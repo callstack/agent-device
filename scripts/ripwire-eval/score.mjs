@@ -8,7 +8,7 @@
 //
 // Usage: node scripts/ripwire-eval/score.mjs --runs=<dir> [--out=<file>]
 
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +20,9 @@ function arg(name, fallback) {
 }
 
 const runsDir = arg('runs');
+// Optional: the directory holding the per-task clones. Given it, each run also reports the byte
+// size of the files it opened — a context-cost proxy that does not depend on self-reporting.
+const worktrees = arg('worktrees');
 const outPath = arg('out', join(here, 'agent-results.json'));
 if (!runsDir) {
   console.error('usage: score.mjs --runs=<dir> [--out=<file>]');
@@ -73,10 +76,23 @@ const scored = readdirSync(runsDir)
       tool_uses: run.tool_uses ?? null,
       duration_ms: run.duration_ms ?? null,
       files_opened: (run.files_opened ?? []).length,
+      files_opened_bytes: worktrees ? openedBytes(worktrees, run) : null,
       missed: [...truth].filter((path) => !predicted.includes(path)),
       spurious: predicted.filter((path) => !truth.has(path)),
     };
   });
+
+function openedBytes(root, run) {
+  let total = 0;
+  for (const path of run.files_opened ?? []) {
+    try {
+      total += statSync(join(root, run.task, path)).size;
+    } catch {
+      // A path the agent named that does not resolve in the pinned clone contributes nothing.
+    }
+  }
+  return total;
+}
 
 function mean(values) {
   const usable = values.filter((value) => typeof value === 'number');
@@ -97,6 +113,7 @@ for (const arm of new Set(scored.map((entry) => entry.arm))) {
     tool_uses: mean(rows.map((r) => r.tool_uses)),
     duration_ms: mean(rows.map((r) => r.duration_ms)),
     files_opened: mean(rows.map((r) => r.files_opened)),
+    files_opened_bytes: mean(rows.map((r) => r.files_opened_bytes)),
   };
 }
 

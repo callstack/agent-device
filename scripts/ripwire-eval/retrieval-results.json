@@ -1,0 +1,1037 @@
+{
+  "generated": "2026-09-08T12:30:17.489Z",
+  "results": [
+    {
+      "task": "T1",
+      "verb": "for",
+      "failed": null,
+      "ms": 1015,
+      "bytes": 10354,
+      "est_tokens": 2589,
+      "paths_mentioned": 43,
+      "ground_truth": 16,
+      "hits": 5,
+      "recall": 0.313,
+      "best_rank": 2,
+      "per_file": [
+        {
+          "path": "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/conformance-normalize.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir-command-parser.ts",
+          "rank": 18
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir.ts",
+          "rank": 10
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-commands.ts",
+          "rank": 3
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-types.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/support-matrix.ts",
+          "rank": 8
+        },
+        {
+          "path": "scripts/fuzz/validation-arbitraries-maestro.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/build-manifest.mjs",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/corpus/manifest.json",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "task": "T1",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 938,
+      "bytes": 12413,
+      "est_tokens": 3103,
+      "paths_mentioned": 20,
+      "ground_truth": 16,
+      "hits": 4,
+      "recall": 0.25,
+      "best_rank": 2,
+      "per_file": [
+        {
+          "path": "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/conformance-normalize.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir-command-parser.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir.ts",
+          "rank": 10
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-commands.ts",
+          "rank": 3
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-types.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/support-matrix.ts",
+          "rank": 8
+        },
+        {
+          "path": "scripts/fuzz/validation-arbitraries-maestro.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/build-manifest.mjs",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/corpus/manifest.json",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "task": "T1",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 964,
+      "bytes": 8821,
+      "est_tokens": 2205,
+      "paths_mentioned": 13,
+      "ground_truth": 16,
+      "hits": 2,
+      "recall": 0.125,
+      "best_rank": 2,
+      "per_file": [
+        {
+          "path": "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/conformance-normalize.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir-command-parser.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-commands.ts",
+          "rank": 3
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-types.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/support-matrix.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/fuzz/validation-arbitraries-maestro.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/build-manifest.mjs",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/corpus/manifest.json",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "task": "T1",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 1005,
+      "bytes": 10614,
+      "est_tokens": 2654,
+      "paths_mentioned": 45,
+      "ground_truth": 16,
+      "hits": 4,
+      "recall": 0.25,
+      "best_rank": 3,
+      "per_file": [
+        {
+          "path": "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/conformance-normalize.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir-command-parser.ts",
+          "rank": 6
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir.ts",
+          "rank": 8
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-commands.ts",
+          "rank": 4
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-types.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/support-matrix.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/fuzz/validation-arbitraries-maestro.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/build-manifest.mjs",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/corpus/manifest.json",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts",
+          "rank": 3
+        }
+      ]
+    },
+    {
+      "task": "T2",
+      "verb": "for",
+      "failed": null,
+      "ms": 1044,
+      "bytes": 10296,
+      "est_tokens": 2574,
+      "paths_mentioned": 43,
+      "ground_truth": 7,
+      "hits": 2,
+      "recall": 0.286,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+          "rank": null
+        },
+        {
+          "path": "packages/kernel/src/snapshot.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-builder.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-node.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy.ts",
+          "rank": 42
+        },
+        {
+          "path": "src/daemon/__tests__/response-views.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/response-views.ts",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "task": "T2",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 930,
+      "bytes": 11590,
+      "est_tokens": 2898,
+      "paths_mentioned": 10,
+      "ground_truth": 7,
+      "hits": 1,
+      "recall": 0.143,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+          "rank": null
+        },
+        {
+          "path": "packages/kernel/src/snapshot.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-builder.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-node.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/__tests__/response-views.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/response-views.ts",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "task": "T2",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 928,
+      "bytes": 8137,
+      "est_tokens": 2034,
+      "paths_mentioned": 5,
+      "ground_truth": 7,
+      "hits": 1,
+      "recall": 0.143,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+          "rank": null
+        },
+        {
+          "path": "packages/kernel/src/snapshot.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-builder.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-node.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/__tests__/response-views.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/response-views.ts",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "task": "T2",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 934,
+      "bytes": 10653,
+      "est_tokens": 2663,
+      "paths_mentioned": 37,
+      "ground_truth": 7,
+      "hits": 3,
+      "recall": 0.429,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+          "rank": 31
+        },
+        {
+          "path": "packages/kernel/src/snapshot.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-builder.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-node.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/daemon/__tests__/response-views.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/response-views.ts",
+          "rank": 25
+        }
+      ]
+    },
+    {
+      "task": "T3",
+      "verb": "for",
+      "failed": null,
+      "ms": 1038,
+      "bytes": 9748,
+      "est_tokens": 2437,
+      "paths_mentioned": 34,
+      "ground_truth": 5,
+      "hits": 1,
+      "recall": 0.2,
+      "best_rank": 8,
+      "per_file": [
+        {
+          "path": "packages/platform-android/src/__tests__/input-actions.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/input-actions.ts",
+          "rank": 8
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-world.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T3",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 945,
+      "bytes": 9695,
+      "est_tokens": 2424,
+      "paths_mentioned": 8,
+      "ground_truth": 5,
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-android/src/__tests__/input-actions.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/input-actions.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-world.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T3",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 909,
+      "bytes": 8476,
+      "est_tokens": 2119,
+      "paths_mentioned": 7,
+      "ground_truth": 5,
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-android/src/__tests__/input-actions.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/input-actions.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-world.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T3",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 1002,
+      "bytes": 10718,
+      "est_tokens": 2680,
+      "paths_mentioned": 41,
+      "ground_truth": 5,
+      "hits": 1,
+      "recall": 0.2,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "packages/platform-android/src/__tests__/input-actions.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/input-actions.ts",
+          "rank": 1
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-world.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T4",
+      "verb": "for",
+      "failed": null,
+      "ms": 988,
+      "bytes": 10118,
+      "est_tokens": 2530,
+      "paths_mentioned": 41,
+      "ground_truth": 7,
+      "hits": 3,
+      "recall": 0.429,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/__tests__/request-diagnostics-http.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/request-diagnostics-http.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/daemon/server/http-server.ts",
+          "rank": 5
+        },
+        {
+          "path": "src/daemon/server/tenant-trust.ts",
+          "rank": 4
+        },
+        {
+          "path": "src/daemon/session-tenant-scope.ts",
+          "rank": null
+        },
+        {
+          "path": "test/wire-compat/surface.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T4",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 986,
+      "bytes": 12724,
+      "est_tokens": 3181,
+      "paths_mentioned": 19,
+      "ground_truth": 7,
+      "hits": 5,
+      "recall": 0.714,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+          "rank": 16
+        },
+        {
+          "path": "src/daemon/__tests__/request-diagnostics-http.test.ts",
+          "rank": 17
+        },
+        {
+          "path": "src/daemon/request-diagnostics-http.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/daemon/server/http-server.ts",
+          "rank": 5
+        },
+        {
+          "path": "src/daemon/server/tenant-trust.ts",
+          "rank": 4
+        },
+        {
+          "path": "src/daemon/session-tenant-scope.ts",
+          "rank": null
+        },
+        {
+          "path": "test/wire-compat/surface.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T4",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 994,
+      "bytes": 9044,
+      "est_tokens": 2261,
+      "paths_mentioned": 15,
+      "ground_truth": 7,
+      "hits": 5,
+      "recall": 0.714,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+          "rank": 12
+        },
+        {
+          "path": "src/daemon/__tests__/request-diagnostics-http.test.ts",
+          "rank": 13
+        },
+        {
+          "path": "src/daemon/request-diagnostics-http.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/daemon/server/http-server.ts",
+          "rank": 5
+        },
+        {
+          "path": "src/daemon/server/tenant-trust.ts",
+          "rank": 4
+        },
+        {
+          "path": "src/daemon/session-tenant-scope.ts",
+          "rank": null
+        },
+        {
+          "path": "test/wire-compat/surface.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T4",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 952,
+      "bytes": 9641,
+      "est_tokens": 2410,
+      "paths_mentioned": 44,
+      "ground_truth": 7,
+      "hits": 2,
+      "recall": 0.286,
+      "best_rank": 13,
+      "per_file": [
+        {
+          "path": "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/__tests__/request-diagnostics-http.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/request-diagnostics-http.ts",
+          "rank": 17
+        },
+        {
+          "path": "src/daemon/server/http-server.ts",
+          "rank": 13
+        },
+        {
+          "path": "src/daemon/server/tenant-trust.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/session-tenant-scope.ts",
+          "rank": null
+        },
+        {
+          "path": "test/wire-compat/surface.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T5",
+      "verb": "for",
+      "failed": null,
+      "ms": 1036,
+      "bytes": 10059,
+      "est_tokens": 2515,
+      "paths_mentioned": 35,
+      "ground_truth": 4,
+      "hits": 2,
+      "recall": 0.5,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.ts",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "task": "T5",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 997,
+      "bytes": 13150,
+      "est_tokens": 3288,
+      "paths_mentioned": 28,
+      "ground_truth": 4,
+      "hits": 3,
+      "recall": 0.75,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.test.ts",
+          "rank": 18
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.ts",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "task": "T5",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 946,
+      "bytes": 9018,
+      "est_tokens": 2255,
+      "paths_mentioned": 14,
+      "ground_truth": 4,
+      "hits": 3,
+      "recall": 0.75,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.test.ts",
+          "rank": 12
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.ts",
+          "rank": 4
+        }
+      ]
+    },
+    {
+      "task": "T5",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 1006,
+      "bytes": 10785,
+      "est_tokens": 2696,
+      "paths_mentioned": 39,
+      "ground_truth": 4,
+      "hits": 2,
+      "recall": 0.5,
+      "best_rank": 3,
+      "per_file": [
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.ts",
+          "rank": 3
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.ts",
+          "rank": 11
+        }
+      ]
+    },
+    {
+      "task": "T6",
+      "verb": "for",
+      "failed": null,
+      "ms": 1136,
+      "bytes": 10390,
+      "est_tokens": 2598,
+      "paths_mentioned": 33,
+      "ground_truth": 3,
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-apple/src/snapshot-route.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T6",
+      "verb": "pack-task",
+      "failed": null,
+      "ms": 1021,
+      "bytes": 11137,
+      "est_tokens": 2784,
+      "paths_mentioned": 7,
+      "ground_truth": 3,
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-apple/src/snapshot-route.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T6",
+      "verb": "pack-task-4k",
+      "failed": null,
+      "ms": 1002,
+      "bytes": 8256,
+      "est_tokens": 2064,
+      "paths_mentioned": 3,
+      "ground_truth": 3,
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-apple/src/snapshot-route.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T6",
+      "verb": "for-idents",
+      "failed": null,
+      "ms": 1024,
+      "bytes": 10545,
+      "est_tokens": 2636,
+      "paths_mentioned": 43,
+      "ground_truth": 3,
+      "hits": 1,
+      "recall": 0.333,
+      "best_rank": 8,
+      "per_file": [
+        {
+          "path": "packages/platform-apple/src/snapshot-route.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.ts",
+          "rank": 8
+        }
+      ]
+    }
+  ]
+}
