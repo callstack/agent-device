@@ -30,6 +30,7 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { readInfoPlistString } from './plist.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
+import { matchesAppleExecutableProcess, readProcessCommandToken } from './perf-process-identity.ts';
 import {
   findAllXmlNodes,
   findFirstXmlNode,
@@ -1052,40 +1053,6 @@ async function runAppleSimulatorProcessCommand(args: string[]): Promise<ExecResu
   return await runAppleToolCommand('ps', ['-axo', 'pid=,%cpu=,rss=,command='], {
     timeoutMs: APPLE_PERF_TIMEOUT_MS,
   });
-}
-
-function matchesAppleExecutableProcess(
-  command: string,
-  executable: { executableName: string; executablePath?: string },
-): boolean {
-  const token = readProcessCommandToken(command);
-  if (executable.executablePath) {
-    for (const executablePath of buildAppleExecutablePathAliases(executable.executablePath)) {
-      if (
-        command === executablePath ||
-        token === executablePath ||
-        command.startsWith(`${executablePath} `)
-      ) {
-        return true;
-      }
-    }
-  }
-  return path.basename(token) === executable.executableName;
-}
-
-function buildAppleExecutablePathAliases(executablePath: string): string[] {
-  const aliases = [executablePath];
-  if (executablePath.startsWith('/private/var/')) {
-    aliases.push(executablePath.replace('/private/var/', '/var/'));
-  } else if (executablePath.startsWith('/var/')) {
-    aliases.push(executablePath.replace('/var/', '/private/var/'));
-  }
-  return aliases;
-}
-
-function readProcessCommandToken(command: string): string {
-  const [token = ''] = command.trim().split(/\s+/, 1);
-  return token;
 }
 
 function buildAppleMemoryPerfSample(args: {
