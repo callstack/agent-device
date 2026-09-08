@@ -1,3 +1,6 @@
+import fc from 'fast-check';
+import { buildScrollGesturePlan } from '@agent-device/contracts/scroll-gesture';
+import { PROPERTY_RUNS_SMALL, scrollInViewportArb } from './touch-plan-lowering.fixtures.ts';
 import assert from 'node:assert/strict';
 import { expectTypeOf, test } from 'vitest';
 import { buildDragGesturePlan, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
@@ -127,4 +130,53 @@ test('lowered endpoint plans are valid Android transport plans', () => {
 test('a canonical endpoint plan cannot reach the transport unlowered', () => {
   expectTypeOf<SinglePointerGesturePlan>().not.toExtend<AndroidLoweredTouchPlan>();
   expectTypeOf<ReturnType<typeof lowerAndroidTouchPlan>>().toExtend<AndroidLoweredTouchPlan>();
+});
+
+test('Android controlled scroll sampling preserves the inertial path and viewport bounds', () => {
+  fc.assert(
+    fc.property(scrollInViewportArb, ({ viewport, direction, durationMs, pixels }) => {
+      const scroll = buildScrollGesturePlan({
+        direction,
+        pixels,
+        referenceWidth: viewport.width,
+        referenceHeight: viewport.height,
+      });
+      const plan = buildGesturePlan(
+        {
+          intent: 'pan',
+          origin: { x: viewport.x + scroll.x1, y: viewport.y + scroll.y1 },
+          delta: { x: scroll.x2 - scroll.x1, y: scroll.y2 - scroll.y1 },
+          durationMs,
+        },
+        viewport,
+        'android',
+      );
+      const controlled = lowerAndroidTouchPlan({ ...plan, releaseBehavior: 'controlled' });
+      const inertial = lowerAndroidTouchPlan({ ...plan, releaseBehavior: 'inertial' });
+      assert.equal(controlled.durationMs, durationMs);
+      assert.equal(inertial.durationMs, durationMs);
+      const samples = controlled.pointers[0].samples;
+      const linear = inertial.pointers[0].samples;
+      assert.deepEqual(
+        samples.map(({ offsetMs }) => offsetMs),
+        linear.map(({ offsetMs }) => offsetMs),
+      );
+      assert.deepEqual(samples[0], linear[0]);
+      assert.deepEqual(samples.at(-1), linear.at(-1));
+      for (const axis of ['x', 'y'] as const) {
+        const from = samples[0]!.point[axis];
+        const to = samples.at(-1)!.point[axis];
+        for (let i = 1; i < samples.length; i += 1) {
+          const sample = samples[i]!;
+          assert.ok(
+            sample.point[axis] >= Math.min(from, to) && sample.point[axis] <= Math.max(from, to),
+          );
+          assert.ok((sample.point[axis] - samples[i - 1]!.point[axis]) * (to - from) >= 0);
+          const expectedLinear = from + ((to - from) * sample.offsetMs) / durationMs;
+          assert.ok(Math.abs(linear[i]!.point[axis] - expectedLinear) < 1e-8);
+        }
+      }
+    }),
+    { numRuns: PROPERTY_RUNS_SMALL },
+  );
 });

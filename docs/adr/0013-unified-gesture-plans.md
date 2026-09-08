@@ -74,8 +74,11 @@ Platform adapters consume the canonical plan:
 - Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
   the physical movement for scroll and long-press, to provider-native touch injection when
   available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower in
-  `packages/platform-android/src/touch-plan.ts` to 16 ms linear transport samples before either injection
-  path; two-contact plans retain their exact planned samples. Transport samples are typed as
+  `packages/platform-android/src/touch-plan-lowering.ts` to approximately 16 ms transport samples before
+  either injection path. Controlled directional scrolls accelerate for one frame, then decelerate
+  through release within the requested duration, without an appended tail. Inertial scrolls and
+  general one-contact plans retain linear interpolation; two-contact plans retain their exact
+  planned samples. Easing reduces release momentum but does not guarantee an exact content offset. Transport samples are typed as
   strictly denser than the canonical endpoint pair, so skipping that lowering is a type error at
   the injection seams instead of a silently sparse gesture. A stationary long-press needs no
   viewport on the helper path; the executor adds the paired provider-owned viewport only for

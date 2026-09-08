@@ -226,7 +226,7 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
       }));
       assert.deepEqual(touchCalls, [
         { topology: 'single', intent: 'longPress', pointerCount: 1, durationMs: 750 },
-        { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 510 }, // 'controlled': 350ms move + 160ms tail (#2371)
+        { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 350 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 300 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 500 },
         { topology: 'two', intent: 'pan', pointerCount: 2, durationMs: 500 },
