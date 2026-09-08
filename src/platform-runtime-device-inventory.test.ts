@@ -11,9 +11,27 @@ import type {
   DeviceInventoryHost,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform-runtime-host';
+import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
+import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import { PLATFORMS, type DeviceInfo, type Platform } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
+
+const simctl = vi.hoisted(() => ({
+  listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,
+  calls: [] as string[],
+}));
+
+vi.mock('../packages/platform-apple/src/core/tool-provider.ts', () => ({
+  runXcrun: async (args: string[]) => {
+    const idx = args.indexOf('listapps');
+    const deviceId = idx >= 0 ? args[idx + 1] : undefined;
+    if (deviceId) simctl.calls.push(deviceId);
+    const entry = simctl.listapps.find((l) => l.deviceId === deviceId);
+    return { stdout: entry ? JSON.stringify(entry.apps) : '{}', stderr: '', exitCode: 0 };
+  },
+  runAppleToolCommand: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
+}));
 
 const scope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
@@ -239,6 +257,39 @@ describe('composed device inventory gateway', () => {
       details: { expectedFamily: 'android', actualFamily: 'linux' },
     });
   });
+
+  test('narrows app-based simulator selection through the factory-installed probe', async () => {
+    // Guards the production wiring: the package-level selection tests inject their own
+    // probe, so only this path proves the factory attaches one to the request context.
+    simctl.listapps = [
+      {
+        deviceId: 'sim-b',
+        apps: { 'com.example.demo': { Bundle: 'com.example.demo', CFBundleName: 'Demo' } },
+      },
+    ];
+    const local = inventoryWorld({
+      apple: async () => source([simulator('sim-a'), simulator('sim-b')]),
+    });
+    const gateways = createComposedDeviceInventoryGateways({
+      registry: local.registry,
+      loadHost: local.loadHost,
+    });
+
+    const selection = await withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
+      resolveTargetDeviceSelection(
+        { platform: 'ios' },
+        {
+          appleSimulatorAppTarget: 'com.example.demo',
+        },
+      ),
+    );
+
+    expect(selection.device.id).toBe('sim-b');
+    expect(selection.reason).toBe('single-app-installed-local');
+    expect(selection.source).toBe('local');
+    expect(selection.candidateCount).toBe(1);
+    expect([...simctl.calls].sort()).toEqual(['sim-a', 'sim-b']);
+  });
 });
 
 function inventoryWorld(
@@ -280,6 +331,18 @@ function device(platform: Platform, id = `${platform}-device`): DeviceInfo {
     name: id,
     kind: 'device',
     target: platform === 'vega' ? 'tv' : 'mobile',
+    booted: true,
+  };
+}
+
+function simulator(id: string): DeviceInfo {
+  return {
+    platform: 'apple',
+    id,
+    name: id,
+    kind: 'simulator',
+    appleOs: 'ios',
+    target: 'mobile',
     booted: true,
   };
 }
