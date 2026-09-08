@@ -195,6 +195,7 @@ test('snapshot publishes runner presentation through the engine and drops its qu
     IOS_SIMULATOR,
     {},
     {
+      hasLiveSession: () => true,
       runCommand: async () => ({
         nodes: [
           {
@@ -270,7 +271,7 @@ test('macOS app snapshots preserve runner nodes outside the iOS presentation eng
   const interactor = createAppleInteractor(
     MACOS_DEVICE,
     {},
-    { runCommand: async () => ({ nodes }) },
+    { hasLiveSession: () => true, runCommand: async () => ({ nodes }) },
   );
 
   const result = presentedSnapshot(await interactor.snapshot({ interactiveOnly: true }));
@@ -282,7 +283,10 @@ test('snapshot reports typed runner presentation failures', async () => {
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     {},
-    { runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }) },
+    {
+      hasLiveSession: () => true,
+      runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }),
+    },
   );
 
   await assert.rejects(interactor.snapshot(), (error: unknown) => {
@@ -298,6 +302,7 @@ test('sparse runner payloads with no viewport fail before publishing actionable 
     IOS_SIMULATOR,
     {},
     {
+      hasLiveSession: () => true,
       runCommand: async () => ({
         nodes: [
           { index: 0, type: 'Application', label: 'App' },
@@ -335,6 +340,7 @@ test('snapshot rejects a scoped quality payload at the runner boundary', async (
     IOS_SIMULATOR,
     {},
     {
+      hasLiveSession: () => true,
       runCommand: async () => ({
         nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],
         qualityPayload: { nodes: [], truncated: false, scope: 'Settings' },
@@ -353,6 +359,7 @@ test('snapshot rejects a scoped quality payload at the runner boundary', async (
 
 test('snapshot accepts only structured healthy empty scope results', async () => {
   const healthyEmptyProvider: AppleRunnerProvider = {
+    hasLiveSession: () => true,
     runCommand: async () => ({
       nodes: [],
       snapshotQuality: { state: 'healthy', backend: 'tree' },
@@ -376,6 +383,7 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
     IOS_SIMULATOR,
     {},
     {
+      hasLiveSession: () => true,
       runCommand: async () => ({ nodes: [] }),
     },
   );
@@ -403,6 +411,7 @@ test('snapshot forwards either forceable preferredBackend into the emitted runne
 
 function recordingRunnerProvider(calls: RecordedRunnerCall[]): AppleRunnerProvider {
   return {
+    hasLiveSession: () => true,
     runCommand: async (_device, command, options) => {
       calls.push({ command, options });
       return runnerResultFor(command);

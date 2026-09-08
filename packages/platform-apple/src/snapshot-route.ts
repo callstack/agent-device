@@ -24,6 +24,10 @@ import {
   type SnapshotSourceFailure,
 } from './snapshot-source-facade.ts';
 import {
+  createLaunchObservationProbe,
+  type LaunchObservationPort,
+} from './snapshot-observability.ts';
+import {
   createSimulatorSnapshotTargetResolver,
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
@@ -31,15 +35,16 @@ import {
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
-export type AppleSnapshotRoute = Readonly<{
-  capture(
-    device: DeviceInfo,
-    input: CaptureSnapshotInput,
-    signal: AbortSignal,
-    fallback: SnapshotFallback,
-  ): Promise<SnapshotResult>;
-  shutdown(): Promise<void>;
-}>;
+export type AppleSnapshotRoute = LaunchObservationPort &
+  Readonly<{
+    capture(
+      device: DeviceInfo,
+      input: CaptureSnapshotInput,
+      signal: AbortSignal,
+      fallback: SnapshotFallback,
+    ): Promise<SnapshotResult>;
+    shutdown(): Promise<void>;
+  }>;
 
 export function createAppleSnapshotRoute(
   host: PlatformRuntimeHost,
@@ -52,14 +57,16 @@ export function createAppleSnapshotRoute(
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
+  const observation = createLaunchObservationProbe({ source, resolveTarget, clock: host.clock });
 
   return Object.freeze({
+    awaitObservable: observation.awaitObservable,
     shutdown: async () => await source.close(),
     capture: async (device, input, signal, fallback) => {
       if (!isEligible(device, input)) return await fallback(input);
       let target: SimulatorSnapshotTarget;
       try {
-        target = await resolveTarget(device, input.options!.appBundleId!, signal);
+        target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
       } catch (error) {
         signal.throwIfAborted();
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
@@ -134,6 +141,38 @@ export function createAppleSnapshotRoute(
       }
     },
   });
+}
+
+/**
+ * A discovery still in flight is not a failure while no runner can answer instead. The XCTest
+ * fallback would first wait for a runner start, and #2198 keeps observation off that wait, so the
+ * capture stays on the single-flight discovery: each turn waits one discovery slice, and the
+ * discovery's own deadline or the request signal ends the loop. A runner that is already live
+ * answers at once, so there the fallback remains the cheaper route (#2331).
+ */
+async function resolveTargetForObservation(
+  host: PlatformRuntimeHost,
+  resolveTarget: SimulatorSnapshotTargetResolver,
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  signal: AbortSignal,
+): Promise<SimulatorSnapshotTarget> {
+  const appBundleId = input.options!.appBundleId!;
+  for (;;) {
+    try {
+      return await resolveTarget(device, appBundleId, signal);
+    } catch (error) {
+      if (!isDiscoveryPending(error)) throw error;
+      const execution = { requestId: input.execution?.requestId };
+      if (await host.appleApplications.hasLiveRunnerSession(device, execution)) throw error;
+    }
+  }
+}
+
+function isDiscoveryPending(error: unknown): boolean {
+  return (
+    error instanceof AppError && error.details?.reason === 'simulator-target-discovery-pending'
+  );
 }
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {

@@ -29,7 +29,7 @@ on:
       - 'packages/*/src/**/*.test.ts'
       - 'packages/*/src/**/__tests__/**/*.ts'
       - 'packages/platform-android/src/**'
-      - 'src/snapshot/snapshot-presentation/android/**'
+      - 'packages/capture-kit/src/snapshot/snapshot-presentation/android/**'
       - 'packages/platform-harmonyos/src/**'
       - 'packages/platform-linux/src/**'
       - 'packages/platform-vega/src/**'
@@ -153,6 +153,8 @@ jobs:
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDispatchResolvesItsOwnModalWithoutCoordinateTapRoutingProbe \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus \

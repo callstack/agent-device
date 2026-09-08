@@ -235,7 +235,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'snapshot-policy',
       kind: 'executable-policy',
-      roots: ['src/snapshot/'],
+      roots: ['packages/capture-kit/src/snapshot/'],
       forbiddenTargetRoots: ['src/daemon/'],
     },
   ],

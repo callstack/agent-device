@@ -13,9 +13,7 @@ export type IosProviderAcquisitionProducer = Extract<
 >;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';
-export type IosSnapshotCompleteness = 'complete' | 'incomplete';
 export type IosSnapshotEvidenceAvailability = 'available' | 'unavailable';
-export type IosSnapshotPresentationOwner = 'ios-snapshot-engine' | 'snapshot-state';
 
 export type IosSnapshotGeneration = string;
 
@@ -62,8 +60,7 @@ export type CaptureHint = Readonly<{
 
 export type IosSnapshotDepthSupport =
   | Readonly<{ kind: 'complete'; maxDepth?: number }>
-  | Readonly<{ kind: 'incomplete' }>
-  | Readonly<{ kind: 'not-applicable' }>;
+  | Readonly<{ kind: 'incomplete' }>;
 
 export type IosSnapshotAcquisitionDepthCapability = Readonly<{
   rawTraversal: IosSnapshotDepthSupport;
@@ -79,31 +76,27 @@ export type IosSnapshotFact =
   | 'generation'
   | 'truncation';
 
-type IosSnapshotProducerCapabilityFacts = Readonly<{
+/**
+ * What a *provider* acquisition leaves unproven, declared so capture-kit can derive the residue
+ * for a producer that hands over a bare tree and nothing else.
+ *
+ * The producer axis is `IosProviderAcquisitionProducer` — Appium page source and the Limrun
+ * element tree — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
+ * `simulator-ax-bridge` build their own residue at the source, so a capability declared for
+ * them here would be a claim nothing consults: exactly the shape that let the table say the
+ * Simulator bridge had hittability evidence while the bridge adapter emitted
+ * `unavailable-fact: hittability` on every capture (#2199). Narrowing the producer makes that
+ * claim unrepresentable rather than merely wrong.
+ *
+ * Truncation is not a field here: it is the one fact the runner and the bridge also need
+ * answered, so it has a single owner over all four producers instead
+ * (`iosSnapshotTruncationEvidence`).
+ */
+export type IosProviderAcquisitionCapabilities = Readonly<{
+  producer: IosProviderAcquisitionProducer;
   acquisitionDepth: IosSnapshotAcquisitionDepthCapability;
-  scopeCompleteness: IosSnapshotCompleteness;
-  interactiveQueryCompleteness: IosSnapshotCompleteness;
-  viewportEvidence: IosSnapshotEvidenceAvailability;
   hittabilityEvidence: IosSnapshotEvidenceAvailability;
-  truncationEvidence: IosSnapshotEvidenceAvailability;
-  presentationOwner: IosSnapshotPresentationOwner;
 }>;
-
-export type IosSnapshotAcquisitionProducerCapabilities = IosSnapshotProducerCapabilityFacts &
-  Readonly<{
-    producer: IosAcquisitionProducer;
-    stage: 'acquired';
-  }>;
-
-export type IosSnapshotPresentedProducerCapabilities = IosSnapshotProducerCapabilityFacts &
-  Readonly<{
-    producer: 'apple-runner';
-    stage: 'presented';
-  }>;
-
-export type IosSnapshotProducerCapabilities =
-  | IosSnapshotAcquisitionProducerCapabilities
-  | IosSnapshotPresentedProducerCapabilities;
 
 export type IosViewportEvidence =
   | Readonly<{ kind: 'reported'; rect: Rect }>
@@ -209,26 +202,6 @@ export type IosSnapshotInput =
       validation: IosSnapshotValidationFacts;
     }>;
 
-export type IosSnapshotAcquisitionNarrowing = Readonly<{
-  depth: number | null;
-  scope: null;
-  interactiveOnly: boolean;
-}>;
-
-export type IosSnapshotPlan = Readonly<{
-  request: IosSnapshotRequest;
-  producer: IosSnapshotProducer;
-  hint: CaptureHint;
-  narrowing: IosSnapshotAcquisitionNarrowing;
-  evidence: Readonly<{
-    scope: IosSnapshotCompleteness;
-    interactiveQuery: IosSnapshotCompleteness;
-    viewport: IosSnapshotEvidenceAvailability;
-    hittability: IosSnapshotEvidenceAvailability;
-    truncation: IosSnapshotEvidenceAvailability;
-  }>;
-}>;
-
 export type IosSnapshotPublishedPayload = Readonly<{
   nodes: readonly SnapshotNode[];
   truncated?: boolean;
@@ -250,6 +223,5 @@ export type IosSnapshotPublication = Readonly<{
 }>;
 
 export type IosSnapshotEngine = Readonly<{
-  plan(request: IosSnapshotRequest, producer: IosSnapshotProducerCapabilities): IosSnapshotPlan;
   publish(input: IosSnapshotInput, request: IosSnapshotRequest): IosSnapshotPublication;
 }>;

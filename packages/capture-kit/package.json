@@ -14,6 +14,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./android-replacement-surface-occlusion": {
+      "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
+      "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
+    },
     "./durable-capture": {
       "types": "./src/durable-capture/index.ts",
       "default": "./src/durable-capture/index.ts"
@@ -33,6 +37,10 @@
     "./ios-snapshot-planning": {
       "types": "./src/ios-snapshot-planning.ts",
       "default": "./src/ios-snapshot-planning.ts"
+    },
+    "./ios-snapshot-runtime": {
+      "types": "./src/snapshot/ios-snapshot-runtime.ts",
+      "default": "./src/snapshot/ios-snapshot-runtime.ts"
     },
     "./mobile-snapshot-semantics": {
       "types": "./src/mobile-snapshot-semantics.ts",
@@ -66,9 +74,33 @@
       "types": "./src/post-gesture-stability.ts",
       "default": "./src/post-gesture-stability.ts"
     },
+    "./quality-warnings": {
+      "types": "./src/snapshot/snapshot-presentation/quality-warnings.ts",
+      "default": "./src/snapshot/snapshot-presentation/quality-warnings.ts"
+    },
     "./react-native-overlay": {
       "types": "./src/react-native-overlay.ts",
       "default": "./src/react-native-overlay.ts"
+    },
+    "./recording-output-path": {
+      "types": "./src/recording/output-path.ts",
+      "default": "./src/recording/output-path.ts"
+    },
+    "./recording-overlay": {
+      "types": "./src/recording/overlay.ts",
+      "default": "./src/recording/overlay.ts"
+    },
+    "./recording-telemetry": {
+      "types": "./src/recording/telemetry.ts",
+      "default": "./src/recording/telemetry.ts"
+    },
+    "./recording-video": {
+      "types": "./src/recording/video.ts",
+      "default": "./src/recording/video.ts"
+    },
+    "./repeated-nav-subtree": {
+      "types": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts",
+      "default": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts"
     },
     "./screenshot-density": {
       "types": "./src/screenshot-density.ts",
@@ -82,13 +114,57 @@
       "types": "./src/screenshot-overlay.ts",
       "default": "./src/screenshot-overlay.ts"
     },
+    "./scroll-edge-state": {
+      "types": "./src/snapshot/scroll-edge-state.ts",
+      "default": "./src/snapshot/scroll-edge-state.ts"
+    },
+    "./snapshot-chrome": {
+      "types": "./src/snapshot-chrome.ts",
+      "default": "./src/snapshot-chrome.ts"
+    },
     "./snapshot-desktop-projection": {
       "types": "./src/snapshot-desktop-projection.ts",
       "default": "./src/snapshot-desktop-projection.ts"
     },
+    "./snapshot-desktop-surface": {
+      "types": "./src/snapshot/snapshot-desktop-surface.ts",
+      "default": "./src/snapshot/snapshot-desktop-surface.ts"
+    },
+    "./snapshot-diff": {
+      "types": "./src/snapshot/snapshot-diff.ts",
+      "default": "./src/snapshot/snapshot-diff.ts"
+    },
+    "./snapshot-evidence": {
+      "types": "./src/snapshot/snapshot-evidence.ts",
+      "default": "./src/snapshot/snapshot-evidence.ts"
+    },
+    "./snapshot-freshness": {
+      "types": "./src/snapshot/snapshot-freshness/index.ts",
+      "default": "./src/snapshot/snapshot-freshness/index.ts"
+    },
+    "./snapshot-label-dedup": {
+      "types": "./src/snapshot/snapshot-label-dedup.ts",
+      "default": "./src/snapshot/snapshot-label-dedup.ts"
+    },
+    "./snapshot-lines": {
+      "types": "./src/snapshot/snapshot-lines.ts",
+      "default": "./src/snapshot/snapshot-lines.ts"
+    },
+    "./snapshot-node-lookup": {
+      "types": "./src/snapshot-node-lookup.ts",
+      "default": "./src/snapshot-node-lookup.ts"
+    },
     "./snapshot-occlusion": {
       "types": "./src/snapshot-occlusion.ts",
       "default": "./src/snapshot-occlusion.ts"
+    },
+    "./snapshot-presentation-android-helper": {
+      "types": "./src/snapshot/snapshot-presentation/android/helper.ts",
+      "default": "./src/snapshot/snapshot-presentation/android/helper.ts"
+    },
+    "./snapshot-presentation-ios-transitions-fixtures": {
+      "types": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts",
+      "default": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts"
     },
     "./snapshot-quality-backend-capabilities": {
       "types": "./src/snapshot-quality-backend-capabilities.ts",
@@ -101,6 +177,22 @@
     "./snapshot-rect-projection": {
       "types": "./src/snapshot-rect-projection.ts",
       "default": "./src/snapshot-rect-projection.ts"
+    },
+    "./snapshot-state": {
+      "types": "./src/snapshot-state.ts",
+      "default": "./src/snapshot-state.ts"
+    },
+    "./snapshot-timeout-policy": {
+      "types": "./src/snapshot/snapshot-timeout-policy.ts",
+      "default": "./src/snapshot/snapshot-timeout-policy.ts"
+    },
+    "./snapshot-visibility": {
+      "types": "./src/snapshot/snapshot-visibility.ts",
+      "default": "./src/snapshot/snapshot-visibility.ts"
+    },
+    "./text-surface": {
+      "types": "./src/snapshot/snapshot-presentation/text-surface.ts",
+      "default": "./src/snapshot/snapshot-presentation/text-surface.ts"
     }
   },
   "devDependencies": {

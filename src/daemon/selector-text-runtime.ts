@@ -12,7 +12,7 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import {
   extractReadableText,
   prefersValueForReadableText,
-} from '../snapshot/snapshot-presentation/text-surface.ts';
+} from '@agent-device/capture-kit/text-surface';
 import type { BoundContextFromFlags } from './context.ts';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 

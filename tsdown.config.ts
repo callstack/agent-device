@@ -32,8 +32,16 @@ const publicSdkChunkGroups = [
     /packages[\\/]kernel[\\/]src[\\/]snapshot\.ts$/,
   ],
   ['sdk-io', /src[\\/]io\.d\.[cm]?ts$/, /src[\\/]io\.ts$/],
-  ['sdk-batch', /src[\\/]batch-policy\.d\.[cm]?ts$/, /src[\\/]batch-policy\.ts$/],
-  ['sdk-batch-runner', /src[\\/]core[\\/]batch\.d\.[cm]?ts$/, /src[\\/]core[\\/]batch\.ts$/],
+  [
+    'sdk-batch',
+    /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.d\.[cm]?ts$/,
+    /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.ts$/,
+  ],
+  [
+    'sdk-batch-runner',
+    /packages[\\/]command-registry[\\/]src[\\/]batch\.d\.[cm]?ts$/,
+    /packages[\\/]command-registry[\\/]src[\\/]batch\.ts$/,
+  ],
   ['sdk-finders', /src[\\/]finders\.d\.[cm]?ts$/, /src[\\/]finders\.ts$/],
   [
     'sdk-android-adb',

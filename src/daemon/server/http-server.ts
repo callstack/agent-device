@@ -45,6 +45,7 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 
@@ -753,14 +754,24 @@ export async function createDaemonHttpServer(options: {
         daemonRequest.meta = {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,
-          sessionIsolation: authResult.tenantId
-            ? (daemonRequest.meta?.sessionIsolation ??
-              daemonRequest.flags?.sessionIsolation ??
-              'tenant')
-            : daemonRequest.meta?.sessionIsolation,
+          // Attestation is what partitions the session namespace: only an attested
+          // tenant gets tenant isolation, so only then does `scopeRequestSession`
+          // name the session `<tenant>:...`. The diagnostics route reads the same
+          // distinction back out of `authorizeAuxiliaryHttpRequest`.
+          //
+          // When the hook attested the tenant, isolation is the SERVER's answer and
+          // the request does not get a say: honoring a client-supplied `'none'` here
+          // dropped the prefix and dropped the caller into the `cwd:<hash>:` namespace
+          // instead, which the client names and another tenant can name too.
+          sessionIsolation: tenantTrust.attested ? 'tenant' : daemonRequest.meta?.sessionIsolation,
         };
         if (daemonRequest.flags?.tenant !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, tenant: tenantTrust.tenantId };
+        }
+        // Consumers that read the flag rather than the meta (`session-doctor-options.ts`)
+        // must not see the isolation the meta just overrode.
+        if (tenantTrust.attested && daemonRequest.flags?.sessionIsolation !== undefined) {
+          daemonRequest.flags = { ...daemonRequest.flags, sessionIsolation: 'tenant' };
         }
         daemonRequest = restrictRemoteHttpRequest(
           daemonRequest,
@@ -870,13 +881,20 @@ function statusCodeForDaemonError(error: {
   return statusCodeForNormalizedError(error.code);
 }
 
+/**
+ * The token/auth-hook gate every non-RPC route shares. `sessionNamespace` is the
+ * naming precondition the session-addressed routes need: present only when the
+ * caller carries a tenant at all, and `partitioned` exactly when that tenant is
+ * attested, which is the same condition the `/rpc` handler above turns into
+ * `sessionIsolation: 'tenant'`.
+ */
 async function authorizeAuxiliaryHttpRequest(params: {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   authHook: HttpAuthHook | null;
   expectedToken?: string;
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
-}): Promise<{ tenantId?: string } | null> {
+}): Promise<{ tenantId?: string; sessionNamespace?: TenantSessionNamespace } | null> {
   const { req, res, authHook, expectedToken, daemonRequest } = params;
   const token = resolveToken({}, req.headers);
   const tenantId = normalizeTenantId(readHeaderValue(req.headers, DAEMON_HTTP_TENANT_HEADER));
@@ -903,17 +921,7 @@ async function authorizeAuxiliaryHttpRequest(params: {
     },
   });
   if (!authResult.ok) {
-    res.statusCode = authResult.statusCode;
-    res.setHeader('content-type', 'application/json');
-    res.end(
-      JSON.stringify({
-        ok: false,
-        error:
-          authResult.response.error?.data?.message ??
-          authResult.response.error?.message ??
-          'Unauthorized',
-      }),
-    );
+    sendAuxiliaryAuthHookRejection(res, authResult);
     return null;
   }
 
@@ -927,7 +935,34 @@ async function authorizeAuxiliaryHttpRequest(params: {
     return null;
   }
 
-  return { tenantId: tenantTrust.tenantId };
+  const trustedTenant = tenantTrust.tenantId;
+  return {
+    tenantId: trustedTenant,
+    ...(trustedTenant
+      ? { sessionNamespace: { tenant: trustedTenant, partitioned: tenantTrust.attested } }
+      : {}),
+  };
+}
+
+/**
+ * An auth hook's own rejection, rendered as the flat REST error these routes
+ * answer with rather than the JSON-RPC envelope the hook decision carries.
+ */
+function sendAuxiliaryAuthHookRejection(
+  res: http.ServerResponse,
+  decision: Extract<HttpAuthDecision, { ok: false }>,
+): void {
+  res.statusCode = decision.statusCode;
+  res.setHeader('content-type', 'application/json');
+  res.end(
+    JSON.stringify({
+      ok: false,
+      error:
+        decision.response.error?.data?.message ??
+        decision.response.error?.message ??
+        'Unauthorized',
+    }),
+  );
 }
 
 function readHeaderValue(headers: IncomingHttpHeaders, name: string): string | undefined {

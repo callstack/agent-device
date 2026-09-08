@@ -11,6 +11,7 @@ import {
   invalidateRunnerSession,
   executeRunnerCommandWithSession,
   readRunnerStartupTimeoutMs,
+  markRunnerSessionServed,
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
@@ -275,6 +276,7 @@ export async function executeRunnerCommand(
     }
     session = await ensureRunnerSession(device, options);
     assertExpectedRunnerSession(session, options.expectedRunnerSessionId);
+    markRunnerSessionServed(session, command);
     if (recycleBootBegun) {
       commitRunnerRecycle(recycleKey);
     }

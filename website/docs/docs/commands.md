@@ -69,6 +69,7 @@ agent-device app-switcher
 - Android: add `--headless` to launch without opening a GUI window.
 - Android: `shutdown --platform android --device <avd-name>` stops a running emulator.
 - `open [app|url] [url]` already boots/activates the selected target when needed.
+- `open <app> --timeout <ms>` is a startup budget for that boot. A never-booted iOS Simulator runs Apple's first-boot migration, which can take several minutes; without the flag the boot wait is capped at 120 seconds. When the budget runs out the command fails with `error.details.reason: boot_timeout` and the Simulator keeps booting, so a retry finds it further along.
 - `open <url>` deep links are supported on Android and iOS.
 - `open <app> <url>` opens a deep link on iOS.
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
@@ -246,6 +247,7 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 
 - `prepare ios-runner` is intended for Apple-platform CI setup before `snapshot`, `replay`, or `test`.
 - Run it after the simulator/device is booted and the app is installed, but before the first snapshot, replay, or test command.
+- `--timeout <ms>` is one budget shared by the Simulator boot (when the target is not booted yet) and the runner preparation; a never-booted Simulator's first-boot migration is bounded by it, not by the 120-second default boot wait.
 - It builds or reuses the local XCTest runner, starts a runner session, and verifies that the runner can answer a lightweight health command.
 - In JSON output, top-level `buildMs`, `connectMs`, and `healthCheckMs` are diagnostic fields and may overlap; use `timing.additiveParts` for additive wall-clock phase totals. `connectMs` contains `buildMs` when a runner artifact is built or rebuilt.
 - If health checking exposes a bad restored runner artifact, Agent Device marks that artifact bad and rebuilds once.

@@ -42,7 +42,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
     stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../../recording/video.ts', () => ({
+vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForStableFile: vi.fn(async () => {}),
   isPlayableVideo: vi.fn(async () => true),
 }));

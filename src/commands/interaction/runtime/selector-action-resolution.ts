@@ -5,7 +5,7 @@ import type { SelectorResolution } from '@agent-device/selectors';
 import { classifyActionableTouchCandidates } from '../../../core/interaction-targeting.ts';
 import { listSelectorPipelineMatches } from '../../../core/selector-pipeline.ts';
 import type { ActingPipelinePolicy } from '../../../core/selector-pipeline-policy.ts';
-import { formatSnapshotLine } from '../../../snapshot/snapshot-lines.ts';
+import { formatSnapshotLine } from '@agent-device/capture-kit/snapshot-lines';
 
 const AMBIGUOUS_ACTION_CANDIDATE_LIMIT = 5;
 

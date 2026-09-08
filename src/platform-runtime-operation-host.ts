@@ -34,7 +34,7 @@ import { createAndroidApplicationTools } from './platform-runtime-android-applic
 import { createLocalApplicationInteractorHost } from './platform-runtime-local-application-interactors.ts';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
 
-export { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
+export { createSnapshotRuntimeHost } from '@agent-device/capture-kit/snapshot-desktop-surface';
 
 export async function loadMacOsSurfaceSnapshot(
   options: CaptureSnapshotInput['options'],

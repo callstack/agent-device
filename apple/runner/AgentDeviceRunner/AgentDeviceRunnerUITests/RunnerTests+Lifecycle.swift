@@ -108,7 +108,7 @@ extension RunnerTests {
     // old PID before refreshCachedTargetIfProcessChanged can observe it.
     clearSnapshotXCTestChannelPenalty(reason: "external_app_relaunch")
     clearPrivateAXAcceptedDepth(reason: "external_app_relaunch")
-    needsFirstInteractionDelay = true
+    beginFirstInteractionStabilization()
     return Response(ok: true, data: DataPayload(message: "target reset"))
   }
 
@@ -132,7 +132,7 @@ extension RunnerTests {
     clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
     clearPrivateAXAcceptedDepth(reason: "target_process_changed")
     snapshotXCTestPenaltyWarmupExemptionPending = true
-    needsFirstInteractionDelay = true
+    beginFirstInteractionStabilization()
   }
 
   static func processIdentifier(of target: XCUIApplication) -> Int? {
@@ -205,7 +205,7 @@ extension RunnerTests {
     currentAppProcessIdentifier = Self.processIdentifier(of: target)
     clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
-    needsFirstInteractionDelay = true
+    beginFirstInteractionStabilization()
     return target
   }
 
@@ -320,10 +320,17 @@ extension RunnerTests {
       sleepFor(postSnapshotInteractionDelay)
       needsPostSnapshotInteractionDelay = false
     }
-    if needsFirstInteractionDelay {
-      sleepFor(firstInteractionAfterActivateDelay)
-      needsFirstInteractionDelay = false
+    if let readyUptime = firstInteractionReadyUptime {
+      sleepFor(readyUptime - ProcessInfo.processInfo.systemUptime)
+      firstInteractionReadyUptime = nil
     }
+  }
+
+  /// Start the post-activation settling window. Measured from now, so the time the caller spends
+  /// getting back to us counts towards it instead of being charged twice.
+  func beginFirstInteractionStabilization() {
+    firstInteractionReadyUptime =
+      ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay
   }
 
   func sleepFor(_ delay: TimeInterval) {

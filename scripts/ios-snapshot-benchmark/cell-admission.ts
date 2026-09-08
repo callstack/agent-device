@@ -47,7 +47,7 @@ export function prepareCellState(options: CellAdmissionOptions): void {
   assertDaemonStopped(options.stateDir);
   bootSimulator(options.udid);
   assertSimulatorState(options.udid, 'Booted');
-  if (options.state === 'cold') {
+  if (options.state === 'cold' || options.state === 'first-interaction') {
     terminateApp(options.udid, options.fixture.app);
     assertAppStopped(options.udid, options.fixture.app);
   }
@@ -58,7 +58,9 @@ export function prepareSampleState(options: CellAdmissionOptions): void {
     prepareColdColdState(options);
     return;
   }
-  if (options.state === 'cold') {
+  if (options.state === 'cold' || options.state === 'first-interaction') {
+    // The first interaction after an open is measured against a cold runner every time: the
+    // daemon and its retained runner go away with it, and the app is relaunched by the sample.
     stopDaemon(options.repoRoot, options.stateDir);
     assertDaemonStopped(options.stateDir);
     terminateApp(options.udid, options.fixture.app);

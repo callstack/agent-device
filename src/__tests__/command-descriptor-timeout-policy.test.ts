@@ -93,19 +93,29 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
 test('budget sources deviating from the default are bounded, reviewed sets', () => {
   const flagBoundBudget: string[] = [];
   const flagWidenBudget: string[] = [];
+  const flagMarginBudget: string[] = [];
   const positionalBudget: string[] = [];
   for (const descriptor of commandDescriptors) {
     const budget = descriptor.timeoutPolicy.budget;
     if (budget.source === 'flag') {
-      const widen = 'envelope' in budget && budget.envelope === 'widen';
-      (widen ? flagWidenBudget : flagBoundBudget).push(descriptor.name);
+      const envelope = 'envelope' in budget ? budget.envelope : undefined;
+      const bucket =
+        envelope === 'widen'
+          ? flagWidenBudget
+          : envelope === 'margin'
+            ? flagMarginBudget
+            : flagBoundBudget;
+      bucket.push(descriptor.name);
     }
     if (budget.source === 'positional-parser') {
       positionalBudget.push(descriptor.name);
     }
   }
   // --timeout bounds the request envelope for these commands only.
-  assert.deepEqual(flagBoundBudget.sort(), ['prepare', 'replay', 'snapshot']);
+  assert.deepEqual(flagBoundBudget.sort(), ['replay', 'snapshot']);
+  // --timeout is a daemon-side startup budget on these commands (#2324); the
+  // envelope keeps a margin over it so the daemon's own timeout wins the race.
+  assert.deepEqual(flagMarginBudget.sort(), ['open', 'prepare']);
   // --timeout bounds the --settle wait on these commands (#1101); like wait's
   // positional budget it only ever widens the envelope, never shrinks it.
   assert.deepEqual(flagWidenBudget.sort(), settleObservationCommandNames());
@@ -307,15 +317,51 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
     240_000,
   );
   assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('test'), { ...base }),
+    undefined,
+  );
+});
+
+test('open and prepare startup budgets keep a client-envelope margin over the daemon deadline', () => {
+  const base = { positionals: [] as string[], flags: {} };
+
+  // A cold Simulator's first boot can take minutes (#2324): the budget reaches
+  // the daemon's boot wait, and the envelope stays past it so the daemon's
+  // structured boot_timeout arrives instead of a client-side daemon reset.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), {
+      ...base,
+      flags: { timeoutMs: 600_000 },
+    }),
+    630_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('prepare'), {
+      ...base,
+      positionals: ['ios-runner'],
+      flags: { timeoutMs: 600_000 },
+    }),
+    630_000,
+  );
+  // Small budgets never shrink the envelope below the command's base.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), {
+      ...base,
+      flags: { timeoutMs: 5_000 },
+    }),
+    90_000,
+  );
+  assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('prepare'), {
       ...base,
       positionals: ['ios-runner'],
       flags: { timeoutMs: 240_000 },
     }),
-    240_000,
+    270_000,
   );
+  // No budget → base envelope.
   assert.equal(
-    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('test'), { ...base }),
-    undefined,
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), { ...base }),
+    90_000,
   );
 });

@@ -21,7 +21,8 @@
 //   under it, nothing to write. Over it, one `APPROVED_OVER_CEILING` row naming the issue, the
 //   reason, and an owner; the row records no number, and the merge-base carries the entry from
 //   the next PR on. A row is stale once nothing can read it -- the entry is gone, the merge-base
-//   now carries it, or its closure fits the ceiling -- and a stale row fails.
+//   now carries it, or its closure fits the ceiling -- and a stale row fails, EXCEPT where the
+//   merge-base is the head itself and no row is readable at all (`staleApprovalRows`).
 //
 // Independent of size, a façade entry's closure must never reach a concrete platform
 // implementation (`PLATFORM_IMPLEMENTATION_PATTERNS`) before discovery or binding selects an
@@ -210,6 +211,32 @@ export function classifyNewEntry(
     `${category} ceiling of ${ceiling}. Make its heavy edges lazy, or add an ` +
     'APPROVED_OVER_CEILING row naming the issue, the reason, and an owner.'
   );
+}
+
+/**
+ * The `APPROVED_OVER_CEILING` rows that can no longer change any verdict, so their removal is the
+ * only thing left to do with them: the entry is gone, the merge-base now carries it, or its
+ * closure fits the ceiling after all.
+ *
+ * The verdict is only readable from a commit that carries work of its own. When the merge-base IS
+ * the head -- a push to `main`, or any commit `main` already carries -- nothing is
+ * first-introduced by construction, so EVERY row reads as stale whatever its real state. The
+ * approving PR's own merge commit is exactly that shape, so judging staleness there made each
+ * approval a guaranteed red `main` one commit after it landed (#2329, run 34099687663): the row
+ * is required to merge the PR, and the merge that follows it is the run that calls the row dead.
+ * Deferring to the next branch loses no enforcement -- a row that outlives its PR is reported
+ * there, on the first commit whose merge-base could have read it.
+ */
+export function staleApprovalRows(
+  approvals: readonly string[],
+  introduced: ReadonlyMap<string, { category: EntryCategory; closureSize: number }>,
+  mergeBaseIsHead: boolean,
+): string[] {
+  if (mergeBaseIsHead) return [];
+  return approvals.filter((id) => {
+    const entry = introduced.get(id);
+    return entry === undefined || entry.closureSize <= NEW_ENTRY_CEILINGS[entry.category];
+  });
 }
 
 /**

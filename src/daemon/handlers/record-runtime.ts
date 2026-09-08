@@ -31,7 +31,7 @@ import {
   prepareRecordingRequest,
   readRecordingScope,
 } from './record-runtime-request.ts';
-import { resolveRecordingOutputPaths } from '../../recording/output-path.ts';
+import { resolveRecordingOutputPaths } from '@agent-device/capture-kit/recording-output-path';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,

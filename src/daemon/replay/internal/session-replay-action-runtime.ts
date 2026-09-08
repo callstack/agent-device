@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { mergeParentFlags } from '../../../core/batch.ts';
+import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,

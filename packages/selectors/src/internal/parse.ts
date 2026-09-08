@@ -56,7 +56,7 @@ export const SELECTOR_KEY_NAMES: readonly SelectorKey[] = [...ALL_KEYS];
 
 // Role/element-type words that show up as accessibility roles, not selector keys (e.g. the
 // `button` in `button="Push Article"`). Superset of the ROLE_LABELS vocabulary in
-// src/snapshot/snapshot-lines.ts (plus a few common role words like list/tab/alert/dialog/header,
+// packages/capture-kit/src/snapshot/snapshot-lines.ts (plus a few common role words like list/tab/alert/dialog/header,
 // minus valid selector keys such as `text`, which ALL_KEYS short-circuits before this set is
 // consulted), kept locally to avoid a selectors -> snapshot layering dependency. Drifts silently
 // if ROLE_LABELS grows; that's fine here since this only sharpens a hint, not validates anything.

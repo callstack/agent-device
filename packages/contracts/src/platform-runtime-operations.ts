@@ -485,6 +485,18 @@ const selectorUsesByIntent = Object.freeze({
 export type SelectorCaptureRuntimeIntent = keyof typeof selectorUsesByIntent;
 
 /**
+ * The one action-selected plan `find` binds (ADR 0019 §9): the target capture always, plus the
+ * focus leg for `find focus` and the focus+type legs for `find type`. Every other action resolves
+ * its target from the capture and delegates or reads; the handler and plan-time consumers share
+ * this map so they cannot drift.
+ */
+export function findRuntimeIntent(
+  action: string,
+): Extract<SelectorCaptureRuntimeIntent, 'capture-only' | 'find-focus' | 'find-type'> {
+  return action === 'focus' ? 'find-focus' : action === 'type' ? 'find-type' : 'capture-only';
+}
+
+/**
  * Same two `kind`s the snapshot plan uses for this split — deliberately, so capture-only,
  * element-text, and wait-observation callers share one admit-then-bind path.
  */

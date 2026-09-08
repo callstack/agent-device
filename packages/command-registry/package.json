@@ -7,12 +7,17 @@
   "description": "The command descriptor registry: the single declaration of every command's surface, runtime-use, batch, timeout, and platform-execution traits, plus the catalogs and projections derived from it.",
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
     "@agent-device/selectors": "workspace:*"
   },
   "exports": {
     "./registry": {
       "types": "./src/registry.ts",
       "default": "./src/registry.ts"
+    },
+    "./planned-operations": {
+      "types": "./src/planned-operations.ts",
+      "default": "./src/planned-operations.ts"
     },
     "./catalog": {
       "types": "./src/catalog.ts",
@@ -57,6 +62,14 @@
     "./wait-positionals": {
       "types": "./src/wait-positionals.ts",
       "default": "./src/wait-positionals.ts"
+    },
+    "./batch": {
+      "types": "./src/batch.ts",
+      "default": "./src/batch.ts"
+    },
+    "./batch-policy": {
+      "types": "./src/batch-policy.ts",
+      "default": "./src/batch-policy.ts"
     }
   }
 }

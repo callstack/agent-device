@@ -323,6 +323,35 @@ test('RPC: no hook configured keeps a client-declared flags.tenant unchanged (re
   });
 });
 
+test('RPC: an attested tenant cannot downgrade its own session isolation', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-tenant-trust-downgrade-');
+  try {
+    const hookPath = writeAttestingAuthHook(root);
+    await withRpcServer(hookPath, async ({ baseUrl, observedRequests }) => {
+      const response = await callRpc(baseUrl, {
+        jsonrpc: '2.0',
+        id: 'rpc-downgrade',
+        method: 'agent_device.command',
+        params: {
+          command: 'session_list',
+          positionals: [],
+          // Both carriers `scopeRequestSession` reads, and both the ones downstream
+          // consumers read: neither may survive as `none` under an attested tenant.
+          meta: { tenantId: ATTESTED_TENANT_ID, sessionIsolation: 'none' },
+          flags: { sessionIsolation: 'none' },
+        },
+      });
+      assert.equal(response.status, 200);
+      assert.equal(observedRequests[0]?.meta?.tenantId, ATTESTED_TENANT_ID);
+      assert.equal(observedRequests[0]?.meta?.sessionIsolation, 'tenant');
+      assert.equal(observedRequests[0]?.flags?.sessionIsolation, 'tenant');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('aux route: a hook configured but silent on tenant refuses a client-declared header claiming another tenant', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const root = mkdtempForTestSync('agent-device-tenant-trust-aux-');
@@ -401,14 +430,48 @@ test('aux route: no hook configured keeps the header-declared tenant unchanged (
       },
     });
     assert.equal(owner.status, 200);
+    // Nothing attested either header, so `scopeRequestSession` partitioned no
+    // session namespace and the `<tenant>:` prefix carries no ownership to check
+    // — the two RPC regressions above show the same caller may already run any
+    // command in `tenant-a:default`. The token is the gate in this mode.
     const otherTenant = await fetch(diagnosticsUrl(baseUrl, 'tenant-a:default', 'abc123'), {
       headers: {
         authorization: `Bearer ${DAEMON_TOKEN}`,
         [DAEMON_HTTP_TENANT_HEADER]: 'tenant-b',
       },
     });
-    assert.equal(otherTenant.status, 401);
+    assert.equal(otherTenant.status, 200);
   });
+});
+
+test('aux route: an attested tenant is still refused a record outside its partition', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-tenant-trust-aux-cross-');
+  try {
+    const hookPath = writeAttestingAuthHook(root);
+    await withDiagnosticsHookServer(hookPath, async ({ baseUrl, sessionsDir }) => {
+      // The hook attests `tenant-real`, so every session that caller can reach is
+      // named `tenant-real:...`. Another tenant's record, and the plain sessions
+      // outside the partition, both stay outside what it may address.
+      writeDiagnosticsRecord(sessionsDir, 'tenant-other:default', 'abc123');
+      writeDiagnosticsRecord(sessionsDir, 'cwd:9f1:default', 'abc123');
+      const auth = { authorization: `Bearer ${DAEMON_TOKEN}` };
+      for (const session of ['tenant-other:default', 'cwd:9f1:default']) {
+        const refused = await fetch(diagnosticsUrl(baseUrl, session, 'abc123'), { headers: auth });
+        assert.equal(refused.status, 401, `expected 401 for session ${session}`);
+        const body = (await refused.json()) as { error?: string; code?: string };
+        assert.equal(body.code, 'UNAUTHORIZED');
+        assert.equal(body.error, 'Session is outside this tenant');
+      }
+      writeDiagnosticsRecord(sessionsDir, `${ATTESTED_TENANT_ID}:default`, 'abc123');
+      const own = await fetch(diagnosticsUrl(baseUrl, `${ATTESTED_TENANT_ID}:default`, 'abc123'), {
+        headers: auth,
+      });
+      assert.equal(own.status, 200);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('aux route (upload): a hook configured but silent on tenant refuses a client-declared header', async (t) => {

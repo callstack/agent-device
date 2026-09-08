@@ -77,6 +77,7 @@ export type CanonicalCommand =
   | { kind: 'takeScreenshot' }
   | { kind: 'waitForAnimationToEnd'; timeout?: number | string }
   | { kind: 'stopApp' }
+  | { kind: 'clearState'; appId?: string }
   | { kind: 'repeat'; times: string | number }
   | { kind: 'retry'; maxRetries?: string | number }
   | { kind: 'runFlow'; label?: string; source: 'file' | 'commands' }
@@ -92,6 +93,27 @@ const UPSTREAM_CONFIG_TYPES = new Set(['ApplyConfigurationCommand', 'DefineVaria
 
 type UpstreamCommand = { type: string; fields: Record<string, unknown> };
 
+function canonicalizeUpstreamLifecycleCommand(
+  command: UpstreamCommand,
+): CanonicalCommand | undefined {
+  const f = command.fields;
+  switch (command.type) {
+    case 'LaunchAppCommand':
+      return dropUndefined({
+        kind: 'launchApp' as const,
+        appId: str(f.appId),
+        clearState: bool(f.clearState),
+        stopApp: bool(f.stopApp),
+      });
+    case 'StopAppCommand':
+      return { kind: 'stopApp' };
+    case 'ClearStateCommand':
+      return dropUndefined({ kind: 'clearState' as const, appId: str(f.appId) });
+    default:
+      return undefined;
+  }
+}
+
 export function canonicalizeUpstreamFlow(commands: UpstreamCommand[]): CanonicalCommand[] {
   return commands
     .filter((command) => !UPSTREAM_CONFIG_TYPES.has(command.type))
@@ -99,15 +121,10 @@ export function canonicalizeUpstreamFlow(commands: UpstreamCommand[]): Canonical
 }
 
 function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand {
+  const lifecycle = canonicalizeUpstreamLifecycleCommand(command);
+  if (lifecycle) return lifecycle;
   const f = command.fields;
   switch (command.type) {
-    case 'LaunchAppCommand':
-      return dropUndefined({
-        kind: 'launchApp',
-        appId: str(f.appId),
-        clearState: bool(f.clearState),
-        stopApp: bool(f.stopApp),
-      });
     case 'TapOnElementCommand': {
       const repeat = asRecord(f.repeat);
       return canonicalTap({
@@ -196,8 +213,6 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
         kind: 'waitForAnimationToEnd',
         timeout: numLike(f.timeout) ?? str(f.timeout),
       });
-    case 'StopAppCommand':
-      return { kind: 'stopApp' };
     case 'RepeatCommand':
       return { kind: 'repeat', times: numLike(f.times) ?? str(f.times) ?? '' };
     case 'RetryCommand':
@@ -302,8 +317,19 @@ export function canonicalizeAgentCommands(
   return program.commands.map((command) => canonicalizeAgentCommand(command, program.config));
 }
 
-function canonicalizeAgentCommand(
-  command: MaestroCommand,
+type AgentLifecycleCommand = Extract<
+  MaestroCommand,
+  { kind: 'launchApp' | 'stopApp' | 'clearState' }
+>;
+
+function isAgentLifecycleCommand(command: MaestroCommand): command is AgentLifecycleCommand {
+  return (
+    command.kind === 'launchApp' || command.kind === 'stopApp' || command.kind === 'clearState'
+  );
+}
+
+function canonicalizeAgentLifecycleCommand(
+  command: AgentLifecycleCommand,
   config: MaestroProgram['config'],
 ): CanonicalCommand {
   switch (command.kind) {
@@ -314,6 +340,19 @@ function canonicalizeAgentCommand(
         clearState: command.clearState,
         stopApp: command.stopApp,
       });
+    case 'stopApp':
+      return { kind: 'stopApp' };
+    case 'clearState':
+      return dropUndefined({ kind: 'clearState', appId: command.appId ?? config.appId });
+  }
+}
+
+function canonicalizeAgentCommand(
+  command: MaestroCommand,
+  config: MaestroProgram['config'],
+): CanonicalCommand {
+  if (isAgentLifecycleCommand(command)) return canonicalizeAgentLifecycleCommand(command, config);
+  switch (command.kind) {
     case 'tapOn': {
       const repeat = numLike(command.repeat) ?? 1;
       const repeatIsNumber = typeof repeat === 'number';
@@ -408,8 +447,6 @@ function canonicalizeAgentCommand(
       return { kind: 'takeScreenshot' };
     case 'waitForAnimationToEnd':
       return dropUndefined({ kind: 'waitForAnimationToEnd', timeout: numLike(command.timeout) });
-    case 'stopApp':
-      return { kind: 'stopApp' };
     case 'repeat':
       return { kind: 'repeat', times: numLike(command.times) ?? str(command.times) ?? '' };
     case 'retry':

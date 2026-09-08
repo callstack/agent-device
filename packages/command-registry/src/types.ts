@@ -36,9 +36,14 @@ export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
  *                           ever EXTENDS the envelope to envelopeMs + budget +
  *                           margin (interaction --settle semantics, #1101: the
  *                           flag bounds a post-action wait, so the request must
- *                           also cover selector/action overhead). `defaultBudgetMs`
- *                           is used when the feature flag is present but the
- *                           numeric timeout flag is omitted.
+ *                           also cover selector/action overhead). With
+ *                           `envelope: 'margin'` the budget is a daemon-side
+ *                           deadline (open/prepare startup): the envelope is
+ *                           budget + margin, never below `envelopeMs`, so the
+ *                           daemon's own structured timeout wins the race against
+ *                           the client envelope. `defaultBudgetMs` is used when
+ *                           the feature flag is present but the numeric timeout
+ *                           flag is omitted.
  *  - `'positional-parser'`— the budget travels inside the positionals; `parser`
  *                           extracts it (or returns null when none was given).
  *                           The client widens the envelope to
@@ -46,7 +51,7 @@ export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
  */
 export type CommandTimeoutBudget =
   | { source: 'none' }
-  | { source: 'flag'; envelope?: 'bound' | 'widen'; defaultBudgetMs?: number }
+  | { source: 'flag'; envelope?: 'bound' | 'widen' | 'margin'; defaultBudgetMs?: number }
   | { source: 'positional-parser'; parser: (positionals: string[]) => number | null };
 
 /**

@@ -565,7 +565,13 @@ test('open iOS URL without app bundle id skips runner prewarm', async () => {
   expect(mockPrewarmIosRunnerSession).not.toHaveBeenCalled();
 });
 
-test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', async () => {
+test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', async ({
+  onTestFinished,
+}) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'prepare-ios-runner';
   mockResolveTargetDevice.mockResolvedValue({
@@ -688,7 +694,13 @@ test('prepare ios-runner explains overlapping timing fields with additive parts'
   }
 });
 
-test('prepare ios-runner starts the XCTest runner on an explicit macOS selector', async () => {
+test('prepare ios-runner starts the XCTest runner on an explicit macOS selector', async ({
+  onTestFinished,
+}) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'prepare-macos-runner';
   mockResolveTargetDevice.mockResolvedValue({

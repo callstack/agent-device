@@ -3220,6 +3220,45 @@
       }
     },
     {
+      "id": "authored/clear-state",
+      "file": "authored/clear-state.yaml",
+      "status": "parsed",
+      "commands": [
+        {
+          "type": "ApplyConfigurationCommand",
+          "fields": {
+            "config": {
+              "appId": "com.example.app",
+              "name": null,
+              "tags": [],
+              "ext": {},
+              "onFlowStart": null,
+              "onFlowComplete": null,
+              "properties": {}
+            },
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "ClearStateCommand",
+          "fields": {
+            "appId": "com.example.app",
+            "label": null,
+            "optional": false
+          }
+        },
+        {
+          "type": "ClearStateCommand",
+          "fields": {
+            "appId": "another.app",
+            "label": null,
+            "optional": false
+          }
+        }
+      ]
+    },
+    {
       "id": "authored/doubletap",
       "file": "authored/doubletap.yaml",
       "status": "parsed",
@@ -4976,5 +5015,5 @@
       ]
     }
   ],
-  "contentHash": "857715bbddad493e6242decf7d8f83a0d7ca2b1d7a1add871fa6b5c544ca29cb"
+  "contentHash": "3fab6cb48d4ac7ec2640faa223b86a1dd58439d1e181ce442a76a5f754efc725"
 }

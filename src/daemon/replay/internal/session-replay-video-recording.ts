@@ -12,7 +12,7 @@ import type {
 import {
   defaultRecordingPath,
   recordingExtensionForPlatform,
-} from '../../../recording/output-path.ts';
+} from '@agent-device/capture-kit/recording-output-path';
 
 const REPLAY_TEST_VIDEO_RECORDING_PREROLL_MS = 1_000;
 const REPLAY_TEST_VIDEO_RECORDING_TAIL_MS = 3_000;

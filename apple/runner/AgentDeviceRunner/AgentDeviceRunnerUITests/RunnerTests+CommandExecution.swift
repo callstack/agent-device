@@ -825,70 +825,6 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
   }
 
-#if os(iOS)
-  func testAlertResolutionCannotBypassRequestedDeadline() throws {
-    final class ResultBox {
-      var error: Error?
-      var probeDeadline: Date?
-      var observedDeadline: Date?
-      var commandStartedAt: Date?
-    }
-    let box = ResultBox()
-    let releaseResolution = DispatchSemaphore(value: 0)
-    let resolutionExited = expectation(description: "bounded alert resolution exited")
-    let commandFinished = expectation(description: "alert command respected its deadline")
-    let command = try runnerCommandFixture(
-      #"{"command":"alert","commandId":"alert-deadline","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
-    )
-    currentApp = springboard
-    currentBundleId = Self.springboardBundleId
-    systemModalProbeOverrideForTesting = { deadline in
-      box.probeDeadline = deadline
-      return nil
-    }
-    alertResolutionOverrideForTesting = { deadline in
-      box.observedDeadline = deadline
-      _ = releaseResolution.wait(timeout: .now() + 1)
-      resolutionExited.fulfill()
-      return nil
-    }
-    defer {
-      releaseResolution.signal()
-      systemModalProbeOverrideForTesting = nil
-      alertResolutionOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
-    }
-
-    DispatchQueue(label: "agent-device.runner.tests.alert-deadline").async {
-      box.commandStartedAt = Date()
-      do {
-        _ = try self.executeDispatched(command: command)
-      } catch {
-        box.error = error
-      }
-      commandFinished.fulfill()
-    }
-
-    wait(for: [commandFinished], timeout: 1)
-    let error = box.error as NSError?
-    XCTAssertEqual(error?.domain, RunnerErrorDomain.general)
-    XCTAssertEqual(error?.code, RunnerErrorCode.mainThreadExecutionTimedOut)
-    XCTAssertNotNil(box.probeDeadline)
-    XCTAssertNotNil(box.observedDeadline)
-    if let probeDeadline = box.probeDeadline,
-      let observedDeadline = box.observedDeadline,
-      let commandStartedAt = box.commandStartedAt
-    {
-      XCTAssertEqual(probeDeadline.timeIntervalSince(observedDeadline), 0, accuracy: 0.01)
-      XCTAssertEqual(observedDeadline.timeIntervalSince(commandStartedAt), 0.5, accuracy: 0.05)
-    }
-
-    releaseResolution.signal()
-    wait(for: [resolutionExited], timeout: 1)
-  }
-#endif
-
   func testRunMainThreadWorkExecutesOffMainCallerOnMainThread() {
     final class ResultBox {
       var observedMainThread: Bool?
@@ -1135,10 +1071,7 @@ extension RunnerTests {
       ? Date().addingTimeInterval(Self.alertCommandTimeout(timeoutMs: command.timeoutMs))
       : nil
     if Thread.isMainThread {
-      let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(
-        command,
-        deadline: alertDeadline
-      )
+      let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(command)
       return try executeOnMainSafely(
         command: command,
         alertDeadline: alertDeadline,
@@ -1148,10 +1081,7 @@ extension RunnerTests {
     // Resolve this before the command's outer main-thread block. If the bounded probe abandons
     // slow XCTest enumeration, return the established recoverable response instead of queueing
     // command preparation behind work that may outlive the 30-second command watchdog.
-    let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(
-      command,
-      deadline: alertDeadline
-    )
+    let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(command)
     if let unavailable = runnerUnavailableResponse(command: command) {
       return unavailable
     }
@@ -2652,11 +2582,10 @@ extension RunnerTests {
   }
 
   private func shouldRouteToSpringboardBlockingSystemModal(
-    _ command: Command,
-    deadline: Date? = nil
+    _ command: Command
   ) -> Bool {
 #if os(iOS)
-    guard command.command == .alert || isCoordinateOnlyTap(command) else {
+    guard isCoordinateOnlyTap(command) else {
       return false
     }
     #if AGENT_DEVICE_RUNNER_UNIT_TESTS
@@ -2664,8 +2593,7 @@ extension RunnerTests {
       return override
     }
     #endif
-    let budgetDeadline = Date().addingTimeInterval(systemModalProbeBudget)
-    let probeDeadline = deadline.map { min($0, budgetDeadline) } ?? budgetDeadline
+    let probeDeadline = Date().addingTimeInterval(systemModalProbeBudget)
     // `runMainThreadWork` executes inline for a main-thread caller, so that path cannot use its
     // timeout machinery. Direct main-thread dispatch keeps the prior synchronous modal check;
     // normal off-main command dispatch uses the bounded probe and post-probe busy recovery.

@@ -2,7 +2,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
-} from '../../core/batch-policy.ts';
+} from '@agent-device/command-registry/batch-policy';
 import {
   parseBatchStepRuntime,
   readBatchStepInputObject,

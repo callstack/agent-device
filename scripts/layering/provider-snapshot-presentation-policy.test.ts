@@ -57,6 +57,26 @@ test('R73 rejects an out-of-adapter provider presentation import', () => {
   );
 });
 
+test('R73 rejects a provider import of the capture-kit presentation runtime subpath', () => {
+  const result = violations(
+    new Map([
+      [
+        providerHelper,
+        `import { presentIosSnapshot } from '@agent-device/capture-kit/ios-snapshot-runtime';\nvoid presentIosSnapshot;\n`,
+      ],
+    ]),
+  );
+  assert.ok(
+    result.some(
+      (entry) =>
+        entry.rule === PROVIDER_SNAPSHOT_PRESENTATION_RULE &&
+        entry.file === providerHelper &&
+        entry.message.includes(IOS_SNAPSHOT_PRESENTATION_OWNER),
+    ),
+    JSON.stringify(result),
+  );
+});
+
 for (const planted of [
   {
     name: 'a planted provider residue discard',

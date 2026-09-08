@@ -46,7 +46,7 @@ export type { AlertAction } from '@agent-device/contracts/alert-contract';
 export type { AppleOS } from '@agent-device/kernel/device';
 // fallow-ignore-next-line unused-type
 export type { JsonObject } from '@agent-device/contracts/client';
-export type { BatchRunResult } from '../core/batch.ts';
+export type { BatchRunResult } from '@agent-device/command-registry/batch';
 
 import type {
   AgentDeviceCapabilitiesResult,
@@ -138,7 +138,7 @@ import type {
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
 
-import type { BatchRunResult } from '../core/batch.ts';
+import type { BatchRunResult } from '@agent-device/command-registry/batch';
 
 import type {
   AgentArtifactsResult,

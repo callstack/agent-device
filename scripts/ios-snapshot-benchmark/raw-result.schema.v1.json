@@ -109,7 +109,10 @@
         "states": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "enum": ["cold-cold", "cold", "warm", "relaunch"] }
+          "items": {
+            "type": "string",
+            "enum": ["cold-cold", "cold", "warm", "relaunch", "first-interaction"]
+          }
         }
       }
     },
@@ -136,7 +139,10 @@
         "properties": {
           "transport": { "type": "string", "enum": ["local", "proxy"] },
           "execution": { "type": "string", "enum": ["fresh-process-cli", "persistent-client"] },
-          "state": { "type": "string", "enum": ["cold-cold", "cold", "warm", "relaunch"] },
+          "state": {
+            "type": "string",
+            "enum": ["cold-cold", "cold", "warm", "relaunch", "first-interaction"]
+          },
           "screen": {
             "type": "string",
             "enum": ["quiet", "list", "nested-scroll", "alert", "system-surface", "xctest-stress"]
@@ -144,7 +150,7 @@
           "sampleMinimum": { "type": "integer", "minimum": 1 },
           "operation": {
             "type": "string",
-            "enum": ["open-foreground", "snapshot", "relaunch-foreground"]
+            "enum": ["open-foreground", "snapshot", "relaunch-foreground", "first-interaction"]
           },
           "samples": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sample" } },
           "wallClockMs": { "$ref": "#/$defs/summaryOrNull" },
@@ -251,7 +257,7 @@
         "finishedAt": { "type": "string", "minLength": 1 },
         "operation": {
           "type": "string",
-          "enum": ["open-foreground", "snapshot", "relaunch-foreground"]
+          "enum": ["open-foreground", "snapshot", "relaunch-foreground", "first-interaction"]
         },
         "wallClockMs": { "type": "number", "minimum": 0 },
         "daemonDurationMs": { "type": "number", "minimum": 0 },

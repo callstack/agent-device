@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import {
+  firstInteractionAfterOpen,
   openFixture,
   sampleFromCli,
   snapshotFixture,
@@ -73,14 +74,15 @@ async function runCell(options: CellAdmissionOptions): Promise<Measurement> {
 
 function runMeasuredCommand(context: CliContext, options: CellAdmissionOptions): CliResult {
   if (options.state === 'warm') return snapshotFixture(context);
+  if (options.state === 'first-interaction')
+    return firstInteractionAfterOpen(context, options.fixture);
   return openFixture(context, options.fixture, { relaunch: true });
 }
 
-function measuredOperation(
-  state: LocalState,
-): 'open-foreground' | 'snapshot' | 'relaunch-foreground' {
+function measuredOperation(state: LocalState): RawSample['operation'] {
   if (state === 'warm') return 'snapshot';
   if (state === 'relaunch') return 'relaunch-foreground';
+  if (state === 'first-interaction') return 'first-interaction';
   return 'open-foreground';
 }
 

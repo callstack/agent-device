@@ -56,7 +56,7 @@ export function contractsImplementationAuthorityViolations(
         violation(
           file.path,
           1,
-          'contracts may not own snapshot quality warning rendering; that presentation policy belongs in src/snapshot/snapshot-presentation',
+          'contracts may not own snapshot quality warning rendering; that presentation policy belongs in packages/capture-kit/src/snapshot/snapshot-presentation',
         ),
       );
     }

@@ -207,6 +207,12 @@ export type MaestroStopAppCommand = {
   appId?: string;
 };
 
+export type MaestroClearStateCommand = {
+  kind: 'clearState';
+  source: MaestroSourceLocation;
+  appId?: string;
+};
+
 export type MaestroRunScriptCommand = {
   kind: 'runScript';
   source: MaestroSourceLocation;
@@ -265,6 +271,7 @@ export type MaestroCommand =
   | MaestroBackCommand
   | MaestroWaitForAnimationToEndCommand
   | MaestroStopAppCommand
+  | MaestroClearStateCommand
   | MaestroRunScriptCommand
   | MaestroRunFlowCommand
   | MaestroRepeatCommand

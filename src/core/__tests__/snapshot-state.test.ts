@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { buildSnapshotState } from '../snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { resolveActionableTouchResolution } from '../interaction-targeting.ts';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
@@ -26,6 +26,7 @@ test('buildSnapshotState carries structured snapshot quality verdicts', () => {
     {
       nodes: [{ index: 0, type: 'Application' }],
       backend: 'xctest',
+      producer: 'apple-runner',
       quality: {
         state: 'sparse',
         backend: 'private-ax',
@@ -97,7 +98,10 @@ test('buildSnapshotState preserves Android effective geometry for post-wire cons
   </node>
 </hierarchy>`;
   const built = buildUiHierarchySnapshot(parseUiHierarchyTree(xml), undefined, {});
-  const state = buildSnapshotState({ nodes: built.nodes, backend: 'android' }, undefined);
+  const state = buildSnapshotState(
+    { nodes: built.nodes, backend: 'android', producer: 'android-uiautomator' },
+    undefined,
+  );
   const target = state.nodes.find((node) => node.label === 'Partially visible');
 
   expect(target).toMatchObject({
@@ -116,6 +120,7 @@ test('buildSnapshotState handles nodes with missing fields', () => {
       ],
       truncated: false,
       backend: 'android',
+      producer: 'android-uiautomator',
     },
     undefined,
   );
@@ -128,58 +133,28 @@ test('buildSnapshotState marks comparisonSafe false for filtered Android snapsho
   const nodes = [{ index: 0, depth: 0, type: 'android.widget.TextView', label: 'A' }];
 
   const interactiveOnly = buildSnapshotState(
-    { nodes, backend: 'android' },
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
     { snapshotInteractiveOnly: true },
   );
   expect(interactiveOnly.comparisonSafe).toBe(false);
 
-  const withDepth = buildSnapshotState({ nodes, backend: 'android' }, { snapshotDepth: 2 });
+  const withDepth = buildSnapshotState(
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
+    { snapshotDepth: 2 },
+  );
   expect(withDepth.comparisonSafe).toBe(false);
 
-  const withScope = buildSnapshotState({ nodes, backend: 'android' }, { snapshotScope: 'Header' });
+  const withScope = buildSnapshotState(
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
+    { snapshotScope: 'Header' },
+  );
   expect(withScope.comparisonSafe).toBe(false);
 
-  const unfiltered = buildSnapshotState({ nodes, backend: 'android' }, {});
-  expect(unfiltered.comparisonSafe).toBe(true);
-});
-
-test('buildSnapshotState leaves Apple runner presentation to the engine', () => {
-  const nodes = [
-    { index: 0, depth: 0, type: 'Application', label: 'Settings' },
-    { index: 1, depth: 1, parentIndex: 0, type: 'Table', label: 'Settings' },
-    { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General' },
-    { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General' },
-  ];
-
-  const state = buildSnapshotState(
-    { nodes, backend: 'xctest', producer: 'apple-runner' },
-    { snapshotInteractiveOnly: true },
+  const unfiltered = buildSnapshotState(
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
+    {},
   );
-
-  expect(state.nodes.map((node) => node.type)).toEqual(['Application', 'Table', 'Cell', 'Button']);
-});
-
-test('buildSnapshotState uses the registered presentation owner for Appium results', () => {
-  const rowRect = { x: 16, y: 293, width: 370, height: 52 };
-  const data = {
-    nodes: [
-      { index: 0, depth: 0, type: 'Application', label: 'Settings' },
-      { index: 1, depth: 1, parentIndex: 0, type: 'CollectionView' },
-      { index: 2, depth: 2, parentIndex: 1, type: 'Cell', label: 'General', rect: rowRect },
-      { index: 3, depth: 3, parentIndex: 2, type: 'Button', label: 'General', rect: rowRect },
-    ],
-    backend: 'xctest' as const,
-    producer: 'appium-source' as const,
-  };
-
-  const state = buildSnapshotState(data, { snapshotInteractiveOnly: true });
-
-  expect(state.nodes.map((node) => [node.type, node.label])).toEqual([
-    ['Application', 'Settings'],
-    ['CollectionView', undefined],
-    ['Cell', 'General'],
-    ['Button', 'General'],
-  ]);
+  expect(unfiltered.comparisonSafe).toBe(true);
 });
 
 test('Appium presentation does not infer hittability from an enabled ancestor rectangle', () => {
@@ -255,6 +230,7 @@ test('buildSnapshotState marks content covered by floating overlays as visible b
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     },
     undefined,
   );
@@ -299,6 +275,7 @@ test('buildSnapshotState marks Android app content covered by IME overlays as bl
         },
       ],
       backend: 'android',
+      producer: 'android-uiautomator',
     },
     undefined,
   );
@@ -354,7 +331,7 @@ test('buildSnapshotState keeps a sparse Android overlay actionable above scrolla
   ];
   const state = buildSnapshotState(
     attachSnapshotOcclusionContextEvidence(
-      { nodes, backend: 'android' as const },
+      { nodes, backend: 'android', producer: 'android-uiautomator' as const },
       {
         nodes,
         sourceIndexByNodeIndex: new Map(nodes.map((node) => [node.index, node.index])),
@@ -405,7 +382,7 @@ test('buildSnapshotState handles a maximum-size deeply nested Android replacemen
   ];
   const state = buildSnapshotState(
     attachSnapshotOcclusionContextEvidence(
-      { nodes, backend: 'android' as const },
+      { nodes, backend: 'android', producer: 'android-uiautomator' as const },
       {
         nodes,
         sourceIndexByNodeIndex: new Map(nodes.map((node) => [node.index, node.index])),
@@ -463,6 +440,7 @@ test('buildSnapshotState treats large Android IME subtrees as one overlay root',
         ...imeChildren,
       ],
       backend: 'android',
+      producer: 'android-uiautomator',
     },
     undefined,
   );
@@ -503,6 +481,7 @@ test('buildSnapshotState does not treat later generic hittable containers as cov
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     },
     undefined,
   );
@@ -561,6 +540,7 @@ test('buildSnapshotState does not let covered overlays cover earlier targets', (
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     },
     undefined,
   );
@@ -608,6 +588,7 @@ test('buildSnapshotState leaves raw snapshot hittability untouched', () => {
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     },
     { snapshotRaw: true },
   );
@@ -639,6 +620,7 @@ test('buildSnapshotState preserves macOS helper scope behavior', () => {
         { index: 1, depth: 1, parentIndex: 0, type: 'Button', label: 'Target' },
       ],
       backend: 'macos-helper',
+      producer: 'macos-helper',
     },
     { snapshotScope: 'missing scope' },
   );

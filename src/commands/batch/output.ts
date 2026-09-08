@@ -1,4 +1,4 @@
-import type { BatchRunResult, BatchStepResult } from '../../core/batch.ts';
+import type { BatchRunResult, BatchStepResult } from '@agent-device/command-registry/batch';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';

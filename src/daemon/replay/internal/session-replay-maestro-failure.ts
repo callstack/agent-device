@@ -7,7 +7,7 @@ import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
   type ReplayVarScrubEntry,
-} from '../../../core/replay-divergence.ts';
+} from '@agent-device/ad-replay/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

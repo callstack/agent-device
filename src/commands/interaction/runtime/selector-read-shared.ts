@@ -12,7 +12,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { extractReadableText } from '../../../snapshot/snapshot-presentation/text-surface.ts';
+import { extractReadableText } from '@agent-device/capture-kit/text-surface';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { findNodeByLabel } from './selector-read-utils.ts';
 import type { SelectorSnapshotInput } from '../../command-input.ts';

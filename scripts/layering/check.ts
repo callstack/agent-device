@@ -102,6 +102,11 @@ import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-p
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import {
+  checkDaemonPlatformRuntimeInventory,
+  DAEMON_PLATFORM_RUNTIME_EDGES,
+} from './daemon-platform-runtime-inventory.ts';
+import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
+import {
   listTrackedPlatformZoneFiles,
   listTrackedProductionSources,
   listTrackedSrcUtilsFiles,
@@ -113,6 +118,7 @@ import { sessionResourceOwnershipViolations } from './session-resource-ownership
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
 import { providerSnapshotPresentationViolations } from './provider-snapshot-presentation-policy.ts';
+import { snapshotAssemblyPresentationViolations } from './snapshot-assembly-presentation-policy.ts';
 import { RETIRED_PATH_RULES, retiredPathRuleViolations } from './retired-paths-policy.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -351,6 +357,9 @@ function report(
       (sum, count) => sum + count,
       0,
     );
+    const measuredOverlay = handlerOwnedOverlay(ratchets.sessionAuthority);
+    const handlerOwnedShapeFiles = measuredOverlay.shapeFiles.length;
+    const handlerOwnedAuthorityFiles = measuredOverlay.authorityFiles.length;
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
@@ -362,8 +371,12 @@ function report(
         `${ratchets.largestTypeCycle.length} files (R9); ${daemonModularitySummary(reference)}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
-        `manufacture narrowed runtime proof (R66); and R65 keeps production src/daemon free of ` +
-        `concrete platform imports in every executable and type-only form.\n`,
+        `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of ` +
+        `concrete platform imports in every executable and type-only form; ` +
+        `${DAEMON_PLATFORM_RUNTIME_EDGES.length} daemon-to-root platform-runtime edges hold ` +
+        `their #2278 classification (R76); and the handler-owned SessionState/SessionStore ` +
+        `authority overlay holds at or under the merge-base (R75, ` +
+        `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files).\n`,
     );
     return 0;
   }
@@ -435,6 +448,9 @@ export const LAYERING_RULE_IDS = [
   'replay-ownership',
   'ios-snapshot-engine-ownership',
   'provider-snapshot-presentation-ownership',
+  'snapshot-assembly-presentation-neutrality',
+  'daemon-platform-runtime-inventory',
+  'session-authority-overlay',
 ] as const;
 
 export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
@@ -487,6 +503,15 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
   'provider-snapshot-presentation-ownership': (context) =>
     providerSnapshotPresentationViolations(context.sources, context.edges),
+  'snapshot-assembly-presentation-neutrality': (context) =>
+    snapshotAssemblyPresentationViolations(context.sources, context.edges),
+  'daemon-platform-runtime-inventory': (context) =>
+    checkDaemonPlatformRuntimeInventory(context.edges),
+  'session-authority-overlay': (context) =>
+    checkSessionAuthorityOverlay(
+      context.ratchets.sessionAuthority,
+      context.reference.sessionAuthority,
+    ),
 };
 
 export function main(): number {

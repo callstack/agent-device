@@ -3,6 +3,7 @@ import { stripUndefined } from './shared.ts';
 import type {
   MaestroAssertTrueCommand,
   MaestroBackCommand,
+  MaestroClearStateCommand,
   MaestroCommand,
   MaestroEraseTextCommand,
   MaestroExtendedWaitUntilCommand,
@@ -122,6 +123,7 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
   back: parseBack,
   waitForAnimationToEnd: parseWaitForAnimationToEnd,
   stopApp: parseStopApp,
+  clearState: parseClearState,
   runScript: parseMaestroRunScriptCommand,
   runFlow: (value, node, context) =>
     parseMaestroRunFlowCommand(value, node, context, parseMaestroCommandList),
@@ -445,6 +447,16 @@ function parseStopApp(
   const source = sourceAt(commandNode, context);
   if (isNullNode(value)) return { kind: 'stopApp', source };
   return { kind: 'stopApp', source, appId: readRequiredString(value, 'stopApp', context) };
+}
+
+function parseClearState(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroClearStateCommand {
+  const source = sourceAt(commandNode, context);
+  if (isNullNode(value)) return { kind: 'clearState', source };
+  return { kind: 'clearState', source, appId: readRequiredString(value, 'clearState', context) };
 }
 
 function parseLaunchArguments(

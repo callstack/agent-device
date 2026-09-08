@@ -465,6 +465,14 @@
       }
     },
     {
+      "id": "authored/clear-state",
+      "file": "authored/clear-state.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: standalone clearState with default and explicit appId (no upstream flow exercises it)."
+      }
+    },
+    {
       "id": "authored/doubletap",
       "file": "authored/doubletap.yaml",
       "origin": {

@@ -9,8 +9,8 @@ import {
   snapshotAndroid,
   type AndroidAdbExecutor,
 } from '@agent-device/platform-android/mechanics';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
-import { coveredAndroidReplacementNodeIndexes } from '../snapshot/android-replacement-surface-occlusion.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { coveredAndroidReplacementNodeIndexes } from '@agent-device/capture-kit/android-replacement-surface-occlusion';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,

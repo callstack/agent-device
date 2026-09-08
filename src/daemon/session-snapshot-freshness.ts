@@ -10,14 +10,14 @@ import {
   type SnapshotFreshnessAttemptShape,
   type SnapshotFreshnessMode,
   type SnapshotFreshnessWindow,
-} from '../snapshot/snapshot-freshness/index.ts';
+} from '@agent-device/capture-kit/snapshot-freshness';
 import type { SessionState } from './session-state.ts';
 
 /**
  * Session binding for the neutral snapshot-freshness facet (#1983).
  *
  * The staleness policy, its thresholds and the recovery loop live in
- * `src/snapshot/snapshot-freshness/`. What stays here is the part that is genuinely daemon
+ * `packages/capture-kit/src/snapshot/snapshot-freshness/`. What stays here is the part that is genuinely daemon
  * assembly: reading and retiring the window that hangs off store-owned `SessionState`, and
  * choosing the comparison baseline from session snapshot lineage. This module is the declared
  * R7 owner of `SessionState.androidSnapshotFreshness`.

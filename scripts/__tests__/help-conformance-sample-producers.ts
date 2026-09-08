@@ -35,7 +35,7 @@ import type { ConnectVerification } from '../../src/cli/connection/connect-provi
 import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { renderSnapshotQualityWarnings } from '../../src/snapshot/snapshot-presentation/quality-warnings.ts';
+import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import { printHumanError } from '../../src/commands/output/error.ts';
 import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
 

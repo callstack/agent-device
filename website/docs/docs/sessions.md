@@ -48,6 +48,12 @@ Shut down the simulator/emulator on close (Apple simulators and Android emulator
 agent-device close --shutdown
 ```
 
+A never-booted iOS Simulator can take several minutes to finish its first boot. Give `open` (or `prepare ios-runner`) a startup budget that covers it; the session's device claim is held from the first `open` onward, so a competing workspace sees `DEVICE_IN_USE` throughout:
+
+```bash
+agent-device open Settings --platform ios --udid <udid> --timeout 600000
+```
+
 Notes:
 
 - `open <app>` within an existing session switches the active app and updates the session bundle id.

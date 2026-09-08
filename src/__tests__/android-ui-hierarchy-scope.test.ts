@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { parseUiHierarchy } from './test-utils/android-ui-hierarchy-fixtures.ts';
 import {
   AndroidSnapshotPresentationFailure,
@@ -121,7 +121,10 @@ test('a scoped Android snapshot is not re-scoped after the wire', () => {
     'projection output: scoped root at depth 0, its children below it',
   );
 
-  const state = buildSnapshotState({ nodes, backend: 'android' }, { snapshotScope: 'panel' });
+  const state = buildSnapshotState(
+    { nodes, backend: 'android', producer: 'android-uiautomator' },
+    { snapshotScope: 'panel' },
+  );
   assert.deepEqual(
     state.nodes.map((node) => node.label ?? node.identifier),
     ['panel', 'Save', 'Cancel'],

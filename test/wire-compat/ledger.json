@@ -61,10 +61,12 @@
     "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
     "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
-    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:38fe712390d247de59a74b9dc209fdf407ff5f9b1e32b698ae71ebc57569b66d",
+    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:e1d2251a5bc1607539ec4fbe73c4a9b2dd5fa2859293c442565eb457db47f42f",
+    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:e145d58c1b8c209cdc95ed9e3540b5ffbb9c2ac2eedce3bb1b34ecd7b7bd9dd0",
     "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
-    "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:5b15e14319b16aebf32d07336986a7f1f2a6b13cec1823ca9aa7c9f01bf1b0b6",
-    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:b22111f693ecb65705195a66bce617e58441483ebfd67cf264d6900ba1dcb401",
+    "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:7f020e3f8bf11f6286d4c466d83606a9819a3a6d4f7db70b427fa8835ce0c5be",
+    "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
+    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -78,9 +80,9 @@
     "src/daemon/http-errors.ts#statusCodeForNormalizedError": "sha256:20ad272162e28425920bd2dcb4da5ec104bd7e8be2028b902b05bfa4da3df966",
     "src/daemon/http-request-target.ts#decodeUriSegment": "sha256:b37622771ea4e61d1a9820169dbdc5809b5c38889bfad79277d7b22f3c3f1ef1",
     "src/daemon/request-diagnostics-http.ts#REQUEST_DIAGNOSTICS_CONTENT_TYPE": "sha256:16bbd9ae7eaeaaa8c8cbd6e65c4ce786a6c5230c5351288228bbf1a6f11bdcdc",
-    "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:20761c39f434c675bb3405838dded5640bb623737957257e0452ebd46035eef1",
+    "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
     "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
-    "src/daemon/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:83d80f1386028ee56e8954949206dbb723d8411e5c13d25565d32ce3ee84dd9e",
+    "src/daemon/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:32c3d100176dd99ecbb61f8050d05b1cda64b7be1944a2cd16633e83fa78660b",
     "src/daemon/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
     "src/daemon/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
     "src/daemon/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
@@ -103,7 +105,7 @@
     "src/daemon/server/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:3cb06e12b3110fa27e390d5c6473578b3f13c93b9f2b571e0e8e42d7ce29d48a",
     "src/daemon/server/http-server.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "src/daemon/server/http-server.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:f74f2fc70313a4cc048bcd531f9831970cab75c2b098688e846c44b3c37a7185",
+    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
     "src/daemon/server/http-server.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "src/daemon/server/http-server.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "src/daemon/server/http-server.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -119,6 +121,8 @@
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:ca661f6dd2de6e517c520dbd1e20b59b24b58d925157ed06123149ed2bc0fa3b",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
+    "src/daemon/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
+    "src/daemon/session-tenant-scope.ts#isTenantAddressableSessionName": "sha256:cc8ae18094b7f57d4bb694678f84ba767637b1087fd28058ffd6a3c92c79f05d",
     "src/daemon/session-tenant-scope.ts#isTenantOwnedSessionName": "sha256:c3cff883507d462548846554b89779cb815ceb265714575e57bee022b57c4bd1",
     "src/daemon/upload-http.ts#AuxiliaryHttpAuthorizer": "sha256:6521ffa355c57af97bfc8095699f2a2b38745a6ef8d61a34c8cfc80ee690b6b5",
     "src/daemon/upload-http.ts#DIRECT_UPLOAD_PATH_PREFIX": "sha256:6fe7d42a65baceb595d96b6aa83fe9aa84527d9aa2e448d7ef47882d31a03276",
@@ -178,7 +182,7 @@
     {
       "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
       "digest": "sha256:709899c02b2a5f6ec2a995350ac7b5791d67db12a631b109af5074427291edda",
-      "rationale": "#2318 moves the daemon HTTP wire contract into @agent-device/contracts and hands buildDaemonHealthPayload the version its caller advertises instead of reading the package version itself. The added parameter is caller-local \u2014 each side passes its own readVersion() \u2014 and the /health payload a released peer sends or parses is byte-identical."
+      "rationale": "#2318 moves the daemon HTTP wire contract into @agent-device/contracts and hands buildDaemonHealthPayload the version its caller advertises instead of reading the package version itself. The added parameter is caller-local — each side passes its own readVersion() — and the /health payload a released peer sends or parses is byte-identical."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
@@ -188,7 +192,7 @@
     {
       "declaration": "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -209,11 +213,6 @@
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
       "digest": "sha256:719b5b8c29a95e9d2be01850bb97c8120f5a04aecc09c265bebfc6631e41ffa3",
       "rationale": "#2110 reads the optional providerApp lease-allocation parameter into the existing flags bag. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted."
-    },
-    {
-      "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
-      "digest": "sha256:f74f2fc70313a4cc048bcd531f9831970cab75c2b098688e846c44b3c37a7185",
-      "rationale": "#2095 adds one new rejection condition (a configured-but-tenant-silent auth hook plus a client-declared tenant) that answers with the same 401 `{ok:false,error,code}` REST shape `sendRestJsonError` already sends for the token-error and hook-rejected cases on this route. An older client already parses that shape; nothing new appears on the wire, only a request that used to be silently trusted now gets an error it already knows how to read."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
@@ -254,6 +253,36 @@
       "declaration": "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError",
       "digest": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
       "rationale": "#1862 client-side only: this rehydrates the new optional structured `cause` when present. Released daemons that omit it follow the unchanged path, and no request field or existing response field is narrowed."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth",
+      "digest": "sha256:e1d2251a5bc1607539ec4fbe73c4a9b2dd5fa2859293c442565eb457db47f42f",
+      "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. RemoteDaemonHealth gains the optional `upstream` link; every released field stays."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#readHealthPayload",
+      "digest": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
+      "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. readHealthPayload reads the same top-level fields through readHealthLink and additionally the nested `upstream` object when present; a payload without it yields the previous shape."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
+      "digest": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
+      "rationale": "#2198 slice B: the ADR 0006 refusal now covers every link a command RPC crosses, so a proxy whose daemon speaks another protocol version fails at health, before the RPC, exactly like a skewed proxy. The comparison against DAEMON_RPC_PROTOCOL_VERSION is unchanged and strictly wider; a compatible chain passes as before."
+    },
+    {
+      "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
+      "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+    },
+    {
+      "declaration": "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
+      "digest": "sha256:24b0fa6b1d965e5cf6503a4665148dc6360c56bf5a0ae710eeaa76a73a62c52a",
+      "rationale": "#2198 context: widens the authorizer callback's result by the same optional sessionNamespace field, so the route can put its tenant question to session-tenant-scope instead of re-deriving the rule locally. The callback is supplied by createDaemonHttpServer inside this process and never crosses the wire; a caller of the route sends and parses exactly the bytes it did before."
+    },
+    {
+      "declaration": "src/daemon/request-diagnostics-http.ts#handleRequestDiagnostics",
+      "digest": "sha256:32c3d100176dd99ecbb61f8050d05b1cda64b7be1944a2cd16633e83fa78660b",
+      "rationale": "#2198 context: asks isTenantAddressableSessionName instead of applying the prefix rule locally. Same UNAUTHORIZED code, same 'Session is outside this tenant' message and same 401 body for the attested-tenant case the rule still refuses; the only difference a peer can observe is that an unattested tenant now gets the 200 + ndjson record it already knows how to read instead of a 401 it could not act on."
     }
   ]
 }

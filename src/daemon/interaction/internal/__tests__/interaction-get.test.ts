@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory
 import { expireRefFrame } from '../../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../../session-snapshot.ts';
 import { handleInteractionCommands } from '../../index.ts';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import {
   contextFromFlags,
   makeSession,
@@ -90,6 +90,7 @@ test('get text prefers underlying value for text surfaces and avoids recording g
     ]),
     createdAt: Date.now(),
     backend: 'xctest',
+    producer: 'apple-runner',
   };
   sessionStore.set(sessionName, session);
 
@@ -140,6 +141,7 @@ test('get text uses backend read expansion when the resolved node has a rect', a
     ]),
     createdAt: Date.now(),
     backend: 'xctest',
+    producer: 'apple-runner',
   };
   sessionStore.set(sessionName, session);
 
@@ -188,6 +190,7 @@ test('get text answers from the captured tree when the bound owner advertises no
     ]),
     createdAt: Date.now(),
     backend: 'xctest',
+    producer: 'apple-runner',
   };
   sessionStore.set(sessionName, session);
   elementReadFixtureState.readTextAtPointAvailable = false;
@@ -262,6 +265,7 @@ test('get text simple iOS id selector resolves through the bound capture, not a 
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
   legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
+    producer: 'apple-runner',
     nodes: [
       {
         index: 0,
@@ -319,6 +323,7 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
   legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
+    producer: 'apple-runner',
     nodes: [
       {
         index: 0,
@@ -415,6 +420,7 @@ test('is visible preserves CLI snapshot flags during runtime snapshot capture', 
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     };
   });
 
@@ -446,7 +452,10 @@ test('is visible reuses fresh cached iOS snapshots with rects', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-visible-cached';
   const session = makeSession(sessionName);
-  session.snapshot = makeVisibleButtonSnapshot('Cached action', 'xctest');
+  session.snapshot = makeVisibleButtonSnapshot('Cached action', {
+    backend: 'xctest',
+    producer: 'apple-runner',
+  });
   sessionStore.set(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(new Error('unexpected fresh snapshot'));
 
@@ -477,11 +486,17 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
     {
       nodes: [{ index: 0, type: 'button', label: 'Submit order' }],
       backend: 'web',
+      producer: 'agent-browser',
     },
     { snapshotInteractiveOnly: false },
   );
   sessionStore.set(sessionName, session);
-  legacyDispatchCapture.mockResolvedValue(makeVisibleButtonSnapshot('Submit order', 'web'));
+  legacyDispatchCapture.mockResolvedValue(
+    makeVisibleButtonSnapshot('Submit order', {
+      backend: 'web',
+      producer: 'agent-browser',
+    }),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -578,6 +593,7 @@ test('is visible passes for list text that inherits viewport visibility from an 
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     };
   });
 
@@ -624,6 +640,7 @@ test('is visible fails for nodes outside the current viewport', async () => {
         },
       ],
       backend: 'xctest',
+      producer: 'apple-runner',
     };
   });
 
@@ -715,6 +732,7 @@ test('ADR 0014 evidence #17: get text @ref reads the retained frame tree, not a 
     ] as never),
     createdAt: Date.now(),
     backend: 'xctest',
+    producer: 'apple-runner',
   });
   sessionStore.set(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(new Error('get text @ref must not recapture'));

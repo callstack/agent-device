@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 export const profileNodes: RawSnapshotNode[] = [
   {
@@ -46,6 +46,7 @@ export function snapshot(
     {
       nodes,
       backend: 'xctest',
+      producer: 'apple-runner',
       quality: { state: 'healthy', backend },
     },
     { snapshotInteractiveOnly: false, ...(options.raw ? { snapshotRaw: true } : {}) },
@@ -57,7 +58,8 @@ export function snapshotPayload(
   backend: 'tree' | 'queries' | 'private-ax' = 'tree',
 ) {
   return {
-    backend: 'xctest' as const,
+    backend: 'xctest',
+    producer: 'apple-runner' as const,
     nodes,
     quality: { state: 'healthy' as const, backend },
   };

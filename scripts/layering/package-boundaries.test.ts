@@ -392,11 +392,13 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
+    '@agent-device/capture-kit/android-replacement-surface-occlusion',
     '@agent-device/capture-kit/durable-capture',
     '@agent-device/capture-kit/durable-json',
     '@agent-device/capture-kit/ios-snapshot-acquisition',
     '@agent-device/capture-kit/ios-snapshot-engine',
     '@agent-device/capture-kit/ios-snapshot-planning',
+    '@agent-device/capture-kit/ios-snapshot-runtime',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
     '@agent-device/capture-kit/png',
     '@agent-device/capture-kit/png-crop',
@@ -405,15 +407,36 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/png-size',
     '@agent-device/capture-kit/png-worker-client',
     '@agent-device/capture-kit/post-gesture-stability',
+    '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
+    '@agent-device/capture-kit/recording-output-path',
+    '@agent-device/capture-kit/recording-overlay',
+    '@agent-device/capture-kit/recording-telemetry',
+    '@agent-device/capture-kit/recording-video',
+    '@agent-device/capture-kit/repeated-nav-subtree',
     '@agent-device/capture-kit/screenshot-density',
     '@agent-device/capture-kit/screenshot-diff-pixels',
     '@agent-device/capture-kit/screenshot-overlay',
+    '@agent-device/capture-kit/scroll-edge-state',
+    '@agent-device/capture-kit/snapshot-chrome',
     '@agent-device/capture-kit/snapshot-desktop-projection',
+    '@agent-device/capture-kit/snapshot-desktop-surface',
+    '@agent-device/capture-kit/snapshot-diff',
+    '@agent-device/capture-kit/snapshot-evidence',
+    '@agent-device/capture-kit/snapshot-freshness',
+    '@agent-device/capture-kit/snapshot-label-dedup',
+    '@agent-device/capture-kit/snapshot-lines',
+    '@agent-device/capture-kit/snapshot-node-lookup',
     '@agent-device/capture-kit/snapshot-occlusion',
+    '@agent-device/capture-kit/snapshot-presentation-android-helper',
+    '@agent-device/capture-kit/snapshot-presentation-ios-transitions-fixtures',
     '@agent-device/capture-kit/snapshot-quality-backend-capabilities',
     '@agent-device/capture-kit/snapshot-quality-verdict',
     '@agent-device/capture-kit/snapshot-rect-projection',
+    '@agent-device/capture-kit/snapshot-state',
+    '@agent-device/capture-kit/snapshot-timeout-policy',
+    '@agent-device/capture-kit/snapshot-visibility',
+    '@agent-device/capture-kit/text-surface',
   ]);
 
   const provisionKitPackage = packages.find((pkg) => pkg.name === '@agent-device/provision-kit');
@@ -455,6 +478,8 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...hostKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/host-kit/archive',
+    // Test-only entry: the one inert audio-probe double the platform runtime fixtures share.
+    '@agent-device/host-kit/audio-probe-fixtures',
     '@agent-device/host-kit/code-signature',
     '@agent-device/host-kit/code-signature-cache',
     '@agent-device/host-kit/command',
@@ -536,12 +561,14 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const adReplayPackage = packages.find((pkg) => pkg.name === '@agent-device/ad-replay');
   assert.ok(adReplayPackage, 'ad-replay package must exist');
-  // Locks the "exports only `.`" boundary: the stage-A wide façade and the
-  // `./testing` subpath (the deleted in-memory selector adapter) are both gone
-  // as of the direct selectors-package cutover — a future
-  // `./testing` (or any other) subpath widens this key list and fails the
-  // assertion.
-  assert.deepEqual([...adReplayPackage.exportTargets.keys()], ['@agent-device/ad-replay']);
+  // Locks the export surface: `.` (the engine) and `./divergence` (the
+  // divergence report/sanitization vocabulary, off the engine entry so CLI/MCP
+  // surfaces don't load the step loop). Any other subpath widens this key
+  // list and fails the assertion.
+  assert.deepEqual(
+    [...adReplayPackage.exportTargets.keys()],
+    ['@agent-device/ad-replay', '@agent-device/ad-replay/divergence'],
+  );
   assert.deepEqual([...adReplayPackage.workspaceDependencies].sort(), [
     '@agent-device/ad-script',
     '@agent-device/contracts',
@@ -654,10 +681,10 @@ test('the real tree parses, declares, and passes R11', () => {
     (pkg) => pkg.name === '@agent-device/provider-webdriver',
   );
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
-  assert.deepEqual(
-    [...providerWebDriverPackage.exportTargets.keys()],
-    ['@agent-device/provider-webdriver'],
-  );
+  assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
+    '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/providers',
+  ]);
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',

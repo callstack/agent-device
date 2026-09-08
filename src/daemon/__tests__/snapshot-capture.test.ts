@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshotData } from '../snapshot-capture.ts';
-import { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
+import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,

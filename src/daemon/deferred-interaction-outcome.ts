@@ -12,7 +12,7 @@ import {
 import {
   isNavigationSensitiveAction,
   type SnapshotFreshnessMode,
-} from '../snapshot/snapshot-freshness/index.ts';
+} from '@agent-device/capture-kit/snapshot-freshness';
 import { withGestureNoEffectWarning } from './gesture-no-effect.ts';
 import {
   areInteractionSurfaceSignaturesStable,

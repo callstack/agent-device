@@ -27,6 +27,8 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     prewarmAppleRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
+    // A retained Simulator runner survives the relaunch, so its cached target is reset.
+    hasLiveIosRunnerSession: vi.fn(() => true),
     scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };

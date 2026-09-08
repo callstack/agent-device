@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
+import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 // End-to-end publication-membership contract for the acquire/present design (#1797, external
 // review pass 4 finding 1), exercised through the production interface. Runner presentation owns
@@ -10,8 +11,15 @@ import { buildSnapshotState } from '../../core/snapshot-state.ts';
 // Non-vacuity: with the collectIosStructuralIdentifierSuppression call disabled in noise.ts, the
 // suppression test below fails because promo-banner is published. It passes only when the
 // production suppression fires.
+//
+// The two stages run in the production order (#2199): the engine presents the acquired tree,
+// then the daemon assembly publishes it. The assembly presents nothing of its own, so the
+// engine's presenter has to be the one that decides membership.
 function publish(nodes: RawSnapshotNode[]) {
-  return buildSnapshotState({ nodes, backend: 'xctest' }, { snapshotInteractiveOnly: true }).nodes;
+  return buildSnapshotState(
+    { nodes: presentIosInteractiveSnapshot(nodes), backend: 'xctest', producer: 'apple-runner' },
+    { snapshotInteractiveOnly: true },
+  ).nodes;
 }
 
 const screen: RawSnapshotNode[] = [

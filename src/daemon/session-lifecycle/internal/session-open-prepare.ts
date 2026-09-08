@@ -161,6 +161,7 @@ export async function prepareOpenCommandDetails(params: {
     prewarmRunnerOnColdBoot:
       surface === 'app' && Boolean(openTarget) && !isDeepLinkTarget(openTarget ?? ''),
     execution: {
+      startupDeadlineAtMs: openStartupDeadlineAtMs(req),
       requestId: req.meta?.requestId,
       logPath,
       traceLogPath: existingSession?.trace?.outPath,
@@ -225,4 +226,12 @@ async function resolvePreparedOpenIdentity(params: {
     appBundleId: resolved.appBundleId,
     appName: resolved.appName,
   };
+}
+
+/** `open --timeout` is a startup budget; it becomes the absolute deadline the boot wait honors. */
+function openStartupDeadlineAtMs(req: DaemonRequest): number | undefined {
+  const timeoutMs = req.flags?.timeoutMs;
+  return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? Date.now() + timeoutMs
+    : undefined;
 }

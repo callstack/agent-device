@@ -107,6 +107,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
   mockGetRunnerSessionSnapshot.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',
+    ready: true,
   });
   const handler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),

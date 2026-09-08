@@ -109,7 +109,6 @@ const publicationWithQualityPayload: IosSnapshotPublication = {
 };
 
 const engineWithSecondPresentation: IosSnapshotEngine = {
-  plan: null as unknown as IosSnapshotEngine['plan'],
   publish: null as unknown as IosSnapshotEngine['publish'],
   // @ts-expect-error the engine surface has no second presentation operation
   present: null as never,
@@ -118,7 +117,7 @@ const engineWithSecondPresentation: IosSnapshotEngine = {
 test('iOS snapshot stage and engine surfaces stay closed', () => {
   assert.equal(acquired.stage, 'acquired');
   assert.equal(presented.stage, 'presented');
-  assert.deepEqual(['plan', 'publish'] satisfies (keyof IosSnapshotEngine)[], ['plan', 'publish']);
+  assert.deepEqual(['publish'] satisfies (keyof IosSnapshotEngine)[], ['publish']);
   void doubleStage;
   void skippedPresentation;
   void nonRunnerPresentation;

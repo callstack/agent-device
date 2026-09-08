@@ -49,6 +49,14 @@ describe('Maestro public operation projection', () => {
       expected: { command: 'close', positionals: [], internal: { closeAppOnly: true } },
     },
     {
+      operation: { kind: 'clearState', appId: 'com.example' },
+      expected: { command: 'settings', positionals: ['clear-app-state', 'com.example'] },
+    },
+    {
+      operation: { kind: 'clearState' },
+      expected: { command: 'settings', positionals: ['clear-app-state'] },
+    },
+    {
       operation: {
         kind: 'openLink',
         appId: 'com.example',

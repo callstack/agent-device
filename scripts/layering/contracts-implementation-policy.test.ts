@@ -101,7 +101,7 @@ test('iOS snapshot contracts reject planning implementation and provider imports
   assert.match(
     messages(
       [
-        "import type { planIosSnapshot } from '@agent-device/capture-kit/ios-snapshot-planning';",
+        "import type { deriveIosCaptureHint } from '@agent-device/capture-kit/ios-snapshot-planning';",
         'export type IosPlan = { readonly value: string };',
       ].join('\n'),
       contract,

@@ -1,13 +1,17 @@
 import { expect, test } from 'vitest';
 import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
 import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
-import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '../../snapshot/snapshot-presentation/ios/transitions.fixtures.ts';
+import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '@agent-device/capture-kit/snapshot-presentation-ios-transitions-fixtures';
 
-test('iOS daemon presentation applies transitions without reapplying runner-owned scope', () => {
+test('the daemon publishes engine transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(
-    { nodes: navigationTitleWithAppProvidedDetailsAffordanceNodes, backend: 'xctest' },
+    {
+      nodes: presentIosInteractiveSnapshot(navigationTitleWithAppProvidedDetailsAffordanceNodes),
+      backend: 'xctest',
+      producer: 'apple-runner',
+    },
     { snapshotInteractiveOnly: true, snapshotScope: 'DisplayNameTextField' },
   );
 

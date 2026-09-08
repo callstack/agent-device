@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-script-http.ts';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
@@ -170,6 +171,139 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(daemon);
     await closeLoopbackServer(loopbackTarget);
+  }
+});
+
+test('daemon proxy cancels the upstream daemon request when its client disconnects', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let upstreamStarted!: (requestId: string | undefined) => void;
+  const started = new Promise<string | undefined>((resolve) => {
+    upstreamStarted = resolve;
+  });
+  let upstreamCanceled!: (reason: string) => void;
+  const canceled = new Promise<string>((resolve) => {
+    upstreamCanceled = resolve;
+  });
+  const env = { ...process.env };
+  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
+  const daemon = await createDaemonHttpServer({
+    token: 'daemon-secret',
+    env,
+    handleRequest: async (request) => {
+      const requestId = request.meta?.requestId;
+      const signal = getRequestSignal(requestId);
+      upstreamStarted(requestId);
+      if (!signal) {
+        upstreamCanceled('no request signal was registered');
+      } else if (signal.aborted) {
+        upstreamCanceled('aborted');
+      } else {
+        signal.addEventListener('abort', () => upstreamCanceled('aborted'), { once: true });
+      }
+      await canceled;
+      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'request canceled' } };
+    },
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(daemon)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const client = http.request({
+      host: '127.0.0.1',
+      port: proxyPort,
+      method: 'POST',
+      path: '/agent-device/rpc',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer proxy-secret' },
+    });
+    client.on('error', () => {});
+    client.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-disconnect',
+        method: 'agent_device.command',
+        params: {
+          token: 'proxy-secret',
+          session: 'default',
+          command: 'snapshot',
+          positionals: [],
+          flags: {},
+        },
+      }),
+    );
+    const requestId = await started;
+    assert.match(String(requestId), /req-disconnect/);
+
+    client.destroy();
+
+    const timeout = new Promise<string>((resolve) => {
+      setTimeout(() => resolve('upstream request was never canceled'), 5000).unref();
+    });
+    assert.equal(await Promise.race([canceled, timeout]), 'aborted');
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(daemon);
+  }
+});
+
+test('daemon proxy forwards a request diagnostics record fetch and nothing else on that path', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const upstreamRequests: Array<{ method: string; url: string; auth: string }> = [];
+  const upstream = http.createServer((req, res) => {
+    upstreamRequests.push({
+      method: req.method ?? '',
+      url: req.url ?? '',
+      auth: String(req.headers.authorization ?? ''),
+    });
+    res.setHeader('content-type', 'application/x-ndjson');
+    res.end('{"phase":"request_failed"}\n');
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const record = `/agent-device/sessions/default/requests/req%3A1/diagnostics`;
+    const headers = { authorization: 'Bearer proxy-secret' };
+
+    const fetched = await fetch(`http://127.0.0.1:${proxyPort}${record}`, { headers });
+    assert.equal(fetched.status, 200);
+    assert.equal(await fetched.text(), '{"phase":"request_failed"}\n');
+    assert.deepEqual(upstreamRequests, [
+      {
+        method: 'GET',
+        url: '/sessions/default/requests/req%3A1/diagnostics',
+        auth: 'Bearer daemon-secret',
+      },
+    ]);
+
+    const unauthenticated = await fetch(`http://127.0.0.1:${proxyPort}${record}`);
+    assert.equal(unauthenticated.status, 401);
+    const posted = await fetch(`http://127.0.0.1:${proxyPort}${record}`, {
+      method: 'POST',
+      headers,
+    });
+    assert.equal(posted.status, 404);
+    const enumerated = await fetch(
+      `http://127.0.0.1:${proxyPort}/agent-device/sessions/default/requests`,
+      {
+        headers,
+      },
+    );
+    assert.equal(enumerated.status, 404);
+    assert.equal(upstreamRequests.length, 1, 'only the record fetch reaches the daemon');
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
   }
 });
 

@@ -30,8 +30,8 @@ async function shutdownAppleTarget(
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<TargetShutdownResult> {
-  if (device.booted === false) return stoppedTargetSuccess();
-
+  // `device.booted` is the state at selection time. A session opened on a cold Simulator carries
+  // `false` for its whole life, so only the native tool may decide that nothing needs stopping.
   signal.throwIfAborted();
   try {
     const result = await appleTools.run(
@@ -89,8 +89,4 @@ function toShutdownResult(result: {
     stdout: result.stdout,
     stderr: result.stderr,
   };
-}
-
-function stoppedTargetSuccess(): TargetShutdownResult {
-  return { success: true, exitCode: 0, stdout: '', stderr: '' };
 }

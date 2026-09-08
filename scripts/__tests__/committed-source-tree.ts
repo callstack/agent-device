@@ -32,6 +32,16 @@ export function mergeBaseWithMain(repoRoot: string): string {
   }
 }
 
+/**
+ * The commit under measurement. Compared against `mergeBaseWithMain`, this answers whether the
+ * head carries work of its own: they are equal exactly when `main` already carries this commit --
+ * a push to `main`, or a branch that has not committed anything yet -- and then no entry is
+ * first-introduced, whatever the tree contains.
+ */
+export function headCommit(repoRoot: string): string {
+  return git(repoRoot, ['rev-parse', 'HEAD']).toString('utf8').trim();
+}
+
 /** Files renamed since `base`, current path -> path at `base`, so a rename is not a new entry. */
 export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string, string> {
   const renamed = new Map<string, string>();

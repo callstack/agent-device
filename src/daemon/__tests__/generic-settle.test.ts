@@ -1,5 +1,4 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -8,7 +7,7 @@ import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch
@@ -23,7 +22,8 @@ vi.mock('../interaction/index.ts', async (importOriginal) => {
     captureSnapshotForSession: vi.fn(async () => ({
       nodes: [],
       createdAt: 0,
-      backend: 'xctest' as const,
+      backend: 'xctest',
+      producer: 'apple-runner' as const,
     })),
   };
 });
@@ -86,10 +86,7 @@ async function emulateCaptureSnapshotForSession(
     postGestureStabilizationPending: session.postGestureStabilization !== undefined,
   });
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
-  const snapshotData = (await mockDispatch('snapshot')) as {
-    nodes?: never[];
-    backend?: SnapshotBackend;
-  };
+  const snapshotData = (await mockDispatch('snapshot')) as Parameters<typeof buildSnapshotState>[0];
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
   setSessionSnapshot(session, snapshot);
   sessionStore.set(session.name, session);
@@ -102,7 +99,7 @@ function mockCommandDispatch(snapshots: Array<typeof BEFORE_NODES>) {
     if (command === 'snapshot') {
       const nodes = snapshots[Math.min(snapshotCalls, snapshots.length - 1)];
       snapshotCalls += 1;
-      return { nodes, backend: 'xctest' };
+      return { nodes, backend: 'xctest', producer: 'apple-runner' };
     }
     return {};
   });
@@ -124,7 +121,10 @@ const mockDispatch = vi.fn<(command: string) => Promise<Record<string, unknown>>
 
 function seedSession(sessionName: string, sessionStore: SessionStore): SessionState {
   const session = makeIosSession(sessionName);
-  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  setSessionSnapshot(
+    session,
+    buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' }, {}),
+  );
   activateCompleteRefFrame(session);
   sessionStore.set(sessionName, session);
   return session;
@@ -226,7 +226,8 @@ test('back --settle answers with the settled diff alongside the command result',
   const sessionName = 'generic-settle-back';
   const session = seedSession(sessionName, sessionStore);
   mockDispatch.mockImplementation(async (command) => {
-    if (command === 'snapshot') return { nodes: AFTER_NODES, backend: 'xctest' };
+    if (command === 'snapshot')
+      return { nodes: AFTER_NODES, backend: 'xctest', producer: 'apple-runner' };
     return { action: 'back', mode: 'in-app', message: 'Back' };
   });
 
@@ -300,7 +301,10 @@ test('a settle observation that cannot build a runtime degrades instead of faili
   // SESSION_NOT_FOUND, and the observation is best-effort: the scroll already
   // happened, so the response keeps its result and simply carries no settle.
   const session = makeIosSession(sessionName);
-  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  setSessionSnapshot(
+    session,
+    buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' }, {}),
+  );
   activateCompleteRefFrame(session);
   mockCommandDispatch([AFTER_NODES]);
 

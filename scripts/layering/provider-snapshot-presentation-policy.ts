@@ -1,7 +1,7 @@
 // Catches: a provider-* package acquiring an iOS snapshot outside the capture-kit acquisition
-//   entrypoint, or presenting it outside src/snapshot/ios-snapshot-runtime.ts — the exact split
-//   R72's engine convergence closed for the runner layer, mirrored here one layer up for the
-//   provider packages that call into it.
+//   entrypoint, or presenting it outside packages/capture-kit/src/snapshot/ios-snapshot-runtime.ts
+//   — the exact split R72's engine convergence closed for the runner layer, mirrored here one
+//   layer up for the provider packages that call into it.
 // Evidence: 7ee1a5ded7 (#2233) carried provider acquisitions through this one presentation
 //   owner, the change this policy was written to hold in place.
 // Cost: 195 LOC (111 rule + 84 test).
@@ -9,7 +9,7 @@
 //   reaching presentation only through @agent-device/capture-kit/ios-snapshot-acquisition, and
 //   never constructing, discarding, or reassigning acquisition residue, no longer matter. An
 //   exports map cannot replace it: it restricts external specifiers, not the transitive walk
-//   into src/snapshot/ or a provider-local `residue` property or assignment.
+//   into packages/capture-kit/src/snapshot/ or a provider-local `residue` property or assignment.
 
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
@@ -18,7 +18,8 @@ import { memberPath, propertyName, visitAst } from './layering-ast.ts';
 export const PROVIDER_SNAPSHOT_PRESENTATION_RULE = 'R73 provider-snapshot-presentation-ownership';
 export const IOS_SNAPSHOT_ACQUISITION_ENTRYPOINT =
   '@agent-device/capture-kit/ios-snapshot-acquisition';
-export const IOS_SNAPSHOT_PRESENTATION_OWNER = 'src/snapshot/ios-snapshot-runtime.ts';
+export const IOS_SNAPSHOT_PRESENTATION_OWNER =
+  'packages/capture-kit/src/snapshot/ios-snapshot-runtime.ts';
 
 const PROVIDER_SOURCE = /^packages\/provider-[^/]+\/src\//;
 const IOS_SNAPSHOT_CAPTURE_KIT_ROOT = 'packages/capture-kit/src/ios-snapshot-';
@@ -109,7 +110,7 @@ function residueViolations(providerFile: string, source: string): LayeringViolat
 function isPresentationTarget(target: string): boolean {
   return (
     target === IOS_SNAPSHOT_PRESENTATION_OWNER ||
-    target.startsWith('src/snapshot/') ||
+    target.startsWith('packages/capture-kit/src/snapshot/') ||
     (target.startsWith(IOS_SNAPSHOT_CAPTURE_KIT_ROOT) &&
       target !== 'packages/capture-kit/src/ios-snapshot-acquisition.ts')
   );

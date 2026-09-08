@@ -6,7 +6,7 @@ import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/typ
 import { commonToClientOptions } from '../common-input-fields.ts';
 import { batchCliOutputFormatters } from './output.ts';
 import { createBatchCommandMetadata, type BatchCommandStep, type BatchInput } from './metadata.ts';
-import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../core/batch-policy.ts';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
 import { createBatchDaemonWriter } from './projection.ts';
 
 const batchCommandMetadata = createBatchCommandMetadata();

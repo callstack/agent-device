@@ -4,8 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { createInteractionRuntime, handleInteractionCommands } from '../../index.ts';
 import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../session-state.ts';
-import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { setSessionSnapshot } from '../../../session-snapshot.ts';
 import { activateCompleteRefFrame, expireRefFrame, refFrameState } from '../../../ref-frame.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
@@ -72,7 +71,7 @@ async function emulateCaptureSnapshotForSession(
     [],
     effectiveFlags.out,
     contextFromFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
-  )) as { nodes?: never[]; truncated?: boolean; backend?: SnapshotBackend };
+  )) as Parameters<typeof buildSnapshotState>[0];
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
   setSessionSnapshot(session, snapshot);
   sessionStore.set(session.name, session);
@@ -81,7 +80,10 @@ async function emulateCaptureSnapshotForSession(
 
 function seedSession(sessionName: string, sessionStore: ReturnType<typeof makeSessionStore>) {
   const session = makeIosSession(sessionName);
-  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  setSessionSnapshot(
+    session,
+    buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' }, {}),
+  );
   // The seed emulates a snapshot response that issued these refs: a complete,
   // active ref frame (ADR 0014).
   activateCompleteRefFrame(session);
@@ -124,7 +126,7 @@ function mockCommandDispatch(params: { snapshots: Array<typeof BEFORE_NODES> }) 
     if (command === 'snapshot') {
       const nodes = params.snapshots[Math.min(snapshotCalls, params.snapshots.length - 1)];
       snapshotCalls += 1;
-      return { nodes, backend: 'xctest' };
+      return { nodes, backend: 'xctest', producer: 'apple-runner' };
     }
     return {};
   });
@@ -348,7 +350,8 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       snapshotCalls += 1;
-      if (snapshotCalls === 1) return { nodes: BEFORE_NODES, backend: 'xctest' };
+      if (snapshotCalls === 1)
+        return { nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' };
       throw new Error('AX bridge crashed');
     }
     return {};
@@ -396,7 +399,10 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
     ) => {
       captureCalls += 1;
       if (captureCalls === 1) {
-        return buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {});
+        return buildSnapshotState(
+          { nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' },
+          {},
+        );
       }
       return await new Promise((_resolve, reject) => {
         const fallback = setTimeout(

@@ -14,6 +14,8 @@ test('parses the versioned state and screen cells', () => {
   assert.deepEqual(parseRtt('80,0,20,0'), [80, 0, 20]);
   assert.equal(sampleMinimumForState('cold-cold'), 10);
   assert.equal(sampleMinimumForState('relaunch'), 20);
+  assert.equal(sampleMinimumForState('first-interaction'), 10);
+  assert.deepEqual(parseLocalStates('first-interaction'), ['first-interaction']);
 });
 
 test('enforces the warm and cold sample minima', () => {

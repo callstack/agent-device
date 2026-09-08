@@ -14,6 +14,7 @@ import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
 import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 import {
   SCROLL_DIRECTIONS,
+  SCROLL_INPUT_DIRECTIONS,
   SWIPE_PATTERNS,
   SWIPE_PAUSE_MAX_MS,
   SWIPE_PRESETS,
@@ -39,7 +40,6 @@ import { readCommonInput, type CommonCommandInput } from '../common-input-fields
 import { readInputRecord } from '../input-readers.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { postActionObservationFields } from '../post-action-observation-grammar.ts';
-import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
 
 const FIND_ACTION_VALUES = [
   'click',

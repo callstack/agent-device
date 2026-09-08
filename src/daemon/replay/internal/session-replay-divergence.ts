@@ -3,14 +3,14 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
+import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { captureSnapshot } from '../../snapshot-capture.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
-import { collectSettleChromeRefs } from '../../../core/snapshot-chrome.ts';
+import { collectSettleChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
 import {
@@ -38,7 +38,7 @@ import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
   type ReplayVarScrubEntry,
-} from '../../../core/replay-divergence.ts';
+} from '@agent-device/ad-replay/divergence';
 
 export type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 

@@ -195,7 +195,7 @@ test('classifyBaselineSurfaceEvidence excludes the keyboard container from discr
 // #1563 review, finding 2: a container-only exclusion still misses keyboard
 // DESCENDANTS (individual keys) and SIBLINGS (assistant buttons like "Next
 // keyboard"/"Dictate", which live outside the container per
-// src/core/snapshot-chrome.ts's collectKeyboardChrome doc comment — a
+// packages/capture-kit/src/snapshot-chrome.ts's collectKeyboardChrome doc comment — a
 // container-descendant walk alone provably misses them, hence the whole-
 // window classification that module reuses here via collectKeyboardChromeRefs).
 test('classifyBaselineSurfaceEvidence excludes keyboard DESCENDANTS and window SIBLINGS, not just the container, from discriminating overlap', () => {

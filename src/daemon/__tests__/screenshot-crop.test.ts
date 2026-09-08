@@ -53,7 +53,7 @@ const IOS_TREE: RawSnapshotNode[] = [
     index: 0,
     depth: 0,
     type: 'XCUIElementTypeApplication',
-    rect: { x: 0, y: 0, width: 390, height: 844 },
+    rect: { x: 0, y: 0, width: 39, height: 84 },
     hittable: true,
   },
   {
@@ -62,7 +62,7 @@ const IOS_TREE: RawSnapshotNode[] = [
     parentIndex: 0,
     type: 'XCUIElementTypeButton',
     label: 'Save',
-    rect: { x: 10, y: 10, width: 100, height: 40 },
+    rect: { x: 1, y: 1, width: 10, height: 4 },
     hittable: true,
   },
 ];
@@ -149,12 +149,12 @@ test('an iOS simulator crop projects the points-space frame into the 3x capture'
     device: IOS_SIMULATOR,
     nodes: IOS_TREE,
     provenance: { backend: 'xctest', producer: 'apple-runner' },
-    png: { width: 1170, height: 2532 },
+    png: { width: 117, height: 252 },
   });
   try {
     const outcome = await seam.run();
     expect(outcome).toEqual({ partialIntersection: false });
-    expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 300, height: 120 });
+    expect(await readPngSize(seam.screenshotPath)).toEqual({ width: 30, height: 12 });
   } finally {
     seam.dispose();
   }

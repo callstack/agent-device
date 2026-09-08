@@ -133,7 +133,7 @@ extension RunnerTests {
     currentBundleId = "com.example.app"
     currentAppProcessIdentifier = 42
     snapshotXCTestPenaltyWarmupExemptionPending = true
-    needsFirstInteractionDelay = false
+    firstInteractionReadyUptime = nil
     penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
 
@@ -145,7 +145,35 @@ extension RunnerTests {
     XCTAssertNil(currentAppProcessIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
-    XCTAssertTrue(needsFirstInteractionDelay)
+    XCTAssertNotNil(firstInteractionReadyUptime)
+  }
+
+  /// The settling window is a deadline measured from the activation, not a pause charged at the
+  /// interaction. A caller that already spent the window elsewhere waits for nothing; one that
+  /// arrives immediately still waits. Without the deadline both cases sleep the full delay.
+  func testFirstInteractionStabilizationWaitsOnlyForTheRemainderOfTheWindow() {
+    needsPostSnapshotInteractionDelay = false
+
+    // An activation whose window has already elapsed: the caller spent it getting back to us.
+    firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+    let elapsedAfterSatisfiedWindow = measureStabilizationDuration()
+    XCTAssertLessThan(elapsedAfterSatisfiedWindow, firstInteractionAfterActivateDelay / 2)
+    XCTAssertNil(firstInteractionReadyUptime)
+
+    // A fresh activation still gets the whole guard.
+    beginFirstInteractionStabilization()
+    let elapsedAfterFreshActivation = measureStabilizationDuration()
+    XCTAssertGreaterThanOrEqual(
+      elapsedAfterFreshActivation,
+      firstInteractionAfterActivateDelay * 0.8
+    )
+    XCTAssertNil(firstInteractionReadyUptime)
+  }
+
+  private func measureStabilizationDuration() -> TimeInterval {
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    applyInteractionStabilizationIfNeeded()
+    return ProcessInfo.processInfo.systemUptime - startedAt
   }
 #endif
 }

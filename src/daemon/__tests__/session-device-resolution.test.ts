@@ -109,7 +109,11 @@ test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of lo
 });
 
 test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session is alive', async () => {
-  mockGetRunnerSessionSnapshot.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: true });
+  mockGetRunnerSessionSnapshot.mockResolvedValue({
+    sessionId: 'sim-1:1234:1',
+    alive: true,
+    ready: true,
+  });
 
   const device = await withMockedPlatform('darwin', async () =>
     refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
@@ -120,7 +124,11 @@ test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session
 });
 
 test('refreshSessionDeviceIfNeeded re-resolves when the iOS runner session is gone', async () => {
-  mockGetRunnerSessionSnapshot.mockResolvedValue({ sessionId: 'sim-1:1234:1', alive: false });
+  mockGetRunnerSessionSnapshot.mockResolvedValue({
+    sessionId: 'sim-1:1234:1',
+    alive: false,
+    ready: false,
+  });
   const resolved = { ...iosSimulatorSession.device, booted: true, name: 'renamed' };
   mockResolveTargetDevice.mockResolvedValue(resolved);
 

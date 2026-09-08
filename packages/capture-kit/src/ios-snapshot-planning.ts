@@ -1,12 +1,9 @@
 import type {
   CaptureHint,
   IosAcquisitionResidue,
-  IosSnapshotAcquisitionDepthCapability,
   IosSnapshotComparisonIdentity,
   IosSnapshotInput,
-  IosSnapshotPlan,
   IosSnapshotPresentationKey,
-  IosSnapshotProducerCapabilities,
   IosSnapshotRequest,
   IosSnapshotRequestInput,
 } from '@agent-device/contracts/ios-snapshot';
@@ -44,36 +41,6 @@ export function deriveIosCaptureHint(request: IosSnapshotRequest): CaptureHint {
     interactiveOnly: !isRaw && request.interactiveOnly,
     customActions: request.customActions,
     acquisitionIntent: request.acquisitionIntent,
-  });
-}
-
-export function planIosSnapshot(
-  request: IosSnapshotRequest,
-  producer: IosSnapshotProducerCapabilities,
-): IosSnapshotPlan {
-  const hint = deriveIosCaptureHint(request);
-  const requestedDepth = hint.rawTraversalDepth ?? hint.regularPresentedDepth;
-  const depthSupport = depthSupportFor(request, producer);
-  const depth =
-    requestedDepth !== null && isCompleteFor(depthSupport, requestedDepth) ? requestedDepth : null;
-  const interactiveOnly =
-    producer.stage === 'acquired' &&
-    hint.interactiveOnly &&
-    producer.interactiveQueryCompleteness === 'complete' &&
-    producer.hittabilityEvidence === 'available';
-
-  return Object.freeze({
-    request,
-    producer: producer.producer,
-    hint,
-    narrowing: Object.freeze({ depth, scope: null, interactiveOnly }),
-    evidence: Object.freeze({
-      scope: producer.scopeCompleteness,
-      interactiveQuery: producer.interactiveQueryCompleteness,
-      viewport: producer.viewportEvidence,
-      hittability: producer.hittabilityEvidence,
-      truncation: producer.truncationEvidence,
-    }),
   });
 }
 
@@ -120,26 +87,6 @@ export function buildIosSnapshotComparisonIdentity(
     presentationKey: input.validation.presentationKey,
     residue: Object.freeze([...input.validation.residue]),
   });
-}
-
-function depthSupportFor(
-  request: IosSnapshotRequest,
-  producer: IosSnapshotProducerCapabilities,
-): IosSnapshotAcquisitionDepthCapability['rawTraversal'] {
-  if (producer.stage !== 'acquired') return { kind: 'not-applicable' };
-  return request.projection === 'raw'
-    ? producer.acquisitionDepth.rawTraversal
-    : producer.acquisitionDepth.regularPresented;
-}
-
-function isCompleteFor(
-  support: IosSnapshotAcquisitionDepthCapability['rawTraversal'],
-  requestedDepth: number,
-): boolean {
-  return (
-    support.kind === 'complete' &&
-    (support.maxDepth === undefined || requestedDepth <= support.maxDepth)
-  );
 }
 
 function lineagesEqual(

@@ -1,3 +1,4 @@
+import { inertAudioProbeHost } from '@agent-device/host-kit/audio-probe-fixtures';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
@@ -21,23 +22,7 @@ export const UNKNOWN_KIND_DEVICE = {
   kind: 'unknown',
 } as unknown as DeviceInfo;
 
-const audioProbeHost: PlatformRuntimeHost['audioProbe'] = {
-  hostCapture: {
-    info: {
-      source: 'system-audio',
-      backend: 'fixture',
-      sourceCount: 0,
-      notes: () => [],
-    },
-    start: async () => {
-      throw new Error('Audio probe is outside this runtime fixture.');
-    },
-    inspectProcess: async () => 'missing',
-    terminateProcess: async () => 'already-missing',
-  },
-  web: { resolve: async () => undefined },
-  ownedProcesses: { replace: () => {}, clear: () => {} },
-};
+const audioProbeHost: PlatformRuntimeHost['audioProbe'] = inertAudioProbeHost();
 
 function localAndroidScreenRecording() {
   return {

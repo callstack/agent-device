@@ -80,6 +80,11 @@ function resolveFlagBudgetTimeoutMs(
   if (policy.budget.envelope === 'widen') {
     return resolveWideningFlagBudget(policy, policy.budget, flags);
   }
+  if (policy.budget.envelope === 'margin') {
+    return typeof flags?.timeoutMs === 'number'
+      ? widenToUserBudget(policy, flags.timeoutMs)
+      : policy.envelopeMs;
+  }
   return typeof flags?.timeoutMs === 'number' ? flags.timeoutMs : policy.envelopeMs;
 }
 

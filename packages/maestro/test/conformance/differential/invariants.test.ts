@@ -185,7 +185,9 @@ function assertSettleFlowSemantics(source: string): void {
     parsed.commands.filter((command) => command.kind === 'tap'),
     [{ kind: 'tap', longPress: false, repeat: 1, target: { selector: { text: 'Settings' } } }],
   );
-  const tap = program.commands.find((command) => command.kind === 'tapOn');
+  const tapIndex = program.commands.findIndex((command) => command.kind === 'tapOn');
+  assert.equal(program.commands[tapIndex - 1]?.kind, 'waitForAnimationToEnd');
+  const tap = program.commands[tapIndex];
   assert.equal(tap?.kind, 'tapOn');
   assert.equal(tap?.retryTapIfNoChange, true);
   assert.equal(
@@ -199,7 +201,7 @@ function assertSettleFlowSemantics(source: string): void {
   );
 }
 
-test('the settle detector reaches its tap without an unrelated setup command', () => {
+test('the settle detector isolates its tap from launch stabilization', () => {
   assertSettleFlowSemantics(fs.readFileSync(SETTLE_FLOW_PATH, 'utf8'));
 });
 
@@ -208,6 +210,7 @@ test('the settle flow guard rejects a changed tap target, disabled retry, or ins
   assert.throws(() => assertSettleFlowSemantics(flow.replace('text: Settings', 'text: Home')));
   assert.throws(() => assertSettleFlowSemantics(flow.replace(/\n\s*retryTapIfNoChange: true/, '')));
   assert.throws(() => assertSettleFlowSemantics(flow.replace('- tapOn:', '- scroll\n- tapOn:')));
+  assert.throws(() => assertSettleFlowSemantics(flow.replace('- waitForAnimationToEnd\n', '')));
 });
 
 // --- metricAtLeast: proves a code path actually ran, not just that it passed ---

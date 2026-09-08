@@ -235,6 +235,7 @@ export function respondToAndroidSettingsAdbCommand(
 ): { stdout: string; stderr: string; exitCode: number; stdoutBuffer?: Buffer } {
   const key = args.join(' ');
   const result =
+    androidDisplayRotationAdbResult(key, options.ime) ??
     androidDeviceAvailabilityAdbResult(key, args, options.pidof) ??
     androidImeLifecycleAdbResult(key, args, options.ime) ??
     androidClipboardAdbResult(key, clipboardText) ??
@@ -254,6 +255,10 @@ type AndroidAdbResult = {
 const ANDROID_CLIPBOARD_SET_TEXT_PREFIX = ['shell', 'cmd', 'clipboard', 'set', 'text'];
 
 function updateAndroidProviderShellState(args: string[], state: AndroidProviderShellState): void {
+  if (argsStartWith(args, ['shell', 'settings', 'put', 'system', 'user_rotation'])) {
+    state.userRotation = String(args[5] ?? '0');
+    return;
+  }
   if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'text') {
     state.searchText = String(args[3] ?? '').replaceAll('%s', ' ');
     return;
@@ -482,6 +487,19 @@ function androidPermissionMutationAdbResult(args: string[]): AndroidAdbResult | 
     return { stdout: '', stderr: '', exitCode: 0 };
   }
   return undefined;
+}
+
+/** The scripted display rotates the moment `user_rotation` lands, the way the settle expects. */
+function androidDisplayRotationAdbResult(
+  key: string,
+  state: AndroidProviderShellState | undefined,
+): AndroidAdbResult | undefined {
+  if (key !== 'shell dumpsys display') return undefined;
+  return {
+    stdout: `    mCurrentOrientation=${state?.userRotation ?? '0'}\n`,
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 function androidSettingsPutAdbResult(args: string[]): AndroidAdbResult | undefined {

@@ -4,7 +4,7 @@ import { handleInteractionCommands } from '../../index.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
-import { buildSnapshotSignatures } from '../../../../snapshot/snapshot-freshness/index.ts';
+import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import {
   makeIosSession as makeSession,

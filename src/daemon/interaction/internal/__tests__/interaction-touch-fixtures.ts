@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { attachRefs, type SnapshotBackend } from '@agent-device/kernel/snapshot';
+import { attachRefs, type SnapshotCaptureProvenance } from '@agent-device/kernel/snapshot';
 import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosAppSession,
@@ -11,7 +11,7 @@ import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
-import { buildSnapshotState } from '../../../../core/snapshot-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 /**
  * Shared factories for the interaction touch handler tests. Named pure
@@ -45,7 +45,7 @@ export function installTestScreenRecording(
   session.screenRecording = makeTestScreenRecordingResource(session, overrides);
 }
 
-export function makeVisibleButtonSnapshot(label: string, backend: SnapshotBackend) {
+export function makeVisibleButtonSnapshot(label: string, provenance: SnapshotCaptureProvenance) {
   return buildSnapshotState(
     {
       nodes: [
@@ -59,7 +59,7 @@ export function makeVisibleButtonSnapshot(label: string, backend: SnapshotBacken
           hittable: true,
         },
       ],
-      backend,
+      ...provenance,
     },
     { snapshotInteractiveOnly: false },
   );
@@ -111,6 +111,7 @@ export function makeStaleRefSession(sessionName: string): SessionState {
     nodes: attachRefs(makeTwoButtonNodes() as never),
     createdAt: Date.now(),
     backend: 'xctest',
+    producer: 'apple-runner',
   };
   // As if the snapshot command just returned these refs to the client: a
   // complete, active ref frame (ADR 0014).

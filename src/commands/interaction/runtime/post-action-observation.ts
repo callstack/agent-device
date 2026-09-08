@@ -1,6 +1,6 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { summarizeAxEvidence } from '../../../snapshot/snapshot-evidence.ts';
+import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,

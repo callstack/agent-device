@@ -4,9 +4,10 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type {
   CaptureHint,
-  IosSnapshotAcquisitionProducerCapabilities,
   IosSnapshotComparisonIdentity,
+  IosSnapshotEvidenceAvailability,
   IosSnapshotInput,
+  IosSnapshotProducer,
   IosSnapshotRequestInput,
 } from '@agent-device/contracts/ios-snapshot';
 import {
@@ -15,11 +16,10 @@ import {
   buildIosSnapshotPresentationKey,
   createIosSnapshotRequest,
   deriveIosCaptureHint,
-  planIosSnapshot,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import {
   createIosSnapshotAcquisition,
-  IOS_SNAPSHOT_PRODUCER_CAPABILITIES,
+  iosSnapshotTruncationEvidence,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 
 type CaptureHintFixture = Readonly<{
@@ -72,107 +72,42 @@ test('normalization makes raw, scope, and absent values explicit', () => {
   });
 });
 
-test('depth narrowing requires complete support for the requested projection', () => {
-  const rawRequest = createIosSnapshotRequest({ projection: 'raw', depth: 2 });
-  const regularRequest = createIosSnapshotRequest({ projection: 'regular', depth: 2 });
-  const rawComplete = acquiredProducer({
-    acquisitionDepth: {
-      rawTraversal: { kind: 'complete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-  });
-  const rawIncomplete = acquiredProducer({
-    acquisitionDepth: {
-      rawTraversal: { kind: 'incomplete' },
-      regularPresented: { kind: 'incomplete' },
-    },
-  });
-  assert.equal(planIosSnapshot(rawRequest, rawComplete).narrowing.depth, 2);
-  assert.equal(planIosSnapshot(rawRequest, rawIncomplete).narrowing.depth, null);
-
-  const regularComplete = acquiredProducer({
-    acquisitionDepth: {
-      rawTraversal: { kind: 'complete' },
-      regularPresented: { kind: 'complete', maxDepth: 2 },
-    },
-  });
-  const regularTooShallow = acquiredProducer({
-    acquisitionDepth: {
-      rawTraversal: { kind: 'complete' },
-      regularPresented: { kind: 'complete', maxDepth: 1 },
-    },
-  });
-  assert.equal(planIosSnapshot(regularRequest, regularComplete).narrowing.depth, 2);
-  assert.equal(planIosSnapshot(regularRequest, regularTooShallow).narrowing.depth, null);
+test('acquisition derives unavailable provider facts from the registry', () => {
+  for (const producer of ['appium-source', 'limrun-ios-tree'] as const) {
+    assert.deepEqual(
+      createIosSnapshotAcquisition({
+        producer,
+        nodes: [],
+        viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1, height: 1 } },
+        lineage: {},
+      }).acquisition.residue,
+      [
+        { kind: 'unavailable-fact', fact: 'hittability' },
+        { kind: 'unavailable-fact', fact: 'acquisition-depth' },
+        { kind: 'unavailable-fact', fact: 'truncation' },
+      ],
+      producer,
+    );
+  }
 });
 
-test('scoped acquisition remains broad and reports scope completeness as evidence', () => {
-  const request = createIosSnapshotRequest({ projection: 'regular', depth: 2, scope: 'Card' });
-  const complete = acquiredProducer({ scopeCompleteness: 'complete' });
-  const incomplete = acquiredProducer({ scopeCompleteness: 'incomplete' });
-  assert.deepEqual(planIosSnapshot(request, complete).narrowing, {
-    depth: null,
-    scope: null,
-    interactiveOnly: false,
-  });
-  assert.equal(planIosSnapshot(request, complete).evidence.scope, 'complete');
-  assert.equal(planIosSnapshot(request, incomplete).evidence.scope, 'incomplete');
-});
+/**
+ * The producers that build their own residue have no row in the provider capability table, so
+ * this is the only place they declare a capability at all — and it must keep saying what it said
+ * before the table was narrowed, or `snapshotTruncationForResult` would start upgrading an absent
+ * `truncated` to `false` (or stop doing so) for a real capture (#2199).
+ */
+test('truncation evidence is declared for every iOS producer', () => {
+  const expected = {
+    'apple-runner': 'available',
+    'simulator-ax-bridge': 'available',
+    'appium-source': 'unavailable',
+    'limrun-ios-tree': 'unavailable',
+  } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
-test('interactive narrowing requires complete queries and available hittability', () => {
-  const request = createIosSnapshotRequest({ interactiveOnly: true });
-  const complete = acquiredProducer({
-    interactiveQueryCompleteness: 'complete',
-    hittabilityEvidence: 'available',
-  });
-  const incompleteQuery = acquiredProducer({
-    interactiveQueryCompleteness: 'incomplete',
-    hittabilityEvidence: 'available',
-  });
-  const missingHittability = acquiredProducer({
-    interactiveQueryCompleteness: 'complete',
-    hittabilityEvidence: 'unavailable',
-  });
-  assert.equal(planIosSnapshot(request, complete).narrowing.interactiveOnly, true);
-  assert.equal(planIosSnapshot(request, incompleteQuery).narrowing.interactiveOnly, false);
-  assert.equal(planIosSnapshot(request, missingHittability).narrowing.interactiveOnly, false);
-});
-
-test('presented producers cannot claim acquisition narrowing', () => {
-  const request = createIosSnapshotRequest({ projection: 'regular', depth: 2 });
-  const plan = planIosSnapshot(request, IOS_SNAPSHOT_PRODUCER_CAPABILITIES['apple-runner']);
-  assert.deepEqual(plan.narrowing, { depth: null, scope: null, interactiveOnly: false });
-  assert.deepEqual(plan.evidence, {
-    scope: 'complete',
-    interactiveQuery: 'complete',
-    viewport: 'available',
-    hittability: 'available',
-    truncation: 'available',
-  });
-});
-
-test('Appium source plan carries its viewport evidence capability', () => {
-  const plan = planIosSnapshot(
-    createIosSnapshotRequest(),
-    IOS_SNAPSHOT_PRODUCER_CAPABILITIES['appium-source'],
-  );
-  assert.equal(plan.evidence.viewport, 'available');
-});
-
-test('acquisition derives unavailable Appium facts from the registry', () => {
-  assert.deepEqual(
-    createIosSnapshotAcquisition({
-      producer: 'appium-source',
-      nodes: [],
-      viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 1, height: 1 } },
-      lineage: {},
-    }).acquisition.residue,
-    [
-      { kind: 'unavailable-fact', fact: 'hittability' },
-      { kind: 'unavailable-fact', fact: 'acquisition-depth' },
-      { kind: 'unavailable-fact', fact: 'truncation' },
-    ],
-  );
+  for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {
+    assert.equal(iosSnapshotTruncationEvidence(producer), expected[producer], producer);
+  }
 });
 
 test('comparison identity rejects every identity axis and residue mismatch', () => {
@@ -236,26 +171,6 @@ test('comparison identity builder follows the closed input stage', () => {
     residue: [],
   });
 });
-
-function acquiredProducer(
-  overrides: Partial<Omit<IosSnapshotAcquisitionProducerCapabilities, 'producer' | 'stage'>> = {},
-): IosSnapshotAcquisitionProducerCapabilities {
-  return {
-    producer: 'simulator-ax-bridge',
-    stage: 'acquired',
-    acquisitionDepth: {
-      rawTraversal: { kind: 'complete' },
-      regularPresented: { kind: 'complete' },
-    },
-    scopeCompleteness: 'incomplete',
-    interactiveQueryCompleteness: 'incomplete',
-    viewportEvidence: 'available',
-    hittabilityEvidence: 'available',
-    truncationEvidence: 'available',
-    presentationOwner: 'snapshot-state',
-    ...overrides,
-  };
-}
 
 function comparisonIdentity(
   overrides: Partial<IosSnapshotComparisonIdentity> = {},
