@@ -8,34 +8,21 @@
 //
 // Usage: node scripts/ripwire-eval/affected-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]
 
-import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { harnessDir, loadTasks, readArgs, runRipwire } from './bench-cli.mjs';
 
-const run = promisify(execFile);
-const here = dirname(fileURLToPath(import.meta.url));
-
-function arg(name, fallback) {
-  const hit = process.argv.find((entry) => entry.startsWith(`--${name}=`));
-  return hit ? hit.slice(name.length + 3) : fallback;
-}
-
-const ripwire = arg('ripwire');
-const worktrees = arg('worktrees');
-const outPath = arg('out', join(here, 'affected-results.json'));
-if (!ripwire || !worktrees) {
-  console.error('usage: affected-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]');
-  process.exit(2);
-}
+const { ripwire, worktrees, out } = readArgs({
+  usage: 'affected-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]',
+  required: ['ripwire', 'worktrees'],
+  optional: { out: join(harnessDir, 'affected-results.json') },
+});
 
 const isTest = (path) => /(\.test\.[cm]?[jt]sx?$)|(^|\/)__tests__\//.test(path);
 
-const tasks = JSON.parse(readFileSync(join(here, 'tasks.json'), 'utf8')).tasks;
 const results = [];
 
-for (const task of tasks) {
+for (const task of loadTasks()) {
   const added = new Set(task.added_files ?? []);
   const truth = [...task.ground_truth, ...added];
   const sources = truth.filter((path) => !isTest(path) && /\.[cm]?[jt]s$/.test(path));
@@ -48,27 +35,18 @@ for (const task of tasks) {
     continue;
   }
 
-  const started = process.hrtime.bigint();
-  let stdout = '';
-  let failed = null;
-  try {
-    ({ stdout } = await run(ripwire, ['.', `--affected=${sources.join(',')}`], {
-      cwd: join(worktrees, task.id),
-      maxBuffer: 32 * 1024 * 1024,
-    }));
-  } catch (error) {
-    failed = String(error?.message ?? error).slice(0, 200);
-    stdout = String(error?.stdout ?? '');
-  }
-  const ms = Number(process.hrtime.bigint() - started) / 1e6;
-
-  const selected = [...stdout.matchAll(/<test p="([^"]+)"/g)].map((match) => match[1]);
+  const call = await runRipwire(
+    ripwire,
+    ['.', `--affected=${sources.join(',')}`],
+    join(worktrees, task.id),
+  );
+  const selected = [...call.stdout.matchAll(/<test p="([^"]+)"/g)].map((match) => match[1]);
   const hit = expected.filter((path) => selected.includes(path));
   results.push({
     task: task.id,
-    failed,
-    ms: Math.round(ms),
-    bytes: Buffer.byteLength(stdout),
+    failed: call.failed,
+    ms: call.ms,
+    bytes: call.bytes,
     seeds: sources.length,
     selected: selected.length,
     expected: expected.length,
@@ -80,12 +58,12 @@ for (const task of tasks) {
     missed: expected.filter((path) => !selected.includes(path)),
   });
   process.stderr.write(
-    `${task.id}: ${hit.length}/${expected.length} expected tests inside ${selected.length} selected, ${Buffer.byteLength(stdout)} B\n`,
+    `${task.id}: ${hit.length}/${expected.length} expected tests inside ${selected.length} selected, ${call.bytes} B\n`,
   );
 }
 
 writeFileSync(
-  outPath,
+  out,
   `${JSON.stringify({ generated: new Date().toISOString(), results }, null, 2)}\n`,
 );
-console.log(outPath);
+console.log(out);

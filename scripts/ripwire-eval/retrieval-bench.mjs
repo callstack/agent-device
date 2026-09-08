@@ -8,27 +8,15 @@
 //
 // Usage: node scripts/ripwire-eval/retrieval-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]
 
-import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { harnessDir, loadTasks, readArgs, runRipwire } from './bench-cli.mjs';
 
-const run = promisify(execFile);
-const here = dirname(fileURLToPath(import.meta.url));
-
-function arg(name, fallback) {
-  const hit = process.argv.find((entry) => entry.startsWith(`--${name}=`));
-  return hit ? hit.slice(name.length + 3) : fallback;
-}
-
-const ripwire = arg('ripwire');
-const worktrees = arg('worktrees');
-const outPath = arg('out', join(here, 'retrieval-results.json'));
-if (!ripwire || !worktrees) {
-  console.error('usage: retrieval-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]');
-  process.exit(2);
-}
+const { ripwire, worktrees, out } = readArgs({
+  usage: 'retrieval-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]',
+  required: ['ripwire', 'worktrees'],
+  optional: { out: join(harnessDir, 'retrieval-results.json') },
+});
 
 const VERBS = [
   { id: 'for', args: (task) => ['.', `--for=${task.prompt}`] },
@@ -67,33 +55,22 @@ function rankPaths(output) {
   return seen;
 }
 
-const tasks = JSON.parse(readFileSync(join(here, 'tasks.json'), 'utf8')).tasks;
 const results = [];
 
-for (const task of tasks) {
-  const cwd = join(worktrees, task.id);
+for (const task of loadTasks()) {
   for (const verb of VERBS) {
     if (verb.skipWhen?.(task)) continue;
-    const started = process.hrtime.bigint();
-    let stdout = '';
-    let failed = null;
-    try {
-      ({ stdout } = await run(ripwire, verb.args(task), { cwd, maxBuffer: 64 * 1024 * 1024 }));
-    } catch (error) {
-      failed = String(error?.message ?? error).slice(0, 200);
-      stdout = String(error?.stdout ?? '');
-    }
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    const ranks = rankPaths(stdout);
+    const call = await runRipwire(ripwire, verb.args(task), join(worktrees, task.id));
+    const ranks = rankPaths(call.stdout);
     const hits = task.ground_truth.map((path) => ({ path, rank: ranks.get(path) ?? null }));
     const found = hits.filter((hit) => hit.rank !== null);
     results.push({
       task: task.id,
       verb: verb.id,
-      failed,
-      ms: Math.round(ms),
-      bytes: Buffer.byteLength(stdout),
-      est_tokens: Math.round(Buffer.byteLength(stdout) / 4),
+      failed: call.failed,
+      ms: call.ms,
+      bytes: call.bytes,
+      est_tokens: Math.round(call.bytes / 4),
       paths_mentioned: ranks.size,
       ground_truth: task.ground_truth.length,
       hits: found.length,
@@ -102,13 +79,13 @@ for (const task of tasks) {
       per_file: hits,
     });
     process.stderr.write(
-      `${task.id}/${verb.id}: ${found.length}/${task.ground_truth.length} in ${Buffer.byteLength(stdout)} B\n`,
+      `${task.id}/${verb.id}: ${found.length}/${task.ground_truth.length} in ${call.bytes} B\n`,
     );
   }
 }
 
 writeFileSync(
-  outPath,
+  out,
   `${JSON.stringify({ generated: new Date().toISOString(), results }, null, 2)}\n`,
 );
-console.log(outPath);
+console.log(out);

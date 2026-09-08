@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-08T12:52:18.925Z",
+  "generated": "2026-09-08T12:57:15.919Z",
   "by_arm": {
     "baseline": {
       "runs": 12,
@@ -32,7 +32,9 @@
         "f1": 0.923,
         "subagent_tokens": 135275,
         "tool_uses": 59,
-        "duration_ms": 422489.5
+        "duration_ms": 422489.5,
+        "files_opened": 42,
+        "files_opened_bytes": 513624.5
       },
       "ripwire": {
         "recall": 0.941,
@@ -40,7 +42,9 @@
         "f1": 0.955,
         "subagent_tokens": 145767,
         "tool_uses": 52.5,
-        "duration_ms": 407472
+        "duration_ms": 407472,
+        "files_opened": 35.5,
+        "files_opened_bytes": 388103.5
       }
     },
     "T2": {
@@ -50,7 +54,9 @@
         "f1": 0.875,
         "subagent_tokens": 115953,
         "tool_uses": 52,
-        "duration_ms": 446680.5
+        "duration_ms": 446680.5,
+        "files_opened": 24,
+        "files_opened_bytes": 305181.5
       },
       "ripwire": {
         "recall": 0.875,
@@ -58,7 +64,9 @@
         "f1": 0.875,
         "subagent_tokens": 137133.5,
         "tool_uses": 53,
-        "duration_ms": 512938.5
+        "duration_ms": 512938.5,
+        "files_opened": 18,
+        "files_opened_bytes": 203737.5
       }
     },
     "T3": {
@@ -68,7 +76,9 @@
         "f1": 0.66,
         "subagent_tokens": 87134,
         "tool_uses": 30.5,
-        "duration_ms": 236221.5
+        "duration_ms": 236221.5,
+        "files_opened": 20.5,
+        "files_opened_bytes": 306365.5
       },
       "ripwire": {
         "recall": 0.6,
@@ -76,7 +86,9 @@
         "f1": 0.75,
         "subagent_tokens": 109296,
         "tool_uses": 35,
-        "duration_ms": 316329
+        "duration_ms": 316329,
+        "files_opened": 25,
+        "files_opened_bytes": 297640
       }
     },
     "T4": {
@@ -86,7 +98,9 @@
         "f1": 0.857,
         "subagent_tokens": 106299,
         "tool_uses": 39.5,
-        "duration_ms": 326635.5
+        "duration_ms": 326635.5,
+        "files_opened": 20.5,
+        "files_opened_bytes": 249989
       },
       "ripwire": {
         "recall": 0.75,
@@ -94,7 +108,9 @@
         "f1": 0.857,
         "subagent_tokens": 109735.5,
         "tool_uses": 26,
-        "duration_ms": 316027
+        "duration_ms": 316027,
+        "files_opened": 20.5,
+        "files_opened_bytes": 221074
       }
     },
     "T5": {
@@ -104,7 +120,9 @@
         "f1": 0.671,
         "subagent_tokens": 103245.5,
         "tool_uses": 36.5,
-        "duration_ms": 323961
+        "duration_ms": 323961,
+        "files_opened": 35,
+        "files_opened_bytes": 527472
       },
       "ripwire": {
         "recall": 1,
@@ -112,7 +130,9 @@
         "f1": 0.685,
         "subagent_tokens": 107898.5,
         "tool_uses": 28.5,
-        "duration_ms": 313857.5
+        "duration_ms": 313857.5,
+        "files_opened": 14.5,
+        "files_opened_bytes": 239848.5
       }
     },
     "T6": {
@@ -122,7 +142,9 @@
         "f1": 0.857,
         "subagent_tokens": 83490.5,
         "tool_uses": 24.5,
-        "duration_ms": 183201.5
+        "duration_ms": 183201.5,
+        "files_opened": 15,
+        "files_opened_bytes": 103954
       },
       "ripwire": {
         "recall": 1,
@@ -130,7 +152,9 @@
         "f1": 0.857,
         "subagent_tokens": 82857,
         "tool_uses": 19,
-        "duration_ms": 172307
+        "duration_ms": 172307,
+        "files_opened": 12,
+        "files_opened_bytes": 56235
       }
     }
   },

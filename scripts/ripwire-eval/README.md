@@ -59,8 +59,11 @@ Agent half — two arms over the same six tasks, identical prompts except the to
 4. Score them:
 
 ```sh
-node scripts/ripwire-eval/score.mjs --runs=<dir-of-run-json>
+node scripts/ripwire-eval/score.mjs --runs=<dir-of-run-json> --worktrees=/tmp/rw
 ```
+
+`--worktrees` is optional; with it, each run also reports the byte size of the files it opened,
+measured from the pinned clone rather than taken from the agent's own account.
 
 `score.mjs` reports per-run and per-arm file-level recall, precision and F1 against ground truth,
 alongside the token, tool-call and wall-clock cost of producing the answer.
