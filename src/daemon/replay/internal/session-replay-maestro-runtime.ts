@@ -7,7 +7,7 @@ import {
   type MaestroPlatform,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { stripUndefined } from '@agent-device/kernel/record';
 import {

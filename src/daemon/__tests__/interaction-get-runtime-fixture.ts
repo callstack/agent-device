@@ -33,7 +33,7 @@ import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils
 
 /**
  * The request-bound runtime seam `get` consumes, faked at `inspectFacts` / `bindDevice` — never
- * at `core/dispatch-resolve.ts`. The bound capture still runs the interactor capture the surrounding
+ * at `-device/device-selection/dispatch-resolve`. The bound capture still runs the interactor capture the surrounding
  * interaction tests already mock, so only the two `get` operations are fixture-owned here.
  */
 export const mockReadTextAtPoint = vi.fn(

@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DeviceSelectionResult } from '../../core/device-selection-resolver.ts';
+import type { DeviceSelectionResult } from '@agent-device/device-selection/device-selection-resolver';
 
 /**
  * Wraps a mocked `resolveTargetDevice` so a mocked `resolveTargetDeviceSelection`

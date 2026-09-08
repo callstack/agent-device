@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { type ProviderScenarioTranscript, createProviderTranscript } from './transcript.ts';

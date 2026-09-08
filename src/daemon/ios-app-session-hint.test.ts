@@ -4,8 +4,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 const listBootedIosSimulators = vi.hoisted(() => vi.fn());
 const detectSoleRunningIosSimulatorApp = vi.hoisted(() => vi.fn());
 
-vi.mock('../request/device-inventory-context.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../request/device-inventory-context.ts')>()),
+vi.mock('@agent-device/device-selection/device-inventory-context', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@agent-device/device-selection/device-inventory-context')
+  >()),
   listLocalDeviceInventory: listBootedIosSimulators,
 }));
 vi.mock('@agent-device/platform-apple/app-resolution', () => ({

@@ -1,9 +1,8 @@
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
+  ComposedDeviceInventoryGateways,
   DeviceInventoryDiscovery,
-  DeviceInventoryGateway,
-  ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -11,11 +10,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 const DEVICE_INVENTORY_CONTEXT_UNAVAILABLE_REASON = 'device_inventory_context_unavailable';
 
-type DeviceInventoryContext = Readonly<{
-  providerFirst: ProviderAwareDeviceInventoryGateway;
-  localOnly: DeviceInventoryGateway;
-  requestScope: PlatformRequestScope;
-}>;
+type DeviceInventoryContext = ComposedDeviceInventoryGateways &
+  Readonly<{ requestScope: PlatformRequestScope }>;
 
 const deviceInventoryContext = new AsyncLocalStorage<DeviceInventoryContext>();
 
@@ -24,6 +20,15 @@ export async function withDeviceInventoryContext<T>(
   task: () => Promise<T>,
 ): Promise<T> {
   return await deviceInventoryContext.run(context, task);
+}
+
+/**
+ * The composition root's installed-app probe, or undefined where no probe was installed:
+ * device selection then falls back to the ordinary inventory rules instead of narrowing
+ * by installed app.
+ */
+export function readInstalledAppProbe() {
+  return deviceInventoryContext.getStore()?.findInstalledApp;
 }
 
 export async function listDeviceInventory(request: DeviceInventoryRequest): Promise<DeviceInfo[]> {

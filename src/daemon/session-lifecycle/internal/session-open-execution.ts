@@ -6,7 +6,7 @@ import {
 import {
   markSelectionBootOccurred,
   type DeviceSelectionResult,
-} from '../../../core/device-selection-resolver.ts';
+} from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';

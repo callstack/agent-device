@@ -8,7 +8,7 @@ import {
 import type { SessionRuntimeHints, SessionScope, SessionState } from '../../session-state.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
-import type { DeviceSelectionResult } from '../../../core/device-selection-resolver.ts';
+import type { DeviceSelectionResult } from '@agent-device/device-selection/device-selection-resolver';
 
 export function buildOpenResult(params: {
   sessionName: string;

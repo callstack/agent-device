@@ -4,8 +4,9 @@ import path from 'node:path';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   const { selectionFromResolveTargetDevice } =
     await import('../../../__tests__/device-selection-stub.ts');
   return {

@@ -11,8 +11,8 @@ import {
   makeAuthoringSession,
 } from '../../../../__tests__/test-utils/session-factories.ts';
 
-vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     resolveTargetDevice: actual.resolveTargetDevice,

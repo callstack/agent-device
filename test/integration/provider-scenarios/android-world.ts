@@ -8,7 +8,7 @@ import type {
   AndroidAdbProcess,
   AndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
-import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,

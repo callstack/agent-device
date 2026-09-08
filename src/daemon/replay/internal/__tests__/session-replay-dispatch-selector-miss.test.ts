@@ -22,8 +22,9 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
 vi.mock('../../../snapshot-interactor-capture.ts', () => ({

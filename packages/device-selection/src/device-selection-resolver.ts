@@ -157,6 +157,11 @@ async function resolveAppInstalledSimulatorSelection(
   const appTarget = appleSimulatorAppTarget?.trim();
   if (!appTarget) return undefined;
 
+  // Function-scoped: keeps the request-context module out of this entry's eager closure.
+  const { readInstalledAppProbe } = await import('./device-inventory-context.ts');
+  const findInstalledApp = readInstalledAppProbe();
+  if (!findInstalledApp) return undefined;
+
   const bootedSimulators = devices.filter(
     (device) =>
       matchesDeviceSelector(device, selector) &&
@@ -166,12 +171,10 @@ async function resolveAppInstalledSimulatorSelection(
   );
   if (bootedSimulators.length < 2) return undefined;
 
-  const { findIosSimulatorInstalledApp } =
-    await import('@agent-device/platform-apple/app-resolution');
   const matches = (
     await Promise.all(
       bootedSimulators.map(async (device) =>
-        (await findIosSimulatorInstalledApp(device, appTarget)) ? device : undefined,
+        (await findInstalledApp(device, appTarget)) ? device : undefined,
       ),
     )
   ).filter((device): device is DeviceInfo => device !== undefined);

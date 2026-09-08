@@ -2,9 +2,11 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 
-vi.mock('../../../request/device-inventory-context.ts', async (importOriginal) => {
+vi.mock('@agent-device/device-selection/device-inventory-context', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../request/device-inventory-context.ts')>();
+    await importOriginal<
+      typeof import('@agent-device/device-selection/device-inventory-context')
+    >();
   return { ...actual, listDeviceInventory: vi.fn(async () => []) };
 });
 

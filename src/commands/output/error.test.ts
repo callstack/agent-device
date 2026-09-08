@@ -125,7 +125,7 @@ test('printHumanError appends a "+N more" marker when candidates were capped', a
 });
 
 // The device-domain resolvers (findBootedAppleSimulatorWithApp,
-// src/core/dispatch-resolve.ts) key their candidate list `devices`, so the CLI
+// -device/device-selection/dispatch-resolve) key their candidate list `devices`, so the CLI
 // renders the udids the "pass --udid" hint asks for. The structured candidate
 // view comes from @agent-device/kernel/errors and formatting stays local here.
 test('printHumanError lists device candidates for the device-domain resolvers', async () => {

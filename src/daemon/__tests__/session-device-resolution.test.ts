@@ -7,14 +7,14 @@ import {
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
 import { getRunnerSessionSnapshot } from '@agent-device/platform-apple/runner/operations';
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   getRunnerSessionSnapshot: vi.fn(async () => null),
 }));
-vi.mock('../../core/dispatch-resolve.ts', () => ({
+vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(),
 }));
 vi.mock('../../provider-device-runtime.ts', () => ({

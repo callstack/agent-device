@@ -5,7 +5,7 @@ import {
   resolveDeclaredScriptPlatform,
   resolveReplayFormat,
 } from '@agent-device/ad-script';
-import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
+import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { isDeepLinkTarget, type CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from './replay-script-source.ts';
 import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';

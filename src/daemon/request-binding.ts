@@ -1,4 +1,4 @@
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { hasDeviceSelectionInput } from './device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';

@@ -10,7 +10,7 @@ import {
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { deviceIdentity, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureBoundDeviceReady } from '../request-runtime-binding.ts';
 import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import {

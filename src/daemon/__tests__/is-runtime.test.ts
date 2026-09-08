@@ -30,7 +30,7 @@ beforeEach(() => {
 
 // `is` answers every one of its eight predicates from the resolved capture — `isCommand` never
 // reaches `backend.readText`. So its whole platform execution is the request-bound capture, and
-// these cases bind at `inspectFacts` / `bindDevice`, never at `core/dispatch-resolve.ts`.
+// these cases bind at `inspectFacts` / `bindDevice`, never at `-device/device-selection/dispatch-resolve`.
 
 const unavailableCapture = { available: false, reason: 'unsupported-device-kind' } as const;
 const activeAppRequired = { available: false, reason: 'owner-capability-missing' } as const;

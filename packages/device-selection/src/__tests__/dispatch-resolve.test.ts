@@ -1,16 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-const { mockFindIosSimulatorInstalledApp, mockListAppleDevices } = vi.hoisted(() => ({
-  mockFindIosSimulatorInstalledApp: vi.fn(),
-  mockListAppleDevices: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/app-resolution', () => {
-  return {
-    findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
-  };
-});
+const mockFindIosSimulatorInstalledApp = vi.fn();
+const mockListAppleDevices = vi.fn();
 import {
   resolveTargetDevice as resolveTargetDeviceInContext,
   resolveTargetDeviceSelection as resolveTargetDeviceSelectionInContext,
@@ -19,7 +11,7 @@ import {
 import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
-} from '../../__tests__/test-utils/device-inventory-gateways.ts';
+} from './test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -98,6 +90,7 @@ async function resolveTargetDevice(
         (request.platform === 'apple' && request.target === 'desktop')
           ? [macDesktop]
           : await mockListAppleDevices(request),
+      findInstalledApp: mockFindIosSimulatorInstalledApp,
     },
     async () => await resolveTargetDeviceInContext(...args),
   );
@@ -205,7 +198,10 @@ test('app-narrowed selection reports its own typed provenance, not a generic loc
   );
 
   const selection = await withTestDeviceInventory(
-    { local: async (request) => await mockListAppleDevices(request) },
+    {
+      local: async (request) => await mockListAppleDevices(request),
+      findInstalledApp: mockFindIosSimulatorInstalledApp,
+    },
     async () =>
       await resolveTargetDeviceSelectionInContext(
         { platform: 'ios' },

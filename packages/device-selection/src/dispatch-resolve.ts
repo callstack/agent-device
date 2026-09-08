@@ -18,7 +18,7 @@ import {
   listLocalDeviceInventory,
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
-} from '../request/device-inventory-context.ts';
+} from './device-inventory-context.ts';
 import type {
   DeviceSelectionResult,
   InventoryDeviceSelectionParams,

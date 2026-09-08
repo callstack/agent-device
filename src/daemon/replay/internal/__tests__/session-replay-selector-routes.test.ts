@@ -15,8 +15,9 @@ import {
   writeReplayFile,
 } from '../../__tests__/session-replay-runtime.fixtures.ts';
 
-vi.mock('../../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
 

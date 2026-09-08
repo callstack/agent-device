@@ -1,5 +1,5 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import type { ResolveTargetDeviceOptions } from '../core/dispatch-resolve.ts';
+import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 
 export function buildOpenTargetDeviceResolutionOptions(
   openTarget: string | undefined,

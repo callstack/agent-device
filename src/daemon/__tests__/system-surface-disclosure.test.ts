@@ -11,8 +11,9 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
-vi.mock('../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return {
     ...actual,
     resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
@@ -28,7 +29,7 @@ vi.mock('../device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withSystemSurfaceDisclosure } from '../system-surface-disclosure.ts';
 

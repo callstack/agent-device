@@ -54,7 +54,7 @@ test('formatToolErrorText renders a structured cause', () => {
 });
 
 // Device-domain AMBIGUOUS_MATCH (findBootedAppleSimulatorWithApp,
-// src/core/dispatch-resolve.ts) keys its list `devices`, so the MCP text path
+// -device/device-selection/dispatch-resolve) keys its list `devices`, so the MCP text path
 // carries the udids the hint asks for — same block as the CLI.
 test('formatToolErrorText lists device-domain candidates udid-first', () => {
   const err = new AppError(

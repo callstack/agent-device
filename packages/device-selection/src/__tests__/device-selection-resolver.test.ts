@@ -1,26 +1,20 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  ANDROID_EMULATOR,
-  IOS_SIMULATOR,
-  MACOS_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   markSelectionBootOccurred,
   resolveExistingSessionDeviceSelection,
   resolveInventoryDeviceSelection,
 } from '../device-selection-resolver.ts';
+import { withTestDeviceInventory } from './test-utils/device-inventory-gateways.ts';
 import {
+  ANDROID_EMULATOR,
+  IOS_SIMULATOR,
+  MACOS_DEVICE,
   SECOND_BOOTED_ANDROID_EMULATOR,
   STOPPED_ANDROID_EMULATOR,
 } from './device-selection-fixtures.ts';
-
-const mockFindIosSimulatorInstalledApp = vi.hoisted(() => vi.fn());
-
-vi.mock('@agent-device/platform-apple/app-resolution', () => ({
-  findIosSimulatorInstalledApp: mockFindIosSimulatorInstalledApp,
-}));
 
 test('explicit identity selector wins before local inference', async () => {
   const selection = await resolveInventoryDeviceSelection({
@@ -59,16 +53,20 @@ test('a single bootable local candidate is selectable without a preliminary devi
 
 test('the booted simulator with the app installed carries its own selected-by reason', async () => {
   const secondBootedSimulator = { ...IOS_SIMULATOR, id: 'sim-2', name: 'iPhone 17' };
-  mockFindIosSimulatorInstalledApp.mockImplementation(async (device: { id: string }) =>
+  const findInstalledApp = vi.fn(async (device: DeviceInfo) =>
     device.id === secondBootedSimulator.id ? 'com.example.demo' : undefined,
   );
 
-  const selection = await resolveInventoryDeviceSelection({
-    devices: [IOS_SIMULATOR, secondBootedSimulator],
-    selector: { platform: 'ios' },
-    source: 'local',
-    appleSimulatorAppTarget: 'com.example.demo',
-  });
+  const selection = await withTestDeviceInventory(
+    { findInstalledApp },
+    async () =>
+      await resolveInventoryDeviceSelection({
+        devices: [IOS_SIMULATOR, secondBootedSimulator],
+        selector: { platform: 'ios' },
+        source: 'local',
+        appleSimulatorAppTarget: 'com.example.demo',
+      }),
+  );
 
   assert.equal(selection.device.id, secondBootedSimulator.id);
   assert.equal(selection.reason, 'single-app-installed-local');

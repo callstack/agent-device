@@ -198,7 +198,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     },
     read: {
       kind: 'covered',
-      evidence: ['src/core/__tests__/dispatch-resolve.test.ts'],
+      evidence: ['packages/device-selection/src/__tests__/dispatch-resolve.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     'artifact-producing': {

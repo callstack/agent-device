@@ -3,7 +3,7 @@ import type {
   BackendCommandContext,
   BackendSnapshotResult,
 } from '../backend.ts';
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { createAgentDevice } from '../runtime.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError } from './response.ts';

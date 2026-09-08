@@ -2,7 +2,7 @@ import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
 } from '@agent-device/command-registry/registry';
-import { listDeviceInventory } from '../../../request/device-inventory-context.ts';
+import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {

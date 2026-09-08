@@ -1,4 +1,4 @@
-import { resolveTargetDeviceSelection } from '../../../core/dispatch-resolve.ts';
+import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyAndClearUse,
@@ -34,7 +34,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { admitRuntimeOperations } from '../../runtime-admission.ts';
-import { resolveExistingSessionDeviceSelection } from '../../../core/device-selection-resolver.ts';
+import { resolveExistingSessionDeviceSelection } from '@agent-device/device-selection/device-selection-resolver';
 import { requireRuntimeBinding, requireRuntimeFacts } from '../../session-runtime-admission.ts';
 import {
   completeOpenCommand,

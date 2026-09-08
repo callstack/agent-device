@@ -8,6 +8,7 @@ import type {
   ComposedDeviceInventoryGateways,
   DeviceInventoryGateway,
   DeviceInventorySource,
+  InstalledAppProbe,
   InventoryPlatformModule,
   PlatformModuleRegistry,
   ProviderAwareDeviceInventoryGateway,
@@ -62,7 +63,14 @@ export function createComposedDeviceInventoryGateways(
     discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,
   });
-  return Object.freeze({ providerFirst, localOnly });
+  // Function-scoped: device selection reads this probe from the request context, and loading it
+  // must not evaluate Apple app-resolution mechanics until a selection actually narrows.
+  const findInstalledApp: InstalledAppProbe = async (device, appTarget) => {
+    const { findIosSimulatorInstalledApp } =
+      await import('@agent-device/platform-apple/app-resolution');
+    return await findIosSimulatorInstalledApp(device, appTarget);
+  };
+  return Object.freeze({ providerFirst, localOnly, findInstalledApp });
 }
 
 function createLocalDeviceInventoryGateway(
