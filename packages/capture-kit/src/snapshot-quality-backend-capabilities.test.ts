@@ -100,7 +100,7 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES['private-ax']).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
-    regularDepth: 'raw-only',
+    regularDepth: 'presentation-cut',
     hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',

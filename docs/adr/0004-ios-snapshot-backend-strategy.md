@@ -273,11 +273,18 @@ fold and eligibility collapse. This keeps shallow probes bounded by the requeste
 frontier without inventing a raw-depth multiplier. Scoped captures remain broad because depth is
 relative to the scope root selected in presentation.
 
-Backend capability declarations are part of the contract: recursive tree supports the presented
-frontier, the flat query sweep supports only its root and one presented level, and private AX is
-raw-depth-only for regular depth requests until it has an equivalent hierarchy-aware frontier.
-The capture plan does not claim deeper regular-depth completeness from a backend that cannot prove
-it. Raw depth remains acquisition depth for every backend.
+Backend capability declarations are part of the contract, and they describe how much acquisition
+work a regular depth request bounds — never whether the backend may answer it. Every backend
+serves a regular `--depth` request because presentation applies the presented-depth cut to
+whatever hierarchy was acquired: the recursive tree stops acquisition at the presented frontier,
+the flat query sweep has only its root and one presented level (so a cut past depth 1 returns the
+sweep unchanged), and private AX walks its raw-depth ladder and is cut afterwards
+(`presentation-cut`). Completeness below an acquisition cap is disclosed the same way it is for an
+unscoped capture — through `truncated` and `effectiveDepth` — because a depth-capped regular
+capture is a subset of the unscoped one from the same backend. Refusing the request instead
+produced no answer at all: a plan pinned or deferred to private AX fell through to the synthetic
+sparse root, which the daemon then rejected as a missing viewport (#2403). Raw depth remains
+acquisition depth for every backend.
 
 Acquisition-side limits remain explicit: raw private-AX captures still disclose their bridge-side
 node cap, the flat query sweep still drops frameless elements because it has no hierarchy to attach

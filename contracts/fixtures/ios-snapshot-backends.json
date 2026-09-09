@@ -39,7 +39,7 @@
       "name": "private-ax",
       "forceable": true,
       "supportsRawProjection": true,
-      "regularDepth": "raw-only",
+      "regularDepth": "presentation-cut",
       "hittable": "geometric-actionability",
       "deepExtension": "yes",
       "depthLadder": "yes",

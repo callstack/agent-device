@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: iOS `--depth` on `snapshot`, `is`, `wait`, `get`, and `find` no longer fails with
+  `regular iOS snapshot presentation requires a valid viewport` when the runner plan is pinned or
+  deferred to the private AX backend (custom actions, a private AX verdict on the session, or the
+  XCTest channel penalty). The runner refused a regular depth-capped request on every backend but
+  the recursive tree, fell through to its synthetic sparse root, and the daemon rejected that root
+  as a missing viewport. Presentation applies the presented-depth cut to whatever hierarchy a
+  backend acquired, so every backend serves the request; the private AX declaration is now
+  `regular-depth=presentation-cut` and an acquisition that stopped short of the cut keeps
+  disclosing that through `truncated`/`effectiveDepth` as it does unscoped.
 - Added: `replay export` supports flows that switch apps and return, preserving each
   `open <appId>` target as an explicit Maestro `launchApp.appId`.
 - Added: `replay export` converts recorded `home` actions to Maestro `pressKey: Home`, allowing
