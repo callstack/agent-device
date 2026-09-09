@@ -19,6 +19,14 @@
   disclosing that through `truncated`/`effectiveDepth` as it does unscoped.
 - Fixed: repeated unfiltered Android snapshots stay compact when identical element bounds arrive
   with a different property order. Changes to the bounds still re-emit the tree.
+- Fixed: iOS `network dump` no longer omits requests that reused a keep-alive connection.
+  CFNetwork logs a request URL only on the line that opens a connection, so a second request to
+  the same host produced no `url:` line and was dropped from the dump entirely — an "this endpoint
+  was called" check read as a definite fail. Such a request is now reported against the origin its
+  connection was opened for, with `pathUnavailable` set, its status, and its timing, and the dump
+  carries a note saying absence of an endpoint does not prove it was not called.
+- Fixed: a URL parsed out of a log line no longer keeps the punctuation that follows it, so an
+  entry's `url` compares equal to the endpoint under test.
 - Added: `replay export` supports flows that switch apps and return, preserving each
   `open <appId>` target as an explicit Maestro `launchApp.appId`.
 - Added: `replay export` converts recorded `home` actions to Maestro `pressKey: Home`, allowing

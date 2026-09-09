@@ -36,6 +36,7 @@ export async function dumpAppleNetworkTraffic(
       }
     }
   }
+  appendUnnamedRequestNote(notes, dump);
   appendLifecycleNote(notes, device, input);
   if (dump.entries.length === 0) notes.push(noEntriesNote(device));
   return Object.freeze({ source: 'app-log', backend, dump, notes: Object.freeze(notes) });
@@ -111,6 +112,20 @@ function buildPredicate(appBundleId: string): string {
     `processImagePath ENDSWITH[c] "/${value}"`,
     `senderImagePath ENDSWITH[c] "/${value}"`,
   ].join(' OR ');
+}
+
+/**
+ * CFNetwork logs a request URL only when a connection is opened, so a request
+ * that reused a keep-alive connection is reported against its connection's
+ * origin with no path. Saying so keeps "this endpoint was never called" from
+ * being read off a dump that could not name every request it observed.
+ */
+function appendUnnamedRequestNote(notes: string[], dump: NetworkDump): void {
+  const unnamed = dump.entries.filter((entry) => entry.pathUnavailable).length;
+  if (unnamed === 0) return;
+  notes.push(
+    `${unnamed} request${unnamed === 1 ? '' : 's'} reused a keep-alive connection, so CFNetwork logged no request URL. ${unnamed === 1 ? 'It is' : 'They are'} listed against the origin the connection was opened for, without a path: absence of an endpoint in this dump does not prove it was not called.`,
+  );
 }
 
 function appendLifecycleNote(notes: string[], device: DeviceInfo, input: NetworkDumpInput): void {

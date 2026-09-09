@@ -13,6 +13,11 @@ export type NetworkEntry = {
   headers?: string;
   requestBody?: string;
   responseBody?: string;
+  /**
+   * The reader observed this request but not its path: `url` is the origin of
+   * the connection it reused. Absent means `url` is the request URL as logged.
+   */
+  pathUnavailable?: boolean;
   raw: string;
   line: number;
 };

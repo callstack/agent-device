@@ -991,6 +991,7 @@ agent-device network dump 25 --include headers --platform web # Browser requests
 - iOS simulator log capture now streams from inside the simulator with `simctl spawn <udid> log ...`, and `network dump` can recover recent simulator log history with `simctl log show` when the live app-log window is sparse.
 - iOS log capture still relies on Unified Logging signals (for example `os_log`); plain stdout/stderr output may be limited depending on app/runtime.
 - On iOS, `network dump` can return zero HTTP entries for real app activity when the app does not emit request metadata into Unified Logging. The response notes now distinguish between an empty repro window and a non-network app log window.
+- On iOS, CFNetwork logs a request URL only on the line that opens a connection, so a request that reused a keep-alive connection has no URL anywhere in the log. Those requests are reported against the origin their connection was opened for, with `pathUnavailable: true`, their status, and their timing, and the dump notes how many there were. Treat a missing endpoint in an iOS dump as unproven rather than as evidence it was not called.
 - Retention knobs: set `AGENT_DEVICE_APP_LOG_MAX_BYTES` and `AGENT_DEVICE_APP_LOG_MAX_FILES` to override rotation limits.
 - Optional write-time redaction patterns: set `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` to a comma-separated regex list.
 

@@ -137,3 +137,94 @@ test('applies a validated absolute line offset to host-selected text', () => {
     /non-negative integer/,
   );
 });
+
+test('a URL logged mid-sentence drops the separator that follows it', () => {
+  const line =
+    '2026-09-09 18:22:27.805 Df spicygolf[33656:4505afd] [com.apple.network:connection] [C9 Hostname#c6f77afc:3040 tcp, url: http://localhost:3040/v4/messages/en_US, definite, attribution: developer] start';
+  const dump = readRecentNetworkTrafficFromText(`${line}\n`, {
+    path: 'app.log',
+    exists: true,
+    backend: 'ios-simulator',
+  });
+
+  assert.equal(dump.entries[0]?.url, 'http://localhost:3040/v4/messages/en_US');
+});
+
+// Captured from a real iOS simulator app log: `/v4/messages/en_US` opens
+// connection 9 and logs its URL, then `/init` reuses connection 9 ~350ms later
+// and CFNetwork logs no URL for it anywhere.
+const CONNECTION_START =
+  '2026-09-09 18:22:27.805 Df spicygolf[33656:4505afd] [com.apple.network:connection] [C9 EA66F890-BE05-450D-BF6E-ADE5ADAC1CB8 Hostname#c6f77afc:3040 tcp, url: http://localhost:3040/v4/messages/en_US, definite, attribution: developer] start';
+const OPENING_SUMMARY =
+  '2026-09-09 18:22:27.816 Df spicygolf[33656:4505aed] [com.apple.CFNetwork:Summary] Task <10B2F1BA-8C9E-4877-80D2-994F1C3ED74A>.<1> summary for task success {transaction_duration_ms=11, response_status=200, connection=9, protocol="http/1.1", request_bytes=221, response_bytes=1214, cache_hit=true}';
+const REUSED_SUMMARY =
+  '2026-09-09 18:22:28.167 Df spicygolf[33656:4505ae4] [com.apple.CFNetwork:Summary] Task <2FAEF670-BB27-42A4-ACDD-6B6DF7D11510>.<2> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1, reused_after_ms=0, request_bytes=236, response_bytes=624, cache_hit=true}';
+
+function iosDump(lines: readonly string[]) {
+  return readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
+    path: 'app.log',
+    exists: true,
+    backend: 'ios-simulator',
+  });
+}
+
+test('a request that reused a keep-alive connection is reported against its origin', () => {
+  const dump = iosDump([CONNECTION_START, OPENING_SUMMARY, REUSED_SUMMARY]);
+  const reused = dump.entries.find((entry) => entry.pathUnavailable);
+
+  assert.equal(reused?.url, 'http://localhost:3040');
+  assert.equal(reused?.status, 200);
+  assert.equal(reused?.durationMs, 1);
+  assert.equal(reused?.timestamp, '2026-09-09 18:22:28.167');
+});
+
+test('a task that opened its own connection is read from its URL-bearing line only', () => {
+  const dump = iosDump([CONNECTION_START, OPENING_SUMMARY]);
+
+  assert.deepEqual(
+    dump.entries.map((entry) => entry.url),
+    ['http://localhost:3040/v4/messages/en_US'],
+  );
+  assert.equal(dump.entries[0]?.pathUnavailable, undefined);
+});
+
+test('a reused request whose connection is outside the scanned window is not invented', () => {
+  const dump = iosDump([REUSED_SUMMARY]);
+
+  assert.deepEqual(dump.entries, []);
+});
+
+test('a recycled connection number resolves to the origin most recently opened for it', () => {
+  const laterStart = CONNECTION_START.replace(
+    'url: http://localhost:3040/v4/messages/en_US',
+    'url: https://api.example.test/v1/session',
+  );
+  const dump = iosDump([CONNECTION_START, laterStart, REUSED_SUMMARY]);
+
+  assert.equal(
+    dump.entries.find((entry) => entry.pathUnavailable)?.url,
+    'https://api.example.test',
+  );
+});
+
+test('a reused request that never got a status drops the CFNetwork sentinel', () => {
+  const failure = REUSED_SUMMARY.replace(
+    'summary for task success',
+    'summary for task failure',
+  ).replace('response_status=200', 'response_status=-1');
+  const dump = iosDump([CONNECTION_START, failure]);
+  const reused = dump.entries.find((entry) => entry.pathUnavailable);
+
+  assert.equal(reused?.url, 'http://localhost:3040');
+  assert.equal(reused?.status, undefined);
+});
+
+test('android dumps do not pay for CFNetwork correlation', () => {
+  const dump = readRecentNetworkTrafficFromText(`${REUSED_SUMMARY}\n`, {
+    path: 'app.log',
+    exists: true,
+    backend: 'android',
+  });
+
+  assert.deepEqual(dump.entries, []);
+});

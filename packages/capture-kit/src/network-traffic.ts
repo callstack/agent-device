@@ -21,6 +21,14 @@ import {
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
 const METHOD_WITH_URL_REGEX = new RegExp(`\\b(${HTTP_METHODS.join('|')})\\b\\s+https?:\\/\\/`, 'i');
 const URL_REGEX = /https?:\/\/[^\s"'<>\])]+/i;
+const CFNETWORK_CONNECTION_URL = /\[C(\d+)\b[^\]]*?\burl:\s*([^\s,\]]+)/;
+const CFNETWORK_TASK_SUMMARY = /\bsummary for task (?:success|failure)\s*\{([^}]*)\}/;
+
+/** Connection openings in scan order, so a recycled number resolves to its most recent opening. */
+type CfNetworkConnectionIndex = ReadonlyMap<
+  string,
+  readonly Readonly<{ lineIndex: number; origin: string }>[]
+>;
 
 export function mergeNetworkDumps(
   primary: NetworkDump,
@@ -67,6 +75,9 @@ export function readRecentNetworkTrafficFromText(
   const startIndex = Math.max(0, allLines.length - maxScanLines);
   const lines = allLines.slice(startIndex);
   const entries: NetworkEntry[] = [];
+  const cfNetworkConnections = isAppleBackend(options.backend)
+    ? indexCfNetworkConnections(lines)
+    : undefined;
   for (let i = lines.length - 1; i >= 0 && entries.length < maxEntries; i -= 1) {
     if (!lines[i]?.trim()) continue;
     const parsed = parseNetworkLine(
@@ -76,6 +87,7 @@ export function readRecentNetworkTrafficFromText(
       options.backend,
       include,
       maxPayloadChars,
+      cfNetworkConnections,
     );
     if (parsed) entries.push(parsed);
   }
@@ -88,6 +100,10 @@ export function readRecentNetworkTrafficFromText(
     include,
     limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
   });
+}
+
+function isAppleBackend(backend: LogBackend | undefined): boolean {
+  return backend === 'ios-simulator' || backend === 'ios-device' || backend === 'macos';
 }
 
 function requireLineNumberOffset(value: number | undefined): number {
@@ -105,11 +121,16 @@ function parseNetworkLine(
   backend: LogBackend | undefined,
   include: NetworkDump['include'],
   maxPayloadChars: number,
+  cfNetworkConnections: CfNetworkConnectionIndex | undefined,
 ): NetworkEntry | null {
   const line = lines[lineIndex]?.trim();
   if (!line) return null;
   const maybeJson = parseEmbeddedNetworkJson(line);
-  const identity = parseNetworkIdentity(line, maybeJson);
+  const identity =
+    parseNetworkIdentity(line, maybeJson) ??
+    (cfNetworkConnections
+      ? parseCfNetworkReusedTaskIdentity(line, cfNetworkConnections, lineIndex)
+      : null);
   if (!identity) return null;
   const result = createNetworkEntry(line, lineNumber, identity, maxPayloadChars);
   if (backend === 'android') enrichNetworkEntryFromAndroidLines(result, lines, lineIndex);
@@ -121,6 +142,8 @@ type NetworkIdentity = Readonly<{
   method?: string;
   url: string;
   status?: number;
+  durationMs?: number;
+  pathUnavailable?: boolean;
 }>;
 
 function parseNetworkIdentity(
@@ -152,7 +175,12 @@ function parseNetworkUrl(
   line: string,
   maybeJson: Record<string, unknown> | null,
 ): string | undefined {
-  return readNetworkJsonString(maybeJson, ['url', 'requestUrl']) ?? URL_REGEX.exec(line)?.[0];
+  const json = readNetworkJsonString(maybeJson, ['url', 'requestUrl']);
+  if (json) return json;
+  const matched = URL_REGEX.exec(line)?.[0];
+  // A URL logged mid-sentence carries the separator that follows it, and an
+  // equality check against the endpoint under test fails on the stray byte.
+  return matched === undefined ? undefined : matched.replace(/[,.;:]+$/, '');
 }
 
 function parseNetworkStatus(
@@ -190,7 +218,7 @@ function createNetworkEntry(
     ...identity,
     timestamp: parseNetworkTimestamp(line),
     packetId: parseAndroidPacketId(line) ?? undefined,
-    durationMs: parseAndroidDurationMs(line) ?? undefined,
+    durationMs: identity.durationMs ?? parseAndroidDurationMs(line) ?? undefined,
     raw: truncate(line, maxPayloadChars),
     line: lineNumber,
   };
@@ -240,4 +268,94 @@ function clampInt(value: number | undefined, fallback: number, min: number, max:
   return value === undefined || !Number.isInteger(value)
     ? fallback
     : Math.max(min, Math.min(max, value));
+}
+
+/**
+ * CFNetwork logs a request URL only on the `com.apple.network:connection` line
+ * that opens a connection. A request that reuses a keep-alive connection emits
+ * a task summary with status, timing, and byte counts but no URL anywhere, so
+ * a URL-keyed reader drops it and an "endpoint was never called" check reads as
+ * a definite negative. Resolving the summary against the connection it reused
+ * recovers the origin; the request path is not in the log at all.
+ */
+function indexCfNetworkConnections(lines: readonly string[]): CfNetworkConnectionIndex {
+  const index = new Map<string, { lineIndex: number; origin: string }[]>();
+  for (const [lineIndex, line] of lines.entries()) {
+    const match = CFNETWORK_CONNECTION_URL.exec(line);
+    if (!match) continue;
+    const origin = readCfNetworkOrigin(match[2] as string);
+    if (!origin) continue;
+    const openings = index.get(match[1] as string);
+    if (openings) openings.push({ lineIndex, origin });
+    else index.set(match[1] as string, [{ lineIndex, origin }]);
+  }
+  return index;
+}
+
+function parseCfNetworkReusedTaskIdentity(
+  line: string,
+  index: CfNetworkConnectionIndex,
+  lineIndex: number,
+): NetworkIdentity | null {
+  const summary = CFNETWORK_TASK_SUMMARY.exec(line);
+  if (!summary) return null;
+  const fields = readCfNetworkSummaryFields(summary[1] as string);
+  // Without `reused` the task opened its own connection, so a URL-bearing line
+  // for it is already in the log and this summary would only duplicate it.
+  if (fields.get('reused') !== '1') return null;
+  const connection = fields.get('connection');
+  if (connection === undefined) return null;
+  const origin = resolveCfNetworkOrigin(index, connection, lineIndex);
+  if (!origin) return null;
+  return {
+    url: origin,
+    status: readCfNetworkStatus(fields.get('response_status')),
+    durationMs: readCfNetworkCount(fields.get('transaction_duration_ms')),
+    pathUnavailable: true,
+  };
+}
+
+function resolveCfNetworkOrigin(
+  index: CfNetworkConnectionIndex,
+  connection: string,
+  lineIndex: number,
+): string | undefined {
+  const openings = index.get(connection);
+  if (!openings) return undefined;
+  let resolved: string | undefined;
+  for (const opening of openings) {
+    if (opening.lineIndex > lineIndex) break;
+    resolved = opening.origin;
+  }
+  return resolved;
+}
+
+function readCfNetworkSummaryFields(body: string): ReadonlyMap<string, string> {
+  const fields = new Map<string, string>();
+  for (const pair of body.split(',')) {
+    const separator = pair.indexOf('=');
+    if (separator === -1) continue;
+    fields.set(pair.slice(0, separator).trim(), pair.slice(separator + 1).trim());
+  }
+  return fields;
+}
+
+function readCfNetworkOrigin(url: string): string | undefined {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+// CFNetwork reports `-1` for a task that never received a response status.
+function readCfNetworkStatus(value: string | undefined): number | undefined {
+  const status = readCfNetworkCount(value);
+  return status !== undefined && status > 0 ? status : undefined;
+}
+
+function readCfNetworkCount(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
