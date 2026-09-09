@@ -64,6 +64,23 @@ At each native fragment boundary, an absent or invalid child count means unknown
 completeness and fails closed. Natural leaves above that boundary need no
 continuation evidence. Unchanged native dictionaries and child arrays are reused.
 
+## Accepted-depth hints
+
+The host source (`packages/platform-apple/src/snapshot-source/depth-hints.ts`)
+remembers the native levels a finished recovery accepted, keyed by the resolved
+target id, its app generation, and this producer. The next capture of that
+generation sends `nativeLevelsHint`, so the guest's first request asks for the
+accepted levels instead of re-paying the known rejection. A hint changes the
+request strategy only: the delivered depth, node bounds, and completeness rules
+are unchanged. Hints are learned only from a recovery that observed a rejection
+and then finished (a tree bounded by the requested depth or node budget still
+teaches), never cross apps, generations, or producers, and expire after eight
+hinted captures so the next capture probes the full depth again; a capture that
+merely succeeds at the hinted depth does not renew it. Explicit raw-depth
+requests neither use nor teach hints. Every response carries `recovery`
+(`requests`, `rejected`, `continuations`, `acceptedLevels`), which the host
+emits as the `ios_snapshot_source_recovery` diagnostic.
+
 ## Recovery conformance
 
 `contracts/fixtures/ios-ax-recovery-conformance.json` is the shared, executable

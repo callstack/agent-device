@@ -18,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.4";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.5";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -262,6 +262,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 - (nullable NSDictionary *)snapshotForProcess:(pid_t)pid
                                     maxDepth:(NSUInteger)maxDepth
                                     maxNodes:(NSUInteger)maxNodes
+                            nativeLevelsHint:(NSUInteger)nativeLevelsHint
                                   requestId:(NSString *)requestId
                                 generation:(NSString *)generation
                               maxDurationMs:(NSUInteger)maxDurationMs
@@ -313,13 +314,14 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   NSError *runtimeError = nil;
   id snapshot = nil;
   BOOL acquisitionTruncated = NO;
+  SnapshotCaptureRecovery recovery = {0, 0, 0, 0};
   @try {
     if (![self isPrimaryForegroundProcess:pid]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-unverified", @"target app is not the primary foreground accessibility owner");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
-    snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes,
+    snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes, nativeLevelsHint,
         ^id(id element, NSUInteger depth, NSUInteger nodes, NSError **captureError) {
           if (![self isPrimaryForegroundProcess:pid]) {
             if (captureError) *captureError = [NSError errorWithDomain:@"agent-device.snapshot" code:5
@@ -331,7 +333,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
           bounded[@"maxChildren"] = @(nodes);
           bounded[@"maxArrayCount"] = @(nodes);
           return [_framework userTestingSnapshotForElement:element options:bounded error:captureError];
-        }, &acquisitionTruncated, &runtimeError);
+        }, &acquisitionTruncated, &recovery, &runtimeError);
     if (![self isPrimaryForegroundProcess:pid]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-changed", @"foreground accessibility ownership changed during acquisition");
       finishRequestWatchdog(watchdog, watchdogState);
@@ -385,6 +387,12 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     @"tree" : tree,
     @"truncated" : @((BOOL)(truncated || acquisitionTruncated)),
     @"automationEnabled" : @(automationEnabled),
+    @"recovery" : @{
+      @"requests" : @(recovery.requests),
+      @"rejected" : @(recovery.rejected),
+      @"continuations" : @(recovery.continuations),
+      @"acceptedLevels" : @(recovery.acceptedLevels),
+    },
   };
 }
 @end

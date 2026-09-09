@@ -181,6 +181,12 @@ records per-producer expectations plus the intentional differences, so a change 
 path is measured against the same synthetic native world. Common executable policy is extracted only
 where the fixture proves equivalence; a shared engine is not a goal.
 
+The host source additionally keeps a bounded accepted-depth hint per resolved target generation
+and producer. It changes only the native levels the first request asks for, is learned only from a
+finished recovery that observed a rejection, expires by hinted-capture count so ordinary screens
+probe back to the full depth, and is never shared across apps, generations, or producers. The
+route's generation circuit remains the only lifecycle owner.
+
 ## Consequences
 
 Regular snapshots remain the right tool for agents and Maestro compatibility because they describe

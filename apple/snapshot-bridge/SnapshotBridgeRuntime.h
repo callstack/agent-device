@@ -22,6 +22,7 @@ NSDictionary *failureResponse(NSString *requestId,
 - (nullable NSDictionary *)snapshotForProcess:(pid_t)pid
                                     maxDepth:(NSUInteger)maxDepth
                                     maxNodes:(NSUInteger)maxNodes
+                            nativeLevelsHint:(NSUInteger)nativeLevelsHint
                                   requestId:(NSString *)requestId
                                 generation:(NSString *)generation
                               maxDurationMs:(NSUInteger)maxDurationMs

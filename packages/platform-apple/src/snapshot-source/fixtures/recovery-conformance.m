@@ -203,13 +203,15 @@ int main(int argc, const char *argv[])
     NSNumber *ownerChangesAfter = [native[@"ownerChangesAfterRequests"] isKindOfClass:NSNumber.class] ? native[@"ownerChangesAfterRequests"] : nil;
     BOOL unknownAtBoundary = [native[@"frontierEvidence"] isEqual:@"unknown"];
     BOOL vanishAtBoundary = [native[@"vanishAtFrontier"] boolValue];
+    NSUInteger hint = [request[@"hint"][@"host-bridge"] unsignedIntegerValue];
     __block NSUInteger requests = 0;
     __block NSUInteger rejected = 0;
 
     BOOL truncated = NO;
+    SnapshotCaptureRecovery recovery = {0, 0, 0, 0};
     NSError *error = nil;
     NSDictionary *result = captureSnapshotTree(root.identity, [request[@"traversalDepth"] unsignedIntegerValue],
-        [request[@"nodeBudget"] unsignedIntegerValue],
+        [request[@"nodeBudget"] unsignedIntegerValue], hint,
         ^id(id element, NSUInteger levels, NSUInteger nodes, NSError **readError) {
           requests++;
           if (ownerChangesAfter && requests > ownerChangesAfter.unsignedIntegerValue) {
@@ -227,14 +229,18 @@ int main(int argc, const char *argv[])
             return nil;
           }
           return fragment(node, levels, unknownAtBoundary, vanishAtBoundary);
-        }, &truncated, &error);
+        }, &truncated, &recovery, &error);
 
-    // Continuations are the native requests beyond the root's accepted request: every request
-    // that reached the reader, minus the rejected ones, minus the root read that produced a tree.
+    // The guest's accounting is what the host learns from and reports, so it must agree with what
+    // the reader observed: every request, every rejection, and the continuations beyond the root.
+    if (recovery.requests != requests || recovery.rejected != rejected ||
+        recovery.continuations != requests - rejected - (requests > rejected ? 1 : 0)) {
+      return fail(caseName, @"recovery accounting must count every native request, rejection, and continuation");
+    }
     NSMutableDictionary *actual = [NSMutableDictionary dictionary];
-    actual[@"requests"] = @(requests);
-    actual[@"rejected"] = @(rejected);
-    actual[@"continuations"] = @(requests - rejected - (requests > rejected ? 1 : 0));
+    actual[@"requests"] = @(recovery.requests);
+    actual[@"rejected"] = @(recovery.rejected);
+    actual[@"continuations"] = @(recovery.continuations);
     if (result) {
       NSUInteger nodes = 0;
       actual[@"outcome"] = truncated ? @"incomplete" : @"complete";

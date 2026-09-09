@@ -157,7 +157,7 @@ int main(int argc, const char *argv[])
       __block NSUInteger requests = 0;
       BOOL truncated = NO;
       NSError *failure = nil;
-      NSDictionary *result = captureSnapshotTree(@"root", depth, 1000, ^id(id element, NSUInteger levels, NSUInteger nodes, NSError **error) {
+      NSDictionary *result = captureSnapshotTree(@"root", depth, 1000, 0, ^id(id element, NSUInteger levels, NSUInteger nodes, NSError **error) {
         requests++;
         if ([scenario hasPrefix:@"api-depth-"]) {
           require(levels == depth + 1, @"native levels must include the root exactly once");
@@ -167,7 +167,7 @@ int main(int argc, const char *argv[])
         }
         if ([element isEqual:@"root"]) return root;
         return @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[]}]};
-      }, &truncated, &failure);
+      }, &truncated, NULL, &failure);
       if (budget) require(!result && failure.code == 1 && requests == 32, @"request budget must fail without publishing partial content");
       else if ([scenario isEqual:@"identity"]) require(result == root && requests == 1, @"healthy capture must reuse the native tree");
       else {
@@ -222,7 +222,7 @@ int main(int argc, const char *argv[])
     require(runtime != nil, setupError ?: @"fixture initialization failed");
     NSDictionary *error = nil;
     NSDictionary *result = [runtime snapshotForProcess:42 maxDepth:([scenario isEqual:@"zero-depth"] ? 0 : [scenario isEqual:@"depth-bound"] ? 4 : 8) maxNodes:(([scenario isEqual:@"depth-nodes"] || [scenario hasPrefix:@"wide-"]) ? 3 : [scenario isEqual:@"runtime-budget"] ? 1000 : 10)
-        requestId:@"capture-1" generation:@"generation-1" maxDurationMs:4000 error:&error];
+        nativeLevelsHint:0 requestId:@"capture-1" generation:@"generation-1" maxDurationMs:4000 error:&error];
     if (expectedCode) {
       require(result == nil, @"refused capture must not publish the app tree");
       require([error[@"error_kind"] isEqual:([expectedCode isEqual:@"application-server-unavailable"] ? @"application_unavailable" : [expectedCode isEqual:@"snapshot-tree-malformed"] ? @"malformed_tree" : [expectedCode isEqual:@"continuation-budget-exhausted"] ? @"reader_unavailable" : @"unsupported")], @"refusal must preserve the typed failure kind");

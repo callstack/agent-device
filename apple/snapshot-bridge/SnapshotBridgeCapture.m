@@ -12,6 +12,7 @@ static const NSUInteger maximumRequests = 32;
 @property(nonatomic) NSUInteger remainingNodes;
 @property(nonatomic) NSUInteger maximumNodes;
 @property(nonatomic) NSUInteger requests;
+@property(nonatomic) NSUInteger rejected;
 @property(nonatomic) BOOL truncated;
 - (nullable NSDictionary *)read:(id)element depth:(NSUInteger)depth error:(NSError **)error;
 - (nullable NSDictionary *)materialize:(NSDictionary *)tree depth:(NSUInteger)depth nativeLevels:(NSUInteger)nativeLevels error:(NSError **)error;
@@ -34,6 +35,7 @@ static const NSUInteger maximumRequests = 32;
     NSNumber *nativeCode = failure.userInfo[@"accessibility-error"];
     BOOL rejected = ([nativeCode isKindOfClass:NSNumber.class] && nativeCode.integerValue == -25201) ||
         ([failure.domain isEqualToString:@"com.apple.dt.xctest.automation-support.error"] && failure.code == 5);
+    if (rejected) self.rejected++;
     if (!rejected || attemptDepth <= 1 || retries >= 2) {
       if (error) *error = failure;
       return nil;
@@ -115,15 +117,22 @@ static const NSUInteger maximumRequests = 32;
 @end
 
 NSDictionary *captureSnapshotTree(id element, NSUInteger maxDepth, NSUInteger maxNodes,
-                                  SnapshotElementReader reader, BOOL *truncated, NSError **error)
+                                  NSUInteger nativeLevelsHint, SnapshotElementReader reader,
+                                  BOOL *truncated, SnapshotCaptureRecovery *recovery, NSError **error)
 {
   SnapshotTreeCapture *capture = [SnapshotTreeCapture new];
   capture.reader = reader;
-  capture.acceptedDepth = maxDepth + 1;
+  capture.acceptedDepth = nativeLevelsHint > 0 ? MIN(maxDepth + 1, nativeLevelsHint) : maxDepth + 1;
   capture.remainingNodes = maxNodes;
   capture.maximumNodes = maxNodes;
   NSDictionary *tree = [capture read:element depth:maxDepth + 1 error:error];
   NSDictionary *result = tree ? [capture materialize:tree depth:maxDepth + 1 nativeLevels:capture.acceptedDepth error:error] : nil;
   *truncated = capture.truncated;
+  if (recovery) {
+    recovery->requests = capture.requests;
+    recovery->rejected = capture.rejected;
+    recovery->continuations = capture.requests - capture.rejected - (tree ? 1 : 0);
+    recovery->acceptedLevels = tree ? capture.acceptedDepth : 0;
+  }
   return result;
 }

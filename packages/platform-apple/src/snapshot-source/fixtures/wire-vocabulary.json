@@ -1,6 +1,6 @@
 {
   "protocolVersion": 1,
-  "sourceVersion": "agent-device-simulator-ax-v1.5.4",
+  "sourceVersion": "agent-device-simulator-ax-v1.5.5",
   "requestKeys": [
     "verb",
     "requestId",
@@ -11,7 +11,8 @@
     "maxDepth",
     "maxNodes",
     "maxDurationMs",
-    "maxResponseBytes"
+    "maxResponseBytes",
+    "nativeLevelsHint"
   ],
   "responseKeys": [
     "protocolVersion",
@@ -23,6 +24,7 @@
     "tree",
     "truncated",
     "automationEnabled",
+    "recovery",
     "error_kind",
     "error_code",
     "error"

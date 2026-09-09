@@ -85,6 +85,11 @@ static NSDictionary *handleRequest(NSDictionary *request)
       !validBoundInteger(request[@"maxResponseBytes"], 1024, kMaximumFrameBytes, &maxResponseBytes)) {
     return failureResponse(requestId, @"bad_request", @"bounds-invalid", @"snapshot bridge request bounds are outside the bridge limits");
   }
+  NSUInteger nativeLevelsHint = 0;
+  if (request[@"nativeLevelsHint"] != nil &&
+      !validBoundInteger(request[@"nativeLevelsHint"], 1, kMaximumDepth + 1, &nativeLevelsHint)) {
+    return failureResponse(requestId, @"bad_request", @"bounds-invalid", @"nativeLevelsHint is outside the bridge depth limits");
+  }
 
   NSString *setupError = nil;
   BridgeRuntime *runtime = sharedRuntime(&setupError);
@@ -98,6 +103,7 @@ static NSDictionary *handleRequest(NSDictionary *request)
   NSDictionary *response = [runtime snapshotForProcess:pidValue.intValue
                                                maxDepth:maxDepth
                                                maxNodes:maxNodes
+                                       nativeLevelsHint:nativeLevelsHint
                                              requestId:requestId
                                            generation:generation
                                          maxDurationMs:maxDurationMs

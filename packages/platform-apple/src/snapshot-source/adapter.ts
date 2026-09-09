@@ -2,10 +2,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CaptureHint, IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
 import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
+import { AcceptedDepthHints, type DepthHintDecision } from './depth-hints.ts';
 import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
-import type { SnapshotBridgeEnvelope } from './protocol.ts';
+import { readSnapshotBridgeRecovery, type SnapshotBridgeEnvelope } from './protocol.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
 import { createSnapshotSourceHost } from './host.ts';
 import type {
@@ -35,6 +36,7 @@ export function createSimulatorSnapshotSource(
 ): SimulatorSnapshotSource {
   const host = options.host ?? createSnapshotSourceHost();
   const manager = new SnapshotBridgeManager(host);
+  const depthHints = new AcceptedDepthHints();
   const preparedBinaries = new Map<string, SnapshotSourceBridgeBinary>();
   let closed = false;
 
@@ -72,6 +74,8 @@ export function createSimulatorSnapshotSource(
       const limits = resolveSnapshotSourceLimits({ ...options.limits, ...request.limits });
       const deadline = createSnapshotSourceDeadline(limits.maxDurationMs, request.signal);
       const maxDepth = resolveRequestedDepth(request.hint, limits.maxTraversalDepth);
+      const requestedLevels = maxDepth + 1;
+      const explicitDepth = request.hint.rawTraversalDepth !== null;
       return await host.withDiagnosticTimer(
         'ios.snapshot-source.acquire',
         async () => {
@@ -80,24 +84,33 @@ export function createSimulatorSnapshotSource(
             limits,
             deadline,
           });
+          const decision = depthHints.consume(request.target, requestedLevels, explicitDepth);
           const envelope = await manager.request({
             target: request.target,
             bridge,
             limits,
             maxDepth,
+            nativeLevelsHint: decision.nativeLevels,
             deadline,
           });
           remainingSnapshotSourceMs(deadline, 'snapshot-decode-deadline');
-          return {
-            stage: 'acquired',
-            acquisition: createAcquisition(
-              request.hint,
-              request.target,
-              envelope,
-              limits,
-              maxDepth,
-            ),
-          };
+          const acquisition = createAcquisition(
+            request.hint,
+            request.target,
+            envelope,
+            limits,
+            maxDepth,
+          );
+          recordRecovery(
+            host,
+            depthHints,
+            request.target,
+            requestedLevels,
+            explicitDepth,
+            decision,
+            envelope,
+          );
+          return { stage: 'acquired', acquisition };
         },
         { producer: SNAPSHOT_SOURCE_PRODUCER },
       );
@@ -146,6 +159,41 @@ function validateRequest(request: SnapshotSourceRequest): void {
   ) {
     throw new AppError('INVALID_ARGS', 'Simulator snapshot source capture hint is invalid');
   }
+}
+
+/**
+ * Learns the accepted native depth from the guest's request accounting and reports the whole
+ * acquisition's native work, so a benchmark can pair native calls, rejections, and continuations
+ * with capture latency without re-deriving them from the tree. Runs only after the delivered tree
+ * validated: a response whose counters look sound but whose tree fails acquisition teaches nothing.
+ */
+function recordRecovery(
+  host: SnapshotSourceHost,
+  depthHints: AcceptedDepthHints,
+  target: SnapshotSourceRequest['target'],
+  requestedLevels: number,
+  explicitDepth: boolean,
+  decision: DepthHintDecision,
+  envelope: SnapshotBridgeEnvelope,
+): void {
+  const recovery = readSnapshotBridgeRecovery(envelope);
+  const truncated = envelope.truncated === true;
+  const learning = depthHints.learn(target, requestedLevels, explicitDepth, recovery);
+  host.emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_snapshot_source_recovery',
+    data: {
+      producer: SNAPSHOT_SOURCE_PRODUCER,
+      ...(target.targetId ? { targetId: target.targetId } : {}),
+      generation: target.generation,
+      requestedLevels,
+      hint: decision.reason,
+      ...(decision.nativeLevels !== undefined ? { hintedLevels: decision.nativeLevels } : {}),
+      ...recovery,
+      truncated,
+      learning,
+    },
+  });
 }
 
 function resolveRequestedDepth(hint: CaptureHint, maximum: number): number {

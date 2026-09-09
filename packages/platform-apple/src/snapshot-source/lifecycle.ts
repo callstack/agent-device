@@ -38,6 +38,7 @@ type SnapshotBridgeRequest = Readonly<{
   bridge: SnapshotSourceBridgeBinary;
   limits: SnapshotSourceLimits;
   maxDepth: number;
+  nativeLevelsHint?: number;
   deadline: SnapshotSourceDeadline;
 }>;
 
@@ -211,6 +212,7 @@ export class SnapshotBridgeManager {
       maxNodes: input.limits.maxNodes,
       maxDurationMs: remainingSnapshotSourceMs(deadline, 'bridge-request-deadline'),
       maxResponseBytes: input.limits.maxResponseBytes,
+      ...(input.nativeLevelsHint !== undefined ? { nativeLevelsHint: input.nativeLevelsHint } : {}),
     });
     const frame = encodeSnapshotBridgeFrame(request, input.limits);
     return await roundTripSnapshotBridge({

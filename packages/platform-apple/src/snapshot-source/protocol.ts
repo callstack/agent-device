@@ -3,7 +3,7 @@ import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 
 export const SNAPSHOT_SOURCE_PROTOCOL_VERSION = 1;
-export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.5.4';
+export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.5.5';
 const FRAME_HEADER_BYTES = 4;
 
 export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
@@ -17,6 +17,7 @@ export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
   'maxNodes',
   'maxDurationMs',
   'maxResponseBytes',
+  'nativeLevelsHint',
 ] as const);
 
 export const SNAPSHOT_SOURCE_RESPONSE_KEYS = Object.freeze([
@@ -29,6 +30,7 @@ export const SNAPSHOT_SOURCE_RESPONSE_KEYS = Object.freeze([
   'tree',
   'truncated',
   'automationEnabled',
+  'recovery',
   'error_kind',
   'error_code',
   'error',
@@ -46,6 +48,34 @@ export const SNAPSHOT_SOURCE_ATTRIBUTE_KEYS = Object.freeze([
 ] as const);
 
 export type SnapshotBridgeEnvelope = Readonly<Record<string, unknown>>;
+
+/**
+ * The guest's native request accounting for one acquisition: how many native requests it
+ * issued, how many the accessibility server rejected at their depth, how many re-rooted withheld
+ * children, and the native levels of the last accepted request.
+ */
+export type SnapshotBridgeRecovery = Readonly<{
+  requests: number;
+  rejected: number;
+  continuations: number;
+  acceptedLevels: number;
+}>;
+
+const RECOVERY_FIELDS = ['requests', 'rejected', 'continuations', 'acceptedLevels'] as const;
+
+export function readSnapshotBridgeRecovery(
+  envelope: SnapshotBridgeEnvelope,
+): SnapshotBridgeRecovery {
+  const recovery = envelope.recovery;
+  if (!isRecord(recovery)) throw snapshotSourceError('malformed-tree', 'recovery-invalid');
+  const fields = RECOVERY_FIELDS.map((field) => [field, recovery[field]] as const);
+  if (fields.some(([, value]) => !Number.isSafeInteger(value) || (value as number) < 0)) {
+    throw snapshotSourceError('malformed-tree', 'recovery-invalid');
+  }
+  return Object.freeze(
+    Object.fromEntries(fields) as Record<(typeof RECOVERY_FIELDS)[number], number>,
+  );
+}
 
 export function encodeSnapshotBridgeFrame(
   value: unknown,
@@ -168,6 +198,7 @@ export function createSnapshotBridgeDescribeRequest(
     maxNodes: number;
     maxDurationMs: number;
     maxResponseBytes: number;
+    nativeLevelsHint?: number;
   }>,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
@@ -181,6 +212,7 @@ export function createSnapshotBridgeDescribeRequest(
     maxNodes: input.maxNodes,
     maxDurationMs: input.maxDurationMs,
     maxResponseBytes: input.maxResponseBytes,
+    ...(input.nativeLevelsHint !== undefined ? { nativeLevelsHint: input.nativeLevelsHint } : {}),
   });
 }
 

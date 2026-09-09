@@ -14,13 +14,16 @@
   "producers": {
     "host-bridge": {
       "recoveryOwner": "apple/snapshot-bridge/SnapshotBridgeCapture.m",
-      "hintOwner": "not yet: the host learns no accepted-depth hint (follow-up to #2424 step 1)",
-      "adapters": ["packages/platform-apple/src/snapshot-source/fixtures/recovery-conformance.m"],
+      "hintOwner": "packages/platform-apple/src/snapshot-source/depth-hints.ts",
+      "adapters": [
+        "packages/platform-apple/src/snapshot-source/fixtures/recovery-conformance.m",
+        "packages/platform-apple/src/snapshot-source/adapter.test.ts (hint cases through the source adapter)"
+      ],
       "nativeLevelsForTraversalDepth": "depth + 1 (delivers exactly `depth` edges below the root)",
       "frontierEvidence": "native child count at every fragment boundary; an absent or invalid count fails closed",
-      "hintIdentity": "none yet; every capture starts at the requested depth",
-      "hintExpiry": "n/a",
-      "hintLearning": "n/a"
+      "hintIdentity": "targetId + generation + producer, owned by the host source",
+      "hintExpiry": "count-based probe-back after 8 hinted captures; hinted successes never renew",
+      "hintLearning": "any recovery that observed a rejection and then finished; a depth- or node-bounded tree still teaches"
     },
     "runner": {
       "recoveryOwner": "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAXSnapshotBridge.m and RunnerTests+AXSnapshotFallback.swift",
@@ -42,7 +45,7 @@
     "Delivered depth: host continuations keep the requested traversal depth and disclose deeper content as truncated; runner extension re-roots with the same native depth, so the delivered tree can exceed the requested depth and an explicit depth is not disclosed as truncated (deeper-than-requested, explicit-depth-honored).",
     "Budgets: the host spends one continuation per withheld parent inside a 32-request budget; the runner spends one extension call per frontier node inside an 8-call budget (host-request-budget, runner-extension-budget).",
     "Ownership and deadlines: only the host checks the foreground owner on every native request; only the runner consults the capture deadline between rungs and extension calls (owner-change-during-continuation, deadline-before-retry).",
-    "Hints: the runner remembers any lower rung per bundle id + pid with a wall-clock expiry that hinted successes never renew; the host bridge has no accepted-depth hint yet, so the hinted recovery cases and the host column of the hint cases are filled in by the follow-up that adds one."
+    "Hints: both producers learn from any finished lower-depth recovery, bounded trees included (bounded-recovery-still-learned); the host keys on the resolved target generation and expires by hinted-capture count, while the runner keys on bundle id + pid and expires by wall clock (probe-back-after-expiry)."
   ],
   "recoveryCases": [
     {
@@ -505,7 +508,8 @@
         "explicitDepth": false,
         "nodeBudget": 1500,
         "hint": {
-          "runner": 40
+          "runner": 40,
+          "host-bridge": 32
         }
       },
       "native": {
@@ -517,8 +521,13 @@
       },
       "expected": {
         "host-bridge": {
-          "outcome": "not-applicable",
-          "reason": "the host bridge has no accepted-depth hint yet"
+          "outcome": "complete",
+          "requests": 2,
+          "rejected": 0,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
         },
         "runner": {
           "outcome": "complete",
@@ -538,7 +547,8 @@
         "explicitDepth": false,
         "nodeBudget": 1500,
         "hint": {
-          "runner": 40
+          "runner": 40,
+          "host-bridge": 32
         }
       },
       "native": {
@@ -550,8 +560,13 @@
       },
       "expected": {
         "host-bridge": {
-          "outcome": "not-applicable",
-          "reason": "the host bridge has no accepted-depth hint yet"
+          "outcome": "complete",
+          "requests": 4,
+          "rejected": 1,
+          "continuations": 2,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
         },
         "runner": {
           "outcome": "complete",
@@ -576,19 +591,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -598,19 +617,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           },
           "outcome": {
             "rejected": {
-              "runner": 0
+              "runner": 0,
+              "host-bridge": 0
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           },
           "expectRenewed": false
         }
@@ -626,19 +649,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -648,19 +675,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 0
+              "runner": 0,
+              "host-bridge": 0
             },
             "acceptedLevels": {
-              "runner": 64
+              "runner": 64,
+              "host-bridge": 65
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           }
         }
       ]
@@ -675,19 +706,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -697,19 +732,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 0
+              "runner": 0,
+              "host-bridge": 0
             },
             "acceptedLevels": {
-              "runner": 64
+              "runner": 64,
+              "host-bridge": 65
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           }
         }
       ]
@@ -724,19 +763,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -749,19 +792,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 0
+              "runner": 0,
+              "host-bridge": 0
             },
             "acceptedLevels": {
-              "runner": 64
+              "runner": 64,
+              "host-bridge": 65
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           }
         }
       ]
@@ -776,19 +823,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -801,19 +852,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 3
+              "runner": 3,
+              "host-bridge": 2
             },
             "acceptedLevels": {
-              "runner": 24
+              "runner": 24,
+              "host-bridge": 16
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 24
+            "runner": 24,
+            "host-bridge": 16
           }
         }
       ]
@@ -828,19 +883,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": false
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         }
       ]
@@ -855,19 +914,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -877,19 +940,23 @@
           },
           "explicitDepth": true,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 3
+              "runner": 3,
+              "host-bridge": 2
             },
             "acceptedLevels": {
-              "runner": 24
+              "runner": 24,
+              "host-bridge": 16
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         }
       ]
@@ -904,19 +971,23 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": null
+            "runner": null,
+            "host-bridge": null
           },
           "outcome": {
             "rejected": {
-              "runner": 2
+              "runner": 2,
+              "host-bridge": 1
             },
             "acceptedLevels": {
-              "runner": 40
+              "runner": 40,
+              "host-bridge": 32
             },
             "complete": true
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         },
         {
@@ -926,16 +997,19 @@
           },
           "explicitDepth": false,
           "expectHintBefore": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           },
           "outcome": {
             "failure": "rejected",
             "rejected": {
-              "runner": 3
+              "runner": 3,
+              "host-bridge": 3
             }
           },
           "expectHintAfter": {
-            "runner": 40
+            "runner": 40,
+            "host-bridge": 32
           }
         }
       ]
