@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, test } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -72,3 +73,54 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => 
     assert.equal(result.exitCode, 0, result.stderr);
   });
 });
+
+const recoveryFixturePath = path.resolve(
+  import.meta.dirname,
+  '../../../../contracts/fixtures/ios-ax-recovery-conformance.json',
+);
+const recoveryFixture = JSON.parse(readFileSync(recoveryFixturePath, 'utf8')) as {
+  version: number;
+  recoveryCases: readonly { name: string }[];
+};
+
+describe.skipIf(process.platform !== 'darwin')(
+  'shared AX recovery conformance (host bridge)',
+  () => {
+    let binary: string;
+    beforeAll(async () => {
+      binary = path.join(await mkdtempForTest('snapshot-recovery-'), 'recovery-conformance');
+      const nativeRoot = path.resolve(import.meta.dirname, '../../../../apple/snapshot-bridge');
+      const compiled = await runCmd(
+        'xcrun',
+        [
+          '--sdk',
+          'macosx',
+          'clang',
+          '-fobjc-arc',
+          '-framework',
+          'Foundation',
+          '-I',
+          nativeRoot,
+          path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
+          path.join(import.meta.dirname, 'fixtures/recovery-conformance.m'),
+          '-o',
+          binary,
+        ],
+        { allowFailure: true, timeoutMs: 45_000 },
+      );
+      assert.equal(compiled.exitCode, 0, compiled.stderr);
+    }, 60_000);
+
+    assert.equal(recoveryFixture.version, 1);
+    test.each(recoveryFixture.recoveryCases.map((recoveryCase) => recoveryCase.name))(
+      'host bridge recovery matches the shared fixture: %s',
+      async (name) => {
+        const result = await runCmd(binary, [recoveryFixturePath, name], {
+          allowFailure: true,
+          timeoutMs: 5_000,
+        });
+        assert.equal(result.exitCode, 0, result.stderr);
+      },
+    );
+  },
+);
