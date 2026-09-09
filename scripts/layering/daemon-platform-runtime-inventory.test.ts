@@ -98,6 +98,25 @@ test('R76 rejects new symbols on a classified edge', () => {
   assert.match(found[0]!.message, /ensureLocalPlatformDeviceReady, extraReadiness/);
 });
 
+test('R76 rejects a reintroduced Android-mechanics import on the selector-dispatch edge', () => {
+  const sources = {
+    'src/platform-runtime-open-target.ts':
+      'export async function resolveSessionAppBundleIdForTarget() { return undefined; }\n' +
+      'export async function resolveAndroidPackageForOpen() { return undefined; }\n',
+    'src/daemon/handlers/session-selector-dispatch.ts':
+      "import { resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';\n" +
+      'void [resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/handlers/session-selector-dispatch.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /classified symbols drifted/);
+  assert.match(
+    found[0]!.message,
+    /resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget/,
+  );
+});
+
 test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
   const sources = {
     'src/platform-runtime-daemon-lifecycle.ts':

@@ -58,9 +58,10 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      neutral open plan/result surface (`resolveRequestedOpenSurface`, `validateOpenRelaunchTarget`,
      `resolveSessionAppBundleIdForTarget`); Android package resolution
      (`resolveAndroidPackageForOpen`, `inferAndroidPackageAfterOpen`) moved behind the Android
-     owning seam in `packages/platform-android`. `session-open-prepare.ts` and
-     `session-selector-dispatch.ts` are daemon-policy-essential over the neutral resolver, which
-     stays the one construction path for the open plan.
+     owning seam in `packages/platform-android`. `session-open-prepare.ts` consumes surface and
+     relaunch-target policy, `session-selector-dispatch.ts` consumes the app-bundle-identity
+     resolver; both edges are daemon-policy-essential, and the resolver stays the one
+     construction path for the open plan.
    - **#2273/#2274** (existing) — `direct-ios-selector.ts` → `queryAppleRuntimeSelector` is the
      selector seam those issues own; coordination was posted there rather than opening a second
      selector producer.

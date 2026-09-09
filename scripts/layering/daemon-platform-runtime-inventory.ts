@@ -168,7 +168,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'open-prepare policy consumes only the neutral open plan/result surface (#2334): surface ' +
       'classification and relaunch-target validation. The platform mechanics that used to share ' +
       'the file (Android package resolution) moved behind the Android owning seam, leaving this ' +
-      'edge daemon policy over a neutral resolver.',
+      'edge daemon policy over two neutral, non-mechanics functions.',
   },
 ] as const;
 

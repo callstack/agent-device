@@ -179,6 +179,10 @@ async function tryResolveAndroidPackageForOpen(
   openTarget: string | undefined,
 ): Promise<string | undefined> {
   if (device.platform !== 'android' || !openTarget) return undefined;
-  const { resolveAndroidPackageForOpen } = await loadAndroidMechanics();
-  return await resolveAndroidPackageForOpen(device, openTarget);
+  try {
+    const { resolveAndroidPackageForOpen } = await loadAndroidMechanics();
+    return await resolveAndroidPackageForOpen(device, openTarget);
+  } catch {
+    return undefined;
+  }
 }
