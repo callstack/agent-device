@@ -13,6 +13,13 @@
   disclosing that through `truncated`/`effectiveDepth` as it does unscoped.
 - Fixed: repeated unfiltered Android snapshots stay compact when identical element bounds arrive
   with a different property order. Changes to the bounds still re-emit the tree.
+- Fixed: `react-devtools` component reads (`errors`, `find`, `count`, `get`) now fail with
+  `COMMAND_FAILED` when the DevTools daemon has zero connected apps, instead of rendering the
+  daemon's empty tree as a result. `react-devtools errors` previously printed "No components with
+  errors or warnings" with nothing attached, which reads as a passing check to an agent collecting
+  evidence. Attachment is probed through `react-devtools status`: an unreachable daemon fails the
+  read rather than starting an empty one on demand, a status without a parseable app count leaves
+  the passthrough untouched, and `status`, `wait`, `start`, and `stop` are never gated.
 - Added: `replay export` supports flows that switch apps and return, preserving each
   `open <appId>` target as an explicit Maestro `launchApp.appId`.
 - Added: `replay export` converts recorded `home` actions to Maestro `pressKey: Home`, allowing
