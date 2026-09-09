@@ -26,7 +26,7 @@ import {
   type InteractionTarget,
 } from './resolution.ts';
 
-export { focusCommand, hoverCommand, longPressCommand, scrollCommand } from './gestures.ts';
+export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
 export type {
   FocusCommandOptions,
   FocusCommandResult,
@@ -34,9 +34,9 @@ export type {
   HoverCommandResult,
   LongPressCommandOptions,
   LongPressCommandResult,
-  ScrollCommandOptions,
-  ScrollCommandResult,
 } from './gestures.ts';
+export { scrollCommand } from './scroll.ts';
+export type { ScrollCommandOptions, ScrollCommandResult } from './scroll.ts';
 export type { InteractionTarget } from './resolution.ts';
 
 export type PressCommandOptions = CommandContext &
