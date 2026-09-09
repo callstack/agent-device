@@ -51,8 +51,10 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
 // Re-pins SNAPSHOT_OPTION_FLAGS (declared once in the kernel, which sits below contracts and
 // cannot name CommandFlags) against CommandFlags here: a renamed or misspelled flag key fails to
 // compile instead of silently reading `undefined` at every snapshotOptionsFromFlags call site.
-// fallow-ignore-next-line unused-export
-export const SNAPSHOT_OPTION_FLAGS_PINNED_TO_COMMAND_FLAGS = SNAPSHOT_OPTION_FLAGS satisfies Record<
+// This is a compile-time check, not API — it stays unexported so the command facade doesn't have
+// to widen just to carry it.
+const snapshotOptionFlagsPinnedToCommandFlags = SNAPSHOT_OPTION_FLAGS satisfies Record<
   SnapshotOptionKey,
   keyof CommandFlags
 >;
+void snapshotOptionFlagsPinnedToCommandFlags;
