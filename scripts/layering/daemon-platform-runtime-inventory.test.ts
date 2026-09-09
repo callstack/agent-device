@@ -122,10 +122,7 @@ test('R76 rejects an expanded destructured dynamic import on a classified edge',
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(
-    found[0]!.message,
-    /extraLifecycleParticipant, platformDaemonLifecycleOwners/,
-  );
+  assert.match(found[0]!.message, /extraLifecycleParticipant, platformDaemonLifecycleOwners/);
 });
 
 test('R76 rejects a rest binding next to a recorded dynamic-import binding', () => {
