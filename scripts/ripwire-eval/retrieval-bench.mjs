@@ -32,6 +32,10 @@ const VERBS = [
   },
   // Same verb, but fed only the identifiers the task text itself puts in backticks — a mechanical
   // distillation, not a hand-tuned query. Isolates how much of --for's result is phrasing.
+  // Same query, with the documented compact legend. Isolates how much of the default output is
+  // the self-documenting preamble — the answer differs sharply by verb, so it is measured, not
+  // assumed (docs/COMMANDS.md `--legend=full|compact`).
+  { id: 'for-compact', args: (task) => ['.', `--for=${task.prompt}`, '--legend=compact'] },
   {
     id: 'for-idents',
     args: (task) => ['.', `--for=${backtickedTerms(task.prompt)}`],

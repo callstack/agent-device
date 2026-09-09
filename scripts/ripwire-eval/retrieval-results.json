@@ -1,11 +1,11 @@
 {
-  "generated": "2026-09-08T13:06:03.406Z",
+  "generated": "2026-09-09T06:24:31.660Z",
   "results": [
     {
       "task": "T1",
       "verb": "for",
       "failed": null,
-      "ms": 5252,
+      "ms": 1464,
       "bytes": 10354,
       "est_tokens": 2589,
       "paths_mentioned": 43,
@@ -85,7 +85,7 @@
       "task": "T1",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4661,
+      "ms": 1273,
       "bytes": 12413,
       "est_tokens": 3103,
       "paths_mentioned": 20,
@@ -165,7 +165,7 @@
       "task": "T1",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 869,
+      "ms": 747,
       "bytes": 8821,
       "est_tokens": 2205,
       "paths_mentioned": 13,
@@ -243,9 +243,89 @@
     },
     {
       "task": "T1",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 1341,
+      "bytes": 10173,
+      "est_tokens": 2543,
+      "paths_mentioned": 47,
+      "ground_truth": 16,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 5,
+      "recall": 0.313,
+      "best_rank": 2,
+      "per_file": [
+        {
+          "path": "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/__tests__/runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/conformance-normalize.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir-command-parser.ts",
+          "rank": 18
+        },
+        {
+          "path": "packages/maestro/src/internal/program-ir.ts",
+          "rank": 10
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-commands.ts",
+          "rank": 3
+        },
+        {
+          "path": "packages/maestro/src/internal/runtime-port-types.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/maestro/src/internal/support-matrix.ts",
+          "rank": 8
+        },
+        {
+          "path": "scripts/fuzz/validation-arbitraries-maestro.ts",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/build-manifest.mjs",
+          "rank": null
+        },
+        {
+          "path": "scripts/maestro-conformance/corpus/manifest.json",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-port.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/__tests__/daemon-runtime-public-operation.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-port.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/adapters/maestro/daemon-runtime-public-operation.ts",
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "task": "T1",
       "verb": "for-idents",
       "failed": null,
-      "ms": 947,
+      "ms": 1007,
       "bytes": 10613,
       "est_tokens": 2653,
       "paths_mentioned": 45,
@@ -325,7 +405,7 @@
       "task": "T2",
       "verb": "for",
       "failed": null,
-      "ms": 5186,
+      "ms": 695,
       "bytes": 10296,
       "est_tokens": 2574,
       "paths_mentioned": 43,
@@ -369,7 +449,7 @@
       "task": "T2",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4583,
+      "ms": 1076,
       "bytes": 11590,
       "est_tokens": 2898,
       "paths_mentioned": 10,
@@ -413,7 +493,7 @@
       "task": "T2",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 951,
+      "ms": 658,
       "bytes": 8137,
       "est_tokens": 2034,
       "paths_mentioned": 5,
@@ -455,9 +535,53 @@
     },
     {
       "task": "T2",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 696,
+      "bytes": 10131,
+      "est_tokens": 2533,
+      "paths_mentioned": 46,
+      "ground_truth": 7,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 2,
+      "recall": 0.286,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "android/snapshot-helper/src/main/java/com/callstack/agentdevice/snapshothelper/AccessibilityTreeXml.java",
+          "rank": null
+        },
+        {
+          "path": "packages/kernel/src/snapshot.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-builder.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy-node.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/ui-hierarchy.ts",
+          "rank": 42
+        },
+        {
+          "path": "src/daemon/__tests__/response-views.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/response-views.ts",
+          "rank": 1
+        }
+      ]
+    },
+    {
+      "task": "T2",
       "verb": "for-idents",
       "failed": null,
-      "ms": 875,
+      "ms": 646,
       "bytes": 10653,
       "est_tokens": 2663,
       "paths_mentioned": 37,
@@ -501,7 +625,7 @@
       "task": "T3",
       "verb": "for",
       "failed": null,
-      "ms": 4943,
+      "ms": 806,
       "bytes": 9748,
       "est_tokens": 2437,
       "paths_mentioned": 34,
@@ -537,7 +661,7 @@
       "task": "T3",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4737,
+      "ms": 1457,
       "bytes": 9695,
       "est_tokens": 2424,
       "paths_mentioned": 8,
@@ -573,7 +697,7 @@
       "task": "T3",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 981,
+      "ms": 776,
       "bytes": 8476,
       "est_tokens": 2119,
       "paths_mentioned": 7,
@@ -607,9 +731,45 @@
     },
     {
       "task": "T3",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 690,
+      "bytes": 9607,
+      "est_tokens": 2402,
+      "paths_mentioned": 37,
+      "ground_truth": 5,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 1,
+      "recall": 0.2,
+      "best_rank": 8,
+      "per_file": [
+        {
+          "path": "packages/platform-android/src/__tests__/input-actions.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/__tests__/test-utils/fake-adb.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-android/src/input-actions.ts",
+          "rank": 8
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-ime-lifecycle-world.ts",
+          "rank": null
+        },
+        {
+          "path": "test/integration/provider-scenarios/android-world.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T3",
       "verb": "for-idents",
       "failed": null,
-      "ms": 1016,
+      "ms": 1044,
       "bytes": 10718,
       "est_tokens": 2680,
       "paths_mentioned": 41,
@@ -645,7 +805,7 @@
       "task": "T4",
       "verb": "for",
       "failed": null,
-      "ms": 5223,
+      "ms": 740,
       "bytes": 10118,
       "est_tokens": 2530,
       "paths_mentioned": 41,
@@ -689,7 +849,7 @@
       "task": "T4",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4522,
+      "ms": 1428,
       "bytes": 12724,
       "est_tokens": 3181,
       "paths_mentioned": 19,
@@ -733,7 +893,7 @@
       "task": "T4",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 960,
+      "ms": 730,
       "bytes": 9044,
       "est_tokens": 2261,
       "paths_mentioned": 15,
@@ -775,9 +935,53 @@
     },
     {
       "task": "T4",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 731,
+      "bytes": 10059,
+      "est_tokens": 2515,
+      "paths_mentioned": 45,
+      "ground_truth": 7,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 3,
+      "recall": 0.429,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/daemon/__tests__/http-server-tenant-trust.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/__tests__/request-diagnostics-http.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/daemon/request-diagnostics-http.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/daemon/server/http-server.ts",
+          "rank": 5
+        },
+        {
+          "path": "src/daemon/server/tenant-trust.ts",
+          "rank": 4
+        },
+        {
+          "path": "src/daemon/session-tenant-scope.ts",
+          "rank": null
+        },
+        {
+          "path": "test/wire-compat/surface.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T4",
       "verb": "for-idents",
       "failed": null,
-      "ms": 914,
+      "ms": 692,
       "bytes": 9641,
       "est_tokens": 2410,
       "paths_mentioned": 44,
@@ -821,7 +1025,7 @@
       "task": "T5",
       "verb": "for",
       "failed": null,
-      "ms": 4826,
+      "ms": 746,
       "bytes": 10059,
       "est_tokens": 2515,
       "paths_mentioned": 35,
@@ -853,7 +1057,7 @@
       "task": "T5",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4562,
+      "ms": 1010,
       "bytes": 13150,
       "est_tokens": 3288,
       "paths_mentioned": 28,
@@ -885,7 +1089,7 @@
       "task": "T5",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 948,
+      "ms": 657,
       "bytes": 9018,
       "est_tokens": 2255,
       "paths_mentioned": 14,
@@ -915,9 +1119,41 @@
     },
     {
       "task": "T5",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 713,
+      "bytes": 9868,
+      "est_tokens": 2467,
+      "paths_mentioned": 39,
+      "ground_truth": 4,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 2,
+      "recall": 0.5,
+      "best_rank": 1,
+      "per_file": [
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-polling.ts",
+          "rank": 1
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.test.ts",
+          "rank": null
+        },
+        {
+          "path": "src/commands/interaction/runtime/wait-selector.ts",
+          "rank": 5
+        }
+      ]
+    },
+    {
+      "task": "T5",
       "verb": "for-idents",
       "failed": null,
-      "ms": 959,
+      "ms": 684,
       "bytes": 10785,
       "est_tokens": 2696,
       "paths_mentioned": 39,
@@ -949,7 +1185,7 @@
       "task": "T6",
       "verb": "for",
       "failed": null,
-      "ms": 5362,
+      "ms": 716,
       "bytes": 10390,
       "est_tokens": 2598,
       "paths_mentioned": 33,
@@ -977,7 +1213,7 @@
       "task": "T6",
       "verb": "pack-task",
       "failed": null,
-      "ms": 4830,
+      "ms": 1369,
       "bytes": 11137,
       "est_tokens": 2784,
       "paths_mentioned": 7,
@@ -1005,7 +1241,7 @@
       "task": "T6",
       "verb": "pack-task-4k",
       "failed": null,
-      "ms": 996,
+      "ms": 1087,
       "bytes": 8256,
       "est_tokens": 2064,
       "paths_mentioned": 3,
@@ -1031,9 +1267,37 @@
     },
     {
       "task": "T6",
+      "verb": "for-compact",
+      "failed": null,
+      "ms": 999,
+      "bytes": 10487,
+      "est_tokens": 2622,
+      "paths_mentioned": 38,
+      "ground_truth": 3,
+      "ground_truth_basis": "existing-files-only",
+      "hits": 0,
+      "recall": 0,
+      "best_rank": null,
+      "per_file": [
+        {
+          "path": "packages/platform-apple/src/snapshot-route.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.test.ts",
+          "rank": null
+        },
+        {
+          "path": "packages/platform-apple/src/snapshot-target.ts",
+          "rank": null
+        }
+      ]
+    },
+    {
+      "task": "T6",
       "verb": "for-idents",
       "failed": null,
-      "ms": 1026,
+      "ms": 693,
       "bytes": 10545,
       "est_tokens": 2636,
       "paths_mentioned": 43,

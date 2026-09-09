@@ -1,10 +1,10 @@
 {
-  "generated": "2026-09-08T16:04:40.961Z",
+  "generated": "2026-09-09T06:24:35.118Z",
   "results": [
     {
       "task": "T1",
       "failed": null,
-      "ms": 3972,
+      "ms": 543,
       "bytes": 8998,
       "seeds": 10,
       "selected": 65,
@@ -13,7 +13,6 @@
       "helpers_not_scored": ["packages/maestro/src/internal/__tests__/runtime-port-fixtures.ts"],
       "hit": 2,
       "recall": 0.5,
-      "precision": 0.031,
       "missed": [
         "packages/maestro/src/internal/__tests__/program-ir-parser.test.ts",
         "packages/maestro/src/internal/__tests__/runtime-port.test.ts"
@@ -22,7 +21,7 @@
     {
       "task": "T2",
       "failed": null,
-      "ms": 2757,
+      "ms": 486,
       "bytes": 19711,
       "seeds": 6,
       "selected": 185,
@@ -31,13 +30,12 @@
       "helpers_not_scored": [],
       "hit": 1,
       "recall": 1,
-      "precision": 0.005,
       "missed": []
     },
     {
       "task": "T3",
       "failed": null,
-      "ms": 2484,
+      "ms": 925,
       "bytes": 2447,
       "seeds": 1,
       "selected": 5,
@@ -50,13 +48,12 @@
       ],
       "hit": 1,
       "recall": 1,
-      "precision": 0.2,
       "missed": []
     },
     {
       "task": "T4",
       "failed": null,
-      "ms": 2524,
+      "ms": 493,
       "bytes": 4380,
       "seeds": 4,
       "selected": 24,
@@ -65,13 +62,12 @@
       "helpers_not_scored": ["test/wire-compat/surface.ts"],
       "hit": 2,
       "recall": 1,
-      "precision": 0.083,
       "missed": []
     },
     {
       "task": "T5",
       "failed": null,
-      "ms": 2840,
+      "ms": 475,
       "bytes": 3652,
       "seeds": 2,
       "selected": 18,
@@ -80,13 +76,12 @@
       "helpers_not_scored": [],
       "hit": 2,
       "recall": 1,
-      "precision": 0.111,
       "missed": []
     },
     {
       "task": "T6",
       "failed": null,
-      "ms": 2179,
+      "ms": 477,
       "bytes": 2123,
       "seeds": 1,
       "selected": 2,
@@ -95,7 +90,6 @@
       "helpers_not_scored": [],
       "hit": 1,
       "recall": 0.5,
-      "precision": 0.5,
       "missed": ["packages/platform-apple/src/snapshot-route.test.ts"]
     }
   ]

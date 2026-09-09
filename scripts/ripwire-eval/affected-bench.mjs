@@ -6,6 +6,12 @@
 // truth files of the real commit and asks whether the commit's own TEST files come back, and at
 // what cost.
 //
+// RECALL ONLY, deliberately. `--affected` answers "which tests can transitively reach this change",
+// which is a strictly larger set than "which tests the commit happened to edit". A test it names
+// that the commit left alone is not a false positive — the commit's file list is not a precision
+// oracle for a reach query. `selected` is therefore reported as breadth (what it would cost to run
+// or read the set), never scored against the ground truth.
+//
 // Usage: node scripts/ripwire-eval/affected-bench.mjs --ripwire=<bin> --worktrees=<dir> [--out=<file>]
 
 import { writeFileSync } from 'node:fs';
@@ -68,8 +74,6 @@ for (const task of loadTasks()) {
     helpers_not_scored: helpers,
     hit: hit.length,
     recall: Number((hit.length / expected.length).toFixed(3)),
-    // Of the tests it named, how many were actually touched — the cost of running the whole set.
-    precision: selected.length === 0 ? 0 : Number((hit.length / selected.length).toFixed(3)),
     missed: expected.filter((path) => !selected.includes(path)),
   });
   process.stderr.write(

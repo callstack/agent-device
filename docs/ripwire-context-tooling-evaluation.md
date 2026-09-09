@@ -26,11 +26,15 @@ What did show up, and is worth keeping in view:
 1. **It is consistent where grep is lucky.** On the one task with a non-obvious touch point — a
    scripted provider fake that throws on unscripted calls — both ripwire runs found it and only one
    of two baseline runs did.
-2. **The token cost is a fixable implementation detail, not a design limit.** ripwire's
-   self-documenting preamble is a *fixed* 1.6–3.1 KB per invocation, up to 62% of a small verb's
-   whole response, re-sent on every call. A terse mode would likely flip the token column.
-3. **The cheap deterministic verbs stand on their own.** `--recall` answers from 799 KB of markdown
-   in 15 KB; `--affected` names the right test files at 2–5 KB when the seed set is narrow.
+2. **Part of the token cost is already avoidable today.** ripwire's self-documenting preamble is a
+   *fixed* 1.6–3.1 KB per invocation, up to 62% of a small verb's whole response. The documented
+   `--legend=compact` removes most of it — but by verb: **−55% on `--callers`, −10% on `--affected`,
+   −1% on `--for`**. The A/B arm's calls were mostly `--for`-shaped, so compact would not have
+   closed the +10% gap; it would have helped an agent that leaned on the narrow verbs.
+3. **The document verbs are the strongest thing here.** `--recall` answers from 799 KB of markdown
+   in 15 KB, and it finds all five CLI-flag declaration sites this repo documents by hand — where
+   the graph verbs find one to three. `--affected` recalls 9 of 12 touched test files at 2–5 KB
+   when the seed set is narrow.
 
 ## What was measured
 
@@ -133,10 +137,16 @@ Both misses are real. T1's are two `packages/maestro` harnesses the walk did not
 `snapshot-route.test.ts`, which covers the direct caller of the changed module and should have
 been a short hop.
 
-Selection breadth is the sharper problem. T2 named **185** test files for a 5-file change: the
-seeds reach into `packages/kernel`, whose symbols are called from everywhere, and the walk has no
-notion of "this hub is not evidence". At that width the answer costs more to read than it saves.
-`--affected` is useful here at 2–24 selected files and not useful at 185.
+**Recall only, deliberately.** `--affected` answers "which tests can transitively reach this
+change" — a strictly larger set than "which tests this commit happened to edit". A test it names
+that the commit left alone is not a false positive, so the commit's file list cannot score
+precision, and an earlier draft of this report was wrong to treat the extra names as excess.
+`selected` below is breadth — what it would cost to read or run the set — not a quality score.
+
+Breadth still varies enough to matter in practice. T2 named **185** test files for a 5-file change,
+because its seeds reach into `packages/kernel`, whose symbols are called from everywhere. That is a
+correct transitive answer and an expensive one; at 2–24 files the same verb is cheap to act on.
+Whether the wide answer is *useful* is a judgement about read cost, not a measured defect.
 
 This does not overlap `pnpm check:affected`, which selects CI *lanes* from a diff. `--affected`
 selects test *files* from source files. They answer different questions.
@@ -231,36 +241,38 @@ repository, ripwire's self-documenting XML comment preamble is **1.6 KB on `--fo
 hardest on exactly the cheap, narrow verbs that should be the tool's best value. Whole-file reads
 went down; total context did not.
 
-This is the single most actionable finding here, and it is a fixable one: the preamble is
-documentation aimed at a first-time reader, re-sent to an agent that has already read it. A
-`--terse` mode that emits the header once per session — or not at all — would likely flip the token
-column without touching the ranking.
+**How much of this is avoidable today.** ripwire already ships `--legend=compact` (documented in
+its `docs/COMMANDS.md`); the arms were run on the default legend, so the +10% above is a
+default-output number. Measured on this repository, compact costs nothing in recall and saves
+**55% on `--callers`, 10% on `--affected`, and 1% on `--for`** — it strips the whole preamble from
+the narrow verbs and only part of it from `--for`, whose bulk is ranked rows, not header. Since the
+ripwire arm's calls were mostly `--for`/`--pack-task`-shaped, compact would have trimmed the gap
+rather than closed it. Re-running the A/B under `--legend=compact` is the open question this
+evaluation does not answer.
 
 ## 4. The one question this repo has already answered in prose
 
 `docs/agents/cli-flags.md` names, by hand, the declaration sites a new CLI flag must be threaded
-through. That makes it the cleanest possible head-to-head between a call graph and a maintained
-routing doc. Asked the same question, one ripwire call names:
+through — the cleanest available head-to-head between a maintained routing doc and the tool.
 
-| Declaration site (from `docs/agents/cli-flags.md`) | `--for="<task in prose>"` | `--for="<the type and helper names>"` |
-| --- | --- | --- |
-| `packages/contracts/src/cli-flags.ts` | — | yes |
-| `src/commands/cli-grammar/*` | yes | yes |
-| `src/commands/command-projection.ts` | — | — |
-| `src/cli-schema/command-overrides.ts` | — | — |
-| `src/cli-schema/cli-config.ts` | — | yes |
+| Declaration site (from `docs/agents/cli-flags.md`) | `--for` (prose) | `--for` (identifiers) | `--recall` |
+| --- | --- | --- | --- |
+| `packages/contracts/src/cli-flags.ts` | — | yes | **yes** |
+| `src/commands/cli-grammar/*` | yes | yes | **yes** |
+| `src/commands/command-projection.ts` | — | — | **yes** |
+| `src/cli-schema/command-overrides.ts` | — | — | **yes** |
+| `src/cli-schema/cli-config.ts` | — | yes | **yes** |
 
-`--pack-task --partition=3`, the verb aimed at fanning work out to parallel agents, produces three
-slices with `overlap_max=0.000` in 1.3 s and 25 KB total — a clean split, naming 44 files, 2 of
-these 5 sites among them.
+**`--recall` finds all five, in 15.7 KB.** That is the verb built for this question: it searches the
+written corpus, and the answer to "where does a CLI flag get threaded" lives in a document, not in
+call edges. An earlier draft of this report tested only `--for` and `--pack-task`, which reach 1–3
+of the five, and concluded from that "a ranked call graph does not recover a convention". That
+conclusion was an artifact of the verb chosen, and is withdrawn.
 
-**A ranked call graph does not recover a convention.** These sites are related by a rule the team
-wrote down, not by call edges: `PROJECT_CONFIG_FLAG_KEYS` is a positive allowlist, and
-`SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` is a merge path. Nothing in the graph says "and also this". The
-routing doc stays the better answer to this particular question, and that is the shape of the
-boundary — ripwire finds what the code *does*, `AGENTS.md` records what the team *decided*.
-
-
+What survives is narrower and less interesting: **the graph verbs are the wrong tool for a
+convention, and ripwire knows it** — the routing table in its own skills sends this question to
+`--recall`. `--pack-task --partition=3`, the fan-out verb, produces three slices with
+`overlap_max=0.000` in 1.3 s and 25 KB total, naming 44 files, 2 of these 5 sites among them.
 
 ## Adoption cost, if we wanted it
 
@@ -292,13 +304,14 @@ line, sends nothing anywhere and needs no key, so the cost of one engineer tryin
 The verbs worth trying first here are `--recall` (52× cheaper than the doc corpus it searches) and
 `--affected` on a narrow seed set.
 
-**Re-run this harness if ripwire ships a terse output mode.** `scripts/ripwire-eval/` is written to
-be re-run against a new binary with two commands; the token result is the one number most likely to
-move, and it is the one currently deciding the verdict.
+**Re-run the A/B under `--legend=compact` before treating the token result as settled.** The arms
+ran on default output. Compact is measured above and is worth 55% on `--callers` but only 1% on
+`--for`, so it should narrow rather than close the gap — but that is an inference from the
+deterministic benches, not a measurement of the agent arm, and the harness exists to settle it.
 
-**Two findings are worth sending upstream**, since both are measured rather than impressionistic:
-the fixed preamble cost per invocation, and `--affected` selecting 185 test files for a 5-file
-change once its seeds reach a hub module in `packages/kernel`.
+**One finding is worth sending upstream:** the fixed preamble is 15% of a `--for` response and 62%
+of a `--callers` one, and `--legend=compact` clears it from the latter but not the former — the
+default is the expensive one, on the verb agents reach for most.
 
 ## Caveats
 
@@ -314,3 +327,6 @@ change once its seeds reach a hub module in `packages/kernel`.
   than folded into per-run wall clock.
 - Change-set localization is one job among many. This says nothing about ripwire's refactoring,
   security or quality lenses beyond the single `--quality-panel` run noted above.
+- **Results are bounded by the invocations tested, and the choice of verb changed conclusions.**
+  The A/B ran on default-legend output; §4's original finding reversed once `--recall` was tried
+  instead of `--for`. Read every number here as "this verb, this flag set", not "the tool".
