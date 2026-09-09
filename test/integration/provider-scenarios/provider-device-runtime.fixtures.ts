@@ -270,11 +270,10 @@ function providerScenarioRuntimeFacts(
       keyboardDismiss: fakeProviderAvailable,
       keyboardEnter: fakeProviderAvailable,
       ...touchRuntimeOperationFacts({
+        unsupported: fakeProviderUnavailable,
         tap: fakeProviderAvailable,
         longPress: fakeProviderAvailable,
-        hover: fakeProviderUnavailable,
         fill: fakeProviderAvailable,
-        tapElementSelector: fakeProviderUnavailable,
       }),
       deployApp: runtime.installApp ? fakeProviderAvailable : fakeProviderUnavailable,
       ...applicationLifecycleOperationFacts({

@@ -163,17 +163,13 @@ export function limrunInteractionOperationFacts(
     ...focusRuntimeOperationFacts({ focus: cell }),
     ...typeTextRuntimeOperationFacts({ type: cell }),
     ...touchRuntimeOperationFacts({
+      unsupported: unsupportedTouch,
       tap: cell,
-      tapRef: unsupportedTouch,
       longPress: liveSessionUnavailable ?? (isIosFamily(device) ? unsupportedTouch : cell),
-      hover: liveSessionUnavailable ?? {
-        available: false,
-        reason: 'unsupported-provider-mode',
-        hint: 'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.',
-      },
-      hoverRef: unsupportedTouch,
+      // A dead session refuses hover for its own reason; the family builder adds the redirection
+      // to longpress either way.
+      hover: liveSessionUnavailable ?? unsupportedTouch,
       fill: cell,
-      fillRef: unsupportedTouch,
       tapElementSelector: liveSessionUnavailable ?? (isIosFamily(device) ? cell : unsupportedTouch),
     }),
     ...limrunGestureFacts(device, cell),

@@ -288,14 +288,10 @@ function linuxDesktopFact(
 function linuxTouchFacts(device: DeviceInfo) {
   const point = device.kind === 'device' ? supported : focusKindUnavailable;
   return touchRuntimeOperationFacts({
+    unsupported: unsupportedPlatformLeaf,
     tap: point,
-    tapRef: unsupportedPlatformLeaf,
     longPress: point,
-    hover: unsupportedPlatformLeaf,
-    hoverRef: unsupportedPlatformLeaf,
     fill: point,
-    fillRef: unsupportedPlatformLeaf,
-    tapElementSelector: unsupportedPlatformLeaf,
   });
 }
 

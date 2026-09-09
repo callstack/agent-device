@@ -263,14 +263,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
           tap: harmonyFocusFact(device),
-          tapRef: unavailable,
           longPress: harmonyFocusFact(device),
-          hover: unavailable,
-          hoverRef: unavailable,
           fill: harmonyFocusFact(device),
-          fillRef: unavailable,
-          tapElementSelector: unavailable,
         }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.

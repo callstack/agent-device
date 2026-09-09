@@ -46,13 +46,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   setViewport: unavailable,
   focusPoint: unavailable,
   typeText: unavailable,
-  ...touchRuntimeOperationFacts({
-    tap: unavailable,
-    longPress: unavailable,
-    hover: unavailable,
-    fill: unavailable,
-    tapElementSelector: unavailable,
-  }),
+  ...touchRuntimeOperationFacts({ unsupported: unavailable }),
   ...gestureRuntimeOperationFacts({
     plan: unavailable,
     directionalFling: unavailable,

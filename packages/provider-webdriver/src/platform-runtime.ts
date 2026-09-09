@@ -621,14 +621,12 @@ function webDriverFacts(
       ...focusRuntimeOperationFacts({ focus: interactorCell(reachable, focusUnavailable) }),
       ...typeTextRuntimeOperationFacts({ type: declared('type', typeUnavailable) }),
       ...touchRuntimeOperationFacts({
+        unsupported: focusUnavailable,
         tap: declared('tap', focusUnavailable),
-        tapRef: focusUnavailable,
         longPress: declared('longPress', focusUnavailable),
-        hover: focusUnavailable,
-        hoverRef: focusUnavailable,
         fill: declared('fill', typeUnavailable),
+        // Text entry, not focus, is what this provider lacks for the ref-addressed fill.
         fillRef: typeUnavailable,
-        tapElementSelector: focusUnavailable,
       }),
       // Gestures and scrolling ride the same provider interactor the captures do, so they need the
       // same reachability. The one extra gate is the retired multi-touch policy: this provider only

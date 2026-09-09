@@ -312,14 +312,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
           tap: appleFocusFact(device),
-          tapRef: unavailable,
           longPress: appleFocusFact(device),
-          hover: unavailable,
-          hoverRef: unavailable,
           fill: appleFocusFact(device),
-          fillRef: unavailable,
-          tapElementSelector: isIosFamily(device) ? appleFocusFact(device) : unavailable,
+          ...(isIosFamily(device) ? { tapElementSelector: appleFocusFact(device) } : {}),
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),

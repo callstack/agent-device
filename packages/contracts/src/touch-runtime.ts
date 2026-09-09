@@ -14,7 +14,7 @@ import type {
   PressPointOptions,
   RunnerContext,
 } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 type TouchExecutionInput = Readonly<{
@@ -74,42 +74,51 @@ export type TouchRuntimeOperationFacts = Readonly<{
 export const HOVER_UNAVAILABLE_HINT =
   'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.';
 
+/**
+ * What an owner declares about the touch family. Every operation is optional and `unsupported` is
+ * not: an owner names the operations it implements and states, once, the denial every operation it
+ * left out reports. Adding a touch operation therefore costs an edit only in the owner that gained
+ * it — an owner that does not implement it already classified it, by the same `unsupported` cell,
+ * with the same reason and hint it would have written out by hand.
+ *
+ * Omission is a classified denial, never an unclassified cell and never an implied success: the
+ * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
+ */
+export type TouchRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  tap?: RuntimeOperationFact;
+  tapRef?: RuntimeOperationFact;
+  longPress?: RuntimeOperationFact;
+  hover?: RuntimeOperationFact;
+  hoverRef?: RuntimeOperationFact;
+  fill?: RuntimeOperationFact;
+  fillRef?: RuntimeOperationFact;
+  tapElementSelector?: RuntimeOperationFact;
+}>;
+
 export function touchRuntimeOperationFacts(
-  input: Readonly<{
-    tap: RuntimeOperationFact;
-    tapRef?: RuntimeOperationFact;
-    longPress: RuntimeOperationFact;
-    hover: RuntimeOperationFact;
-    hoverRef?: RuntimeOperationFact;
-    fill: RuntimeOperationFact;
-    fillRef?: RuntimeOperationFact;
-    tapElementSelector: RuntimeOperationFact;
-  }>,
+  input: TouchRuntimeOperationFactsInput,
 ): TouchRuntimeOperationFacts {
-  const hoverRef: RuntimeOperationFact = input.hoverRef ?? NATIVE_REF_UNAVAILABLE;
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
   return Object.freeze({
-    tapPoint: input.tap,
-    tapRef: input.tapRef ?? NATIVE_REF_UNAVAILABLE,
-    longPressPoint: input.longPress,
-    hoverPoint: input.hover.available
-      ? input.hover
-      : Object.freeze({ ...input.hover, hint: input.hover.hint ?? HOVER_UNAVAILABLE_HINT }),
-    hoverRef: hoverRef.available
-      ? hoverRef
-      : Object.freeze({
-          ...hoverRef,
-          hint: hoverRef.hint ?? HOVER_UNAVAILABLE_HINT,
-        }),
-    fillPoint: input.fill,
-    fillRef: input.fillRef ?? NATIVE_REF_UNAVAILABLE,
-    tapElementSelector: input.tapElementSelector,
+    tapPoint: declared(input.tap),
+    tapRef: declared(input.tapRef),
+    longPressPoint: declared(input.longPress),
+    hoverPoint: withHoverRefusalHint(declared(input.hover)),
+    hoverRef: withHoverRefusalHint(declared(input.hoverRef)),
+    fillPoint: declared(input.fill),
+    fillRef: declared(input.fillRef),
+    tapElementSelector: declared(input.tapElementSelector),
   });
 }
 
-const NATIVE_REF_UNAVAILABLE = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-} as const);
+/** Both hover legs answer with the same redirection to longpress when they are refused. */
+function withHoverRefusalHint(fact: RuntimeOperationFact): RuntimeOperationFact {
+  return fact.available
+    ? fact
+    : Object.freeze({ ...fact, hint: fact.hint ?? HOVER_UNAVAILABLE_HINT });
+}
 
 function runnerContext(input: TouchExecutionInput, signal: AbortSignal): RunnerContext {
   return { ...input.execution, appBundleId: input.appBundleId, signal };

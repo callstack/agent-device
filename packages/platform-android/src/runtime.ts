@@ -327,14 +327,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // row has no device behind it (parity with the retired `type` bucket).
         ...typeTextRuntimeOperationFacts({ type: androidTouchFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: focusKindUnavailable,
           tap: androidTouchFact(device),
-          tapRef: focusKindUnavailable,
           longPress: androidTouchFact(device),
+          // Hover is not a device-kind gap: no Android kind raises pointer hover state.
           hover: hoverUnavailable,
-          hoverRef: focusKindUnavailable,
           fill: androidTouchFact(device),
-          fillRef: focusKindUnavailable,
-          tapElementSelector: focusKindUnavailable,
         }),
         // uiautomator reads text at a point through the same adb path the snapshot uses, so the
         // synthetic `simulator` row is the only Android kind without a live read.
