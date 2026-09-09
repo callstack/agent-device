@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../toolchain-probe-budget.ts';
 
 export type SnapshotSourceToolchainIdentity = Readonly<{
   xcode: string;
@@ -84,11 +86,7 @@ async function toolOutput(
   args: string[],
   deadline: SnapshotSourceDeadline,
 ): Promise<string> {
-  const result = await host.run(command, args, {
-    allowFailure: true,
-    signal: deadline.signal,
-    timeoutMs: Math.min(10_000, remainingSnapshotSourceMs(deadline, 'toolchain-probe-deadline')),
-  });
+  const result = await runToolchainProbe(host, command, args, deadline);
   if (result.exitCode !== 0) {
     throw snapshotSourceError('unsupported', 'toolchain-probe-failed', {
       command,
@@ -99,4 +97,49 @@ async function toolOutput(
   const output = (result.stdout || result.stderr).trim();
   if (!output) throw snapshotSourceError('unsupported', 'toolchain-probe-empty', { command });
   return output;
+}
+
+/**
+ * Runs one toolchain probe, retrying exactly once if the attempt times out
+ * and the deadline still has room. The retry absorbs the cold-start
+ * signature-verification stall named on COLD_TOOLCHAIN_PROBE_TIMEOUT_MS: the
+ * first exec of a tool on a fresh host can block for that long, but the
+ * immediate next exec of the same tool is instant.
+ */
+async function runToolchainProbe(
+  host: SnapshotSourceHost,
+  command: string,
+  args: string[],
+  deadline: SnapshotSourceDeadline,
+): Promise<ExecResult> {
+  try {
+    return await execToolchainProbe(host, command, args, deadline);
+  } catch (error) {
+    if (!isToolchainProbeTimeout(error) || !toolchainProbeDeadlineHasRoom(deadline)) throw error;
+    return await execToolchainProbe(host, command, args, deadline);
+  }
+}
+
+function execToolchainProbe(
+  host: SnapshotSourceHost,
+  command: string,
+  args: string[],
+  deadline: SnapshotSourceDeadline,
+): Promise<ExecResult> {
+  return host.run(command, args, {
+    allowFailure: true,
+    signal: deadline.signal,
+    timeoutMs: Math.min(
+      COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+      remainingSnapshotSourceMs(deadline, 'toolchain-probe-deadline'),
+    ),
+  });
+}
+
+function toolchainProbeDeadlineHasRoom(deadline: SnapshotSourceDeadline): boolean {
+  return !deadline.signal?.aborted && deadline.clock.remainingMs() > 0;
+}
+
+function isToolchainProbeTimeout(error: unknown): boolean {
+  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }

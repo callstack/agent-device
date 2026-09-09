@@ -18,13 +18,13 @@ import {
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
 import { computeRunnerSourceFingerprint } from './runner-source.ts';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../toolchain-probe-budget.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
 const RUNNER_CACHE_SCHEMA_VERSION = 2;
 const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
-const TOOLCHAIN_PROBE_TIMEOUT_MS = 5_000;
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =
@@ -223,11 +223,7 @@ function runToolchainProbe(cmd: string, args: string[]): ProbeResult<string> {
   const probe = [cmd, ...args].join(' ');
   let output: { exitCode: number; stdout: string; stderr: string };
   try {
-    output = runCmdSync(cmd, args, {
-      allowFailure: true,
-      timeoutMs: TOOLCHAIN_PROBE_TIMEOUT_MS,
-      maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
-    });
+    output = runToolchainProbeCommand(cmd, args);
   } catch (error) {
     return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
   }
@@ -240,6 +236,40 @@ function runToolchainProbe(cmd: string, args: string[]): ProbeResult<string> {
   }
   const value = output.stdout.trim();
   return value ? { ok: true, value } : probeFailure(probe, 'empty_output', 'no output');
+}
+
+/**
+ * Runs one toolchain probe, retrying exactly once if the attempt times out.
+ * Apple's syspolicyd signature scan blocks the first `xcodebuild`/`xcrun`
+ * exec after a fresh host boots (see COLD_TOOLCHAIN_PROBE_TIMEOUT_MS); the
+ * immediate next exec of the same tool is instant, so the retry recovers
+ * without widening the per-call budget.
+ */
+function runToolchainProbeCommand(
+  cmd: string,
+  args: string[],
+): { exitCode: number; stdout: string; stderr: string } {
+  try {
+    return execToolchainProbeCommand(cmd, args);
+  } catch (error) {
+    if (!isToolchainProbeTimeout(error)) throw error;
+    return execToolchainProbeCommand(cmd, args);
+  }
+}
+
+function execToolchainProbeCommand(
+  cmd: string,
+  args: string[],
+): { exitCode: number; stdout: string; stderr: string } {
+  return runCmdSync(cmd, args, {
+    allowFailure: true,
+    timeoutMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
+  });
+}
+
+function isToolchainProbeTimeout(error: unknown): boolean {
+  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }
 
 function parseXcodeVersionOutput(

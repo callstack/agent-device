@@ -240,6 +240,60 @@ test('a timed-out probe leaves the toolchain unavailable instead of a comparable
   assert.deepEqual(unavailableProbes(), [{ probe: 'xcodebuild -version', reason: 'probe_error' }]);
 });
 
+// Apple's syspolicyd signature scan blocks the first xcodebuild/xcrun exec
+// after a fresh macOS host boots for roughly 18 to 19 seconds; the immediate
+// next exec of the same tool is instant (#2422). These two cases exercise
+// the resulting one-retry policy without waiting on a real cold-start stall.
+// They use device fixtures untouched by the tests above so the toolchain
+// fingerprint cache starts empty for each.
+
+test('a cold-start toolchain probe recovers on retry: the first call exceeds the budget, the second returns immediately', () => {
+  let xcodebuildAttempts = 0;
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) => {
+    if (command === 'xcodebuild') {
+      xcodebuildAttempts += 1;
+      if (xcodebuildAttempts === 1) {
+        throw new AppError('COMMAND_FAILED', 'xcodebuild timed out after 30000ms', {
+          timeoutMs: 30_000,
+        });
+      }
+    }
+    return appleToolchainProbeResult(command, args);
+  });
+  runCmdSync.mockClear();
+
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_DEVICE);
+
+  assert.equal(metadata.xcodeVersion, '26.2');
+  assert.equal(metadata.xcodeBuildVersion, '17C52');
+  expect(runCmdSync.mock.calls.filter(([command]) => command === 'xcodebuild')).toHaveLength(2);
+});
+
+test('a toolchain host that never returns still fails at the deadline with the same timeout error', () => {
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) => {
+    if (command === 'xcodebuild') {
+      throw new AppError('COMMAND_FAILED', 'xcodebuild timed out after 30000ms', {
+        timeoutMs: 30_000,
+      });
+    }
+    return appleToolchainProbeResult(command, args);
+  });
+  runCmdSync.mockClear();
+
+  try {
+    resolveExpectedRunnerCacheMetadata(MACOS_DEVICE);
+    assert.fail('expected an always-timing-out toolchain probe to fail the cache decision');
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.retriable, true);
+    expect(error.message).toContain('xcodebuild -version');
+    expect(error.message).toContain('xcodebuild timed out after 30000ms');
+  }
+  // Exactly one retry, not an unbounded loop: the original attempt plus one retry.
+  expect(runCmdSync.mock.calls.filter(([command]) => command === 'xcodebuild')).toHaveLength(2);
+});
+
 test('a failing probe reports its exit status rather than a fabricated SDK version', () => {
   runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
     command === 'xcrun'
