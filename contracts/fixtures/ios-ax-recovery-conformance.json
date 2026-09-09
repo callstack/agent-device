@@ -8,7 +8,8 @@
     "vanishAtFrontier": "The deepest level of every returned fragment has no live accessibility element, so no continuation can be rooted there.",
     "ownerChangesAfterRequests": "The primary foreground owner changes after that many native requests (host only).",
     "deadlineAfterRequests": "The capture deadline is spent after that many native requests (runner only; the host deadline is the guest watchdog and the host request timeout).",
-    "signature": "`tree` is the delivered tree in preorder: every node's identity, with `<parent` appended when its parent is not the canonical one (the previous level on the same branch, or the fan's last chain node for a branch head); runs of consecutive levels on one branch collapse to `first-last` (`0-44`, `30.1-49.1`). `nodes` is the retained node count. Dropped, duplicated, reordered, or re-parented nodes change the signature."
+    "signature": "`tree` is the delivered tree in preorder: every node's identity, with `<parent` appended when its parent is not the canonical one (the previous level on the same branch, or the fan's last chain node for a branch head); runs of consecutive levels on one branch collapse to `first-last` (`0-44`, `30.1-49.1`). `nodes` is the retained node count. Dropped, duplicated, reordered, or re-parented nodes change the signature.",
+    "hintSteps": "Each hint step is one capture of a target generation: the adapter builds a chain that fits the accepted rung when `complete` is true and a longer chain under a node budget of the accepted rung when it is false, rejects native requests above `acceptedLevels`, runs the producer's real ladder, and checks `rejected` requests, the accepted rung, boundedness, and the remembered depth before and after the producer's own learning step. A step with `failure` is rejected at every depth: the capture fails, nothing is learned, and the remembered depth is untouched. `expire` spends the producer's hint lifetime."
   },
   "producers": {
     "host-bridge": {
@@ -25,7 +26,7 @@
       "recoveryOwner": "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAXSnapshotBridge.m and RunnerTests+AXSnapshotFallback.swift",
       "hintOwner": "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+AXSnapshotFallback.swift",
       "adapters": [
-        "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AXRecoveryConformanceTests.swift (stacked PR)"
+        "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AXRecoveryConformanceTests.swift"
       ],
       "nativeLevelsForTraversalDepth": "depth (node levels; delivers `depth - 1` edges below the root)",
       "frontierEvidence": "childless nodes at the deepest observed level of a capped capture; no child counts",
@@ -562,6 +563,382 @@
           "nodes": 45
         }
       }
+    }
+  ],
+  "hintCases": [
+    {
+      "name": "learn-from-complete-recovery",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": 40
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          },
+          "expectRenewed": false
+        }
+      ]
+    },
+    {
+      "name": "never-across-generations",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g2"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0
+            },
+            "acceptedLevels": {
+              "runner": 64
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "never-across-apps",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "target": {
+            "id": "app-b",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0
+            },
+            "acceptedLevels": {
+              "runner": 64
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "probe-back-after-expiry",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "expire": true
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0
+            },
+            "acceptedLevels": {
+              "runner": 64
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "expired-probe-relearns-when-still-rejected",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "expire": true
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 3
+            },
+            "acceptedLevels": {
+              "runner": 24
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 24
+          }
+        }
+      ]
+    },
+    {
+      "name": "bounded-recovery-still-learned",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": false
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit-depth-ignores-hints",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": true,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 3
+            },
+            "acceptedLevels": {
+              "runner": 24
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        }
+      ]
+    },
+    {
+      "name": "rejected-at-every-depth-keeps-the-hint",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2
+            },
+            "acceptedLevels": {
+              "runner": 40
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": 40
+          },
+          "outcome": {
+            "failure": "rejected",
+            "rejected": {
+              "runner": 3
+            }
+          },
+          "expectHintAfter": {
+            "runner": 40
+          }
+        }
+      ]
     }
   ]
 }

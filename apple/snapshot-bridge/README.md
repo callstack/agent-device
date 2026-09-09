@@ -69,11 +69,9 @@ continuation evidence. Unchanged native dictionaries and child arrays are reused
 `contracts/fixtures/ios-ax-recovery-conformance.json` is the shared, executable
 recovery contract for this bridge and the XCTest runner's private AX bridge.
 `packages/platform-apple/src/snapshot-source/fixtures/recovery-conformance.m`
-replays each case through `captureSnapshotTree`; the runner adapter that
-replays the same cases through the XCTest runner's private AX bridge is
-pending in [#2428](https://github.com/callstack/agent-device/pull/2428), so at
-this revision only the fixture's `host-bridge` column is executed. Each
-expectation names the
+replays each case through `captureSnapshotTree`; the runner replays the same
+cases through its own bridge in
+`RunnerTests+AXRecoveryConformanceTests.swift`. Each expectation names the
 outcome, the native request accounting, and the delivered tree as a canonical
 preorder signature with its retained node count, so a producer that drops,
 duplicates, reorders, or re-parents nodes cannot pass as complete. The fixture

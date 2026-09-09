@@ -49,6 +49,18 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
                                            customActionLimit:(NSInteger)customActionLimit
                                                     deadline:(nullable NSDate *)deadline;
 
+/// The capture behind `snapshotTreeForApplication:`, for an AX client and target
+/// application element that are already resolved. Every request, extension, and
+/// custom-action decision happens here; the application entry point only resolves
+/// the two identities.
++ (NSDictionary<NSString *, id> *)snapshotTreeWithClient:(id)axClient
+                                                  target:(id)target
+                                                maxDepth:(NSInteger)maxDepth
+                                                maxNodes:(NSInteger)maxNodes
+                                  deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                       customActionLimit:(NSInteger)customActionLimit
+                                                deadline:(nullable NSDate *)deadline;
+
 /// Names of the element's UIAccessibilityCustomActions, or nil when it has
 /// none.
 ///

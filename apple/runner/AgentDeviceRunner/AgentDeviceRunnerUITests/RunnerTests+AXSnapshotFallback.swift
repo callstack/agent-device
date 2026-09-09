@@ -8,7 +8,7 @@ extension RunnerTests {
   /// depth-capped Bluesky-class tree resolves in 1-3 chained requests (~100-300ms
   /// each); the bound exists so a pathological tree cannot stack requests past
   /// the capture-plan deadline, which is also enforced per call.
-  private static let privateAXDeepExtensionCallLimit = 8
+  static let privateAXDeepExtensionCallLimit = 8
 
   /// Upper bound on per-element custom-action reads per capture. Each is its own
   /// AX round trip (~100ms on an idle simulator), so this caps the opt-in cost
@@ -65,6 +65,65 @@ extension RunnerTests {
     let blocked = (coverage[RunnerAXSnapshotCustomActionsBlockedKey] as? NSNumber)?.boolValue ?? false
     return SnapshotCustomActionCoverage(
       read: read, candidates: candidates, truncated: truncated, blocked: blocked)
+  }
+
+  struct PrivateAXLadderOutcome {
+    let response: [String: Any]
+    let effectiveDepth: Int
+    let deadlineSpent: Bool
+    let lastError: String
+
+    var succeeded: Bool { response["ok"] as? Bool == true }
+  }
+
+  /// Walks the ladder rungs until one capture succeeds. The first rung always runs (the plan
+  /// gated entry on its own budget); later rungs stop when the capture-plan deadline is spent so
+  /// ladder retries can never stack past the runner's main-thread watchdog (#1105).
+  static func privateAXLadderCapture(
+    attemptDepths: [Int],
+    deadline: Date,
+    capture: (Int) -> [String: Any]
+  ) -> PrivateAXLadderOutcome {
+    var response: [String: Any] = [:]
+    var effectiveDepth = attemptDepths.first ?? 0
+    var lastError = "unknown private AX snapshot failure"
+    for depth in attemptDepths {
+      if depth != attemptDepths.first, Date() >= deadline {
+        NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_BUDGET_EXHAUSTED depth=%ld", depth)
+        return PrivateAXLadderOutcome(
+          response: response, effectiveDepth: effectiveDepth, deadlineSpent: true,
+          lastError: lastError)
+      }
+      response = capture(depth)
+      if response["ok"] as? Bool == true {
+        effectiveDepth = depth
+        break
+      }
+      lastError = response["error"] as? String ?? lastError
+      NSLog(
+        "AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_DEPTH_RETRY depth=%ld error=%@",
+        depth,
+        lastError
+      )
+    }
+    return PrivateAXLadderOutcome(
+      response: response, effectiveDepth: effectiveDepth, deadlineSpent: false, lastError: lastError)
+  }
+
+  /// Only a capture that actually descended records memory: a first-rung success on a
+  /// remembered depth deliberately does NOT refresh the TTL, so expiry re-probes the full
+  /// requested depth once per window instead of capping this screen class forever.
+  func recordPrivateAXAcceptedDepth(
+    exactDepthRequested: Bool,
+    effectiveDepth: Int,
+    attemptDepths: [Int]
+  ) {
+    guard !exactDepthRequested, effectiveDepth != attemptDepths.first else { return }
+    rememberPrivateAXAcceptedDepth(
+      bundleId: currentBundleId,
+      processIdentifier: currentAppProcessIdentifier,
+      depth: effectiveDepth
+    )
   }
 
   func rememberPrivateAXAcceptedDepth(bundleId: String?, processIdentifier: Int?, depth: Int) {
@@ -125,22 +184,13 @@ extension RunnerTests {
         requestedDepth: requestedDepth,
         rememberedDepth: rememberedDepth
       )
-      var response: [String: Any] = [:]
-      var effectiveDepth = requestedDepth
-      var lastError = "unknown private AX snapshot failure"
-      for depth in attemptDepths {
-        // The first rung always runs (the plan gated entry on its own budget); later rungs
-        // stop when the capture-plan deadline is spent so ladder retries can never stack
-        // past the runner's main-thread watchdog (#1105).
-        if depth != attemptDepths.first, Date() >= deadline {
-          NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_BUDGET_EXHAUSTED depth=%ld", depth)
-          break
-        }
-        // Declared residue (#1797): the bridge caps the tree at 5000 nodes while serializing,
-        // BEFORE either projection exists, so a raw capture of a huge screen is bounded rather
-        // than failing the way the tree backend's own raw cap does. The cap is disclosed as
-        // `truncated`, and it applied to the acquired tree before this projection split too.
-        response = RunnerAXSnapshotBridge.snapshotTree(
+      // Declared residue (#1797): the bridge caps the tree at 5000 nodes while serializing,
+      // BEFORE either projection exists, so a raw capture of a huge screen is bounded rather
+      // than failing the way the tree backend's own raw cap does. The cap is disclosed as
+      // `truncated`, and it applied to the acquired tree before this projection split too.
+      let ladder = Self.privateAXLadderCapture(attemptDepths: attemptDepths, deadline: deadline) {
+        depth in
+        RunnerAXSnapshotBridge.snapshotTree(
           for: app,
           maxDepth: depth,
           maxNodes: Self.privateAXSnapshotMaxNodes,
@@ -148,31 +198,18 @@ extension RunnerTests {
           customActionLimit: hint.customActions ? Self.privateAXCustomActionLimit : 0,
           deadline: deadline
         )
-        if response["ok"] as? Bool == true {
-          effectiveDepth = depth
-          break
-        }
-        lastError = response["error"] as? String ?? lastError
-        NSLog(
-          "AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_DEPTH_RETRY depth=%ld error=%@",
-          depth,
-          lastError
-        )
       }
-      guard response["ok"] as? Bool == true else {
-        NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_FAILED=%@", lastError)
+      let response = ladder.response
+      let effectiveDepth = ladder.effectiveDepth
+      guard ladder.succeeded else {
+        NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_FAILED=%@", ladder.lastError)
         return nil
       }
-      // Only a capture that actually descended records memory: a first-rung success on a
-      // remembered depth deliberately does NOT refresh the TTL, so expiry re-probes the full
-      // requested depth once per window instead of capping this screen class forever.
-      if !exactDepthRequested, effectiveDepth != attemptDepths.first {
-        rememberPrivateAXAcceptedDepth(
-          bundleId: currentBundleId,
-          processIdentifier: currentAppProcessIdentifier,
-          depth: effectiveDepth
-        )
-      }
+      recordPrivateAXAcceptedDepth(
+        exactDepthRequested: exactDepthRequested,
+        effectiveDepth: effectiveDepth,
+        attemptDepths: attemptDepths
+      )
       guard let root = response["root"] as? [String: Any] else {
         NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_FAILED=missing root")
         return nil

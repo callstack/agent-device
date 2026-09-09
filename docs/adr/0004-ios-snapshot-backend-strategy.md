@@ -176,10 +176,9 @@ propagation.
 The host AX bridge and the XCTest runner's private AX bridge recover rejected deep requests with
 different native representations, ladders, and completeness evidence, and they stay separate
 implementations. `contracts/fixtures/ios-ax-recovery-conformance.json` is their shared, executable
-recovery contract: each producer replays every case through its own adapter (the host adapter
-first; the runner adapter is pending in #2428), and the fixture records per-producer expectations
-plus the intentional differences, so a change to either recovery path is measured against the same
-synthetic native world. Common executable policy is extracted only
+recovery contract: each producer replays every case through its own adapter, and the fixture
+records per-producer expectations plus the intentional differences, so a change to either recovery
+path is measured against the same synthetic native world. Common executable policy is extracted only
 where the fixture proves equivalence; a shared engine is not a goal.
 
 ## Consequences

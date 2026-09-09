@@ -104,7 +104,27 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     if (nil == target) {
       return [self failure:@"Could not match active AX application for XCTest application"];
     }
+    return [self snapshotTreeWithClient:axClient
+                                 target:target
+                               maxDepth:maxDepth
+                               maxNodes:maxNodes
+                 deepExtensionCallLimit:deepExtensionCallLimit
+                      customActionLimit:customActionLimit
+                               deadline:deadline];
+  } @catch (NSException *exception) {
+    return [self failure:exception.reason ?: exception.name ?: @"AX snapshot bridge exception"];
+  }
+}
 
++ (NSDictionary<NSString *, id> *)snapshotTreeWithClient:(id)axClient
+                                                  target:(id)target
+                                                maxDepth:(NSInteger)maxDepth
+                                                maxNodes:(NSInteger)maxNodes
+                                  deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                       customActionLimit:(NSInteger)customActionLimit
+                                                deadline:(nullable NSDate *)deadline
+{
+  @try {
     NSArray *attributes = [self snapshotAttributes];
     NSError *error = nil;
     id root = [self requestSnapshotFromClient:axClient
