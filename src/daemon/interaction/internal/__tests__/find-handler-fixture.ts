@@ -7,8 +7,8 @@ import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-f
  * One `handleFindCommands` invocation shape.
  *
  * Read-only `find` constructs a BOUND selector backend — it shares the element read with `get` —
- * so every caller needs the request-runtime seams. It lives here rather than in `find.test.ts`
- * because that file is over the module-size tripwire and may only shrink.
+ * so every caller needs the request-runtime seams. It lives in its own sibling fixture module,
+ * rather than in any one `find*.test.ts` file, because several of those files share it.
  */
 export function invokeFindHandler(params: {
   sessionName: string;

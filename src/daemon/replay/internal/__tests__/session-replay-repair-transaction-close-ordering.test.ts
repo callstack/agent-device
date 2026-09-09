@@ -49,12 +49,12 @@ import { AppError } from '@agent-device/kernel/errors';
 import { HEAL_COMPLETE_SENTINEL } from '../../../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { SessionState } from '../../../session-state.ts';
+import { freshEvidence } from './session-replay-repair.fixtures.ts';
 import {
-  freshEvidence,
   handleCloseCommand,
   makeCompleteRepairSession,
   setup,
-} from './session-replay-repair.fixtures.ts';
+} from './session-replay-repair-transaction.fixtures.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

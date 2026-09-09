@@ -62,14 +62,13 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from '../../__tests__/session-replay-runtime.fixtures.ts';
+import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 import {
-  freshEvidence,
   handleCloseCommand,
   makeCompleteRepairSession,
-  makeRecordingReplayInvoke,
   SAVE_ANNOTATION,
   setup,
-} from './session-replay-repair.fixtures.ts';
+} from './session-replay-repair-transaction.fixtures.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

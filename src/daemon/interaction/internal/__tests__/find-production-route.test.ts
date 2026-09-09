@@ -30,9 +30,9 @@ beforeEach(() => {
 
 // --- #1654: the production route, find handler through the real interaction leaf ---
 //
-// The tests above (in find.test.ts) stub `invoke`, so they prove what find SENDS. These drive
-// the real `handleInteractionCommands` on the other end, so they prove what the action actually
-// acts on — and they fail if either producer (click or fill) stops attaching the channel, which a
+// find.test.ts's tests stub `invoke`, so they prove what find SENDS. These drive the real
+// `handleInteractionCommands` on the other end, so they prove what the action actually acts on —
+// and they fail if either producer (click or fill) stops attaching the channel, which a
 // hand-built request cannot catch.
 
 const findRouteContextFromFlags = (flags: CommandFlags | undefined) => ({
