@@ -7,11 +7,24 @@ import { isSessionRecording } from '../../../session-script-publication-capabili
  * session.actions." This factory keeps the per-test mock declarative (a config
  * object, no inline branching) so each test body stays linear.
  */
+import path from 'node:path';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { LeaseRegistry } from '../../../lease-registry.ts';
 import { isInteractiveObservation } from '../../../session-action-recorder.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import {
+  makeIosSession,
+  makeRepairCompleteSession,
+  repairPublication,
+} from '../../../../__tests__/test-utils/session-factories.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../../session-lifecycle/index.ts';
+import {
+  bindLifecycleRuntime,
+  inspectLifecycleRuntimeFacts,
+} from '../../../__tests__/application-lifecycle-runtime-harness.ts';
+import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
 
 export function freshEvidence(id: string, label: string): TargetAnnotationV1 {
   return {
@@ -91,4 +104,65 @@ function resolveInvokeSession(config: RecordingReplayInvokeConfig, req: DaemonRe
   const created = makeIosSession(config.sessionName);
   config.sessionStore.set(config.sessionName, created);
   return created;
+}
+
+/**
+ * ADR 0012 decision 6 "repair transaction" lifecycle fixtures: an id="save" annotation whose
+ * target diverges to id="save-v2" under `session-replay-repair-transaction*.test.ts`'s mocked
+ * device tree, a fresh sessions dir + registries per test, `close` bound to the production
+ * lifecycle runtime seams, and a COMPLETE repair-armed session ready to commit. It lives here
+ * rather than in any one `session-replay-repair-transaction*.test.ts` file because several split
+ * test files over the module-size tripwire share it (docs/agents/testing.md).
+ */
+export const SAVE_ANNOTATION =
+  '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
+
+export function setup(prefix: string) {
+  const root = mkdtempForTestSync(prefix);
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  return {
+    root,
+    sessionStore,
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    leaseRegistry: new LeaseRegistry(),
+  };
+}
+
+export function handleCloseCommand(
+  params: Omit<Parameters<typeof handleProductionCloseCommand>[0], 'inspectFacts' | 'bindDevice'>,
+) {
+  return handleProductionCloseCommand({
+    ...params,
+    platformResourceCleanup,
+    inspectFacts: inspectLifecycleRuntimeFacts,
+    bindDevice: bindLifecycleRuntime,
+  });
+}
+
+/** A COMPLETE, committable repair-armed session at the default healed sibling path. */
+export function makeCompleteRepairSession(
+  sessionStore: SessionStore,
+  sessionName: string,
+  root: string,
+) {
+  const session = makeRepairCompleteSession(sessionName, {
+    appBundleId: 'com.example.app',
+    scriptPublication: repairPublication('complete', { path: path.join(root, 'flow.healed.ad') }),
+    actions: [
+      { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
+      {
+        ts: 2,
+        command: 'press',
+        positionals: ['@e7'],
+        flags: {},
+        result: { selectorChain: ['id="save-v2"'] },
+        targetEvidence: freshEvidence('save-v2', 'Save V2'),
+      },
+    ],
+  });
+  sessionStore.set(sessionName, session);
+  return session;
 }

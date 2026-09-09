@@ -12,6 +12,8 @@ import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
+import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');
@@ -193,4 +195,30 @@ export function batteryCapture(): Record<string, unknown> {
     ],
     { rawNodeCount: 1, maxDepth: 0 },
   );
+}
+
+const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings', 'alert']);
+
+/**
+ * `handleSnapshotCommands` bound to the suite's snapshot runtime fixture for the
+ * runtime-bound route commands, and to `platformResourceCleanup` always. It lives here rather than
+ * in any one `snapshot-handler*.test.ts` file because several split test files over the
+ * module-size tripwire share it (docs/agents/testing.md).
+ */
+export function handleSnapshotCommands(
+  params: Parameters<typeof handleProductionSnapshotCommands>[0],
+): ReturnType<typeof handleProductionSnapshotCommands> {
+  if (!SNAPSHOT_ROUTE_RUNTIME_COMMANDS.has(params.req.command)) {
+    return handleProductionSnapshotCommands({
+      ...params,
+      platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+    });
+  }
+  const runtime = snapshotRuntimeFixture(params.req.meta?.requestId);
+  return handleProductionSnapshotCommands({
+    ...params,
+    inspectFacts: params.inspectFacts ?? runtime.inspectFacts,
+    bindDevice: params.bindDevice ?? runtime.bindDevice,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+  });
 }
