@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { test, vi } from 'vitest';
 import { getFlagDefinitions, getFlagDefinitionsForKey } from './cli-grammar/flag-registry.ts';
 import type { FlagDefinition, FlagKey } from './cli-grammar/flag-types.ts';
 import { listCommandMetadata } from './command-metadata.ts';
@@ -11,6 +12,15 @@ import { optionField } from './command-input.ts';
  * two hand-written copies and can only report that they already drifted; these
  * plant a divergence in the ONE declaration and require the derived surface to
  * follow it, which a second hand-written copy could not do.
+ *
+ * The plant therefore has to land BEFORE the surfaces are built. Command
+ * metadata — and the MCP tool schema built from it — is constructed at module
+ * load, so a plant applied afterwards would only prove that `optionField` reads
+ * its own argument: a command that went back to a hand-written
+ * `booleanField('…')` would still pass. `buildWithPlantedOption` resets the
+ * module graph, writes the divergence onto the declaration, and only then
+ * imports the builders, so what these tests observe is the production
+ * derivation running over the planted declaration.
  */
 
 function declarationFor(key: FlagKey): FlagDefinition {
@@ -21,29 +31,62 @@ function declarationFor(key: FlagKey): FlagDefinition {
   return definition;
 }
 
+function propertyOf(schema: JsonSchema, property: string, label: string): JsonSchema {
+  const found = schema.properties?.[property];
+  assert.ok(found, `expected ${label} to publish the ${property} input`);
+  return found;
+}
+
 function commandProperty(command: string, property: string): JsonSchema {
   const metadata = listCommandMetadata().find((entry) => entry.name === command);
   assert.ok(metadata, `expected metadata for ${command}`);
-  const schema = metadata.inputSchema.properties?.[property];
-  assert.ok(schema, `expected ${command} to publish the ${property} input`);
-  return schema;
+  return propertyOf(metadata.inputSchema, property, command);
 }
 
-function withPlantedDivergence<T>(
-  definition: FlagDefinition,
+type PlantedSurfaces = {
+  /** The command metadata table the CLI, the Node client and `explain` read. */
+  commandProperty(command: string, property: string): JsonSchema;
+  /** The MCP tool schema, built from that same metadata. */
+  toolProperty(tool: string, property: string): JsonSchema;
+};
+
+async function buildWithPlantedOption(
+  key: FlagKey,
   plant: Partial<FlagDefinition>,
-  body: () => T,
-): T {
-  const original = { ...definition };
-  Object.assign(definition, plant);
-  try {
-    return body();
-  } finally {
-    Object.assign(definition, original);
-  }
+): Promise<PlantedSurfaces> {
+  vi.resetModules();
+
+  // Plant first: nothing in this module graph has built a command yet.
+  const registry = await import('./cli-grammar/flag-registry.ts');
+  const declaration = registry
+    .getFlagDefinitionsForKey(key)
+    .find((candidate) => candidate.inputDescription !== undefined);
+  assert.ok(declaration, `expected ${key} to declare an inputDescription`);
+  Object.assign(declaration, plant);
+
+  // Build second: importing these runs the real derivation over the planted
+  // declaration. The mutation stays inside this discarded graph — the surfaces
+  // imported statically above never see it.
+  const { listCommandMetadata: listPlantedMetadata } = await import('./command-metadata.ts');
+  const { listCommandTools } = await import('../mcp/command-tools.ts');
+  const metadata = listPlantedMetadata();
+  const tools = listCommandTools();
+
+  return {
+    commandProperty(command, property) {
+      const entry = metadata.find((candidate) => candidate.name === command);
+      assert.ok(entry, `expected metadata for ${command}`);
+      return propertyOf(entry.inputSchema, property, command);
+    },
+    toolProperty(tool, property) {
+      const entry = tools.find((candidate) => candidate.name === tool);
+      assert.ok(entry, `expected an MCP tool for ${tool}`);
+      return propertyOf(entry.inputSchema, property, `the ${tool} tool`);
+    },
+  };
 }
 
-test('a derived field publishes the option declaration itself, not a second copy of it', () => {
+test('the shipped surfaces publish the option declaration itself, not a second copy of it', () => {
   for (const [command, property, key] of [
     ['open', 'foreground', 'foreground'],
     ['snapshot', 'customActions', 'snapshotCustomActions'],
@@ -56,34 +99,40 @@ test('a derived field publishes the option declaration itself, not a second copy
   }
 });
 
-test('planted prose divergence moves the derived field; a hand-written copy could not', () => {
-  const declaration = declarationFor('foreground');
-  const published = commandProperty('open', 'foreground').description;
+test('prose planted before the build moves every surface derived from the declaration', async () => {
+  const planted = 'Planted description for the derivation test.';
+  const shipped = declarationFor('foreground').inputDescription;
+  const surfaces = await buildWithPlantedOption('foreground', { inputDescription: planted });
 
-  const derived = withPlantedDivergence(
-    declaration,
-    { inputDescription: 'Planted description for the derivation test.' },
-    () => optionField('foreground').schema,
-  );
-
-  assert.equal(derived.description, 'Planted description for the derivation test.');
-  assert.notEqual(derived.description, published);
-  assert.equal(optionField('foreground').schema.description, published);
+  // Both surfaces were BUILT from the planted declaration. An `open` command
+  // that spelled its description out by hand would publish `shipped` here.
+  assert.notEqual(planted, shipped);
+  assert.equal(surfaces.commandProperty('open', 'foreground').description, planted);
+  assert.equal(surfaces.toolProperty('open', 'foreground').description, planted);
 });
 
-test('planted value-type divergence moves the derived field shape and its bounds', () => {
-  const declaration = declarationFor('snapshotCustomActions');
+test('a value type and bounds planted before the build move the derived field shape', async () => {
+  const planted = 'Planted custom-actions description for the derivation test.';
+  const surfaces = await buildWithPlantedOption('snapshotCustomActions', {
+    type: 'int',
+    min: 1,
+    max: 4,
+    inputDescription: planted,
+  });
 
-  const derived = withPlantedDivergence(
-    declaration,
-    { type: 'int', min: 1, max: 4 },
-    () => optionField('snapshotCustomActions').schema,
-  );
-
-  assert.equal(derived.type, 'integer');
-  assert.equal(derived.minimum, 1);
-  assert.equal(derived.maximum, 4);
-  assert.equal(optionField('snapshotCustomActions').schema.type, 'boolean');
+  // A hand-written `booleanField('…')` cannot follow either half of this.
+  assert.deepEqual(surfaces.commandProperty('snapshot', 'customActions'), {
+    type: 'integer',
+    description: planted,
+    minimum: 1,
+    maximum: 4,
+  });
+  assert.deepEqual(surfaces.toolProperty('snapshot', 'customActions'), {
+    type: 'integer',
+    description: planted,
+    minimum: 1,
+    maximum: 4,
+  });
 });
 
 test('an option with no declared tool audience cannot be derived into a field', () => {
@@ -120,6 +169,48 @@ test('the two audiences of one option are declared side by side and stay distinc
       declaration.usageDescription,
       declaration.inputDescription,
       `${key} declares two audiences; collapsing them to one string is a separate decision`,
+    );
+  }
+});
+
+/**
+ * The public SDK option types keep their editor documentation: a `.d.ts` is
+ * read in an editor, where nothing resolves a `FlagDefinition`, and this repo
+ * has no step that generates those docs. That documentation is not a second
+ * declaration of the option's behaviour, but it is the same sentence in a
+ * second place — so it is pinned: the JSDoc on the SDK field must be the
+ * option's own `inputDescription`, verbatim.
+ */
+const SDK_DOCUMENTED_OPTIONS = [
+  { key: 'foreground', file: 'packages/contracts/src/client-app.ts', field: 'foreground' },
+  {
+    key: 'snapshotCustomActions',
+    file: 'packages/contracts/src/client-capture.ts',
+    field: 'customActions',
+  },
+] as const;
+
+/** The JSDoc block immediately preceding `field?:`, unwrapped onto one line. */
+function sdkFieldDocumentation(source: string, field: string): string | undefined {
+  const block = new RegExp(String.raw`/\*\*((?:(?!\*/)[\s\S])*)\*/\s*${field}\?:`).exec(source);
+  if (!block?.[1]) return undefined;
+  return block[1]
+    .split('\n')
+    .map((line) => line.replace(/^\s*\*?/, '').trim())
+    .join(' ')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
+}
+
+test('each documented SDK option field carries its option declaration verbatim', () => {
+  for (const { key, file, field } of SDK_DOCUMENTED_OPTIONS) {
+    const source = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
+    const documented = sdkFieldDocumentation(source, field);
+    assert.ok(documented, `expected ${file} to document ${field} with a JSDoc block`);
+    assert.equal(
+      documented,
+      declarationFor(key).inputDescription,
+      `${file} must document ${field} with the ${key} declaration verbatim`,
     );
   }
 });
