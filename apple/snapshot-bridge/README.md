@@ -60,4 +60,6 @@ allows at most 32 native requests within the existing capture deadline,
 checks foreground ownership on every request, and returns a failure when it
 cannot complete a continuation. Budget exhaustion and malformed continuations
 use non-launch failure codes, so the route falls back without launch re-polling.
-Unchanged native dictionaries and child arrays are reused.
+At each native fragment boundary, an absent or invalid child count means unknown
+completeness and fails closed. Natural leaves above that boundary need no
+continuation evidence. Unchanged native dictionaries and child arrays are reused.

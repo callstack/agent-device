@@ -14,7 +14,7 @@ static const NSUInteger maximumRequests = 32;
 @property(nonatomic) NSUInteger requests;
 @property(nonatomic) BOOL truncated;
 - (nullable NSDictionary *)read:(id)element depth:(NSUInteger)depth error:(NSError **)error;
-- (nullable NSDictionary *)materialize:(NSDictionary *)tree depth:(NSUInteger)depth error:(NSError **)error;
+- (nullable NSDictionary *)materialize:(NSDictionary *)tree depth:(NSUInteger)depth nativeLevels:(NSUInteger)nativeLevels error:(NSError **)error;
 @end
 
 @implementation SnapshotTreeCapture
@@ -43,7 +43,7 @@ static const NSUInteger maximumRequests = 32;
   }
 }
 
-- (nullable NSDictionary *)materialize:(NSDictionary *)tree depth:(NSUInteger)depth error:(NSError **)error
+- (nullable NSDictionary *)materialize:(NSDictionary *)tree depth:(NSUInteger)depth nativeLevels:(NSUInteger)nativeLevels error:(NSError **)error
 {
   if (![tree isKindOfClass:NSDictionary.class] ||
       ![tree[attributesKey] isKindOfClass:NSDictionary.class] ||
@@ -59,7 +59,15 @@ static const NSUInteger maximumRequests = 32;
   self.remainingNodes--;
   NSArray *children = tree[childrenKey];
   NSNumber *childCount = tree[childCountKey];
-  BOOL withheld = [childCount isKindOfClass:NSNumber.class] && childCount.unsignedIntegerValue > children.count;
+  BOOL knownChildCount = [childCount isKindOfClass:NSNumber.class] && childCount.doubleValue >= 0 &&
+      childCount.doubleValue == (double)childCount.unsignedIntegerValue;
+  if (nativeLevels <= 1 && !knownChildCount && depth <= 1) self.truncated = YES;
+  if (depth > 1 && nativeLevels <= 1 && !knownChildCount) {
+    if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:6
+        userInfo:@{NSLocalizedDescriptionKey: @"snapshot boundary child count unavailable"}];
+    return nil;
+  }
+  BOOL withheld = knownChildCount && childCount.unsignedIntegerValue > children.count;
   if (depth <= 1 || self.remainingNodes == 0) {
     self.truncated |= children.count > 0 || withheld;
     if (children.count == 0) return tree;
@@ -76,6 +84,7 @@ static const NSUInteger maximumRequests = 32;
     }
     NSDictionary *continuation = [self read:element depth:depth error:error];
     if (!continuation) return nil;
+    nativeLevels = MIN(depth, self.acceptedDepth);
     children = continuation[childrenKey];
     if (![children isKindOfClass:NSArray.class] || children.count < MIN(childCount.unsignedIntegerValue, self.remainingNodes)) {
       if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:4
@@ -92,7 +101,7 @@ static const NSUInteger maximumRequests = 32;
       if (!materialized) materialized = [[children subarrayWithRange:NSMakeRange(0, index)] mutableCopy];
       break;
     }
-    NSDictionary *node = [self materialize:child depth:depth - 1 error:error];
+    NSDictionary *node = [self materialize:child depth:depth - 1 nativeLevels:(nativeLevels > 0 ? nativeLevels - 1 : 0) error:error];
     if (!node) return nil;
     if (node != child && !materialized) materialized = [[children subarrayWithRange:NSMakeRange(0, index)] mutableCopy];
     [materialized addObject:node];
@@ -114,7 +123,7 @@ NSDictionary *captureSnapshotTree(id element, NSUInteger maxDepth, NSUInteger ma
   capture.remainingNodes = maxNodes;
   capture.maximumNodes = maxNodes;
   NSDictionary *tree = [capture read:element depth:maxDepth + 1 error:error];
-  NSDictionary *result = tree ? [capture materialize:tree depth:maxDepth + 1 error:error] : nil;
+  NSDictionary *result = tree ? [capture materialize:tree depth:maxDepth + 1 nativeLevels:capture.acceptedDepth error:error] : nil;
   *truncated = capture.truncated;
   return result;
 }

@@ -85,10 +85,12 @@ static NSString *captureScenario;
                 @"UIAccessibilitySnapshotKeyChildrenCount": @(i < 6 ? 1 : 0),
                 @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]} mutableCopy];
     }
-    if ([captureScenario isEqual:@"depth-missing-element"]) {
+    if ([@[@"depth-missing-element", @"depth-missing-count", @"depth-invalid-count", @"depth-fractional-count", @"depth-nan-count", @"depth-negative-count"] containsObject:captureScenario] || ([captureScenario isEqual:@"depth-continuation-count"] && level > 0)) {
       NSMutableDictionary *frontier = tree;
       while ([frontier[@"UIAccessibilitySnapshotKeyChildren"] count]) frontier = [frontier[@"UIAccessibilitySnapshotKeyChildren"] firstObject];
-      [frontier removeObjectForKey:@"UIAccessibilitySnapshotKeyElement"];
+      if ([captureScenario isEqual:@"depth-missing-element"]) [frontier removeObjectForKey:@"UIAccessibilitySnapshotKeyElement"];
+      else if ([captureScenario isEqual:@"depth-missing-count"] || [captureScenario isEqual:@"depth-continuation-count"]) [frontier removeObjectForKey:@"UIAccessibilitySnapshotKeyChildrenCount"];
+      else frontier[@"UIAccessibilitySnapshotKeyChildrenCount"] = [captureScenario isEqual:@"depth-fractional-count"] ? @0.5 : [captureScenario isEqual:@"depth-nan-count"] ? @(NAN) : [captureScenario isEqual:@"depth-negative-count"] ? @(-1) : [NSNull null];
     }
     if ([captureScenario isEqual:@"depth-incomplete"] && level > 0) tree[@"UIAccessibilitySnapshotKeyChildren"] = @[];
     if ([captureScenario isEqual:@"depth-owner-change"] && level > 0) primaryApplication = replacementApplication;
@@ -160,7 +162,7 @@ int main(int argc, const char *argv[])
         if ([scenario hasPrefix:@"api-depth-"]) {
           require(levels == depth + 1, @"native levels must include the root exactly once");
           NSDictionary *tree = nil;
-          for (NSUInteger i = 0; i < levels; i++) tree = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]};
+          for (NSUInteger i = 0; i < levels; i++) tree = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildrenCount": [scenario isEqual:@"api-depth-unknown"] ? [NSNull null] : @(tree ? 1 : 0), @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]};
           return tree;
         }
         if ([element isEqual:@"root"]) return root;
@@ -171,7 +173,7 @@ int main(int argc, const char *argv[])
       else {
         NSUInteger count = 0;
         for (NSDictionary *node = result; node; node = [node[@"UIAccessibilitySnapshotKeyChildren"] firstObject]) count++;
-        require(count == depth + 1 && !truncated && requests == 1, @"every requested depth must include root plus permitted descendants");
+        require(count == depth + 1 && truncated == [scenario isEqual:@"api-depth-unknown"] && requests == 1, @"every requested depth must include root plus permitted descendants");
       }
       return 0;
     }
@@ -191,9 +193,9 @@ int main(int argc, const char *argv[])
       expectedCaptures = [scenario isEqual:@"wide-continuation"] ? 2 : 1;
     } else if ([scenario hasPrefix:@"depth-"]) {
       expectedCaptures = [scenario isEqual:@"depth-bound"] ? 5 : [scenario isEqual:@"depth-nodes"] ? 2 : 3;
-      if ([scenario isEqual:@"depth-missing-element"] || [scenario isEqual:@"depth-incomplete"]) {
+      if ([@[@"depth-missing-element", @"depth-incomplete", @"depth-missing-count", @"depth-invalid-count", @"depth-continuation-count", @"depth-fractional-count", @"depth-nan-count", @"depth-negative-count"] containsObject:scenario]) {
         expectedCode = @"snapshot-tree-malformed";
-        if ([scenario isEqual:@"depth-missing-element"]) expectedCaptures = 2;
+        if (![scenario isEqual:@"depth-incomplete"] && ![scenario isEqual:@"depth-continuation-count"]) expectedCaptures = 2;
       }
       if ([scenario isEqual:@"depth-owner-change"]) {
         replacementApplication = system;
