@@ -8,7 +8,7 @@ import {
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';

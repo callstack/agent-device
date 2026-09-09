@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   clearAndroidSnapshotFreshness,
   getActiveAndroidSnapshotFreshness,

@@ -1,5 +1,5 @@
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { SessionState } from '../session-state.ts';
 
 /**

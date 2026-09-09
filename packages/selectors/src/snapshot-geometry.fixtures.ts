@@ -1,12 +1,7 @@
 import fc from 'fast-check';
-import {
-  attachRefs,
-  type Rect,
-  type RawSnapshotNode,
-  type SnapshotNode,
-  type SnapshotState,
-  type SnapshotStateProvenance,
-} from '@agent-device/kernel/snapshot';
+import { attachRefs, type Rect, type SnapshotNode } from '@agent-device/kernel/snapshot';
+
+export { makeSnapshotState } from '@agent-device/capture-kit/snapshot-state-fixtures';
 
 /**
  * Run budget for every property in the unit suite. Properties share the unit
@@ -15,19 +10,6 @@ import {
  * a measured file duration.
  */
 export const PROPERTY_RUNS = 100;
-
-export function makeSnapshotState(
-  raw: RawSnapshotNode[],
-  // The provenance pair stays correlated: overrides carry it as one value, never as two
-  // independently typed fields.
-  overrides?: Omit<Partial<SnapshotState>, 'backend' | 'producer'> & SnapshotStateProvenance,
-): SnapshotState {
-  return {
-    nodes: attachRefs(raw),
-    createdAt: Date.now(),
-    ...overrides,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Rects / viewports

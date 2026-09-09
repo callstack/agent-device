@@ -1,7 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,

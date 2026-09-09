@@ -5,7 +5,7 @@ import {
   formatSelectorChainExpression,
   selectorChainArb,
 } from './__tests__/property-arbitraries.ts';
-import { PROPERTY_RUNS } from '../test-fixtures.ts';
+import { PROPERTY_RUNS } from '../snapshot-geometry.fixtures.ts';
 import { parseSelectorChain } from './parse.ts';
 import type { SelectorTerm } from './parse.ts';
 

@@ -306,16 +306,6 @@
       ]
     },
     {
-      "comment": "#2402: PROPERTY_RUNS, scrollingContainerTypeArb, distinctRectPairArb, and interactionTouchPointScenarioArb are the canonical snapshot/geometry fast-check fixtures both root and this package's tests build on; every consumer (packages/selectors/src/interaction-targeting.test.ts, interaction-touch-point.test.ts, internal/parse.test.ts, and root's wait-positionals.test.ts, kernel/snapshot-ref-grammar.test.ts, commands/replay/ad-script-round-trip.test.ts) is a test-tree file outside --production analysis. makeSnapshotState from the same module is not listed here — its *.fixtures.ts consumers keep it visible to --production analysis already.",
-      "file": "packages/selectors/src/test-fixtures.ts",
-      "exports": [
-        "PROPERTY_RUNS",
-        "scrollingContainerTypeArb",
-        "distinctRectPairArb",
-        "interactionTouchPointScenarioArb"
-      ]
-    },
-    {
       "comment": "Android mechanics facet: the package exports the complete named implementation seam for root/core/SDK consumers and package-owned tests; Fallow's production graph does not follow workspace subpath imports through the package exports map.",
       "file": "packages/platform-android/src/mechanics.ts",
       "exports": ["*"]

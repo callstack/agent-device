@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { preferOnscreenMatches } from '../find-match-ranking.ts';
 
 const VIEWPORT = { x: 0, y: 0, width: 390, height: 844 };

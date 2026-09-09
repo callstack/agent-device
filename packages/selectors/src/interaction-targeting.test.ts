@@ -6,7 +6,7 @@ import {
   makeSnapshotState,
   PROPERTY_RUNS,
   scrollingContainerTypeArb,
-} from './test-fixtures.ts';
+} from './snapshot-geometry.fixtures.ts';
 import {
   classifyActionableTouchCandidates,
   createActionableTouchResolver,

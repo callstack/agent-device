@@ -8,7 +8,7 @@ import {
   type CommandSessionStore,
 } from '../../../../../runtime.ts';
 import { ref } from '../../selector-read-utils.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 export function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([

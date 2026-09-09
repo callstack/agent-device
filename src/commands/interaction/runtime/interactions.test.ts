@@ -9,7 +9,7 @@ import {
   localCommandPolicy,
 } from '../../../runtime.ts';
 import type { Point } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   coveredByTabBarSnapshot,
   createInteractionDevice,

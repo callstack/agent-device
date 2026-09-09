@@ -9,7 +9,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 

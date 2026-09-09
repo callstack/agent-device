@@ -7,7 +7,7 @@ import {
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
 
 test('runtime wait stable settles after two unchanged captures', async () => {

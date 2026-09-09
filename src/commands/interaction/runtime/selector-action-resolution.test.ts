@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,

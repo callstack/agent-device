@@ -6,7 +6,7 @@ import {
   interactionTouchPointScenarioArb,
   makeSnapshotState,
   PROPERTY_RUNS,
-} from './test-fixtures.ts';
+} from './snapshot-geometry.fixtures.ts';
 import { resolveInteractionTouchPoint } from './interaction-touch-point.ts';
 
 function containsPoint(rect: Rect, point: Point): boolean {

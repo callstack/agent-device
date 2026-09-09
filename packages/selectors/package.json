@@ -4,7 +4,7 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19); `./parameterized-recorded-fill` parameterizes recorded fill payloads against their selectors; the interaction-resolution subpaths (`./selector-pipeline`, `./interaction-targeting`, `./interaction-touch-point`, `./press-retarget`, `./absence-observation*`, …) host the engine execution surface owned by the pipeline; `./test-fixtures` is the canonical home for snapshot/geometry test fixtures this package and root tests both build on.",
+  "description": "Shared selector matching, argument, and replay semantics for agent-device. `.` is string-only; `./ast` is the published parser surface behind `agent-device/selectors`; `./engine` is the resolve/list surface reserved for the selector-pipeline owner (R19); `./parameterized-recorded-fill` parameterizes recorded fill payloads against their selectors; the interaction-resolution subpaths (`./selector-pipeline`, `./interaction-targeting`, `./interaction-touch-point`, `./press-retarget`, `./absence-observation*`, …) host the engine execution surface owned by the pipeline; `./snapshot-geometry-fixtures` is the canonical home for the geometry/touch-point test fixtures this package and root tests both build on (it re-exports `makeSnapshotState` from `@agent-device/capture-kit/snapshot-state-fixtures`, its own canonical home).",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
@@ -72,9 +72,9 @@
       "types": "./src/selector-pipeline-policy.ts",
       "default": "./src/selector-pipeline-policy.ts"
     },
-    "./test-fixtures": {
-      "types": "./src/test-fixtures.ts",
-      "default": "./src/test-fixtures.ts"
+    "./snapshot-geometry-fixtures": {
+      "types": "./src/snapshot-geometry.fixtures.ts",
+      "default": "./src/snapshot-geometry.fixtures.ts"
     },
     "./touch-semantics": {
       "types": "./src/touch-semantics.ts",

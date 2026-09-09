@@ -1,5 +1,5 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 export function elementSettingsSnapshot(offscreenRowYs: number[]): SnapshotState {
   return makeSnapshotState(

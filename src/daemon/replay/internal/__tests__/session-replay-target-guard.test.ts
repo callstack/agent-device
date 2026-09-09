@@ -11,7 +11,7 @@ import type {
   TargetAnnotationV1,
 } from '@agent-device/contracts/replay';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   ref as interactionRef,
   selector,

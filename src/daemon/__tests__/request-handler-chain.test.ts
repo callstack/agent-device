@@ -9,7 +9,7 @@ import { getDaemonRouteOwnerFiles } from '../route-owner-files.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction/index.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';

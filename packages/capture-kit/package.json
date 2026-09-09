@@ -182,6 +182,10 @@
       "types": "./src/snapshot-state.ts",
       "default": "./src/snapshot-state.ts"
     },
+    "./snapshot-state-fixtures": {
+      "types": "./src/snapshot-state.fixtures.ts",
+      "default": "./src/snapshot-state.fixtures.ts"
+    },
     "./snapshot-timeout-policy": {
       "types": "./src/snapshot/snapshot-timeout-policy.ts",
       "default": "./src/snapshot/snapshot-timeout-policy.ts"

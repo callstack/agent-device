@@ -8,7 +8,7 @@ import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
 import type { SessionState } from './session-state.ts';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 const device: SessionState['device'] = {
   platform: 'apple',

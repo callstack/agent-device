@@ -3,7 +3,7 @@ import {
   type GesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '@agent-device/contracts/scroll-gesture';
-import { type Point, type RawSnapshotNode, type Rect } from '@agent-device/kernel/snapshot';
+import type { Point, RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
@@ -18,7 +18,7 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-regist
  * so a failure names a minimal input rather than the raw random one.
  *
  * `PROPERTY_RUNS` and the interaction touch-point/rect arbitraries live in
- * `@agent-device/selectors/test-fixtures` (#2402) — the canonical location
+ * `@agent-device/selectors/snapshot-geometry-fixtures` (#2402) — the canonical location
  * both this file and the selectors package build on.
  */
 

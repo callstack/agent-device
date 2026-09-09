@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { stableCaptureSignal, stableCaptureSignalsEqual } from './stable-capture-signal.ts';
 import { elementSettingsSnapshot } from './stable-capture.fixtures.ts';
 
