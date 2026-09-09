@@ -269,13 +269,17 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   }
 });
 
-test('an open whose generation already failed the bridge skips the launch-observation poll', async () => {
+test.each([
+  'application-server-unavailable',
+  'continuation-budget-exhausted',
+  'snapshot-tree-malformed',
+])('an open whose generation failed with %s skips the launch-observation poll', async (code) => {
   // #2199: `application-server-unavailable` is a launch-transition code, so an ungated probe would
   // re-read the bridge every 150 ms for its whole 5 s window on a generation the circuit already
   // gave up on — ~33 acquisitions per `open`, each a fresh connect.
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'transport-failure', code: 'application-server-unavailable' },
+    failure: { kind: 'transport-failure', code },
   });
   const route = createAppleSnapshotRoute(
     { ...platformRuntimeHostFixture(), clock: steppingClock() },

@@ -134,17 +134,20 @@ test('the last poll is capped to the remaining window', async () => {
   expect(sleeps.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(1_000);
 });
 
-test('a failure outside the launch transition ends the wait at once', async () => {
-  const { observe, acquire, sleep } = probe(
-    [failed('bridge-disconnected', 'transport-failure'), acquired()],
-    { now: () => 0, sleep: async () => {} },
-  );
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    'unobservable',
-  );
-  expect(acquire).toHaveBeenCalledOnce();
-  expect(sleep).not.toHaveBeenCalled();
-});
+test.each(['bridge-disconnected', 'continuation-budget-exhausted', 'snapshot-tree-malformed'])(
+  'a %s failure ends the launch wait at once',
+  async (code) => {
+    const { observe, acquire, sleep } = probe([failed(code, 'transport-failure'), acquired()], {
+      now: () => 0,
+      sleep: async () => {},
+    });
+    await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
+      'unobservable',
+    );
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  },
+);
 
 test('a generation whose bridge circuit is open is unobservable without a bridge round trip', async () => {
   const { observe, acquire, sleep, gate } = probe(
