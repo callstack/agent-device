@@ -8,7 +8,6 @@ export {
   TVOS_REMOTE_EVIDENCE,
   TVOS_REMOTE_TEST_NAME,
 } from '../command-coverage/evidence.ts';
-export type { TvOsPlatformCoverageEntry } from '../command-coverage/entries.ts';
 
 export const TVOS_REMOTE_SCENARIO_COMMANDS: readonly PublicCommand[] = [
   PUBLIC_COMMANDS.open,

@@ -8,7 +8,6 @@ export {
   LINUX_COVERAGE_GAP_ISSUE,
   LINUX_REPLAY_EVIDENCE,
 } from '../command-coverage/evidence.ts';
-export type { LinuxPlatformCoverageEntry } from '../command-coverage/entries.ts';
 
 /**
  * One primary, observable owner for every public command on the Linux desktop.

@@ -119,15 +119,6 @@ export type CommandCoverageDeclaration = {
 
 export type CoveragePlatform = keyof CommandCoverageDeclaration;
 
-export const COVERAGE_PLATFORMS = [
-  'androidEmulator',
-  'iosSimulator',
-  'macos',
-  'tvos',
-  'web',
-  'linux',
-] as const satisfies readonly CoveragePlatform[];
-
 export const androidEmulator = {
   live: (scenario: string, assertion: string): AndroidEmulatorCoverageEntry => ({
     assertion,

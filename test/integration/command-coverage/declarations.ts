@@ -39,7 +39,7 @@ const C = PUBLIC_COMMANDS;
  * a command added to the catalog without a row here fails type-checking, and each platform's
  * coverage smoke test fails the same omission at runtime.
  */
-export const COMMAND_COVERAGE_DECLARATIONS = {
+const COMMAND_COVERAGE_DECLARATIONS = {
   [C.artifacts]: {
     androidEmulator: androidEmulator.live(
       'full:observability-artifacts',

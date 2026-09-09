@@ -4,7 +4,6 @@ import { buildCoverageClassificationSummary } from '../support/coverage-classifi
 
 export { MACOS_COVERAGE_GAP_ISSUE } from '../command-coverage/evidence.ts';
 export { MACOS_LIVE_SCENARIOS } from './live-scenarios.ts';
-export type { MacOsPlatformCoverageEntry } from '../command-coverage/entries.ts';
 
 /**
  * One primary, observable owner for every public command on the local macOS host.

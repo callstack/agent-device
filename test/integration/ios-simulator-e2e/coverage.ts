@@ -1,8 +1,6 @@
 import { projectCoverage } from '../command-coverage/declarations.ts';
 import type { PublicCommand } from '../command-coverage/entries.ts';
 
-export type { IosSimulatorCoverageEntry } from '../command-coverage/entries.ts';
-
 /**
  * One primary owner for every public command on an iOS mobile simulator.
  *

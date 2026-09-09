@@ -2,8 +2,6 @@ import { projectCoverage } from '../command-coverage/declarations.ts';
 import type { PublicCommand } from '../command-coverage/entries.ts';
 import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 
-export type { AndroidEmulatorCoverageEntry } from '../command-coverage/entries.ts';
-
 /**
  * One primary, observable owner for every public command on an Android emulator.
  *

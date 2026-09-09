@@ -7,7 +7,6 @@ export {
   WEB_SMOKE_EVIDENCE,
   WEB_SMOKE_TEST_NAME,
 } from '../command-coverage/evidence.ts';
-export type { WebPlatformCoverageEntry } from '../command-coverage/entries.ts';
 
 /**
  * One primary, observable owner for every public command on the managed web target.
