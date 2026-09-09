@@ -3,9 +3,9 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   formatSelectorChainExpression,
-  PROPERTY_RUNS,
   selectorChainArb,
 } from './__tests__/property-arbitraries.ts';
+import { PROPERTY_RUNS } from '../test-fixtures.ts';
 import { parseSelectorChain } from './parse.ts';
 import type { SelectorTerm } from './parse.ts';
 

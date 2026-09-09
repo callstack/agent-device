@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
-import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 import { scenarioName } from './coverage-manifest.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';

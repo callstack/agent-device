@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { SELECTOR_RESOLUTION_POLICIES } from '@agent-device/selectors';
-import { makeSnapshotState } from './internal/__tests__/snapshot-builders.ts';
+import { makeSnapshotState } from './test-fixtures.ts';
 import {
   listSelectorPipelineMatches,
   resolveSelectorPipeline,

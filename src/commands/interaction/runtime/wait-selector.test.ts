@@ -7,7 +7,7 @@ import {
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 import { createFakeClock } from './__tests__/test-utils/index.ts';
 import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';

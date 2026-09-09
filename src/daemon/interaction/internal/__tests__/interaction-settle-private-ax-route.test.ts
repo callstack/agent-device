@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { makeSnapshotState } from '../../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';

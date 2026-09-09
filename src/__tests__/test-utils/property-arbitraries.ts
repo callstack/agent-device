@@ -3,13 +3,7 @@ import {
   type GesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import { SCROLL_DIRECTIONS, SWIPE_PRESETS } from '@agent-device/contracts/scroll-gesture';
-import {
-  attachRefs,
-  type Point,
-  type RawSnapshotNode,
-  type Rect,
-  type SnapshotNode,
-} from '@agent-device/kernel/snapshot';
+import { type Point, type RawSnapshotNode, type Rect } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
@@ -22,15 +16,11 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-regist
  *
  * fast-check reports the SHRUNK counterexample plus the seed/path to replay it,
  * so a failure names a minimal input rather than the raw random one.
+ *
+ * `PROPERTY_RUNS` and the interaction touch-point/rect arbitraries live in
+ * `@agent-device/selectors/test-fixtures` (#2402) — the canonical location
+ * both this file and the selectors package build on.
  */
-
-/**
- * Run budget for every property in the unit suite. Properties share the unit
- * slow-test budget (2.5s per file, see docs/agents/testing.md), so the count is
- * bounded here rather than per call site — raise it in one place, and only with
- * a measured file duration.
- */
-export const PROPERTY_RUNS = 100;
 
 /** Cheaper budget for properties whose single run does real work (diff, planning). */
 export const PROPERTY_RUNS_SMALL = 40;
@@ -76,119 +66,6 @@ const viewportRectArb: fc.Arbitrary<Rect> = fc.oneof(
     height: fc.integer({ min: 1, max: 2400 }),
   }),
 );
-
-export const scrollingContainerTypeArb = fc.constantFrom(
-  'XCUIElementTypeScrollView',
-  'XCUIElementTypeTable',
-  'XCUIElementTypeCollectionView',
-  'android.widget.ListView',
-  'androidx.recyclerview.widget.RecyclerView',
-);
-
-export const distinctRectPairArb: fc.Arbitrary<{ ancestor: Rect; target: Rect }> = fc
-  .record({
-    x: fc.integer({ min: -200, max: 200 }),
-    y: fc.integer({ min: -200, max: 200 }),
-    width: fc.integer({ min: 1, max: 1200 }),
-    height: fc.integer({ min: 1, max: 1200 }),
-  })
-  .chain((ancestor) =>
-    fc.constantFrom<keyof Rect>('x', 'y', 'width', 'height').map((field) => ({
-      ancestor,
-      target: { ...ancestor, [field]: ancestor[field] + 1 },
-    })),
-  );
-
-export type InteractionTouchPointScenario = {
-  nodes: SnapshotNode[];
-  permutedNodes: SnapshotNode[];
-  target: SnapshotNode;
-  bound: Rect;
-  competitorRects: Rect[];
-};
-
-const halfPixel = (value: number): number => value / 2;
-const touchPointAxisStepsArb = fc.oneof(
-  fc.integer({ min: 4, max: 46 }),
-  fc.integer({ min: 48, max: 800 }),
-);
-
-const touchPointTargetRectArb = fc
-  .record({
-    x: fc.integer({ min: -200, max: 200 }),
-    y: fc.integer({ min: -200, max: 200 }),
-    // Exercise dense desktop rows as well as standard mobile touch targets.
-    width: touchPointAxisStepsArb,
-    height: touchPointAxisStepsArb,
-  })
-  .map(({ x, y, width, height }) => ({
-    x: halfPixel(x),
-    y: halfPixel(y),
-    width: halfPixel(width),
-    height: halfPixel(height),
-  }));
-
-function containedRectArb(container: Rect): fc.Arbitrary<Rect> {
-  const widthSteps = Math.round(container.width * 2);
-  const heightSteps = Math.round(container.height * 2);
-  return fc
-    .record({
-      width: fc.integer({ min: 2, max: widthSteps - 2 }),
-      height: fc.integer({ min: 2, max: heightSteps - 2 }),
-    })
-    .chain(({ width, height }) =>
-      fc
-        .record({
-          x: fc.integer({ min: 0, max: widthSteps - width }),
-          y: fc.integer({ min: 0, max: heightSteps - height }),
-        })
-        .map(({ x, y }) => ({
-          x: container.x + halfPixel(x),
-          y: container.y + halfPixel(y),
-          width: halfPixel(width),
-          height: halfPixel(height),
-        })),
-    );
-}
-
-export const interactionTouchPointScenarioArb: fc.Arbitrary<InteractionTouchPointScenario> =
-  touchPointTargetRectArb.chain((targetRect) =>
-    fc
-      .tuple(
-        fc.array(containedRectArb(targetRect), { minLength: 1, maxLength: 6 }),
-        containedRectArb(targetRect),
-      )
-      .chain(([competitorRects, bound]) => {
-        const nodes = attachRefs([
-          {
-            index: 0,
-            depth: 0,
-            type: 'Link',
-            label: 'Generated parent',
-            rect: targetRect,
-            hittable: true,
-          },
-          ...competitorRects.map((rect, offset) => ({
-            index: offset + 1,
-            depth: 1,
-            parentIndex: 0,
-            type: 'Button',
-            label: `Generated child ${offset + 1}`,
-            rect,
-            hittable: true,
-          })),
-        ]);
-        return fc
-          .shuffledSubarray(nodes, { minLength: nodes.length, maxLength: nodes.length })
-          .map((permutedNodes) => ({
-            nodes,
-            permutedNodes,
-            target: nodes[0]!,
-            bound,
-            competitorRects,
-          }));
-      }),
-  );
 
 /** A point sampled from the viewport's own box, so most gestures are plannable. */
 function pointInViewportArb(viewport: Rect): fc.Arbitrary<Point> {

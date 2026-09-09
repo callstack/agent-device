@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { test } from 'vitest';
 import { isValidSelectorExpression, SELECTOR_KEY_NAMES } from '@agent-device/selectors';
-import { PROPERTY_RUNS } from './test-utils/property-arbitraries.ts';
+import { PROPERTY_RUNS } from '@agent-device/selectors/test-fixtures';
 import {
   parseWaitPositionals,
   resolveWaitBudgetMs,

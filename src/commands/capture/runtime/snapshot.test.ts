@@ -12,7 +12,7 @@ import {
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 
 test('runtime snapshot captures nodes and updates the session baseline', async () => {
   let stored: Parameters<CommandSessionStore['set']>[0] | undefined;

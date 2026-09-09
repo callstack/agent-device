@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';

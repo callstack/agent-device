@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeSnapshotState } from './internal/__tests__/snapshot-builders.ts';
+import { makeSnapshotState } from './test-fixtures.ts';
 import {
   absenceCaptureOptionMessage,
   absenceCaptureOptionRefusal,

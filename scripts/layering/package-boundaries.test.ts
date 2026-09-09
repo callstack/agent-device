@@ -629,9 +629,13 @@ test('the real tree parses, declares, and passes R11', () => {
   // `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
   // execution surface the core selector pipeline moved into this package —
   // one subpath per module so consumers pull only the stage they run; the
-  // `-fixtures` entry is the test-fixture surface (host-kit's
-  // `./audio-probe-fixtures` precedent). Any other subpath, or the AST
-  // leaking into `.`, fails here.
+  // `-fixtures` entries are the test-fixture surface (host-kit's
+  // `./audio-probe-fixtures` precedent) — `./interaction-targeting-fixtures`
+  // for the interaction-targeting node trees and `./test-fixtures` for the
+  // snapshot/geometry builders both this package's and root's tests build on
+  // (#2402, replacing the copy that used to live under root's
+  // `src/__tests__/test-utils/`). Any other subpath, or the AST leaking into
+  // `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/absence-observation',
@@ -648,6 +652,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/press-retarget',
     '@agent-device/selectors/selector-pipeline',
     '@agent-device/selectors/selector-pipeline-policy',
+    '@agent-device/selectors/test-fixtures',
     '@agent-device/selectors/touch-semantics',
   ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [

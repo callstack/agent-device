@@ -69,6 +69,9 @@ Before creating fixtures, look in `src/__tests__/test-utils/`. Import named buil
 that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`); avoid importing
 unrelated helpers through a barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact,
 and mocked-binary values belong in a sibling fixture module, not in repeated test literals.
+`makeSnapshotState`, `PROPERTY_RUNS`, and the interaction touch-point/rect arbitraries live in
+`@agent-device/selectors/test-fixtures` — the canonical location root tests and the selectors
+package both build on — not in `src/__tests__/test-utils/`.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a

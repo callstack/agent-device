@@ -8,7 +8,7 @@ import {
   tryResolveRefNode,
 } from './resolution.ts';
 import { resolveRecordedTarget } from '@agent-device/selectors';
-import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/test-fixtures';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import {
