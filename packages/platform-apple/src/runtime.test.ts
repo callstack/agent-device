@@ -9,6 +9,7 @@ import { listIosApps } from './core/app-resolution.ts';
 import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
+import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
@@ -219,6 +220,29 @@ test.each(Object.entries(leaves))(
     expectNavigationAndKeyboardFacts(binding, device);
   },
 );
+
+test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial', async () => {
+  for (const device of [leaves.macos, leaves.ios, leaves.tvos]) {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    const hoverDenial = {
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: HOVER_UNAVAILABLE_HINT,
+    };
+    expect(binding.facts.operations.hoverPoint).toEqual(hoverDenial);
+    expect(binding.facts.operations.hoverRef).toEqual(hoverDenial);
+    expect(binding.operations.hoverPoint).toBeTypeOf('undefined');
+    expect(binding.operations.hoverRef).toBeTypeOf('undefined');
+  }
+});
 
 /** Both the fact and the bound operation function agree on availability, for one operation. */
 function expectOperationAvailability(
