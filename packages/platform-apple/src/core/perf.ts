@@ -30,7 +30,6 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { readInfoPlistString } from './plist.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
-import { matchesAppleExecutableProcess, readProcessCommandToken } from './perf-process-identity.ts';
 import {
   findAllXmlNodes,
   findFirstXmlNode,
@@ -965,9 +964,15 @@ export async function readAppleProcessSamples(
   const result = isMacOs(device)
     ? await runAppleToolCommand('ps', args, { timeoutMs: APPLE_PERF_TIMEOUT_MS })
     : await runAppleSimulatorProcessCommand(args);
+  const { matchesAppleExecutableProcess } = await import('./perf-process-identity.ts');
   return parseApplePsOutput(result.stdout).filter((processInfo) =>
     matchesAppleExecutableProcess(processInfo.command, executable),
   );
+}
+
+function readProcessCommandToken(command: string): string {
+  const [token = ''] = command.trim().split(/\s+/, 1);
+  return token;
 }
 
 async function resolveAppleMemorySnapshotProcess(

@@ -4,7 +4,7 @@ export function matchesAppleExecutableProcess(
   command: string,
   executable: { executableName: string; executablePath?: string },
 ): boolean {
-  const token = readProcessCommandToken(command);
+  const [token = ''] = command.trim().split(/\s+/, 1);
   if (executable.executablePath) {
     for (const executablePath of buildAppleExecutablePathAliases(executable.executablePath)) {
       if (
@@ -28,9 +28,4 @@ function buildAppleExecutablePathAliases(executablePath: string): string[] {
     aliases.push(executablePath.replace('/var/', '/private/var/'));
   }
   return aliases;
-}
-
-export function readProcessCommandToken(command: string): string {
-  const [token = ''] = command.trim().split(/\s+/, 1);
-  return token;
 }
