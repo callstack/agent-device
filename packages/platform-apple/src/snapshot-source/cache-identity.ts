@@ -17,10 +17,13 @@ export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridge.m',
   'SnapshotBridgeRuntime.m',
   'SnapshotBridgeRuntime.h',
+  'SnapshotBridgeCapture.h',
+  'SnapshotBridgeCapture.m',
 ] as const;
 export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridge.m',
   'SnapshotBridgeRuntime.m',
+  'SnapshotBridgeCapture.m',
 ] as const;
 
 export async function fingerprintSnapshotBridgeSource(

@@ -143,6 +143,8 @@ final class RunnerTests: XCTestCase {
   // The injection records a real XCTIssue AFTER the real gesture, so
   // `xctestRecordedFailureResponse` and target invalidation fire byte-for-byte
   // like a field failure. Production builds compile none of this.
+  var textInputProbeIssueForTesting: XCTIssue?
+
   static let injectedTapFailureFlagPathForTesting =
     "/tmp/agent-device-inject-tap-recorded-failure-for-testing"
 
@@ -182,6 +184,7 @@ final class RunnerTests: XCTestCase {
   #endif
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
   // issues this session muted, so wedge investigations see the volume without grepping logs.
+  var textInputProbeIssues: TextInputProbeIssues?
   let suppressedIssueLock = NSLock()
   var suppressedAxSnapshotIssueCount = 0
   // Keep blocker actions narrow to avoid false positives from generic hittable containers.
@@ -221,6 +224,7 @@ final class RunnerTests: XCTestCase {
   /// outcomes stay honest through their own error paths — only this issue side-channel is
   /// muted. Everything else still records (and still drives XCTEST_RECORDED_FAILURE).
   override func record(_ issue: XCTIssue) {
+    if containTextInputProbeIssue(issue) { return }
     let description = issue.compactDescription
     if Self.isSuppressedAxSnapshotIssueDescription(description) {
       suppressedIssueLock.lock()

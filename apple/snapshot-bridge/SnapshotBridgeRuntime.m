@@ -5,6 +5,7 @@
  */
 
 #import "SnapshotBridgeRuntime.h"
+#import "SnapshotBridgeCapture.h"
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/message.h>
@@ -17,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.3";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.4";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -311,13 +312,26 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   BOOL automationEnabled = [self assertAutomationMode:YES];
   NSError *runtimeError = nil;
   id snapshot = nil;
+  BOOL acquisitionTruncated = NO;
   @try {
     if (![self isPrimaryForegroundProcess:pid]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-unverified", @"target app is not the primary foreground accessibility owner");
       finishRequestWatchdog(watchdog, watchdogState);
       return nil;
     }
-    snapshot = [_framework userTestingSnapshotForElement:(__bridge id)raw options:options error:&runtimeError];
+    snapshot = captureSnapshotTree((__bridge id)raw, maxDepth, maxNodes,
+        ^id(id element, NSUInteger depth, NSUInteger nodes, NSError **captureError) {
+          if (![self isPrimaryForegroundProcess:pid]) {
+            if (captureError) *captureError = [NSError errorWithDomain:@"agent-device.snapshot" code:5
+                userInfo:@{NSLocalizedDescriptionKey: @"foreground owner changed during continuation"}];
+            return nil;
+          }
+          NSMutableDictionary *bounded = [options mutableCopy];
+          bounded[@"maxDepth"] = @(depth);
+          bounded[@"maxChildren"] = @(nodes);
+          bounded[@"maxArrayCount"] = @(nodes);
+          return [_framework userTestingSnapshotForElement:element options:bounded error:captureError];
+        }, &acquisitionTruncated, &runtimeError);
     if (![self isPrimaryForegroundProcess:pid]) {
       if (error) *error = failureResponse(requestId, @"unsupported", @"foreground-owner-changed", @"foreground accessibility ownership changed during acquisition");
       finishRequestWatchdog(watchdog, watchdogState);
@@ -362,7 +376,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     @"ok" : @YES,
     @"pid" : @(pid),
     @"tree" : tree,
-    @"truncated" : @(truncated),
+    @"truncated" : @((BOOL)(truncated || acquisitionTruncated)),
     @"automationEnabled" : @(automationEnabled),
   };
 }

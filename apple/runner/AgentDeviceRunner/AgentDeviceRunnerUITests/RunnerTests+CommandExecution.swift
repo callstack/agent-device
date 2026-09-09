@@ -1795,7 +1795,7 @@ extension RunnerTests {
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
-          textInput = textInputAt(app: activeApp, x: x, y: y)
+          textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
           // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil

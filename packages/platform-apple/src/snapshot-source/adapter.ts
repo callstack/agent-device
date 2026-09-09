@@ -247,7 +247,7 @@ function truncationResidue(
   if (nodeCount >= limits.maxNodes) {
     return { kind: 'truncated', dimension: 'nodes', limit: limits.maxNodes };
   }
-  if (maxTraversalDepth >= maxDepth) {
+  if (maxTraversalDepth >= Math.max(0, maxDepth - 1)) {
     return { kind: 'truncated', dimension: 'depth', limit: maxDepth };
   }
   return { kind: 'truncated', dimension: 'payload', limit: limits.maxResponseBytes };

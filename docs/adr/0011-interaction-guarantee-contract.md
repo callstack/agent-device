@@ -326,3 +326,24 @@ Each step lands green and independently useful:
 - **More integration tests without the registry**: this is the status quo
   plus effort. Without the matrix as code, nothing forces a new path to
   acquire the existing suite, which is exactly how this week's bugs happened.
+
+### Optional observation before an iOS coordinate tap
+
+A coordinate tap must not depend on a preceding XCTest snapshot failure. Its
+optional text-input lookup may establish a concrete identity for a later bare
+`type`; an absent or unavailable lookup establishes no typing witness. A runner
+snapshot penalty can skip this work, but is only a performance optimization.
+
+The lookup owns a thread-bound issue scope in the runner recorder and returns a
+typed result. Any recorded issue, including one otherwise handled by AX suppression,
+discards partial candidates. The scope excludes gesture dispatch and required
+text-entry reads. Those failures retain the existing mutation-outcome rules.
+
+The iOS PR lane exercises a fresh runner with an unavailable probe, a suppressed
+AX issue with a matching candidate, healthy coordinate tap followed by typing,
+and failures outside the optional observation scope. These tests must not seed a
+snapshot penalty to make the first tap safe.
+
+The recorder consumes optional-read issues before forwarding to XCTest. XCTest's
+expected-failure API must not own this scope: in a long-lived command test it can
+complete the enclosing test even when the command response succeeds.

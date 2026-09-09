@@ -25,6 +25,8 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
   await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
   const fixture = createAdapterHost();
   const source = createSimulatorSnapshotSource({
     host: fixture.host,
@@ -74,6 +76,11 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(rawDepthOne.stage, 'acquired');
     assert.equal(fixture.requestedDepths.at(-1), 1);
+    assert.ok(
+      rawDepthOne.acquisition.residue.some(
+        (item) => item.kind === 'truncated' && item.dimension === 'depth',
+      ),
+    );
 
     fixture.responsePid = 999;
     const outcome = await source.acquire({
@@ -97,6 +104,8 @@ test('preparation consumes the same acquisition deadline as bridge I/O', async (
   await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
   const fixture = createAdapterHost(150);
   const source = createSimulatorSnapshotSource({ host: fixture.host, sourceRoot, cacheRoot });
   const request = createIosSnapshotRequest();
@@ -235,7 +244,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
             ok: true,
             pid: this.readResponsePid(),
             generation: request.generation,
-            truncated: false,
+            truncated: request.maxDepth === 1,
             automationEnabled: true,
             tree: {
               XC_kAXXCAttributeElementType: 'Application',

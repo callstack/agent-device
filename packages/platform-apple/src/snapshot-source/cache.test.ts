@@ -19,6 +19,8 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   await writeFile(sourceFile, 'native source v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime v1');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header v1');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header v1');
 
   let builds = 0;
   let xcodeVersion = 'Xcode 16.4\nBuild version 16F6';
@@ -127,6 +129,8 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
   await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
   let builds = 0;
   const host = createFakeBuildHost(async () => {
     builds += 1;
@@ -163,6 +167,8 @@ test('an aborted cache waiter does not cancel an independent preparation', async
   await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
   let builds = 0;
   let buildStarted!: () => void;
   const started = new Promise<void>((resolve) => {

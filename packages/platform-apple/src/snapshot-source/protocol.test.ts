@@ -122,7 +122,13 @@ test('snapshot bridge failures stay typed at the guest boundary', () => {
 
 test('wire vocabulary guard keeps TS and Objective-C literals aligned', async () => {
   const native = await Promise.all(
-    ['SnapshotBridge.m', 'SnapshotBridgeRuntime.m', 'SnapshotBridgeRuntime.h'].map((fileName) =>
+    [
+      'SnapshotBridge.m',
+      'SnapshotBridgeRuntime.m',
+      'SnapshotBridgeRuntime.h',
+      'SnapshotBridgeCapture.h',
+      'SnapshotBridgeCapture.m',
+    ].map((fileName) =>
       readFile(
         path.join(import.meta.dirname, '../../../../apple/snapshot-bridge', fileName),
         'utf8',
@@ -136,7 +142,7 @@ test('wire vocabulary guard keeps TS and Objective-C literals aligned', async ()
   assert.deepEqual(wireVocabulary.responseKeys, SNAPSHOT_SOURCE_RESPONSE_KEYS);
   assert.deepEqual(wireVocabulary.attributeKeys, SNAPSHOT_SOURCE_ATTRIBUTE_KEYS);
   assert.match(nativeSource, /kProtocolVersion = 1/);
-  assert.match(nativeSource, /kSourceVersion = @"agent-device-simulator-ax-v1\.5\.3"/);
+  assert.match(nativeSource, /kSourceVersion = @"agent-device-simulator-ax-v1\.5\.4"/);
   for (const key of [
     ...wireVocabulary.requestKeys,
     ...wireVocabulary.responseKeys,
