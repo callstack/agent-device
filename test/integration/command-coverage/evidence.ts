@@ -55,6 +55,10 @@ export const TVOS_AUDIO_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'tvOS audio capture availability follows the exact host-owned runtime fact',
 };
+export const APPLE_HOVER_DENIAL_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial',
+};
 
 export const WEB_SMOKE_TEST_NAME = 'live web platform e2e smoke';
 export const WEB_SMOKE_EVIDENCE: RepositoryEvidence = {
@@ -77,4 +81,8 @@ export const LINUX_PROVIDER_EVIDENCE: RepositoryEvidence = {
 export const LINUX_RUNTIME_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-linux/src/runtime.test.ts',
   test: 'classifies the Linux $name lifecycle denominator against the legacy dispatch cell',
+};
+export const LINUX_HOVER_DENIAL_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-linux/src/runtime.test.ts',
+  test: 'hover has no Linux interactor route; the touch family reports its typed denial',
 };
