@@ -19,12 +19,15 @@ import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-trans
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
+  createRunnerPhaseDeadline,
   ensureXctestrunArtifact,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
   prepareXctestrunWithEnv,
+  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerCacheProbeBudget,
+  type RunnerPhaseDeadline,
 } from './runner-xctestrun.ts';
 import {
   resolveRunnerRequestSignal,
@@ -110,11 +113,16 @@ export async function ensureRunnerSession(
   // from a retained-after-close runner no longer applies.
   cancelIosRunnerIdleStop(device.id);
   return await withRunnerSessionLock(device.id, async () => {
+    // One clock for the whole startup phase. The reuse check runs the same
+    // blocking toolchain probes the startup after it would, so a cold probe's
+    // stall is time the startup no longer has: everything below reads what this
+    // deadline has left rather than `startupTimeoutMs` again (#2422).
+    const phaseDeadline = createRunnerPhaseDeadline(options.startupTimeoutMs);
     const existing = runnerSessions.get(device.id);
     if (existing) {
       assertExpectedRunnerSession(existing, options.expectedRunnerSessionId);
       const reusable = await resolveReusableRunnerSession(device, existing, {
-        timeoutMs: options.startupTimeoutMs,
+        deadline: phaseDeadline,
         signal: resolveRunnerRequestSignal(options),
       });
       if (reusable) return reusable;
@@ -122,7 +130,7 @@ export async function ensureRunnerSession(
 
     return await withRunnerLeaseLock(
       device.id,
-      async () => await startRunnerSessionWithLease(device, options),
+      async () => await startRunnerSessionWithLease(device, options, phaseDeadline),
     );
   });
 }
@@ -130,6 +138,7 @@ export async function ensureRunnerSession(
 async function startRunnerSessionWithLease(
   device: DeviceInfo,
   options: RunnerSessionOptions,
+  phaseDeadline: RunnerPhaseDeadline | undefined,
 ): Promise<RunnerSession> {
   const startupTimings: Record<string, number> = {};
   // The owning request's abort signal so a client disconnect kills the blocking
@@ -155,6 +164,7 @@ async function startRunnerSessionWithLease(
     async () =>
       await tryAdoptRunnerSessionFromLease(device, {
         startupTimeoutMs: options.startupTimeoutMs,
+        phaseDeadline,
         expectedRunnerSessionId: options.expectedRunnerSessionId,
       }),
   );
@@ -185,6 +195,15 @@ async function startRunnerSessionWithLease(
       phase: 'ios_runner_startup_cleanup_stale_bundles_skipped',
     });
   }
+  // What the startup phase has left after the reuse probe, the adoption attempt
+  // and the pre-build cleanup. Read before the build rather than after it: the
+  // build answers to its own `buildTimeoutMs` deadline, so charging it to the
+  // startup budget as well would spend that budget twice over (#2422).
+  const startupTimeoutMs = requireRunnerPhaseRemainingMs(
+    phaseDeadline,
+    options.startupTimeoutMs,
+    'runner_session_startup',
+  );
   const xctestrunArtifact = await measureRunnerStartupStep(
     startupTimings,
     'ensure_xctestrun',
@@ -258,7 +277,7 @@ async function startRunnerSessionWithLease(
     child: runnerProcess.child,
     ready: false,
     startupRetryWake: runnerProcess.startupRetryWake,
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs),
+    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(startupTimeoutMs),
     startupTimings,
     logicalLeaseContext,
     simulatorSetRedirect: simulatorSetRedirect ?? undefined,

@@ -17,9 +17,11 @@ import {
   type RunnerLease,
 } from './runner-lease.ts';
 import {
+  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerCacheProbeBudget,
+  type RunnerPhaseDeadline,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
@@ -50,7 +52,17 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): 
 // lock, like the rest of session startup.
 export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
-  options: { startupTimeoutMs?: number; expectedRunnerSessionId?: string },
+  options: {
+    startupTimeoutMs?: number;
+    /**
+     * The startup phase's clock, shared with the caller. The fingerprint check
+     * below runs the same blocking toolchain probes a fresh startup would, so
+     * the adopted session must be given what those probes left rather than a
+     * fresh `startupTimeoutMs` (#2422).
+     */
+    phaseDeadline?: RunnerPhaseDeadline;
+    expectedRunnerSessionId?: string;
+  },
 ): Promise<RunnerSession | null> {
   if (device.kind !== 'simulator' || !isIosRunnerDetachEnabled()) return null;
   // Custom simulator sets run behind the XCTestDevices redirect, whose
@@ -88,7 +100,7 @@ export async function tryAdoptRunnerSessionFromLease(
     return skip('runner_pid_recycled');
   }
   const expectedDerived = resolveExpectedDerivedPath(device, {
-    timeoutMs: options.startupTimeoutMs,
+    deadline: options.phaseDeadline,
   });
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
@@ -156,7 +168,7 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { startupTimeoutMs?: number },
+  options: { startupTimeoutMs?: number; phaseDeadline?: RunnerPhaseDeadline },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
@@ -181,7 +193,13 @@ function buildAdoptedRunnerSession(
     child,
     // The probe already proved the runner answers commands.
     ready: true,
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs),
+    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
+      requireRunnerPhaseRemainingMs(
+        options.phaseDeadline,
+        options.startupTimeoutMs,
+        'runner_session_adoption',
+      ),
+    ),
     lease: buildRunnerLease({
       deviceId: device.id,
       sessionId,

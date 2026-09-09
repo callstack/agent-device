@@ -1416,7 +1416,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   assert.equal(rebuilt.artifact, 'rebuilt');
   assert.equal(rebuilt.reason, 'missing_xctestrun');
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs, 300_000);
+  assert.equal(Math.ceil(Number(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs) / 1e3), 300); // phase remainder (#2422)
 });
 
 test('ensureXctestrunArtifact rethrows unexpected cached macOS runner repair errors', async () => {

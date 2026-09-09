@@ -155,6 +155,15 @@ export type AppleRunnerHost = {
    * stamps rather than from the message text.
    */
   isCommandTimeoutError(error: unknown): boolean;
+  /**
+   * Ceiling on one toolchain identity probe attempt, in milliseconds
+   * (`COLD_TOOLCHAIN_PROBE_TIMEOUT_MS` in
+   * `packages/platform-apple/src/core/config.ts`, which owns it for both
+   * toolchain probers). It arrives through the port rather than by import so
+   * the runner's cache-metadata module, which every Apple façade evaluates,
+   * does not grow its eager import closure to read one number.
+   */
+  coldToolchainProbeTimeoutMs(): number;
   // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
@@ -285,6 +294,8 @@ export const requireExecSuccess: AppleRunnerHost['requireExecSuccess'] = (result
   requireHost().requireExecSuccess(result, message, extra);
 export const isCommandTimeoutError: AppleRunnerHost['isCommandTimeoutError'] = (error) =>
   requireHost().isCommandTimeoutError(error);
+export const coldToolchainProbeTimeoutMs: AppleRunnerHost['coldToolchainProbeTimeoutMs'] = () =>
+  requireHost().coldToolchainProbeTimeoutMs();
 export const emitDiagnostic: AppleRunnerHost['emitDiagnostic'] = (event) =>
   requireHost().emitDiagnostic(event);
 export const withDiagnosticTimer = <T>(

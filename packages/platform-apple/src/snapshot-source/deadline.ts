@@ -3,20 +3,28 @@ import { snapshotSourceError } from './errors.ts';
 
 export type SnapshotSourceDeadline = Readonly<{
   clock: Deadline;
+  /**
+   * The clock the deadline is read against. Injected so a test can prove that a
+   * step which blocked for the timeout it was handed leaves the next step only
+   * the remainder -- a fake that throws instantly moves no time and so cannot
+   * tell a shared budget from a fresh one (#2422).
+   */
+  now: () => number;
   signal: AbortSignal | undefined;
 }>;
 
 export function createSnapshotSourceDeadline(
   timeoutMs: number,
   signal: AbortSignal | undefined,
+  now: () => number = Date.now,
 ): SnapshotSourceDeadline {
   if (signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
-  return { clock: Deadline.fromTimeoutMs(timeoutMs), signal };
+  return { clock: Deadline.fromTimeoutMs(timeoutMs, now()), now, signal };
 }
 
 export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code: string): number {
   if (deadline.signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
-  const remainingMs = deadline.clock.remainingMs();
+  const remainingMs = deadline.clock.remainingMs(deadline.now());
   if (remainingMs <= 0) throw snapshotSourceError('timeout', code);
   return Math.max(1, Math.floor(remainingMs));
 }

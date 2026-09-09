@@ -6,7 +6,7 @@ import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions } from '../host.ts';
 import {
-  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  createRunnerPhaseDeadline,
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -15,19 +15,12 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-cache-metadata.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS as SNAPSHOT_SOURCE_COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../snapshot-source/cache-identity.ts';
+// The one owning module for the probe budget: this file's probes reach it
+// through the runner host port, snapshot-source imports it directly (#2422).
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../core/config.ts';
 import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();
-
-// This file's COLD_TOOLCHAIN_PROBE_TIMEOUT_MS is a deliberate local copy of
-// snapshot-source/cache-identity.ts's constant of the same name, not an
-// import of it -- see the doc comment on the export in
-// runner-cache-metadata.ts for why. This test is what keeps the two values
-// from drifting apart (#2422).
-test('COLD_TOOLCHAIN_PROBE_TIMEOUT_MS matches the copy in snapshot-source/cache-identity.ts', () => {
-  assert.equal(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, SNAPSHOT_SOURCE_COLD_TOOLCHAIN_PROBE_TIMEOUT_MS);
-});
 
 test('resolveRunnerMaxConcurrentDestinationsFlag uses simulator flag for simulators', () => {
   assert.equal(
@@ -316,15 +309,17 @@ describe('toolchain probe budget', () => {
     assert.equal(clock.nowMs, 45_000);
   });
 
-  test('an owning request with 4 s left gets one 4 s attempt and no retry', () => {
+  test('an owning phase with 4 s left gets one 4 s attempt and no retry', () => {
     const clock = installFakeToolchainClock();
+    const phaseDeadline = createRunnerPhaseDeadline(4_000);
     runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
       throw blockForWholeTimeout(clock, command, args, options);
     });
     runCmdSync.mockClear();
 
     assert.throws(
-      () => resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { timeoutMs: 4_000 }),
+      () =>
+        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { deadline: phaseDeadline }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'apple_toolchain_probe_unavailable');

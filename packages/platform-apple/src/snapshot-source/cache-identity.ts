@@ -1,30 +1,12 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
+// The per-attempt toolchain probe budget both Apple toolchain probers read; see
+// its doc comment there for the cold-start stall it is sized for (#2422).
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../core/config.ts';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
-
-/**
- * Per-call timeout for a toolchain identity probe (`xcodebuild -version`,
- * `xcrun --show-sdk-version`, `sw_vers`, `uname`, …). On a fresh macOS host,
- * Apple's syspolicyd signature scan blocks the very first `xcodebuild`/
- * `xcrun`/large-binary exec after boot for roughly 18 to 19 seconds at 0%
- * CPU; the second exec of the same tool is instant. A budget sized for a
- * warm toolchain (the old 10 s / 5 s split) trips on that cold-start stall
- * and reports a bogus toolchain-probe timeout unrelated to the change under
- * test (#2422).
- *
- * `runner/runner-cache-metadata.ts` needs this same budget but cannot import
- * it from here: this module is outside every platform-apple façade's eager
- * closure today, and importing it from `runner-cache-metadata.ts` would pull
- * `snapshot-source/*` into all of them (`scripts/__tests__/eager-closure-
- * budgets.ts`). It instead declares its own copy of this constant, checked
- * against this one for equality by a unit test
- * (`runner/__tests__/runner-cache-metadata.test.ts`) so the two cannot drift
- * apart.
- */
-export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
 
 export type SnapshotSourceToolchainIdentity = Readonly<{
   xcode: string;
@@ -124,9 +106,11 @@ async function toolOutput(
  * and the deadline still has room. The retry absorbs the cold-start
  * signature-verification stall named on COLD_TOOLCHAIN_PROBE_TIMEOUT_MS: the
  * first exec of a tool on a fresh host can block for that long, but the
- * immediate next exec of the same tool is instant. Only the exec layer's own
- * structured timeout counts -- a tool that failed by itself and merely said
- * "timed out" in its output is not this stall and is not retried.
+ * immediate next exec of the same tool is instant. Both attempts read one
+ * deadline, so the retry gets what the stall left rather than a fresh ceiling.
+ * Only the exec layer's own structured timeout counts -- a tool that failed by
+ * itself and merely said "timed out" in its output is not this stall and is not
+ * retried.
  */
 async function runToolchainProbe(
   host: SnapshotSourceHost,
@@ -159,5 +143,5 @@ function execToolchainProbe(
 }
 
 function toolchainProbeDeadlineHasRoom(deadline: SnapshotSourceDeadline): boolean {
-  return !deadline.signal?.aborted && deadline.clock.remainingMs() > 0;
+  return !deadline.signal?.aborted && deadline.clock.remainingMs(deadline.now()) > 0;
 }

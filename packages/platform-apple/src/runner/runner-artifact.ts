@@ -19,9 +19,11 @@ import {
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
+  createRunnerPhaseDeadline,
   emitRunnerXctestrunDecision,
   emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
+  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
@@ -31,6 +33,7 @@ import {
   resolveRunnerSigningBuildSettings,
   writeRunnerCacheMetadataForArtifacts,
   type ExistingXctestrunState,
+  type RunnerPhaseDeadline,
   type RunnerXctestrunCacheKind,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache.ts';
@@ -68,26 +71,33 @@ export type ExternalXctestRunnerOptions = {
   iosXctestEnvDir?: string;
 };
 
+/** What the build phase reads: its budget, where it logs, and how it is canceled. */
+type RunnerXctestrunBuildOptions = {
+  verbose?: boolean;
+  logPath?: string;
+  traceLogPath?: string;
+  buildTimeoutMs?: number;
+  signal?: AbortSignal;
+};
+
 export async function ensureXctestrunArtifact(
   device: DeviceInfo,
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
+  options: RunnerXctestrunBuildOptions & {
     forceRunnerXctestrunRebuild?: boolean;
-    signal?: AbortSignal;
   } & ExternalXctestRunnerOptions,
 ): Promise<RunnerXctestrunArtifact> {
   const external = resolveExternalXctestrunArtifact(options);
   if (external) return external;
 
   const projectRoot = findProjectRoot();
-  // The cache decision runs blocking toolchain probes before any build starts,
-  // so it spends this request's build budget and must answer to it: the same
-  // deadline and abort signal the build itself would get (#2422).
+  // One clock for the whole build phase. The cache decision runs blocking
+  // toolchain probes before any build starts, so a cold probe's stall is time
+  // the build no longer has: both read this deadline rather than each starting
+  // from a fresh copy of `buildTimeoutMs` (#2422). The cache lock, the reuse
+  // evaluation, and the cleanup between them are on it too.
+  const phaseDeadline = createRunnerPhaseDeadline(options.buildTimeoutMs);
   const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot, {
-    timeoutMs: options.buildTimeoutMs,
+    deadline: phaseDeadline,
     signal: options.signal,
   });
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
@@ -97,6 +107,7 @@ export async function ensureXctestrunArtifact(
       return await ensureXctestrunUnderCacheLock({
         device,
         options,
+        phaseDeadline,
         projectRoot,
         expectedCacheMetadata,
         derived,
@@ -153,19 +164,14 @@ function resolveExternalXctestDerivedDataPath(xctestrunPath: string): string {
 
 async function ensureXctestrunUnderCacheLock(params: {
   device: DeviceInfo;
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  };
+  options: RunnerXctestrunBuildOptions;
+  phaseDeadline: RunnerPhaseDeadline | undefined;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
   forceRebuild: boolean;
 }): Promise<RunnerXctestrunArtifact> {
-  const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
+  const { device, options, phaseDeadline, projectRoot, expectedCacheMetadata, derived } = params;
   cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
   const existing = await evaluateExistingXctestrunForDevice({
     device,
@@ -193,6 +199,7 @@ async function ensureXctestrunUnderCacheLock(params: {
   return await buildXctestrunArtifact({
     device,
     options,
+    phaseDeadline,
     projectRoot,
     expectedCacheMetadata,
     derived,
@@ -229,33 +236,46 @@ async function resolveReusableXctestrunArtifact(params: {
 
 async function buildXctestrunArtifact(params: {
   device: DeviceInfo;
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  };
+  options: RunnerXctestrunBuildOptions;
+  phaseDeadline: RunnerPhaseDeadline | undefined;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
   cache: RunnerXctestrunArtifact['cache'];
   reason: ExistingXctestrunState['reason'];
 }): Promise<RunnerXctestrunArtifact> {
-  const { device, options, projectRoot, expectedCacheMetadata, derived, cache, reason } = params;
+  const {
+    device,
+    options,
+    phaseDeadline,
+    projectRoot,
+    expectedCacheMetadata,
+    derived,
+    cache,
+    reason,
+  } = params;
   const projectPath = resolveAppleRunnerProjectPath(projectRoot);
 
   if (!fs.existsSync(projectPath)) {
     throw new AppError('COMMAND_FAILED', 'iOS runner project not found', { projectPath });
   }
 
+  // What the phase has left after the toolchain probes, the cache lock, and the
+  // reuse evaluation -- computed before the build announces itself, so a phase
+  // already spent fails here instead of starting an xcodebuild it would have to
+  // kill at once (#2422).
+  const buildTimeoutMs = requireRunnerPhaseRemainingMs(
+    phaseDeadline,
+    options.buildTimeoutMs,
+    'runner_xctestrun_build',
+  );
   const buildStartedAt = Date.now();
   emitRequestProgress({
     type: 'command',
     status: 'progress',
     message: 'Building Apple runner...',
   });
-  await buildRunnerXctestrun(device, projectPath, derived, options);
+  await buildRunnerXctestrun(device, projectPath, derived, { ...options, buildTimeoutMs });
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 
   const built = findXctestrun(derived, device);
@@ -461,13 +481,7 @@ async function buildRunnerXctestrun(
   device: DeviceInfo,
   projectPath: string,
   derived: string,
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  },
+  options: RunnerXctestrunBuildOptions,
 ): Promise<void> {
   const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
