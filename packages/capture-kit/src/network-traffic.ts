@@ -48,6 +48,7 @@ export function mergeNetworkDumps(
     ...primary,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
+    unnamedRequests: Math.max(primary.unnamedRequests ?? 0, secondary.unnamedRequests ?? 0),
   });
 }
 
@@ -67,6 +68,7 @@ export function readRecentNetworkTrafficFromText(
       scannedLines: 0,
       matchedLines: 0,
       entries: Object.freeze([]),
+      unnamedRequests: 0,
       include,
       limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
     });
@@ -97,6 +99,9 @@ export function readRecentNetworkTrafficFromText(
     scannedLines: lines.length,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
+    unnamedRequests: cfNetworkConnections
+      ? countUnnamedCfNetworkRequests(lines, cfNetworkConnections)
+      : 0,
     include,
     limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
   });
@@ -313,6 +318,24 @@ function parseCfNetworkReusedTaskIdentity(
     durationMs: readCfNetworkCount(fields.get('transaction_duration_ms')),
     pathUnavailable: true,
   };
+}
+
+function countUnnamedCfNetworkRequests(
+  lines: readonly string[],
+  index: CfNetworkConnectionIndex,
+): number {
+  let unnamed = 0;
+  for (const [lineIndex, line] of lines.entries()) {
+    if (!line.includes('summary for task')) continue;
+    const summary = CFNETWORK_TASK_SUMMARY.exec(line);
+    if (!summary) continue;
+    const fields = readCfNetworkSummaryFields(summary[1] as string);
+    if (fields.get('reused') !== '1') continue;
+    const connection = fields.get('connection');
+    if (connection !== undefined && resolveCfNetworkOrigin(index, connection, lineIndex)) continue;
+    unnamed += 1;
+  }
+  return unnamed;
 }
 
 function resolveCfNetworkOrigin(

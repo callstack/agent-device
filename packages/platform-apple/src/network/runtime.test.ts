@@ -210,3 +210,50 @@ function unusedAppLogHost(): Omit<
     'appleTools' | 'commands' | 'appLogs' | 'networkTransports'
   >;
 }
+
+// Real iOS simulator lines: `/init` reused the connection `/v4/messages/en_US`
+// opened, and CFNetwork logged no URL for it.
+const CONNECTION_START =
+  '2026-09-09 18:22:27.805 Df app[1:2] [com.apple.network:connection] [C9 EA66F890 Hostname#c6f77afc:3040 tcp, url: http://localhost:3040/v4/messages/en_US, definite] start';
+const REUSED_SUMMARY =
+  '2026-09-09 18:22:28.167 Df app[1:2] [com.apple.CFNetwork:Summary] Task <2FAEF670>.<2> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1, request_bytes=236, response_bytes=624}';
+
+test('a keep-alive request reported against its origin does not silence lifecycle guidance', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: `${[CONNECTION_START, REUSED_SUMMARY].join('\n')}\n`,
+      runSimctl: vi.fn(),
+    }),
+    simulator,
+    input({ appLogSnapshot: { state: 'ended', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.notes).toEqual([
+    expect.stringContaining('Session app log stream is inactive'),
+    expect.stringContaining('reused a keep-alive connection'),
+  ]);
+  expect(result.notes[1]).toContain('1 listed against the origin');
+});
+
+test('a keep-alive request whose connection predates the window keeps the dump from reading empty', async () => {
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: `${REUSED_SUMMARY}\n`,
+      runSimctl: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 1 })),
+    }),
+    simulator,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toEqual([]);
+  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.notes).toEqual([
+    expect.stringContaining('1 opened before this scan window'),
+    expect.stringContaining('No HTTP(s) entries were found'),
+  ]);
+  expect(result.notes[0]).toContain('does not prove it was not called');
+});

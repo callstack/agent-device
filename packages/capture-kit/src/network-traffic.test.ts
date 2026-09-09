@@ -65,6 +65,7 @@ test('keeps missing canonical app-log text distinct and merges recovery first', 
     scannedLines: 0,
     matchedLines: 0,
     entries: [],
+    unnamedRequests: 0,
     include: 'summary',
     limits: { maxEntries: 2, maxPayloadChars: 2048, maxScanLines: 100 },
   });
@@ -220,11 +221,32 @@ test('a reused request that never got a status drops the CFNetwork sentinel', ()
 });
 
 test('android dumps do not pay for CFNetwork correlation', () => {
-  const dump = readRecentNetworkTrafficFromText(`${REUSED_SUMMARY}\n`, {
+  const lines = `${[CONNECTION_START, REUSED_SUMMARY].join('\n')}\n`;
+  assert.equal(iosDump([CONNECTION_START, REUSED_SUMMARY]).entries.length, 2);
+
+  const dump = readRecentNetworkTrafficFromText(lines, {
     path: 'app.log',
     exists: true,
     backend: 'android',
   });
 
+  assert.deepEqual(
+    dump.entries.map((entry) => entry.url),
+    ['http://localhost:3040/v4/messages/en_US'],
+  );
+  assert.equal(dump.unnamedRequests, 0);
+});
+
+test('a reused request whose connection opened before the window is counted, not dropped', () => {
+  const dump = iosDump([REUSED_SUMMARY]);
+
   assert.deepEqual(dump.entries, []);
+  assert.equal(dump.unnamedRequests, 1);
+});
+
+test('a resolved reused request is named, not counted as unnamed', () => {
+  const dump = iosDump([CONNECTION_START, OPENING_SUMMARY, REUSED_SUMMARY]);
+
+  assert.equal(dump.unnamedRequests, 0);
+  assert.equal(dump.entries.filter((entry) => entry.pathUnavailable).length, 1);
 });

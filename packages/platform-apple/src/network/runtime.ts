@@ -36,8 +36,8 @@ export async function dumpAppleNetworkTraffic(
       }
     }
   }
-  appendUnnamedRequestNote(notes, dump);
   appendLifecycleNote(notes, device, input);
+  appendUnnamedRequestNote(notes, dump);
   if (dump.entries.length === 0) notes.push(noEntriesNote(device));
   return Object.freeze({ source: 'app-log', backend, dump, notes: Object.freeze(notes) });
 }
@@ -121,11 +121,25 @@ function buildPredicate(appBundleId: string): string {
  * being read off a dump that could not name every request it observed.
  */
 function appendUnnamedRequestNote(notes: string[], dump: NetworkDump): void {
-  const unnamed = dump.entries.filter((entry) => entry.pathUnavailable).length;
-  if (unnamed === 0) return;
-  notes.push(
-    `${unnamed} request${unnamed === 1 ? '' : 's'} reused a keep-alive connection, so CFNetwork logged no request URL. ${unnamed === 1 ? 'It is' : 'They are'} listed against the origin the connection was opened for, without a path: absence of an endpoint in this dump does not prove it was not called.`,
-  );
+  const againstOrigin = dump.entries.filter((entry) => entry.pathUnavailable).length;
+  const unresolved = dump.unnamedRequests ?? 0;
+  const observed = againstOrigin + unresolved;
+  if (observed === 0) return;
+  const parts = [
+    `${observed} request${observed === 1 ? '' : 's'} reused a keep-alive connection, so CFNetwork logged no request URL.`,
+  ];
+  if (againstOrigin > 0) {
+    parts.push(
+      `${againstOrigin} listed against the origin the connection was opened for, without a path.`,
+    );
+  }
+  if (unresolved > 0) {
+    parts.push(
+      `${unresolved} opened before this scan window and are missing from the entries entirely; scan more lines, or run logs clear --restart before the repro.`,
+    );
+  }
+  parts.push('Absence of an endpoint in this dump does not prove it was not called.');
+  notes.push(parts.join(' '));
 }
 
 function appendLifecycleNote(notes: string[], device: DeviceInfo, input: NetworkDumpInput): void {
