@@ -147,6 +147,7 @@ jobs:
 
       - name: Run targeted iOS runner XCTest regressions
         run: |
+          set -o pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
           xcodebuild test-without-building \
@@ -164,6 +165,12 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEmptyReplacementWithoutResolvableTargetFailsClosed \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFreshCoordinateTapContainsUnavailableTextInputProbe \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeIssueScopeIsThreadBound \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbePreservesEnclosingRunnerWait \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSuppressedAxIssueMakesTextInputProbeUnavailable \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHealthyCoordinateTapPreservesBareTypingWitness \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeContainmentExcludesRequiredReadsAndLaterIssues \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTextInputCandidateMustBeEnabledAndContainTheTouchPoint \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication \
@@ -234,7 +241,14 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers 2>&1 | tee /tmp/agent-device-runner-regressions.log
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const log = readFileSync("/tmp/agent-device-runner-regressions.log", "utf8");
+            if (!/\] AGENT_DEVICE_RUNNER_OPTIONAL_PROBE_WAIT_COMPLETED$/m.test(log)) {
+              throw new Error("Optional observation ended the runner test before its wait completed");
+            }
+          '
 
       - name: Preflight iOS runner through public CLI
         run: |
