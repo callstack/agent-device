@@ -55,7 +55,7 @@ const HANDLER_CHAIN_FILE = 'src/daemon/request-handler-chain.ts';
  * needs — command name to owning scenario — so this lane does not depend on the rest of that
  * manifest's vocabulary, and reports honestly when it is not in the tree yet.
  */
-const LIVE_COVERAGE_MANIFEST = 'test/integration/ios-simulator-e2e/coverage-manifest.ts';
+const LIVE_COVERAGE_MANIFEST = 'test/integration/ios-simulator-e2e/coverage.ts';
 const LIVE_COVERAGE_EXPORT = 'IOS_SIMULATOR_E2E_COVERAGE';
 
 type LiveCoverageEntry = { level: string; owner: unknown; assertion: string };

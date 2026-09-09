@@ -12,7 +12,7 @@ import {
   WEB_SMOKE_EVIDENCE,
   WEB_SMOKE_TEST_NAME,
   liveCommandsForWebSmoke,
-} from './web-e2e/coverage-manifest.ts';
+} from './web-e2e/coverage.ts';
 import { runCleanupWithCoverageReport, writeCoverageReport } from './web-e2e/coverage-report.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();

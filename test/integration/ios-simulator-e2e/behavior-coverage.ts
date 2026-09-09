@@ -23,8 +23,8 @@ type BehaviorCoverageEntry =
 
 /**
  * Cross-command mobile usage patterns requested by #320. Command ownership
- * remains exhaustive in coverage-manifest.ts; this table prevents that
- * command-level view from hiding missing end-to-end journeys.
+ * remains exhaustive in the command coverage declarations; this table prevents
+ * that command-level view from hiding missing end-to-end journeys.
  */
 export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
   'cold-start-deep-link-navigation': {

@@ -11,7 +11,7 @@ import {
   MACOS_PLATFORM_COVERAGE,
   MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   liveCommandsForScenario,
-} from './macos-e2e/coverage-manifest.ts';
+} from './macos-e2e/coverage.ts';
 import { writeCoverageReport } from './macos-e2e/coverage-report.ts';
 
 test('macOS coverage exhaustively classifies the public catalog', () => {

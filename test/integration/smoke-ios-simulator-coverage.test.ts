@@ -17,7 +17,7 @@ import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-co
 import {
   IOS_SIMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
-} from './ios-simulator-e2e/coverage-manifest.ts';
+} from './ios-simulator-e2e/coverage.ts';
 import { collectPagedEventTimeline } from './live-device-e2e/event-timeline.ts';
 import { findMissingFixtureIdentifiers } from './ios-simulator-e2e/fixture-identifier-coverage.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';

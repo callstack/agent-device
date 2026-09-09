@@ -10,7 +10,7 @@ import {
   ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
   ANDROID_EMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
-} from './android-emulator-e2e/coverage-manifest.ts';
+} from './android-emulator-e2e/coverage.ts';
 import { assertCoverageComplete } from './android-emulator-e2e/live-coverage-report.ts';
 import { scenarioIdsFromEnv } from './android-emulator-e2e/live-runner.ts';
 import {

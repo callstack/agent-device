@@ -63,7 +63,7 @@ test('the macOS coverage manifest selects its executable gate and macOS replay l
     'macos-coverage',
     'replay-macos',
   ]);
-  assert.deepEqual(lanes('test/integration/macos-e2e/coverage-manifest.ts'), [
+  assert.deepEqual(lanes('test/integration/macos-e2e/coverage.ts'), [
     'macos-coverage',
     'replay-macos',
   ]);

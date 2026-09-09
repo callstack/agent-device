@@ -14,7 +14,7 @@ import {
   TVOS_REMOTE_EVIDENCE,
   TVOS_REMOTE_SCENARIO_COMMANDS,
   TVOS_REMOTE_TEST_NAME,
-} from './tvos-e2e/coverage-manifest.ts';
+} from './tvos-e2e/coverage.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 

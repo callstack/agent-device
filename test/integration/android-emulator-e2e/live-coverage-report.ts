@@ -9,7 +9,7 @@ import {
 import {
   ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
   liveCommandsForScenario,
-} from './coverage-manifest.ts';
+} from './coverage.ts';
 import type { LiveContext } from './live-harness.ts';
 
 export function assertCoverageComplete(

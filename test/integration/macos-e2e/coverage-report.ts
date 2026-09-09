@@ -5,7 +5,7 @@ import {
   MACOS_LIVE_SCENARIOS,
   MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   liveCommandsForScenario,
-} from './coverage-manifest.ts';
+} from './coverage.ts';
 
 export function writeCoverageReport(artifactDir: string): string {
   fs.mkdirSync(artifactDir, { recursive: true });

@@ -13,7 +13,7 @@ import {
   LINUX_REPLAY_EVIDENCE,
   liveCommandsForLinuxCommandEvidence,
   liveCommandsForLinuxReplay,
-} from './linux-e2e/coverage-manifest.ts';
+} from './linux-e2e/coverage.ts';
 import {
   LINUX_COMMAND_EVIDENCE_COMMANDS,
   LINUX_COMMAND_EVIDENCE_SCRIPT,

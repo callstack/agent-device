@@ -11,7 +11,7 @@ import {
   type LiveDeviceContext,
 } from '../live-device-e2e/runtime.ts';
 import type { IosSimulatorBehaviorId } from './behavior-coverage.ts';
-import { liveCommandsForScenario } from './coverage-manifest.ts';
+import { liveCommandsForScenario } from './coverage.ts';
 import { liveBehaviorsForScenario, writeCoverageReport } from './live-coverage-report.ts';
 
 export { assertCoverageComplete, writeCoverageReport } from './live-coverage-report.ts';
