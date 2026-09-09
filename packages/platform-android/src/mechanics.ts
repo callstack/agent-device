@@ -190,10 +190,22 @@ export {
   formatAndroidInstalledPackageRequiredMessage,
   type AndroidAppTargetKind,
 } from './open-target.ts';
-export {
-  inferAndroidPackageAfterOpen,
-  resolveAndroidPackageForOpen,
-} from './open-target-resolution.ts';
+export async function resolveAndroidPackageForOpen(
+  ...args: Parameters<typeof import('./open-target-resolution.ts').resolveAndroidPackageForOpen>
+): Promise<
+  Awaited<ReturnType<typeof import('./open-target-resolution.ts').resolveAndroidPackageForOpen>>
+> {
+  const { resolveAndroidPackageForOpen: load } = await import('./open-target-resolution.ts');
+  return await load(...args);
+}
+export async function inferAndroidPackageAfterOpen(
+  ...args: Parameters<typeof import('./open-target-resolution.ts').inferAndroidPackageAfterOpen>
+): Promise<
+  Awaited<ReturnType<typeof import('./open-target-resolution.ts').inferAndroidPackageAfterOpen>>
+> {
+  const { inferAndroidPackageAfterOpen: load } = await import('./open-target-resolution.ts');
+  return await load(...args);
+}
 export {
   resetAndroidFramePerfStats,
   sampleAndroidFramePerf,
