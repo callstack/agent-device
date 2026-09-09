@@ -47,10 +47,13 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      device refresh, and open-hint policy. Root composition supplies request-local inventory
      and its error classifier; `packages/platform-apple` owns the probes. The three consumers
      are daemon-policy-essential. Selector production and lifecycle participation stay separate.
-   - **#2333** — lifecycle participation of platform resource owners
-     (`daemon-runtime.ts` → `platform-runtime-apple-runner-owner.ts`,
-     `platform-runtime-resource-cleanup.ts`, and the dynamic
-     `platform-runtime-operation-host.ts` import).
+   - **#2333 (done)** — lifecycle participation of platform resource owners. The
+     `apple-runner-owner` and `operation-host` edges are retired; `daemon-runtime.ts` now holds
+     only the typed `PlatformOwnerLifecycle` contract (`src/daemon/platform-owner-lifecycle.ts`),
+     composed at the root by `platform-runtime-daemon-lifecycle.ts`, which is the sole importer of
+     the Apple runner owner, the Android snapshot-helper and Web orphan cleanups, and legacy
+     app-log marker recovery. The `resource-cleanup` edge stays, reclassified
+     composition-essential and carrying only `platformResourceCleanup`.
    - **#2334** — open-target planning separated from platform mechanics
      (`session-open-prepare.ts`, `session-selector-dispatch.ts` →
      `platform-runtime-open-target.ts`), blocked by #2332.
@@ -117,5 +120,5 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
   `scripts/layering/check.ts` (both observed red against planted violations before acceptance).
 - R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
 - R65 for the concrete-platform-import ban this audit builds on.
-- Child issues #2333, #2334 (and #2273/#2274 for the selector seam) for the remaining category-3
-  implementation work.
+- Child issue #2334 (and #2273/#2274 for the selector seam) for the remaining category-3
+  implementation work; #2333 landed (see §2.2).
