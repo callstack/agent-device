@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLaunchObservationProbe } from './snapshot-observability.ts';
 import type { SnapshotSourceFailure, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
@@ -154,6 +158,30 @@ test('a generation whose bridge circuit is open is unobservable without a bridge
   expect(gate).toHaveBeenCalledWith(target);
   expect(acquire).not.toHaveBeenCalled();
   expect(sleep).not.toHaveBeenCalled();
+});
+
+test('the skip is reported, so a live run can tell it from an unresolvable target', async () => {
+  // Both verdicts are `unobservable` with zero acquisitions; only the diagnostic separates a
+  // circuit skip from a target that never resolved.
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    const skipped = probe([acquired()], { now: () => 0, sleep: async () => {} }, () => true);
+    await skipped.observe.awaitObservable(simulator, 'com.example.app', signal());
+    expect(countDiagnosticEventsByPhase(['ios_launch_observation_skipped'])).toBe(1);
+  });
+  await withDiagnosticsScope({ command: 'open' }, async () => {
+    const unresolvable = createLaunchObservationProbe({
+      source: { acquire: vi.fn(), close: async () => {} },
+      resolveTarget: async () => {
+        throw new Error('no target');
+      },
+      clock: { now: () => 0, sleep: async () => {} },
+      isBridgeDisabled: () => true,
+    });
+    await expect(
+      unresolvable.awaitObservable(simulator, 'com.example.app', signal()),
+    ).resolves.toBe('unobservable');
+    expect(countDiagnosticEventsByPhase(['ios_launch_observation_skipped'])).toBe(0);
+  });
 });
 
 test.each([

@@ -2,6 +2,7 @@ import {
   createIosSnapshotRequest,
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
@@ -69,7 +70,20 @@ export function createLaunchObservationProbe(
         // A generation whose bridge already failed a capture fails this probe the same way, and
         // the codes it fails with are the ones this loop re-reads for seconds. Ask the circuit
         // first; a relaunch carries a new generation, which rebaselines and observes as usual.
-        if (deps.isBridgeDisabled(target)) return 'unobservable';
+        // A skip is reported, because an unresolvable target reaches the same verdict by a
+        // different route and only the diagnostic tells the two apart on a live device.
+        if (deps.isBridgeDisabled(target)) {
+          emitDiagnostic({
+            level: 'debug',
+            phase: 'ios_launch_observation_skipped',
+            data: {
+              reason: 'circuit-disabled',
+              deviceId: device.id,
+              generation: target.generation,
+            },
+          });
+          return 'unobservable';
+        }
         const outcome = await deps.source.acquire({ target, hint, signal });
         if (outcome.stage !== 'failed') return 'observable';
         signal.throwIfAborted();
