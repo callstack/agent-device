@@ -54,9 +54,13 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      the Apple runner owner, the Android snapshot-helper and Web orphan cleanups, and legacy
      app-log marker recovery. The `resource-cleanup` edge stays, reclassified
      composition-essential and carrying only `platformResourceCleanup`.
-   - **#2334** — open-target planning separated from platform mechanics
-     (`session-open-prepare.ts`, `session-selector-dispatch.ts` →
-     `platform-runtime-open-target.ts`), blocked by #2332.
+   - **Open-target planning (done, #2334)** — `platform-runtime-open-target.ts` keeps only the
+     neutral open plan/result surface (`resolveRequestedOpenSurface`, `validateOpenRelaunchTarget`,
+     `resolveSessionAppBundleIdForTarget`); Android package resolution
+     (`resolveAndroidPackageForOpen`, `inferAndroidPackageAfterOpen`) moved behind the Android
+     owning seam in `packages/platform-android`. `session-open-prepare.ts` and
+     `session-selector-dispatch.ts` are daemon-policy-essential over the neutral resolver, which
+     stays the one construction path for the open plan.
    - **#2273/#2274** (existing) — `direct-ios-selector.ts` → `queryAppleRuntimeSelector` is the
      selector seam those issues own; coordination was posted there rather than opening a second
      selector producer.
@@ -85,7 +89,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 5. **Per-audit-area decisions.** Apple session observation: consume the neutral
    `AppleSessionObservation` contract. Runtime lifecycle participation: deepen through the existing lifecycle
    phases, no generic hook bag (#2333). Open-target planning: separate plan/result from
-   platform mechanics, one construction path preserved (#2334). Session state/store authority:
+   platform mechanics, one construction path preserved. Session state/store authority:
    keep the current access shape, ratchet the handler-owned slice (R75). Route depth: record the
    re-traced routes; collapse only the proven pass-through hops (none undertaken in this
    change).
@@ -120,5 +124,4 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
   `scripts/layering/check.ts` (both observed red against planted violations before acceptance).
 - R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
 - R65 for the concrete-platform-import ban this audit builds on.
-- Child issue #2334 (and #2273/#2274 for the selector seam) for the remaining category-3
-  implementation work; #2333 landed (see §2.2).
+- Child issues #2333 and #2334 landed (see §2.2); #2273/#2274 remain for the selector seam.

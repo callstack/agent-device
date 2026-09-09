@@ -145,39 +145,6 @@ async function tryResolveIosAppBundleId(
   }
 }
 
-export async function resolveAndroidPackageForOpen(
-  device: DeviceInfo,
-  openTarget: string | undefined,
-): Promise<string | undefined> {
-  if (device.platform !== 'android' || !openTarget || isDeepLinkTarget(openTarget))
-    return undefined;
-  try {
-    const { resolveAndroidApp } = await loadAndroidMechanics();
-    const resolved = await resolveAndroidApp(device, openTarget);
-    return resolved.type === 'package' ? resolved.value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export async function inferAndroidPackageAfterOpen(
-  device: DeviceInfo,
-  openTarget: string | undefined,
-  currentAppBundleId: string | undefined,
-): Promise<string | undefined> {
-  if (currentAppBundleId) return currentAppBundleId;
-  if (device.platform !== 'android' || !openTarget || !isDeepLinkTarget(openTarget)) {
-    return currentAppBundleId;
-  }
-  try {
-    const { getAndroidAppState } = await loadAndroidMechanics();
-    const foreground = await getAndroidAppState(device);
-    return foreground.package?.trim() || currentAppBundleId;
-  } catch {
-    return currentAppBundleId;
-  }
-}
-
 function shouldPreserveAndroidPackageContext(
   device: DeviceInfo,
   openTarget: string | undefined,
@@ -196,17 +163,22 @@ export async function resolveSessionAppBundleIdForTarget(
   device: DeviceInfo,
   openTarget: string | undefined,
   currentAppBundleId: string | undefined,
-  resolveAndroidPackageForOpenFn: (
-    device: DeviceInfo,
-    openTarget: string | undefined,
-  ) => Promise<string | undefined>,
 ): Promise<string | undefined> {
   if (device.platform === 'harmonyos') {
     return bundleIdFromOpenTarget(openTarget) ?? currentAppBundleId;
   }
   return (
     (await resolveIosBundleIdForOpen(device, openTarget, currentAppBundleId)) ??
-    (await resolveAndroidPackageForOpenFn(device, openTarget)) ??
+    (await tryResolveAndroidPackageForOpen(device, openTarget)) ??
     (shouldPreserveAndroidPackageContext(device, openTarget) ? currentAppBundleId : undefined)
   );
+}
+
+async function tryResolveAndroidPackageForOpen(
+  device: DeviceInfo,
+  openTarget: string | undefined,
+): Promise<string | undefined> {
+  if (device.platform !== 'android' || !openTarget) return undefined;
+  const { resolveAndroidPackageForOpen } = await loadAndroidMechanics();
+  return await resolveAndroidPackageForOpen(device, openTarget);
 }

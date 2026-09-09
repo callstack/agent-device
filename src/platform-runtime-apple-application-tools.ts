@@ -145,12 +145,7 @@ async function resolveAppleOpenTarget(
   return {
     appBundleId:
       macOsSurface.appBundleId ??
-      (await resolveSessionAppBundleIdForTarget(
-        device,
-        input.target,
-        input.currentAppBundleId,
-        async () => undefined,
-      )),
+      (await resolveSessionAppBundleIdForTarget(device, input.target, input.currentAppBundleId)),
     appName: macOsSurface.appName ?? input.target,
   };
 }

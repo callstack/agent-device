@@ -151,22 +151,24 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
   {
     file: 'src/daemon/handlers/session-selector-dispatch.ts',
     target: 'src/platform-runtime-open-target.ts',
-    symbols: ['resolveAndroidPackageForOpen', 'resolveSessionAppBundleIdForTarget'],
-    classification: 'leaked-platform-mechanics',
+    symbols: ['resolveSessionAppBundleIdForTarget'],
+    classification: 'daemon-policy-essential',
     rationale:
-      'selector dispatch consumes the mixed open-target module; Android package resolution ' +
-      'is platform mechanics that should sit behind the Android owning seam.',
-    deepenedBy: '#2334',
+      'selector dispatch reconstructs the session app-bundle identity after a trigger-app-event ' +
+      'deep link through the one neutral open-plan resolver (#2334); Android package resolution ' +
+      'moved behind the Android owning seam in packages/platform-android, so the resolver is the ' +
+      'only symbol this edge names.',
   },
   {
     file: 'src/daemon/session-lifecycle/internal/session-open-prepare.ts',
     target: 'src/platform-runtime-open-target.ts',
     symbols: ['resolveRequestedOpenSurface', 'validateOpenRelaunchTarget'],
-    classification: 'leaked-platform-mechanics',
+    classification: 'daemon-policy-essential',
     rationale:
-      'open-prepare policy consumes the mixed open-target module; the neutral open ' +
-      'plan/result should be separated from the platform mechanics that share the file.',
-    deepenedBy: '#2334',
+      'open-prepare policy consumes only the neutral open plan/result surface (#2334): surface ' +
+      'classification and relaunch-target validation. The platform mechanics that used to share ' +
+      'the file (Android package resolution) moved behind the Android owning seam, leaving this ' +
+      'edge daemon policy over a neutral resolver.',
   },
 ] as const;
 

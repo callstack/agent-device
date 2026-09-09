@@ -14,10 +14,7 @@ import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import {
-  resolveAndroidPackageForOpen,
-  resolveSessionAppBundleIdForTarget,
-} from '../../platform-runtime-open-target.ts';
+import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
 import type { DeviceReadyOptions } from '../device-ready.ts';
@@ -228,7 +225,6 @@ export async function handleAppEventCommand(
             session.device,
             eventUrl,
             session.appBundleId,
-            resolveAndroidPackageForOpen,
           )) ?? session.appBundleId)
         : session.appBundleId;
       return {

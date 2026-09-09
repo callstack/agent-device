@@ -191,6 +191,10 @@ export {
   type AndroidAppTargetKind,
 } from './open-target.ts';
 export {
+  inferAndroidPackageAfterOpen,
+  resolveAndroidPackageForOpen,
+} from './open-target-resolution.ts';
+export {
   resetAndroidFramePerfStats,
   sampleAndroidFramePerf,
   type AndroidFramePerfOptions,
