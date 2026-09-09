@@ -235,7 +235,12 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
       ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
-      ...touchRuntimeOperationFacts({ unsupported: frozen.touch }),
+      ...touchRuntimeOperationFacts({
+        unsupported: frozen.touch,
+        tap: frozen.touch,
+        longPress: frozen.touch,
+        fill: frozen.touch,
+      }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
       ...backRuntimeOperationFacts({ back: frozen.back }),
       ...homeRuntimeOperationFacts({ home: frozen.home }),

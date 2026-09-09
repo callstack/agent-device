@@ -44,13 +44,20 @@ test("an operation the owner never names reports the owner's own denial verbatim
     hint: 'focus is supported on Android emulators and physical devices.',
   } as const;
 
-  expect(touchRuntimeOperationFacts({ unsupported: denial, tap: available })).toEqual({
+  expect(
+    touchRuntimeOperationFacts({
+      unsupported: denial,
+      tap: available,
+      longPress: available,
+      fill: available,
+    }),
+  ).toEqual({
     tapPoint: available,
     tapRef: denial,
-    longPressPoint: denial,
+    longPressPoint: available,
     hoverPoint: denial,
     hoverRef: denial,
-    fillPoint: denial,
+    fillPoint: available,
     fillRef: denial,
     tapElementSelector: denial,
   });

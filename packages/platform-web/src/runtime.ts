@@ -388,6 +388,7 @@ function webRuntimeFacts(
         unsupported: readinessUnavailable,
         tap: browserDevice,
         tapRef: webOptionalOperationFact(interactor?.tapRef, browserDevice),
+        longPress: readinessUnavailable,
         hover: webOptionalOperationFact(interactor?.hover, browserDevice),
         hoverRef: webOptionalOperationFact(interactor?.hoverRef, browserDevice),
         fill: browserDevice,

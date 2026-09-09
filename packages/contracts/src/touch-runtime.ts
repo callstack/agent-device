@@ -75,23 +75,24 @@ export const HOVER_UNAVAILABLE_HINT =
   'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.';
 
 /**
- * What an owner declares about the touch family. Every operation is optional and `unsupported` is
- * not: an owner names the operations it implements and states, once, the denial every operation it
- * left out reports. Adding a touch operation therefore costs an edit only in the owner that gained
- * it — an owner that does not implement it already classified it, by the same `unsupported` cell,
- * with the same reason and hint it would have written out by hand.
+ * What an owner declares about the touch family. `tap`, `longPress` and `fill` are universally
+ * implemented, so they stay required cells — a compile-time guard against an owner silently
+ * dropping one. Every other operation is optional, and `unsupported` names the denial an omitted
+ * cell reports: an owner that does not implement one of those already classified it, by the same
+ * `unsupported` cell, with the same reason and hint it would have written out by hand. Adding a new
+ * touch operation therefore costs an edit only in the owner that gained it.
  *
  * Omission is a classified denial, never an unclassified cell and never an implied success: the
  * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
  */
 export type TouchRuntimeOperationFactsInput = Readonly<{
   unsupported: RuntimeOperationUnavailability;
-  tap?: RuntimeOperationFact;
+  tap: RuntimeOperationFact;
   tapRef?: RuntimeOperationFact;
-  longPress?: RuntimeOperationFact;
+  longPress: RuntimeOperationFact;
   hover?: RuntimeOperationFact;
   hoverRef?: RuntimeOperationFact;
-  fill?: RuntimeOperationFact;
+  fill: RuntimeOperationFact;
   fillRef?: RuntimeOperationFact;
   tapElementSelector?: RuntimeOperationFact;
 }>;
@@ -102,12 +103,12 @@ export function touchRuntimeOperationFacts(
   const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
     fact ?? input.unsupported;
   return Object.freeze({
-    tapPoint: declared(input.tap),
+    tapPoint: input.tap,
     tapRef: declared(input.tapRef),
-    longPressPoint: declared(input.longPress),
+    longPressPoint: input.longPress,
     hoverPoint: withHoverRefusalHint(declared(input.hover)),
     hoverRef: withHoverRefusalHint(declared(input.hoverRef)),
-    fillPoint: declared(input.fill),
+    fillPoint: input.fill,
     fillRef: declared(input.fillRef),
     tapElementSelector: declared(input.tapElementSelector),
   });

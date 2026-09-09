@@ -101,7 +101,12 @@ export function screenshotRuntimeFixture(
           customActions: options.snapshot ?? available,
           withoutActiveApp: options.snapshot ?? available,
         }),
-        ...touchRuntimeOperationFacts({ unsupported: unavailable, tap: available }),
+        ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
+          tap: available,
+          longPress: unavailable,
+          fill: unavailable,
+        }),
       },
     };
   };
