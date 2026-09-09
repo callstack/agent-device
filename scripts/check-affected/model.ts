@@ -270,11 +270,12 @@ const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
 };
 
 function isNodeIntegrationPath(file: string): boolean {
-  return (
-    file.startsWith('test/integration/') &&
-    !file.slice('test/integration/'.length).includes('/') &&
-    file.endsWith('.ts')
-  );
+  if (!file.startsWith('test/integration/') || !file.endsWith('.ts')) return false;
+  const rest = file.slice('test/integration/'.length);
+  // command-coverage/ holds the single declaration table every platform's node --test
+  // coverage smoke test projects its record from (#2411): a change there feeds all six
+  // smoke tests even though the file itself sits one level below test/integration/.
+  return !rest.includes('/') || rest.startsWith('command-coverage/');
 }
 
 const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
@@ -351,7 +352,11 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
 
 const macosCoverageOwnership: OwnershipRule = ({ file }) =>
   file === 'test/integration/smoke-macos-coverage.test.ts' ||
-  file.startsWith('test/integration/macos-e2e/')
+  file.startsWith('test/integration/macos-e2e/') ||
+  // The per-command coverage judgments (macOS included) are declared once here and
+  // projected into macos-e2e/coverage.ts at load time (#2411), so a table edit must
+  // still select the macOS lane the way editing the old macos-e2e manifest did.
+  file.startsWith('test/integration/command-coverage/')
     ? [
         reason(
           'macos-coverage',

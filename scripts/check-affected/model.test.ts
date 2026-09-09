@@ -69,6 +69,16 @@ test('root node-integration support modules select the node integration suite', 
   assert.ok(ids(['test/integration/test-helpers.ts']).includes('integration-node'));
 });
 
+test('the shared coverage declaration table selects the node integration suite and the macOS lane', () => {
+  const result = ids(['test/integration/command-coverage/declarations.ts']);
+  assert.ok(result.includes('integration-node'), 'expected integration-node ownership');
+  assert.ok(result.includes('macos-coverage'), 'expected macos-coverage ownership');
+  assert.ok(
+    !result.includes('vitest-related'),
+    'declarations.ts is resolved by node --test, not by Vitest',
+  );
+});
+
 test('android-adb stub test delegates project ownership to Vitest', () => {
   const result = ids(['packages/platform-android/src/__tests__/notifications.test.ts']);
   assert.ok(result.includes('vitest-related'));
