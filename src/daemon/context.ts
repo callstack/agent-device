@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DispatchContext } from '../core/dispatch-context.ts';
+import { dispatchContextFlags, type DispatchContext } from '../core/dispatch-context.ts';
 import { resolveClickButton } from '@agent-device/contracts/click-button';
 import {
   screenshotFlagsFromOptions,
@@ -17,9 +17,10 @@ export type BoundContextFromFlags = (
   traceLogPath?: string,
 ) => DaemonCommandContext;
 
-// Flat compatibility mapper: keeping each CLI flag visible here makes request
-// context drift easier to spot than splitting the same optional fields apart.
-// fallow-ignore-next-line complexity
+// The pass-through flags come from their one declaration
+// (`DISPATCH_CONTEXT_FLAG_KEYS`); what stays written out here is what this
+// mapper actually decides — the request-scope fields, and the three flag
+// families that change vocabulary on the way through.
 export function contextFromFlags(
   logPath: string,
   flags: CommandFlags | undefined,
@@ -33,36 +34,11 @@ export function contextFromFlags(
     requestId: effectiveRequestId,
     appBundleId,
     runnerLeaseContext: resolveRunnerLogicalLeaseContext({ meta }),
-    activity: flags?.activity,
-    launchConsole: flags?.launchConsole,
-    launchArgs: flags?.launchArgs,
-    clearAppState: flags?.clearAppState,
-    verbose: flags?.verbose,
     logPath,
     traceLogPath,
-    iosXctestrunFile: flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: flags?.iosXctestEnvDir,
+    ...dispatchContextFlags(flags),
     screenshotCaptureBackend: flags?.maestro?.screenshotCaptureBackend,
-    snapshotInteractiveOnly: flags?.snapshotInteractiveOnly,
-    snapshotPreferredBackend: flags?.snapshotPreferredBackend,
-    snapshotDepth: flags?.snapshotDepth,
-    snapshotScope: flags?.snapshotScope,
-    snapshotRaw: flags?.snapshotRaw,
-    snapshotCustomActions: flags?.snapshotCustomActions,
-    snapshotIncludeHiddenContentHints: flags?.snapshotIncludeHiddenContentHints,
     ...screenshotFlagsFromOptions(flags),
-    count: flags?.count,
-    intervalMs: flags?.intervalMs,
-    delayMs: flags?.delayMs,
-    durationMs: flags?.durationMs,
-    holdMs: flags?.holdMs,
-    jitterPx: flags?.jitterPx,
-    pixels: flags?.pixels,
-    doubleTap: flags?.doubleTap,
     clickButton: resolveClickButton(flags),
-    backMode: flags?.backMode,
-    pauseMs: flags?.pauseMs,
-    pattern: flags?.pattern,
   };
 }

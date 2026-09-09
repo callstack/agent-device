@@ -68,11 +68,8 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     relaunch?: boolean;
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
     timeoutMs?: number;
-    /**
-     * Include the initial interactive snapshot in a fresh open response. With
-     * no app argument, iOS can discover the sole running app on the sole booted
-     * simulator and fails closed when that environment is ambiguous.
-     */
+    // `foreground` is described once on its option declaration (the `--foreground`
+    // FlagDefinition), which feeds both `--help` and the tool/SDK field.
     foreground?: boolean;
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */

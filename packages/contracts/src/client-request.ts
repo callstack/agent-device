@@ -14,24 +14,20 @@ import type {
   NetworkIncludeMode,
   SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
+import type { SnapshotCommandOptionFields } from '@agent-device/kernel/snapshot';
 import type { DaemonBatchStep } from './batch-step.ts';
 import type { ReplayRequestFields } from './replay-request-fields.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
 
 export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
-  ReplayRequestFields & {
+  ReplayRequestFields &
+  SnapshotCommandOptionFields & {
     positionals?: string[];
     kind?: string;
     out?: string;
     artifact?: string;
     dsym?: string;
     searchPath?: string;
-    interactiveOnly?: boolean;
-    depth?: number;
-    scope?: string;
-    raw?: boolean;
-    customActions?: boolean;
-    forceFull?: boolean;
     count?: number;
     fps?: number;
     recordingScope?: RecordingScope;

@@ -2,7 +2,7 @@ import { ACTION_FLAG_DEFINITIONS } from './flag-definitions-action.ts';
 import { CONNECTION_FLAG_DEFINITIONS } from './flag-definitions-connection.ts';
 import { TARGET_FLAG_DEFINITIONS } from './flag-definitions-target.ts';
 import { WORKFLOW_FLAG_DEFINITIONS } from './flag-definitions-workflow.ts';
-import type { FlagDefinition } from './flag-types.ts';
+import type { FlagDefinition, FlagKey } from './flag-types.ts';
 
 const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   ...CONNECTION_FLAG_DEFINITIONS,
@@ -22,4 +22,13 @@ export function getFlagDefinition(token: string): FlagDefinition | undefined {
 
 export function getFlagDefinitions(): readonly FlagDefinition[] {
   return FLAG_DEFINITIONS;
+}
+
+/**
+ * The declarations for one flag key. A key can hold more than one when its CLI
+ * spelling is a `setValue` pair (`--record` / `--no-record`), so the caller
+ * decides which facet it needs.
+ */
+export function getFlagDefinitionsForKey(key: FlagKey): readonly FlagDefinition[] {
+  return FLAG_DEFINITIONS.filter((definition) => definition.key === key);
 }

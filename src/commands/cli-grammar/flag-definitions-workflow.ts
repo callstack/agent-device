@@ -206,6 +206,8 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--actions',
     usageDescription:
       'Snapshot: name the affordances merged inside an element (iOS sim); not directly invokable — reach them via the detail screen, labeled children, or coordinates',
+    inputDescription:
+      'Name the affordances an element merged away (iOS UIAccessibilityCustomAction, React Native accessibilityActions) — a card whose reply/options controls are not separate elements still lists them here. The names are for PLANNING, not invocation: there is no API to trigger them, so reach the affordance through the element detail screen, through the same control exposed as a labeled element elsewhere, or by coordinates from its rect. iOS simulator only; costs one accessibility round trip per merged element.',
   },
   {
     key: 'snapshotForceFull',

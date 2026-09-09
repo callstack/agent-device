@@ -280,6 +280,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--foreground',
     usageDescription:
       'open: keep normal app/device selection and return an initial snapshot; without an app, resolve the sole running app on the sole booted iOS simulator',
+    inputDescription:
+      'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
   },
   {
     key: 'restart',

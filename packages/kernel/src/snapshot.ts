@@ -87,13 +87,136 @@ export type SnapshotOptions = {
   customActions?: boolean;
 };
 
-export type SnapshotPresentationFlagInput = {
-  snapshotInteractiveOnly?: boolean;
-  snapshotDepth?: number;
-  snapshotScope?: string;
-  snapshotRaw?: boolean;
-  snapshotCustomActions?: boolean;
+/**
+ * The snapshot capture family stated ONCE as option key ↔ command-flag key.
+ *
+ * The same pair (`customActions` ↔ `snapshotCustomActions`, and its seven
+ * siblings) used to be re-typed by hand at every seam that carries a snapshot
+ * request across the option/flag vocabulary line — the CLI reader, the client
+ * option projection, the daemon capture inputs, the presentation key. Each copy
+ * restated a fact already stated here and decided nothing, so a new snapshot
+ * option cost one edit per seam and a missed seam dropped the option silently.
+ *
+ * Declared in the kernel because both vocabularies are declared here
+ * ({@link SnapshotOptions}) and above (`CommandFlags` in contracts), so this is
+ * the lowest point both sides can read. This generalises the shipped
+ * `screenshotFlagsFromOptions`/`screenshotOptionsFromFlags` pair for the
+ * screenshot family.
+ *
+ * Every projection takes an EXPLICIT key list: a seam admits the options it
+ * routes and no more, so adding a pair here never silently widens a seam that
+ * cannot honour it.
+ */
+// Exported only because the exported types below say `typeof` it.
+// fallow-ignore-next-line unused-export
+export const SNAPSHOT_OPTION_FLAGS = {
+  interactiveOnly: 'snapshotInteractiveOnly',
+  depth: 'snapshotDepth',
+  scope: 'snapshotScope',
+  raw: 'snapshotRaw',
+  customActions: 'snapshotCustomActions',
+  forceFull: 'snapshotForceFull',
+  includeHiddenContentHints: 'snapshotIncludeHiddenContentHints',
+  preferredBackend: 'snapshotPreferredBackend',
+} as const;
+
+export type SnapshotOptionKey = keyof typeof SNAPSHOT_OPTION_FLAGS;
+
+type SnapshotOptionValues = {
+  interactiveOnly: boolean;
+  depth: number;
+  scope: string;
+  raw: boolean;
+  customActions: boolean;
+  forceFull: boolean;
+  includeHiddenContentHints: boolean;
+  preferredBackend: SnapshotPreferredBackend;
 };
+
+/** The option-vocabulary view of the declared pairs, narrowed to `TKeys`. */
+export type SnapshotOptionFields<TKeys extends SnapshotOptionKey = SnapshotOptionKey> = {
+  [TKey in TKeys]?: SnapshotOptionValues[TKey];
+};
+
+/** The flag-vocabulary view of the declared pairs, narrowed to `TKeys`. */
+export type SnapshotOptionFlagFields<TKeys extends SnapshotOptionKey = SnapshotOptionKey> = {
+  [TKey in TKeys as (typeof SNAPSHOT_OPTION_FLAGS)[TKey]]?: SnapshotOptionValues[TKey];
+};
+
+/**
+ * Option keys a `snapshot`/`diff` command request carries end to end. `scope` is
+ * resolved against the session before capture, so seams that resolve it spread
+ * this projection and then override that one key.
+ */
+export const SNAPSHOT_COMMAND_OPTION_KEYS = [
+  'interactiveOnly',
+  'depth',
+  'scope',
+  'raw',
+  'customActions',
+  'forceFull',
+] as const;
+
+/**
+ * The snapshot capture options a `snapshot`/`diff` request is stated in, in
+ * every vocabulary that names them: the public SDK type, the internal request
+ * bag and the command runtime options each reference THIS type instead of
+ * re-listing the same six keys.
+ */
+export type SnapshotCommandOptionFields = SnapshotOptionFields<
+  (typeof SNAPSHOT_COMMAND_OPTION_KEYS)[number]
+>;
+
+/** Option keys a daemon runtime capture input carries; `forceFull` is a command-level concern. */
+export const SNAPSHOT_CAPTURE_OPTION_KEYS = [
+  'interactiveOnly',
+  'preferredBackend',
+  'depth',
+  'scope',
+  'raw',
+  'customActions',
+  'includeHiddenContentHints',
+] as const;
+
+/** Option keys that identify a presentation; see {@link buildSnapshotPresentationKey}. */
+// fallow-ignore-next-line unused-export
+export const SNAPSHOT_PRESENTATION_OPTION_KEYS = [
+  'depth',
+  'interactiveOnly',
+  'raw',
+  'scope',
+  'customActions',
+] as const;
+
+/**
+ * Reads the declared options out of a flags bag. Every requested key is present
+ * (possibly `undefined`), matching what the hand-written copies produced.
+ */
+export function snapshotOptionsFromFlags<const TKeys extends readonly SnapshotOptionKey[]>(
+  flags: SnapshotOptionFlagFields | undefined,
+  keys: TKeys,
+): SnapshotOptionFields<TKeys[number]> {
+  return Object.fromEntries(
+    keys.map((key) => [key, flags?.[SNAPSHOT_OPTION_FLAGS[key]]]),
+  ) as SnapshotOptionFields<TKeys[number]>;
+}
+
+/** Writes the declared options back into flag vocabulary, dropping absent values. */
+export function snapshotFlagsFromOptions<const TKeys extends readonly SnapshotOptionKey[]>(
+  options: SnapshotOptionFields | undefined,
+  keys: TKeys,
+): SnapshotOptionFlagFields<TKeys[number]> {
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const value = options?.[key];
+      return value === undefined ? [] : [[SNAPSHOT_OPTION_FLAGS[key], value]];
+    }),
+  ) as SnapshotOptionFlagFields<TKeys[number]>;
+}
+
+export type SnapshotPresentationFlagInput = SnapshotOptionFlagFields<
+  (typeof SNAPSHOT_PRESENTATION_OPTION_KEYS)[number]
+>;
 
 export type RawSnapshotNode = {
   index: number;
@@ -382,13 +505,7 @@ export function snapshotPresentationOptionsFromFlags(
   flags: SnapshotPresentationFlagInput | undefined,
 ): SnapshotOptions | undefined {
   if (!flags) return undefined;
-  return {
-    depth: flags.snapshotDepth,
-    interactiveOnly: flags.snapshotInteractiveOnly,
-    raw: flags.snapshotRaw,
-    scope: flags.snapshotScope,
-    customActions: flags.snapshotCustomActions,
-  };
+  return snapshotOptionsFromFlags(flags, SNAPSHOT_PRESENTATION_OPTION_KEYS);
 }
 
 export function centerOfRect(rect: Rect): Point {

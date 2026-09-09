@@ -5,6 +5,10 @@ import {
   leaseScopeToCommandFlags,
 } from '@agent-device/contracts/lease-scope';
 import { stripUndefined } from '@agent-device/kernel/record';
+import {
+  SNAPSHOT_COMMAND_OPTION_KEYS,
+  snapshotFlagsFromOptions,
+} from '@agent-device/kernel/snapshot';
 import { getFlagDefinitions } from './cli-grammar/flag-registry.ts';
 import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CommandMetadata } from './command-contract.ts';
@@ -69,12 +73,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     metroPort: options.metroPort,
     bundleUrl: options.bundleUrl,
     launchUrl: options.launchUrl,
-    snapshotInteractiveOnly: options.interactiveOnly,
-    snapshotDepth: options.depth,
-    snapshotScope: options.scope,
-    snapshotRaw: options.raw,
-    snapshotCustomActions: options.customActions,
-    snapshotForceFull: options.forceFull,
+    ...snapshotFlagsFromOptions(options, SNAPSHOT_COMMAND_OPTION_KEYS),
     ...screenshotFlagsFromOptions(options),
     appsFilter: options.appsFilter,
     kind: options.kind,

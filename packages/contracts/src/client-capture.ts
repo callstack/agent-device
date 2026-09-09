@@ -4,6 +4,7 @@ import type { SessionSurface } from './session-surface.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
+  SnapshotCommandOptionFields,
   SnapshotNode,
   SnapshotUnchanged,
   SnapshotVisibility,
@@ -16,15 +17,12 @@ import type {
   DeviceCommandBaseOptions,
 } from './client-connection.ts';
 
+// The snapshot capture keys come from the one snapshot option declaration
+// (`SnapshotCommandOptionFields`); their prose lives on the owning option
+// declaration, not on a second copy here.
 export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
-  AgentDeviceSelectionOptions & {
-    interactiveOnly?: boolean;
-    depth?: number;
-    scope?: string;
-    raw?: boolean;
-    /** List accessibility custom actions on merged elements (iOS simulator). */
-    customActions?: boolean;
-    forceFull?: boolean;
+  AgentDeviceSelectionOptions &
+  SnapshotCommandOptionFields & {
     timeoutMs?: number;
     /**
      * #1271 stage 2 (ADR 0012 amendment): `snapshot` is observation-only and
