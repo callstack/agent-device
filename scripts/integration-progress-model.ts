@@ -160,6 +160,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['holdMs', 'press hold duration'],
     ['jitterPx', 'press jitter'],
     ['pixels', 'scroll distance'],
+    ['until', 'scroll-until-visible stop condition'],
     ['doubleTap', 'double tap gesture'],
     ['clickButton', 'desktop mouse button selection', ['button']],
     ['backMode', 'explicit app/system back behavior', ['mode']],

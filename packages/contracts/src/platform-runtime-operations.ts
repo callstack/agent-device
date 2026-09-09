@@ -249,12 +249,14 @@ export const gestureViewportRuntimeUse = defineUse({ required: ['gestureViewport
 /** `scroll <direction>` executes one pass and needs nothing else. */
 const scrollDirectionUse = defineUse({ required: ['scrollDirection'] });
 /**
- * `scroll top` / `scroll bottom` verify hidden content between passes, so the capture is part of
- * the tier's requirement rather than something discovered mid-run — the retired leaf's
+ * Every scroll that verifies between passes: `scroll top`/`scroll bottom` read hidden content at
+ * the edge, and `scroll --until <selector>` re-reads the tree to decide whether the target came
+ * into view. Both check against that capture rather than a stale session snapshot, so the capture
+ * is part of the tier's requirement rather than something discovered mid-run — the retired leaf's
  * "requires snapshot support to verify hidden content before scrolling" refusal, moved to
- * admission.
+ * admission. One declaration, because the two tiers admit on identical facts.
  */
-const scrollEdgeUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
+const scrollVerifiedPassUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
 
 const gestureUsesByTier = Object.freeze({
   plan: gesturePlanUse,
@@ -275,7 +277,10 @@ export const gestureRuntimePlanUses = Object.freeze([
 export const swipeRuntimePlanUses = Object.freeze([gesturePlanUse] as const);
 
 /** Every use `scroll` can select between. */
-export const scrollRuntimePlanUses = Object.freeze([scrollDirectionUse, scrollEdgeUse] as const);
+export const scrollRuntimePlanUses = Object.freeze([
+  scrollDirectionUse,
+  scrollVerifiedPassUse,
+] as const);
 
 type GesturePlanFor<Tier extends GestureRuntimeTier> = Readonly<{
   tier: Tier;
@@ -337,15 +342,28 @@ function gesturePlan<const Tier extends GestureRuntimeTier>(tier: Tier): Gesture
  */
 export type ScrollRuntimePlan =
   | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
-  | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollEdgeUse }>;
+  | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollVerifiedPassUse }>
+  | Readonly<{ kind: 'until'; until: string; use: typeof scrollVerifiedPassUse }>;
 
-/** `scroll top`/`scroll bottom` verify between passes; every other scroll executes one pass. */
+/**
+ * `scroll top`/`scroll bottom` verify between passes, `scroll --until` re-reads the tree between
+ * passes to check its selector, and every other scroll executes one pass. The edge directions carry
+ * their own stop condition, so pairing them with `--until` names two, which the caller rejects
+ * before this resolves.
+ */
 export function resolveScrollRuntimePlan(
-  input: Readonly<{ edge?: 'top' | 'bottom' }>,
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
 ): ScrollRuntimePlan {
+  if (input.until !== undefined) {
+    return Object.freeze({
+      kind: 'until',
+      until: input.until,
+      use: scrollVerifiedPassUse,
+    } as const);
+  }
   return input.edge === undefined
     ? Object.freeze({ kind: 'direction', use: scrollDirectionUse } as const)
-    : Object.freeze({ kind: 'edge', edge: input.edge, use: scrollEdgeUse } as const);
+    : Object.freeze({ kind: 'edge', edge: input.edge, use: scrollVerifiedPassUse } as const);
 }
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],

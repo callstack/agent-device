@@ -83,7 +83,13 @@ export type InPageSwipeGesturePlan = {
   referenceHeight: number;
 };
 
-const DEFAULT_SCROLL_AMOUNT = 0.6;
+/**
+ * The finger-path fraction of the viewport axis one scroll covers when the caller names no
+ * distance. Exported because a backend with no viewport to measure against (the browser) scales its
+ * own default step by the ratio to this, and that ratio is only meaningful while both sides read
+ * the same number.
+ */
+export const DEFAULT_SCROLL_AMOUNT = 0.6;
 // Scroll gestures never touch the outer 10% of either axis. Modern app windows are edge-to-edge,
 // so the viewport includes the system bars: a swipe that starts inside the status bar (5.7% of a
 // Pixel 7's height, 6.9% of an iPhone's with a Dynamic Island) pulls the notification shade or

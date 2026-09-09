@@ -27,6 +27,7 @@ import {
   cleanupManagedAgentBrowserOrphansForProviderStartup,
   recordManagedAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
+import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
 const AGENT_BROWSER_TIMEOUT_MS = 30_000;
@@ -125,7 +126,7 @@ async function runPacedScroll(
   direction: string,
   scrollOptions: { amount?: number; pixels?: number; durationMs?: number } | undefined,
 ): Promise<void> {
-  const steps = buildPacedScrollSteps(scrollOptions);
+  const steps = buildPacedScrollSteps(resolveWebScrollDistance(scrollOptions));
   for (const step of steps) {
     await runJson(buildScrollArgs(direction, step.distance));
     if (step.delayAfterMs > 0) await sleep(step.delayAfterMs);
@@ -137,32 +138,57 @@ type ScrollStep = {
   delayAfterMs: number;
 };
 
-function buildPacedScrollSteps(
+/** agent-browser's own default wheel step, and the distance the default amount maps onto. */
+const WEB_DEFAULT_SCROLL_PIXELS = 300;
+
+type WebScrollDistance = {
+  distance?: number;
+  durationMs?: number;
+};
+
+/**
+ * The browser scrolls by CSS pixels, so a relative `amount` has to become one before it reaches
+ * agent-browser — feeding it through raw made `scroll down 0.5` travel half a pixel.
+ *
+ * There is no gesture viewport to measure against on this backend, so `amount` scales the default
+ * step the same way the Linux pointer backend scales its wheel clicks: the shared default amount
+ * maps to the default step, and everything else is proportional to it.
+ */
+function resolveWebScrollDistance(
   scrollOptions: { amount?: number; pixels?: number; durationMs?: number } | undefined,
-): ScrollStep[] {
-  const requestedDistance = scrollOptions?.pixels ?? scrollOptions?.amount;
+): WebScrollDistance {
   const durationMs = scrollOptions?.durationMs;
+  const timing = durationMs === undefined ? {} : { durationMs };
+  if (scrollOptions?.pixels !== undefined) {
+    return { distance: scrollOptions.pixels, ...timing };
+  }
+  if (scrollOptions?.amount !== undefined) {
+    return {
+      distance: Math.max(
+        1,
+        Math.round((WEB_DEFAULT_SCROLL_PIXELS * scrollOptions.amount) / DEFAULT_SCROLL_AMOUNT),
+      ),
+      ...timing,
+    };
+  }
+  return timing;
+}
+
+function buildPacedScrollSteps(scrollDistance: WebScrollDistance): ScrollStep[] {
+  const { distance, durationMs } = scrollDistance;
   if (durationMs === undefined || durationMs <= 0) {
-    return [{ distance: requestedDistance, delayAfterMs: 0 }];
+    return [{ distance, delayAfterMs: 0 }];
   }
 
   const stepCount = Math.max(1, Math.min(20, Math.ceil(durationMs / 50)));
   const intervalMs = durationMs / Math.max(1, stepCount - 1);
-  return scrollStepDistances(scrollOptions, stepCount).map((distance, index) => ({
-    distance,
+  return distributeIntegerDistance(
+    Math.round(distance ?? WEB_DEFAULT_SCROLL_PIXELS),
+    stepCount,
+  ).map((stepDistance, index) => ({
+    distance: stepDistance,
     delayAfterMs: index < stepCount - 1 ? intervalMs : 0,
   }));
-}
-
-function scrollStepDistances(
-  scrollOptions: { amount?: number; pixels?: number } | undefined,
-  stepCount: number,
-): number[] {
-  const totalDistance = scrollOptions?.pixels ?? scrollOptions?.amount ?? 300;
-  if (scrollOptions?.amount !== undefined && scrollOptions.pixels === undefined) {
-    return Array.from({ length: stepCount }, () => totalDistance / stepCount);
-  }
-  return distributeIntegerDistance(Math.round(totalDistance), stepCount);
 }
 
 function distributeIntegerDistance(totalDistance: number, stepCount: number): number[] {

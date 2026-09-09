@@ -39,6 +39,8 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
     holdMs?: number;
     jitterPx?: number;
     pixels?: number;
+    /** Scroll: repeat passes until this selector is visible on screen. */
+    until?: string;
     doubleTap?: boolean;
     verify?: boolean;
     settle?: boolean;

@@ -47,6 +47,24 @@ export function assertExclusiveScrollDistanceInputs(
   }
 }
 
+/**
+ * `top`/`bottom` are scroll-to-extreme requests that already carry a stop condition, so pairing one
+ * with `--until` names two and the request has no single meaning. Rejected at the surface rather
+ * than resolved by precedence, so neither stop condition can silently win.
+ */
+export function assertScrollUntilCompatible(
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
+): void {
+  if (input.until === undefined || input.edge === undefined) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `scroll ${input.edge} already scrolls to the ${input.edge} edge and cannot take --until`,
+    {
+      hint: `Use scroll ${input.edge === 'bottom' ? 'down' : 'up'} --until <selector> to stop at the target, or scroll ${input.edge} to reach the edge.`,
+    },
+  );
+}
+
 export function normalizeScrollDurationMs(
   durationMs: number | undefined,
   options: { field?: string; invalidMessage?: string; max?: number } = {},

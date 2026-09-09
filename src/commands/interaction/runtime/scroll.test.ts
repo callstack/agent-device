@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { selector } from './selector-read-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   createInteractionDevice,
   runtimeScrollSnapshot,
@@ -235,4 +236,99 @@ test('runtime viewport scroll rejects inspect-only macOS surfaces', async () => 
       new RegExp(`scroll is not supported on macOS ${surface}`),
     );
   }
+});
+
+/** A viewport-height tree whose target row sits at `targetY`, used to walk a target into view. */
+function untilSnapshot(targetY: number, hiddenBelow: boolean) {
+  return makeSnapshotState([
+    {
+      index: 1,
+      depth: 0,
+      type: 'ScrollView',
+      label: 'Form',
+      hiddenContentBelow: hiddenBelow ? true : undefined,
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'Email',
+      rect: { x: 0, y: targetY, width: 400, height: 40 },
+      hittable: true,
+    },
+  ]);
+}
+
+test('runtime scroll --until stops the pass loop as soon as the selector is on screen', async () => {
+  const scrolls: unknown[] = [];
+  const frames = [untilSnapshot(2400, true), untilSnapshot(1200, true), untilSnapshot(300, true)];
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({
+      snapshot: frames[Math.min(scrolls.length, frames.length - 1)],
+    }),
+    scroll: async (_context, target, options) => {
+      scrolls.push({ target, options });
+      return { pixels: 480 };
+    },
+  });
+
+  const result = await device.interactions.scroll({
+    direction: 'down',
+    until: 'label=Email',
+  });
+
+  assert.equal(result.until, 'label=Email');
+  assert.equal(result.passes, 2);
+  assert.equal(scrolls.length, 2);
+  assert.match(String(result.message), /Scrolled down 2 passes until label=Email was visible/);
+});
+
+test('runtime scroll --until performs no gesture when the target is already on screen', async () => {
+  const scrolls: unknown[] = [];
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({ snapshot: untilSnapshot(300, true) }),
+    scroll: async () => {
+      scrolls.push('scrolled');
+      return {};
+    },
+  });
+
+  const result = await device.interactions.scroll({ direction: 'down', until: 'label=Email' });
+
+  assert.equal(result.passes, 0);
+  assert.equal(scrolls.length, 0);
+  assert.match(String(result.message), /already visible/);
+});
+
+test('runtime scroll --until fails with the end-of-content reason when the list runs out', async () => {
+  // Nothing below the fold and nothing hidden: the same signal `scroll bottom` stops on.
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({ snapshot: untilSnapshot(300, false) }),
+    scroll: async () => ({}),
+  });
+
+  await assert.rejects(
+    () => device.interactions.scroll({ direction: 'down', until: 'label=Missing' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_edge_reached');
+      return true;
+    },
+  );
+});
+
+test('runtime scroll --until is refused on the edge directions, which already carry a stop condition', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({ snapshot: untilSnapshot(300, true) }),
+    scroll: async () => {
+      throw new Error('scroll should be rejected before any backend call');
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.scroll({ direction: 'bottom', until: 'label=Email' }),
+    /scroll bottom already scrolls to the bottom edge and cannot take --until/,
+  );
 });

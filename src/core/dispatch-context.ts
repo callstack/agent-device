@@ -49,6 +49,7 @@ export const DISPATCH_CONTEXT_FLAG_KEYS = [
   'holdMs',
   'jitterPx',
   'pixels',
+  'until',
   'doubleTap',
   'backMode',
   'pauseMs',

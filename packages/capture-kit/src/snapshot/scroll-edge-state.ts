@@ -69,19 +69,30 @@ export async function runScrollEdgePasses<TResult>(params: {
   return { passes, result };
 }
 
+/**
+ * `honoredPixels` is the travel the gesture planner actually produced, which is not always the
+ * travel that was asked for: one gesture cannot cross more than the viewport axis minus its edge
+ * padding, so a large `amount` saturates. Naming the honored distance is what keeps
+ * `scroll down 3` from reporting a three-viewport scroll it never performed.
+ */
 export function formatScrollEdgeMessage(
   direction: ScrollDirection,
   edge: ScrollEdge | undefined,
   passes: number,
   amount: number | undefined,
   pixels: number | undefined,
+  honoredPixels?: number,
 ): string {
   if (edge && passes === 0) {
     return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
   }
   if (edge) return `Scrolled to ${edge} with ${passes} ${direction} passes`;
-  if (pixels !== undefined) return `Scrolled ${direction} by ${pixels}px`;
-  if (amount !== undefined) return `Scrolled ${direction} by ${amount}`;
+  if (pixels !== undefined) return `Scrolled ${direction} by ${honoredPixels ?? pixels}px`;
+  if (amount !== undefined) {
+    return honoredPixels === undefined
+      ? `Scrolled ${direction} by ${amount}`
+      : `Scrolled ${direction} by ${amount} of the viewport (${honoredPixels}px)`;
+  }
   return `Scrolled ${direction}`;
 }
 

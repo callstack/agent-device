@@ -1,5 +1,6 @@
 import {
   assertExclusiveScrollDistanceInputs,
+  assertScrollUntilCompatible,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
@@ -22,6 +23,13 @@ import {
   type ScrollEdge,
   type ScrollEdgeState,
 } from '@agent-device/capture-kit/scroll-edge-state';
+import {
+  formatScrollUntilMessage,
+  runScrollUntilVisiblePasses,
+  scrollUntilNotFoundError,
+} from '@agent-device/capture-kit/scroll-until-visible';
+import { isSelectorVisibleInNodes } from '@agent-device/selectors/scroll-until-match';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { errorResponse } from './response.ts';
@@ -43,6 +51,7 @@ type BoundScrollDirection = BoundDeviceRuntime<
   Extract<ScrollRuntimePlan, { kind: 'direction' }>['use']
 >;
 type BoundScrollEdge = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'edge' }>['use']>;
+type BoundScrollUntil = BoundDeviceRuntime<Extract<ScrollRuntimePlan, { kind: 'until' }>['use']>;
 
 /** `scroll bottom` scrolls down to the edge; `scroll top` scrolls up to it. */
 function parseScrollTarget(input: string): ScrollTarget {
@@ -82,12 +91,20 @@ export async function resolveBoundScrollRuntime(
   const amount = params.positionals[1] ? Number(params.positionals[1]) : undefined;
   const pixels = params.context.pixels;
   const durationMs = params.context.durationMs;
+  const until = params.context.until;
   if (!directionInput) throw new AppError('INVALID_ARGS', 'scroll requires direction');
   assertScrollCommandInputs(amount, pixels, durationMs);
 
   const target = parseScrollTarget(directionInput);
+  assertScrollUntilCompatible({
+    ...(target.edge ? { edge: target.edge } : {}),
+    ...(until === undefined ? {} : { until }),
+  });
   const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
-  const plan = resolveScrollRuntimePlan(target.edge === undefined ? {} : { edge: target.edge });
+  const plan = resolveScrollRuntimePlan({
+    ...(target.edge === undefined ? {} : { edge: target.edge }),
+    ...(until === undefined ? {} : { until }),
+  });
   const admission = {
     command: 'scroll',
     device: params.device,
@@ -115,6 +132,25 @@ export async function resolveBoundScrollRuntime(
           await executeEdgeScroll(runtime, edge, target, options, dispatchContext),
       );
     }
+    case 'until': {
+      const selector = plan.until;
+      return await resolveBoundGenericRuntime(
+        {
+          ...admission,
+          unavailableResponse: (unavailable) => scrollUntilUnsupported(unavailable.hint),
+          use: plan.use,
+        },
+        async (runtime, dispatchContext) =>
+          await executeUntilScroll(
+            runtime,
+            params.device,
+            selector,
+            target,
+            options,
+            dispatchContext,
+          ),
+      );
+    }
   }
 }
 
@@ -122,6 +158,15 @@ function scrollEdgeUnsupported(edge: ScrollEdge, hint: string | undefined) {
   return errorResponse(
     'UNSUPPORTED_OPERATION',
     `scroll ${edge} requires snapshot support to verify hidden content before scrolling`,
+    undefined,
+    hint === undefined ? undefined : { hint },
+  );
+}
+
+function scrollUntilUnsupported(hint: string | undefined) {
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    'scroll --until requires snapshot support to check whether the selector became visible',
     undefined,
     hint === undefined ? undefined : { hint },
   );
@@ -156,6 +201,70 @@ async function executeEdgeScroll(
     scroll: async () => await scrollOnce(runtime, target, options, context),
   });
   return scrollResult(target, options, edgeResult.passes, edgeResult.result ?? {});
+}
+
+/** Repeats the pass until the selector is on screen, the content runs out, or the budget does. */
+async function executeUntilScroll(
+  runtime: BoundScrollUntil,
+  device: DeviceInfo,
+  selector: string,
+  target: ScrollTarget,
+  options: ResolvedScrollExecutionOptions,
+  context: DaemonCommandContext,
+): Promise<Record<string, unknown>> {
+  const untilResult = await runScrollUntilVisiblePasses({
+    ...(verticalEdgeFor(target.direction) === undefined
+      ? {}
+      : { edge: verticalEdgeFor(target.direction) as ScrollEdge }),
+    captureNodes: async () => await captureUntilNodes(runtime, context),
+    isVisibleMatch: async (nodes) =>
+      await isSelectorVisibleInNodes({
+        nodes,
+        selector,
+        platform: publicPlatformString(device),
+      }),
+    scroll: async () => await scrollOnce(runtime, target, options, context),
+  });
+  if (untilResult.outcome !== 'matched') {
+    throw scrollUntilNotFoundError({
+      direction: target.direction,
+      selector,
+      outcome: untilResult.outcome,
+      passes: untilResult.passes,
+    });
+  }
+  return withSuccessText(
+    {
+      direction: target.direction,
+      until: selector,
+      passes: untilResult.passes,
+      ...(options.amount !== undefined ? { amount: options.amount } : {}),
+      ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
+      ...(untilResult.result ?? {}),
+    },
+    formatScrollUntilMessage(target.direction, selector, untilResult.passes),
+  );
+}
+
+/**
+ * The end-of-content analyzer only reads vertical edges, so a horizontal `--until` is bounded by
+ * its pass budget alone rather than by a signal that would always report "no room".
+ */
+function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefined {
+  if (direction === 'down') return 'bottom';
+  if (direction === 'up') return 'top';
+  return undefined;
+}
+
+async function captureUntilNodes(runtime: BoundScrollUntil, context: DaemonCommandContext) {
+  return (
+    (
+      await runtime.operations.captureSnapshot({
+        options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
+        execution: runtimeExecutionFromContext(context),
+      })
+    ).nodes ?? []
+  );
 }
 
 async function captureEdgeState(
@@ -213,8 +322,14 @@ function scrollResult(
       completedPasses,
       options.amount,
       options.pixels,
+      honoredScrollPixels(interactionResult),
     ),
   );
+}
+
+/** The travel the planner produced, which saturates below a large requested amount. */
+function honoredScrollPixels(result: Record<string, unknown>): number | undefined {
+  return typeof result.pixels === 'number' ? result.pixels : undefined;
 }
 
 /** The neutral intent one scroll carries, projected from a resolved command context. */

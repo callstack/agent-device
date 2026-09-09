@@ -338,3 +338,92 @@ test('the edge plan proves its capture statically and the direction plan cannot 
   expectTypeOf<keyof DirectionOperations>().toEqualTypeOf<'scrollDirection'>();
   expectTypeOf<RequiredKeys<DirectionOperations>>().toEqualTypeOf<'scrollDirection'>();
 });
+
+/** Same shape the command runtime's `--until` tests use: a row walked into the viewport. */
+function untilNodes(targetY: number, hiddenBelow: boolean) {
+  return [
+    {
+      index: 1,
+      depth: 0,
+      type: 'ScrollView',
+      label: 'Form',
+      ...(hiddenBelow ? { hiddenContentBelow: true } : {}),
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'Email',
+      rect: { x: 0, y: targetY, width: 400, height: 40 },
+    },
+  ];
+}
+
+test('bound scroll --until stops on the pass whose capture shows the selector on screen', async () => {
+  const scrolls: string[] = [];
+  const frames = [untilNodes(2400, true), untilNodes(1200, true), untilNodes(300, true)];
+  const result = await runScroll(
+    ['down'],
+    { until: 'label=Email' },
+    {
+      captureSnapshot: async () => ({ nodes: frames[Math.min(scrolls.length, frames.length - 1)] }),
+      scroll: async (direction) => {
+        scrolls.push(direction);
+        return { pixels: 480 };
+      },
+    },
+  );
+
+  assert.equal(result.until, 'label=Email');
+  assert.equal(result.passes, 2);
+  assert.equal(scrolls.length, 2);
+  assert.match(String(result.message), /Scrolled down 2 passes until label=Email was visible/);
+});
+
+test('bound scroll --until reports the end of the content rather than spending its budget', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Missing' },
+        {
+          captureSnapshot: async () => ({ nodes: untilNodes(300, false) }),
+          scroll: async () => ({}),
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_edge_reached');
+      return true;
+    },
+  );
+});
+
+test('bound scroll rejects --until on an edge direction before any device work', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['bottom'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({ nodes: untilNodes(300, true) }),
+          scroll: async () => {
+            throw new Error('scroll should be rejected before the backend call');
+          },
+        },
+      ),
+    /scroll bottom already scrolls to the bottom edge and cannot take --until/,
+  );
+});
+
+test('bound scroll --until is refused when the owner advertises no capture', async () => {
+  const resolved = await resolveBoundScrollRuntime({
+    device: IOS_SIMULATOR,
+    positionals: ['down'],
+    context: { until: 'label=Email' } as DaemonCommandContext,
+    ...bindings({ scroll: async () => ({}) }),
+  });
+  assert.equal(resolved.ok, false);
+});

@@ -881,11 +881,11 @@ async function assertVisibleSelectorTarget(
     // A selector re-resolves against a fresh snapshot on every attempt, so the
     // recovery is: move the named direction, then retry THIS selector — no
     // separate snapshot step, and no @ref (a scroll expires the ref frame,
-    // #1366). Naming the direction stops the wrong-way / retry-the-same-ref loop;
-    // bounded steps stop the overshoot loop — a single large scroll (fling
-    // momentum on iOS) can sail past the target, so a short gesture pan lands it.
+    // #1366). `--until` is that whole loop as one command: it checks the same
+    // selector between passes, which is also what keeps a large step from
+    // overshooting, so the hint no longer has to trade distance for accuracy.
     hint: (direction) =>
-      `${scrollRevealClause(direction)} in small steps, retrying ${action} with the same selector after each (it re-resolves against a fresh snapshot). A single large scroll can overshoot the target; a short bounded gesture pan lands it more reliably. If it is inside a closed drawer or another tab, open that container first.`,
+      `${scrollRevealClause(direction, selector)} then retry ${action} with the same selector. --until checks the selector between passes, so it stops on the target rather than sailing past it. If it is inside a closed drawer or another tab, open that container first.`,
   });
 }
 
@@ -902,19 +902,29 @@ async function assertVisibleRefTarget(
     details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
     // 0014), so retrying this @ref would be rejected next. Steer to a selector,
-    // which re-resolves against a fresh snapshot and bypasses the ref-frame guard.
+    // which re-resolves against a fresh snapshot and bypasses the ref-frame guard
+    // — and which `--until` can then check between passes.
     hint: (direction) =>
-      `${scrollRevealClause(direction)} in small steps (a single large scroll can overshoot; a short bounded gesture pan lands it more reliably), then retry ${action} with a selector (e.g. text=/id=) rather than this @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.`,
+      `${scrollRevealClause(direction, null)} then retry ${action} with a selector (e.g. text=/id=) rather than this @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.`,
   });
 }
 
-// Shared lead-in for both off-screen hints. Names the concrete `scroll <dir>`
-// when the geometry gives one, and falls back to the generic phrasing when the
-// target is off more than one edge in a way that has no single reveal. Callers
-// append the bounded-steps guidance: a single large scroll (fling momentum on
-// iOS) can sail past the target, so small bounded moves are what actually land.
-function scrollRevealClause(direction: OffscreenScrollDirection | null): string {
-  return direction ? `Scroll ${direction} toward it` : 'Scroll toward it';
+/**
+ * Shared lead-in for both off-screen hints: the one command that reveals the target.
+ *
+ * When the geometry names a direction AND the caller has a selector to check, this is a complete
+ * `scroll <dir> --until <selector>` — one request that stops on the target instead of the
+ * scroll-then-look-again loop the hint used to prescribe. Without a selector to check (an @ref
+ * refusal) or without a single reveal direction (off more than one edge), it degrades to naming
+ * the move and leaves the stop condition to the caller's own next step.
+ */
+function scrollRevealClause(
+  direction: OffscreenScrollDirection | null,
+  selector: string | null,
+): string {
+  if (!direction) return 'Scroll toward it,';
+  if (!selector) return `Scroll ${direction} toward it,`;
+  return `Run scroll ${direction} --until '${selector}' to bring it on screen,`;
 }
 
 /**

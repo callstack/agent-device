@@ -145,9 +145,9 @@ const interactionCliSchemas = {
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount]',
-    usageFlags: ['pixels', 'durationMs', 'settle'],
+    usageFlags: ['until', 'pixels', 'durationMs', 'settle'],
     positionalArgs: ['directionOrEdge', 'amount?'],
-    allowedFlags: ['pixels', 'durationMs', ...postActionObservationCliFlags('scroll')],
+    allowedFlags: ['pixels', 'durationMs', 'until', ...postActionObservationCliFlags('scroll')],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
 

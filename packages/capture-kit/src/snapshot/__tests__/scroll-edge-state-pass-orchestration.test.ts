@@ -55,6 +55,25 @@ test('formatScrollEdgeMessage: pixels takes priority over amount when both are s
   assert.equal(formatScrollEdgeMessage('down', undefined, 0, 3, 250), 'Scrolled down by 250px');
 });
 
+/**
+ * One gesture saturates at the viewport axis minus its edge padding, so a large amount buys less
+ * travel than it names. The message reports what the planner honored rather than what was asked.
+ */
+test('an amount-based message names the honored travel when the planner reports it', () => {
+  assert.equal(
+    formatScrollEdgeMessage('down', undefined, 1, 3, undefined, 640),
+    'Scrolled down by 3 of the viewport (640px)',
+  );
+  assert.equal(
+    formatScrollEdgeMessage('down', undefined, 1, 0.65, undefined, undefined),
+    'Scrolled down by 0.65',
+  );
+  assert.equal(
+    formatScrollEdgeMessage('down', undefined, 1, undefined, 5000, 640),
+    'Scrolled down by 640px',
+  );
+});
+
 // ---------------------------------------------------------------------------
 // captureScrollEdgeState: retry-without-scope on an empty scoped capture
 // ---------------------------------------------------------------------------

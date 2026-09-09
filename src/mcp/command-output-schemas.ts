@@ -531,7 +531,8 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     {
       direction: enumSchema(['up', 'down', 'left', 'right']),
       edge: enumSchema(['top', 'bottom']),
-      passes: numberSchema('Edge scrolls only: how many scroll-and-check passes ran.'),
+      until: stringSchema('Until scrolls only: the selector the passes stopped on.'),
+      passes: numberSchema('Edge and until scrolls only: how many scroll-and-check passes ran.'),
       amount: numberSchema(),
       pixels: numberSchema(),
       durationMs: numberSchema(),

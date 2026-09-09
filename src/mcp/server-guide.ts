@@ -19,7 +19,7 @@ export const MCP_SERVER_INSTRUCTIONS = `agent-device drives iOS, Android, tvOS, 
 
 Start: known app -> call open {app, foreground: true} at once; do not probe with devices, apps, appstate, snapshot, or screenshot first. open returns the initial interactive snapshot with @refs. Unknown app id: devices, then apps, then open the discovered id; never invent ids. Existing session: continue from its state, do not reopen.
 
-Loop: press/click/fill/longpress/hover/scroll/back with settle: true; the response is the settled UI diff, continue from it. snapshot {interactiveOnly: true} only when the diff lacks the next target or did not settle. Verify with wait {kind: "text", text}, wait {selector}, wait {absent: selector}, is, get, or find; a bare screenshot is not verification. End with close.
+Loop: press/click/fill/longpress/hover/scroll/back with settle: true; the response is the settled UI diff, continue from it. To reach an off-screen target, scroll {direction, until: "<selector>"} scrolls until it is on screen in one call, and direction "bottom" runs to the end of the content; repeated bare scrolls are the slow way to find something. snapshot {interactiveOnly: true} only when the diff lacks the next target or did not settle. Verify with wait {kind: "text", text}, wait {selector}, wait {absent: selector}, is, get, or find; a bare screenshot is not verification. End with close.
 
 Targets: copy refs byte-for-byte (@e12, @e12~s4; keep @ and any ~sN). Refs go stale after mutations. Prefer refs, then id/label/role selectors; coordinates last. On a sparse/AX-unavailable warning its refs and selectors are invalid: screenshot, read the image, press {x, y}, then snapshot the changed screen.
 

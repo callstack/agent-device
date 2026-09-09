@@ -116,6 +116,13 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Scroll: explicit gesture distance in pixels',
   },
   {
+    key: 'until',
+    names: ['--until'],
+    type: 'string',
+    usageLabel: '--until <selector>',
+    usageDescription: 'Scroll: repeat passes until the selector is visible on screen',
+  },
+  {
     key: 'doubleTap',
     names: ['--double-tap'],
     type: 'boolean',

@@ -1,5 +1,6 @@
 import {
   assertExclusiveScrollDistanceInputs,
+  assertScrollUntilCompatible,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
@@ -13,6 +14,12 @@ import {
   type ScrollEdgeState,
   type ScrollEdgeTarget,
 } from '@agent-device/capture-kit/scroll-edge-state';
+import {
+  formatScrollUntilMessage,
+  runScrollUntilVisiblePasses,
+  scrollUntilNotFoundError,
+} from '@agent-device/capture-kit/scroll-until-visible';
+import { isSelectorVisibleInNodes } from '@agent-device/selectors/scroll-until-match';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
@@ -48,6 +55,8 @@ export type ScrollCommandOptions = CommandContext & {
   amount?: number;
   pixels?: number;
   durationMs?: number;
+  /** Repeat passes until this selector is visible on screen, then stop. */
+  until?: string;
 };
 
 export type ScrollCommandResult =
@@ -55,6 +64,7 @@ export type ScrollCommandResult =
       kind: 'viewport';
       direction: GestureDirection;
       edge?: 'top' | 'bottom';
+      until?: string;
       passes?: number;
       amount?: number;
       pixels?: number;
@@ -64,6 +74,7 @@ export type ScrollCommandResult =
       ResolvedInteractionTarget & {
         direction: GestureDirection;
         edge?: 'top' | 'bottom';
+        until?: string;
         passes?: number;
         amount?: number;
         pixels?: number;
@@ -81,6 +92,52 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
     throw new AppError('UNSUPPORTED_OPERATION', 'scroll is not supported by this backend');
   }
   const target = resolveScrollDirection(options.direction);
+  const distance = normalizeScrollDistance(options, target.edge);
+  const resolved = await resolveScrollTarget(runtime, options);
+  const runScroll = bindScrollPass(
+    runtime,
+    options,
+    resolved,
+    target.direction,
+    distance.execution,
+  );
+
+  if (options.until !== undefined) {
+    return await runUntilScroll({
+      runtime,
+      options,
+      resolved,
+      direction: target.direction,
+      until: options.until,
+      distance: distance.reported,
+      scroll: runScroll,
+    });
+  }
+  return await runDirectionOrEdgeScroll({
+    runtime,
+    options,
+    resolved,
+    target,
+    distance,
+    scroll: runScroll,
+  });
+};
+
+type NormalizedScrollDistance = {
+  /** What the caller asked for, echoed back on the result. */
+  reported: { amount?: number; pixels?: number };
+  execution: ReturnType<typeof resolveScrollExecutionOptions>;
+};
+
+/** Every distance/timing rejection, in one place, before any target resolution or device work. */
+function normalizeScrollDistance(
+  options: ScrollCommandOptions,
+  edge: ScrollEdge | undefined,
+): NormalizedScrollDistance {
+  assertScrollUntilCompatible({
+    ...(edge ? { edge } : {}),
+    ...(options.until === undefined ? {} : { until: options.until }),
+  });
   const amount = normalizeOptionalPositiveNumber(options.amount, 'scroll amount');
   const pixels = normalizeOptionalPositiveInteger(options.pixels, 'scroll pixels');
   const durationMs = normalizeScrollDurationMs(options.durationMs);
@@ -88,58 +145,88 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
     { amount, pixels },
     'scroll accepts either amount or pixels, not both',
   );
+  const reported = {
+    ...(amount !== undefined ? { amount } : {}),
+    ...(pixels !== undefined ? { pixels } : {}),
+  };
+  return {
+    reported,
+    execution: resolveScrollExecutionOptions(
+      { ...reported, ...(durationMs !== undefined ? { durationMs } : {}) },
+      edge,
+    ),
+  };
+}
 
-  const resolved = await resolveScrollTarget(runtime, options);
+/** One pass, with its target and options already resolved: the unit every branch repeats. */
+function bindScrollPass(
+  runtime: AgentDeviceRuntime,
+  options: ScrollCommandOptions,
+  resolved: ResolvedScrollTarget,
+  direction: GestureDirection,
+  execution: ReturnType<typeof resolveScrollExecutionOptions>,
+): () => Promise<Awaited<ReturnType<NonNullable<AgentDeviceRuntime['backend']['scroll']>>>> {
+  const scrollBackend = runtime.backend.scroll;
+  if (!scrollBackend) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'scroll is not supported by this backend');
+  }
   const backendTarget =
     resolved.kind === 'viewport'
       ? { kind: 'viewport' as const }
       : { kind: 'point' as const, point: requireResolvedPoint(resolved) };
-  const scrollBackend = runtime.backend.scroll;
-  const executionOptions = resolveScrollExecutionOptions(
-    {
-      ...(amount !== undefined ? { amount } : {}),
-      ...(pixels !== undefined ? { pixels } : {}),
-      ...(durationMs !== undefined ? { durationMs } : {}),
-    },
-    target.edge,
-  );
-  const runScroll = async () =>
+  return async () =>
     await scrollBackend(toBackendContext(runtime, options), backendTarget, {
-      direction: target.direction,
-      ...executionOptions,
+      direction,
+      ...execution,
     });
-  let backendResult: Awaited<ReturnType<NonNullable<typeof runtime.backend.scroll>>> | undefined;
-  let completedPasses = 0;
-  if (target.edge) {
-    const edge = target.edge;
-    const edgeTarget = buildScrollEdgeTarget(resolved);
-    const edgeResult = await runScrollEdgePasses({
-      edge,
-      captureState: async (scope) =>
-        await captureRuntimeScrollEdgeState(runtime, options, edge, edgeTarget, scope),
-      scroll: runScroll,
-    });
-    backendResult = edgeResult.result;
-    completedPasses = edgeResult.passes;
-  } else {
-    backendResult = await runScroll();
-    completedPasses = 1;
-  }
-  const formattedBackendResult = toBackendResult(backendResult);
-  const reportedDurationMs = honoredScrollDurationMs(formattedBackendResult);
+}
+
+/** `scroll <direction>` and `scroll top|bottom`: one pass, or passes until the edge stops moving. */
+async function runDirectionOrEdgeScroll(params: {
+  runtime: AgentDeviceRuntime;
+  options: ScrollCommandOptions;
+  resolved: ResolvedScrollTarget;
+  target: { direction: GestureDirection; edge?: ScrollEdge };
+  distance: NormalizedScrollDistance;
+  scroll: () => Promise<Awaited<ReturnType<NonNullable<AgentDeviceRuntime['backend']['scroll']>>>>;
+}): Promise<ScrollCommandResult> {
+  const { runtime, options, resolved, target, distance } = params;
+  const edge = target.edge;
+  const pass = edge
+    ? await runScrollEdgePasses({
+        edge,
+        captureState: async (scope) =>
+          await captureRuntimeScrollEdgeState(
+            runtime,
+            options,
+            edge,
+            buildScrollEdgeTarget(resolved),
+            scope,
+          ),
+        scroll: params.scroll,
+      })
+    : { passes: 1, result: await params.scroll() };
+  const backendResult = toBackendResult(pass.result);
+  const reportedDurationMs = honoredScrollDurationMs(backendResult);
   return {
     ...resolved,
     direction: target.direction,
-    ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
-    ...(amount !== undefined ? { amount } : {}),
-    ...(pixels !== undefined ? { pixels } : {}),
+    ...(edge ? { edge, passes: pass.passes } : {}),
+    ...distance.reported,
     ...(reportedDurationMs !== undefined ? { durationMs: reportedDurationMs } : {}),
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...(backendResult ? { backendResult } : {}),
     ...successText(
-      formatScrollEdgeMessage(target.direction, target.edge, completedPasses, amount, pixels),
+      formatScrollEdgeMessage(
+        target.direction,
+        edge,
+        pass.passes,
+        distance.reported.amount,
+        distance.reported.pixels,
+        honoredScrollPixels(backendResult),
+      ),
     ),
   };
-};
+}
 
 async function resolveScrollTarget(
   runtime: AgentDeviceRuntime,
@@ -160,7 +247,6 @@ async function resolveScrollTarget(
     },
   );
 }
-
 function resolveScrollDirection(direction: ScrollInputDirection): {
   direction: GestureDirection;
   edge?: 'top' | 'bottom';
@@ -169,7 +255,6 @@ function resolveScrollDirection(direction: ScrollInputDirection): {
   if (direction === 'top') return { direction: 'up', edge: 'top' };
   return { direction: requireDirection(direction, 'scroll direction') };
 }
-
 function buildScrollEdgeTarget(resolved: ResolvedScrollTarget): ScrollEdgeTarget {
   return resolved.kind === 'viewport'
     ? {}
@@ -178,7 +263,6 @@ function buildScrollEdgeTarget(resolved: ResolvedScrollTarget): ScrollEdgeTarget
         nodeIndex: 'node' in resolved ? resolved.node?.index : undefined,
       };
 }
-
 async function captureRuntimeScrollEdgeState(
   runtime: AgentDeviceRuntime,
   options: ScrollCommandOptions,
@@ -204,6 +288,86 @@ async function captureRuntimeScrollEdgeState(
       return result.snapshot?.nodes ?? result.nodes ?? [];
     },
   });
+}
+
+/**
+ * `scroll --until <selector>`: repeat the pass until the selector is on screen.
+ *
+ * A sibling of the edge branch rather than a variant of the one-pass branch — it owns a different
+ * stop condition, a different failure vocabulary, and a result that names the selector it stopped
+ * on, none of which the ordinary scroll result carries.
+ */
+async function runUntilScroll(params: {
+  runtime: AgentDeviceRuntime;
+  options: ScrollCommandOptions;
+  resolved: ResolvedScrollTarget;
+  direction: GestureDirection;
+  until: string;
+  distance: { amount?: number; pixels?: number };
+  scroll: () => Promise<Awaited<ReturnType<NonNullable<AgentDeviceRuntime['backend']['scroll']>>>>;
+}): Promise<ScrollCommandResult> {
+  const { runtime, options, resolved, direction, until, distance } = params;
+  const edge = verticalEdgeFor(direction);
+  const result = await runScrollUntilVisiblePasses({
+    ...(edge === undefined ? {} : { edge }),
+    captureNodes: async () => await captureRuntimeScrollNodes(runtime, options),
+    isVisibleMatch: async (nodes) =>
+      await isSelectorVisibleInNodes({
+        nodes,
+        selector: until,
+        platform: runtime.backend.platform,
+      }),
+    scroll: params.scroll,
+  });
+  if (result.outcome !== 'matched') {
+    throw scrollUntilNotFoundError({
+      direction,
+      selector: until,
+      outcome: result.outcome,
+      passes: result.passes,
+    });
+  }
+  const backendResult = toBackendResult(result.result);
+  return {
+    ...resolved,
+    direction,
+    until,
+    passes: result.passes,
+    ...distance,
+    ...(backendResult ? { backendResult } : {}),
+    ...successText(formatScrollUntilMessage(direction, until, result.passes)),
+  };
+}
+
+/** The travel the planner produced, which saturates below a large requested amount. */
+function honoredScrollPixels(result: Record<string, unknown> | undefined): number | undefined {
+  return typeof result?.pixels === 'number' ? result.pixels : undefined;
+}
+
+/**
+ * The end-of-content analyzer only reads vertical edges, so a horizontal `--until` is bounded by
+ * its pass budget alone rather than by a signal that would always report "no room".
+ */
+function verticalEdgeFor(direction: GestureDirection): ScrollEdge | undefined {
+  if (direction === 'down') return 'bottom';
+  if (direction === 'up') return 'top';
+  return undefined;
+}
+
+async function captureRuntimeScrollNodes(
+  runtime: AgentDeviceRuntime,
+  options: ScrollCommandOptions,
+) {
+  if (!runtime.backend.captureSnapshot) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'scroll --until requires snapshot support to check whether the selector became visible',
+    );
+  }
+  const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
+    includeRects: true,
+  });
+  return result.snapshot?.nodes ?? result.nodes ?? [];
 }
 
 function requireDirection(
