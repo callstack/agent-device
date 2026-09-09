@@ -249,7 +249,10 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
             tree: {
               XC_kAXXCAttributeElementType: 'Application',
               XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
-              XC_kAXXCAttributeChildren: [],
+              XC_kAXXCAttributeChildren:
+                request.maxDepth === 1
+                  ? [{ XC_kAXXCAttributeElementType: 'Button', XC_kAXXCAttributeChildren: [] }]
+                  : [],
             },
           },
           {

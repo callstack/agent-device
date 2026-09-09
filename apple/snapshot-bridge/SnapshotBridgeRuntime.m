@@ -342,6 +342,13 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;
   }
+  if (!snapshot && [runtimeError.domain isEqualToString:@"agent-device.snapshot"]) {
+    BOOL exhausted = runtimeError.code == 1;
+    if (error) *error = failureResponse(requestId, exhausted ? @"reader_unavailable" : @"malformed_tree",
+        exhausted ? @"continuation-budget-exhausted" : @"snapshot-tree-malformed", runtimeError.localizedDescription);
+    finishRequestWatchdog(watchdog, watchdogState);
+    return nil;
+  }
   if (!snapshot) {
     NSNumber *axError = runtimeError.userInfo[kAccessibilityErrorKey];
     NSInteger code = [axError respondsToSelector:@selector(integerValue)] ? axError.integerValue : runtimeError.code;

@@ -151,12 +151,21 @@ extension RunnerTests {
     let response = try execute(command: command)
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
-    XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: currentBundleId))
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: currentBundleId))
     XCTAssertNil(textEntryTapWitness)
     let type = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-unavailable-probe","text":"must-not-type"}"#)
     let typed = try execute(command: type)
     XCTAssertFalse(typed.ok)
     XCTAssertEqual(typed.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    let fieldFrame = field.frame
+    let nextTap = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-after-probe-recovery","x":\#(fieldFrame.midX),"y":\#(fieldFrame.midY),"synthesized":true}"#
+    )
+    XCTAssertTrue(try execute(command: nextTap).ok)
+    XCTAssertNotNil(textEntryTapWitness)
+    XCTAssertTrue(try execute(command: type).ok)
+    XCTAssertEqual(field.value as? String, "must-not-type")
   }
 #endif
 }

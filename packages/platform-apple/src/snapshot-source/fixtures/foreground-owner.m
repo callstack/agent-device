@@ -1,4 +1,5 @@
 #import "SnapshotBridgeRuntime.h"
+#import "SnapshotBridgeCapture.h"
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <dlfcn.h>
@@ -37,6 +38,18 @@ static NSString *captureScenario;
 - (id)userTestingSnapshotForElement:(id)element options:(NSDictionary *)options error:(NSError **)error
 {
   captureCount++;
+  if ([captureScenario isEqual:@"runtime-budget"]) {
+    BOOL root = ![element isKindOfClass:NSNumber.class];
+    NSMutableArray *children = [NSMutableArray array];
+    for (NSUInteger i = 0; i < (root ? 40 : 1); i++) [children addObject:@{
+        @"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[],
+        @"UIAccessibilitySnapshotKeyElement": @(i), @"UIAccessibilitySnapshotKeyChildrenCount": @(root ? 1 : 0)}];
+    return @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": children};
+  }
+  if ([captureScenario isEqual:@"rejected"]) {
+    if (error) *error = [NSError errorWithDomain:@"AX" code:-25201 userInfo:@{@"accessibility-error": @(-25201)}];
+    return nil;
+  }
   if ([captureScenario isEqual:@"unavailable"]) {
     if (error) *error = [NSError errorWithDomain:@"unavailable" code:5
         userInfo:@{NSLocalizedDescriptionKey:@"Error kAXErrorIllegalArgument"}];
@@ -130,6 +143,38 @@ int main(int argc, const char *argv[])
   @autoreleasepool {
     require(argc == 2, @"one capture scenario is required");
     NSString *scenario = @(argv[1]);
+    if ([scenario isEqual:@"identity"] || [scenario isEqual:@"request-budget"] || [scenario hasPrefix:@"api-depth-"]) {
+      BOOL budget = [scenario isEqual:@"request-budget"];
+      NSUInteger depth = [scenario hasPrefix:@"api-depth-"] ? [[scenario substringFromIndex:10] integerValue] : 64;
+      NSMutableArray *children = [NSMutableArray array];
+      for (NSUInteger i = 0; i < (budget ? 40 : 2); i++) {
+        [children addObject:@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[],
+            @"UIAccessibilitySnapshotKeyElement": @(i), @"UIAccessibilitySnapshotKeyChildrenCount": @(budget ? 1 : 0)}];
+      }
+      NSDictionary *root = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": children};
+      __block NSUInteger requests = 0;
+      BOOL truncated = NO;
+      NSError *failure = nil;
+      NSDictionary *result = captureSnapshotTree(@"root", depth, 1000, ^id(id element, NSUInteger levels, NSUInteger nodes, NSError **error) {
+        requests++;
+        if ([scenario hasPrefix:@"api-depth-"]) {
+          require(levels == depth + 1, @"native levels must include the root exactly once");
+          NSDictionary *tree = nil;
+          for (NSUInteger i = 0; i < levels; i++) tree = @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": tree ? @[tree] : @[]};
+          return tree;
+        }
+        if ([element isEqual:@"root"]) return root;
+        return @{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[@{@"UIAccessibilitySnapshotKeyAttributes": @{}, @"UIAccessibilitySnapshotKeyChildren": @[]}]};
+      }, &truncated, &failure);
+      if (budget) require(!result && failure.code == 1 && requests == 32, @"request budget must fail without publishing partial content");
+      else if ([scenario isEqual:@"identity"]) require(result == root && requests == 1, @"healthy capture must reuse the native tree");
+      else {
+        NSUInteger count = 0;
+        for (NSDictionary *node = result; node; node = [node[@"UIAccessibilitySnapshotKeyChildren"] firstObject]) count++;
+        require(count == depth + 1 && !truncated && requests == 1, @"every requested depth must include root plus permitted descendants");
+      }
+      return 0;
+    }
     captureScenario = scenario;
     AXElement *target = [AXElement new];
     target.pid = 42;
@@ -139,20 +184,23 @@ int main(int argc, const char *argv[])
     primaryApplication = target;
     NSString *expectedCode = nil;
     NSUInteger expectedCaptures = 0;
-    if ([scenario hasPrefix:@"wide-"] || [scenario isEqual:@"zero-depth"]) {
+    if ([scenario isEqual:@"runtime-budget"]) {
+      expectedCaptures = 32;
+      expectedCode = @"continuation-budget-exhausted";
+    } else if ([scenario hasPrefix:@"wide-"] || [scenario isEqual:@"zero-depth"]) {
       expectedCaptures = [scenario isEqual:@"wide-continuation"] ? 2 : 1;
     } else if ([scenario hasPrefix:@"depth-"]) {
-      expectedCaptures = [scenario isEqual:@"depth-bound"] ? 1 : [scenario isEqual:@"depth-nodes"] ? 2 : 3;
+      expectedCaptures = [scenario isEqual:@"depth-bound"] ? 5 : [scenario isEqual:@"depth-nodes"] ? 2 : 3;
       if ([scenario isEqual:@"depth-missing-element"] || [scenario isEqual:@"depth-incomplete"]) {
-        expectedCode = @"application-server-unavailable";
+        expectedCode = @"snapshot-tree-malformed";
         if ([scenario isEqual:@"depth-missing-element"]) expectedCaptures = 2;
       }
       if ([scenario isEqual:@"depth-owner-change"]) {
         replacementApplication = system;
         expectedCode = @"foreground-owner-changed";
       }
-    } else if ([scenario isEqual:@"unavailable"]) {
-      expectedCaptures = 1;
+    } else if ([scenario isEqual:@"unavailable"] || [scenario isEqual:@"rejected"]) {
+      expectedCaptures = [scenario isEqual:@"rejected"] ? 3 : 1;
       expectedCode = @"application-server-unavailable";
     } else if ([scenario isEqualToString:@"stable"]) {
       expectedCaptures = 1;
@@ -171,11 +219,11 @@ int main(int argc, const char *argv[])
     BridgeRuntime *runtime = [[FixtureRuntime alloc] initWithError:&setupError];
     require(runtime != nil, setupError ?: @"fixture initialization failed");
     NSDictionary *error = nil;
-    NSDictionary *result = [runtime snapshotForProcess:42 maxDepth:([scenario isEqual:@"zero-depth"] ? 0 : [scenario isEqual:@"depth-bound"] ? 4 : 8) maxNodes:(([scenario isEqual:@"depth-nodes"] || [scenario hasPrefix:@"wide-"]) ? 3 : 10)
+    NSDictionary *result = [runtime snapshotForProcess:42 maxDepth:([scenario isEqual:@"zero-depth"] ? 0 : [scenario isEqual:@"depth-bound"] ? 4 : 8) maxNodes:(([scenario isEqual:@"depth-nodes"] || [scenario hasPrefix:@"wide-"]) ? 3 : [scenario isEqual:@"runtime-budget"] ? 1000 : 10)
         requestId:@"capture-1" generation:@"generation-1" maxDurationMs:4000 error:&error];
     if (expectedCode) {
       require(result == nil, @"refused capture must not publish the app tree");
-      require([error[@"error_kind"] isEqual:([expectedCode isEqual:@"application-server-unavailable"] ? @"application_unavailable" : @"unsupported")], @"refusal must preserve the typed failure kind");
+      require([error[@"error_kind"] isEqual:([expectedCode isEqual:@"application-server-unavailable"] ? @"application_unavailable" : [expectedCode isEqual:@"snapshot-tree-malformed"] ? @"malformed_tree" : [expectedCode isEqual:@"continuation-budget-exhausted"] ? @"reader_unavailable" : @"unsupported")], @"refusal must preserve the typed failure kind");
       require([error[@"error_code"] isEqual:expectedCode], @"refusal must name the ownership phase");
       require([error[@"requestId"] isEqual:@"capture-1"], @"refusal must preserve request identity");
     } else {
@@ -190,7 +238,7 @@ int main(int argc, const char *argv[])
         NSDictionary *node = result[@"tree"];
         NSUInteger count = 1;
         while ([node[@"XC_kAXXCAttributeChildren"] count]) {node = [node[@"XC_kAXXCAttributeChildren"] firstObject]; count++;}
-        require(count == ([scenario isEqual:@"depth-bound"] ? 4 : 3), @"bounded capture must retain every allowed node");
+        require(count == ([scenario isEqual:@"depth-bound"] ? 5 : 3), @"bounded capture must retain every allowed node");
       } else if ([scenario hasPrefix:@"depth-"]) {
         NSDictionary *node = result[@"tree"];
         for (NSUInteger i = 0; i < 6; i++) node = [node[@"XC_kAXXCAttributeChildren"] firstObject];

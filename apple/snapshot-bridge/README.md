@@ -54,6 +54,10 @@ A healthy capture uses one native request. If native acquisition rejects it,
 `SnapshotBridgeCapture.m` retries supported native failure codes at lower depths
 and fetches withheld children from their accessibility elements. The completed
 tree keeps the original depth and node limits; partial trees disclose truncation.
-Recovery allows at most 32 native requests within the existing capture deadline,
+The traversal depth counts edges below the root; native requests count the root
+as one level. Each acquisition allows two lower-depth retries, and recovery
+allows at most 32 native requests within the existing capture deadline,
 checks foreground ownership on every request, and returns a failure when it
-cannot complete a continuation. The route then retains its XCTest fallback.
+cannot complete a continuation. Budget exhaustion and malformed continuations
+use non-launch failure codes, so the route falls back without launch re-polling.
+Unchanged native dictionaries and child arrays are reused.

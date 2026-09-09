@@ -21,7 +21,7 @@ static const NSUInteger maximumRequests = 32;
 - (nullable NSDictionary *)read:(id)element depth:(NSUInteger)depth error:(NSError **)error
 {
   NSUInteger attemptDepth = MIN(depth, self.acceptedDepth);
-  for (;;) {
+  for (NSUInteger retries = 0;; retries++) {
     if (self.requests >= maximumRequests) {
       if (error) *error = [NSError errorWithDomain:@"agent-device.snapshot" code:1
           userInfo:@{NSLocalizedDescriptionKey: @"snapshot continuation request budget exhausted"}];
@@ -34,7 +34,7 @@ static const NSUInteger maximumRequests = 32;
     NSNumber *nativeCode = failure.userInfo[@"accessibility-error"];
     BOOL rejected = ([nativeCode isKindOfClass:NSNumber.class] && nativeCode.integerValue == -25201) ||
         ([failure.domain isEqualToString:@"com.apple.dt.xctest.automation-support.error"] && failure.code == 5);
-    if (!rejected || attemptDepth <= 1) {
+    if (!rejected || attemptDepth <= 1 || retries >= 2) {
       if (error) *error = failure;
       return nil;
     }
@@ -60,11 +60,12 @@ static const NSUInteger maximumRequests = 32;
   NSArray *children = tree[childrenKey];
   NSNumber *childCount = tree[childCountKey];
   BOOL withheld = [childCount isKindOfClass:NSNumber.class] && childCount.unsignedIntegerValue > children.count;
-  NSMutableDictionary *result = [tree mutableCopy];
   if (depth <= 1 || self.remainingNodes == 0) {
     self.truncated |= children.count > 0 || withheld;
-    result[childrenKey] = @[];
-    return result;
+    if (children.count == 0) return tree;
+    NSMutableDictionary *bounded = [tree mutableCopy];
+    bounded[childrenKey] = @[];
+    return bounded;
   }
   if (withheld && children.count < self.remainingNodes) {
     id element = tree[elementKey];
@@ -83,17 +84,23 @@ static const NSUInteger maximumRequests = 32;
     }
   }
   if (withheld && children.count < childCount.unsignedIntegerValue) self.truncated = YES;
-  NSMutableArray *materialized = [NSMutableArray array];
+  NSMutableArray *materialized = nil;
+  NSUInteger index = 0;
   for (NSDictionary *child in children) {
     if (self.remainingNodes == 0) {
       self.truncated = YES;
+      if (!materialized) materialized = [[children subarrayWithRange:NSMakeRange(0, index)] mutableCopy];
       break;
     }
     NSDictionary *node = [self materialize:child depth:depth - 1 error:error];
     if (!node) return nil;
+    if (node != child && !materialized) materialized = [[children subarrayWithRange:NSMakeRange(0, index)] mutableCopy];
     [materialized addObject:node];
+    index++;
   }
-  result[childrenKey] = materialized;
+  if (!materialized && children == tree[childrenKey]) return tree;
+  NSMutableDictionary *result = [tree mutableCopy];
+  result[childrenKey] = materialized ?: children;
   return result;
 }
 @end
@@ -103,11 +110,11 @@ NSDictionary *captureSnapshotTree(id element, NSUInteger maxDepth, NSUInteger ma
 {
   SnapshotTreeCapture *capture = [SnapshotTreeCapture new];
   capture.reader = reader;
-  capture.acceptedDepth = maxDepth;
+  capture.acceptedDepth = maxDepth + 1;
   capture.remainingNodes = maxNodes;
   capture.maximumNodes = maxNodes;
-  NSDictionary *tree = [capture read:element depth:maxDepth error:error];
-  NSDictionary *result = tree ? [capture materialize:tree depth:MAX(1, maxDepth) error:error] : nil;
+  NSDictionary *tree = [capture read:element depth:maxDepth + 1 error:error];
+  NSDictionary *result = tree ? [capture materialize:tree depth:maxDepth + 1 error:error] : nil;
   *truncated = capture.truncated;
   return result;
 }

@@ -33,8 +33,7 @@ extension RunnerTests {
       return elements.first
     case .absent:
       return nil
-    case .unavailable(let failure):
-      penalizeSnapshotXCTestChannel(bundleId: currentBundleId, reason: failure.rawValue)
+    case .unavailable:
       return nil
     }
   }

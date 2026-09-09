@@ -37,6 +37,14 @@ describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => 
 
   test.each([
     'stable',
+    'identity',
+    'request-budget',
+    'runtime-budget',
+    'api-depth-0',
+    'api-depth-1',
+    'api-depth-4',
+    'api-depth-128',
+    'rejected',
     'wide-nodes',
     'wide-continuation',
     'zero-depth',
