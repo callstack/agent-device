@@ -24,6 +24,7 @@ import {
   prepareXctestrunWithEnv,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
+  type RunnerCacheProbeBudget,
 } from './runner-xctestrun.ts';
 import {
   resolveRunnerRequestSignal,
@@ -112,7 +113,10 @@ export async function ensureRunnerSession(
     const existing = runnerSessions.get(device.id);
     if (existing) {
       assertExpectedRunnerSession(existing, options.expectedRunnerSessionId);
-      const reusable = await resolveReusableRunnerSession(device, existing);
+      const reusable = await resolveReusableRunnerSession(device, existing, {
+        timeoutMs: options.startupTimeoutMs,
+        signal: resolveRunnerRequestSignal(options),
+      });
       if (reusable) return reusable;
     }
 
@@ -307,6 +311,7 @@ function runnerSessionOwnershipChanged(): AppError {
 async function resolveReusableRunnerSession(
   device: DeviceInfo,
   existing: RunnerSession,
+  cacheProbeBudget: RunnerCacheProbeBudget,
 ): Promise<RunnerSession | null> {
   if (!isRunnerProcessAlive(existing.child.pid)) {
     await measureRunnerStartupStep({}, 'stop_stale_session', async () => {
@@ -336,7 +341,7 @@ async function resolveReusableRunnerSession(
 
   const expectedDerived = resolveRunnerDerivedPath(
     device,
-    resolveExpectedRunnerCacheMetadata(device),
+    resolveExpectedRunnerCacheMetadata(device, undefined, cacheProbeBudget),
   );
   if (existingArtifact?.derived !== expectedDerived) {
     emitDiagnostic({

@@ -83,7 +83,13 @@ export async function ensureXctestrunArtifact(
   if (external) return external;
 
   const projectRoot = findProjectRoot();
-  const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
+  // The cache decision runs blocking toolchain probes before any build starts,
+  // so it spends this request's build budget and must answer to it: the same
+  // deadline and abort signal the build itself would get (#2422).
+  const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot, {
+    timeoutMs: options.buildTimeoutMs,
+    signal: options.signal,
+  });
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
   return await withKeyedLock(runnerXctestrunBuildLocks, derived, async () => {
     const releaseCacheLock = await acquireRunnerXctestrunCacheLock(derived);

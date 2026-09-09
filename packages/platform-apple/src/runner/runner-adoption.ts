@@ -19,6 +19,7 @@ import {
 import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
+  type RunnerCacheProbeBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
@@ -86,7 +87,9 @@ export async function tryAdoptRunnerSessionFromLease(
   if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
     return skip('runner_pid_recycled');
   }
-  const expectedDerived = resolveExpectedDerivedPath(device);
+  const expectedDerived = resolveExpectedDerivedPath(device, {
+    timeoutMs: options.startupTimeoutMs,
+  });
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
     return skip('artifact_fingerprint_mismatch');
@@ -134,9 +137,15 @@ async function probeRunnerAnswersUptime(device: DeviceInfo, port: number): Promi
   }
 }
 
-function resolveExpectedDerivedPath(device: DeviceInfo): string | null {
+function resolveExpectedDerivedPath(
+  device: DeviceInfo,
+  budget: RunnerCacheProbeBudget,
+): string | null {
   try {
-    return resolveRunnerDerivedPath(device, resolveExpectedRunnerCacheMetadata(device));
+    return resolveRunnerDerivedPath(
+      device,
+      resolveExpectedRunnerCacheMetadata(device, undefined, budget),
+    );
   } catch {
     return null;
   }

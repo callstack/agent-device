@@ -39,7 +39,9 @@ test('a cold-start toolchain probe recovers on retry: the first call exceeds the
 });
 
 test('a toolchain host that never returns still fails at the deadline with the same timeout error', async () => {
+  let calls = 0;
   const host = fakeToolchainHost((command) => {
+    calls += 1;
     throw new AppError('COMMAND_FAILED', `${command} timed out after 30000ms`, {
       timeoutMs: 30_000,
     });
@@ -50,6 +52,26 @@ test('a toolchain host that never returns still fails at the deadline with the s
     (error: unknown) =>
       error instanceof AppError && error.message === 'xcodebuild timed out after 30000ms',
   );
+  // Exactly one retry, not an unbounded loop.
+  assert.equal(calls, 2);
+});
+
+test('a probe that failed on its own and merely says "timed out" in its message is not retried', async () => {
+  let calls = 0;
+  const host = fakeToolchainHost((command) => {
+    calls += 1;
+    // No `timeoutMs` detail: the tool reported its own failure, the exec layer
+    // did not kill it at a timeout we asked for. Retrying that just doubles a
+    // failure the retry cannot fix.
+    throw new AppError('COMMAND_FAILED', `${command} timed out after 10ms`, { cmd: command });
+  });
+
+  await assert.rejects(
+    readSnapshotSourceToolchain(host, 'iOS 26.2', createSnapshotSourceDeadline(120_000, undefined)),
+    (error: unknown) =>
+      error instanceof AppError && error.message === 'xcodebuild timed out after 10ms',
+  );
+  assert.equal(calls, 1);
 });
 
 function toolchainAnswer(

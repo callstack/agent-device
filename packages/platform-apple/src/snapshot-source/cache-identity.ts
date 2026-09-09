@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -120,11 +120,13 @@ async function toolOutput(
 }
 
 /**
- * Runs one toolchain probe, retrying exactly once if the attempt times out
+ * Runs one toolchain probe, retrying exactly once if the attempt timed out
  * and the deadline still has room. The retry absorbs the cold-start
  * signature-verification stall named on COLD_TOOLCHAIN_PROBE_TIMEOUT_MS: the
  * first exec of a tool on a fresh host can block for that long, but the
- * immediate next exec of the same tool is instant.
+ * immediate next exec of the same tool is instant. Only the exec layer's own
+ * structured timeout counts -- a tool that failed by itself and merely said
+ * "timed out" in its output is not this stall and is not retried.
  */
 async function runToolchainProbe(
   host: SnapshotSourceHost,
@@ -135,7 +137,7 @@ async function runToolchainProbe(
   try {
     return await execToolchainProbe(host, command, args, deadline);
   } catch (error) {
-    if (!isToolchainProbeTimeout(error) || !toolchainProbeDeadlineHasRoom(deadline)) throw error;
+    if (!isCommandTimeoutError(error) || !toolchainProbeDeadlineHasRoom(deadline)) throw error;
     return await execToolchainProbe(host, command, args, deadline);
   }
 }
@@ -158,8 +160,4 @@ function execToolchainProbe(
 
 function toolchainProbeDeadlineHasRoom(deadline: SnapshotSourceDeadline): boolean {
   return !deadline.signal?.aborted && deadline.clock.remainingMs() > 0;
-}
-
-function isToolchainProbeTimeout(error: unknown): boolean {
-  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }

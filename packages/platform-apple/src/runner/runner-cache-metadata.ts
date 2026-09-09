@@ -2,9 +2,11 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   createTtlMemo,
+  Deadline,
+  isCommandTimeoutError,
   isEnvTruthy,
   findProjectRoot,
   readVersion,
@@ -26,8 +28,9 @@ const RUNNER_CACHE_SCHEMA_VERSION = 2;
 const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
 
 /**
- * Per-call timeout for a toolchain identity probe (`xcodebuild -version`,
- * `xcrun --show-sdk-version`, …). Must equal `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS`
+ * Ceiling on one toolchain identity probe attempt (`xcodebuild -version`,
+ * `xcrun --show-sdk-version`, …); the owning request's remaining budget can
+ * cap an attempt lower. Must equal `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS`
  * in `../snapshot-source/cache-identity.ts` -- both absorb the same ~18 to
  * 19 second syspolicyd signature-scan stall on the first `xcodebuild`/
  * `xcrun` exec after a fresh macOS host boots (#2422). It is declared here
@@ -39,6 +42,19 @@ const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
  */
 export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
 
+/**
+ * Ceiling on the wall clock the whole toolchain fingerprint may spend, across
+ * all three probes and their retries, when the owning request carries no
+ * shorter budget. Sized for the one cold-start stall the retry exists for --
+ * a single stalled probe (up to {@link COLD_TOOLCHAIN_PROBE_TIMEOUT_MS}) plus
+ * its now-warm retry and the two remaining probes -- not for three
+ * independently stalling tools, which is why the per-call timeout alone is not
+ * the bound (#2422).
+ */
+const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
+
+const TOOLCHAIN_PROBE_BUDGET_EXHAUSTED_DETAIL =
+  'the request budget for reading the toolchain was exhausted before this probe could run';
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =
@@ -66,6 +82,59 @@ type ToolchainProbeFailure = {
   reason: 'probe_error' | 'nonzero_exit' | 'empty_output' | 'unparsable_output';
   detail: string;
 };
+
+/**
+ * What the request that wants a runner cache decision has left to spend on it.
+ * The decision blocks the calling request on up to three synchronous `spawnSync`
+ * probes, so the request's own deadline and cancellation must reach them: an
+ * exhausted budget fails the decision instead of starting another 30 second
+ * probe, and a canceled request surfaces the cancellation rather than
+ * retrying (#2422). A caller with neither still gets
+ * {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
+ *
+ * `spawnSync` cannot be interrupted once it has started, so cancellation is
+ * observed between attempts; the per-attempt cap is what bounds how long that
+ * takes.
+ */
+export type RunnerCacheProbeBudget = {
+  /** Milliseconds the owning request has left, if it carries a deadline. */
+  timeoutMs?: number;
+  /** The owning request's cancellation signal, if it carries one. */
+  signal?: AbortSignal;
+};
+
+/**
+ * The remaining-time and cancellation view the probes consult. One is created
+ * per fingerprint read, so the three probes and their retries share -- and
+ * together cannot exceed -- a single budget.
+ */
+type ToolchainProbeClock = {
+  /** Milliseconds the next attempt may block for; 0 once the budget is spent. */
+  attemptTimeoutMs(): number;
+  /** Throws the owning request's cancellation error once it has aborted. */
+  throwIfCanceled(): void;
+};
+
+function createToolchainProbeClock(
+  budget: RunnerCacheProbeBudget | undefined,
+): ToolchainProbeClock {
+  const ownerRemainingMs =
+    budget?.timeoutMs !== undefined && Number.isFinite(budget.timeoutMs)
+      ? Math.max(0, budget.timeoutMs)
+      : Number.POSITIVE_INFINITY;
+  const deadline = Deadline.fromTimeoutMs(
+    Math.min(TOOLCHAIN_FINGERPRINT_BUDGET_MS, ownerRemainingMs),
+  );
+  return {
+    attemptTimeoutMs: () =>
+      Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, Math.floor(deadline.remainingMs())),
+    throwIfCanceled: () => {
+      if (budget?.signal?.aborted) {
+        throw createRequestCanceledError({ phase: 'apple_toolchain_probe' });
+      }
+    },
+  };
+}
 
 type ProbeResult<Value> =
   | { ok: true; value: Value }
@@ -139,13 +208,14 @@ export const IOS_RUNNER_CONTAINER_BUNDLE_IDS: string[] = resolveRunnerContainerB
 export function resolveExpectedRunnerCacheMetadata(
   device: DeviceInfo,
   projectRoot: string = findProjectRoot(),
+  budget?: RunnerCacheProbeBudget,
 ): RunnerXctestrunCacheMetadata {
   const platformName = resolveRunnerPlatformName(device);
   return {
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
-    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind)),
+    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind), budget),
     platformName,
     deviceKind: device.kind,
     target: device.target ?? 'mobile',
@@ -177,10 +247,13 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
  * fingerprint also names the derived-data directory, so an unreadable
  * toolchain fails the cache decision instead of standing in for one.
  */
-function requireRunnerToolchainFingerprint(sdkName: string): RunnerToolchainFingerprint {
+function requireRunnerToolchainFingerprint(
+  sdkName: string,
+  budget: RunnerCacheProbeBudget | undefined,
+): RunnerToolchainFingerprint {
   const cached = toolchainFingerprintCache().get(sdkName);
   if (cached) return cached;
-  const fingerprint = readRunnerToolchainFingerprint(sdkName);
+  const fingerprint = readRunnerToolchainFingerprint(sdkName, createToolchainProbeClock(budget));
   if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
   toolchainFingerprintCache().set(sdkName, fingerprint.value);
   return fingerprint.value;
@@ -188,16 +261,17 @@ function requireRunnerToolchainFingerprint(sdkName: string): RunnerToolchainFing
 
 function readRunnerToolchainFingerprint(
   sdkName: string,
+  clock: ToolchainProbeClock,
 ):
   | { ok: true; value: RunnerToolchainFingerprint }
   | { ok: false; failures: readonly ToolchainProbeFailure[] } {
-  const xcode = parseXcodeVersionOutput(runToolchainProbe('xcodebuild', ['-version']));
-  const sdkVersion = runToolchainProbe('xcrun', ['--sdk', sdkName, '--show-sdk-version']);
-  const sdkBuildVersion = runToolchainProbe('xcrun', [
-    '--sdk',
-    sdkName,
-    '--show-sdk-build-version',
-  ]);
+  const xcode = parseXcodeVersionOutput(runToolchainProbe('xcodebuild', ['-version'], clock));
+  const sdkVersion = runToolchainProbe('xcrun', ['--sdk', sdkName, '--show-sdk-version'], clock);
+  const sdkBuildVersion = runToolchainProbe(
+    'xcrun',
+    ['--sdk', sdkName, '--show-sdk-build-version'],
+    clock,
+  );
   if (!xcode.ok || !sdkVersion.ok || !sdkBuildVersion.ok) {
     return {
       ok: false,
@@ -233,12 +307,24 @@ function unavailableToolchainError(failures: readonly ToolchainProbeFailure[]): 
   );
 }
 
-function runToolchainProbe(cmd: string, args: string[]): ProbeResult<string> {
+function runToolchainProbe(
+  cmd: string,
+  args: string[],
+  clock: ToolchainProbeClock,
+): ProbeResult<string> {
   const probe = [cmd, ...args].join(' ');
+  // Both checks are outside the try: a canceled request is the caller's own
+  // error to see, and an exhausted budget must not start another blocking
+  // spawnSync just to time out again.
+  clock.throwIfCanceled();
+  if (clock.attemptTimeoutMs() <= 0) {
+    return probeFailure(probe, 'probe_error', TOOLCHAIN_PROBE_BUDGET_EXHAUSTED_DETAIL);
+  }
   let output: { exitCode: number; stdout: string; stderr: string };
   try {
-    output = runToolchainProbeCommand(cmd, args);
+    output = runToolchainProbeCommand(cmd, args, clock);
   } catch (error) {
+    clock.throwIfCanceled();
     return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
   }
   if (output.exitCode !== 0) {
@@ -253,37 +339,39 @@ function runToolchainProbe(cmd: string, args: string[]): ProbeResult<string> {
 }
 
 /**
- * Runs one toolchain probe, retrying exactly once if the attempt times out.
- * Apple's syspolicyd signature scan blocks the first `xcodebuild`/`xcrun`
- * exec after a fresh host boots (see COLD_TOOLCHAIN_PROBE_TIMEOUT_MS); the
- * immediate next exec of the same tool is instant, so the retry recovers
- * without widening the per-call budget.
+ * Runs one toolchain probe, retrying exactly once if the attempt timed out and
+ * the shared budget still has room. Apple's syspolicyd signature scan blocks
+ * the first `xcodebuild`/`xcrun` exec after a fresh host boots (see
+ * COLD_TOOLCHAIN_PROBE_TIMEOUT_MS); the immediate next exec of the same tool is
+ * instant, so the retry recovers without widening the per-call budget. Only the
+ * exec layer's structured timeout is retried -- a tool that failed on its own
+ * and merely said "timed out" in its output is not this stall.
  */
 function runToolchainProbeCommand(
   cmd: string,
   args: string[],
+  clock: ToolchainProbeClock,
 ): { exitCode: number; stdout: string; stderr: string } {
   try {
-    return execToolchainProbeCommand(cmd, args);
+    return execToolchainProbeCommand(cmd, args, clock);
   } catch (error) {
-    if (!isToolchainProbeTimeout(error)) throw error;
-    return execToolchainProbeCommand(cmd, args);
+    if (!isCommandTimeoutError(error)) throw error;
+    clock.throwIfCanceled();
+    if (clock.attemptTimeoutMs() <= 0) throw error;
+    return execToolchainProbeCommand(cmd, args, clock);
   }
 }
 
 function execToolchainProbeCommand(
   cmd: string,
   args: string[],
+  clock: ToolchainProbeClock,
 ): { exitCode: number; stdout: string; stderr: string } {
   return runCmdSync(cmd, args, {
     allowFailure: true,
-    timeoutMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    timeoutMs: clock.attemptTimeoutMs(),
     maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
   });
-}
-
-function isToolchainProbeTimeout(error: unknown): boolean {
-  return error instanceof Error && /timed out after \d+ms/.test(error.message);
 }
 
 function parseXcodeVersionOutput(
