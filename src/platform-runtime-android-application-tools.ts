@@ -25,6 +25,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
   return Object.freeze({
     resolveOpenTarget: async (device, input) => await resolveAndroidOpenTarget(device, input),
     inferOpenedAppBundleId: async (device, target, currentAppBundleId) => {
+      if (currentAppBundleId) return currentAppBundleId;
       try {
         const { inferAndroidPackageAfterOpen } = await loadAndroidMechanics();
         return await inferAndroidPackageAfterOpen(device, target, currentAppBundleId);
