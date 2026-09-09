@@ -18,13 +18,27 @@ import {
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
 import { computeRunnerSourceFingerprint } from './runner-source.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../toolchain-probe-budget.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
 const RUNNER_CACHE_SCHEMA_VERSION = 2;
 const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
+
+/**
+ * Per-call timeout for a toolchain identity probe (`xcodebuild -version`,
+ * `xcrun --show-sdk-version`, …). Must equal `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS`
+ * in `../snapshot-source/cache-identity.ts` -- both absorb the same ~18 to
+ * 19 second syspolicyd signature-scan stall on the first `xcodebuild`/
+ * `xcrun` exec after a fresh macOS host boots (#2422). It is declared here
+ * rather than imported from that module because this file sits in every
+ * platform-apple façade's eager closure and `snapshot-source/*` does not
+ * (`scripts/__tests__/eager-closure-budgets.ts`); a unit test
+ * (`__tests__/runner-cache-metadata.test.ts`) asserts the two constants stay
+ * equal so they cannot drift apart.
+ */
+export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
+
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =

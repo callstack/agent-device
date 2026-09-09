@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -11,9 +12,19 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-cache-metadata.ts';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS as SNAPSHOT_SOURCE_COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../snapshot-source/cache-identity.ts';
 import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();
+
+// This file's COLD_TOOLCHAIN_PROBE_TIMEOUT_MS is a deliberate local copy of
+// snapshot-source/cache-identity.ts's constant of the same name, not an
+// import of it -- see the doc comment on the export in
+// runner-cache-metadata.ts for why. This test is what keeps the two values
+// from drifting apart (#2422).
+test('COLD_TOOLCHAIN_PROBE_TIMEOUT_MS matches the copy in snapshot-source/cache-identity.ts', () => {
+  assert.equal(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, SNAPSHOT_SOURCE_COLD_TOOLCHAIN_PROBE_TIMEOUT_MS);
+});
 
 test('resolveRunnerMaxConcurrentDestinationsFlag uses simulator flag for simulators', () => {
   assert.equal(
