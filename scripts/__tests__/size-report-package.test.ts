@@ -74,3 +74,17 @@ test('Markdown emphasizes total install size and startup without duplicate break
     /\| Installed \(including dependencies\) \| - \| 350 B \| - \|/,
   );
 });
+
+test('base measurement uses the measured revision package asset policy', async () => {
+  const workflow = await readFile(
+    join(import.meta.dirname, '../../.github/workflows/size.yml'),
+    'utf8',
+  );
+  const baseStep = workflow
+    .split('      - name: Measure base size\n')[1]!
+    .split('      - name: Save base dist cache')[0]!;
+  assert.match(
+    baseStep,
+    /git checkout --detach[\s\S]*cp scripts\/size-report-package\.mjs \/tmp\/agent-device-size-report\/[\s\S]*node \/tmp\/agent-device-size-report\/size-report\.mjs/,
+  );
+});

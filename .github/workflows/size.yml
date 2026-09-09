@@ -73,6 +73,7 @@ jobs:
       - name: Measure base size
         run: |
           git checkout --detach "${{ github.event.pull_request.base.sha }}"
+          cp scripts/size-report-package.mjs /tmp/agent-device-size-report/
           pnpm install --frozen-lockfile
           if [ "${{ steps.base-dist-cache.outputs.cache-hit }}" != "true" ]; then
             pnpm build
