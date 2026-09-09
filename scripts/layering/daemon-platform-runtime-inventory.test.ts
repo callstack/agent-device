@@ -100,23 +100,23 @@ test('R76 rejects new symbols on a classified edge', () => {
 
 test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const { recoverLegacyAppLogMarkersAfterDaemonLock } = await import('../../platform-runtime-operation-host.ts');\n" +
-      'void recoverLegacyAppLogMarkersAfterDaemonLock;\n',
+      "const { platformDaemonLifecycleOwners } = await import('../../platform-runtime-daemon-lifecycle.ts');\n" +
+      'void platformDaemonLifecycleOwners;\n',
   };
   assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
 });
 
 test('R76 rejects an expanded destructured dynamic import on a classified edge', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
-      'export async function extraLegacyMarkerSweep() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n' +
+      'export const extraLifecycleParticipant = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const { recoverLegacyAppLogMarkersAfterDaemonLock, extraLegacyMarkerSweep } = await import('../../platform-runtime-operation-host.ts');\n" +
-      'void [recoverLegacyAppLogMarkersAfterDaemonLock, extraLegacyMarkerSweep];\n',
+      "const { platformDaemonLifecycleOwners, extraLifecycleParticipant } = await import('../../platform-runtime-daemon-lifecycle.ts');\n" +
+      'void [platformDaemonLifecycleOwners, extraLifecycleParticipant];\n',
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
@@ -124,18 +124,18 @@ test('R76 rejects an expanded destructured dynamic import on a classified edge',
   assert.match(found[0]!.message, /classified symbols drifted/);
   assert.match(
     found[0]!.message,
-    /extraLegacyMarkerSweep, recoverLegacyAppLogMarkersAfterDaemonLock/,
+    /extraLifecycleParticipant, platformDaemonLifecycleOwners/,
   );
 });
 
 test('R76 rejects a rest binding next to a recorded dynamic-import binding', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n' +
-      'export async function sweepLegacyAppLogMarkers() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n' +
+      'export const sweepLifecycleParticipants = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const { recoverLegacyAppLogMarkersAfterDaemonLock, ...operationHost } = await import('../../platform-runtime-operation-host.ts');\n" +
-      'void [recoverLegacyAppLogMarkersAfterDaemonLock, operationHost];\n',
+      "const { platformDaemonLifecycleOwners, ...lifecycleModule } = await import('../../platform-runtime-daemon-lifecycle.ts');\n" +
+      'void [platformDaemonLifecycleOwners, lifecycleModule];\n',
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
@@ -143,18 +143,18 @@ test('R76 rejects a rest binding next to a recorded dynamic-import binding', () 
   assert.match(found[0]!.message, /unnameable dynamic-import binding/);
   assert.match(
     found[0]!.message,
-    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-operation-host\.ts/,
+    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-daemon-lifecycle\.ts/,
   );
 });
 
 test('R76 rejects a computed destructure key on a classified dynamic import', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const markerName = 'recoverLegacyAppLogMarkersAfterDaemonLock';\n" +
-      'const { [markerName]: recover } = await import("../../platform-runtime-operation-host.ts");\n' +
-      'void recover;\n',
+      "const ownersName = 'platformDaemonLifecycleOwners';\n" +
+      'const { [ownersName]: owners } = await import("../../platform-runtime-daemon-lifecycle.ts");\n' +
+      'void owners;\n',
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
@@ -163,10 +163,10 @@ test('R76 rejects a computed destructure key on a classified dynamic import', ()
 
 test('R76 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const mod = await import('../../platform-runtime-operation-host.ts');\nvoid mod;\n",
+      "const mod = await import('../../platform-runtime-daemon-lifecycle.ts');\nvoid mod;\n",
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
@@ -176,12 +176,12 @@ test('R76 rejects a namespace-form dynamic import that hides the recorded bindin
 
 test('R76 rejects a namespace import alongside the recorded named binding on the same pair', () => {
   const sources = {
-    'src/platform-runtime-operation-host.ts':
-      'export async function recoverLegacyAppLogMarkersAfterDaemonLock() { return {}; }\n',
+    'src/platform-runtime-daemon-lifecycle.ts':
+      'export const platformDaemonLifecycleOwners = {};\n',
     'src/daemon/server/daemon-runtime.ts':
-      "const { recoverLegacyAppLogMarkersAfterDaemonLock } = await import('../../platform-runtime-operation-host.ts');\n" +
-      "const operationHost = await import('../../platform-runtime-operation-host.ts');\n" +
-      'void [recoverLegacyAppLogMarkersAfterDaemonLock, operationHost];\n',
+      "const { platformDaemonLifecycleOwners } = await import('../../platform-runtime-daemon-lifecycle.ts');\n" +
+      "const lifecycleModule = await import('../../platform-runtime-daemon-lifecycle.ts');\n" +
+      'void [platformDaemonLifecycleOwners, lifecycleModule];\n',
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
@@ -189,7 +189,7 @@ test('R76 rejects a namespace import alongside the recorded named binding on the
   assert.match(found[0]!.message, /open-ended dynamic import/);
   assert.match(
     found[0]!.message,
-    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-operation-host\.ts/,
+    /src\/daemon\/server\/daemon-runtime\.ts -> src\/platform-runtime-daemon-lifecycle\.ts/,
   );
 });
 

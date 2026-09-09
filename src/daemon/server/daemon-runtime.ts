@@ -68,15 +68,8 @@ import {
 } from './transport.ts';
 import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
 
-import {
-  configureAppleRunnerDeviceClaimAuthorityProbe,
-  configureAppleRunnerLeaseOwnerStateDir,
-} from '../../platform-runtime-apple-runner-owner.ts';
-import {
-  cleanupManagedWebRuntimeOrphans,
-  platformResourceCleanup,
-  resetAndroidSnapshotHelperRuntime,
-} from '../../platform-runtime-resource-cleanup.ts';
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import { platformDaemonLifecycleOwners } from '../../platform-runtime-daemon-lifecycle.ts';
 import { openWebSessionNames } from '../web-session-names.ts';
 import {
   recoverAppLogResourcesAfterDaemonLock,
@@ -242,8 +235,10 @@ export async function startDaemonRuntime(
   const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
-  await configureAppleRunnerLeaseOwnerStateDir(baseDir);
-  await configureAppleRunnerDeviceClaimAuthorityProbe(processOwnsActiveDeviceClaim);
+  await platformDaemonLifecycleOwners.configureForDaemonLock({
+    stateDir: baseDir,
+    hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
+  });
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -481,8 +476,7 @@ export async function startDaemonRuntime(
   };
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
     stderr.write('Daemon lock is held by another process; exiting.\n');
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
-    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
+    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(0);
     return null;
   }
@@ -493,9 +487,8 @@ export async function startDaemonRuntime(
   let httpPort: number | undefined;
   const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
   try {
-    const { recoverLegacyAppLogMarkersAfterDaemonLock } =
-      await import('../../platform-runtime-operation-host.ts');
-    const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
+    const legacyMarkerRecovery =
+      await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(sessionsDir);
     appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
     for (const markerPath of legacyMarkerRecovery.recovered) {
       startupAppLogDiagnostics.push({
@@ -560,8 +553,7 @@ export async function startDaemonRuntime(
     closeServersBestEffort(servers);
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
-    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
+    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);
     return null;
   }
@@ -588,7 +580,7 @@ export async function startDaemonRuntime(
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
     try {
-      await resetAndroidSnapshotHelperRuntime();
+      await platformDaemonLifecycleOwners.resetAndroidSnapshotHelper();
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
@@ -626,8 +618,7 @@ export async function startDaemonRuntime(
     ]);
     removeInfo(infoPath);
     releaseDaemonLock(lockPath);
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
-    await configureAppleRunnerDeviceClaimAuthorityProbe(undefined);
+    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);
   };
 
@@ -696,7 +687,7 @@ export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
   ownedProcessRecords?: OwnedProcessRecordStore;
 }): Promise<void> {
   try {
-    await cleanupManagedWebRuntimeOrphans({
+    await platformDaemonLifecycleOwners.cleanupManagedWebOrphans({
       stateDir: params.stateDir,
       openWebSessionNames: openWebSessionNames(params.sessionStore),
       ...(params.ownedProcessRecords === undefined

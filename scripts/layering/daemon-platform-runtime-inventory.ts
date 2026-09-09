@@ -69,42 +69,26 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
   },
   {
     file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-apple-runner-owner.ts',
-    symbols: [
-      'configureAppleRunnerDeviceClaimAuthorityProbe',
-      'configureAppleRunnerLeaseOwnerStateDir',
-    ],
-    classification: 'leaked-platform-mechanics',
-    rationale:
-      'daemon startup/shutdown names the Apple runner owner directly; the daemon-owned ' +
-      'inputs (lease-owner state dir, claim-authority probe) should flow through typed ' +
-      'lifecycle participation instead of configure calls into a platform-composed owner.',
-    deepenedBy: '#2333',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
     target: 'src/platform-runtime-resource-cleanup.ts',
-    symbols: [
-      'cleanupManagedWebRuntimeOrphans',
-      'platformResourceCleanup',
-      'resetAndroidSnapshotHelperRuntime',
-    ],
-    classification: 'leaked-platform-mechanics',
+    symbols: ['platformResourceCleanup'],
+    classification: 'composition-essential',
     rationale:
-      'startup/shutdown cleanup participation names the Android snapshot-helper and Web ' +
-      'orphan owners directly; platformResourceCleanup (the neutral PlatformResourceCleanup ' +
-      'contract) is the model the other two symbols should follow.',
-    deepenedBy: '#2333',
+      'process-root assembly of the neutral PlatformResourceCleanup contract capability; the ' +
+      'Android snapshot-helper reset and Web orphan cleanup that used to be named directly on ' +
+      'this edge now sit behind the typed lifecycle-participation surface (#2333, see the ' +
+      'platform-runtime-daemon-lifecycle.ts edge below).',
   },
   {
     file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-operation-host.ts',
-    symbols: ['recoverLegacyAppLogMarkersAfterDaemonLock'],
-    classification: 'leaked-platform-mechanics',
+    target: 'src/platform-runtime-daemon-lifecycle.ts',
+    symbols: ['platformDaemonLifecycleOwners'],
+    classification: 'composition-essential',
     rationale:
-      'daemon startup names app-log legacy marker recovery, a platform process mechanic; ' +
-      'it should join the same typed lifecycle participation as the other startup cleanups.',
-    deepenedBy: '#2333',
+      'process-root assembly of the typed PlatformOwnerLifecycle contract capability (#2333): ' +
+      'the daemon keeps ordering, cancellation, and best-effort failure policy for its ' +
+      'startup/shutdown platform-owner participation, while this composition module is the ' +
+      'sole place that names the Apple runner owner, the Android snapshot-helper and Web ' +
+      'orphan cleanups, and legacy app-log marker recovery.',
   },
   {
     file: 'src/daemon/device-claim-owner-recovery.ts',
