@@ -27,7 +27,7 @@ private final class SynthesizedInputRecordSpy: NSObject {
     )
     if SynthesizedInputSpy.rejectNext {
       SynthesizedInputSpy.rejectNext = false
-      error?.pointee = NSError(domain: "WarmupTest", code: 1)
+      error?.pointee = NSError(domain: "SynthesizedInputPreparationTest", code: 1)
       return false
     }
     return true
@@ -47,21 +47,23 @@ extension RunnerTests {
       originals.append((method, method_getImplementation(method)))
       method_setImplementation(method, method_getImplementation(spy))
     }
+    RunnerSynthesizedGesture.resetSynthesizedInputPreparation()
     defer {
       for (method, implementation) in originals { method_setImplementation(method, implementation) }
+      RunnerSynthesizedGesture.resetSynthesizedInputPreparation()
       SynthesizedInputSpy.paths = [:]
       SynthesizedInputSpy.submittedPathCounts = []
       SynthesizedInputSpy.rejectNext = true
     }
     let target = SynthesizedInputTarget()
-    // Exercise the actual bridge entry points used by gesture/sequence, scroll,
-    // synthesized drag and coordinate tap. No real event reaches the simulator.
+    // Every bridge entry point gesture/sequence, scroll, synthesized drag, swipe and
+    // coordinate tap use. The spy keeps any record from reaching the simulator.
     let samples: [[[String: NSNumber]]] = [[
       ["x": 10, "y": 10, "offsetMs": 0],
       ["x": 20, "y": 20, "offsetMs": 100],
     ]]
-    // A failed preparation must leave the real request available and permit the
-    // next route to prepare again. Only a successful empty synthesis consumes it.
+    // The first preparation is rejected: the request still goes out, and the next route
+    // prepares again. Only a successful empty record retires the preparation.
     XCTAssertNil(RunnerSynthesizedGesture.synthesizeGesture(withApplication: target, pointerSamples: samples))
     XCTAssertNil(RunnerSynthesizedGesture.synthesizeControlledScroll(withApplication: target, x: 10, y: 10, x2: 20, y2: 20, durationMs: 100))
     XCTAssertNil(RunnerSynthesizedGesture.synthesizeContinuousDrag(withApplication: target, x: 10, y: 10, x2: 20, y2: 20, durationMs: 100))

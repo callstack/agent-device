@@ -2,7 +2,6 @@
 #import "RunnerXCTestEventBridge.h"
 
 #import <CoreGraphics/CoreGraphics.h>
-#import <TargetConditionals.h>
 #import <objc/message.h>
 
 static NSString *const RunnerGestureSynthesisSurface = @"event";
@@ -46,6 +45,17 @@ static NSString * _Nullable RunnerSynthesizeEventRecord(
   const RunnerGestureEventBridge *bridge,
   id record
 );
+static id _Nullable RunnerAllocateEventRecord(
+  const RunnerGestureEventBridge *bridge,
+  NSString *recordName,
+  NSInteger interfaceOrientation,
+  NSInteger targetProcessID
+);
+static void RunnerPrepareSynthesizedInput(
+  const RunnerGestureEventBridge *bridge,
+  NSInteger interfaceOrientation,
+  NSInteger targetProcessID
+);
 static id RunnerSwipePointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
@@ -87,6 +97,8 @@ static NSString * _Nullable RunnerTrySynthesizeTap(id application, CGPoint point
 static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
 static const double RunnerDragSampleIntervalMs = 16.0;
 static const NSInteger RunnerControlledScrollMaxFrameCount = 30;
+// Set once the empty preparation record has synthesized in this process.
+static BOOL RunnerSynthesizedInputPrepared = NO;
 static id RunnerTapPointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint point
@@ -215,6 +227,10 @@ static id RunnerTapPointerPath(
   }
 }
 
++ (void)resetSynthesizedInputPreparation {
+  RunnerSynthesizedInputPrepared = NO;
+}
+
 + (NSInteger)interfaceOrientationForApplication:(id)application {
   SEL selector = NSSelectorFromString(@"interfaceOrientation");
   if (![application respondsToSelector:selector]) {
@@ -310,21 +326,6 @@ static NSString * _Nullable RunnerResolveGestureEventBridge(
   return nil;
 }
 
-static id RunnerAllocateGestureRecord(
-  const RunnerGestureEventBridge *bridge,
-  NSString *name,
-  NSInteger orientation,
-  NSInteger processID
-) {
-  id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
-    [bridge->core.recordClass alloc], bridge->initRecordSelector, name, orientation
-  );
-  if (record != nil) {
-    ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge->core.setTargetProcessIDSelector, processID);
-  }
-  return record;
-}
-
 static NSString * _Nullable RunnerCreateEventRecord(
   id application,
   NSString *recordName,
@@ -342,39 +343,56 @@ static NSString * _Nullable RunnerCreateEventRecord(
     return @"private XCTest event synthesis unavailable: could not resolve target process ID";
   }
 
-#if TARGET_OS_IOS
-  // Prepare at the shared record boundary, before any route constructs timed
-  // pointer paths. An empty record carries no contact (including no status-bar
-  // tap), and reuses the caller's resolved orientation/PID without AX or images.
-  static BOOL didPrepare = NO;
-  @synchronized ([RunnerSynthesizedGesture class]) {
-    if (!didPrepare) {
-      NSTimeInterval startedAt = NSProcessInfo.processInfo.systemUptime;
-      NSString *preparationError = nil;
-      @try {
-        id preparation = RunnerAllocateGestureRecord(
-          bridge, @"agent-device-input-preparation", interfaceOrientation, targetProcessID
-        );
-        preparationError = preparation == nil
-          ? @"could not create preparation record"
-          : RunnerSynthesizeEventRecord(bridge, preparation);
-        didPrepare = preparationError == nil;
-      } @catch (NSException *exception) {
-        preparationError = RunnerFormatXCTestException(exception, @"input preparation failed");
-      }
-      NSLog(
-        @"AGENT_DEVICE_RUNNER_SYNTHESIZED_INPUT_WARMUP outcome=%@ elapsedMs=%.0f detail=%@",
-        didPrepare ? @"performed" : @"unsupported",
-        (NSProcessInfo.processInfo.systemUptime - startedAt) * 1000,
-        preparationError ?: @""
-      );
-    }
+  if (!RunnerSynthesizedInputPrepared) {
+    RunnerPrepareSynthesizedInput(bridge, interfaceOrientation, targetProcessID);
   }
-#endif
-  // Failed preparation is best-effort and remains eligible on the next request.
-  // The requested record is always fresh and retains its original timing.
-  *record = RunnerAllocateGestureRecord(bridge, recordName, interfaceOrientation, targetProcessID);
+  *record = RunnerAllocateEventRecord(bridge, recordName, interfaceOrientation, targetProcessID);
   return *record == nil ? @"private XCTest event synthesis failed: could not create event record" : nil;
+}
+
+static id _Nullable RunnerAllocateEventRecord(
+  const RunnerGestureEventBridge *bridge,
+  NSString *recordName,
+  NSInteger interfaceOrientation,
+  NSInteger targetProcessID
+) {
+  id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
+    [bridge->core.recordClass alloc],
+    bridge->initRecordSelector,
+    recordName,
+    interfaceOrientation
+  );
+  if (record != nil) {
+    ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge->core.setTargetProcessIDSelector, targetProcessID);
+  }
+  return record;
+}
+
+// Pays XCTest's one-time synthesis setup with a record that carries no pointer path, so no
+// contact reaches the target, before the first timed record. A failure is logged and retried
+// on the next record; the requested record is created afterwards either way.
+static void RunnerPrepareSynthesizedInput(
+  const RunnerGestureEventBridge *bridge,
+  NSInteger interfaceOrientation,
+  NSInteger targetProcessID
+) {
+  NSTimeInterval startedAt = NSProcessInfo.processInfo.systemUptime;
+  NSString *error = nil;
+  @try {
+    id record = RunnerAllocateEventRecord(
+      bridge, @"agent-device-input-preparation", interfaceOrientation, targetProcessID
+    );
+    error = record == nil ? @"could not create event record" : RunnerSynthesizeEventRecord(bridge, record);
+  } @catch (NSException *exception) {
+    error = RunnerFormatXCTestException(exception, @"input preparation failed");
+  }
+  RunnerSynthesizedInputPrepared = error == nil;
+  NSLog(
+    @"AGENT_DEVICE_RUNNER_SYNTHESIZED_INPUT_PREPARATION outcome=%@ elapsedMs=%.0f detail=%@",
+    error == nil ? @"performed" : @"failed",
+    (NSProcessInfo.processInfo.systemUptime - startedAt) * 1000,
+    error ?: @""
+  );
 }
 
 static NSString * _Nullable RunnerSynthesizeEventRecord(

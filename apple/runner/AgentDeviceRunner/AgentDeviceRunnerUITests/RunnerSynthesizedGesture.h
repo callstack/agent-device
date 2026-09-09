@@ -38,6 +38,10 @@ FOUNDATION_EXPORT double RunnerControlledScrollProgress(double t);
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples;
 
+// Forgets that this process already synthesized its empty preparation record, so a
+// test can observe the preparation again.
++ (void)resetSynthesizedInputPreparation;
+
 // UIInterfaceOrientation of the app (1 portrait, 2 upsideDown, 3 landscapeRight,
 // 4 landscapeLeft), or 0 if unreadable.
 + (NSInteger)interfaceOrientationForApplication:(id)application;
