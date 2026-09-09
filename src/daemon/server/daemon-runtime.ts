@@ -235,10 +235,6 @@ export async function startDaemonRuntime(
   const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
-  await platformDaemonLifecycleOwners.configureForDaemonLock({
-    stateDir: baseDir,
-    hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
-  });
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -476,7 +472,6 @@ export async function startDaemonRuntime(
   };
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
     stderr.write('Daemon lock is held by another process; exiting.\n');
-    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(0);
     return null;
   }
@@ -487,6 +482,10 @@ export async function startDaemonRuntime(
   let httpPort: number | undefined;
   const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
   try {
+    await platformDaemonLifecycleOwners.configureForDaemonLock({
+      stateDir: baseDir,
+      hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
+    });
     const legacyMarkerRecovery =
       await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(sessionsDir);
     appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);

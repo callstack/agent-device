@@ -33,6 +33,25 @@ test('daemon startup awaits app-log recovery after acquiring the lock and before
   expect(openedServers).toBeGreaterThan(recovery);
 });
 
+test('daemon startup configures the Apple runner owner after acquiring the lock, not before', () => {
+  // #2333/#2415 review: the daemon-owned lease-owner state dir and claim-authority probe must
+  // publish only once this process actually holds the daemon lock, so a losing process never
+  // configures a global platform owner it does not own.
+  const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
+  const acquiredLock = source.indexOf('if (!acquireDaemonLock(');
+  const runnerOwnerConfigured = source.indexOf(
+    'await platformDaemonLifecycleOwners.configureForDaemonLock(',
+  );
+  const lockFailureExit = source.indexOf("stderr.write('Daemon lock is held by another process");
+
+  expect(acquiredLock).toBeGreaterThanOrEqual(0);
+  expect(lockFailureExit).toBeGreaterThan(acquiredLock);
+  expect(runnerOwnerConfigured).toBeGreaterThan(acquiredLock);
+  // The configure call sits inside the post-lock try block, after the failure branch that exits
+  // for a lock held by another process.
+  expect(runnerOwnerConfigured).toBeGreaterThan(lockFailureExit);
+});
+
 test('retained startup recovery evidence is flushed after daemon.log publication', async () => {
   const root = mkdtempForTestSync('daemon-runtime-app-log-recovery-diagnostics-');
   const sessionsDir = path.join(root, 'sessions');
