@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2393/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2393/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2393/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2393/static/js/index.88dc962578.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2393/static/js/index.357859c5f0.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -169,6 +169,7 @@
 <li>For React Native JavaScript heap leaks, use <code>agent-device cdp</code> against the Metro CDP target instead of native/process memory samples; see the CDP section above.</li>
 <li>Heap and memgraph artifacts are returned as paths plus compact metadata. Example default output: <code>Memory artifact (android-hprof): /tmp/app.hprof (42MB)</code>. They are not printed or embedded in JSON by default. heapprofd/native allocation tracing is deferred until Perfetto plumbing is available.</li>
 <li><code>perf cpu profile ... --kind xctrace</code> collects an Apple native <code>.trace</code>; <code>report</code> aggregates every run, returns at most ten weighted top functions in JSON, and prints five. <code>perf trace ... --kind xctrace</code> keeps trace data as an artifact.</li>
+<li>On iOS simulators and macOS, process sampling and captures target the resolved app executable. Other running copies with the same executable name are excluded, including copies installed on another simulator.</li>
 <li>Android native profiling uses <code>perf cpu profile ... --kind simpleperf</code>; its report likewise returns at most ten top functions and prints five. Android native trace capture uses <code>perf trace ... --kind perfetto</code>. These commands require an active Android app session and return artifact paths/summaries instead of dumping profile or trace contents.</li>
 <li>Use the compact native perf result as agent evidence. For example, a successful Perfetto stop may return <code>state: &quot;stopped&quot;</code>, <code>outPath: &quot;/tmp/app.perfetto-trace&quot;</code>, <code>sizeBytes: 5392410</code>, and <code>method: &quot;adb-shell-perfetto&quot;</code> while the 5.3 MB raw trace remains on disk as the artifact.</li>
 <li>Memory and Android frame-health availability depend on platform and whether the active session is bound to an app/package. HarmonyOS reports process RSS through HDC; CPU profiling, frame sampling, and memory-snapshot artifacts remain unavailable on the public HDC surface.</li>
