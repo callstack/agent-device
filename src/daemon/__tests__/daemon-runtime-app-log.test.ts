@@ -21,7 +21,9 @@ import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.t
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {
   const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf('if (!acquireDaemonLock(');
-  const legacyRecovery = source.indexOf('await recoverLegacyAppLogMarkersAfterDaemonLock(');
+  const legacyRecovery = source.indexOf(
+    'await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(',
+  );
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
   const openedServers = source.indexOf('const opened = await openDaemonServers()');
 
