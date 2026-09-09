@@ -87,28 +87,29 @@ export type SnapshotOptions = {
   customActions?: boolean;
 };
 
-/**
- * The snapshot capture family stated ONCE as option key ↔ command-flag key.
- *
- * The same pair (`customActions` ↔ `snapshotCustomActions`, and its seven
- * siblings) used to be re-typed by hand at every seam that carries a snapshot
- * request across the option/flag vocabulary line — the CLI reader, the client
- * option projection, the daemon capture inputs, the presentation key. Each copy
- * restated a fact already stated here and decided nothing, so a new snapshot
- * option cost one edit per seam and a missed seam dropped the option silently.
- *
- * Declared in the kernel because both vocabularies are declared here
- * ({@link SnapshotOptions}) and above (`CommandFlags` in contracts), so this is
- * the lowest point both sides can read. This generalises the shipped
- * `screenshotFlagsFromOptions`/`screenshotOptionsFromFlags` pair for the
- * screenshot family.
- *
- * Every projection takes an EXPLICIT key list: a seam admits the options it
- * routes and no more, so adding a pair here never silently widens a seam that
- * cannot honour it.
- */
-// Exported only because the exported types below say `typeof` it.
-// fallow-ignore-next-line unused-export
+// The snapshot capture family stated ONCE as option key ↔ command-flag key.
+//
+// The same pair (`customActions` ↔ `snapshotCustomActions`, and its seven
+// siblings) used to be re-typed by hand at every seam that carries a snapshot
+// request across the option/flag vocabulary line — the CLI reader, the client
+// option projection, the daemon capture inputs, the presentation key. Each copy
+// restated a fact already stated here and decided nothing, so a new snapshot
+// option cost one edit per seam and a missed seam dropped the option silently.
+//
+// Declared in the kernel because both vocabularies are declared here
+// (SnapshotOptions) and above (`CommandFlags` in contracts), so this is
+// the lowest point both sides can read. This generalises the shipped
+// `screenshotFlagsFromOptions`/`screenshotOptionsFromFlags` pair for the
+// screenshot family.
+//
+// Every projection takes an EXPLICIT key list: a seam admits the options it
+// routes and no more, so adding a pair here never silently widens a seam that
+// cannot honour it.
+//
+// Exported only because the exported types below say `typeof` it — this const
+// is not itself public API, so the rationale stays a source comment (stripped
+// from the published .d.ts) instead of a bundled JSDoc block.
+/** The CLI/daemon flag key for each snapshot capture option, by option name. */
 export const SNAPSHOT_OPTION_FLAGS = {
   interactiveOnly: 'snapshotInteractiveOnly',
   depth: 'snapshotDepth',
