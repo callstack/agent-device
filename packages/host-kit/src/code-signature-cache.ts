@@ -6,6 +6,7 @@ import { publishFileSync } from './file.ts';
 import {
   buildDaemonCodeFileLabel,
   formatDaemonCodeSignature,
+  resolveDaemonCodePath,
   walkDaemonCodeGraph,
   type DaemonCodeFileStamp,
   type DaemonCodeGraphWalk,
@@ -57,14 +58,18 @@ type CacheDocument = {
  * toolchain cache: failing to read or write one only costs the walk.
  */
 export function resolveCachedDaemonCodeSignature(entryPath: string, root: string): string {
-  const cachePath = resolveCachePath(entryPath, root);
-  const entryLabel = buildDaemonCodeFileLabel(root, entryPath);
-  const validated = readValidatedWalk(cachePath, root, entryLabel);
+  // The walk names every file from the resolved root down, so a document is
+  // read and written under those same names or its entry never matches.
+  const realRoot = resolveDaemonCodePath(root);
+  const realEntryPath = resolveDaemonCodePath(entryPath);
+  const cachePath = resolveCachePath(realEntryPath, realRoot);
+  const entryLabel = buildDaemonCodeFileLabel(realRoot, realEntryPath);
+  const validated = readValidatedWalk(cachePath, realRoot, entryLabel);
   if (validated) return formatDaemonCodeSignature(validated.files);
 
   let walk: DaemonCodeGraphWalk;
   try {
-    walk = walkDaemonCodeGraph(entryPath, root);
+    walk = walkDaemonCodeGraph(realEntryPath, realRoot);
   } catch {
     return 'unknown';
   }
@@ -195,21 +200,13 @@ function publishWalk(cachePath: string, walk: DaemonCodeGraphWalk): void {
   }
 }
 
-/** One document per (entry, root) pair, so sibling checkouts never share one. */
+/**
+ * One document per (entry, root) pair, so sibling checkouts never share one.
+ * Both arrive resolved, so symlinked routes to one checkout are one checkout,
+ * as in `buildSourceCheckoutStateDirName`.
+ */
 function resolveCachePath(entryPath: string, root: string): string {
-  const key = crypto
-    .createHash('sha1')
-    .update(`${resolveRealPath(root)} ${resolveRealPath(entryPath)}`)
-    .digest('hex');
+  const key = crypto.createHash('sha1').update(`${root} ${entryPath}`).digest('hex');
   const directory = `${CACHE_DIRECTORY_PREFIX}-${process.getuid?.() ?? 'user'}`;
   return path.join(os.tmpdir(), directory, `${key}.json`);
-}
-
-/** Symlinked paths to one checkout are one checkout, as in `buildSourceCheckoutStateDirName`. */
-function resolveRealPath(filePath: string): string {
-  try {
-    return fs.realpathSync.native(filePath);
-  } catch {
-    return path.resolve(filePath);
-  }
 }

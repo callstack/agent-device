@@ -3,11 +3,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { computeDaemonCodeSignature, walkDaemonCodeGraph } from './code-signature.ts';
-import { writeWorkspaceFixture } from './code-signature.fixtures.ts';
-import { mkdtempForTestSync } from './internal/tmp-dir.fixtures.ts';
+import {
+  createCheckoutRootForTest,
+  writeInstalledDependencyFixture,
+  writeWorkspaceFixture,
+} from './code-signature.fixtures.ts';
 
 function labelsOf(entryPath: string, root: string): string[] {
   return walkDaemonCodeGraph(entryPath, root).files.map(([label]) => label);
+}
+
+/**
+ * The same checkout named through a symlink, which is how a real one is
+ * routinely named: macOS resolves `/tmp` to `/private/tmp`, and a checkout
+ * under a symlinked parent directory reaches every file the same way.
+ */
+function linkTo(root: string): string {
+  const linkPath = `${root}-link`;
+  fs.symlinkSync(root, linkPath, 'dir');
+  return linkPath;
 }
 
 test('a workspace subpath is walked, and its file is stamped under the package path', () => {
@@ -60,28 +74,56 @@ test('retargeting the exports map moves the edge without either endpoint changin
 });
 
 test('an installed dependency is not followed into', () => {
-  const root = mkdtempForTestSync('agent-device-signature-installed-');
+  const { root, entryPath } = writeInstalledDependencyFixture('agent-device-signature-installed-');
   try {
-    const entryPath = path.join(root, 'src', 'daemon.ts');
-    const packageDir = path.join(root, 'node_modules', '@scope', 'vendor');
-    fs.mkdirSync(path.dirname(entryPath), { recursive: true });
-    fs.mkdirSync(path.join(packageDir, 'src'), { recursive: true });
-    fs.writeFileSync(entryPath, "import '@scope/vendor/thing';\n", 'utf8');
-    fs.writeFileSync(path.join(packageDir, 'src', 'thing.js'), 'export const thing = 1;\n', 'utf8');
-    fs.writeFileSync(
-      path.join(packageDir, 'package.json'),
-      JSON.stringify({ name: '@scope/vendor', exports: { './thing': './src/thing.js' } }),
-      'utf8',
-    );
-
     assert.deepEqual(labelsOf(entryPath, root), ['src/daemon.ts']);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
+/**
+ * A root named through a symlink is the same root, and every label is still
+ * repository-relative. Resolving the manifests but not the root would put the
+ * two on either side of the link, so a workspace package would be labelled by
+ * the route out of the repository and back in.
+ */
+test('a checkout named through a symlink stamps the same repository-relative labels', () => {
+  const { root } = writeWorkspaceFixture('agent-device-signature-linked-workspace-');
+  const linkedRoot = linkTo(root);
+  try {
+    assert.deepEqual(labelsOf(path.join(linkedRoot, 'src', 'daemon.ts'), linkedRoot).sort(), [
+      'packages/kit/package.json',
+      'packages/kit/src/owned.ts',
+      'src/daemon.ts',
+    ]);
+  } finally {
+    fs.rmSync(linkedRoot, { force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The workspace/installed test is `node_modules` containment, so it answers
+ * only while the root and the manifest are named the same way. Under an
+ * unresolved root every installed dependency reads as a workspace package and
+ * the walk follows its whole closure.
+ */
+test('an installed dependency is not followed into through a symlinked root', () => {
+  const { root } = writeInstalledDependencyFixture('agent-device-signature-linked-installed-');
+  const linkedRoot = linkTo(root);
+  try {
+    assert.deepEqual(labelsOf(path.join(linkedRoot, 'src', 'daemon.ts'), linkedRoot), [
+      'src/daemon.ts',
+    ]);
+  } finally {
+    fs.rmSync(linkedRoot, { force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a workspace package linked after the walk is an absent path, not a silent miss', () => {
-  const root = mkdtempForTestSync('agent-device-signature-absent-');
+  const root = createCheckoutRootForTest('agent-device-signature-absent-');
   try {
     const entryPath = path.join(root, 'src', 'daemon.ts');
     fs.mkdirSync(path.dirname(entryPath), { recursive: true });

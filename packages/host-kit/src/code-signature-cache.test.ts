@@ -5,8 +5,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { computeDaemonCodeSignature } from './code-signature.ts';
 import { resolveCachedDaemonCodeSignature } from './code-signature-cache.ts';
-import { writeWorkspaceFixture } from './code-signature.fixtures.ts';
-import { mkdtempForTestSync } from './internal/tmp-dir.fixtures.ts';
+import { createCheckoutRootForTest, writeWorkspaceFixture } from './code-signature.fixtures.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -38,7 +37,7 @@ function writeGraphFixture(
   depPath: string;
   cacheHome: string;
 } {
-  const root = mkdtempForTestSync(prefix);
+  const root = createCheckoutRootForTest(prefix);
   const entryPath = path.join(root, 'src', 'daemon.ts');
   const depPath = path.join(root, 'src', dependency.fileName);
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
@@ -314,7 +313,7 @@ test('resolveCachedDaemonCodeSignature ignores a cache document another user wro
 });
 
 test('resolveCachedDaemonCodeSignature reports an unreadable entry as unknown', () => {
-  const root = mkdtempForTestSync('agent-device-signature-cache-missing-');
+  const root = createCheckoutRootForTest('agent-device-signature-cache-missing-');
   try {
     assert.equal(
       resolveCachedDaemonCodeSignature(path.join(root, 'src', 'daemon.ts'), root),
