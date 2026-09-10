@@ -11,6 +11,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: PLATFORM_SELECTORS,
     usageLabel: `--platform ${PLATFORM_SELECTORS.join('|')}`,
     usageDescription: 'Platform to target (`apple` aliases the Apple automation backend)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'target',
@@ -19,6 +21,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['mobile', 'tv', 'desktop'],
     usageLabel: '--target mobile|tv|desktop',
     usageDescription: 'Device target class to match',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'device',
@@ -26,6 +30,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--device <name>',
     usageDescription: 'Device name to target (a UDID belongs in --udid, a serial in --serial)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'udid',
@@ -34,6 +40,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--udid <udid>',
     usageDescription:
       'Apple device or simulator UDID; the only selector that pins one device when several share a --device name',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'serial',
@@ -41,6 +49,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--serial <serial>',
     usageDescription: 'Android, HarmonyOS, or Vega VVD serial',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'stale',
@@ -48,6 +58,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--stale',
     usageDescription: 'Device status: show only claims with a provably stale owner',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'surface',
@@ -56,6 +68,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: SESSION_SURFACES,
     usageLabel: '--surface app|frontmost-app|desktop|menubar',
     usageDescription: 'macOS session surface for open (defaults to app)',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'headless',
@@ -63,6 +77,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--headless',
     usageDescription: 'Boot: launch Android emulator without a GUI window',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'targetApp',
@@ -70,6 +86,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--app <id-or-name>',
     usageDescription: 'Doctor: verify an installed target app without opening a session',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroHost',
@@ -77,6 +95,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--metro-host <host>',
     usageDescription: 'Session-scoped Metro/debug host hint',
+    projectConfig: false,
+    recorded: true,
   },
   {
     key: 'metroPort',
@@ -87,6 +107,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--metro-port <port>',
     usageDescription:
       'Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host',
+    projectConfig: false,
+    recorded: true,
   },
   {
     key: 'metroProjectRoot',
@@ -94,6 +116,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--project-root <path>',
     usageDescription: 'metro prepare: React Native project root (default: cwd)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'kind',
@@ -103,6 +127,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--kind <kind>',
     usageDescription:
       'Kind selector for commands that support it, such as metro prepare or perf artifact collectors',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'perfTemplate',
@@ -110,6 +136,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--template <name>',
     usageDescription: 'Perf xctrace template name, for example Time Profiler',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'metroKind',
@@ -118,6 +146,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['auto', 'react-native', 'expo', 'repack'],
     usageLabel: '--metro-kind auto|react-native|expo|repack',
     usageDescription: 'metro prepare: detect or force the React Native dev-server launcher kind',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroPublicBaseUrl',
@@ -125,6 +155,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--public-base-url <url>',
     usageDescription: 'metro prepare: public base URL used for direct dev-server bundle hints',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroProxyBaseUrl',
@@ -132,6 +164,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--proxy-base-url <url>',
     usageDescription: 'metro prepare: optional bridge origin for remote dev-server access',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroBearerToken',
@@ -140,6 +174,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--bearer-token <token>',
     usageDescription:
       'metro prepare: host bridge bearer token (or AGENT_DEVICE_METRO_BEARER_TOKEN; falls back to AGENT_DEVICE_DAEMON_AUTH_TOKEN)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroPreparePort',
@@ -149,6 +185,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 65535,
     usageLabel: '--port <port>',
     usageDescription: 'metro prepare: local dev-server port (default: 8081)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroListenHost',
@@ -156,6 +194,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--listen-host <host>',
     usageDescription: 'metro prepare: host dev server listens on (default: 0.0.0.0)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroStatusHost',
@@ -164,6 +204,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--status-host <host>',
     usageDescription:
       'metro prepare: host used for local dev-server /status polling (default: 127.0.0.1)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroStartupTimeoutMs',
@@ -172,6 +214,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--startup-timeout-ms <ms>',
     usageDescription: 'metro prepare: timeout while waiting for the dev server to become ready',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroProbeTimeoutMs',
@@ -180,6 +224,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--probe-timeout-ms <ms>',
     usageDescription: 'metro prepare: timeout for /status and proxy bridge calls',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroRuntimeFile',
@@ -187,6 +233,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--runtime-file <path>',
     usageDescription: 'metro prepare: optional file path to persist the JSON result',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroNoReuseExisting',
@@ -194,6 +242,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--no-reuse-existing',
     usageDescription: 'metro prepare: always start a fresh Metro process',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'metroNoInstallDeps',
@@ -201,6 +251,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--no-install-deps',
     usageDescription: 'metro prepare: skip package-manager install when node_modules is missing',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'bundleUrl',
@@ -208,6 +260,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--bundle-url <url>',
     usageDescription: 'Session-scoped bundle URL hint',
+    projectConfig: false,
+    recorded: true,
   },
   {
     key: 'launchUrl',
@@ -215,6 +269,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--launch-url <url>',
     usageDescription: 'Session-scoped deep link / launch URL hint',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'iosSimulatorDeviceSet',
@@ -222,6 +278,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--ios-simulator-device-set <path>',
     usageDescription: 'Scope iOS simulator discovery/commands to this simulator device set',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'iosXctestrunFile',
@@ -229,6 +287,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--ios-xctestrun-file <path>',
     usageDescription: 'Use an externally built iOS XCTest runner .xctestrun artifact',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'iosXctestDerivedDataPath',
@@ -236,6 +296,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--ios-xctest-derived-data-path <path>',
     usageDescription: 'Derived data path for external iOS XCTest runner execution',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'iosXctestEnvDir',
@@ -243,6 +305,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--ios-xctest-env-dir <path>',
     usageDescription: 'Writable directory for per-session iOS XCTest runner env overlays',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'deviceHub',
@@ -250,6 +314,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--device-hub',
     usageDescription: 'open: use Xcode Device Hub when surfacing Apple simulators',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'testIme',
@@ -258,6 +324,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--test-ime',
     usageDescription:
       'open: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices)',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'testIme',
@@ -267,6 +335,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--no-test-ime',
     usageDescription:
       'open: keep the real Android keyboard even on emulators (opt out of the headless test IME)',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'androidDeviceAllowlist',
@@ -274,6 +344,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--android-device-allowlist <serials>',
     usageDescription: 'Comma/space separated Android serial allowlist for discovery/selection',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'remote',
@@ -281,6 +353,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--remote',
     usageDescription: 'Doctor: check remote connection setup instead of local device inventory',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'activity',
@@ -288,6 +362,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--activity <component>',
     usageDescription: 'Android app launch activity (package/Activity); not for URL opens',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'launchConsole',
@@ -295,6 +371,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--launch-console <path>',
     usageDescription: 'open: capture the initial iOS simulator launch console window to a file',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'launchArgs',
@@ -304,6 +382,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--launch-args <arg>',
     usageDescription:
       'open: repeatable launch argument forwarded verbatim to the platform launch command (iOS app process args; Android adb shell am start args). Linux and macOS reject the flag.',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'header',
@@ -312,6 +392,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     multiple: true,
     usageLabel: '--header <name:value>',
     usageDescription: 'install-from-source: repeatable HTTP header for URL downloads',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'githubActionsArtifact',
@@ -319,12 +401,16 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--github-actions-artifact <owner/repo:artifact>',
     usageDescription: 'install-from-source: GitHub Actions artifact resolved by a remote daemon',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'installSource',
     // Config-only virtual option; parsed explicitly from JSON before generic string options.
     names: [],
     type: 'string',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'session',
@@ -332,5 +418,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--session <name>',
     usageDescription: 'Named session',
+    projectConfig: true,
+    recorded: false,
   },
 ];

@@ -8,9 +8,12 @@ Thread a flag only through the layers that consume it:
    flag; find the owner with
    `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For
    schema-only CLI commands, the owner is `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in
-   `src/cli-schema/command-overrides.ts`. New flags are operator-only by default. Add a flag to `PROJECT_CONFIG_FLAG_KEYS` in
-   `src/cli-schema/cli-config.ts` only when repository control is safe; this positive allowlist is
-   the completeness gate.
+   `src/cli-schema/command-overrides.ts`. Every flag declaration states `projectConfig`
+   (may be set from a project `agent-device.json`) and `recorded` (the session recorder
+   copies it into `SessionAction.flags`). Both are required, so a new declaration that
+   omits either does not compile — that, not an allowlist, is the completeness gate. Set
+   `projectConfig: true` only when repository control is safe; a new flag is otherwise
+   operator-only. Set `recorded: true` only when a `.ad` recording must carry the flag.
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input.
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into
    the daemon request only if the flag affects daemon execution.

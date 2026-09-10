@@ -11,6 +11,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 200,
     usageLabel: '--count <n>',
     usageDescription: 'Repeat count for press/swipe series',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'pointerCount',
@@ -20,6 +22,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 2,
     usageLabel: '--pointer-count <1|2>',
     usageDescription: 'Gesture pan: number of touch pointers (default 1)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'fps',
@@ -29,6 +33,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 120,
     usageLabel: '--fps <n>',
     usageDescription: 'Record: target frames per second (iOS physical device runner)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'quality',
@@ -37,6 +43,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--quality <medium|high>',
     usageDescription:
       'Record: output quality preset; Android maps this to screenrecord bitrate, Apple targets use it for export/encoding. Legacy numeric values 5-7 map to medium; 8-10 map to high',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'hideTouches',
@@ -44,6 +52,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--hide-touches',
     usageDescription: 'Record: skip touch-overlay post-processing for faster raw benchmark videos',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'recordingScope',
@@ -53,6 +63,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--scope <app|device|system>',
     usageDescription:
       'Record: app requires an active app session; device/system records the whole screen',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'intervalMs',
@@ -62,6 +74,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--interval-ms <ms>',
     usageDescription: 'Delay between press iterations',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'delayMs',
@@ -71,6 +85,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--delay-ms <ms>',
     usageDescription: 'Delay between typed characters',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'recordAs',
@@ -78,6 +94,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--record-as <VAR>',
     usageDescription: 'Fill: send the live text but publish ${VAR} in an armed .ad recording',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'durationMs',
@@ -87,6 +105,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--duration-ms <ms>',
     usageDescription: 'Scroll: pace the gesture over this duration when supported',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'holdMs',
@@ -96,6 +116,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--hold-ms <ms>',
     usageDescription: 'Press hold duration for each iteration',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'jitterPx',
@@ -105,6 +127,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 100,
     usageLabel: '--jitter-px <n>',
     usageDescription: 'Deterministic coordinate jitter radius for press',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'pixels',
@@ -114,6 +138,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 100_000,
     usageLabel: '--pixels <n>',
     usageDescription: 'Scroll: explicit gesture distance in pixels',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'doubleTap',
@@ -121,6 +147,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--double-tap',
     usageDescription: 'Use double-tap gesture per press iteration',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'verify',
@@ -129,6 +157,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--verify',
     usageDescription:
       'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'settle',
@@ -137,6 +167,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--settle',
     usageDescription:
       'After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response (best-effort; never fails the action)',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'settleQuietMs',
@@ -145,6 +177,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     usageLabel: '--settle-quiet <ms>',
     usageDescription: 'Settle: quiet window the UI must hold to count as settled (default 500ms)',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'clickButton',
@@ -153,6 +187,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['primary', 'secondary', 'middle'],
     usageLabel: '--button primary|secondary|middle',
     usageDescription: 'Click: choose mouse button (middle reserved for future macOS support)',
+    projectConfig: true,
+    recorded: true,
   },
   // These aliases encode the value directly in the flag name so `back` reads naturally as
   // `back --in-app` or `back --system` without introducing a separate `--back-mode` flag.
@@ -164,6 +200,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     setValue: 'in-app',
     usageLabel: '--in-app',
     usageDescription: 'Back: use app-provided back UI when available',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'backMode',
@@ -173,6 +211,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     setValue: 'system',
     usageLabel: '--system',
     usageDescription: 'Back: use system back input or gesture when available',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'pauseMs',
@@ -182,6 +222,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--pause-ms <ms>',
     usageDescription: 'Delay between swipe iterations',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'pattern',
@@ -190,6 +232,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['one-way', 'ping-pong'],
     usageLabel: '--pattern one-way|ping-pong',
     usageDescription: 'Swipe repeat pattern',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'verbose',
@@ -198,6 +242,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--debug, --verbose, -v',
     usageDescription:
       'Enable debug diagnostics; test --verbose prints per-test step timings without debug logs',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'cost',
@@ -205,6 +251,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--cost',
     usageDescription: 'Include per-command wall-clock latency (cost.wallClockMs) in the response',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'responseLevel',
@@ -214,6 +262,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--level digest|default|full',
     usageDescription:
       'Response detail level: digest (token-cheap), default (today), or full. Default keeps the wire shape unchanged.',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'json',
@@ -221,6 +271,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--json',
     usageDescription: 'JSON output',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'help',
@@ -228,6 +280,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--help, -h',
     usageDescription: 'Print help and exit',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'version',
@@ -235,6 +289,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--version, -V',
     usageDescription: 'Print version and exit',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'snapshotDiff',
@@ -242,6 +298,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--diff',
     usageDescription: 'Snapshot: show structural diff against the previous session baseline',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'saveScript',
@@ -250,6 +308,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--save-script [path]',
     usageDescription:
       'Arm evidence capture on open, publish the armed recording on close; close --save-script alone (without an armed open) is rejected — start with open --save-script, or use session save-script mid-session. Optional custom output path.',
+    projectConfig: false,
+    recorded: true,
   },
   {
     key: 'networkInclude',
@@ -258,6 +318,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['summary', 'headers', 'body', 'all'],
     usageLabel: '--include summary|headers|body|all',
     usageDescription: 'Network: include headers, bodies, or both in output',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'shutdown',
@@ -265,6 +327,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--shutdown',
     usageDescription: 'close: shutdown associated simulator/emulator after ending session',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'relaunch',
@@ -272,6 +336,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--relaunch',
     usageDescription: 'open: terminate app process before launching it',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'foreground',
@@ -282,6 +348,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'open: keep normal app/device selection and return an initial snapshot; without an app, resolve the sole running app on the sole booted iOS simulator',
     inputDescription:
       'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'restart',
@@ -289,6 +357,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--restart',
     usageDescription: 'logs clear: stop active stream, clear logs, then start streaming again',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'retainPaths',
@@ -296,6 +366,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--retain-paths',
     usageDescription: 'install-from-source: keep materialized artifact paths after install',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'retentionMs',
@@ -304,6 +376,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--retention-ms <ms>',
     usageDescription: 'install-from-source: retention TTL for materialized artifact paths',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'noRecord',
@@ -311,6 +385,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--no-record',
     usageDescription: 'Do not record this action',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'record',
@@ -319,5 +395,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--record',
     usageDescription:
       'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with --no-record)',
+    projectConfig: true,
+    recorded: true,
   },
 ];

@@ -33,4 +33,18 @@ export type FlagDefinition = {
    * this option with `optionField`.
    */
   inputDescription?: string;
+  /**
+   * Whether the key may be set from a project `agent-device.json`. Fail-closed by
+   * declaration, not by a list: a repository-controlled config may set a flag only
+   * when this says so, so the compiler holds the property a hand-maintained
+   * allowlist used to hold by omission. Omit it and the declaration will not
+   * compile.
+   */
+  projectConfig: boolean;
+  /**
+   * Whether the session recorder copies this key into `SessionAction.flags`. Also
+   * fail-closed by declaration: a recorded action carries only what a flag
+   * explicitly opts into.
+   */
+  recorded: boolean;
 };

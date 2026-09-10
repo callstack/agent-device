@@ -32,3 +32,33 @@ export function getFlagDefinitions(): readonly FlagDefinition[] {
 export function getFlagDefinitionsForKey(key: FlagKey): readonly FlagDefinition[] {
   return FLAG_DEFINITIONS.filter((definition) => definition.key === key);
 }
+
+/**
+ * The keys a project `agent-device.json` may set, derived from each declaration's
+ * `projectConfig` field. Recomputed per call over the live declarations rather than
+ * cached here, so a consumer that builds its admission set at its own module load
+ * observes the current declarations — which is what lets a planted declaration move
+ * the surface a divergence test reads.
+ */
+export function projectConfigFlagKeys(): ReadonlySet<FlagKey> {
+  return new Set(
+    FLAG_DEFINITIONS.filter((definition) => definition.projectConfig).map(
+      (definition) => definition.key,
+    ),
+  );
+}
+
+/**
+ * The keys the session recorder copies into `SessionAction.flags`, derived from each
+ * declaration's `recorded` field. Recomputed per call for the same reason as
+ * `projectConfigFlagKeys`.
+ */
+export function recordedFlagKeys(): readonly FlagKey[] {
+  return [
+    ...new Set(
+      FLAG_DEFINITIONS.filter((definition) => definition.recorded).map(
+        (definition) => definition.key,
+      ),
+    ),
+  ];
+}

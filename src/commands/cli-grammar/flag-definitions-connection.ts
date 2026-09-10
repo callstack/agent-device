@@ -9,6 +9,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--config <path>',
     usageDescription:
       'Load CLI defaults from a specific config file (required for connection/provider defaults outside user config)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'remoteConfig',
@@ -16,6 +18,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--remote-config <path>',
     usageDescription: 'Load remote host + Metro workflow settings from a specific profile file',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'stateDir',
@@ -24,6 +28,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--state-dir <path>',
     usageDescription:
       'Daemon state directory (defaults to ~/.agent-device for packages, or a worktree-scoped dev dir from source)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'daemonBaseUrl',
@@ -31,6 +37,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--daemon-base-url <url>',
     usageDescription: 'Explicit remote HTTP daemon base URL (skip local daemon discovery/startup)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'daemonAuthToken',
@@ -39,6 +47,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--daemon-auth-token <token>',
     usageDescription:
       'Remote HTTP daemon or proxy auth token (sent as request token and bearer header)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'daemonTransport',
@@ -47,6 +57,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['auto', 'socket', 'http'],
     usageLabel: '--daemon-transport auto|socket|http',
     usageDescription: 'Daemon client transport preference',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'daemonServerMode',
@@ -55,6 +67,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['socket', 'http', 'dual'],
     usageLabel: '--daemon-server-mode socket|http|dual',
     usageDescription: 'Daemon server mode used when spawning daemon',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'proxyHost',
@@ -62,6 +76,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--host <host>',
     usageDescription: 'Proxy: host interface to bind (default: 127.0.0.1)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'proxyPort',
@@ -71,6 +87,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 65535,
     usageLabel: '--port <port>',
     usageDescription: 'Proxy: TCP port to bind (default: 0, choose a free port)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'tenant',
@@ -78,6 +96,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--tenant <id>',
     usageDescription: 'Tenant scope identifier for isolated daemon sessions',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'sessionIsolation',
@@ -86,6 +106,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['none', 'tenant'],
     usageLabel: '--session-isolation none|tenant',
     usageDescription: 'Session isolation strategy (tenant prefixes session namespace)',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'runId',
@@ -93,6 +115,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--run-id <id>',
     usageDescription: 'Run identifier used for tenant lease admission checks',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'leaseId',
@@ -100,6 +124,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--lease-id <id>',
     usageDescription: 'Lease identifier bound to tenant/run admission scope',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'leaseBackend',
@@ -108,6 +134,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
     usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance|harmonyos-instance',
     usageDescription: 'Lease backend for remote tenant connection admission',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'provider',
@@ -115,6 +143,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider <name>',
     usageDescription: 'Cloud provider name for provider-scoped commands',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerSessionId',
@@ -122,6 +152,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-session <id>',
     usageDescription: 'Cloud provider session id or ARN',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerApp',
@@ -130,6 +162,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--provider-app <ref-or-path>',
     usageDescription:
       'Cloud provider app reference or local app path used when creating hosted WebDriver sessions',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerOsVersion',
@@ -137,6 +171,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-os-version <version>',
     usageDescription: 'Hosted cloud provider OS version, for example 17 or 14.0',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerProject',
@@ -144,6 +180,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-project <name>',
     usageDescription: 'Hosted cloud provider project label',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerBuild',
@@ -151,6 +189,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-build <name>',
     usageDescription: 'Hosted cloud provider build label',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerSessionName',
@@ -158,6 +198,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-session-name <name>',
     usageDescription: 'Hosted cloud provider session label',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerDeviceOrientation',
@@ -167,6 +209,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--provider-device-orientation portrait|landscape',
     usageDescription:
       'Screen orientation a hosted cloud provider session starts in. Set this rather than rotating after launch: a session that boots landscape renders login webviews landscape',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerGeoLocation',
@@ -174,6 +218,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-geo-location <country>',
     usageDescription: 'Hosted cloud provider IP geolocation country code, for example US',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerTimezone',
@@ -181,6 +227,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-timezone <zone>',
     usageDescription: 'Hosted cloud provider device time zone, for example New_York',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerLanguage',
@@ -188,6 +236,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-language <language>',
     usageDescription: 'Hosted cloud provider app language, for example Fr',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerLocale',
@@ -195,6 +245,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-locale <locale>',
     usageDescription: 'Hosted cloud provider device locale, for example Fr',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerNetworkProfile',
@@ -203,6 +255,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--provider-network-profile <profile>',
     usageDescription:
       'Hosted cloud provider named network condition profile, for example 4g-lte-advanced-good. Mutually exclusive with --provider-custom-network',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerCustomNetwork',
@@ -211,6 +265,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--provider-custom-network <shape>',
     usageDescription:
       'Hosted cloud provider custom network shape. Mutually exclusive with --provider-network-profile',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'providerNoResignApp',
@@ -219,6 +275,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--provider-no-resign-app',
     usageDescription:
       'iOS only: keep an Enterprise-signed app as uploaded instead of letting the provider re-sign it, which strips entitlements such as push notifications',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'awsProjectArn',
@@ -226,6 +284,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--aws-project-arn <arn>',
     usageDescription: 'AWS Device Farm project ARN for hosted WebDriver sessions',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'awsDeviceArn',
@@ -233,6 +293,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--aws-device-arn <arn>',
     usageDescription: 'AWS Device Farm device ARN for hosted WebDriver sessions',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'awsAppArn',
@@ -240,6 +302,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--aws-app-arn <arn>',
     usageDescription: 'AWS Device Farm app ARN attached to hosted remote access sessions',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'awsRegion',
@@ -247,6 +311,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--aws-region <region>',
     usageDescription: 'AWS region for Device Farm API calls',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'awsInteractionMode',
@@ -255,6 +321,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['INTERACTIVE', 'NO_VIDEO', 'VIDEO_ONLY'],
     usageLabel: '--aws-interaction-mode INTERACTIVE|NO_VIDEO|VIDEO_ONLY',
     usageDescription: 'AWS Device Farm remote access interaction mode',
+    projectConfig: false,
+    recorded: false,
   },
   {
     key: 'force',
@@ -263,6 +331,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--force, --overwrite',
     usageDescription:
       'Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'clean',
@@ -270,6 +340,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--clean',
     usageDescription: 'Daemon stop: remove retained runner processes and leases after stopping',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'noLogin',
@@ -277,6 +349,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--no-login',
     usageDescription: 'Connect: fail instead of starting implicit cloud login',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'sessionLock',
@@ -286,5 +360,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--session-lock reject|strip',
     usageDescription:
       'Lock bound-session device routing for this CLI invocation and nested batch steps; strip drops conflicting platform/scope selectors only, and a selector naming a different device always fails',
+    projectConfig: true,
+    recorded: false,
   },
 ];
