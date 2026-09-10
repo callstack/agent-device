@@ -250,7 +250,7 @@ test('a keep-alive request whose connection predates the window keeps the dump f
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.dump.entries).toEqual([]);
-  expect(result.dump.unnamedRequestIds).toHaveLength(1);
+  expect(result.dump.unnamedRequests).toBe(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),
@@ -273,7 +273,7 @@ test('simulator recovery keeps traffic it saw but could not name', async () => {
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.dump.entries).toEqual([]);
-  expect(result.dump.unnamedRequestIds).toHaveLength(1);
+  expect(result.dump.unnamedRequests).toBe(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),
@@ -295,10 +295,34 @@ test('recovery-only traffic that cannot be named is still reported, not called e
   );
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
-  expect(result.dump.unnamedRequestIds).toHaveLength(1);
+  expect(result.dump.unnamedRequests).toBe(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),
   ]);
   expect(result.notes.join(' ')).not.toContain('none looked like HTTP traffic');
+});
+
+test('a response bounded to one entry still reports every unnamed request, without their ids', async () => {
+  // Five reused tasks, none resolvable: far more than the requested entry limit.
+  const summaries = Array.from({ length: 5 }, (_, index) =>
+    REUSED_SUMMARY.replace('Task <2FAEF670>.<2>', `Task <2FAEF670>.<${index + 10}>`),
+  );
+  const result = await dumpAppleNetworkTraffic(
+    host({
+      text: `${summaries.join('\n')}\n`,
+      runSimctl: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 1 })),
+    }),
+    simulator,
+    input({ maxEntries: 1, appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toEqual([]);
+  expect(result.dump.unnamedRequests).toBe(5);
+  // The identities are a reconciliation detail and must not reach the response,
+  // where their number is bounded by the scan window rather than by maxEntries.
+  expect(result.dump).not.toHaveProperty('unnamedRequestIds');
+  expect(result.notes[0]).toContain('5 requests reused a keep-alive connection');
 });

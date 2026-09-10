@@ -21,13 +21,13 @@ export type NetworkDump = Readonly<{
   matchedLines: number;
   entries: readonly NetworkEntry[];
   /**
-   * Identities of requests the reader observed but could not name at all, so
-   * they are absent from `entries`: an empty dump with a non-empty list is a
-   * failed capture, not evidence that nothing was requested. Identities rather
-   * than a count, so two scan windows over overlapping traffic reconcile to the
-   * requests actually seen instead of double-counting or under-reporting them.
+   * How many requests the reader observed but could not name at all, so they
+   * are absent from `entries`: an empty dump with a non-zero count is a failed
+   * capture, not evidence that nothing was requested. A count rather than the
+   * identities behind it, so the response stays bounded however many lines the
+   * scan window held.
    */
-  unnamedRequestIds?: readonly string[];
+  unnamedRequests?: number;
   include: NonNullable<NetworkDumpParserOptions['include']>;
   limits: Readonly<{ maxEntries: number; maxPayloadChars: number; maxScanLines: number }>;
 }>;

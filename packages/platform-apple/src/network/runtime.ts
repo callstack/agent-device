@@ -1,7 +1,12 @@
 import type { NetworkDump } from '@agent-device/contracts/network-traffic';
 import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
+import {
+  mergeNetworkDumps,
+  readRecentNetworkTrafficFromText,
+  withoutScanIdentities,
+  type ScannedNetworkDump,
+} from '@agent-device/capture-kit';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { backendForAppleDevice } from '../logs/backend.ts';
 
@@ -28,7 +33,12 @@ export async function dumpAppleNetworkTraffic(
   appendLifecycleNote(notes, device, input);
   appendUnnamedRequestNote(notes, dump);
   if (dump.entries.length === 0) notes.push(noEntriesNote(device));
-  return Object.freeze({ source: 'app-log', backend, dump, notes: Object.freeze(notes) });
+  return Object.freeze({
+    source: 'app-log',
+    backend,
+    dump: withoutScanIdentities(dump),
+    notes: Object.freeze(notes),
+  });
 }
 
 /**
@@ -38,12 +48,12 @@ export async function dumpAppleNetworkTraffic(
  */
 function mergeRecoveredTraffic(
   notes: string[],
-  dump: NetworkDump,
-  recovery: { dump: NetworkDump; lineCount: number },
+  dump: ScannedNetworkDump,
+  recovery: { dump: ScannedNetworkDump; lineCount: number },
   maxEntries: number,
-): NetworkDump {
+): ScannedNetworkDump {
   const recovered = recovery.dump.entries.length;
-  if (recovered === 0 && (recovery.dump.unnamedRequestIds ?? []).length === 0) {
+  if (recovered === 0 && (recovery.dump.unnamedRequests ?? 0) === 0) {
     if (recovery.lineCount > 0) {
       notes.push(
         `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
@@ -78,7 +88,7 @@ async function recoverSimulatorTraffic(
   input: NetworkDumpInput,
   appLogPath: string,
   signal: AbortSignal,
-): Promise<{ dump: NetworkDump; lineCount: number } | undefined> {
+): Promise<{ dump: ScannedNetworkDump; lineCount: number } | undefined> {
   const args = [
     ...(device.simulatorSetPath ? ['--set', device.simulatorSetPath] : []),
     'spawn',
@@ -139,7 +149,7 @@ function buildPredicate(appBundleId: string): string {
  */
 function appendUnnamedRequestNote(notes: string[], dump: NetworkDump): void {
   const againstOrigin = dump.entries.filter((entry) => entry.pathUnavailable).length;
-  const unresolved = (dump.unnamedRequestIds ?? []).length;
+  const unresolved = dump.unnamedRequests ?? 0;
   const observed = againstOrigin + unresolved;
   if (observed === 0) return;
   const parts = [

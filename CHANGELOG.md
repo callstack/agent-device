@@ -25,10 +25,10 @@
   was called" check read as a definite fail. Such a request is now reported against the origin its
   connection was opened for, with `pathUnavailable` set, its status, and its timing. A reused
   request whose connection was opened before the scanned window cannot be named at all; those are
-  listed in the dump's `unnamedRequestIds`, so an empty result still reports that traffic was
-  observed. Identities rather than a count, so the app-log and recovery windows reconcile to the
-  requests actually seen instead of double-counting overlapping traffic or under-reporting
-  disjoint traffic. The notes say absence of an endpoint does not prove it was not called.
+  counted in the dump's `unnamedRequests`, so an empty result still reports that traffic was
+  observed. The identities behind that count reconcile the app-log and recovery windows internally
+  — so overlapping traffic is not double-counted and disjoint traffic is not under-reported — but
+  the response carries only the count, which stays bounded however large the scan window was. The notes say absence of an endpoint does not prove it was not called.
 - Fixed: a URL logged as a delimited `url: <value>,` field no longer keeps the separator the log
   format put after it, so an entry's `url` compares equal to the endpoint under test. A bare URL
   elsewhere is left alone, since nothing there establishes that trailing punctuation is not part of

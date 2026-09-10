@@ -41,11 +41,24 @@ type CfNetworkConnectionIndex = ReadonlyMap<
   readonly Readonly<{ lineIndex: number; origin: string }>[]
 >;
 
+/**
+ * A dump plus the identities behind its `unnamedRequests`. Reconciling two scan
+ * windows needs those identities; a caller returning a dump to its requester
+ * does not, and an unbounded list of them has no place in a response.
+ */
+export type ScannedNetworkDump = NetworkDump & Readonly<{ unnamedRequestIds?: readonly string[] }>;
+
+/** The public projection: identities dropped, their count kept. */
+export function withoutScanIdentities(dump: ScannedNetworkDump): NetworkDump {
+  const { unnamedRequestIds: _identities, ...rest } = dump;
+  return Object.freeze(rest);
+}
+
 export function mergeNetworkDumps(
-  primary: NetworkDump,
-  secondary: NetworkDump,
+  primary: ScannedNetworkDump,
+  secondary: ScannedNetworkDump,
   maxEntries = primary.limits.maxEntries,
-): NetworkDump {
+): ScannedNetworkDump {
   const entries = [...primary.entries];
   const seen = new Set(entries.map(networkEntryKey));
   for (const entry of secondary.entries) {
@@ -70,6 +83,7 @@ export function mergeNetworkDumps(
     ...primary,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
+    unnamedRequests: unnamedRequestIds.length,
     unnamedRequestIds: Object.freeze(unnamedRequestIds),
   });
 }
@@ -77,7 +91,7 @@ export function mergeNetworkDumps(
 export function readRecentNetworkTrafficFromText(
   content: string,
   options: NetworkDumpParserOptions,
-): NetworkDump {
+): ScannedNetworkDump {
   const maxEntries = clampInt(options.maxEntries, 25, 1, 200);
   const include = options.include ?? 'summary';
   const maxPayloadChars = clampInt(options.maxPayloadChars, 2048, 64, 16_384);
@@ -90,7 +104,7 @@ export function readRecentNetworkTrafficFromText(
       scannedLines: 0,
       matchedLines: 0,
       entries: Object.freeze([]),
-      unnamedRequestIds: Object.freeze([]),
+      unnamedRequests: 0,
       include,
       limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
     });
@@ -102,6 +116,9 @@ export function readRecentNetworkTrafficFromText(
   const cfNetworkConnections = isAppleBackend(options.backend)
     ? indexCfNetworkConnections(lines)
     : undefined;
+  const unnamedRequestIds = cfNetworkConnections
+    ? collectUnnamedCfNetworkTasks(lines, cfNetworkConnections)
+    : [];
   for (let i = lines.length - 1; i >= 0 && entries.length < maxEntries; i -= 1) {
     if (!lines[i]?.trim()) continue;
     const parsed = parseNetworkLine(
@@ -121,9 +138,8 @@ export function readRecentNetworkTrafficFromText(
     scannedLines: lines.length,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
-    unnamedRequestIds: Object.freeze(
-      cfNetworkConnections ? collectUnnamedCfNetworkTasks(lines, cfNetworkConnections) : [],
-    ),
+    unnamedRequests: unnamedRequestIds.length,
+    unnamedRequestIds: Object.freeze(unnamedRequestIds),
     include,
     limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
   });

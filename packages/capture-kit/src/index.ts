@@ -29,4 +29,9 @@ export {
   appLogSessionArtifactsMatch,
   assertAppLogSessionArtifacts,
 } from './app-log-session-artifacts.ts';
-export { mergeNetworkDumps, readRecentNetworkTrafficFromText } from './network-traffic.ts';
+export {
+  mergeNetworkDumps,
+  readRecentNetworkTrafficFromText,
+  withoutScanIdentities,
+  type ScannedNetworkDump,
+} from './network-traffic.ts';
