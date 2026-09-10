@@ -1849,7 +1849,7 @@ agent-device alert dismiss
 ```
 
 - `wait` accepts a millisecond duration, `text <value>`, a snapshot ref (`@eN`), a selector, or strict `absent <selector>`.
-- `wait <selector> [timeoutMs]` polls until the selector resolves or the timeout expires.
+- `wait <selector> [timeoutMs]` polls until the selector resolves or the timeout expires. Selector waits use snapshot capture, including steps inside `replay`, so they share the capture backend and recovery used by `is`.
 - `wait absent <selector> [timeoutMs]` polls until a complete, readable capture has zero matches. It is strict absence, not a visibility check: hidden or off-screen matches still keep the wait pending.
 - Strict absence rejects `--scope` and `--depth`. Sparse, truncated, incomplete, and Android unreadable-content captures do not count as readable captures and cannot satisfy the wait; they are ridden out until the deadline, and a run with no valid capture preserves its typed unreadable diagnostic.
 - `wait @ref [timeoutMs]` requires an existing session snapshot from a prior `snapshot` command.
