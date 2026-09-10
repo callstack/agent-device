@@ -19,6 +19,5 @@ export {
   resolveRunnerAppBundleId,
   resolveRunnerDerivedPath,
   type RunnerCacheProbeBudget,
-  type RunnerPhaseDeadline,
 } from './runner-cache-metadata.ts';
 export { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';

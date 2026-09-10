@@ -156,12 +156,12 @@ export type AppleRunnerHost = {
    */
   isCommandTimeoutError(error: unknown): boolean;
   /**
-   * Ceiling on one toolchain identity probe attempt, in milliseconds
-   * (`COLD_TOOLCHAIN_PROBE_TIMEOUT_MS` in
-   * `packages/platform-apple/src/core/config.ts`, which owns it for both
-   * toolchain probers). It arrives through the port rather than by import so
-   * the runner's cache-metadata module, which every Apple façade evaluates,
-   * does not grow its eager import closure to read one number.
+   * Ceiling on one Apple toolchain identity probe attempt, in milliseconds:
+   * `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS` from `@agent-device/host-kit/command`,
+   * which owns it for both Apple toolchain probers. Like every other host-kit
+   * symbol above it arrives through this port rather than by import, because
+   * `scripts/__tests__/eager-closure-budgets.test.ts` holds the runner entry to
+   * the modules it evaluates today and a static edge to host-kit adds five.
    */
   coldToolchainProbeTimeoutMs(): number;
   // Diagnostics (@agent-device/host-kit/diagnostics)

@@ -27,7 +27,6 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerCacheProbeBudget,
-  type RunnerPhaseDeadline,
 } from './runner-xctestrun.ts';
 import {
   resolveRunnerRequestSignal,
@@ -138,7 +137,7 @@ export async function ensureRunnerSession(
 async function startRunnerSessionWithLease(
   device: DeviceInfo,
   options: RunnerSessionOptions,
-  phaseDeadline: RunnerPhaseDeadline | undefined,
+  phaseDeadline: Deadline | undefined,
 ): Promise<RunnerSession> {
   const startupTimings: Record<string, number> = {};
   // The owning request's abort signal so a client disconnect kills the blocking
@@ -165,6 +164,7 @@ async function startRunnerSessionWithLease(
       await tryAdoptRunnerSessionFromLease(device, {
         startupTimeoutMs: options.startupTimeoutMs,
         phaseDeadline,
+        signal,
         expectedRunnerSessionId: options.expectedRunnerSessionId,
       }),
   );

@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createSnapshotSourceHost } from './host.ts';
 import { readSnapshotSourceToolchain } from './cache-identity.ts';
 import { createSnapshotSourceDeadline, type SnapshotSourceDeadline } from './deadline.ts';
+import { SnapshotSourceError } from './errors.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import type { SnapshotSourceHost } from './types.ts';
 
@@ -80,6 +81,38 @@ test('a toolchain host that never returns still fails at the deadline with the s
   // remainder rather than a fresh ceiling.
   assert.deepEqual(timeouts, [30_000, 30_000]);
   assert.equal(clock.nowMs, 60_000);
+});
+
+test('a request canceled while a probe blocked surfaces the cancellation, not the timeout', async () => {
+  const clock = { nowMs: 0 };
+  const request = new AbortController();
+  let calls = 0;
+  const host = fakeToolchainHost((command, _args, options) => {
+    calls += 1;
+    const timeout = blockForWholeTimeout(clock, command, options);
+    // The abort lands while the attempt is still blocked, which is the case the
+    // deadline alone cannot tell from a plain timeout: it still has room.
+    request.abort();
+    throw timeout;
+  });
+
+  await assert.rejects(
+    readSnapshotSourceToolchain(
+      host,
+      'iOS 26.2',
+      createSnapshotSourceDeadline(120_000, request.signal, () => clock.nowMs),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof SnapshotSourceError);
+      assert.equal(error.failureKind, 'cancelled');
+      assert.equal(error.failureCode, 'abort-signal');
+      assert.equal(error.details?.reason, 'request_canceled');
+      return true;
+    },
+  );
+  // The deadline still had 90 s, so only the cancellation stops the retry.
+  assert.equal(calls, 1);
+  assert.equal(clock.nowMs, 30_000);
 });
 
 test('a probe that failed on its own and merely says "timed out" in its message is not retried', async () => {

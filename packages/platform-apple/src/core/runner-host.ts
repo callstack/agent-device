@@ -3,6 +3,7 @@ import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 
 import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmdBackground,
@@ -35,7 +36,6 @@ import {
 } from '@agent-device/host-kit/request';
 
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { visitXmlPlistEntries } from './plist-xml.ts';
 import {

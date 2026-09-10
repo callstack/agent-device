@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   buildDetachedRunnerLease,
   buildRunnerLease,
@@ -11,6 +12,7 @@ import {
 } from '../runner-lease.ts';
 import { isIosRunnerDetachEnabled, tryAdoptRunnerSessionFromLease } from '../runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner-transport.ts';
+import { resolveExpectedRunnerCacheMetadata } from '../runner-xctestrun.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -28,6 +30,7 @@ vi.mock('../runner-xctestrun.ts', async (importOriginal) => {
 });
 
 const mockSendRunnerCommandOnce = vi.mocked(sendRunnerCommandOnce);
+const mockResolveExpectedRunnerCacheMetadata = vi.mocked(resolveExpectedRunnerCacheMetadata);
 const mockIsProcessAlive = vi.fn((_pid: number) => false);
 const mockReadProcessCommand = vi.fn((_pid: number): string | null => null);
 const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'test-process-start');
@@ -138,6 +141,27 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
   // Adoption transfers ownership: the lease on disk now belongs to us.
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
+});
+
+test('a request canceled during the fingerprint probe fails adoption instead of skipping it', async () => {
+  // The fingerprint check runs the same blocking toolchain probes a fresh
+  // startup would, and it is handed the request's signal. A cancellation from
+  // there is not an unresolvable derived path: swallowing it would let startup
+  // walk on past a client that is already gone (#2422).
+  writeStaleLease();
+  mockIsProcessAlive.mockReturnValue(true);
+  const request = new AbortController();
+  request.abort();
+  mockResolveExpectedRunnerCacheMetadata.mockImplementationOnce((_device, _projectRoot, budget) => {
+    // The probe only cancels because the request's signal reached it.
+    expect(budget?.signal?.aborted).toBe(true);
+    throw createRequestCanceledError({ phase: 'apple_toolchain_probe' });
+  });
+
+  await expect(
+    tryAdoptRunnerSessionFromLease(simulator, { signal: request.signal }),
+  ).rejects.toSatisfy(isRequestCanceledError);
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 });
 
 test('adoption is skipped for a recycled runner pid (start time mismatch)', async () => {

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   runCmdStreaming,
+  type Deadline,
   type ExecBackgroundResult,
   withKeyedLock,
   emitRequestProgress,
@@ -33,7 +34,6 @@ import {
   resolveRunnerSigningBuildSettings,
   writeRunnerCacheMetadataForArtifacts,
   type ExistingXctestrunState,
-  type RunnerPhaseDeadline,
   type RunnerXctestrunCacheKind,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache.ts';
@@ -165,7 +165,7 @@ function resolveExternalXctestDerivedDataPath(xctestrunPath: string): string {
 async function ensureXctestrunUnderCacheLock(params: {
   device: DeviceInfo;
   options: RunnerXctestrunBuildOptions;
-  phaseDeadline: RunnerPhaseDeadline | undefined;
+  phaseDeadline: Deadline | undefined;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
@@ -237,7 +237,7 @@ async function resolveReusableXctestrunArtifact(params: {
 async function buildXctestrunArtifact(params: {
   device: DeviceInfo;
   options: RunnerXctestrunBuildOptions;
-  phaseDeadline: RunnerPhaseDeadline | undefined;
+  phaseDeadline: Deadline | undefined;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;

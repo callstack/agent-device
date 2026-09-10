@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
-// The per-attempt toolchain probe budget both Apple toolchain probers read; see
-// its doc comment there for the cold-start stall it is sized for (#2422).
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../core/config.ts';
+import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  isCommandTimeoutError,
+  type ExecResult,
+} from '@agent-device/host-kit/command';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -111,6 +112,10 @@ async function toolOutput(
  * Only the exec layer's own structured timeout counts -- a tool that failed by
  * itself and merely said "timed out" in its output is not this stall and is not
  * retried.
+ *
+ * A request canceled while the attempt blocked is the caller's own outcome, so
+ * it is raised as this module's typed cancellation rather than as the timeout
+ * that happened to be in flight when the abort landed.
  */
 async function runToolchainProbe(
   host: SnapshotSourceHost,
@@ -121,7 +126,9 @@ async function runToolchainProbe(
   try {
     return await execToolchainProbe(host, command, args, deadline);
   } catch (error) {
-    if (!isCommandTimeoutError(error) || !toolchainProbeDeadlineHasRoom(deadline)) throw error;
+    if (!isCommandTimeoutError(error)) throw error;
+    if (deadline.signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
+    if (deadline.clock.remainingMs(deadline.now()) <= 0) throw error;
     return await execToolchainProbe(host, command, args, deadline);
   }
 }
@@ -140,8 +147,4 @@ function execToolchainProbe(
       remainingSnapshotSourceMs(deadline, 'toolchain-probe-deadline'),
     ),
   });
-}
-
-function toolchainProbeDeadlineHasRoom(deadline: SnapshotSourceDeadline): boolean {
-  return !deadline.signal?.aborted && deadline.clock.remainingMs(deadline.now()) > 0;
 }

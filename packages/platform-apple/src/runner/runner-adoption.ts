@@ -1,12 +1,14 @@
 import path from 'node:path';
 import {
   resolveIosSimulatorDeviceSetPath,
+  type Deadline,
   emitDiagnostic,
   isProcessAlive,
   parseBooleanLiteral,
   type ExecResult,
 } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import { withRunnerCommandId } from './runner-contract.ts';
 import {
@@ -21,7 +23,6 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerCacheProbeBudget,
-  type RunnerPhaseDeadline,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
@@ -60,7 +61,9 @@ export async function tryAdoptRunnerSessionFromLease(
      * the adopted session must be given what those probes left rather than a
      * fresh `startupTimeoutMs` (#2422).
      */
-    phaseDeadline?: RunnerPhaseDeadline;
+    phaseDeadline?: Deadline;
+    /** The owning request's cancellation signal, forwarded to those probes. */
+    signal?: AbortSignal;
     expectedRunnerSessionId?: string;
   },
 ): Promise<RunnerSession | null> {
@@ -101,6 +104,7 @@ export async function tryAdoptRunnerSessionFromLease(
   }
   const expectedDerived = resolveExpectedDerivedPath(device, {
     deadline: options.phaseDeadline,
+    signal: options.signal,
   });
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
@@ -158,7 +162,12 @@ function resolveExpectedDerivedPath(
       device,
       resolveExpectedRunnerCacheMetadata(device, undefined, budget),
     );
-  } catch {
+  } catch (error) {
+    // An unresolvable fingerprint is a miss the caller recovers from by starting
+    // fresh. A canceled request is not: the client that asked for this startup
+    // is gone, so it leaves through the catch rather than becoming one more
+    // reason to keep going.
+    if (isRequestCanceledError(error)) throw error;
     return null;
   }
 }
@@ -168,7 +177,7 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { startupTimeoutMs?: number; phaseDeadline?: RunnerPhaseDeadline },
+  options: { startupTimeoutMs?: number; phaseDeadline?: Deadline },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {

@@ -29,7 +29,6 @@ export {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
-  type RunnerPhaseDeadline,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';
 

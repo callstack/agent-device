@@ -15,9 +15,10 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-cache-metadata.ts';
-// The one owning module for the probe budget: this file's probes reach it
-// through the runner host port, snapshot-source imports it directly (#2422).
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../core/config.ts';
+// The one owning module for the probe budget: host-kit's exec layer. The
+// snapshot-source prober imports it from there directly; this file's probes read
+// the same value through the runner host port (#2422).
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '@agent-device/host-kit/command';
 import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();
@@ -289,19 +290,10 @@ describe('toolchain probe budget', () => {
 
     assert.throws(
       () => resolveExpectedRunnerCacheMetadata(MACOS_DEVICE),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.code, 'COMMAND_FAILED');
-        assert.equal(error.details?.reason, 'apple_toolchain_probe_unavailable');
-        assert.equal(error.details?.retriable, true);
-        expect(error.details?.hint).toContain('xcode-select -p');
-        expect(error.message).toContain('xcodebuild -version');
-        // The reported failure is the last attempt: 30 s, then the 15 s the
-        // budget still had.
-        expect(error.message).toContain('xcodebuild timed out after 15000ms');
-        expect(error.message).toContain('request budget');
-        return true;
-      },
+      // A budget spent before the remaining probes could start is not an
+      // unreadable toolchain: nothing probed it, so the error says the budget
+      // ran out rather than pointing at `xcode-select`.
+      (error: unknown) => expectRunnerPhaseBudgetExhausted(error),
     );
     // 30 s + a 15 s retry spends the whole budget on the first probe; the two
     // xcrun probes then fail on the budget instead of blocking for 30 s each.
@@ -320,15 +312,11 @@ describe('toolchain probe budget', () => {
     assert.throws(
       () =>
         resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { deadline: phaseDeadline }),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.reason, 'apple_toolchain_probe_unavailable');
-        expect(error.message).toContain('xcodebuild timed out after 4000ms');
-        expect(error.message).toContain('request budget');
-        return true;
-      },
+      (error: unknown) => expectRunnerPhaseBudgetExhausted(error),
     );
     assert.equal(runCmdSync.mock.calls.length, 1);
+    // The one attempt was capped by the phase, not by the 30 s per-call ceiling.
+    assert.equal(runCmdSync.mock.calls[0]?.[2]?.timeoutMs, 4_000);
     assert.equal(clock.nowMs, 4_000);
   });
 
@@ -388,6 +376,17 @@ describe('toolchain probe budget', () => {
     expect(runCmdSync.mock.calls.filter(([command]) => command === 'xcodebuild')).toHaveLength(1);
   });
 });
+
+/** The error a runner phase raises when a step is reached with nothing left to spend. */
+function expectRunnerPhaseBudgetExhausted(error: unknown): boolean {
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.details?.reason, 'runner_phase_budget_exhausted');
+  assert.equal(error.details?.phase, 'apple_toolchain_probe');
+  assert.equal(error.details?.retriable, true);
+  expect(error.message).toContain('budget ran out');
+  return true;
+}
 
 /**
  * A clock the probes' own budget reads, advanced only by
