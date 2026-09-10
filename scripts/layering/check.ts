@@ -32,6 +32,10 @@
 //     an exports map, and every workspace specifier declared + exports-named (R11).
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
+//   - Over THE APPLE RUNNER SUBTREE: `runner/**` may not value-import `@agent-device/host-kit/*`
+//     directly (R77) — the subtree sits in the eager closure of seven Apple façade entries the
+//     eager-closure-budgets gate holds at a fixed size, so a direct host-kit edge grows all seven;
+//     host-kit reaches the runner only through `runner/host.ts`, bound in `core/runner-host.ts`.
 //   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
 //     code cannot manufacture or repair a narrowed runtime proof (R66).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
@@ -90,6 +94,7 @@ import {
   checkRetiredPlatformsZone,
   platformPackagePolicySummary,
 } from './platform-package-policy.ts';
+import { appleRunnerHostPortViolations } from './apple-runner-host-port-policy.ts';
 import {
   listUntrackedProductionTypeScriptFiles,
   readTrackedPlatformPackageDeclarations,
@@ -443,6 +448,7 @@ export const LAYERING_RULE_IDS = [
   'daemon-platform-boundary',
   'package-boundaries',
   'platform-package-policy',
+  'apple-runner-host-port',
   'retired-platforms-zone',
   'src-utils-retirement',
   'replay-ownership',
@@ -493,6 +499,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       readTrackedPlatformPackageDeclarations(repoRoot),
       { untrackedProductionFiles: listUntrackedProductionTypeScriptFiles(repoRoot) },
     ),
+  'apple-runner-host-port': (context) =>
+    appleRunnerHostPortViolations(context.allTypeScriptSources),
   'retired-platforms-zone': () => checkRetiredPlatformsZone(listTrackedPlatformZoneFiles(repoRoot)),
   'src-utils-retirement': (context) =>
     retiredPathRuleViolations('R14', context.trackedSrcUtilsFiles),
