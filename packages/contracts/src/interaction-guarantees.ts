@@ -171,12 +171,14 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // hook, refuses on the visibility resolver's verdict unchanged — this is a
   // rescue-only override, never a way to relax a genuine refusal.
   // The live read is a SEPARATE runner request (the direct querySelector), so
-  // only the per-request selection policy is shared: capture and rescue each
-  // resolve their own active surface through the runner's single
-  // prepareActiveCommandContext seam, in-place system surfaces included (the
-  // web sign-in sheet, #2448). That is not a same-instant guarantee — no
-  // captured surface identity crosses the two requests, so a surface that
-  // appears or dismisses between them is undetected.
+  // it shares the runner's prepareActiveCommandContext surface policy only with
+  // a RUNNER-ROUTED capture: eligible simulator captures go to the host AX
+  // bridge (packages/platform-apple/src/snapshot-route.ts), and a bridge-served
+  // capture never reaches that seam. #2448 puts the system-surface case (the
+  // web sign-in sheet) back on the runner, where both reads do share it. Either
+  // way this is not a same-instant guarantee — no captured surface identity
+  // crosses the two requests, so a surface that appears or dismisses between
+  // them is undetected.
   offscreen: {
     kind: 'runtime',
     via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
