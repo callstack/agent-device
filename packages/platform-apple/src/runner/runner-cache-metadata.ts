@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import {
   coldToolchainProbeTimeoutMs,
   createTtlMemo,
@@ -351,19 +355,14 @@ function runToolchainProbe(
   clock: ToolchainProbeClock,
 ): ProbeResult<string> {
   const probe = [cmd, ...args].join(' ');
-  // Both checks are outside the try, and both throw rather than becoming a
-  // probe failure: a canceled request and a spent budget are the caller's own
-  // errors to see. Reporting an unreadable toolchain instead would blame the
-  // toolchain for a probe that never ran.
-  clock.throwIfCanceled();
-  if (clock.attemptTimeoutMs() <= 0) {
-    throw runnerPhaseBudgetExhaustedError('apple_toolchain_probe');
-  }
   let output: { exitCode: number; stdout: string; stderr: string };
   try {
     output = runToolchainProbeCommand(cmd, args, clock);
   } catch (error) {
-    clock.throwIfCanceled();
+    // A canceled request and a spent budget are the caller's own errors to
+    // see, not an unreadable toolchain: only what's left becomes a probe
+    // failure.
+    if (isRequestCanceledError(error) || isRunnerPhaseBudgetExhaustedError(error)) throw error;
     return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
   }
   if (output.exitCode !== 0) {
@@ -385,7 +384,10 @@ function runToolchainProbe(
  * reaches this file through the host port); the immediate next exec of the same
  * tool is instant, so the retry recovers without widening the per-call budget. Only the
  * exec layer's structured timeout is retried -- a tool that failed on its own
- * and merely said "timed out" in its output is not this stall.
+ * and merely said "timed out" in its output is not this stall. The retry calls
+ * the same guarded attempt below, so a request canceled or a budget spent
+ * between attempts is caught there rather than trusted from before the first
+ * one.
  */
 function runToolchainProbeCommand(
   cmd: string,
@@ -393,25 +395,31 @@ function runToolchainProbeCommand(
   clock: ToolchainProbeClock,
 ): { exitCode: number; stdout: string; stderr: string } {
   try {
-    return execToolchainProbeCommand(cmd, args, clock);
+    return attemptToolchainProbe(cmd, args, clock);
   } catch (error) {
     if (!isCommandTimeoutError(error)) throw error;
-    clock.throwIfCanceled();
-    if (clock.attemptTimeoutMs() <= 0) throw error;
-    return execToolchainProbeCommand(cmd, args, clock);
+    return attemptToolchainProbe(cmd, args, clock);
   }
 }
 
-function execToolchainProbeCommand(
+/** The one guard site for a toolchain probe attempt: cancellation and a spent budget both throw here, before anything execs. */
+function attemptToolchainProbe(
   cmd: string,
   args: string[],
   clock: ToolchainProbeClock,
 ): { exitCode: number; stdout: string; stderr: string } {
+  clock.throwIfCanceled();
+  const timeoutMs = clock.attemptTimeoutMs();
+  if (timeoutMs <= 0) throw runnerPhaseBudgetExhaustedError('apple_toolchain_probe');
   return runCmdSync(cmd, args, {
     allowFailure: true,
-    timeoutMs: clock.attemptTimeoutMs(),
+    timeoutMs,
     maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
   });
+}
+
+function isRunnerPhaseBudgetExhaustedError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'runner_phase_budget_exhausted';
 }
 
 function parseXcodeVersionOutput(
