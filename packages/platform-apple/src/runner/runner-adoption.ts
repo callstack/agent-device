@@ -1,7 +1,6 @@
 import path from 'node:path';
 import {
   resolveIosSimulatorDeviceSetPath,
-  type Deadline,
   emitDiagnostic,
   isProcessAlive,
   parseBooleanLiteral,
@@ -22,7 +21,7 @@ import {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  type RunnerCacheProbeBudget,
+  type RunnerPhaseBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
@@ -54,11 +53,11 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): 
 export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
   options: {
-    startupTimeoutMs?: number;
-    /** The startup phase's clock: the fingerprint check below spends from it (#2422). */
-    phaseDeadline?: Deadline;
-    /** The owning request's cancellation signal, forwarded to those probes. */
-    signal?: AbortSignal;
+    /**
+     * The startup phase's one budget: the fingerprint check below spends from it, its
+     * cancellation reaches those probes, and the adopted session inherits the rest (#2422).
+     */
+    budget?: RunnerPhaseBudget;
     expectedRunnerSessionId?: string;
   },
 ): Promise<RunnerSession | null> {
@@ -97,10 +96,7 @@ export async function tryAdoptRunnerSessionFromLease(
   if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
     return skip('runner_pid_recycled');
   }
-  const expectedDerived = resolveExpectedDerivedPath(device, {
-    deadline: options.phaseDeadline,
-    signal: options.signal,
-  });
+  const expectedDerived = resolveExpectedDerivedPath(device, options.budget);
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
     return skip('artifact_fingerprint_mismatch');
@@ -150,7 +146,7 @@ async function probeRunnerAnswersUptime(device: DeviceInfo, port: number): Promi
 
 function resolveExpectedDerivedPath(
   device: DeviceInfo,
-  budget: RunnerCacheProbeBudget,
+  budget: RunnerPhaseBudget | undefined,
 ): string | null {
   try {
     return resolveRunnerDerivedPath(
@@ -169,7 +165,7 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { startupTimeoutMs?: number; phaseDeadline?: Deadline },
+  options: { budget?: RunnerPhaseBudget },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
@@ -195,11 +191,7 @@ function buildAdoptedRunnerSession(
     // The probe already proved the runner answers commands.
     ready: true,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
-      requireRunnerPhaseRemainingMs(
-        options.phaseDeadline,
-        options.startupTimeoutMs,
-        'runner_session_adoption',
-      ),
+      requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
     ),
     lease: buildRunnerLease({
       deviceId: device.id,

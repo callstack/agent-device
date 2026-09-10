@@ -13,7 +13,10 @@ import {
 } from '../runner-lease.ts';
 import { isIosRunnerDetachEnabled, tryAdoptRunnerSessionFromLease } from '../runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner-transport.ts';
-import { resolveExpectedRunnerCacheMetadata } from '../runner-xctestrun.ts';
+import {
+  createRunnerPhaseBudget,
+  resolveExpectedRunnerCacheMetadata,
+} from '../runner-xctestrun.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -161,7 +164,9 @@ test('a request canceled during the fingerprint probe fails adoption instead of 
   });
 
   await expect(
-    tryAdoptRunnerSessionFromLease(simulator, { signal: request.signal }),
+    tryAdoptRunnerSessionFromLease(simulator, {
+      budget: createRunnerPhaseBudget(undefined, request.signal),
+    }),
   ).rejects.toSatisfy(isRequestCanceledError);
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 
@@ -186,7 +191,9 @@ test('a request canceled during the fingerprint probe fails adoption instead of 
   );
 
   await expect(
-    tryAdoptRunnerSessionFromLease(simulator, { signal: warmRequest.signal }),
+    tryAdoptRunnerSessionFromLease(simulator, {
+      budget: createRunnerPhaseBudget(undefined, warmRequest.signal),
+    }),
   ).rejects.toSatisfy(isRequestCanceledError);
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
   // Ownership was never transferred: the stale lease is untouched.

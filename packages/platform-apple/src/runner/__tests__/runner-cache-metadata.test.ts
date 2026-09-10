@@ -6,7 +6,7 @@ import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions } from '../host.ts';
 import {
-  createRunnerPhaseDeadline,
+  createRunnerPhaseBudget,
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -278,112 +278,22 @@ describe('toolchain probe budget', () => {
     assert.deepEqual(xcodebuildTimeouts, [COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, 15_000]);
   });
 
-  test('a toolchain host that never returns stops at the shared budget instead of once per probe', () => {
-    const clock = installFakeToolchainClock();
-    runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
-      throw blockForWholeTimeout(clock, command, args, options);
-    });
-    runCmdSync.mockClear();
-
-    assert.throws(
-      () => resolveExpectedRunnerCacheMetadata(MACOS_DEVICE),
-      // A budget spent before the remaining probes could start is not an
-      // unreadable toolchain: nothing probed it, so the error says the budget
-      // ran out rather than pointing at `xcode-select`.
-      (error: unknown) => expectRunnerPhaseBudgetExhausted(error),
-    );
-    // 30 s + a 15 s retry spends the whole budget on the first probe; the two
-    // xcrun probes then fail on the budget instead of blocking for 30 s each.
-    assert.equal(runCmdSync.mock.calls.length, 2);
-    assert.equal(clock.nowMs, 45_000);
-  });
-
   test('an owning phase with 4 s left gets one 4 s attempt and no retry', () => {
     const clock = installFakeToolchainClock();
-    const phaseDeadline = createRunnerPhaseDeadline(4_000);
+    const phaseBudget = createRunnerPhaseBudget(4_000, undefined);
     runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
       throw blockForWholeTimeout(clock, command, args, options);
     });
     runCmdSync.mockClear();
 
     assert.throws(
-      () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { deadline: phaseDeadline }),
+      () => resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, phaseBudget),
       (error: unknown) => expectRunnerPhaseBudgetExhausted(error),
     );
     assert.equal(runCmdSync.mock.calls.length, 1);
     // The one attempt was capped by the phase, not by the 30 s per-call ceiling.
     assert.equal(runCmdSync.mock.calls[0]?.[2]?.timeoutMs, 4_000);
     assert.equal(clock.nowMs, 4_000);
-  });
-
-  test('a request canceled while a probe blocked surfaces the cancellation instead of retrying', () => {
-    const clock = installFakeToolchainClock();
-    const request = new AbortController();
-    runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
-      const timeout = blockForWholeTimeout(clock, command, args, options);
-      request.abort();
-      throw timeout;
-    });
-    runCmdSync.mockClear();
-
-    assert.throws(
-      () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { signal: request.signal }),
-      (error: unknown) => isRequestCanceledError(error),
-    );
-    assert.equal(runCmdSync.mock.calls.length, 1);
-  });
-
-  test('a non-timeout error that also cancels the request on the last probe surfaces cancellation, not an unavailable toolchain', () => {
-    const request = new AbortController();
-    runCmdSync.mockImplementation((command: string, args: string[]) => {
-      // The final probe: abort the request and fail with a plain command
-      // error, not the exec layer's structured timeout -- there is no next
-      // attempt left to catch the cancellation, so the catch here must.
-      if (command === 'xcrun' && args.includes('--show-sdk-build-version')) {
-        request.abort();
-        throw new AppError('COMMAND_FAILED', 'xcrun: unexpected error', {});
-      }
-      return appleToolchainProbeResult(command, args);
-    });
-    runCmdSync.mockClear();
-
-    assert.throws(
-      () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { signal: request.signal }),
-      (error: unknown) => isRequestCanceledError(error),
-    );
-    assert.equal(runCmdSync.mock.calls.length, 3);
-  });
-
-  test('an already-canceled request runs no toolchain probe at all, cold or with the fingerprint cache warm', () => {
-    installFakeToolchainClock();
-    runCmdSync.mockClear();
-
-    assert.throws(
-      () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, {
-          signal: AbortSignal.abort(),
-        }),
-      (error: unknown) => isRequestCanceledError(error),
-    );
-    assert.equal(runCmdSync.mock.calls.length, 0);
-
-    // Warm the real fingerprint memo with an ordinary request, then repeat
-    // with an already-aborted signal: the cache-hit path must check
-    // cancellation before it returns the memoized value, not skip it (#2422).
-    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
-    runCmdSync.mockClear();
-
-    assert.throws(
-      () =>
-        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, {
-          signal: AbortSignal.abort(),
-        }),
-      (error: unknown) => isRequestCanceledError(error),
-    );
-    assert.equal(runCmdSync.mock.calls.length, 0);
   });
 
   test('a probe that failed on its own and merely says "timed out" in its message is not retried', () => {
@@ -409,6 +319,174 @@ describe('toolchain probe budget', () => {
     );
     expect(runCmdSync.mock.calls.filter(([command]) => command === 'xcodebuild')).toHaveLength(1);
   });
+
+  /**
+   * One row per way a fingerprint read can be interrupted: when the owning request aborts,
+   * what the probe that abort lands on does, and what the phase must then surface.
+   * `spawnSync` cannot be interrupted once it has started, so a cancellation is only ever
+   * observed between attempts -- the exec count is what pins which attempt each row stopped.
+   */
+  type ToolchainProbeCancellationCase = {
+    label: string;
+    /** Which execs refuse to answer, and how they end; every other exec answers. */
+    failing?: { at: 'first' | 'final' | 'every'; as: 'exec-timeout' | 'command-failure' };
+    /**
+     * When the owning request aborts: never, before the phase runs a probe at all, while
+     * the failing exec is still blocked, or as that exec's timeout unwinds.
+     */
+    aborts: 'never' | 'before-any-probe' | 'while-it-blocks' | 'as-it-unwinds';
+    /** Whether the process-wide fingerprint memo already holds an answer. */
+    fingerprintCache?: 'warm';
+    expected: 'request-canceled' | 'budget-exhausted' | 'fingerprint';
+    /** Execs the phase is allowed to have run by the time it settles. */
+    execs: number;
+    /** Wall clock the phase spent: only an exec that blocks for its whole timeout moves it. */
+    clockMs: number;
+  };
+
+  const CANCELLATION_CASES: ToolchainProbeCancellationCase[] = [
+    {
+      label: 'aborted before the first probe, cold cache',
+      aborts: 'before-any-probe',
+      expected: 'request-canceled',
+      execs: 0,
+      clockMs: 0,
+    },
+    {
+      // A cache hit must not answer a request that is already gone (#2422 round 4).
+      label: 'aborted before the first probe, fingerprint cache warm',
+      aborts: 'before-any-probe',
+      fingerprintCache: 'warm',
+      expected: 'request-canceled',
+      execs: 0,
+      clockMs: 0,
+    },
+    {
+      label: 'aborted while the first probe blocks, and it then times out',
+      failing: { at: 'first', as: 'exec-timeout' },
+      aborts: 'while-it-blocks',
+      expected: 'request-canceled',
+      execs: 1,
+      clockMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    },
+    {
+      label: 'aborted while the first probe fails with a non-timeout error',
+      failing: { at: 'first', as: 'command-failure' },
+      aborts: 'while-it-blocks',
+      expected: 'request-canceled',
+      execs: 1,
+      clockMs: 0,
+    },
+    {
+      // The budget still had 15 s: only the cancellation stops the retry.
+      label: "aborted as the first attempt's timeout unwinds, before its retry",
+      failing: { at: 'first', as: 'exec-timeout' },
+      aborts: 'as-it-unwinds',
+      expected: 'request-canceled',
+      execs: 1,
+      clockMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    },
+    {
+      // Nothing is left to catch the cancellation on a later attempt, so the failing
+      // probe's own catch must: an unavailable toolchain would be the wrong verdict.
+      label: 'aborted while the final probe fails with a non-timeout error',
+      failing: { at: 'final', as: 'command-failure' },
+      aborts: 'while-it-blocks',
+      expected: 'request-canceled',
+      execs: 3,
+      clockMs: 0,
+    },
+    {
+      label: 'aborted while the final probe blocks, and it then times out',
+      failing: { at: 'final', as: 'exec-timeout' },
+      aborts: 'while-it-blocks',
+      expected: 'request-canceled',
+      execs: 3,
+      clockMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    },
+    {
+      // 30 s plus a 15 s retry spends the whole 45 s ceiling on the first probe. The two
+      // xcrun probes never ran, so the verdict is the budget, not an unreadable toolchain:
+      // an `xcode-select` hint here would point at the wrong thing.
+      label: 'never aborted, the first probe and its retry spend the whole budget',
+      failing: { at: 'every', as: 'exec-timeout' },
+      aborts: 'never',
+      expected: 'budget-exhausted',
+      execs: 2,
+      clockMs: 45_000,
+    },
+    {
+      label: 'never aborted, the first probe times out and its retry recovers',
+      failing: { at: 'first', as: 'exec-timeout' },
+      aborts: 'never',
+      expected: 'fingerprint',
+      execs: 4,
+      clockMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+    },
+  ];
+
+  test.each(CANCELLATION_CASES)('cancellation matrix: $label', (testCase) => {
+    const clock = installFakeToolchainClock();
+    const request = new AbortController();
+    if (testCase.fingerprintCache === 'warm') {
+      runCmdSync.mockImplementation(appleToolchainProbeResult);
+      resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    }
+    if (testCase.aborts === 'before-any-probe') request.abort();
+
+    let execs = 0;
+    runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
+      execs += 1;
+      if (!failsOnExec(testCase, execs)) return appleToolchainProbeResult(command, args);
+      if (testCase.aborts === 'while-it-blocks') request.abort();
+      const failure =
+        testCase.failing?.as === 'exec-timeout'
+          ? blockForWholeTimeout(clock, command, args, options)
+          : // No `timeoutMs` detail: the tool failed on its own, so nothing retries it.
+            new AppError('COMMAND_FAILED', `${command}: unexpected error`, { cmd: command, args });
+      if (testCase.aborts === 'as-it-unwinds') request.abort();
+      throw failure;
+    });
+
+    const readFingerprint = () =>
+      resolveExpectedRunnerCacheMetadata(
+        IOS_SIMULATOR,
+        undefined,
+        createRunnerPhaseBudget(undefined, request.signal),
+      );
+
+    if (testCase.expected === 'fingerprint') {
+      const metadata = readFingerprint();
+      assert.equal(metadata.xcodeVersion, '26.2', testCase.label);
+      assert.equal(metadata.xcodeBuildVersion, '17C52', testCase.label);
+    } else {
+      assert.throws(readFingerprint, (error: unknown) => {
+        assert.ok(
+          testCase.expected === 'request-canceled'
+            ? isRequestCanceledError(error)
+            : expectRunnerPhaseBudgetExhausted(error),
+          `${testCase.label}: expected ${testCase.expected}, got ${String(error)}`,
+        );
+        return true;
+      });
+    }
+    assert.equal(execs, testCase.execs, `${testCase.label}: exec count`);
+    assert.equal(clock.nowMs, testCase.clockMs, `${testCase.label}: wall clock spent`);
+  });
+
+  /** Which exec a row's failing probe is: the first, the last of the three, or all of them. */
+  function failsOnExec(testCase: ToolchainProbeCancellationCase, exec: number): boolean {
+    switch (testCase.failing?.at) {
+      case 'first':
+        return exec === 1;
+      case 'final':
+        return exec === 3;
+      case 'every':
+        return true;
+      default:
+        return false;
+    }
+  }
 });
 
 /** The error a runner phase raises when a step is reached with nothing left to spend. */

@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions, ExecResult, ExecStreamOptions } from '../host.ts';
-import { ensureXctestrunArtifact } from '../runner-xctestrun.ts';
+import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { MACOS_DEVICE } from './device-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -67,7 +67,7 @@ afterEach(() => {
 
 test('a warm toolchain leaves the build the whole phase budget', async () => {
   await assert.rejects(
-    ensureXctestrunArtifact(MACOS_DEVICE, { buildTimeoutMs: 120_000 }),
+    ensureXctestrunArtifact(MACOS_DEVICE, { budget: createRunnerPhaseBudget(120_000, undefined) }),
     missingXctestrun,
   );
 
@@ -88,7 +88,7 @@ test('a cold-start probe stall comes out of the build budget instead of being ad
   });
 
   await assert.rejects(
-    ensureXctestrunArtifact(MACOS_DEVICE, { buildTimeoutMs: 120_000 }),
+    ensureXctestrunArtifact(MACOS_DEVICE, { budget: createRunnerPhaseBudget(120_000, undefined) }),
     missingXctestrun,
   );
 
@@ -107,7 +107,7 @@ test('a probe that spends the whole phase fails before xcodebuild is spawned', a
   });
 
   await assert.rejects(
-    ensureXctestrunArtifact(MACOS_DEVICE, { buildTimeoutMs: 30_000 }),
+    ensureXctestrunArtifact(MACOS_DEVICE, { budget: createRunnerPhaseBudget(30_000, undefined) }),
     (error: unknown) =>
       error instanceof AppError &&
       error.details?.reason === 'runner_phase_budget_exhausted' &&
