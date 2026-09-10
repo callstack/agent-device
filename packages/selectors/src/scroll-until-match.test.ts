@@ -118,15 +118,25 @@ test('the legacy iOS application-root-only shape is refused', async () => {
 });
 
 /**
- * Truncation is a readable tree missing its tail, not a failed read. Refusing it would fail large
+ * A tree the backend vouches for is readable, and so is one whose tail was truncated: truncation
+ * drops content, it does not make the capture untrustworthy. Refusing either would fail large
  * screens where the target is plainly in view.
  */
-test('a truncated but populated capture is not refused', async () => {
+test('a populated capture is not refused, healthy or recovered', async () => {
+  const nodes = tree({ ref: 'e2', label: 'Submit', y: 200 });
   assert.equal(
     await scrollUntilCaptureRefusal({
-      nodes: tree({ ref: 'e2', label: 'Submit', y: 200 }),
-      snapshotQuality: { state: 'ok', backend: 'tree' },
+      nodes,
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
     }),
     undefined,
   );
+  assert.equal(
+    await scrollUntilCaptureRefusal({
+      nodes,
+      snapshotQuality: { state: 'recovered', backend: 'tree' },
+    }),
+    undefined,
+  );
+  assert.equal(await scrollUntilCaptureRefusal({ nodes }), undefined);
 });
