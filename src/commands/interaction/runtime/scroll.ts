@@ -1,6 +1,5 @@
 import {
   assertExclusiveScrollDistanceInputs,
-  assertScrollUntilCompatible,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
@@ -14,16 +13,6 @@ import {
   type ScrollEdgeState,
   type ScrollEdgeTarget,
 } from '@agent-device/capture-kit/scroll-edge-state';
-import {
-  formatScrollUntilMessage,
-  runScrollUntilVisiblePasses,
-  scrollUntilCaptureError,
-  scrollUntilNotFoundError,
-} from '@agent-device/capture-kit/scroll-until-visible';
-import {
-  isSelectorVisibleInNodes,
-  scrollUntilCaptureRefusal,
-} from '@agent-device/selectors/scroll-until-match';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
@@ -59,8 +48,6 @@ export type ScrollCommandOptions = CommandContext & {
   amount?: number;
   pixels?: number;
   durationMs?: number;
-  /** Repeat passes until this selector is visible on screen, then stop. */
-  until?: string;
 };
 
 export type ScrollCommandResult =
@@ -68,7 +55,6 @@ export type ScrollCommandResult =
       kind: 'viewport';
       direction: GestureDirection;
       edge?: 'top' | 'bottom';
-      until?: string;
       passes?: number;
       amount?: number;
       pixels?: number;
@@ -78,7 +64,6 @@ export type ScrollCommandResult =
       ResolvedInteractionTarget & {
         direction: GestureDirection;
         edge?: 'top' | 'bottom';
-        until?: string;
         passes?: number;
         amount?: number;
         pixels?: number;
@@ -106,17 +91,6 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
     distance.execution,
   );
 
-  if (options.until !== undefined) {
-    return await runUntilScroll({
-      runtime,
-      options,
-      resolved,
-      direction: target.direction,
-      until: options.until,
-      distance: distance.reported,
-      scroll: runScroll,
-    });
-  }
   return await runDirectionOrEdgeScroll({
     runtime,
     options,
@@ -138,10 +112,6 @@ function normalizeScrollDistance(
   options: ScrollCommandOptions,
   edge: ScrollEdge | undefined,
 ): NormalizedScrollDistance {
-  assertScrollUntilCompatible({
-    ...(edge ? { edge } : {}),
-    ...(options.until === undefined ? {} : { until: options.until }),
-  });
   const amount = normalizeOptionalPositiveNumber(options.amount, 'scroll amount');
   const pixels = normalizeOptionalPositiveInteger(options.pixels, 'scroll pixels');
   const durationMs = normalizeScrollDurationMs(options.durationMs);
@@ -294,94 +264,9 @@ async function captureRuntimeScrollEdgeState(
   });
 }
 
-/**
- * `scroll --until <selector>`: repeat the pass until the selector is on screen.
- *
- * A sibling of the edge branch rather than a variant of the one-pass branch — it owns a different
- * stop condition, a different failure vocabulary, and a result that names the selector it stopped
- * on, none of which the ordinary scroll result carries.
- */
-async function runUntilScroll(params: {
-  runtime: AgentDeviceRuntime;
-  options: ScrollCommandOptions;
-  resolved: ResolvedScrollTarget;
-  direction: GestureDirection;
-  until: string;
-  distance: { amount?: number; pixels?: number };
-  scroll: () => Promise<Awaited<ReturnType<NonNullable<AgentDeviceRuntime['backend']['scroll']>>>>;
-}): Promise<ScrollCommandResult> {
-  const { runtime, options, resolved, direction, until, distance } = params;
-  const edge = verticalEdgeFor(direction);
-  const result = await runScrollUntilVisiblePasses({
-    ...(edge === undefined ? {} : { edge }),
-    captureNodes: async () => await captureRuntimeScrollNodes(runtime, options, direction, until),
-    isVisibleMatch: async (nodes) =>
-      await isSelectorVisibleInNodes({
-        nodes,
-        selector: until,
-        platform: runtime.backend.platform,
-      }),
-    scroll: params.scroll,
-  });
-  if (result.outcome !== 'matched') {
-    throw scrollUntilNotFoundError({
-      direction,
-      selector: until,
-      outcome: result.outcome,
-      passes: result.passes,
-    });
-  }
-  const backendResult = toBackendResult(result.result);
-  return {
-    ...resolved,
-    direction,
-    until,
-    passes: result.passes,
-    ...distance,
-    ...(backendResult ? { backendResult } : {}),
-    ...successText(formatScrollUntilMessage(direction, until, result.passes)),
-  };
-}
-
 /** The travel the planner produced, which saturates below a large requested amount. */
 function honoredScrollPixels(result: Record<string, unknown> | undefined): number | undefined {
   return typeof result?.pixels === 'number' ? result.pixels : undefined;
-}
-
-/**
- * The end-of-content analyzer only reads vertical edges, so a horizontal `--until` is bounded by
- * its pass budget alone rather than by a signal that would always report "no room".
- */
-function verticalEdgeFor(direction: GestureDirection): ScrollEdge | undefined {
-  if (direction === 'down') return 'bottom';
-  if (direction === 'up') return 'top';
-  return undefined;
-}
-
-/**
- * The tree one pass reads, or a refusal. Never `?? []`: an unreadable capture that reached the edge
- * analyzer as an empty tree is exactly how a failed read used to be reported as end-of-content.
- */
-async function captureRuntimeScrollNodes(
-  runtime: AgentDeviceRuntime,
-  options: ScrollCommandOptions,
-  direction: GestureDirection,
-  selector: string,
-) {
-  if (!runtime.backend.captureSnapshot) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'scroll --until requires snapshot support to check whether the selector became visible',
-    );
-  }
-  const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
-    includeRects: true,
-  });
-  // The whole result, not `result.snapshot`: the nested state and the top-level backend annotation
-  // spell the quality verdict differently, and picking one level drops the other's.
-  const refusal = await scrollUntilCaptureRefusal(result);
-  if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
-  return result.snapshot?.nodes ?? result.nodes ?? [];
 }
 
 function requireDirection(

@@ -23,16 +23,7 @@ import {
   type ScrollEdge,
   type ScrollEdgeState,
 } from '@agent-device/capture-kit/scroll-edge-state';
-import {
-  formatScrollUntilMessage,
-  runScrollUntilVisiblePasses,
-  scrollUntilCaptureError,
-  scrollUntilNotFoundError,
-} from '@agent-device/capture-kit/scroll-until-visible';
-import {
-  isSelectorVisibleInNodes,
-  scrollUntilCaptureRefusal,
-} from '@agent-device/selectors/scroll-until-match';
+import { formatScrollUntilMessage, runScrollUntilVisible } from './scroll-until.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
@@ -207,7 +198,7 @@ async function executeEdgeScroll(
   return scrollResult(target, options, edgeResult.passes, edgeResult.result ?? {});
 }
 
-/** Repeats the pass until the selector is on screen, the content runs out, or the budget does. */
+/** Repeats the pass until the selector is on screen; every failure shape is owned by the loop. */
 async function executeUntilScroll(
   runtime: BoundScrollUntil,
   device: DeviceInfo,
@@ -216,27 +207,17 @@ async function executeUntilScroll(
   options: ResolvedScrollExecutionOptions,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
-  const untilResult = await runScrollUntilVisiblePasses({
-    ...(verticalEdgeFor(target.direction) === undefined
-      ? {}
-      : { edge: verticalEdgeFor(target.direction) as ScrollEdge }),
-    captureNodes: async () => await captureUntilNodes(runtime, context, target.direction, selector),
-    isVisibleMatch: async (nodes) =>
-      await isSelectorVisibleInNodes({
-        nodes,
-        selector,
-        platform: publicPlatformString(device),
+  const untilResult = await runScrollUntilVisible({
+    selector,
+    direction: target.direction,
+    platform: publicPlatformString(device),
+    capture: async () =>
+      await runtime.operations.captureSnapshot({
+        options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
+        execution: runtimeExecutionFromContext(context),
       }),
     scroll: async () => await scrollOnce(runtime, target, options, context),
   });
-  if (untilResult.outcome !== 'matched') {
-    throw scrollUntilNotFoundError({
-      direction: target.direction,
-      selector,
-      outcome: untilResult.outcome,
-      passes: untilResult.passes,
-    });
-  }
   return withSuccessText(
     {
       direction: target.direction,
@@ -248,35 +229,6 @@ async function executeUntilScroll(
     },
     formatScrollUntilMessage(target.direction, selector, untilResult.passes),
   );
-}
-
-/**
- * The end-of-content analyzer only reads vertical edges, so a horizontal `--until` is bounded by
- * its pass budget alone rather than by a signal that would always report "no room".
- */
-function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefined {
-  if (direction === 'down') return 'bottom';
-  if (direction === 'up') return 'top';
-  return undefined;
-}
-
-/**
- * The tree one pass reads, or a refusal. Never `?? []`: an unreadable capture that reached the edge
- * analyzer as an empty tree is exactly how a failed read used to be reported as end-of-content.
- */
-async function captureUntilNodes(
-  runtime: BoundScrollUntil,
-  context: DaemonCommandContext,
-  direction: ScrollDirection,
-  selector: string,
-) {
-  const capture = await runtime.operations.captureSnapshot({
-    options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
-    execution: runtimeExecutionFromContext(context),
-  });
-  const refusal = await scrollUntilCaptureRefusal(capture);
-  if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
-  return capture.nodes ?? [];
 }
 
 async function captureEdgeState(

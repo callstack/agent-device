@@ -118,10 +118,6 @@
       "types": "./src/snapshot/scroll-edge-state.ts",
       "default": "./src/snapshot/scroll-edge-state.ts"
     },
-    "./scroll-until-visible": {
-      "types": "./src/snapshot/scroll-until-visible.ts",
-      "default": "./src/snapshot/scroll-until-visible.ts"
-    },
     "./snapshot-chrome": {
       "types": "./src/snapshot-chrome.ts",
       "default": "./src/snapshot-chrome.ts"

@@ -37,6 +37,18 @@ export async function captureScrollEdgeState(params: {
   }
 }
 
+/**
+ * Is there hidden content left at this edge? The same question `runScrollEdgePasses` loops on,
+ * exposed for callers with their own stop condition (`scroll --until`) so both read one signal.
+ */
+export async function canScrollFurtherAtEdge(
+  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
+  edge: ScrollEdge,
+): Promise<boolean> {
+  const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
+  return analyzeScrollEdgeState(nodes, edge).canScroll;
+}
+
 export async function runScrollEdgePasses<TResult>(params: {
   edge: ScrollEdge;
   captureState: (scope?: string) => Promise<ScrollEdgeState>;

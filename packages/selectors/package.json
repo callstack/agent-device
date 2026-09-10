@@ -68,10 +68,6 @@
       "types": "./src/selector-pipeline.ts",
       "default": "./src/selector-pipeline.ts"
     },
-    "./scroll-until-match": {
-      "types": "./src/scroll-until-match.ts",
-      "default": "./src/scroll-until-match.ts"
-    },
     "./selector-pipeline-policy": {
       "types": "./src/selector-pipeline-policy.ts",
       "default": "./src/selector-pipeline-policy.ts"

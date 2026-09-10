@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { SCROLL_UNTIL_PASS_LIMIT } from '@agent-device/capture-kit/scroll-until-visible';
+import { SCROLL_UNTIL_PASS_LIMIT } from '../../../src/daemon/scroll-until.ts';
 import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
