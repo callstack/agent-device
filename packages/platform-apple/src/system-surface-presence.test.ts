@@ -78,6 +78,21 @@ test('an unreadable process environment is unknown, never absent', async () => {
   await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('unknown');
 });
 
+// A successful read that carries no device scope at all proves nothing: reporting it as absence
+// would route a live sheet to the occluded app tree.
+test('a process environment with no device scope at all is unknown, never absent', async () => {
+  stubProbes({
+    pgrep: RUNNING,
+    ps: { exitCode: 0, stdout: '/…/SafariViewService.app/SafariViewService' },
+  });
+  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('unknown');
+});
+
+test('an empty process environment read is unknown, never absent', async () => {
+  stubProbes({ pgrep: RUNNING, ps: { exitCode: 0, stdout: '' } });
+  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('unknown');
+});
+
 test('a non-zero process scan exit that is not "no match" is unknown', async () => {
   stubProbes({ pgrep: { exitCode: 2, stdout: '' } });
   await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('unknown');

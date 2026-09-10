@@ -492,6 +492,83 @@ test('capturePostGestureStabilizedResult re-baselines instead of concluding when
   assert.equal(staleAccepts + settled, 1);
 });
 
+// --- #2438: a system surface appearing or dismissing mid-poll is not comparable evidence ---
+
+test('capturePostGestureStabilizedResult re-baselines when an in-place system surface appears (iOS)', async () => {
+  // A web sign-in sheet is hosted out of the app's process. Its tree and the app's tree describe
+  // different surfaces, so a quiet capture of the sheet says nothing about a gesture taken against
+  // the app. Both captures are XCTest here: without the surface in the comparison token they would
+  // agree on backend alone and produce a verdict from incomparable node sets.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+  });
+  markPostGestureStabilization(session, 'scroll');
+
+  const capture = vi.fn(async () =>
+    makeSnapshotState(pickupSnapshot(500).nodes, {
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
+      iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+    }),
+  );
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      rebased: countDiagnosticEventsByPhase(['post_gesture_snapshot_baseline_rebased']),
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(6_000);
+  const { rebased, staleAccepts, settled } = await resultPromise;
+
+  assert.equal(rebased, 1);
+  assert.equal(staleAccepts + settled, 1);
+});
+
+test('capturePostGestureStabilizedResult re-baselines when an in-place system surface dismisses (iOS)', async () => {
+  // The mirror case: the baseline was the sheet and the app returns underneath it.
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+    iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+  });
+  markPostGestureStabilization(session, 'scroll');
+
+  const capture = vi.fn(async () =>
+    makeSnapshotState(pickupSnapshot(500).nodes, {
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
+    }),
+  );
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      rebased: countDiagnosticEventsByPhase(['post_gesture_snapshot_baseline_rebased']),
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(6_000);
+  const { rebased, staleAccepts, settled } = await resultPromise;
+
+  assert.equal(rebased, 1);
+  assert.equal(staleAccepts + settled, 1);
+});
+
 test('capturePostGestureStabilizedResult still distrusts a same-backend baseline match (iOS)', async () => {
   // The guard above must not become a blanket escape hatch: when the backend is
   // stable, an unchanged surface is still the stale-read signal #1542 added.

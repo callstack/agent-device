@@ -12,6 +12,7 @@ export type FindTargetTree = {
   nodes: SnapshotState['nodes'];
   snapshotQuality?: SnapshotQualityVerdict;
   systemSurfaceOnly?: boolean;
+  iosSystemSurfaceBundleId?: string;
 };
 
 /**
@@ -65,6 +66,7 @@ export function createFindTargetCapture(
       nodes: snapshot.nodes,
       snapshotQuality: snapshot.snapshotQuality,
       systemSurfaceOnly: snapshot.systemSurfaceOnly,
+      iosSystemSurfaceBundleId: snapshot.iosSystemSurfaceBundleId,
     };
   };
 }

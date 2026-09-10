@@ -364,7 +364,13 @@ export async function capturePostGestureStabilizedResult<T>(params: {
 }
 
 function snapshotComparisonKey(snapshot: SnapshotState | undefined): string | undefined {
-  return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
+  const base = snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
+  const surface = snapshot?.iosSystemSurfaceBundleId;
+  // An app capture and an in-place system-surface capture (a web sign-in sheet) describe different
+  // surfaces. Without the surface in this token two XCTest captures compare equal on backend alone,
+  // so a sheet appearing or dismissing would read as a stable surface (#2438).
+  if (surface === undefined) return base;
+  return `${base ?? 'unknown-backend'}@${surface}`;
 }
 
 function isPostGestureStabilizingAction(

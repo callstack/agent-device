@@ -95,7 +95,11 @@ async function isProcessScopedToDevice(
 ): Promise<boolean | 'unknown'> {
   const result = await runProbe('ps', ['eww', '-p', String(pid), '-o', 'command='], signal);
   if (result === 'unknown' || result.exitCode !== 0) return 'unknown';
-  return result.stdout.includes(`SIMULATOR_UDID=${deviceId}`);
+  if (result.stdout.includes(`SIMULATOR_UDID=${deviceId}`)) return true;
+  // Only a scope naming a DIFFERENT device is a real negative. A read that carries no device scope
+  // at all proves nothing — the environment may have been truncated or withheld — and reporting it
+  // as absence would route a live sheet to the occluded app tree.
+  return result.stdout.includes('SIMULATOR_UDID=') ? false : 'unknown';
 }
 
 async function runProbe(

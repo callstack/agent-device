@@ -6,9 +6,13 @@ import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
+import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../__tests__/test-utils/session-factories.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -256,4 +260,111 @@ test('sessionless wait timeout still discloses the occluding system surface', as
   if (response.ok) return;
   expect(sessionStore.get('default')).toBeUndefined();
   expect(String(response.error.details?.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+});
+
+// --- #2438: an in-place iOS system surface (web sign-in sheet) discloses on the same shared seam ---
+
+// The runner stamps `systemSurface` on a capture it served from the sheet; buildSnapshotState turns
+// that into `iosSystemSurfaceBundleId`, which selector routes must carry and disclose.
+const SHEET_SNAPSHOT_DATA = {
+  backend: 'xctest',
+  producer: 'apple-runner',
+  systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+  nodes: [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Safari',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'LOGIN',
+      hittable: true,
+      rect: { x: 32, y: 366, width: 338, height: 50 },
+    },
+  ],
+};
+
+function serveSheetCapture(): void {
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) =>
+    command === 'snapshot' ? SHEET_SNAPSHOT_DATA : {},
+  );
+}
+
+test('mutating find on an in-place system surface discloses it on the found outcome', async () => {
+  serveSheetCapture();
+  const sessionStore = makeSessionStore();
+  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+
+  const response = await handleFindCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'find',
+      positionals: ['LOGIN', 'click'],
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) return;
+  expect(String((response.data as Record<string, unknown>).warning)).toContain(
+    IOS_SYSTEM_SURFACE_DISCLOSURE,
+  );
+});
+
+test('mutating find that misses on an in-place system surface still discloses it', async () => {
+  serveSheetCapture();
+  const sessionStore = makeSessionStore();
+  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+
+  const response = await handleFindCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'find',
+      positionals: ['Bakery list', 'click'],
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }) as DaemonResponse,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok) return;
+  expect(String(response?.error.details?.hint)).toContain(IOS_SYSTEM_SURFACE_DISCLOSURE);
+});
+
+test('the shared disclosure helper reports an iOS system surface on both outcomes', () => {
+  const ok = withSystemSurfaceDisclosure(
+    { ok: true, data: { found: true } },
+    { iosSystemSurfaceBundleId: 'com.apple.SafariViewService' },
+  );
+  expect(ok.ok).toBe(true);
+  if (!ok.ok) return;
+  expect(String((ok.data as Record<string, unknown>).warning)).toContain(
+    IOS_SYSTEM_SURFACE_DISCLOSURE,
+  );
+
+  const failed = withSystemSurfaceDisclosure(
+    { ok: false, error: { code: 'NOT_FOUND', message: 'no match' } },
+    { iosSystemSurfaceBundleId: 'com.apple.SafariViewService' },
+  );
+  expect(failed.ok).toBe(false);
+  if (failed.ok) return;
+  expect(String(failed.error.details?.hint)).toContain(IOS_SYSTEM_SURFACE_DISCLOSURE);
 });
