@@ -29,7 +29,6 @@ import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtim
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
-import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
@@ -519,9 +518,7 @@ function webDriverFacts(
       home: inactiveSession,
       orientation: inactiveSession,
       tvRemote: inactiveSession,
-      keyboardStatus: inactiveSession,
-      keyboardDismiss: inactiveSession,
-      keyboardEnter: inactiveSession,
+      keyboard: inactiveSession,
       readClipboard: inactiveSession,
       writeClipboard: inactiveSession,
       appSwitcher: inactiveSession,
@@ -565,9 +562,7 @@ function webDriverFacts(
     home: homeUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
-    keyboardStatus: keyboardUnavailable,
-    keyboardDismiss: keyboardUnavailable,
-    keyboardEnter: keyboardUnavailable,
+    keyboard: keyboardUnavailable,
     readClipboard: clipboardUnavailable,
     writeClipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
@@ -648,11 +643,6 @@ function webDriverFacts(
         orientation: declared('orientation', orientationUnavailable),
       }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
-      ...keyboardRuntimeOperationFacts({
-        status: keyboardUnavailable,
-        dismiss: keyboardUnavailable,
-        enter: keyboardUnavailable,
-      }),
       // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability
       // gate stays inside the interactor, where it already lives.
       //

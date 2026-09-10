@@ -15,6 +15,7 @@ import {
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
@@ -381,9 +382,7 @@ function sourceRuntimeFacts(
       home: unavailable,
       setOrientation: unavailable,
       tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
+      ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
       readClipboard: unavailable,
       writeClipboard: unavailable,
       appSwitcher: unavailable,

@@ -368,6 +368,14 @@ test.each([
   ] as const) {
     expect(facts.operations[operation].available).toBe(false);
   }
+  // `keyboard` is one family cell, so the reason says which gap closed it: the dead session
+  // refuses with the session gap, a live session with no reachable interactor with this
+  // provider's own keyboard refusal.
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      reason: state.isSessionActive() ? 'unsupported-provider-mode' : 'owner-capability-missing',
+    });
+  }
   if (state.isSessionActive()) {
     const binding = await owner.bind({
       device,

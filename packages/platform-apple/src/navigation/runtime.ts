@@ -101,8 +101,11 @@ function appleTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
     : tvRemoteUnavailable;
 }
 
-/** The outer keyboard cell: unavailable with no hint, matching the retired `supportsKeyboard`
- * capability-bucket-level rejection (which carried no hint text of its own). */
+/**
+ * The outer keyboard cell, and this owner's keyboard-family refusal: unavailable with no hint,
+ * matching the retired `supportsKeyboard` capability-bucket-level rejection (which carried no hint
+ * text of its own).
+ */
 const keyboardCellUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -138,6 +141,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
     ...keyboardRuntimeOperationFacts({
+      unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),
       dismiss: appleKeyboardDismissFact(device),
       enter: appleKeyboardEnterFact(device),

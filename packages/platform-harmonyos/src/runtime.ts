@@ -287,7 +287,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
+        // HDC drives dismissal and the enter key; any other keyboard operation is a leaf gap.
         ...keyboardRuntimeOperationFacts({
+          unsupported: harmonyPlatformLeafUnavailable,
           status: harmonyKeyboardStatusUnavailable,
           dismiss: harmonyFocusFact(device),
           enter: harmonyFocusFact(device),

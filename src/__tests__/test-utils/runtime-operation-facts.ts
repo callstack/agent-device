@@ -2,6 +2,7 @@ import { applicationLifecycleOperationFacts } from '@agent-device/contracts/appl
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
@@ -64,9 +65,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   home: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,
-  keyboardStatus: unavailable,
-  keyboardDismiss: unavailable,
-  keyboardEnter: unavailable,
+  ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
   readClipboard: unavailable,
   writeClipboard: unavailable,
   appSwitcher: unavailable,
@@ -125,9 +124,7 @@ export function createUnavailableRuntimeFactsForTest(
     home: fact,
     orientation: fact,
     tvRemote: fact,
-    keyboardStatus: fact,
-    keyboardDismiss: fact,
-    keyboardEnter: fact,
+    keyboard: fact,
     readClipboard: fact,
     writeClipboard: fact,
     appSwitcher: fact,

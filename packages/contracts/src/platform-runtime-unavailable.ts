@@ -37,6 +37,9 @@ import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
  * the selected package/provider must classify every lifecycle operation for its exact cell.
+ *
+ * A family is one cell where all of its operations share one reason, and one cell per operation
+ * only where the reasons genuinely differ per operation.
  */
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
@@ -58,9 +61,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   home: RuntimeOperationUnavailability;
   orientation: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
-  keyboardStatus: RuntimeOperationUnavailability;
-  keyboardDismiss: RuntimeOperationUnavailability;
-  keyboardEnter: RuntimeOperationUnavailability;
+  keyboard: RuntimeOperationUnavailability;
   readClipboard: RuntimeOperationUnavailability;
   writeClipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
@@ -116,9 +117,7 @@ const UNAVAILABLE_CELLS = {
   home: true,
   orientation: true,
   tvRemote: true,
-  keyboardStatus: true,
-  keyboardDismiss: true,
-  keyboardEnter: true,
+  keyboard: true,
   readClipboard: true,
   writeClipboard: true,
   appSwitcher: true,
@@ -245,11 +244,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...homeRuntimeOperationFacts({ home: frozen.home }),
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
-      ...keyboardRuntimeOperationFacts({
-        status: frozen.keyboardStatus,
-        dismiss: frozen.keyboardDismiss,
-        enter: frozen.keyboardEnter,
-      }),
+      ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({
         read: frozen.readClipboard,
         write: frozen.writeClipboard,

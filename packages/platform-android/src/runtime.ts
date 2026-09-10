@@ -76,6 +76,12 @@ const focusKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'focus is supported on Android emulators and physical devices.',
 } as const);
+/** adb drives keyboard actions on the same two kinds it drives everything else. */
+const keyboardKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'keyboard actions are supported on Android emulators and physical devices.',
+} as const);
 const hoverUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -363,6 +369,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // The only owner with a live IME status read; dismiss/enter share every other
         // interaction cell's kind gate (parity with the retired `keyboard` bucket).
         ...keyboardRuntimeOperationFacts({
+          unsupported: keyboardKindUnavailable,
           status: androidTouchFact(device),
           dismiss: androidTouchFact(device),
           enter: androidTouchFact(device),

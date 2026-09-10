@@ -21,6 +21,7 @@ import {
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
 import {
   bindProviderTouchInteractor,
@@ -267,8 +268,11 @@ function providerScenarioRuntimeFacts(
       captureSnapshot: fakeProviderAvailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
-      keyboardDismiss: fakeProviderAvailable,
-      keyboardEnter: fakeProviderAvailable,
+      ...keyboardRuntimeOperationFacts({
+        unsupported: fakeProviderUnavailable,
+        dismiss: fakeProviderAvailable,
+        enter: fakeProviderAvailable,
+      }),
       ...touchRuntimeOperationFacts({
         unsupported: fakeProviderUnavailable,
         tap: fakeProviderAvailable,

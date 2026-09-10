@@ -413,11 +413,7 @@ function webRuntimeFacts(
       ...homeRuntimeOperationFacts({ home: navigationUnavailable }),
       ...orientationRuntimeOperationFacts({ orientation: navigationUnavailable }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: navigationUnavailable }),
-      ...keyboardRuntimeOperationFacts({
-        status: navigationUnavailable,
-        dismiss: navigationUnavailable,
-        enter: navigationUnavailable,
-      }),
+      ...keyboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // The web backend never carried a `clipboard` capability bucket (`WEB_QUERY_COMMANDS`
       // lists `audio` alone), so no clipboard cell was ever admitted here.
       ...clipboardRuntimeOperationFacts({

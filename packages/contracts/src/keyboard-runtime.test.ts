@@ -17,18 +17,56 @@ const device = {
 const local = (resolveInteractor: LocalInteractorOperationResolver) =>
   localInteractorSource({ device, resolveInteractor });
 
-test('builds the exact keyboard operation fact catalog', () => {
+const available = { available: true } as const;
+
+test('builds the exact keyboard operation fact catalog for an owner that names every operation', () => {
+  const familyDenial = {
+    available: false,
+    reason: 'unsupported-device-kind',
+  } as const;
   const status = { available: true } as const;
   const dismiss = {
     available: false,
     reason: 'unsupported-platform-leaf',
   } as const;
   const enter = { available: true } as const;
-  expect(keyboardRuntimeOperationFacts({ status, dismiss, enter })).toEqual({
+  expect(
+    keyboardRuntimeOperationFacts({ unsupported: familyDenial, status, dismiss, enter }),
+  ).toEqual({
     keyboardStatus: status,
     keyboardDismiss: dismiss,
     keyboardEnter: enter,
   });
+});
+
+test('an operation the owner never names reports the denial the owner stated for the family, verbatim — omission is a classified refusal, never an unclassified cell and never an implied success', () => {
+  const denial = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
+  } as const;
+
+  expect(keyboardRuntimeOperationFacts({ unsupported: denial, dismiss: available })).toEqual({
+    keyboardStatus: denial,
+    keyboardDismiss: available,
+    keyboardEnter: denial,
+  });
+});
+
+test('an owner serving no keyboard operation names the family denial once and still answers with the exhaustive shape', () => {
+  const denial = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  } as const;
+
+  const facts = keyboardRuntimeOperationFacts({ unsupported: denial });
+
+  expect(facts).toEqual({
+    keyboardStatus: denial,
+    keyboardDismiss: denial,
+    keyboardEnter: denial,
+  });
+  expect(Object.isFrozen(facts)).toBe(true);
 });
 
 test('a local status binding drives the interactor and returns its report', async () => {

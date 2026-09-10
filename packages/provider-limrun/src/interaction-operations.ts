@@ -347,9 +347,16 @@ export function limrunKeyboardOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const cell =
-    liveSessionUnavailable ?? (device.platform === 'android' ? available : keyboardUnavailableIos);
+  // One denial covers the iOS leg and any session that is no longer live: neither serves a
+  // keyboard operation.
+  const unsupported = liveSessionUnavailable ?? keyboardUnavailableIos;
+  const androidLegServesKeyboard =
+    liveSessionUnavailable === undefined && device.platform === 'android';
   return Object.freeze({
-    ...keyboardRuntimeOperationFacts({ status: cell, dismiss: cell, enter: cell }),
+    ...keyboardRuntimeOperationFacts(
+      androidLegServesKeyboard
+        ? { unsupported, status: available, dismiss: available, enter: available }
+        : { unsupported },
+    ),
   });
 }
