@@ -92,7 +92,21 @@ export function createAppleSnapshotRoute(
       // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
       // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
       // capture that would answer confidently from the occluded app tree.
-      if ((await systemSurfacePresent(device, signal)) !== 'absent') return await fallback(input);
+      const surfacePresence = await systemSurfacePresent(device, signal);
+      if (surfacePresence === 'present') return await fallback(input);
+      if (surfacePresence === 'unknown') {
+        // The probe could not answer. Take the runner rather than a bridge capture that would
+        // answer confidently from the occluded app tree — but say so: silently losing the bridge
+        // fast path, with no warning and a comparable identity, would be its own defect.
+        return await runFallback(
+          input,
+          fallback,
+          { targetId: `${device.id}:${input.options!.appBundleId!}` },
+          requestFor(input),
+          'system-surface-probe-unavailable',
+          [unknownGenerationResidue()],
+        );
+      }
       let target: SimulatorSnapshotTarget;
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);

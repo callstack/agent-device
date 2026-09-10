@@ -80,6 +80,29 @@ test.for(['present', 'unknown'] as const)(
   },
 );
 
+// Losing the bridge fast path must never be silent: an unprovable probe still owes the caller a
+// warning and an identity that cannot be compared against a bridge publication.
+test('a probe that cannot answer discloses the skipped bridge and stays incomparable', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'unknown',
+  });
+
+  const result = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(result.warnings).toEqual([
+    'Simulator AX snapshot unavailable (system-surface-probe-unavailable); used XCTest for an unverified app generation.',
+  ]);
+  expect(result.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    residue: [
+      { kind: 'unknown-generation', captureId: expect.any(String) },
+      { kind: 'fallback-source', producer: 'apple-runner' },
+    ],
+  });
+});
+
 test('typed bridge failure falls back once and disables retries for that app generation', async () => {
   const source = sourceReturning({
     stage: 'failed',
