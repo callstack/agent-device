@@ -26,6 +26,12 @@ export type FlagDefinition = {
   max?: number;
   setValue?: CliFlags[FlagKey];
   usageLabel?: string;
+  /**
+   * Keeps this option out of generated command synopses while `usageLabel` still
+   * renders it under `Command flags:`. Reserve it for cross-cutting opt-ins whose
+   * synopsis bracket would read as noise on every command that accepts them.
+   */
+  usageHidden?: boolean;
   /** The `--help` audience: one line, command-prefixed. */
   usageDescription?: string;
   /**

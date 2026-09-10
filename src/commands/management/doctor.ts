@@ -21,8 +21,7 @@ const doctorCommandMetadata = defineFieldCommandMetadata(
 );
 
 const doctorCliSchema = {
-  usageOverride:
-    'doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
+  usageOverride: 'doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple]',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 

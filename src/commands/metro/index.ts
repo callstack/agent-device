@@ -72,6 +72,7 @@ type MetroInput = { action: 'prepare' | 'reload' } & MetroPrepareOptions & Metro
 const metroCliSchema = {
   usageOverride:
     'metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo|repack]\n  agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]',
+  usageFlags: [],
   listUsageOverride: 'metro',
   positionalArgs: ['prepare|reload'],
   allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],

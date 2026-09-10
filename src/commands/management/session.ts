@@ -22,6 +22,7 @@ const sessionCommandMetadata = defineFieldCommandMetadata(
 
 const sessionCliSchema = {
   usageOverride: 'session list | session state-dir | session save-script [path] [--force]',
+  usageFlags: [],
   listUsageOverride: 'session',
   positionalArgs: ['list|state-dir|save-script?', 'path?'],
   allowedFlags: ['force'],

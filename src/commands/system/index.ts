@@ -121,6 +121,7 @@ const appStateCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
+  usageFlags: [],
   allowedFlags: ['backMode', ...postActionObservationCliFlags(BACK_COMMAND_NAME)],
 } as const satisfies CommandSchemaOverride;
 
@@ -146,7 +147,7 @@ const clipboardCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const tvRemoteCliSchema = {
-  usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
+  usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE}`,
   listUsageOverride: 'tv-remote press|longpress <button> [--duration-ms <ms>]',
   positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],

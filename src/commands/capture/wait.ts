@@ -45,6 +45,7 @@ const waitCommandMetadata = defineFieldCommandMetadata(WAIT_COMMAND_NAME, waitCo
 const waitCliSchema = {
   usageOverride:
     'wait <ms>|text <text>|@ref|<selector>|absent <selector> [timeoutMs]|stable [quietMs] [timeoutMs]',
+  usageFlags: [],
   positionalArgs: ['durationOrSelector', 'timeoutMs?'],
   allowsExtraPositionals: true,
   allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],

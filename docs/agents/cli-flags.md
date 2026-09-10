@@ -40,6 +40,13 @@ steps 1-3, plus step 9.
 ## Where CLI help and schema live
 
 - Long help prose: `src/cli-schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
+- Synopsis: `src/cli-schema/usage.ts` generates the `[label]` flag tail from `allowedFlags`, so a
+  new option reaches `--help` without any synopsis edit. Declare `usageFlags` on the command only
+  when its synopsis names fewer options: `[]` for a synopsis that is pure grammar (or writes its own
+  mutually-exclusive brackets), otherwise the subset it names. `Command flags:` always lists
+  everything in `allowedFlags`. Keep a cross-cutting opt-in out of every synopsis with
+  `usageHidden: true` on its flag definition. `src/cli-schema/usage.test.ts` fails a tail that names
+  an option the command does not accept, or one the hand-written grammar already wrote.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
 - Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in

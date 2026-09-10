@@ -51,8 +51,6 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
 );
 
 const snapshotCliSchema = {
-  usageOverride:
-    'snapshot [--diff] [-i] [-d <depth>] [-s <scope>] [--raw] [--actions] [--force-full] [--timeout <ms>]',
   allowedFlags: [
     'snapshotDiff',
     ...SNAPSHOT_FLAGS,

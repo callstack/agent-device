@@ -96,6 +96,7 @@ export const testCommandMetadata = defineFieldCommandMetadata(
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
+  usageFlags: [],
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
   allowedFlags: [
@@ -121,6 +122,7 @@ const replayCliSchema = {
 
 const testCliSchema = {
   usageOverride: 'test <path-or-glob>...',
+  usageFlags: [],
   listUsageOverride: 'test <path-or-glob>...',
   positionalArgs: ['pathOrGlob'],
   allowsExtraPositionals: true,

@@ -82,6 +82,7 @@ export const audioCommandMetadata = defineFieldCommandMetadata(
 const logsCliSchema = {
   usageOverride:
     'logs path | logs start | logs stop | logs clear [--restart] | logs doctor | logs mark [message...]',
+  usageFlags: [],
   positionalArgs: ['path|start|stop|clear|doctor|mark', 'message?'],
   allowsExtraPositionals: true,
   allowedFlags: ['restart'],
@@ -96,6 +97,7 @@ const eventsCliSchema = {
 const networkCliSchema = {
   usageOverride:
     'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]',
+  usageFlags: [],
   listUsageOverride: 'network',
   positionalArgs: ['dump|log', 'limit?', 'include?'],
   allowedFlags: ['networkInclude'],

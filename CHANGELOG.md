@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Changed: a command whose synopsis is generated names each option with the label its declaration
+  carries, so `snapshot` now shows `--depth, -d <depth>` and `--scope, -s <scope>` where it used to
+  show the short aliases, and `--record` is documented under `Command flags:` instead of inside the
+  `snapshot` and `is` synopsis lines. `snapshot`, `proxy`, `daemon`, `device`, `doctor`, `prepare`
+  and `tv-remote` no longer restate their option list in a hand-written usage string, so adding an
+  option to those commands updates `--help` on its own (#2444).
 - Fixed: iOS `--depth` on `snapshot`, `is`, `wait`, `get`, and `find` no longer fails with
   `regular iOS snapshot presentation requires a valid viewport` when the runner plan is pinned or
   deferred to the private AX backend (custom actions, a private AX verdict on the session, or the

@@ -30,6 +30,7 @@ const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCo
 const diffCliSchema = {
   usageOverride:
     'diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs]',
+  usageFlags: [],
   positionalArgs: ['kind', 'current?'],
   allowedFlags: [...SNAPSHOT_FLAGS, 'baseline', 'threshold', 'out', 'overlayRefs'],
 } as const;

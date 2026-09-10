@@ -58,6 +58,7 @@ export const traceCommandMetadata = defineFieldCommandMetadata(
 const recordCliSchema = {
   usageOverride:
     'record start [path] [--scope <app|device|system>] [--fps <n>] [--quality <medium|high>] [--hide-touches] | record stop',
+  usageFlags: [],
   listUsageOverride: 'record start [path] | record stop',
   positionalArgs: ['start|stop', 'path?'],
   allowedFlags: ['recordingScope', 'fps', 'quality', 'hideTouches'],

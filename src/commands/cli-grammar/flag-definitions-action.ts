@@ -317,6 +317,9 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--record'],
     type: 'boolean',
     usageLabel: '--record',
+    // Accepted by the observation-only commands, not asked for by an operator writing a flow:
+    // the synopsis stays the invocation they are choosing between (#1271 stage 2).
+    usageHidden: true,
     usageDescription:
       'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with --no-record)',
   },
