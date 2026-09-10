@@ -16,6 +16,10 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '@agent-device/contracts/command';
+import {
+  isIosSystemSurfaceHost,
+  iosSystemSurfaceOpenRefusal,
+} from '@agent-device/contracts/ios-system-surface';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
@@ -129,6 +133,15 @@ export async function openIosApp(
   }
 
   const bundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
+  // A system-hosted surface (e.g. the web sign-in sheet in com.apple.SafariViewService) must never
+  // be launched or activated: doing so cancels what it presents (issue #2438). While it is on
+  // screen it appears in the session app's snapshots on its own and is driven in place.
+  if (isIosSystemSurfaceHost(bundleId)) {
+    throw new AppError('UNSUPPORTED_OPERATION', iosSystemSurfaceOpenRefusal(bundleId), {
+      reason: 'system-surface-host-not-openable',
+      appBundleId: bundleId,
+    });
+  }
   if (device.kind === 'simulator') {
     await launchIosSimulatorApp(device, bundleId, {
       ...(launchConsole ? { launchConsole } : {}),

@@ -986,6 +986,10 @@ extension RunnerTests {
 
   struct ActiveCommandContext {
     let app: XCUIApplication
+    // Set when `app` is a system surface host (e.g. the web sign-in sheet) served in place over
+    // the still-bound session app, so the response can disclose it and lineage can keep an app
+    // baseline from being compared against a sheet capture (issue #2438).
+    var systemSurface: SystemSurfaceHost? = nil
   }
 
   enum ActiveCommandPreparation {
@@ -1342,7 +1346,11 @@ extension RunnerTests {
     case .response(let response):
       return response
     case .context(let context):
-      return try executeSnapshotPrepared(command: command, activeApp: context.app)
+      return try executeSnapshotPrepared(
+        command: command,
+        activeApp: context.app,
+        systemSurface: context.systemSurface
+      )
     }
   }
 
@@ -1364,14 +1372,24 @@ extension RunnerTests {
     )
   }
 
-  private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
+  private func executeSnapshotPrepared(
+    command: Command,
+    activeApp: XCUIApplication,
+    systemSurface: SystemSurfaceHost? = nil
+  ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
-      let payload: DataPayload
+      var payload: DataPayload
       if options.raw {
         payload = try snapshotRaw(app: activeApp, options: options)
       } else {
         payload = try snapshotFast(app: activeApp, options: options)
+      }
+      if let systemSurface {
+        payload.systemSurface = SystemSurfaceProvenancePayload(
+          bundleId: systemSurface.bundleId,
+          kind: systemSurface.kind.rawValue
+        )
       }
       setNeedsPostSnapshotInteractionDelay()
       return Response(ok: true, data: payload)
@@ -1575,10 +1593,21 @@ extension RunnerTests {
     routeToSpringboard: Bool = false
   ) -> ActiveCommandPreparation {
     var activeApp = currentApp ?? app
+    var systemSurface: SystemSurfaceHost? = nil
     if routeToSpringboard {
       activeApp = springboard
     } else if shouldSkipAppActivationPreflight(command) {
       activeApp = resolveAppWithoutActivation(command: command)
+    } else if let presented = presentedSystemSurfaceHost() {
+      // A system surface (e.g. the web sign-in sheet) is presented over the session app. Serve and
+      // drive it IN PLACE: never activate or relaunch it — that cancels what it presents (#2438) —
+      // and never adopt it as the cached session target. The session app binding stays intact, so
+      // once the surface is gone the next command resolves back to the app.
+      activeApp = presented.app
+      systemSurface = presented.host
+      if isInteractionCommand(command.command) {
+        applyInteractionStabilizationIfNeeded()
+      }
     } else if !isRunnerLifecycleCommand(command.command) {
       let normalizedBundleId = command.appBundleId?
         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1639,7 +1668,27 @@ extension RunnerTests {
         applyInteractionStabilizationIfNeeded()
       }
     }
-    return .context(ActiveCommandContext(app: activeApp))
+    return .context(ActiveCommandContext(app: activeApp, systemSurface: systemSurface))
+  }
+
+  /// A registered system surface host (e.g. `com.apple.SafariViewService`) that is genuinely on
+  /// screen right now, or nil. Presence is `state == .runningForeground`: the live spike for #2438
+  /// showed content heuristics (webViews/text fields present) cannot tell a live sheet from a
+  /// torn-down one, but foreground state can — and the only way such a host is foreground with a
+  /// stale tree is if it was activated/relaunched, which the open guard and this in-place policy
+  /// both refuse. `state` never activates and returns `.notRunning` cheaply when the host is absent.
+  private func presentedSystemSurfaceHost() -> (host: SystemSurfaceHost, app: XCUIApplication)? {
+#if os(iOS)
+    for host in SystemSurfaceHostRegistry.hosts {
+      let candidate = XCUIApplication(bundleIdentifier: host.bundleId)
+      if candidate.state == .runningForeground {
+        return (host, candidate)
+      }
+    }
+    return nil
+#else
+    return nil
+#endif
   }
 
   func executeOnMainPrepared(

@@ -241,6 +241,10 @@ struct DataPayload: Codable {
   var truncated: Bool?
   var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
+  // Whole-snapshot provenance: this capture describes a system surface (e.g. the web sign-in sheet)
+  // presented over the session app, served in place without activation (#2438). Absent for ordinary
+  // app captures.
+  var systemSurface: SystemSurfaceProvenancePayload?
   var gestureStartUptimeMs: Double?
   var gestureEndUptimeMs: Double?
   var x: Double?
@@ -273,6 +277,13 @@ struct DataPayload: Codable {
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
+}
+
+/// Wire provenance for a capture served from an in-place system surface host (#2438). `kind`
+/// mirrors the TS `IosSystemSurfaceKind` (e.g. "web-auth").
+struct SystemSurfaceProvenancePayload: Codable {
+  let bundleId: String
+  let kind: String
 }
 
 struct SnapshotQualityPayload: Codable {

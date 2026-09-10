@@ -32,6 +32,10 @@ import {
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
+import {
+  createSystemSurfacePresenceProbe,
+  type SystemSurfacePresenceProbe,
+} from './system-surface-presence.ts';
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
@@ -51,10 +55,12 @@ export function createAppleSnapshotRoute(
   options: Readonly<{
     source?: SimulatorSnapshotSource;
     resolveTarget?: SimulatorSnapshotTargetResolver;
+    systemSurfacePresent?: SystemSurfacePresenceProbe;
   }> = {},
 ): AppleSnapshotRoute {
   const source = options.source ?? createSimulatorSnapshotSource();
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
+  const systemSurfacePresent = options.systemSurfacePresent ?? createSystemSurfacePresenceProbe();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
   /**
@@ -79,6 +85,12 @@ export function createAppleSnapshotRoute(
     shutdown: async () => await source.close(),
     capture: async (device, input, signal, fallback) => {
       if (!isEligible(device, input)) return await fallback(input);
+      // A system surface (e.g. the web sign-in sheet) presented over the app is invisible to the
+      // host AX bridge — the app is still the AX primaryApp, so the bridge would serve the occluded
+      // app tree as if healthy (#2438). The XCTest runner can see and drive the surface, so route
+      // this capture to it. The runner serves the surface only while it is genuinely foreground and
+      // otherwise serves the app, so this is correct even while a dismissed host lingers.
+      if (await systemSurfacePresent(device, signal)) return await fallback(input);
       let target: SimulatorSnapshotTarget;
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);

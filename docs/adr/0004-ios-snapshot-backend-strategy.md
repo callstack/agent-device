@@ -288,3 +288,37 @@ When adding new iOS snapshot behavior, maintainers should first decide which str
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or
 tries to make raw snapshots safe by silently truncating, it is probably crossing strategy
 boundaries.
+
+## Amendment: in-place system surfaces (issue #2438)
+
+Some UI is presented out of the app's process by a system bundle — `com.apple.SafariViewService`,
+which hosts `ASWebAuthenticationSession` and `SFSafariViewController` for delegated OAuth/OIDC
+sign-in. Two facts, both verified live on the iOS 26.2 Simulator, shape how it is captured:
+
+- The surface dies if activated. `XCUIApplication.activate()` or `simctl launch` on the host cancels
+  the authentication session and blacks the view. So the host must be observed and driven **in
+  place**, never activated, and `open` refuses to launch a registered host.
+- The local host AX bridge cannot see it. While the sheet is up the app remains the AX `primaryApp`,
+  so the bridge serves the (occluded) app tree as if healthy. Only the XCTest runner, addressing the
+  host by bundle id, can read and drive the sheet.
+
+Decision. A closed registry names these hosts (`contracts/fixtures/ios-system-surface-hosts.json`,
+mirrored by the TypeScript and Swift registries under a parity test). When a registered host is
+genuinely presented, the runner serves and drives it in place and never adopts it as the cached
+session target; the session binding stays on the app, so once the surface is gone the next command
+resolves back to the app. On the Simulator a cheap, device-scoped host-side probe (a registered
+host process running for the device) routes the capture to the runner instead of the bridge; when no
+host is running the bridge fast path is untouched.
+
+Presence is `XCUIApplication.state == .runningForeground`, not tree content. The live spike showed a
+torn-down host still serving a *richer* tree than a live one, so content heuristics cannot separate
+live from dead; foreground state can. Crucially, the only way a host is foreground with a stale tree
+is if it was activated or relaunched — which the open guard and the in-place policy both refuse — so
+this fix and the never-activate guard are one design: the guard is what makes the foreground
+predicate sound. This also makes issue #2438's second bug (a stale tree served confidently after
+teardown) unrepresentable for the delegated-auth flow, because the session never binds to the host.
+
+Captures of a system surface carry a response-level `systemSurface` provenance and the shared
+`IOS_SYSTEM_SURFACE_DISCLOSURE`, so the agent is told the controls belong to a system sheet rather
+than the app. Physical devices always use the runner, so the in-place serve applies there without a
+route change; the Simulator route probe is the only Simulator-specific piece.

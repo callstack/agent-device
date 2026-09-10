@@ -240,6 +240,10 @@
       "types": "./src/ios-snapshot.ts",
       "default": "./src/ios-snapshot.ts"
     },
+    "./ios-system-surface": {
+      "types": "./src/ios-system-surface.ts",
+      "default": "./src/ios-system-surface.ts"
+    },
     "./interactor-operation-catalog": {
       "types": "./src/interactor-operation-catalog.ts",
       "default": "./src/interactor-operation-catalog.ts"

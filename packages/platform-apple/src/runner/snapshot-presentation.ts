@@ -17,6 +17,11 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import {
+  isIosSystemSurfaceHost,
+  type IosSystemSurfaceKind,
+  type IosSystemSurfaceProvenance,
+} from '@agent-device/contracts/ios-system-surface';
 
 export type AppleRunnerSnapshotResult = Readonly<{
   nodes?: RawSnapshotNode[];
@@ -25,6 +30,7 @@ export type AppleRunnerSnapshotResult = Readonly<{
   quality?: SnapshotQualityVerdict;
   qualityPayload?: IosRunnerQualityPayloadFacts;
   runnerFatal?: boolean;
+  systemSurface?: IosSystemSurfaceProvenance;
 }>;
 
 export function readAppleSnapshotResult(
@@ -36,11 +42,25 @@ export function readAppleSnapshotResult(
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
     qualityPayload: readQualityPayload(result.qualityPayload),
     runnerFatal: result.runnerFatal === true,
+    ...(readSystemSurfaceProvenance(result.systemSurface)
+      ? { systemSurface: readSystemSurfaceProvenance(result.systemSurface) }
+      : {}),
     message:
       typeof result.message === 'string' && result.message.trim().length > 0
         ? result.message
         : undefined,
   };
+}
+
+function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance | undefined {
+  if (!isRecord(value)) return undefined;
+  const bundleId = value.bundleId;
+  const kind = value.kind;
+  // Trust only a bundle id the shared registry recognizes; an unknown value is dropped rather than
+  // surfaced, mirroring the wire-reader discipline elsewhere in this module.
+  if (typeof bundleId !== 'string' || !isIosSystemSurfaceHost(bundleId)) return undefined;
+  if (typeof kind !== 'string') return undefined;
+  return { bundleId, kind: kind as IosSystemSurfaceKind };
 }
 
 export function presentAppleRunnerSnapshot(

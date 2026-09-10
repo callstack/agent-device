@@ -35,6 +35,7 @@ import {
   readAppleSnapshotResult,
 } from './runner/snapshot-presentation.ts';
 import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
+import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -245,15 +246,28 @@ async function captureAppleRunnerSnapshot(
   if (nodes.length === 0 && device.kind === 'simulator' && !isValidEmptyScope) {
     throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
   }
+  const warnings = runnerSnapshotWarnings(result);
   return {
     nodes: presentRunnerSnapshotForDevice(device, options, result),
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,
     ...(result.quality ? { quality: result.quality } : {}),
-    // Legacy runners without a quality verdict still surface their message text.
-    ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+/**
+ * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
+ * quality verdict, and the shared disclosure when the capture describes an in-place system surface
+ * (e.g. the web sign-in sheet) rather than the app itself (#2438).
+ */
+function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
+  const warnings: string[] = [];
+  if (!result.quality && result.message) warnings.push(result.message);
+  const surfaceDisclosure = iosSystemSurfaceDisclosure(result.systemSurface);
+  if (surfaceDisclosure) warnings.push(surfaceDisclosure);
+  return warnings;
 }
 
 function presentRunnerSnapshotForDevice(
