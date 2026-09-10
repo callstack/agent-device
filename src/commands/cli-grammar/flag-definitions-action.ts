@@ -147,6 +147,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--until <selector>',
     usageDescription: 'Scroll: repeat passes until the selector is visible on screen',
+    projectConfig: true,
+    recorded: false,
   },
   {
     key: 'doubleTap',
