@@ -76,23 +76,19 @@ async function withDirectSelectorScenario(
   );
 }
 
-// `wait` asks the admitted Apple owner first for simple selector existence. A positive
-// owner observation avoids a sparse canonical tree; a miss still falls through to the
-// request-bound capture. The public response strips the internal `selectorChain` either way.
-test('Provider-backed iOS selector wait accepts the owner observation and strips selectorChain', async () => {
+test('Provider-backed iOS selector wait captures directly and strips selectorChain', async () => {
   const transcript = createProviderTranscript([
-    {
-      command: 'ios.runner.querySelector',
-      deviceId: DEVICE_ID,
-      platform: 'apple',
-      request: {
-        command: 'querySelector',
-        selectorKey: 'label',
-        selectorValue: 'Continue',
-        appBundleId: APP,
+    snapshotEntry([
+      APPLICATION_NODE,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Continue',
+        hittable: true,
+        rect: { x: 100, y: 300, width: 200, height: 44 },
       },
-      result: { found: true, nodes: [] },
-    },
+    ]),
   ]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
@@ -103,20 +99,19 @@ test('Provider-backed iOS selector wait accepts the owner observation and strips
   });
 });
 
-test('Provider-backed iOS selector wait falls through to capture after an owner miss', async () => {
+test('Provider-backed iOS selector wait polls a fresh capture after a selector miss', async () => {
   const transcript = createProviderTranscript([
-    {
-      command: 'ios.runner.querySelector',
-      deviceId: DEVICE_ID,
-      platform: 'apple',
-      request: {
-        command: 'querySelector',
-        selectorKey: 'label',
-        selectorValue: 'Continue',
-        appBundleId: APP,
+    snapshotEntry([
+      APPLICATION_NODE,
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Loading',
+        hittable: true,
+        rect: { x: 100, y: 300, width: 200, height: 44 },
       },
-      result: { found: false, nodes: [] },
-    },
+    ]),
     snapshotEntry([
       APPLICATION_NODE,
       {

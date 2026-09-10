@@ -66,11 +66,7 @@ import {
 } from './deployment/runtime.ts';
 import { appleNavigationFacts, createAppleNavigationOperations } from './navigation/runtime.ts';
 import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
-import {
-  bindAppleFindSelectorRuntime,
-  bindAppleFindTextRuntime,
-  bindAppleSnapshotRuntime,
-} from './runtime-snapshot.ts';
+import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
@@ -186,8 +182,8 @@ const snapshotActiveAppRequired = Object.freeze({
 } as const);
 const nativeSelectorUnavailable = Object.freeze({
   available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Native selector observation is available only on the Apple touch family.',
+  reason: 'owner-capability-missing',
+  hint: 'Apple selector observations use canonical snapshot capture.',
 } as const);
 
 function unsupportedAppleDeviceKind(hint: string) {
@@ -303,7 +299,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...selectorObservationRuntimeOperationFacts({
           findText: appleSnapshotFact(device),
-          findSelector: appleFindSelectorFact(device),
+          findSelector: nativeSelectorUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
@@ -441,12 +437,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
           }),
         ),
-        ...whenAdmitted(facts.operations.findSelector, () =>
-          bindAppleFindSelectorRuntime(host, {
-            device: request.device,
-            signal: request.scope.signal,
-          }),
-        ),
         ...createAppleNavigationOperations({
           host,
           device: request.device,
@@ -539,10 +529,6 @@ function appleSnapshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
-}
-
-function appleFindSelectorFact(device: DeviceInfo) {
-  return isIosFamily(device) ? appleSnapshotFact(device) : nativeSelectorUnavailable;
 }
 
 /**

@@ -139,6 +139,21 @@ test('a negative native observation falls through to the same bound canonical ca
   expect(runtime.bindDevice).toHaveBeenCalledTimes(1);
 });
 
+test('an unavailable native selector query cannot fail a capture-backed wait', async () => {
+  const runtime = harness({
+    fact: unavailable,
+    nodes: [{ index: 0, depth: 0, type: 'Button', identifier: 'runner-only' }],
+  });
+  runtime.findSelector.mockRejectedValue(
+    new Error('XCTest recorded a failure while executing querySelector'),
+  );
+  const response = await run(makeIosAppSession('wait-conditional-selector'), runtime);
+
+  expect(response.ok).toBe(true);
+  expect(runtime.findSelector).not.toHaveBeenCalled();
+  expect(runtime.captureSnapshot).toHaveBeenCalled();
+});
+
 test('an unavailable conditional observation preserves the capture-backed owner path', async () => {
   const runtime = harness({
     fact: unavailable,

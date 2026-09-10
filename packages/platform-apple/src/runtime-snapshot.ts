@@ -4,8 +4,6 @@ import {
   captureSnapshotSignal,
 } from '@agent-device/contracts/snapshot-runtime';
 import type {
-  FindSelectorInput,
-  FindSelectorResult,
   FindTextInput,
   FindTextResult,
 } from '@agent-device/contracts/selector-observation-runtime';
@@ -97,29 +95,10 @@ export function bindAppleFindTextRuntime(
   });
 }
 
-/** Apple owns the native simple-selector observation; callers never inspect Apple/provider state. */
-export function bindAppleFindSelectorRuntime(
-  host: PlatformRuntimeHost,
-  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
-): Pick<PlatformRuntimeOperations, 'findSelector'> {
-  return Object.freeze({
-    findSelector: async (input: FindSelectorInput): Promise<FindSelectorResult> => {
-      const admitted = await admitAppleNativeFind(host, request, input);
-      if (!admitted) return { found: false };
-      const interactor = await host.localInteractors.resolve(request.device, {
-        ...input.execution,
-        ...admitted,
-      });
-      if (!interactor.findSelector) return { found: false };
-      return await interactor.findSelector(input.selector, admitted);
-    },
-  });
-}
-
 type AdmittedAppleNativeFind = Readonly<{ appBundleId: string; signal: AbortSignal }>;
 
 /**
- * The one admission both native find ports share (conditions listed on `bindAppleFindTextRuntime`).
+ * Native text observation admission (conditions listed on `bindAppleFindTextRuntime`).
  * `undefined` means "not proven here"; an admitted find carries the app scope and the composed
  * request/poll signal the runner call needs.
  */
