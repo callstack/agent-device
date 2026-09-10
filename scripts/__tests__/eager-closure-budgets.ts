@@ -187,13 +187,24 @@ export function eagerClosureEntries(repoRoot: string): EagerClosureEntry[] {
   ];
 }
 
-/** The no-growth verdict: `null` unless the head closure is larger than the merge-base one. */
+/**
+ * The no-growth verdict: `null` unless the head closure is larger than the merge-base one.
+ *
+ * The closing sentence deliberately does not prescribe one fix. #2423's review found that a
+ * generic "move it behind a dynamic import" sent five reviewers toward the wrong change: the
+ * growth there was a small new module that belonged in a module every affected entry already
+ * evaluated, not behind a lazy boundary. There are two common causes and two remedies, and which
+ * applies is exactly what the added-module listing this verdict is always printed alongside
+ * (`describeClosureGrowth`) is for.
+ */
 export function classifyGrowth(id: string, base: number, head: number): string | null {
   if (head <= base) return null;
   return (
-    `${id} evaluates ${head} modules on import; the merge-base evaluated ${base}. Something ` +
-    'that used to load on demand now loads eagerly, or a new static edge was added: move it ' +
-    'behind a function-scoped `await import`.'
+    `${id} evaluates ${head} modules on import; the merge-base evaluated ${base}. That means ` +
+    'either a new static edge was added, or something that used to load on demand now loads ' +
+    'eagerly. The fix is either to give the new code a home in a module the closure already ' +
+    'evaluates, or to move the new edge behind a function-scoped `await import` -- see the ' +
+    'added module(s) below for which one fits.'
   );
 }
 
@@ -358,10 +369,29 @@ export function describeClosurePressure(
   );
 }
 
+/** How many of `added` a growth diagnostic names individually before it just counts the rest. */
+const REPORTED_ADDED_MODULES = 10;
+
+/** Head-closure files absent from the merge-base closure -- what actually grew, entry excluded. */
+export function addedModules(
+  graph: ReadonlyMap<string, string | null>,
+  baseClosure: ReadonlySet<string>,
+  entryPath: string,
+): string[] {
+  return [...graph.keys()].filter((file) => file !== entryPath && !baseClosure.has(file));
+}
+
 /**
- * Where an existing entry grew: the shortest import route to the first module the merge-base did
- * not evaluate, plus how many more there are. The walk is breadth-first, so the first one in
- * closure order is the shallowest, which is where the new edge almost always is.
+ * Every newly evaluated module against the merge-base (bounded to `REPORTED_ADDED_MODULES`), each
+ * with the shortest static import route from the entry down to it.
+ *
+ * #2423's review is why this names more than one module: the previous version of this diagnostic
+ * printed only the FIRST added module, which hid the pattern when the real growth was one small
+ * new module reached from several places. A reader saw one chain, read it as "this one edge
+ * should be lazy", and proposed a dynamic import for what was actually a shared constant -- five
+ * times, across five separate CI failures, because nothing in any one entry's message showed that
+ * the "new" modules were mostly the same one. Listing every added module (still bounded) lets a
+ * reader see that shape from a single failure.
  */
 export function describeClosureGrowth(
   graph: ReadonlyMap<string, string | null>,
@@ -369,11 +399,13 @@ export function describeClosureGrowth(
   entryPath: string,
   repoRoot: string,
 ): string {
-  const added = [...graph.keys()].filter((file) => file !== entryPath && !baseClosure.has(file));
-  const first = added[0];
-  if (first === undefined) return '  (no module is new against the merge-base)';
-  const more = added.length > 1 ? `\n  (+${added.length - 1} more newly evaluated module(s))` : '';
-  return `  ${formatImportChain(graph, first, repoRoot)}${more}`;
+  const added = addedModules(graph, baseClosure, entryPath);
+  if (added.length === 0) return '  (no module is new against the merge-base)';
+  const shown = added.slice(0, REPORTED_ADDED_MODULES);
+  const lines = shown.map((file) => `  ${formatImportChainArrow(graph, file, repoRoot)}`);
+  const hidden = added.length - shown.length;
+  const more = hidden > 0 ? `\n  (+${hidden} more newly evaluated module(s))` : '';
+  return `${lines.join('\n')}${more}`;
 }
 
 /**
@@ -400,24 +432,46 @@ export function describePlatformOffenders(
 }
 
 /**
- * The import chain from a closure's entry down to `target`, rendered one edge per line.
+ * The hops from a closure's entry down to `target`, repo-relative, shallowest first.
  *
  * #1960 asks a violation to "name the offending edge chain". A sorted set of evaluated files names
  * the destination but not the route, which leaves the reader to rediscover by hand which import
  * actually pulled it in. `eagerClosureGraphOf` records each file's discoverer, so the route is
  * just a walk back up, and because that walk is breadth-first the route is the shortest one.
  */
-function formatImportChain(
+function chainTo(
   graph: ReadonlyMap<string, string | null>,
   target: string,
   repoRoot: string,
-): string {
+): string[] {
   const chain: string[] = [];
   for (let at: string | null | undefined = target; at != null; at = graph.get(at)) {
     chain.push(path.relative(repoRoot, at));
     if (chain.length > 64) break; // defensive: a cycle would otherwise spin here
   }
-  return chain.reverse().join('\n      -> ');
+  return chain.reverse();
+}
+
+/** The import chain from a closure's entry down to `target`, rendered one edge per line. */
+function formatImportChain(
+  graph: ReadonlyMap<string, string | null>,
+  target: string,
+  repoRoot: string,
+): string {
+  return chainTo(graph, target, repoRoot).join('\n      -> ');
+}
+
+/**
+ * The same route as `formatImportChain`, arrow-joined on one line -- compact enough to list
+ * several of them (`describeClosureGrowth`) without the multi-line chain format burying the list
+ * itself under indentation.
+ */
+function formatImportChainArrow(
+  graph: ReadonlyMap<string, string | null>,
+  target: string,
+  repoRoot: string,
+): string {
+  return chainTo(graph, target, repoRoot).join(' → ');
 }
 
 /** How many hops from the entry down to `target`, bounded so a cycle cannot spin. */
@@ -428,4 +482,118 @@ function chainLength(graph: ReadonlyMap<string, string | null>, target: string):
     if (length > 64) break;
   }
   return length;
+}
+
+/** A growing entry's contribution to the cross-entry shared-homes aggregation below. */
+export type GrowthForAggregation = {
+  /** The entry's label, matching `EagerClosureEntry.id`. */
+  id: string;
+  /** This entry's added modules (absolute paths), as `addedModules` returns them. */
+  added: readonly string[];
+  /** This entry's merge-base closure graph -- gives both membership and forward edges. */
+  baseGraph: ReadonlyMap<string, string | null>;
+};
+
+/** How many candidate homes `describeSharedGrowthHomes` names before it just counts the rest. */
+const MAX_SHARED_HOMES = 30;
+
+/**
+ * The workspace package (or the root `src/` mechanics tree) a repo-relative path lives under --
+ * the scope `describeSharedGrowthHomes` searches for an existing home, since a candidate outside
+ * the added module's own package is not a home the added module could plausibly move into.
+ */
+function packageOf(relativeFile: string): string {
+  const match = /^(packages\/[^/]+)\//.exec(relativeFile);
+  return match ? match[1] : 'src';
+}
+
+/** True when nothing in `graph` records `candidate` as the direct importer of a same-package file. */
+function hasNoInPackageChild(
+  candidate: string,
+  pkg: string,
+  graph: ReadonlyMap<string, string | null>,
+  repoRoot: string,
+): boolean {
+  for (const [child, parent] of graph) {
+    if (parent === candidate && packageOf(path.relative(repoRoot, child)) === pkg) return false;
+  }
+  return true;
+}
+
+/**
+ * When two or more entries grow by the SAME newly-added module, the per-entry diagnostic above
+ * cannot show the shape that actually matters: there is no old edge to make lazy, because the
+ * module is brand new, so "move it behind a dynamic import" is not even coherent advice. The
+ * useful question is "where does this already have a home", and the answer is scoped to what
+ * every affected entry already evaluates, under the added module's own package -- a real
+ * candidate list instead of "somewhere in the repo".
+ *
+ * #2423's review: five reviewers each independently proposed a dynamic import for a constant that
+ * a module already imported eagerly wherever it was needed; the fix was moving the constant
+ * there. Nothing in any one entry's own message could show that shape, because each entry's
+ * diagnostic only ever describes that one entry's own closure. This runs once, after every entry
+ * has been evaluated, and is silent (`null`) unless at least two entries actually share an added
+ * module and that intersection is non-empty.
+ *
+ * Sorted with modules that have no in-package eager import of their own first when that is cheap
+ * to compute -- it already is here, since a candidate's forward edges are read straight off the
+ * base graph that produced it, no extra tree read required -- because a leaf module is the safer
+ * home: adding a symbol to it cannot itself grow anyone else's closure.
+ */
+export function describeSharedGrowthHomes(
+  growths: readonly GrowthForAggregation[],
+  repoRoot: string,
+): string | null {
+  const entriesByAddedModule = new Map<string, GrowthForAggregation[]>();
+  for (const growth of growths) {
+    for (const added of growth.added) {
+      const group = entriesByAddedModule.get(added);
+      if (group) group.push(growth);
+      else entriesByAddedModule.set(added, [growth]);
+    }
+  }
+
+  const homePackage = new Map<string, string>();
+  const homeGraph = new Map<string, ReadonlyMap<string, string | null>>();
+  for (const [added, group] of entriesByAddedModule) {
+    if (group.length < 2) continue;
+    const [first, ...rest] = group;
+    if (!first) continue;
+    const pkg = packageOf(path.relative(repoRoot, added));
+    for (const candidate of first.baseGraph.keys()) {
+      if (homePackage.has(candidate)) continue;
+      if (packageOf(path.relative(repoRoot, candidate)) !== pkg) continue;
+      if (rest.every((other) => other.baseGraph.has(candidate))) {
+        homePackage.set(candidate, pkg);
+        homeGraph.set(candidate, first.baseGraph);
+      }
+    }
+  }
+  if (homePackage.size === 0) return null;
+
+  const sorted = [...homePackage.keys()].sort((left, right) => {
+    const leftLeaf = hasNoInPackageChild(
+      left,
+      homePackage.get(left) as string,
+      homeGraph.get(left) as ReadonlyMap<string, string | null>,
+      repoRoot,
+    );
+    const rightLeaf = hasNoInPackageChild(
+      right,
+      homePackage.get(right) as string,
+      homeGraph.get(right) as ReadonlyMap<string, string | null>,
+      repoRoot,
+    );
+    if (leftLeaf !== rightLeaf) return leftLeaf ? -1 : 1;
+    return path.relative(repoRoot, left).localeCompare(path.relative(repoRoot, right));
+  });
+
+  const shown = sorted.slice(0, MAX_SHARED_HOMES);
+  const hidden = sorted.length - shown.length;
+  const lines = shown.map((file) => `  ${path.relative(repoRoot, file)}`);
+  const more = hidden > 0 ? `\n  (+${hidden} more)` : '';
+  return (
+    'Modules every failing entry already evaluates (possible homes for a shared symbol; not a ' +
+    `statement that any of them is the right owner):\n${lines.join('\n')}${more}`
+  );
 }
