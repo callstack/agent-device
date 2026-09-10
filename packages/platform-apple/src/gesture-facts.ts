@@ -38,6 +38,7 @@ function unsupportedAppleDeviceKind(hint: string) {
 export function appleGestureAndScrollFacts(device: DeviceInfo) {
   return {
     ...gestureRuntimeOperationFacts({
+      unsupported: gestureKindUnavailable,
       plan: appleGesturePlanFact(device),
       directionalFling: appleGesturePlanFact(device),
       multiTouch: appleMultiTouchGestureFact(device),

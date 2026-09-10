@@ -19,6 +19,7 @@ const available = { available: true } as const;
 const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
 
 const allAvailable = gestureRuntimeOperationFacts({
+  unsupported: unavailable,
   plan: available,
   directionalFling: available,
   multiTouch: available,
@@ -43,9 +44,10 @@ const plan: GesturePlan = {
   ],
 };
 
-test('builds the exact gesture operation fact catalog', () => {
+test('builds the exact gesture operation fact catalog for an owner that names every tier', () => {
   expect(
     gestureRuntimeOperationFacts({
+      unsupported: unavailable,
       plan: available,
       directionalFling: unavailable,
       multiTouch: unavailable,
@@ -59,6 +61,37 @@ test('builds the exact gesture operation fact catalog', () => {
     performTargetAuthoredDrag: available,
     gestureViewport: unavailable,
   });
+});
+
+test('a tier the owner never names reports the denial the owner stated for the family, verbatim — omission is a classified refusal, never an unclassified tier and never an implied success', () => {
+  const denial = {
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'Gestures are supported on HarmonyOS emulators and physical devices.',
+  } as const;
+
+  expect(gestureRuntimeOperationFacts({ unsupported: denial, plan: available })).toEqual({
+    performGesturePlan: available,
+    performDirectionalFlingPlan: denial,
+    performMultiTouchGesturePlan: denial,
+    performTargetAuthoredDrag: denial,
+    gestureViewport: denial,
+  });
+});
+
+test('an owner serving no gesture tier names the family denial once and still answers with the exhaustive shape', () => {
+  const denial = { available: false, reason: 'unsupported-platform-leaf' } as const;
+
+  const facts = gestureRuntimeOperationFacts({ unsupported: denial });
+
+  expect(facts).toEqual({
+    performGesturePlan: denial,
+    performDirectionalFlingPlan: denial,
+    performMultiTouchGesturePlan: denial,
+    performTargetAuthoredDrag: denial,
+    gestureViewport: denial,
+  });
+  expect(Object.isFrozen(facts)).toBe(true);
 });
 
 test('a local binding executes the plan through the owner interactor', async () => {
@@ -110,11 +143,9 @@ test('a binding exposes only the tiers its owner facts admitted', () => {
     device,
     signal: new AbortController().signal,
     facts: gestureRuntimeOperationFacts({
+      unsupported: unavailable,
       plan: available,
-      directionalFling: unavailable,
-      multiTouch: unavailable,
       targetAuthoredDrag: unavailable,
-      viewport: unavailable,
     }),
     resolveInteractor: async () => ({ performGesture: async () => ({}) }) as unknown as Interactor,
   });

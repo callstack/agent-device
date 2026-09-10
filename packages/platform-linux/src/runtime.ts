@@ -247,6 +247,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // every cell — a direction-authored fling's speed semantics, two-contact synthesis, and
       // target-authored drag timing.
       ...gestureRuntimeOperationFacts({
+        unsupported: gestureKindUnavailable,
         plan: linuxDesktopFact(device, gestureKindUnavailable),
         directionalFling: directionalFlingUnavailable,
         multiTouch: multiTouchUnavailable,

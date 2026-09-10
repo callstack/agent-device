@@ -319,6 +319,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),
         ...gestureRuntimeOperationFacts({
+          unsupported: gestureKindUnavailable,
           plan: androidGestureFact(device),
           directionalFling: androidGestureFact(device),
           multiTouch: androidTouchTargetFact(device, androidTvMultiTouchUnavailable),

@@ -628,6 +628,7 @@ function webDriverFacts(
       // ever owns physical devices, and two-finger synthesis on a physical iOS device was refused
       // before this migration exactly as it is refused here.
       ...gestureRuntimeOperationFacts({
+        unsupported: gestureUnavailable,
         plan: interactorCell(reachable, gestureUnavailable),
         directionalFling: interactorCell(reachable, gestureUnavailable),
         multiTouch: webDriverMultiTouchCell(device, reachable),

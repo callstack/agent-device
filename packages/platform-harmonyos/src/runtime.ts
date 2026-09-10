@@ -252,6 +252,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Gestures share focus's HDC-driven kind cell; only the two tiers HDC cannot synthesize
         // are refused.
         ...gestureRuntimeOperationFacts({
+          unsupported: gestureKindUnavailable,
           plan: harmonyGestureFact(device),
           directionalFling: harmonyGestureFact(device),
           multiTouch: multiTouchUnavailable,

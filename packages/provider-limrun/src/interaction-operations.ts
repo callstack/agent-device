@@ -54,6 +54,11 @@ const iosGestureUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
 } as const);
+/** A gesture tier this provider mode never exposes, whatever the session. */
+const gestureUnsupportedProviderMode = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+} as const);
 const androidTvMultiTouchUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -74,26 +79,15 @@ function limrunGestureFacts(
   device: DeviceInfo,
   cell: RuntimeOperationUnavailability | typeof available,
 ): GestureRuntimeOperationFacts {
-  if (cell !== available) {
-    return gestureRuntimeOperationFacts({
-      plan: cell,
-      directionalFling: cell,
-      multiTouch: cell,
-      targetAuthoredDrag: cell,
-      viewport: cell,
-    });
+  if (!cell.available) {
+    return gestureRuntimeOperationFacts({ unsupported: cell });
   }
   if (device.platform !== 'android') {
-    return gestureRuntimeOperationFacts({
-      plan: iosGestureUnavailable,
-      directionalFling: iosGestureUnavailable,
-      multiTouch: iosGestureUnavailable,
-      targetAuthoredDrag: iosGestureUnavailable,
-      viewport: iosGestureUnavailable,
-    });
+    return gestureRuntimeOperationFacts({ unsupported: iosGestureUnavailable });
   }
   const tv = device.target === 'tv';
   return gestureRuntimeOperationFacts({
+    unsupported: gestureUnsupportedProviderMode,
     plan: available,
     directionalFling: available,
     multiTouch: tv ? androidTvMultiTouchUnavailable : available,

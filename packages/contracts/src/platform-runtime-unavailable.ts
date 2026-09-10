@@ -224,13 +224,7 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
       ...focusRuntimeOperationFacts({ focus: frozen.focus }),
-      ...gestureRuntimeOperationFacts({
-        plan: frozen.gesture,
-        directionalFling: frozen.gesture,
-        multiTouch: frozen.gesture,
-        targetAuthoredDrag: frozen.gesture,
-        viewport: frozen.gesture,
-      }),
+      ...gestureRuntimeOperationFacts({ unsupported: frozen.gesture }),
       ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
       ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
       ...touchRuntimeOperationFacts({

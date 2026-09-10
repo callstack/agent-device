@@ -399,11 +399,8 @@ function webRuntimeFacts(
       // outright. Drag is the exception it checked FIRST, by naming the phases an adapter needs.
       ...scrollRuntimeOperationFacts({ scroll: browserDevice }),
       ...gestureRuntimeOperationFacts({
-        plan: gestureUnavailable,
-        directionalFling: gestureUnavailable,
-        multiTouch: gestureUnavailable,
+        unsupported: gestureUnavailable,
         targetAuthoredDrag: targetAuthoredDragUnavailable,
-        viewport: gestureUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
