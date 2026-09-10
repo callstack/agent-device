@@ -73,9 +73,19 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  const baselineNodes = params.session.snapshot?.nodes ?? [];
-  return { observe: async () => await observeSettled(params, settle, baselineNodes) };
+  // The baseline travels with the surface its capture described (#2438), so the settled diff is
+  // never built across an in-place system surface appearing over (or leaving) the app.
+  const baseline: SettleBaseline = {
+    nodes: params.session.snapshot?.nodes ?? [],
+    ...(params.session.snapshot?.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: params.session.snapshot.iosSystemSurfaceBundleId }
+      : {}),
+  };
+  return { observe: async () => await observeSettled(params, settle, baseline) };
 }
+
+/** The pre-action tree the generic route diffs against, and the surface it describes. */
+type SettleBaseline = { nodes: SnapshotNode[]; surfaceBundleId?: string };
 
 /**
  * Best-effort like the settle engine itself: the action already succeeded, so a
@@ -87,7 +97,7 @@ export function planGenericSettleObservation(
 async function observeSettled(
   context: GenericSettleContext,
   settle: SettleParams,
-  baselineNodes: SnapshotNode[],
+  baseline: SettleBaseline,
 ): Promise<SettleObservation | undefined> {
   const runtime = createGenericSettleRuntime(context);
   if (!runtime) return undefined;
@@ -96,7 +106,8 @@ async function observeSettled(
   // use for press/fill.
   const observation = await runtime.interactions.settleObservation({
     ...settle,
-    baselineNodes,
+    baselineNodes: baseline.nodes,
+    ...(baseline.surfaceBundleId ? { baselineSurfaceBundleId: baseline.surfaceBundleId } : {}),
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });

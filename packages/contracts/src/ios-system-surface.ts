@@ -79,3 +79,16 @@ export function iosSystemSurfaceDisclosure(
 ): string | undefined {
   return provenance ? IOS_SYSTEM_SURFACE_DISCLOSURE : undefined;
 }
+
+/**
+ * The agent-facing sentence for a surface TRANSITION between two captures — the post-action
+ * observation's case, where the pre-action baseline and the capture taken after the action describe
+ * different surfaces. `to` is the surface the AFTER capture describes: a host bundle id when the
+ * sheet is now on screen (the standing disclosure applies verbatim), or `undefined` when the sheet
+ * has left and the capture shows app content again, which the standing sentence cannot say.
+ */
+export function iosSystemSurfaceTransitionDisclosure(to: string | undefined): string {
+  return to === undefined
+    ? 'A system web sign-in sheet was presented over the app before this action and is gone now, so this observation describes app content while the pre-action tree described that sheet.'
+    : IOS_SYSTEM_SURFACE_DISCLOSURE;
+}
