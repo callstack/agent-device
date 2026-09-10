@@ -95,6 +95,12 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
       reason: 'unsupported-provider-mode',
     });
   }
+  for (const operation of ['readClipboard', 'writeClipboard'] as const) {
+    assert.deepEqual(binding.facts.operations[operation], {
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
   // `apps` is left unclassified above (an optional cell): it inherits the network gap's reason.
   assert.deepEqual(binding.facts.operations.listApps, {
     available: false,

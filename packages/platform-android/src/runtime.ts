@@ -378,7 +378,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Read and write share one cell: `cmd clipboard` either has a shell implementation on this
         // build or it has none, and no Android build ships one half of it.
         ...clipboardRuntimeOperationFacts({
-          unsupported: clipboardShellUnavailable,
+          unsupported: clipboardCell.available ? clipboardShellUnavailable : clipboardCell,
           read: clipboardCell,
           write: clipboardCell,
         }),

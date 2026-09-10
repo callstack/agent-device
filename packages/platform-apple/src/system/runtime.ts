@@ -116,12 +116,13 @@ function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
   return resolveDeviceAppleOs(device) === 'watchos' ? appleWatchOsUnavailable : available;
 }
 
-/** The clipboard denial this leaf reports for a surface this owner does not name. */
+/**
+ * The clipboard denial this leaf reports for a half it does not name: the leaf's own refusal where
+ * it has one, since a leaf that serves clipboard today has no clipboard refusal to state.
+ */
 function appleClipboardFamilyUnavailable(device: DeviceInfo): RuntimeOperationUnavailability {
-  if (device.kind !== 'simulator' && device.kind !== 'device') return clipboardKindUnavailable;
-  return resolveDeviceAppleOs(device) === 'watchos'
-    ? appleWatchOsUnavailable
-    : clipboardLeafUnavailable;
+  const cell = appleClipboardFact(device);
+  return cell.available ? clipboardLeafUnavailable : cell;
 }
 
 /** The system-surface cells: clipboard read/write, app-event delivery, settings, and alerts. */
