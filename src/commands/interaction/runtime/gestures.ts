@@ -347,7 +347,7 @@ function recordedDragTarget(target: ResolvedInteractionTarget): DragRecordingTar
   };
 }
 
-export function requireResolvedPoint(result: { point?: Point }): Point {
+function requireResolvedPoint(result: { point?: Point }): Point {
   if (!result.point) {
     throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
   }
