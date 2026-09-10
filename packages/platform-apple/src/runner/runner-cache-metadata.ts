@@ -8,7 +8,6 @@ import {
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import {
-  coldToolchainProbeTimeoutMs,
   createTtlMemo,
   Deadline,
   isCommandTimeoutError,
@@ -19,6 +18,7 @@ import {
   type TtlMemo,
 } from './host.ts';
 import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   resolveRunnerBuildDestinationFamily,
   resolveRunnerDerivedBaseName,
   resolveRunnerPlatformName,
@@ -33,13 +33,9 @@ const RUNNER_CACHE_SCHEMA_VERSION = 2;
 const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
 
 /**
- * Ceiling on the wall clock the whole toolchain fingerprint may spend, across
- * all three probes and their retries, when the owning phase carries no shorter
- * budget. Sized for the one cold-start stall the retry exists for -- a single
- * stalled probe (up to the host's `coldToolchainProbeTimeoutMs()`) plus its
- * now-warm retry and the two remaining probes -- not for three independently
- * stalling tools, which is why the per-call timeout alone is not the bound
- * (#2422).
+ * Ceiling on the wall clock the whole toolchain fingerprint may spend, across all three
+ * probes and their retries, when the owning phase carries no shorter budget: one stalled
+ * probe, its warm retry, and the two probes still to run (#2422).
  */
 const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
@@ -71,14 +67,8 @@ type ToolchainProbeFailure = {
 };
 
 /**
- * The one clock a runner phase spends, for a step whose budget is `timeoutMs`;
- * `undefined` for a caller that carries no budget at all (background and
- * preflight surfaces). The cache decision's blocking toolchain probes and the
- * step the phase exists for (an `xcodebuild` build, a runner startup) both read
- * it, so what the probes spend is time the step no longer has. Create it once
- * per phase and read the rest with {@link requireRunnerPhaseRemainingMs}; a
- * step that hands the probes a timeout and then hands itself the same number
- * again spends the phase's budget twice (#2422).
+ * The one clock a runner phase spends, created once per phase and read with
+ * {@link requireRunnerPhaseRemainingMs}; `undefined` for a caller carrying no budget.
  */
 export function createRunnerPhaseDeadline(timeoutMs: number | undefined): Deadline | undefined {
   if (timeoutMs === undefined || !Number.isFinite(timeoutMs)) return undefined;
@@ -86,10 +76,8 @@ export function createRunnerPhaseDeadline(timeoutMs: number | undefined): Deadli
 }
 
 /**
- * What the phase has left for its next step, or `fallbackTimeoutMs` when it
- * carries no deadline. Throws instead of returning zero: a step reached with
- * nothing left must fail before it spawns anything, not start a process it
- * would have to kill immediately.
+ * What the phase has left for its next step, or `fallbackTimeoutMs` when it carries no
+ * deadline. Throws rather than returning zero, so a spent phase fails before it spawns.
  */
 export function requireRunnerPhaseRemainingMs(
   deadline: Deadline | undefined,
@@ -102,12 +90,7 @@ export function requireRunnerPhaseRemainingMs(
   return remainingMs;
 }
 
-/**
- * The one error a runner phase raises when a step is reached with nothing left
- * to spend, whether that step is an `xcodebuild` build, a runner startup, or a
- * toolchain probe. It says the budget ran out, not that the thing it would have
- * run is broken.
- */
+/** Says the phase budget ran out, not that the step it would have run is broken. */
 function runnerPhaseBudgetExhaustedError(phase: string): AppError {
   return new AppError('COMMAND_FAILED', 'The Apple runner budget ran out before this step began', {
     phase,
@@ -117,17 +100,8 @@ function runnerPhaseBudgetExhaustedError(phase: string): AppError {
 }
 
 /**
- * What the phase that wants a runner cache decision has left to spend on it.
- * The decision blocks the calling request on up to three synchronous `spawnSync`
- * probes, so the phase's own deadline and cancellation must reach them: an
- * exhausted budget fails the decision instead of starting another 30 second
- * probe, and a canceled request surfaces the cancellation rather than
- * retrying (#2422). A caller with neither still gets
- * {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
- *
- * `spawnSync` cannot be interrupted once it has started, so cancellation is
- * observed between attempts; the per-attempt cap is what bounds how long that
- * takes.
+ * What the phase that wants a runner cache decision has left to spend on it. A caller
+ * with neither field still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
  */
 export type RunnerCacheProbeBudget = {
   /** The owning phase's clock, shared with whatever the phase does next. */
@@ -137,9 +111,11 @@ export type RunnerCacheProbeBudget = {
 };
 
 /**
- * The remaining-time and cancellation view the probes consult. One is created
- * per fingerprint read, so the three probes and their retries share -- and
- * together cannot exceed -- a single budget.
+ * The remaining-time and cancellation view the probes consult: one per fingerprint read,
+ * so the three probes and their retries share a single budget.
+ *
+ * `spawnSync` cannot be interrupted once it has started, so cancellation is observed
+ * between attempts; the per-attempt cap is what bounds how long that takes.
  */
 type ToolchainProbeClock = {
   /** Milliseconds the next attempt may block for; 0 once the budget is spent. */
@@ -152,10 +128,6 @@ function createToolchainProbeClock(
   budget: RunnerCacheProbeBudget | undefined,
 ): ToolchainProbeClock {
   const phaseDeadline = budget?.deadline;
-  // The fingerprint's own deadline, opened at whichever of the two ceilings is
-  // nearer: the phase's remainder, or the fingerprint budget for a caller with
-  // no phase clock (or a generous one). Both are wall-clock, so the step after
-  // the probes still sees the time they spent.
   const deadline = Deadline.fromTimeoutMs(
     Math.min(
       TOOLCHAIN_FINGERPRINT_BUDGET_MS,
@@ -164,7 +136,7 @@ function createToolchainProbeClock(
   );
   return {
     attemptTimeoutMs: () =>
-      Math.min(coldToolchainProbeTimeoutMs(), Math.floor(deadline.remainingMs())),
+      Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, Math.floor(deadline.remainingMs())),
     throwIfCanceled: () => {
       if (budget?.signal?.aborted) {
         throw createRequestCanceledError({ phase: 'apple_toolchain_probe' });
@@ -279,18 +251,14 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
 }
 
 /**
- * The toolchain half of the cache key, or a failure. A probe that timed out or
- * could not be read has no value to compare or persist, and the same
- * fingerprint also names the derived-data directory, so an unreadable
- * toolchain fails the cache decision instead of standing in for one.
+ * The toolchain half of the cache key. It also names the derived-data directory, so an
+ * unreadable toolchain fails the cache decision instead of standing in for one.
  */
 function requireRunnerToolchainFingerprint(
   sdkName: string,
   budget: RunnerCacheProbeBudget | undefined,
 ): RunnerToolchainFingerprint {
-  // Checked before the cache, not just before the probes: a canceled request
-  // must surface as canceled even on a cache hit, or adoption reads a stale
-  // "success" and goes on to probe uptime and write the lease (#2422).
+  // Before the cache, not just before the probes: a hit must not hide a cancellation.
   const clock = createToolchainProbeClock(budget);
   clock.throwIfCanceled();
   const cached = toolchainFingerprintCache().get(sdkName);
@@ -359,12 +327,7 @@ function runToolchainProbe(
   try {
     output = runToolchainProbeCommand(cmd, args, clock);
   } catch (error) {
-    // A canceled request and a spent budget are the caller's own errors to
-    // see, not an unreadable toolchain: only what's left becomes a probe
-    // failure. Checked again here (not just in attemptToolchainProbe) because
-    // the request can abort while this exec is in flight, after its own guard
-    // already passed -- including on the last probe, where there is no next
-    // attempt left to catch it.
+    // A cancellation or a spent budget is the caller's error, not an unreadable toolchain.
     clock.throwIfCanceled();
     if (isRequestCanceledError(error) || isRunnerPhaseBudgetExhaustedError(error)) throw error;
     return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
@@ -381,17 +344,9 @@ function runToolchainProbe(
 }
 
 /**
- * Runs one toolchain probe, retrying exactly once if the attempt timed out and
- * the shared budget still has room. Apple's syspolicyd signature scan blocks
- * the first `xcodebuild`/`xcrun` exec after a fresh host boots (see
- * `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS` in `@agent-device/host-kit/command`, which
- * reaches this file through the host port); the immediate next exec of the same
- * tool is instant, so the retry recovers without widening the per-call budget. Only the
- * exec layer's structured timeout is retried -- a tool that failed on its own
- * and merely said "timed out" in its output is not this stall. The retry calls
- * the same guarded attempt below, so a request canceled or a budget spent
- * between attempts is caught there rather than trusted from before the first
- * one.
+ * Retries exactly once, and only the exec layer's structured timeout: the stall
+ * {@link COLD_TOOLCHAIN_PROBE_TIMEOUT_MS} names clears on the next exec of the same tool,
+ * while a tool that failed on its own and said "timed out" in its output is not it.
  */
 function runToolchainProbeCommand(
   cmd: string,
@@ -406,7 +361,7 @@ function runToolchainProbeCommand(
   }
 }
 
-/** The one guard site for a toolchain probe attempt: cancellation and a spent budget both throw here, before anything execs. */
+/** The one guard site: cancellation and a spent budget both throw here, before any exec. */
 function attemptToolchainProbe(
   cmd: string,
   args: string[],

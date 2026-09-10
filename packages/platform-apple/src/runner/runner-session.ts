@@ -112,10 +112,7 @@ export async function ensureRunnerSession(
   // from a retained-after-close runner no longer applies.
   cancelIosRunnerIdleStop(device.id);
   return await withRunnerSessionLock(device.id, async () => {
-    // One clock for the whole startup phase. The reuse check runs the same
-    // blocking toolchain probes the startup after it would, so a cold probe's
-    // stall is time the startup no longer has: everything below reads what this
-    // deadline has left rather than `startupTimeoutMs` again (#2422).
+    // One clock for the whole startup phase: the toolchain probes and the startup share it.
     const phaseDeadline = createRunnerPhaseDeadline(options.startupTimeoutMs);
     const existing = runnerSessions.get(device.id);
     if (existing) {
@@ -195,10 +192,7 @@ async function startRunnerSessionWithLease(
       phase: 'ios_runner_startup_cleanup_stale_bundles_skipped',
     });
   }
-  // What the startup phase has left after the reuse probe, the adoption attempt
-  // and the pre-build cleanup. Read before the build rather than after it: the
-  // build answers to its own `buildTimeoutMs` deadline, so charging it to the
-  // startup budget as well would spend that budget twice over (#2422).
+  // Read before the build, which answers to its own `buildTimeoutMs` deadline (#2422).
   const startupTimeoutMs = requireRunnerPhaseRemainingMs(
     phaseDeadline,
     options.startupTimeoutMs,

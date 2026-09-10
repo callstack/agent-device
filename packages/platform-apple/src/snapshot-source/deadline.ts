@@ -3,12 +3,7 @@ import { snapshotSourceError } from './errors.ts';
 
 export type SnapshotSourceDeadline = Readonly<{
   clock: Deadline;
-  /**
-   * The clock the deadline is read against. Injected so a test can prove that a
-   * step which blocked for the timeout it was handed leaves the next step only
-   * the remainder -- a fake that throws instantly moves no time and so cannot
-   * tell a shared budget from a fresh one (#2422).
-   */
+  /** The clock the deadline is read against; injected so a test can move time (#2422). */
   now: () => number;
   signal: AbortSignal | undefined;
 }>;

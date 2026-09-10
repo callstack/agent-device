@@ -149,21 +149,8 @@ export type AppleRunnerHost = {
     message: string,
     extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
   ): ExecResult;
-  /**
-   * True only for the error the exec layer raises when it killed a command at
-   * the `timeoutMs` the caller asked for, read from the structured detail it
-   * stamps rather than from the message text.
-   */
+  /** True only for the error the exec layer raises when it killed a command at `timeoutMs`. */
   isCommandTimeoutError(error: unknown): boolean;
-  /**
-   * Ceiling on one Apple toolchain identity probe attempt, in milliseconds:
-   * `COLD_TOOLCHAIN_PROBE_TIMEOUT_MS` from `@agent-device/host-kit/command`,
-   * which owns it for both Apple toolchain probers. Like every other host-kit
-   * symbol above it arrives through this port rather than by import, because
-   * `scripts/__tests__/eager-closure-budgets.test.ts` holds the runner entry to
-   * the modules it evaluates today and a static edge to host-kit adds five.
-   */
-  coldToolchainProbeTimeoutMs(): number;
   // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
@@ -294,8 +281,6 @@ export const requireExecSuccess: AppleRunnerHost['requireExecSuccess'] = (result
   requireHost().requireExecSuccess(result, message, extra);
 export const isCommandTimeoutError: AppleRunnerHost['isCommandTimeoutError'] = (error) =>
   requireHost().isCommandTimeoutError(error);
-export const coldToolchainProbeTimeoutMs: AppleRunnerHost['coldToolchainProbeTimeoutMs'] = () =>
-  requireHost().coldToolchainProbeTimeoutMs();
 export const emitDiagnostic: AppleRunnerHost['emitDiagnostic'] = (event) =>
   requireHost().emitDiagnostic(event);
 export const withDiagnosticTimer = <T>(

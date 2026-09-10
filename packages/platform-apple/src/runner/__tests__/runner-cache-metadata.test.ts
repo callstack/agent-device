@@ -15,10 +15,7 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-cache-metadata.ts';
-// The one owning module for the probe budget: host-kit's exec layer. The
-// snapshot-source prober imports it from there directly; this file's probes read
-// the same value through the runner host port (#2422).
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '@agent-device/host-kit/command';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();

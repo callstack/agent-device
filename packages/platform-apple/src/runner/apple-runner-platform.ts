@@ -6,6 +6,19 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 
+/**
+ * Ceiling on one Apple toolchain identity probe attempt (`xcodebuild -version`, `xcrun
+ * --sdk <sdk> --show-sdk-version`). On a fresh macOS host Apple's syspolicyd signature
+ * scan blocks the first `xcodebuild`/`xcrun` exec after boot for roughly 18 to 19 seconds
+ * at 0% CPU, and the next exec of the same tool is instant; a budget sized for a warm
+ * toolchain (the old 10 s / 5 s split) trips on that stall and reports a toolchain
+ * timeout that says nothing about the toolchain (#2422).
+ *
+ * It sits beside the SDK names the probes run against so both Apple toolchain probers
+ * read one value without either owning it.
+ */
+export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
+
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
 
 type RunnerPlatformDeviceKind = 'simulator' | 'device';

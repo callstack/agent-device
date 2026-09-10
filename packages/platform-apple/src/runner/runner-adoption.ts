@@ -55,12 +55,7 @@ export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
   options: {
     startupTimeoutMs?: number;
-    /**
-     * The startup phase's clock, shared with the caller. The fingerprint check
-     * below runs the same blocking toolchain probes a fresh startup would, so
-     * the adopted session must be given what those probes left rather than a
-     * fresh `startupTimeoutMs` (#2422).
-     */
+    /** The startup phase's clock: the fingerprint check below spends from it (#2422). */
     phaseDeadline?: Deadline;
     /** The owning request's cancellation signal, forwarded to those probes. */
     signal?: AbortSignal;
@@ -163,10 +158,7 @@ function resolveExpectedDerivedPath(
       resolveExpectedRunnerCacheMetadata(device, undefined, budget),
     );
   } catch (error) {
-    // An unresolvable fingerprint is a miss the caller recovers from by starting
-    // fresh. A canceled request is not: the client that asked for this startup
-    // is gone, so it leaves through the catch rather than becoming one more
-    // reason to keep going.
+    // An unresolvable fingerprint is a miss the caller starts fresh from; a cancel is not.
     if (isRequestCanceledError(error)) throw error;
     return null;
   }

@@ -90,11 +90,7 @@ export async function ensureXctestrunArtifact(
   if (external) return external;
 
   const projectRoot = findProjectRoot();
-  // One clock for the whole build phase. The cache decision runs blocking
-  // toolchain probes before any build starts, so a cold probe's stall is time
-  // the build no longer has: both read this deadline rather than each starting
-  // from a fresh copy of `buildTimeoutMs` (#2422). The cache lock, the reuse
-  // evaluation, and the cleanup between them are on it too.
+  // One clock for the whole build phase: the toolchain probes and the xcodebuild share it.
   const phaseDeadline = createRunnerPhaseDeadline(options.buildTimeoutMs);
   const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot, {
     deadline: phaseDeadline,
@@ -260,10 +256,6 @@ async function buildXctestrunArtifact(params: {
     throw new AppError('COMMAND_FAILED', 'iOS runner project not found', { projectPath });
   }
 
-  // What the phase has left after the toolchain probes, the cache lock, and the
-  // reuse evaluation -- computed before the build announces itself, so a phase
-  // already spent fails here instead of starting an xcodebuild it would have to
-  // kill at once (#2422).
   const buildTimeoutMs = requireRunnerPhaseRemainingMs(
     phaseDeadline,
     options.buildTimeoutMs,

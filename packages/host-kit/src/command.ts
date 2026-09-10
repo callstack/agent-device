@@ -1,6 +1,5 @@
 export {
   coerceExecResult,
-  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   type CommandExecutorOverride,
   type ExecBackgroundOptions,
   type ExecBackgroundResult,

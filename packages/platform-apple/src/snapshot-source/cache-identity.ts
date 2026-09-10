@@ -1,10 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import {
-  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
-  isCommandTimeoutError,
-  type ExecResult,
-} from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -103,19 +100,9 @@ async function toolOutput(
 }
 
 /**
- * Runs one toolchain probe, retrying exactly once if the attempt timed out
- * and the deadline still has room. The retry absorbs the cold-start
- * signature-verification stall named on COLD_TOOLCHAIN_PROBE_TIMEOUT_MS: the
- * first exec of a tool on a fresh host can block for that long, but the
- * immediate next exec of the same tool is instant. Both attempts read one
- * deadline, so the retry gets what the stall left rather than a fresh ceiling.
- * Only the exec layer's own structured timeout counts -- a tool that failed by
- * itself and merely said "timed out" in its output is not this stall and is not
- * retried.
- *
- * A request canceled while the attempt blocked is the caller's own outcome, so
- * it is raised as this module's typed cancellation rather than as the timeout
- * that happened to be in flight when the abort landed.
+ * Retries exactly once, and only the exec layer's structured timeout: the stall
+ * {@link COLD_TOOLCHAIN_PROBE_TIMEOUT_MS} names clears on the next exec of the same tool.
+ * Both attempts read one deadline, so the retry gets what the stall left.
  */
 async function runToolchainProbe(
   host: SnapshotSourceHost,
