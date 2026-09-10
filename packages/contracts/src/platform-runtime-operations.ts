@@ -385,11 +385,11 @@ const selectorTextCaptureWithoutActiveAppUse = defineUse({
  */
 const waitSelectorCaptureUse = defineUse({
   required: ['captureSnapshot'],
-  conditional: ['findText', 'findSelector'],
+  conditional: ['findText'],
 });
 const waitSelectorCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-  conditional: ['findText', 'findSelector'],
+  conditional: ['findText'],
 });
 
 /**

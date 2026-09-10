@@ -222,7 +222,6 @@ export function createUnavailablePlatformRuntimeFacts(
       // sends every text wait to the canonical tree.
       ...selectorObservationRuntimeOperationFacts({
         findText: frozen.snapshot,
-        findSelector: frozen.snapshot,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
       ...focusRuntimeOperationFacts({ focus: frozen.focus }),

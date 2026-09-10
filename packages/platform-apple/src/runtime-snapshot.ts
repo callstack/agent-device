@@ -74,8 +74,8 @@ type SnapshotRuntimeOperation = Pick<
  *   observation never needs while the canonical tree comes from the host AX bridge. A runner that
  *   is already alive keeps answering.
  *
- * All report `found: false` — "not proven here" — never an error, so the caller's canonical tree
- * remains the complete path (ADR 0019 section 2).
+ * These admission refusals report `found: false`. Native execution can fail; the shared wait
+ * observation boundary defers those failures to canonical capture (ADR 0019 section 2).
  */
 export function bindAppleFindTextRuntime(
   host: PlatformRuntimeHost,

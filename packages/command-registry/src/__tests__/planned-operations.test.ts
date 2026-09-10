@@ -6,11 +6,12 @@ import { resolvePlannedRuntimeOperations } from '../planned-operations.ts';
 const steps = (...commands: string[]) =>
   commands.map((command) => ({ command, positionals: [], flags: {} }));
 
-test('observation commands require only capture and selector-observation operations', () => {
+test('observation plans require capture without the conditional native text operation', () => {
   const operations = resolvePlannedRuntimeOperations(steps('snapshot', 'wait', 'is', 'screenshot'));
   assert.ok(operations);
   assert.ok(operations.includes('captureSnapshot'));
   assert.ok(!operations.includes('captureSnapshotWithCustomActions'));
+  assert.ok(!operations.includes('findText'));
   for (const operation of operations) {
     assert.doesNotMatch(operation, /^(tap|fill|type|scroll|perform|hover|focus|longPress)/);
   }

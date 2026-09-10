@@ -198,8 +198,6 @@ function expectAppleSnapshotAvailability(
   // capture does; every other supported leaf advertises and binds it.
   expect(binding.facts.operations.readTextAtPoint.available).toBe(available);
   expect(binding.operations.readTextAtPoint).toBeTypeOf(available ? 'function' : 'undefined');
-  expect(binding.facts.operations.findSelector.available).toBe(false);
-  expect(binding.operations.findSelector).toBeUndefined();
 }
 
 test.each(Object.entries(leaves))(
@@ -604,7 +602,6 @@ function expectLegacyLifecycleFactCell(
     (facts.device.kind === 'simulator' || facts.device.kind === 'device');
   expect(facts.operations.captureSnapshot.available).toBe(snapshotAvailable);
   expect(facts.operations.readTextAtPoint.available).toBe(snapshotAvailable);
-  expect(facts.operations.findSelector.available).toBe(false);
 }
 
 // The macOS non-app surface branch calls `captureSurface` directly instead of going through

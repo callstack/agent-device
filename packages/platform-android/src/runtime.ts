@@ -309,7 +309,6 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // No native text reading: every text wait on this owner polls the canonical tree.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
-          findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),

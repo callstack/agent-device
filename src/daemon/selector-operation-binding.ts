@@ -6,20 +6,16 @@ import type {
 import type { FocusPointInput } from '@agent-device/contracts/focus-runtime';
 import type { TypeTextInput } from '@agent-device/contracts/type-text-runtime';
 import type {
-  FindSelectorInput,
-  FindSelectorRuntimeOperations,
   FindTextInput,
   FindTextRuntimeOperations,
 } from '@agent-device/contracts/selector-observation-runtime';
 
 export type BoundElementRead = ElementTextRuntimeOperations['readTextAtPoint'];
 export type BoundNativeTextRead = FindTextRuntimeOperations['findText'];
-export type BoundNativeSelectorRead = FindSelectorRuntimeOperations['findSelector'];
 
 type SelectorOperations = Readonly<{
   readTextAtPoint?: BoundElementRead;
   findText?: BoundNativeTextRead;
-  findSelector?: BoundNativeSelectorRead;
 }>;
 
 /** Projects the one preferred operation admitted for `get` and read-only `find`. */
@@ -40,31 +36,32 @@ export function selectElementTextOperation(
   );
 }
 
-/** Projects only the fact-conditional observations admitted for `wait`. */
+/** Native observation failures defer to canonical capture; cancellation remains terminal. */
 export function selectWaitObservationOperations(
   runtime: Readonly<{
     operations: Readonly<{
       findText?: BoundNativeTextRead;
-      findSelector?: BoundNativeSelectorRead;
     }>;
   }>,
-): Pick<SelectorOperations, 'findText' | 'findSelector'> {
-  const { findText, findSelector } = runtime.operations;
-  const selectedText = findText ? { operations: { findText } } : undefined;
-  const selectedSelector = findSelector ? { operations: { findSelector } } : undefined;
-  return Object.freeze({
-    ...(selectedText
+): Pick<SelectorOperations, 'findText'> {
+  const { findText } = runtime.operations;
+  return Object.freeze(
+    findText
       ? {
-          findText: async (input: FindTextInput) => await selectedText.operations.findText(input),
+          findText: async (input: FindTextInput) => {
+            input.signal?.throwIfAborted();
+            try {
+              const result = await findText(input);
+              input.signal?.throwIfAborted();
+              return result;
+            } catch {
+              input.signal?.throwIfAborted();
+              return { found: false };
+            }
+          },
         }
-      : {}),
-    ...(selectedSelector
-      ? {
-          findSelector: async (input: FindSelectorInput) =>
-            await selectedSelector.operations.findSelector(input),
-        }
-      : {}),
-  });
+      : {},
+  );
 }
 
 /** find's directly-executed mutating operations, projected from its one action-selected bind. */

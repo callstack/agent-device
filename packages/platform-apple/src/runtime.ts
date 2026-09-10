@@ -180,12 +180,6 @@ const snapshotActiveAppRequired = Object.freeze({
   reason: 'owner-capability-missing',
   hint: 'Open the app under test before capturing its snapshot.',
 } as const);
-const nativeSelectorUnavailable = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'Apple selector observations use canonical snapshot capture.',
-} as const);
-
 function unsupportedAppleDeviceKind(hint: string) {
   return Object.freeze({ available: false, reason: 'unsupported-device-kind', hint } as const);
 }
@@ -299,7 +293,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...selectorObservationRuntimeOperationFacts({
           findText: appleSnapshotFact(device),
-          findSelector: nativeSelectorUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),

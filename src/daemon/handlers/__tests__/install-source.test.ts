@@ -359,7 +359,6 @@ function sourceRuntimeFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
       findText: unavailable,
-      findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,

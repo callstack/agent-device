@@ -377,7 +377,6 @@ function webRuntimeFacts(
       // No native text reading: every text wait on this owner polls the canonical tree.
       ...selectorObservationRuntimeOperationFacts({
         findText: openTargetKindUnavailable,
-        findSelector: openTargetKindUnavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
       ...focusRuntimeOperationFacts({ focus: browserDevice }),
