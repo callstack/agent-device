@@ -239,8 +239,8 @@ test('growth shared by two entries names the merge-base modules they already hav
 
   const shared = describeSharedGrowthHomes(
     [
-      { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA },
-      { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB },
+      { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size + 1 },
+      { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB, headClosureSize: graphB.size + 1 },
     ],
     '/repo',
   );
@@ -257,11 +257,102 @@ test('growth that no other entry shares produces no shared-homes note', () => {
   const graphA = new Map<string, string | null>([['/repo/entry-a.ts', null]]);
   expect(
     describeSharedGrowthHomes(
-      [{ id: 'entry-a.ts', added: ['/repo/new.ts'], baseGraph: graphA }],
+      [{ id: 'entry-a.ts', added: ['/repo/new.ts'], baseGraph: graphA, headClosureSize: 2 }],
       '/repo',
     ),
     'nothing to aggregate when only one entry grew by this module',
   ).toBeNull();
+});
+
+test('an equal-size replacement is not growth, so the aggregate stays silent', () => {
+  // #2471's review: the aggregate used to take every entry with a newly evaluated module, which is
+  // not the condition the per-entry rule applies. Both entries below swapped one module for
+  // another -- same closure size, one module the merge-base did not evaluate, and the SAME one, so
+  // the grouping would fire. `classifyGrowth` passes both, so this must print nothing at all.
+  const addedFile = '/repo/packages/demo/src/new-thing.ts';
+  const sharedHome = '/repo/packages/demo/src/shared-home.ts';
+  const graphA = new Map<string, string | null>([
+    ['/repo/entry-a.ts', null],
+    [sharedHome, '/repo/entry-a.ts'],
+    ['/repo/packages/demo/src/dropped-by-a.ts', '/repo/entry-a.ts'],
+  ]);
+  const graphB = new Map<string, string | null>([
+    ['/repo/entry-b.ts', null],
+    [sharedHome, '/repo/entry-b.ts'],
+    ['/repo/packages/demo/src/dropped-by-b.ts', '/repo/entry-b.ts'],
+  ]);
+
+  expect(classifyGrowth('entry-a.ts', graphA.size, graphA.size)).toBeNull();
+  expect(classifyGrowth('entry-b.ts', graphB.size, graphB.size)).toBeNull();
+  expect(
+    describeSharedGrowthHomes(
+      [
+        { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size },
+        { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB, headClosureSize: graphB.size },
+      ],
+      '/repo',
+    ),
+    'a swap at equal size is no violation: the aggregate may not fail where the rule passes',
+  ).toBeNull();
+  expect(
+    describeSharedGrowthHomes(
+      [
+        { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size },
+        {
+          id: 'entry-b.ts',
+          added: [addedFile],
+          baseGraph: graphB,
+          headClosureSize: graphB.size - 1,
+        },
+      ],
+      '/repo',
+    ),
+    'a closure that shrank while adding a module is likewise not growth',
+  ).toBeNull();
+});
+
+test('disjoint growth groups keep their own entries and homes in separate blocks', () => {
+  // #2471's review: candidate homes from separate added-module groups were unioned into one list
+  // labelled as common to every failing entry, which is false as soon as two groups exist. Both
+  // added modules live in the same package here, so only the grouping -- not the package scope --
+  // can keep them apart: new-x.ts grew a1/a2, new-y.ts grew b1/b2, and no closure is shared.
+  const addedX = '/repo/packages/demo/src/new-x.ts';
+  const addedY = '/repo/packages/demo/src/new-y.ts';
+  const homeX = '/repo/packages/demo/src/home-x.ts';
+  const homeY = '/repo/packages/demo/src/home-y.ts';
+  const growth = (id: string, added: string, home: string) => {
+    const entryPath = `/repo/${id}`;
+    const baseGraph = new Map<string, string | null>([
+      [entryPath, null],
+      [home, entryPath],
+    ]);
+    return { id, added: [added], baseGraph, headClosureSize: baseGraph.size + 1 };
+  };
+
+  const shared = describeSharedGrowthHomes(
+    [
+      growth('entry-a1.ts', addedX, homeX),
+      growth('entry-a2.ts', addedX, homeX),
+      growth('entry-b1.ts', addedY, homeY),
+      growth('entry-b2.ts', addedY, homeY),
+    ],
+    '/repo',
+  );
+
+  const blocks = (shared ?? '').split('\n\n');
+  expect(blocks, 'one block per added module, never one merged list').toHaveLength(2);
+  const blockX = blocks.find((block) => block.startsWith('packages/demo/src/new-x.ts')) ?? '';
+  const blockY = blocks.find((block) => block.startsWith('packages/demo/src/new-y.ts')) ?? '';
+
+  expect(blockX, 'each entry is named with how much it grew').toContain('entry-a1.ts (+1)');
+  expect(blockX).toContain('entry-a2.ts (+1)');
+  expect(blockX).toContain('packages/demo/src/home-x.ts');
+  expect(blockX, 'b1/b2 did not grow by new-x.ts').not.toContain('entry-b1.ts');
+  expect(blockX, 'no entry that grew by new-x.ts evaluates home-y.ts').not.toContain('home-y.ts');
+  expect(blockY).toContain('entry-b1.ts (+1)');
+  expect(blockY).toContain('packages/demo/src/home-y.ts');
+  expect(blockY, 'a1/a2 did not grow by new-y.ts').not.toContain('entry-a1.ts');
+  expect(blockY, 'no entry that grew by new-y.ts evaluates home-x.ts').not.toContain('home-x.ts');
 });
 
 /**
@@ -516,11 +607,16 @@ test('entries that grow by the same new module report shared merge-base homes on
   // #2423's review: when several entries grow because they all reached the same new module, the
   // per-entry test above already fails once per entry -- this adds ONE more diagnostic naming the
   // modules they already have in common, instead of leaving a reader to notice the repetition
-  // across several separate failures by hand. It can only fail alongside at least two already-red
-  // entries above, so it never changes the gate's own pass/fail verdict.
-  const growths = carriedGrowth
-    .filter((growth) => growth.added.length > 0)
-    .map((growth) => ({ id: growth.entry.id, added: growth.added, baseGraph: growth.baseGraph }));
+  // across several separate failures by hand. Every carried entry is handed over with its head
+  // closure size, and the aggregation itself keeps only the ones the no-growth rule fails
+  // (#2471 review) -- so it can only fail alongside at least two already-red entries above and
+  // never changes the gate's own pass/fail verdict.
+  const growths = carriedGrowth.map((growth) => ({
+    id: growth.entry.id,
+    added: growth.added,
+    baseGraph: growth.baseGraph,
+    headClosureSize: growth.graph.size,
+  }));
   const shared = describeSharedGrowthHomes(growths, repoRoot);
   expect(
     shared,

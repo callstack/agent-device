@@ -492,10 +492,40 @@ export type GrowthForAggregation = {
   added: readonly string[];
   /** This entry's merge-base closure graph -- gives both membership and forward edges. */
   baseGraph: ReadonlyMap<string, string | null>;
+  /**
+   * This entry's head closure size, so the aggregation can apply the same condition
+   * `classifyGrowth` does: an entry only grew when this exceeds `baseGraph.size`. A closure that
+   * swapped one module for another, or shrank while adding one, has newly evaluated modules and
+   * no growth -- `classifyGrowth` passes it, so nothing here may report it (#2471 review).
+   */
+  headClosureSize: number;
 };
 
-/** How many candidate homes `describeSharedGrowthHomes` names before it just counts the rest. */
+/** How many candidate homes one added-module block names before it just counts the rest. */
 const MAX_SHARED_HOMES = 30;
+
+/** How many added-module blocks the whole note prints before it just counts the rest. */
+const MAX_SHARED_GROUPS = 5;
+
+/** How many grown entries one block names before it just counts the rest. */
+const MAX_GROUP_ENTRIES = 8;
+
+/**
+ * One added module with the entries that grew by it and the merge-base modules exactly those
+ * entries share. Groups stay separate all the way to the message: a home common to one group's
+ * entries says nothing about another group's, so unioning them would label modules as common to
+ * entries that never evaluate them (#2471 review).
+ */
+type SharedGrowthGroup = {
+  addedModule: string;
+  entries: readonly GrowthForAggregation[];
+  homes: readonly string[];
+};
+
+/** How many modules an entry evaluates beyond its merge-base closure; `<= 0` is not growth. */
+function netGrowth(growth: GrowthForAggregation): number {
+  return growth.headClosureSize - growth.baseGraph.size;
+}
 
 /**
  * The workspace package (or the root `src/` mechanics tree) a repo-relative path lives under --
@@ -520,67 +550,24 @@ function hasNoInPackageChild(
   return true;
 }
 
-/** Every entry that grew, indexed by each of its added modules -- one entry may appear under several. */
-function groupGrowthsByAddedModule(
+/**
+ * Every entry that actually GREW, indexed by each of its added modules -- one entry may appear
+ * under several. Entries whose head closure is no larger than their merge-base one are dropped
+ * here, which is what keeps the aggregation from reporting a swap the per-entry rule passes.
+ */
+function growthsByAddedModule(
   growths: readonly GrowthForAggregation[],
 ): Map<string, GrowthForAggregation[]> {
-  const entriesByAddedModule = new Map<string, GrowthForAggregation[]>();
+  const byAddedModule = new Map<string, GrowthForAggregation[]>();
   for (const growth of growths) {
+    if (netGrowth(growth) <= 0) continue;
     for (const added of growth.added) {
-      const group = entriesByAddedModule.get(added);
+      const group = byAddedModule.get(added);
       if (group) group.push(growth);
-      else entriesByAddedModule.set(added, [growth]);
+      else byAddedModule.set(added, [growth]);
     }
   }
-  return entriesByAddedModule;
-}
-
-/**
- * One added-module group's contribution to the candidate homes: when at least two entries grew
- * by `added`, every merge-base module the first entry evaluates that is (a) in the added
- * module's own package, (b) not already claimed as a home for a different added module, and (c)
- * also evaluated by every other entry in the group, is recorded as a home -- mutating
- * `homePackage` and `homeGraph` in place.
- */
-function collectSharedHomesForGroup(
-  added: string,
-  group: readonly GrowthForAggregation[],
-  repoRoot: string,
-  homePackage: Map<string, string>,
-  homeGraph: Map<string, ReadonlyMap<string, string | null>>,
-): void {
-  if (group.length < 2) return;
-  const [first, ...rest] = group;
-  if (!first) return;
-  const pkg = packageOf(path.relative(repoRoot, added));
-  for (const candidate of first.baseGraph.keys()) {
-    if (homePackage.has(candidate)) continue;
-    if (packageOf(path.relative(repoRoot, candidate)) !== pkg) continue;
-    if (!rest.every((other) => other.baseGraph.has(candidate))) continue;
-    homePackage.set(candidate, pkg);
-    homeGraph.set(candidate, first.baseGraph);
-  }
-}
-
-/**
- * For each added module shared by two or more entries, the modules every one of those entries
- * already evaluates at the merge-base, scoped to the added module's own package -- the candidate
- * homes a shared symbol could plausibly move into. A module already claimed as a home for one
- * added module is not reconsidered for another.
- */
-function sharedGrowthHomeCandidates(
-  entriesByAddedModule: ReadonlyMap<string, readonly GrowthForAggregation[]>,
-  repoRoot: string,
-): {
-  homePackage: Map<string, string>;
-  homeGraph: Map<string, ReadonlyMap<string, string | null>>;
-} {
-  const homePackage = new Map<string, string>();
-  const homeGraph = new Map<string, ReadonlyMap<string, string | null>>();
-  for (const [added, group] of entriesByAddedModule) {
-    collectSharedHomesForGroup(added, group, repoRoot, homePackage, homeGraph);
-  }
-  return { homePackage, homeGraph };
+  return byAddedModule;
 }
 
 /**
@@ -589,34 +576,80 @@ function sharedGrowthHomeCandidates(
  * closure -- then alphabetically by repo-relative path.
  */
 function sortHomesLeavesFirst(
-  homePackage: ReadonlyMap<string, string>,
-  homeGraph: ReadonlyMap<string, ReadonlyMap<string, string | null>>,
+  homes: readonly string[],
+  pkg: string,
+  graph: ReadonlyMap<string, string | null>,
   repoRoot: string,
 ): string[] {
-  const isLeaf = (candidate: string): boolean =>
-    hasNoInPackageChild(
-      candidate,
-      homePackage.get(candidate) as string,
-      homeGraph.get(candidate) as ReadonlyMap<string, string | null>,
-      repoRoot,
-    );
-  return [...homePackage.keys()].sort((left, right) => {
-    const leftLeaf = isLeaf(left);
-    const rightLeaf = isLeaf(right);
+  return [...homes].sort((left, right) => {
+    const leftLeaf = hasNoInPackageChild(left, pkg, graph, repoRoot);
+    const rightLeaf = hasNoInPackageChild(right, pkg, graph, repoRoot);
     if (leftLeaf !== rightLeaf) return leftLeaf ? -1 : 1;
     return path.relative(repoRoot, left).localeCompare(path.relative(repoRoot, right));
   });
 }
 
-/** Renders the sorted candidate homes as the bounded, capped message block. */
-function formatSharedGrowthHomes(sortedHomes: readonly string[], repoRoot: string): string {
-  const shown = sortedHomes.slice(0, MAX_SHARED_HOMES);
-  const hidden = sortedHomes.length - shown.length;
-  const lines = shown.map((file) => `  ${path.relative(repoRoot, file)}`);
+/**
+ * The merge-base modules every entry in `group` already evaluates, scoped to the added module's
+ * own package -- the candidate homes a shared symbol could plausibly move into, for this group
+ * only.
+ */
+function sharedHomesForGroup(
+  addedModule: string,
+  group: readonly GrowthForAggregation[],
+  repoRoot: string,
+): string[] {
+  const [first, ...rest] = group;
+  if (!first) return [];
+  const pkg = packageOf(path.relative(repoRoot, addedModule));
+  const homes = [...first.baseGraph.keys()].filter(
+    (candidate) =>
+      packageOf(path.relative(repoRoot, candidate)) === pkg &&
+      rest.every((other) => other.baseGraph.has(candidate)),
+  );
+  return sortHomesLeavesFirst(homes, pkg, first.baseGraph, repoRoot);
+}
+
+/** Every added module two or more grown entries share and that has at least one candidate home. */
+function sharedGrowthGroups(
+  growths: readonly GrowthForAggregation[],
+  repoRoot: string,
+): SharedGrowthGroup[] {
+  const groups: SharedGrowthGroup[] = [];
+  for (const [addedModule, entries] of growthsByAddedModule(growths)) {
+    if (entries.length < 2) continue;
+    const homes = sharedHomesForGroup(addedModule, entries, repoRoot);
+    if (homes.length > 0) groups.push({ addedModule, entries, homes });
+  }
+  return groups;
+}
+
+/** The grown entries of one group with how much each grew, bounded to `MAX_GROUP_ENTRIES`. */
+function formatGrownEntries(entries: readonly GrowthForAggregation[]): string {
+  const shown = entries
+    .slice(0, MAX_GROUP_ENTRIES)
+    .map((entry) => `${entry.id} (+${netGrowth(entry)})`);
+  const hidden = entries.length - shown.length;
+  const more = hidden > 0 ? `, and ${hidden} more entry(ies)` : '';
+  return `${shown.join(', ')}${more}`;
+}
+
+/** One group's candidate homes, one per indented line, bounded to `MAX_SHARED_HOMES`. */
+function formatCandidateHomes(homes: readonly string[], repoRoot: string): string {
+  const shown = homes.slice(0, MAX_SHARED_HOMES);
+  const hidden = homes.length - shown.length;
   const more = hidden > 0 ? `\n  (+${hidden} more)` : '';
+  return `${shown.map((file) => `  ${path.relative(repoRoot, file)}`).join('\n')}${more}`;
+}
+
+/** One added module's block: what grew by it, and the homes those same entries already evaluate. */
+function formatSharedGrowthGroup(group: SharedGrowthGroup, repoRoot: string): string {
+  const added = path.relative(repoRoot, group.addedModule);
   return (
-    'Modules every failing entry already evaluates (possible homes for a shared symbol; not a ' +
-    `statement that any of them is the right owner):\n${lines.join('\n')}${more}`
+    `${added} -- newly evaluated by ${formatGrownEntries(group.entries)}\n` +
+    `Entries that grew by ${added} already evaluate these modules at the merge-base (possible ` +
+    `homes for a shared symbol; not a statement of ownership):\n` +
+    formatCandidateHomes(group.homes, repoRoot)
   );
 }
 
@@ -632,22 +665,28 @@ function formatSharedGrowthHomes(sortedHomes: readonly string[], repoRoot: strin
  * a module already imported eagerly wherever it was needed; the fix was moving the constant
  * there. Nothing in any one entry's own message could show that shape, because each entry's
  * diagnostic only ever describes that one entry's own closure. This runs once, after every entry
- * has been evaluated, and is silent (`null`) unless at least two entries actually share an added
- * module and that intersection is non-empty.
+ * has been evaluated, and is silent (`null`) unless at least two entries that actually GREW share
+ * an added module and their merge-base intersection is non-empty.
  *
- * Sorted with modules that have no in-package eager import of their own first when that is cheap
- * to compute -- it already is here, since a candidate's forward edges are read straight off the
- * base graph that produced it, no extra tree read required -- because a leaf module is the safer
- * home: adding a symbol to it cannot itself grow anyone else's closure.
+ * One block per added module (#2471 review). Two properties the shape has to keep: an entry whose
+ * closure did not grow contributes nothing however many modules are new to it, and a home is only
+ * ever printed under the added module whose grown entries all evaluate it -- never unioned across
+ * groups and labelled as common to every failing entry.
+ *
+ * Homes are sorted with modules that have no in-package eager import of their own first -- it is
+ * cheap here, since a candidate's forward edges are read straight off the base graph that
+ * produced it, no extra tree read required -- because a leaf module is the safer home: adding a
+ * symbol to it cannot itself grow anyone else's closure.
  */
 export function describeSharedGrowthHomes(
   growths: readonly GrowthForAggregation[],
   repoRoot: string,
 ): string | null {
-  const entriesByAddedModule = groupGrowthsByAddedModule(growths);
-  const { homePackage, homeGraph } = sharedGrowthHomeCandidates(entriesByAddedModule, repoRoot);
-  if (homePackage.size === 0) return null;
-
-  const sorted = sortHomesLeavesFirst(homePackage, homeGraph, repoRoot);
-  return formatSharedGrowthHomes(sorted, repoRoot);
+  const groups = sharedGrowthGroups(growths, repoRoot);
+  if (groups.length === 0) return null;
+  const shown = groups.slice(0, MAX_SHARED_GROUPS);
+  const hidden = groups.length - shown.length;
+  const blocks = shown.map((group) => formatSharedGrowthGroup(group, repoRoot));
+  if (hidden > 0) blocks.push(`(+${hidden} more added module(s) shared by two or more entries)`);
+  return blocks.join('\n\n');
 }
