@@ -36,6 +36,11 @@ test('package apple runner source strips unit-test blocks without mutating check
   assert.doesNotMatch(packagedSwift, /unitOnlyHelper/);
   assert.match(packagedSwift, /runtimeHelper/);
   assert.match(packagedSwift, /#if os\(macOS\)/);
+  assert.match(sourceSwift, /Doc comment/);
+  assert.doesNotMatch(packagedSwift, /Doc comment/);
+  assert.doesNotMatch(packagedSwift, /Packaged source carries no prose/);
+  assert.doesNotMatch(packagedSwift, /trailing note/);
+  assert.match(packagedSwift, /let endpoint = "https:\/\/example\.com\/path"\n/);
   assert.ok(
     fs.existsSync(
       path.join(root, 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj'),
@@ -186,6 +191,33 @@ test('package apple runner source allows only the runner entrypoint test method'
   assert.match(rejected.stderr, /testExtraEntrypoint/);
 });
 
+test('package apple runner source judges shipped test methods after comments are removed', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-commented-test-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    ['extension RunnerTests {', '  // func testCommentedOut() {}', '}', ''].join('\n'),
+  );
+
+  // The guard asks what the npm package contains, so a method that only exists in prose is not
+  // a shipped test method — the prose does not reach the package either.
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    fs.readFileSync(
+      path.join(
+        root,
+        'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+      ),
+      'utf8',
+    ),
+    'extension RunnerTests {\n}\n',
+  );
+});
+
 test('package apple runner source removes legacy dist/apple-runner output before shipping', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-legacy-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -320,8 +352,11 @@ function writeStripFixtureTree(root: string): void {
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
     [
+      '// Packaged source carries no prose.',
       'extension RunnerTests {',
+      '  /// Doc comment.',
       '  func runtimeHelper() {}',
+      '  let endpoint = "https://example.com/path"  // trailing note',
       '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
       '  func unitOnlyHelper() {',
       '    #if os(iOS)',

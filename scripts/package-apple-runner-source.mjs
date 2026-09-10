@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripSwiftComments } from './strip-swift-comments.mjs';
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
@@ -52,6 +53,8 @@ function packageAppleRunnerSource(options = {}) {
     copiedFiles: 0,
     strippedFiles: 0,
     strippedBlocks: 0,
+    strippedComments: 0,
+    strippedCommentBytes: 0,
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary);
@@ -210,15 +213,22 @@ function validateFile(sourcePath, relativePath, summary, options) {
   return validateSwiftFile(sourcePath, relativePath, summary);
 }
 
+// The unit-test strip runs first and stays line-based, so which blocks it removes does not depend
+// on comment removal. The comment scanner then reads Swift that is already in its shipped shape,
+// and the shipped-test-method guard sees exactly the text the package will contain.
 function validateSwiftFile(sourcePath, relativePath, summary) {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const stripped = stripRunnerUnitTestBlocks(source, sourcePath);
-  assertNoShippedTestMethods(stripped.contents, relativePath);
+  const withoutComments = stripSwiftComments(stripped.contents, sourcePath);
+  assertNoShippedTestMethods(withoutComments.contents, relativePath);
   if (stripped.strippedBlocks > 0) {
     summary.strippedFiles += 1;
     summary.strippedBlocks += stripped.strippedBlocks;
   }
-  return stripped;
+  summary.strippedComments += withoutComments.removedComments;
+  summary.strippedCommentBytes +=
+    Buffer.byteLength(stripped.contents) - Buffer.byteLength(withoutComments.contents);
+  return { contents: withoutComments.contents, strippedBlocks: stripped.strippedBlocks };
 }
 
 function assertNoShippedTestMethods(strippedContents, relativePath) {
@@ -323,7 +333,8 @@ if (isMainModule()) {
       const relativeOutput = path.relative(path.resolve(options.root), summary.outputRoot);
       console.log(
         `Packaged Apple runner source at ${relativeOutput} ` +
-          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks).`,
+          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks ` +
+          `and ${summary.strippedComments} comments worth ${summary.strippedCommentBytes} bytes).`,
       );
     }
   }
