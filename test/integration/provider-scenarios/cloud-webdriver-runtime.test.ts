@@ -396,9 +396,8 @@ function assertWebDriverCalls(calls: readonly CloudWebDriverHttpCall[], leaseId:
       alwaysMatch: {
         platformName: 'Android',
         'appium:deviceName': 'Google Pixel 8',
-        device: 'Google Pixel 8',
-        os_version: '14.0',
-        app: 'bs://app-id',
+        'appium:platformVersion': '14.0',
+        'appium:app': 'bs://app-id',
         'bstack:options': {
           projectName: 'agent-device',
           buildName: 'run-a',

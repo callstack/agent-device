@@ -222,14 +222,22 @@ export function createBrowserStackUploadApp(
   };
 }
 
+/**
+ * Builds the BrowserStack session capabilities.
+ *
+ * The payload is W3C-only. Emitting the legacy JSONWP keys (`device`, `os_version`, `app`) alongside
+ * `platformName`/`appium:*` makes BrowserStack resolve the ambiguity as JSONWP and discard
+ * `bstack:options` wholesale — taking the project/build/session labels and every device-feature
+ * capability with it, with no error on the wire.
+ */
 export function buildBrowserStackCapabilities(
   options: BrowserStackCapabilitiesOptions,
 ): Record<string, unknown> {
   const { 'bstack:options': configuredBstackOptions, ...configured } = options.configured ?? {};
   return {
-    device: options.deviceName,
-    os_version: options.osVersion,
-    ...(options.app ? { app: options.app } : {}),
+    'appium:deviceName': options.deviceName,
+    'appium:platformVersion': options.osVersion,
+    ...(options.app ? { 'appium:app': options.app } : {}),
     ...configured,
     // Merged per key, never assigned: `configured` carrying its own `bstack:options` used to
     // replace the whole object and silently drop the session/build labels below.

@@ -390,9 +390,8 @@ function assertBrowserStackCalls(
       alwaysMatch: {
         platformName: 'Android',
         'appium:deviceName': 'Google Pixel 8',
-        device: 'Google Pixel 8',
-        os_version: '14.0',
-        app: 'bs://preuploaded',
+        'appium:platformVersion': '14.0',
+        'appium:app': 'bs://preuploaded',
         'bstack:options': {
           projectName: 'agent-device',
           buildName: `build-${lease.runId}`,
