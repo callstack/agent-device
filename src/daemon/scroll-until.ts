@@ -55,9 +55,7 @@ export type ScrollUntilCapture = {
 };
 
 /** Why a capture cannot answer the `--until` question at all. Never an outcome about the content. */
-export type ScrollUntilCaptureRefusal = { reason: 'no-capture' | 'sparse-tree'; detail: string };
-
-export type ScrollUntilOutcome = 'matched' | 'edge-reached' | 'pass-limit';
+type ScrollUntilCaptureRefusal = { reason: 'no-capture' | 'sparse-tree'; detail: string };
 
 /**
  * Scrolls until the selector matches a node that is on screen.
@@ -196,7 +194,7 @@ function canonicalCapture(capture: ScrollUntilCapture): {
 function scrollUntilNotFoundError(
   direction: ScrollDirection,
   selector: string,
-  outcome: Exclude<ScrollUntilOutcome, 'matched'>,
+  outcome: 'edge-reached' | 'pass-limit',
   passes: number,
 ): AppError {
   const spent = `${passes} ${passes === 1 ? 'pass' : 'passes'}`;
