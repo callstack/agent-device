@@ -250,3 +250,60 @@ test('a resolved reused request is named, not counted as unnamed', () => {
   assert.equal(dump.unnamedRequests, 0);
   assert.equal(dump.entries.filter((entry) => entry.pathUnavailable).length, 1);
 });
+
+function withProcess(line: string, process: string): string {
+  const swapped = line.replace(/spicygolf\[\d+:[0-9a-f]+\]/, process);
+  if (swapped === line) throw new Error('fixture process token not found');
+  return swapped;
+}
+
+test('a recycled connection number does not inherit the origin of a previous process', () => {
+  const relaunchedSummary = REUSED_SUMMARY.replace(
+    'spicygolf[33656:4505ae4]',
+    'spicygolf[40001:4505ae4]',
+  );
+  const dump = iosDump([CONNECTION_START, relaunchedSummary]);
+
+  assert.deepEqual(
+    dump.entries.filter((entry) => entry.pathUnavailable),
+    [],
+  );
+  assert.equal(dump.unnamedRequests, 1);
+});
+
+test('a connection number is resolved within the process that opened it', () => {
+  const otherProcessStart = withProcess(CONNECTION_START, 'otherapp[40001:4505afd]').replace(
+    'url: http://localhost:3040/v4/messages/en_US',
+    'url: https://wrong.example.test/x',
+  );
+  const dump = iosDump([otherProcessStart, CONNECTION_START, REUSED_SUMMARY]);
+
+  assert.equal(dump.entries.find((entry) => entry.pathUnavailable)?.url, 'http://localhost:3040');
+});
+
+test('a line with no readable process identity leaves its traffic unnamed', () => {
+  const dump = iosDump([
+    CONNECTION_START.replace('spicygolf[33656:4505afd]', 'spicygolf'),
+    REUSED_SUMMARY.replace('spicygolf[33656:4505ae4]', 'spicygolf'),
+  ]);
+
+  assert.deepEqual(
+    dump.entries.filter((entry) => entry.pathUnavailable),
+    [],
+  );
+  assert.equal(dump.unnamedRequests, 1);
+});
+
+test('a URL whose path ends in punctuation is not truncated into a different endpoint', () => {
+  const dump = iosDump([
+    '2026-09-09 18:22:27.805 Df app[1:2] [com.example:Default] GET https://example.test/release. status=200',
+  ]);
+
+  assert.equal(dump.entries[0]?.url, 'https://example.test/release.');
+});
+
+test('a delimited url: field drops the separator the format put after it', () => {
+  const dump = iosDump([CONNECTION_START]);
+
+  assert.equal(dump.entries[0]?.url, 'http://localhost:3040/v4/messages/en_US');
+});

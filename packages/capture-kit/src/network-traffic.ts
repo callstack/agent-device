@@ -23,6 +23,14 @@ const METHOD_WITH_URL_REGEX = new RegExp(`\\b(${HTTP_METHODS.join('|')})\\b\\s+h
 const URL_REGEX = /https?:\/\/[^\s"'<>\])]+/i;
 const CFNETWORK_CONNECTION_URL = /\[C(\d+)\b[^\]]*?\burl:\s*([^\s,\]]+)/;
 const CFNETWORK_TASK_SUMMARY = /\bsummary for task (?:success|failure)\s*\{([^}]*)\}/;
+// `name[pid:tid]` in the compact unified-log prefix. Connection numbers restart
+// per process, so a number alone would let a relaunched app inherit the origin
+// its predecessor opened; the pid is what keeps those apart.
+const LOG_PROCESS_IDENTITY = /(?:^|\s)(\S+)\[(\d+):[0-9a-f]+\]/;
+// `url: <value>,` is a delimited field, so the separator belongs to the format
+// rather than to the URL. A bare URL elsewhere keeps whatever it matched, since
+// nothing there establishes that trailing punctuation is not part of the path.
+const URL_FIELD = /\burl:\s*(https?:\/\/[^\s,\]]+)/i;
 
 /** Connection openings in scan order, so a recycled number resolves to its most recent opening. */
 type CfNetworkConnectionIndex = ReadonlyMap<
@@ -182,10 +190,7 @@ function parseNetworkUrl(
 ): string | undefined {
   const json = readNetworkJsonString(maybeJson, ['url', 'requestUrl']);
   if (json) return json;
-  const matched = URL_REGEX.exec(line)?.[0];
-  // A URL logged mid-sentence carries the separator that follows it, and an
-  // equality check against the endpoint under test fails on the stray byte.
-  return matched === undefined ? undefined : matched.replace(/[,.;:]+$/, '');
+  return URL_FIELD.exec(line)?.[1] ?? URL_REGEX.exec(line)?.[0];
 }
 
 function parseNetworkStatus(
@@ -288,13 +293,25 @@ function indexCfNetworkConnections(lines: readonly string[]): CfNetworkConnectio
   for (const [lineIndex, line] of lines.entries()) {
     const match = CFNETWORK_CONNECTION_URL.exec(line);
     if (!match) continue;
-    const origin = readCfNetworkOrigin(match[2] as string);
-    if (!origin) continue;
-    const openings = index.get(match[1] as string);
+    const key = cfNetworkConnectionKey(line, match[1] as string);
+    const origin = key === undefined ? undefined : readCfNetworkOrigin(match[2] as string);
+    if (!origin || key === undefined) continue;
+    const openings = index.get(key);
     if (openings) openings.push({ lineIndex, origin });
-    else index.set(match[1] as string, [{ lineIndex, origin }]);
+    else index.set(key, [{ lineIndex, origin }]);
   }
   return index;
+}
+
+/**
+ * A connection is only the same connection within one process. A line whose
+ * process cannot be read correlates to nothing, so its traffic stays unnamed
+ * rather than borrowing an origin the app never contacted.
+ */
+function cfNetworkConnectionKey(line: string, connection: string): string | undefined {
+  const process = LOG_PROCESS_IDENTITY.exec(line);
+  if (!process) return undefined;
+  return `${process[1]}[${process[2]}]#${connection}`;
 }
 
 function parseCfNetworkReusedTaskIdentity(
@@ -309,8 +326,8 @@ function parseCfNetworkReusedTaskIdentity(
   // for it is already in the log and this summary would only duplicate it.
   if (fields.get('reused') !== '1') return null;
   const connection = fields.get('connection');
-  if (connection === undefined) return null;
-  const origin = resolveCfNetworkOrigin(index, connection, lineIndex);
+  const key = connection === undefined ? undefined : cfNetworkConnectionKey(line, connection);
+  const origin = key === undefined ? undefined : resolveCfNetworkOrigin(index, key, lineIndex);
   if (!origin) return null;
   return {
     url: origin,
@@ -332,7 +349,8 @@ function countUnnamedCfNetworkRequests(
     const fields = readCfNetworkSummaryFields(summary[1] as string);
     if (fields.get('reused') !== '1') continue;
     const connection = fields.get('connection');
-    if (connection !== undefined && resolveCfNetworkOrigin(index, connection, lineIndex)) continue;
+    const key = connection === undefined ? undefined : cfNetworkConnectionKey(line, connection);
+    if (key !== undefined && resolveCfNetworkOrigin(index, key, lineIndex)) continue;
     unnamed += 1;
   }
   return unnamed;
@@ -340,10 +358,10 @@ function countUnnamedCfNetworkRequests(
 
 function resolveCfNetworkOrigin(
   index: CfNetworkConnectionIndex,
-  connection: string,
+  key: string,
   lineIndex: number,
 ): string | undefined {
-  const openings = index.get(connection);
+  const openings = index.get(key);
   if (!openings) return undefined;
   let resolved: string | undefined;
   for (const opening of openings) {

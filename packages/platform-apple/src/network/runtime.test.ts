@@ -257,3 +257,48 @@ test('a keep-alive request whose connection predates the window keeps the dump f
   ]);
   expect(result.notes[0]).toContain('does not prove it was not called');
 });
+
+test('simulator recovery keeps traffic it saw but could not name', async () => {
+  const runSimctl = vi.fn(async () => ({
+    stdout: ['Timestamp               Ty Process[PID:TID]', REUSED_SUMMARY].join('\n'),
+    stderr: '',
+    exitCode: 0,
+  }));
+  const result = await dumpAppleNetworkTraffic(
+    host({ text: '', runSimctl }),
+    simulator,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.entries).toEqual([]);
+  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.notes).toEqual([
+    expect.stringContaining('1 opened before this scan window'),
+    expect.stringContaining('No HTTP(s) entries were found'),
+  ]);
+  expect(result.notes.join(' ')).not.toContain('none looked like HTTP traffic');
+});
+
+test('recovery-only traffic that cannot be named is still reported, not called empty', async () => {
+  const runSimctl = vi.fn(async () => ({
+    stdout: ['Timestamp               Ty Process[PID:TID]', REUSED_SUMMARY].join('\n'),
+    stderr: '',
+    exitCode: 0,
+  }));
+  const result = await dumpAppleNetworkTraffic(
+    host({ text: '', runSimctl }),
+    simulator,
+    input({ appLogSnapshot: { state: 'active', startedAt: 1_000 } }),
+    new AbortController().signal,
+  );
+
+  if (result.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.notes).toEqual([
+    expect.stringContaining('1 opened before this scan window'),
+    expect.stringContaining('No HTTP(s) entries were found'),
+  ]);
+  expect(result.notes.join(' ')).not.toContain('none looked like HTTP traffic');
+});

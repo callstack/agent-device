@@ -27,8 +27,10 @@
   request whose connection was opened before the scanned window cannot be named at all; those are
   counted in the dump's `unnamedRequests`, so an empty result still reports that traffic was
   observed. The notes say absence of an endpoint does not prove it was not called.
-- Fixed: a URL parsed out of a log line no longer keeps the punctuation that follows it, so an
-  entry's `url` compares equal to the endpoint under test.
+- Fixed: a URL logged as a delimited `url: <value>,` field no longer keeps the separator the log
+  format put after it, so an entry's `url` compares equal to the endpoint under test. A bare URL
+  elsewhere is left alone, since nothing there establishes that trailing punctuation is not part of
+  the path.
 - Added: `replay export` supports flows that switch apps and return, preserving each
   `open <appId>` target as an explicit Maestro `launchApp.appId`.
 - Added: `replay export` converts recorded `home` actions to Maestro `pressKey: Home`, allowing

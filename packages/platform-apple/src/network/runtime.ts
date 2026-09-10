@@ -23,23 +23,40 @@ export async function dumpAppleNetworkTraffic(
   const notes: string[] = [];
   if (canRecoverSimulator(device, input, dump)) {
     const recovery = await recoverSimulatorTraffic(host, device, input, recent.path, signal);
-    if (recovery) {
-      if (recovery.dump.entries.length > 0) {
-        dump = mergeNetworkDumps(recovery.dump, dump, input.maxEntries);
-        notes.push(
-          `Recovered ${recovery.dump.entries.length} iOS simulator HTTP entr${recovery.dump.entries.length === 1 ? 'y' : 'ies'} from simctl log show (${recovery.lineCount} app log lines scanned).`,
-        );
-      } else if (recovery.lineCount > 0) {
-        notes.push(
-          `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
-        );
-      }
-    }
+    if (recovery) dump = mergeRecoveredTraffic(notes, dump, recovery, input.maxEntries);
   }
   appendLifecycleNote(notes, device, input);
   appendUnnamedRequestNote(notes, dump);
   if (dump.entries.length === 0) notes.push(noEntriesNote(device));
   return Object.freeze({ source: 'app-log', backend, dump, notes: Object.freeze(notes) });
+}
+
+/**
+ * Traffic the recovery pass saw but could not name is still traffic, so it is
+ * merged for its count alone; only a pass that found nothing at all reports the
+ * window as non-network.
+ */
+function mergeRecoveredTraffic(
+  notes: string[],
+  dump: NetworkDump,
+  recovery: { dump: NetworkDump; lineCount: number },
+  maxEntries: number,
+): NetworkDump {
+  const recovered = recovery.dump.entries.length;
+  if (recovered === 0 && (recovery.dump.unnamedRequests ?? 0) === 0) {
+    if (recovery.lineCount > 0) {
+      notes.push(
+        `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
+      );
+    }
+    return dump;
+  }
+  if (recovered > 0) {
+    notes.push(
+      `Recovered ${recovered} iOS simulator HTTP entr${recovered === 1 ? 'y' : 'ies'} from simctl log show (${recovery.lineCount} app log lines scanned).`,
+    );
+  }
+  return mergeNetworkDumps(recovery.dump, dump, maxEntries);
 }
 
 function canRecoverSimulator(
