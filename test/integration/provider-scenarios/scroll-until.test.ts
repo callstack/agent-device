@@ -8,15 +8,10 @@ import { withProviderScenarioResource } from './harness.ts';
 /**
  * `scroll --until <selector>` through the real daemon, provider admission, and capture path.
  *
- * The world serves a hierarchy whose target row starts below the viewport and climbs on each
- * capture, which is what lets the loop's stop condition be observed rather than asserted: the
- * command is expected to stop on the first capture that puts the row on screen, and to have spent
- * exactly the gestures that took to reach it.
- */
-/**
  * The row climbs one screen per capture, so it is off-screen for the first captures and on screen
- * from the third. Keyed on captures rather than on injected gestures because the Android gesture
- * path runs through the persistent helper, not an adb shell command the world can count.
+ * from the third: the loop's stop condition is observed rather than asserted. Keyed on captures
+ * rather than on injected gestures because the Android gesture path runs through the persistent
+ * helper, not an adb shell command the world can count.
  */
 function climbingRow(): () => number {
   let captures = 0;

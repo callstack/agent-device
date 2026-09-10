@@ -1,8 +1,7 @@
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { resolveSelectorPipeline } from './selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from './selector-pipeline-policy.ts';
+import type { SelectorPipelineOutcome } from './selector-pipeline.ts';
 
 /**
  * The stop condition `scroll --until` asks of every capture: does this selector match a node that
@@ -21,6 +20,14 @@ export async function isSelectorVisibleInNodes(params: {
 }): Promise<boolean> {
   const nodes = params.nodes as SnapshotNode[];
   if (nodes.length === 0) return false;
+  // Both edges are lazy on purpose. The policy table re-enters the package barrel and the pipeline
+  // pulls the match engine, which together would make this small predicate a 66-module entry
+  // surface for every importer. The loop that calls this awaits anyway, and the module cache makes
+  // every pass after the first free.
+  const [{ SELECTOR_PIPELINE_POLICIES }, { resolveSelectorPipeline }] = await Promise.all([
+    import('./selector-pipeline-policy.ts'),
+    import('./selector-pipeline.ts'),
+  ]);
   const outcome = await resolveSelectorPipeline(
     SELECTOR_PIPELINE_POLICIES.wait,
     nodes,
@@ -35,9 +42,7 @@ export async function isSelectorVisibleInNodes(params: {
   return matched.some((node) => visibility.isVisibleOnScreen(node));
 }
 
-function matchedNodes(
-  outcome: Awaited<ReturnType<typeof resolveSelectorPipeline>>,
-): readonly SnapshotNode[] {
+function matchedNodes(outcome: SelectorPipelineOutcome): readonly SnapshotNode[] {
   switch (outcome.kind) {
     case 'target':
     case 'ambiguous':

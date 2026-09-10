@@ -103,7 +103,7 @@ export function scrollUntilNotFoundError(params: {
       {
         reason: 'scroll_until_edge_reached',
         details: { selector, direction, passes },
-        hint: `Nothing further lies ${direction} of here. Run snapshot -i to see what is on screen, scroll the opposite direction, or check the selector — the element may be on another screen.`,
+        hint: `The content ends here, so no further ${direction} scroll can reveal it. Run snapshot -i to see what is on screen, scroll the opposite direction, or check the selector — the element may be on another screen.`,
       },
     );
   }
