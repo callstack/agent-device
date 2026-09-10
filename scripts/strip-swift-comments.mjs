@@ -5,13 +5,71 @@
 // This is a lexical scanner, not a regex pass, because `//` and `/*` open a comment only in code
 // position. String literals may contain either; a raw literal (`#"…"#`) moves its own closing
 // delimiter and its interpolation opener with the `#` count, so what counts as an escape changes
-// per literal; interpolation segments hold code, including further literals; and Swift block
-// comments nest. A regex sees none of that, and the failure mode is a package that does not
+// per literal; interpolation segments hold code, including further literals; extended regex
+// literals (`#/…/#`) are a second delimiter family that also starts with a `#` run; and Swift
+// block comments nest. A regex sees none of that, and the failure mode is a package that does not
 // compile on a user's machine. Anything the scanner cannot account for therefore throws here, at
 // packaging time, rather than shipping.
+//
+// Bare `/…/` regex literals are the one construct no scanner can resolve: the same `/` opens a
+// comment, divides, and starts a regex literal, and which it is depends on the parse. Where one
+// could start, packaging fails instead of rewriting bytes the scanner cannot prove are code.
 
 /** A `"`/`"""` literal opener with its optional raw `#` delimiters. */
 const STRING_OPENER = /(#*)("""|")/y;
+/** An extended regex literal opener: a `#` run, then `/`. The `#` count sets the terminator. */
+const EXTENDED_REGEX_OPENER = /(#+)\//y;
+/** How much emitted output `isExpressionPosition` may look back over. */
+const CODE_TAIL_LENGTH = 128;
+/**
+ * Swift bars a bare regex literal from opening on one of these, so a `/` in front of one — `a / b`,
+ * `reduce(/)` — is an operator whatever the parse says.
+ */
+const NON_REGEX_START = new Set([' ', '\t', '\n', ')']);
+/** A `/` directly after one of these ends an operand, so it divides rather than opening a regex. */
+const OPERAND_END = /[A-Za-z0-9_$)\]`"?!]$/;
+/** The identifier a lookbehind ends on, when it ends on one. */
+const TRAILING_IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*$/;
+/**
+ * Keywords a `/` can follow while still being at the start of an expression. Value keywords
+ * (`self`, `super`, `nil`, `true`, `false`) are operands and so are deliberately absent.
+ */
+const EXPRESSION_KEYWORDS = new Set([
+  'as',
+  'await',
+  'borrowing',
+  'case',
+  'catch',
+  'consume',
+  'consuming',
+  'copy',
+  'default',
+  'defer',
+  'do',
+  'each',
+  'else',
+  'for',
+  'guard',
+  'if',
+  'in',
+  'is',
+  'let',
+  'repeat',
+  'return',
+  'switch',
+  'throw',
+  'try',
+  'var',
+  'where',
+  'while',
+  'yield',
+]);
+/** How an unterminated frame is named in the error that refuses to ship the file. */
+const FRAME_DESCRIPTIONS = {
+  literal: 'string literal',
+  regex: 'regex literal',
+  interpolation: 'interpolation',
+};
 
 /**
  * `source` with its comments removed. A line whose only content was a comment disappears;
@@ -31,36 +89,42 @@ export function stripSwiftComments(source, filePath = '<swift source>') {
     lines: [],
     /** The output line being built. */
     line: '',
+    /** The tail of everything emitted so far, for the scanner's one lookbehind. */
+    codeTail: '',
     lineHasComment: false,
-    /** Literal and interpolation nesting, innermost last. */
+    /** Literal, regex-literal and interpolation nesting, innermost last. */
     frames: [],
     removedComments: 0,
   };
 
   while (state.index < source.length) {
-    const literal = currentStringLiteral(state);
-    if (literal === undefined) scanCodeCharacter(state);
-    else scanStringLiteralCharacter(state, literal);
+    const frame = state.frames.at(-1);
+    if (frame?.kind === 'literal') scanStringLiteralCharacter(state, frame);
+    else if (frame?.kind === 'regex') scanRegexLiteralCharacter(state, frame);
+    else scanCodeCharacter(state);
   }
   finishFile(state);
 
   return { contents: state.lines.join(''), removedComments: state.removedComments };
 }
 
-function currentStringLiteral(state) {
+/** The literal whose bytes are being copied through verbatim, if the scanner is inside one. */
+function currentLiteral(state) {
   const frame = state.frames.at(-1);
-  return frame !== undefined && frame.kind === 'literal' ? frame : undefined;
+  return frame !== undefined && (frame.kind === 'literal' || frame.kind === 'regex')
+    ? frame
+    : undefined;
+}
+
+/** Appends to the output line, keeping the lookbehind tail in step with it. */
+function emit(state, text) {
+  state.line += text;
+  state.codeTail = (state.codeTail + text).slice(-CODE_TAIL_LENGTH);
 }
 
 function scanCodeCharacter(state) {
   const char = state.source[state.index];
-  const next = state.source[state.index + 1];
-  if (char === '/' && next === '/') {
-    consumeLineComment(state);
-    return;
-  }
-  if (char === '/' && next === '*') {
-    consumeBlockComment(state);
+  if (char === '/' && consumeSlash(state)) {
     return;
   }
   if (char === '\n') {
@@ -68,19 +132,42 @@ function scanCodeCharacter(state) {
     endLine(state);
     return;
   }
-  if ((char === '"' || char === '#') && pushStringLiteral(state)) {
+  if ((char === '"' || char === '#') && pushLiteral(state)) {
     return;
   }
   trackInterpolationParenthesis(state, char);
-  state.line += char;
+  emit(state, char);
   state.index += 1;
 }
 
 /**
- * Opens a literal frame when the `"`/`#` at the cursor really starts one. `#` also leads every
- * Swift directive (`#if`, `#available`, `#!` in the recording scripts), so only a `#`-run
- * followed by a quote is a raw literal.
+ * Resolves the `/` at the cursor: it opens a comment, or it is an operator, or — where the scanner
+ * cannot prove which — it fails the file. `false` leaves the `/` to be emitted as an operator.
  */
+function consumeSlash(state) {
+  const next = state.source[state.index + 1];
+  if (next === '/') {
+    consumeLineComment(state);
+    return true;
+  }
+  if (next === '*') {
+    consumeBlockComment(state);
+    return true;
+  }
+  rejectAmbiguousBareRegexLiteral(state, next);
+  return false;
+}
+
+/**
+ * Opens a literal frame when the `"`/`#` at the cursor really starts one. `#` also leads every
+ * Swift directive (`#if`, `#available`, `#!` in the recording scripts), so only a `#`-run followed
+ * by a quote is a raw string literal, and only a `#`-run followed by `/` is an extended regex
+ * literal.
+ */
+function pushLiteral(state) {
+  return pushStringLiteral(state) || pushExtendedRegexLiteral(state);
+}
+
 function pushStringLiteral(state) {
   STRING_OPENER.lastIndex = state.index;
   const opener = STRING_OPENER.exec(state.source);
@@ -94,9 +181,105 @@ function pushStringLiteral(state) {
     escape: `\\${pounds}`,
     startLine: state.sourceLine,
   });
-  state.line += opener[0];
+  emit(state, opener[0]);
   state.index += opener[0].length;
   return true;
+}
+
+/**
+ * Opens an extended regex literal (`#/…/#`, `##/…/##`). Its contents are regex syntax, where `//`
+ * and `/*` are ordinary characters, so the frame exists only to keep the comment scanner out. A
+ * newline straight after the opener selects Swift's multi-line form, whose closing delimiter has
+ * to stand on its own line — everywhere else `/` plus the `#` run is regex content.
+ */
+function pushExtendedRegexLiteral(state) {
+  EXTENDED_REGEX_OPENER.lastIndex = state.index;
+  const opener = EXTENDED_REGEX_OPENER.exec(state.source);
+  if (opener === null) return false;
+
+  state.frames.push({
+    kind: 'regex',
+    multiline: state.source[state.index + opener[0].length] === '\n',
+    terminator: `/${opener[1]}`,
+    startLine: state.sourceLine,
+  });
+  emit(state, opener[0]);
+  state.index += opener[0].length;
+  return true;
+}
+
+function scanRegexLiteralCharacter(state, regex) {
+  if (state.source.startsWith(regex.terminator, state.index)) {
+    closeRegexLiteral(state, regex);
+    return;
+  }
+  const char = state.source[state.index];
+  // A regex escape is copied as a pair, so `\/` never reads as the closing delimiter.
+  if (char === '\\' && isEscapableRegexCharacter(state.source[state.index + 1])) {
+    emit(state, state.source.slice(state.index, state.index + 2));
+    state.index += 2;
+    return;
+  }
+  if (char === '\n') {
+    if (!regex.multiline) {
+      throw new Error(`Unterminated regex literal in ${state.filePath}:${regex.startLine}`);
+    }
+    state.index += 1;
+    endLine(state);
+    return;
+  }
+  emit(state, char);
+  state.index += 1;
+}
+
+/**
+ * Closes the literal at its delimiter. Swift closes a multi-line regex literal at the first
+ * unescaped `/` plus its `#` run too, but then requires that delimiter to start its own line —
+ * so a mid-line one is a file that does not compile either way, and stripping it is refused
+ * rather than guessed at.
+ */
+function closeRegexLiteral(state, regex) {
+  if (regex.multiline && state.line.trim() !== '') {
+    throw new Error(
+      `Multi-line regex literal in ${state.filePath}:${regex.startLine} closes mid-line at ` +
+        `line ${state.sourceLine}; its ${regex.terminator} delimiter must start its own line`,
+    );
+  }
+  emit(state, regex.terminator);
+  state.index += regex.terminator.length;
+  state.frames.pop();
+}
+
+function isEscapableRegexCharacter(char) {
+  return char !== undefined && char !== '\n';
+}
+
+/**
+ * Refuses a `/` that could open a bare regex literal. Swift lexes `/…/`, a division and a comment
+ * from the same character, and only the parse separates them, so rewriting the bytes after it
+ * would be a guess: `let p = /foo//bar/` has no comment in it at all. Packaging fails instead.
+ */
+function rejectAmbiguousBareRegexLiteral(state, next) {
+  if (next === undefined || NON_REGEX_START.has(next)) return;
+  if (!isExpressionPosition(state)) return;
+  throw new Error(
+    `Ambiguous bare regex literal or division in ${state.filePath}:${state.sourceLine}; ` +
+      'write the pattern as an extended regex literal (#/…/#), or space the operator (a / b), ' +
+      'so packaging can tell them apart',
+  );
+}
+
+/**
+ * Whether an expression could start at the cursor, which is where — and only where — Swift reads
+ * a `/` as a bare regex literal. Anywhere else the `/` follows an operand and divides it.
+ */
+function isExpressionPosition(state) {
+  const tail = state.codeTail.replace(/\s+$/u, '');
+  if (tail === '') return true;
+  if (!OPERAND_END.test(tail)) return true;
+  // `return /x/` ends on an identifier yet still starts an expression.
+  const identifier = TRAILING_IDENTIFIER.exec(tail)?.[0];
+  return identifier !== undefined && EXPRESSION_KEYWORDS.has(identifier);
 }
 
 /** Closes an interpolation segment at its matching `)`, so its own parentheses do not end it. */
@@ -111,7 +294,7 @@ function trackInterpolationParenthesis(state, char) {
 
 function scanStringLiteralCharacter(state, literal) {
   if (state.source.startsWith(literal.terminator, state.index)) {
-    state.line += literal.terminator;
+    emit(state, literal.terminator);
     state.index += literal.terminator.length;
     state.frames.pop();
     return;
@@ -124,7 +307,7 @@ function scanStringLiteralCharacter(state, literal) {
     consumeLiteralNewline(state, literal);
     return;
   }
-  state.line += char;
+  emit(state, char);
   state.index += 1;
 }
 
@@ -140,13 +323,13 @@ function consumeEscape(state, literal) {
   if (char === '\n') {
     // A multiline literal's line continuation: the newline belongs to the literal, but the
     // output still breaks its line here so line accounting stays on the source.
-    state.line += literal.escape;
+    emit(state, literal.escape);
     state.index = escapedIndex + 1;
     endLine(state);
     return true;
   }
 
-  state.line += state.source.slice(state.index, escapedIndex + 1);
+  emit(state, state.source.slice(state.index, escapedIndex + 1));
   state.index = escapedIndex + 1;
   if (char === '(') state.frames.push({ kind: 'interpolation', depth: 1 });
   return true;
@@ -181,7 +364,7 @@ function consumeBlockComment(state) {
   state.lineHasComment = true;
   // One space in place of the comment keeps the tokens that flanked it apart: Swift reads
   // `a/*x*/b` as `a b`, not as `ab`.
-  state.line += ' ';
+  emit(state, ' ');
   state.removedComments += 1;
 }
 
@@ -214,12 +397,13 @@ function consumeBlockCommentCharacter(state) {
  */
 function endLine(state) {
   state.sourceLine += 1;
-  if (currentStringLiteral(state) !== undefined || !state.lineHasComment) {
+  if (currentLiteral(state) !== undefined || !state.lineHasComment) {
     state.lines.push(`${state.line}\n`);
   } else if (state.line.trim() !== '') {
     state.lines.push(`${state.line.trimEnd()}\n`);
   }
   state.line = '';
+  state.codeTail = (state.codeTail + '\n').slice(-CODE_TAIL_LENGTH);
   state.lineHasComment = false;
 }
 
@@ -228,7 +412,7 @@ function finishFile(state) {
   const unterminated = state.frames.at(-1);
   if (unterminated !== undefined) {
     throw new Error(
-      `Unterminated ${unterminated.kind} in ${state.filePath} ` +
+      `Unterminated ${FRAME_DESCRIPTIONS[unterminated.kind]} in ${state.filePath} ` +
         `(started at line ${unterminated.startLine ?? state.sourceLine})`,
     );
   }

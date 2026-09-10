@@ -112,6 +112,81 @@ test('preserves a multi-line raw literal and its line continuations', () => {
   assert.equal(strip(source), source);
 });
 
+// Every Swift snippet in the regex-literal tests below parses clean under `xcrun swiftc -parse`
+// (Swift 6.2), and so does what the scanner leaves of it. `#/foo//bar/#` has no comment in it at
+// all: before the scanner knew the delimiter, it shipped `let pattern = #/foo`.
+test('preserves extended regex literals whose contents are comment-shaped', () => {
+  const source = swift(
+    'let pattern = #/foo//bar/#',
+    'let pounded = ##/a//b/#c/##',
+    'let blockish = #/x/*y/#',
+    String.raw`let escaped = #/a\/#b/#`,
+  );
+
+  assert.equal(strip(source), source);
+  assert.equal(stripSwiftComments(source).removedComments, 0);
+});
+
+test('strips a real comment that trails an extended regex literal', () => {
+  const source = swift(
+    'let trailing = #/a//b/#  // trailing',
+    'let blocked = ##/c/*d*/##  /* block */',
+    'let next = 1',
+  );
+
+  assert.equal(
+    strip(source),
+    swift('let trailing = #/a//b/#', 'let blocked = ##/c/*d*/##', 'let next = 1'),
+  );
+  assert.equal(stripSwiftComments(source).removedComments, 2);
+});
+
+test('preserves a multi-line extended regex literal verbatim, comment-shaped lines included', () => {
+  const source = swift(
+    'let multi = #/',
+    '  foo//bar',
+    '  /*e*/',
+    String.raw`  a\/#b`,
+    '',
+    '  /#',
+    'let after = 1  // note',
+  );
+
+  assert.equal(
+    strip(source),
+    swift(
+      'let multi = #/',
+      '  foo//bar',
+      '  /*e*/',
+      String.raw`  a\/#b`,
+      '',
+      '  /#',
+      'let after = 1',
+    ),
+  );
+});
+
+test('reads an unspaced division as an operator, not as a bare regex literal', () => {
+  const source = swift(
+    '#!/usr/bin/env swift',
+    'let half = width/2  // note',
+    'let ratio = Double(3)/Double(4)',
+    'let spaced = width / 2  // also fine',
+    'let divide: (Int, Int) -> Int = (/)',
+  );
+
+  assert.equal(
+    strip(source),
+    swift(
+      '#!/usr/bin/env swift',
+      'let half = width/2',
+      'let ratio = Double(3)/Double(4)',
+      'let spaced = width / 2',
+      'let divide: (Int, Int) -> Int = (/)',
+    ),
+  );
+});
+
 test('reads interpolation segments as code without losing their nested literals', () => {
   const source = swift(
     String.raw`let line = "prefix \(makeURL("https://example.com")) suffix" // trailing`,
@@ -229,5 +304,37 @@ test('throws when an interpolation segment never closes', () => {
   assert.throws(
     () => strip(swift(String.raw`let a = "\(value`)),
     /Unterminated interpolation in Fixture\.swift/,
+  );
+});
+
+// A bare `/…/` is the one construct a scanner cannot resolve: Swift lexes a comment, a division
+// and a regex literal from the same `/`, and only the parse tells them apart. Packaging fails
+// rather than rewrite bytes it cannot prove are code.
+test('throws on a bare regex literal instead of reading its contents as a comment', () => {
+  assert.throws(
+    () => strip(swift('let a = 1', 'let pattern = /foo//bar/')),
+    /Ambiguous bare regex literal or division in Fixture\.swift:2/,
+  );
+  assert.throws(
+    () => strip(swift('func f() -> Regex<Substring> {', String.raw`  return /x\/y/`, '}')),
+    /Ambiguous bare regex literal or division in Fixture\.swift:2/,
+  );
+});
+
+test('throws on an unterminated extended regex literal', () => {
+  assert.throws(
+    () => strip(swift('let a = 1', 'let pattern = #/no closing', 'let b = 2 // note')),
+    /Unterminated regex literal in Fixture\.swift:2/,
+  );
+  assert.throws(
+    () => strip(swift('let a = 1', 'let pattern = #/', '  never closed')),
+    /Unterminated regex literal in Fixture\.swift \(started at line 2\)/,
+  );
+});
+
+test('throws when a multi-line regex literal closes mid-line', () => {
+  assert.throws(
+    () => strip(swift('let multi = #/', '  mid/#line stays', '  /#')),
+    /Multi-line regex literal in Fixture\.swift:1 closes mid-line at line 2/,
   );
 });

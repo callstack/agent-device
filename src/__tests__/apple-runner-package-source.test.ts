@@ -191,6 +191,49 @@ test('package apple runner source allows only the runner entrypoint test method'
   assert.match(rejected.stderr, /testExtraEntrypoint/);
 });
 
+test('package apple runner source ships regex literals whole and refuses ambiguous ones', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-regex-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  const relativePath =
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift';
+
+  // An extended regex literal's contents are regex syntax, never comments, so they ship whole.
+  writeFixtureFile(
+    root,
+    relativePath,
+    ['extension RunnerTests {', '  let pattern = #/foo//bar/#  // note', '}', ''].join('\n'),
+  );
+
+  const allowed = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+  assert.equal(allowed.exitCode, 0);
+  assert.equal(
+    fs.readFileSync(
+      path.join(
+        root,
+        'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+      ),
+      'utf8',
+    ),
+    'extension RunnerTests {\n  let pattern = #/foo//bar/#\n}\n',
+  );
+
+  // A bare `/…/` is a regex literal, a division and a comment opener at once, so packaging fails
+  // by name and line instead of shipping Swift whose literal it silently truncated.
+  writeFixtureFile(
+    root,
+    relativePath,
+    ['extension RunnerTests {', '  let pattern = /foo//bar/', '}', ''].join('\n'),
+  );
+
+  const rejected = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+  assert.notEqual(rejected.exitCode, 0);
+  assert.match(rejected.stderr, /Ambiguous bare regex literal or division/);
+  assert.match(rejected.stderr, /RunnerTests\+Feature\.swift:2/);
+});
+
 test('package apple runner source judges shipped test methods after comments are removed', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-commented-test-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
