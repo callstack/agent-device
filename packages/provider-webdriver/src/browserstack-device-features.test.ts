@@ -19,6 +19,8 @@ const DEVICE_FEATURE_FIELDS = [
   'providerNetworkProfile',
   'providerCustomNetwork',
   'providerNoResignApp',
+  'providerLocal',
+  'providerLocalIdentifier',
 ] as const;
 
 test('every device-feature field maps to exactly one capability spec', () => {
@@ -56,6 +58,44 @@ test('configured device features project onto BrowserStack vendor capability key
 
 test('unset device features emit no capability keys', () => {
   assert.deepEqual(buildBrowserStackDeviceFeatureCapabilities({}, 'android'), {});
+});
+
+test('local tunnel features project onto their BrowserStack vendor capability keys', () => {
+  assert.deepEqual(
+    buildBrowserStackDeviceFeatureCapabilities(
+      {
+        providerLocal: true,
+        providerLocalIdentifier: 'mbdp-proof',
+      },
+      'ios',
+    ),
+    { local: true, localIdentifier: 'mbdp-proof' },
+  );
+});
+
+test('--provider-local-identifier is rejected without --provider-local', () => {
+  // BrowserStack accepts localIdentifier on a non-local session and ignores it, so the only symptom
+  // would be that an allowlisted host stays unreachable with no error anywhere.
+  assert.throws(
+    () =>
+      buildBrowserStackDeviceFeatureCapabilities({ providerLocalIdentifier: 'mbdp-proof' }, 'ios'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.match(error.message, /--provider-local-identifier requires --provider-local/);
+      assert.match(String(error.details?.hint), /--provider-local/);
+      return true;
+    },
+  );
+
+  // The closest negative: the same field alongside --provider-local is accepted.
+  assert.deepEqual(
+    buildBrowserStackDeviceFeatureCapabilities(
+      { providerLocal: true, providerLocalIdentifier: 'mbdp-proof' },
+      'ios',
+    ),
+    { local: true, localIdentifier: 'mbdp-proof' },
+  );
 });
 
 test('app re-signing opt-out is rejected on Android with a recovery hint', () => {

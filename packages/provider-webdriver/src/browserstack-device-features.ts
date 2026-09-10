@@ -25,6 +25,8 @@ export type BrowserStackDeviceFeatureFields = Pick<
   | 'providerNetworkProfile'
   | 'providerCustomNetwork'
   | 'providerNoResignApp'
+  | 'providerLocal'
+  | 'providerLocalIdentifier'
 >;
 
 type BrowserStackDeviceFeatureSpec = {
@@ -38,7 +40,7 @@ type BrowserStackDeviceFeatureSpec = {
    * `negated-boolean` is a flag whose presence means "turn the capability off" — BrowserStack
    * defaults `resignApp` to true, so the only useful instruction is the opt-out.
    */
-  type: 'string' | 'enum' | 'negated-boolean';
+  type: 'string' | 'enum' | 'negated-boolean' | 'boolean';
   enumValues?: readonly string[];
   /** Platform the capability applies to; absent means both. */
   platform?: CloudWebDriverPlatform;
@@ -97,6 +99,24 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     type: 'negated-boolean',
     platform: 'ios',
   },
+  {
+    // Routes device traffic through a BrowserStack Local tunnel, which is how a session reaches a
+    // host an IP allowlist would otherwise reject.
+    //
+    // Whether the tunnel carries publicly-resolvable hosts is a property of the BrowserStackLocal
+    // daemon (`--force-local`), not of the session: BrowserStack rejects session creation outright
+    // if a `forceLocal` capability is sent, so it cannot be mirrored here.
+    field: 'providerLocal',
+    capability: 'local',
+    flag: '--provider-local',
+    type: 'boolean',
+  },
+  {
+    field: 'providerLocalIdentifier',
+    capability: 'localIdentifier',
+    flag: '--provider-local-identifier',
+    type: 'string',
+  },
 ];
 
 /**
@@ -110,6 +130,7 @@ export function buildBrowserStackDeviceFeatureCapabilities(
   platform: CloudWebDriverPlatform,
 ): Record<string, unknown> {
   requireCompatibleNetworkFields(fields);
+  requireLocalTunnelFields(fields);
   const capabilities: Record<string, unknown> = {};
   for (const spec of BROWSERSTACK_DEVICE_FEATURE_SPECS) {
     const value = fields[spec.field];
@@ -178,6 +199,10 @@ export function readBrowserStackDeviceFeatureFields(
       if (value === true) fields.providerNoResignApp = true;
       continue;
     }
+    if (spec.type === 'boolean') {
+      if (value === true) assignBooleanField(fields, spec);
+      continue;
+    }
     if (typeof value !== 'string' || value.length === 0) continue;
     assignStringField(fields, spec, value);
   }
@@ -194,7 +219,15 @@ function assignStringField(
     return;
   }
   if (spec.field === 'providerNoResignApp') return;
+  if (spec.field === 'providerLocal') return;
   fields[spec.field] = value;
+}
+
+function assignBooleanField(
+  fields: BrowserStackDeviceFeatureFields,
+  spec: BrowserStackDeviceFeatureSpec,
+): void {
+  if (spec.field === 'providerLocal') fields.providerLocal = true;
 }
 
 function requireDeviceOrientation(
@@ -225,6 +258,20 @@ function requireSupportedPlatform(
       platform,
     },
   );
+}
+
+/**
+ * Fails when `--provider-local-identifier` was set without `--provider-local`.
+ *
+ * BrowserStack accepts `localIdentifier` on a non-local session and ignores it, so the session runs
+ * untunneled and the only symptom is that allowlisted hosts stay unreachable.
+ */
+function requireLocalTunnelFields(fields: BrowserStackDeviceFeatureFields): void {
+  if (fields.providerLocal || !fields.providerLocalIdentifier) return;
+  throw new AppError('INVALID_ARGS', '--provider-local-identifier requires --provider-local.', {
+    hint: 'Add --provider-local, or drop the flag.',
+    flags: ['--provider-local-identifier'],
+  });
 }
 
 function requireCompatibleNetworkFields(fields: BrowserStackDeviceFeatureFields): void {

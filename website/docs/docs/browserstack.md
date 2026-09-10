@@ -51,11 +51,33 @@ Optional device features:
 --provider-no-resign-app                                     # iOS only
 ```
 
+Optional local tunnel, for reaching a host an IP allowlist would otherwise reject:
+
+```bash
+--provider-local
+--provider-local-identifier my-tunnel
+```
+
 BrowserStack receives these values in `bstack:options` when it creates the hosted session.
 
 - The orientation applies when the session starts. An activity without a fixed orientation, such as a Chrome Custom Tab hosting OAuth, can still open in landscape. Run `agent-device orientation portrait` after launching it when needed.
 - `--provider-network-profile` and `--provider-custom-network` are mutually exclusive.
 - `--provider-no-resign-app` applies to iOS only. BrowserStack re-signs uploaded iOS apps with its provisioning profile, which strips entitlements; opt out when testing entitlement-dependent features such as push notifications.
+- `--provider-local` needs a [BrowserStackLocal](https://www.browserstack.com/docs/app-automate/app-percy/set-up-testing/local-testing) daemon already running. `--provider-local-identifier` must match the daemon's `--local-identifier`, and is rejected without `--provider-local` — BrowserStack ignores it on a non-local session, so the session would run untunneled with no error.
+
+### Reaching a host that resolves publicly
+
+BrowserStack Local only tunnels hosts it cannot resolve publicly. An API that is allowlisted but has
+public DNS still egresses from BrowserStack's network and stays unreachable. Start the daemon with
+`--force-local` so every request goes through the tunnel:
+
+```bash
+BrowserStackLocal --key "$BROWSERSTACK_ACCESS_KEY" \
+  --local-identifier my-tunnel --force-local --daemon start
+```
+
+This is a property of the daemon, not of the session: BrowserStack rejects session creation when a
+`forceLocal` capability is sent, so there is no `--provider-force-local` flag.
 
 ## CLI workflow
 

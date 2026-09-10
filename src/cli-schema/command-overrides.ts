@@ -87,6 +87,8 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'providerNetworkProfile',
       'providerCustomNetwork',
       'providerNoResignApp',
+      'providerLocal',
+      'providerLocalIdentifier',
       'awsProjectArn',
       'awsDeviceArn',
       'awsAppArn',

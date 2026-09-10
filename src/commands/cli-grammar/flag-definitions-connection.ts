@@ -221,6 +221,22 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'iOS only: keep an Enterprise-signed app as uploaded instead of letting the provider re-sign it, which strips entitlements such as push notifications',
   },
   {
+    key: 'providerLocal',
+    names: ['--provider-local'],
+    type: 'boolean',
+    usageLabel: '--provider-local',
+    usageDescription:
+      'Route hosted cloud provider device traffic through a BrowserStack Local tunnel, so the session reaches hosts an IP allowlist would otherwise reject. Needs a running BrowserStackLocal daemon; start it with --force-local when the allowlisted host resolves publicly, since the tunnel otherwise carries only hosts it cannot resolve',
+  },
+  {
+    key: 'providerLocalIdentifier',
+    names: ['--provider-local-identifier'],
+    type: 'string',
+    usageLabel: '--provider-local-identifier <id>',
+    usageDescription:
+      'Bind the session to a named local tunnel, matching BrowserStackLocal --local-identifier. Requires --provider-local',
+  },
+  {
     key: 'awsProjectArn',
     names: ['--aws-project-arn'],
     type: 'string',

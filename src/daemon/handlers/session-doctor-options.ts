@@ -31,6 +31,8 @@ const REMOTE_PROVIDER_FLAG_KEYS = [
   'providerNetworkProfile',
   'providerCustomNetwork',
   'providerNoResignApp',
+  'providerLocal',
+  'providerLocalIdentifier',
   'awsProjectArn',
   'awsDeviceArn',
   'awsAppArn',
