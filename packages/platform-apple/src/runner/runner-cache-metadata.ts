@@ -361,7 +361,11 @@ function runToolchainProbe(
   } catch (error) {
     // A canceled request and a spent budget are the caller's own errors to
     // see, not an unreadable toolchain: only what's left becomes a probe
-    // failure.
+    // failure. Checked again here (not just in attemptToolchainProbe) because
+    // the request can abort while this exec is in flight, after its own guard
+    // already passed -- including on the last probe, where there is no next
+    // attempt left to catch it.
+    clock.throwIfCanceled();
     if (isRequestCanceledError(error) || isRunnerPhaseBudgetExhaustedError(error)) throw error;
     return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
   }

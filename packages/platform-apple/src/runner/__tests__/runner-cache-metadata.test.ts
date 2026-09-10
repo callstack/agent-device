@@ -338,6 +338,28 @@ describe('toolchain probe budget', () => {
     assert.equal(runCmdSync.mock.calls.length, 1);
   });
 
+  test('a non-timeout error that also cancels the request on the last probe surfaces cancellation, not an unavailable toolchain', () => {
+    const request = new AbortController();
+    runCmdSync.mockImplementation((command: string, args: string[]) => {
+      // The final probe: abort the request and fail with a plain command
+      // error, not the exec layer's structured timeout -- there is no next
+      // attempt left to catch the cancellation, so the catch here must.
+      if (command === 'xcrun' && args.includes('--show-sdk-build-version')) {
+        request.abort();
+        throw new AppError('COMMAND_FAILED', 'xcrun: unexpected error', {});
+      }
+      return appleToolchainProbeResult(command, args);
+    });
+    runCmdSync.mockClear();
+
+    assert.throws(
+      () =>
+        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, { signal: request.signal }),
+      (error: unknown) => isRequestCanceledError(error),
+    );
+    assert.equal(runCmdSync.mock.calls.length, 3);
+  });
+
   test('an already-canceled request runs no toolchain probe at all, cold or with the fingerprint cache warm', () => {
     installFakeToolchainClock();
     runCmdSync.mockClear();
