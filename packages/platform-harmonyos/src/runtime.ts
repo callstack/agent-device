@@ -296,10 +296,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           enter: harmonyFocusFact(device),
         }),
         // HarmonyOS exposes no clipboard automation operation.
-        ...clipboardRuntimeOperationFacts({
-          read: harmonyPlatformLeafUnavailable,
-          write: harmonyPlatformLeafUnavailable,
-        }),
+        ...clipboardRuntimeOperationFacts({ unsupported: harmonyPlatformLeafUnavailable }),
         ...audioProbeRuntimeOperationFacts({
           capture: audioProbeUnavailable,
           query: audioProbeUnavailable,

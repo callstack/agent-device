@@ -1,5 +1,6 @@
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -60,8 +61,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   setOrientation: unavailable,
   tvRemote: unavailable,
   ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
-  readClipboard: unavailable,
-  writeClipboard: unavailable,
+  ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
   appSwitcher: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
@@ -119,8 +119,7 @@ export function createUnavailableRuntimeFactsForTest(
     orientation: fact,
     tvRemote: fact,
     keyboard: fact,
-    readClipboard: fact,
-    writeClipboard: fact,
+    clipboard: fact,
     appSwitcher: fact,
     triggerAppEvent: fact,
     setSetting: fact,

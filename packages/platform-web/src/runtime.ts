@@ -413,10 +413,7 @@ function webRuntimeFacts(
       ...keyboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // The web backend never carried a `clipboard` capability bucket (`WEB_QUERY_COMMANDS`
       // lists `audio` alone), so no clipboard cell was ever admitted here.
-      ...clipboardRuntimeOperationFacts({
-        read: navigationUnavailable,
-        write: navigationUnavailable,
-      }),
+      ...clipboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // Parity with the retired `WEB_QUERY_COMMANDS` graft, which admitted `audio` on every web
       // device; the provider that carries no probe transport still refuses at execution.
       ...audioProbeRuntimeOperationFacts({ capture: audioCaptureUnavailable, query: available }),

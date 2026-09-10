@@ -519,8 +519,7 @@ function webDriverFacts(
       orientation: inactiveSession,
       tvRemote: inactiveSession,
       keyboard: inactiveSession,
-      readClipboard: inactiveSession,
-      writeClipboard: inactiveSession,
+      clipboard: inactiveSession,
       appSwitcher: inactiveSession,
       triggerAppEvent: inactiveSession,
       setSetting: inactiveSession,
@@ -563,8 +562,7 @@ function webDriverFacts(
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
     keyboard: keyboardUnavailable,
-    readClipboard: clipboardUnavailable,
-    writeClipboard: clipboardUnavailable,
+    clipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
@@ -653,6 +651,7 @@ function webDriverFacts(
       // Appium — which does expose the clipboard extension. The refusal moves to where it can be
       // true: the interactor, per session.
       ...clipboardRuntimeOperationFacts({
+        unsupported: clipboardUnavailable,
         read: declared('clipboard.read', clipboardUnavailable),
         write: declared('clipboard.write', clipboardUnavailable),
       }),

@@ -62,8 +62,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   orientation: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
   keyboard: RuntimeOperationUnavailability;
-  readClipboard: RuntimeOperationUnavailability;
-  writeClipboard: RuntimeOperationUnavailability;
+  clipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
   setSetting: RuntimeOperationUnavailability;
@@ -118,8 +117,7 @@ const UNAVAILABLE_CELLS = {
   orientation: true,
   tvRemote: true,
   keyboard: true,
-  readClipboard: true,
-  writeClipboard: true,
+  clipboard: true,
   appSwitcher: true,
   triggerAppEvent: true,
   setSetting: true,
@@ -239,10 +237,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
-      ...clipboardRuntimeOperationFacts({
-        read: frozen.readClipboard,
-        write: frozen.writeClipboard,
-      }),
+      ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: frozen.appSwitcher }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),

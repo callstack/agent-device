@@ -51,9 +51,10 @@ function harness(
   const writeClipboard = vi.fn(async () => undefined);
   const runtimeFacts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(device), providerMode: 'local' },
-    operations: clipboardRuntimeOperationFacts(
-      facts,
-    ) as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+    operations: clipboardRuntimeOperationFacts({
+      unsupported: unavailable,
+      ...facts,
+    }) as RuntimeFacts<PlatformRuntimeOperations>['operations'],
   };
   const binding = {
     device,

@@ -14,6 +14,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -377,8 +378,7 @@ function sourceRuntimeFacts(
       setOrientation: unavailable,
       tvRemote: unavailable,
       ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
+      ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,

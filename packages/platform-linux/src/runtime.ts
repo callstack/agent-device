@@ -196,8 +196,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     home: homeKindUnavailable,
     orientation: linuxPlatformLeafUnavailable,
     tvRemote: linuxPlatformLeafUnavailable,
-    readClipboard: clipboardKindUnavailable,
-    writeClipboard: clipboardKindUnavailable,
+    clipboard: clipboardKindUnavailable,
     // The Linux interactor's own `appSwitcher` throws unsupported, and the retired descriptor
     // declared `linux: {}`, so no Linux cell was ever admitted.
     appSwitcher: linuxPlatformLeafUnavailable,
@@ -269,6 +268,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // Parity with the retired `clipboard` capability bucket (`{ device: true }`): wl-clipboard
       // / xclip / xsel drive the desktop session's selection, and no other Linux cell has one.
       ...clipboardRuntimeOperationFacts({
+        unsupported: clipboardKindUnavailable,
         read: linuxDesktopFact(device, clipboardKindUnavailable),
         write: linuxDesktopFact(device, clipboardKindUnavailable),
       }),
