@@ -43,6 +43,10 @@ export const BROWSERSTACK_CAPABILITY_OVERRIDES = {
     support: 'unsupported',
     note: 'Use BrowserStack Local for network tunneling; agent-device port reverse is not available.',
   },
+  launchArgs: {
+    support: 'supported',
+    note: 'App Automate runs Appium, so a relaunch can carry iOS processArguments or Android intent arguments.',
+  },
   artifacts: {
     support: 'supported',
     note: 'BrowserStack session details expose provider-hosted video, Appium logs, device logs, and dashboard links.',

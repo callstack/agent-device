@@ -79,6 +79,23 @@ BrowserStackLocal --key "$BROWSERSTACK_ACCESS_KEY" \
 This is a property of the daemon, not of the session: BrowserStack rejects session creation when a
 `forceLocal` capability is sent, so there is no `--provider-force-local` flag.
 
+## Launch arguments
+
+`--launch-args` is forwarded to the app as iOS process arguments, so a flow can vary per-launch
+configuration without re-leasing a device:
+
+```bash
+agent-device open com.example.app \
+  --launch-args "-otaChannel" --launch-args "qa-1234"
+```
+
+Process arguments are read once, at process start, so a launch carrying them always terminates the
+running app first — activating it would foreground the old process and drop the arguments silently.
+A launch without arguments still activates as before.
+
+iOS only. Android App Automate sessions reject `--launch-args` rather than accepting it and doing
+nothing.
+
 ## CLI workflow
 
 ```bash

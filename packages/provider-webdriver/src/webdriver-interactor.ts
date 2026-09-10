@@ -133,21 +133,55 @@ class WebDriverInteractor implements Interactor {
 
   async open(
     app: string,
-    options?: {
+    options: {
       activity?: string;
       appBundleId?: string;
       launchConsole?: string;
       launchArgs?: string[];
+      terminateRunningApp?: boolean;
       url?: string;
-    },
+    } = {},
   ): Promise<void> {
-    if (options?.url) {
-      await this.client.executeScript('mobile: deepLink', [{ url: options.url, package: app }]);
+    const { url, appBundleId, launchArgs = [], terminateRunningApp } = options;
+    if (url) {
+      await this.client.executeScript('mobile: deepLink', [{ url, package: app }]);
       return;
     }
-    const appId = options?.appBundleId ?? app;
+    const appId = appBundleId ?? app;
     if (!appId) return;
+    if (launchArgs.length > 0) {
+      await this.relaunchWithArguments(appId, launchArgs);
+      return;
+    }
+    if (terminateRunningApp === true) await this.client.terminateApp(appId);
     await this.client.activateApp(appId);
+  }
+
+  /**
+   * Process arguments are read once, at process start. Activating an already-running app
+   * foregrounds the old process and the arguments are never seen, so this always terminates first
+   * regardless of what the caller asked for.
+   */
+  private async relaunchWithArguments(appId: string, launchArgs: readonly string[]): Promise<void> {
+    this.requireSupport('launchArgs');
+    this.requireIosLaunchArguments();
+    await this.client.terminateApp(appId);
+    await this.client.executeScript('mobile: launchApp', [
+      { bundleId: appId, arguments: [...launchArgs] },
+    ]);
+  }
+
+  private requireIosLaunchArguments(): void {
+    if (this.capabilities.platform === 'ios') return;
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Launch arguments are only supported on iOS WebDriver sessions.',
+      {
+        hint: 'Drop --launch-args, or run the flow against an iOS device.',
+        platform: this.capabilities.platform,
+        provider: this.capabilities.provider,
+      },
+    );
   }
 
   async openDevice(): Promise<void> {
