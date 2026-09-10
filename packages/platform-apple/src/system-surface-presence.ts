@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runCmd } from '@agent-device/host-kit/command';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import { runAppleToolCommand } from './core/tool-provider.ts';
 
 /**
  * Whether a registered iOS system surface host is running for a Simulator (issue #2438).
@@ -104,7 +104,9 @@ async function runProbe(
   signal: AbortSignal | undefined,
 ): Promise<{ exitCode: number; stdout: string } | 'unknown'> {
   try {
-    const result = await runCmd(command, args, {
+    // Through the Apple tool provider, like every other host probe here, so a stubbed provider
+    // answers instead of spawning a real process.
+    const result = await runAppleToolCommand(command, args, {
       allowFailure: true,
       timeoutMs: PROBE_TIMEOUT_MS,
       ...(signal ? { signal } : {}),

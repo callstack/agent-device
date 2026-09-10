@@ -1,15 +1,15 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
-  return { ...actual, runCmd: vi.fn(actual.runCmd) };
+vi.mock('./core/tool-provider.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./core/tool-provider.ts')>();
+  return { ...actual, runAppleToolCommand: vi.fn(actual.runAppleToolCommand) };
 });
 
-import { runCmd } from '@agent-device/host-kit/command';
+import { runAppleToolCommand } from './core/tool-provider.ts';
 import { createSystemSurfacePresenceProbe } from './system-surface-presence.ts';
 
-const mockRunCmd = vi.mocked(runCmd);
+const mockRunCmd = vi.mocked(runAppleToolCommand);
 
 const sim = {
   platform: 'apple',
