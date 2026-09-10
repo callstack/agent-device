@@ -4,9 +4,7 @@ import type {
   ManagedProcessIdentity,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { ScreenRecordingBackgroundProcess } from '@agent-device/contracts/screen-recording-runtime-host';
-import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import type { AppleSimulatorScreenRecordingProcess } from './platform-runtime-screen-recording-apple-transport.ts';
 import {
   inspectManagedProcess,
@@ -21,14 +19,6 @@ const LIVENESS_GRACE_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const IDENTITY_POLL_MS = 25;
 const IDENTITY_TIMEOUT_MS = 2_000;
-
-// POSIX EBUSY. `simctl recordVideo` exits with this when CoreSimulator's shared
-// `SimStreamProcessorService` still holds the one host-wide recording slot — a live recording
-// elsewhere, or a prior recorder that died without detaching. A signal death reports `exitCode: 1`,
-// never 16, so this is safe to key on the exit code rather than the stderr text (#2170).
-const HOST_RECORDING_BUSY_EXIT_CODE = 16;
-const HOST_RECORDING_BUSY_HINT =
-  'Another screen recording is active on this host, or a previous recorder died without detaching. Stop the other recording, or run `killall -9 SimStreamProcessorService` to clear the dangling stream service (it relaunches on demand), then retry.';
 
 const appleSimulatorRecordingCommandMatches: ManagedProcessCommandMatcher = (
   persisted,
@@ -249,18 +239,7 @@ function startError(outcome: AppleSimulatorExit): Error {
   if (outcome.kind === 'failed') {
     return outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
   }
-  const { stdout, stderr, exitCode } = outcome.result;
-  if (exitCode === HOST_RECORDING_BUSY_EXIT_CODE) {
-    return new AppError(
-      'COMMAND_FAILED',
-      'simctl recordVideo could not start because the CoreSimulator host recording slot is busy (EBUSY)',
-      execFailureDetails(
-        { stdout, stderr, exitCode },
-        { reason: 'apple-simulator-host-recording-busy', hint: HOST_RECORDING_BUSY_HINT },
-      ),
-    );
-  }
-  return new Error(`simctl recordVideo exited with code ${exitCode}`);
+  return new Error(`simctl recordVideo exited with code ${outcome.result.exitCode}`);
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {

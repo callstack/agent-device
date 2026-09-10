@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
@@ -67,45 +66,6 @@ test('waits for delayed output and rejects an early nonzero exit', async () => {
     ),
   ).rejects.toThrow('simctl recordVideo exited with code 1');
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
-});
-
-const BUSY_STDERR =
-  'Error starting video recorder: Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy"';
-
-test('surfaces a typed hint for the EBUSY host-recording exit that survives normalization', async () => {
-  const root = mkdtempForTestSync('agent-device-recording-busy-');
-  const busy = background(50);
-  busy.resolveWait({ stdout: '', stderr: BUSY_STDERR, exitCode: 16 });
-
-  const thrown = await withTransport(
-    busy.process,
-    async () => await startAppleSimulatorRecording(simulator, path.join(root, 'busy.mp4')),
-  ).catch((error: unknown) => error);
-
-  expect(thrown).toBeInstanceOf(AppError);
-  const normalized = normalizeError(thrown);
-  expect(normalized.code).toBe('COMMAND_FAILED');
-  expect(normalized.hint).toContain('SimStreamProcessorService');
-  expect(normalized.details).toMatchObject({
-    reason: 'apple-simulator-host-recording-busy',
-    exitCode: 16,
-    processExitError: true,
-  });
-  expect(normalized.message).toContain('recording slot is busy');
-  expect(normalized.message).toContain('Resource busy');
-});
-
-test('keys the busy classification on the exit code, not the stderr text', async () => {
-  const root = mkdtempForTestSync('agent-device-recording-not-busy-');
-  const failed = background(51);
-  failed.resolveWait({ stdout: '', stderr: BUSY_STDERR, exitCode: 1 });
-
-  await expect(
-    withTransport(
-      failed.process,
-      async () => await startAppleSimulatorRecording(simulator, path.join(root, 'other.mp4')),
-    ),
-  ).rejects.toThrow('simctl recordVideo exited with code 1');
 });
 
 test('cancellation during readiness kills and settles with the exact reason', async () => {

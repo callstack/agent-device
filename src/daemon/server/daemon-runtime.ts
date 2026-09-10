@@ -83,11 +83,9 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
-// `simctl recordVideo` releases the host-wide recording lock only once it finishes finalizing on
-// SIGINT, so an orphaned recorder is given the same grace the live stop path allows before the
-// reaper escalates. An ungraceful SIGKILL fixes one device but leaves every later recording on the
-// host failing with EBUSY (#2170). The reaper only selects the recorder purpose, so this bounds one
-// tree — the daemon-startup budget stays well under the 15s client startup timeout.
+// An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
+// finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
+// (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
 const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
 
 type WritableOutput = {
