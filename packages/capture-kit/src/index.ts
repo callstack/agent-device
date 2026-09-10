@@ -30,8 +30,7 @@ export {
   assertAppLogSessionArtifacts,
 } from './app-log-session-artifacts.ts';
 export {
-  mergeNetworkDumps,
+  mergeNetworkScans,
   readRecentNetworkTrafficFromText,
-  withoutScanIdentities,
-  type ScannedNetworkDump,
+  type NetworkScan,
 } from './network-traffic.ts';

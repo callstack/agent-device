@@ -2,10 +2,9 @@ import type { NetworkDump } from '@agent-device/contracts/network-traffic';
 import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import {
-  mergeNetworkDumps,
+  mergeNetworkScans,
   readRecentNetworkTrafficFromText,
-  withoutScanIdentities,
-  type ScannedNetworkDump,
+  type NetworkScan,
 } from '@agent-device/capture-kit';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { backendForAppleDevice } from '../logs/backend.ts';
@@ -18,7 +17,7 @@ export async function dumpAppleNetworkTraffic(
 ): Promise<NetworkDumpResult> {
   const backend = backendForAppleDevice(device);
   const recent = await host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-  let dump = readRecentNetworkTrafficFromText(recent.text, {
+  let scan = readRecentNetworkTrafficFromText(recent.text, {
     ...input,
     path: recent.path,
     exists: recent.exists,
@@ -26,17 +25,17 @@ export async function dumpAppleNetworkTraffic(
     backend,
   });
   const notes: string[] = [];
-  if (canRecoverSimulator(device, input, dump)) {
+  if (canRecoverSimulator(device, input, scan.dump)) {
     const recovery = await recoverSimulatorTraffic(host, device, input, recent.path, signal);
-    if (recovery) dump = mergeRecoveredTraffic(notes, dump, recovery, input.maxEntries);
+    if (recovery) scan = mergeRecoveredTraffic(notes, scan, recovery, input.maxEntries);
   }
   appendLifecycleNote(notes, device, input);
-  appendUnnamedRequestNote(notes, dump);
-  if (dump.entries.length === 0) notes.push(noEntriesNote(device));
+  appendUnnamedRequestNote(notes, scan.dump);
+  if (scan.dump.entries.length === 0) notes.push(noEntriesNote(device));
   return Object.freeze({
     source: 'app-log',
     backend,
-    dump: withoutScanIdentities(dump),
+    dump: scan.dump,
     notes: Object.freeze(notes),
   });
 }
@@ -48,25 +47,25 @@ export async function dumpAppleNetworkTraffic(
  */
 function mergeRecoveredTraffic(
   notes: string[],
-  dump: ScannedNetworkDump,
-  recovery: { dump: ScannedNetworkDump; lineCount: number },
+  scan: NetworkScan,
+  recovery: { scan: NetworkScan; lineCount: number },
   maxEntries: number,
-): ScannedNetworkDump {
-  const recovered = recovery.dump.entries.length;
-  if (recovered === 0 && (recovery.dump.unnamedRequests ?? 0) === 0) {
+): NetworkScan {
+  const recovered = recovery.scan.dump.entries.length;
+  if (recovered === 0 && (recovery.scan.dump.unnamedRequests ?? 0) === 0) {
     if (recovery.lineCount > 0) {
       notes.push(
         `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
       );
     }
-    return dump;
+    return scan;
   }
   if (recovered > 0) {
     notes.push(
       `Recovered ${recovered} iOS simulator HTTP entr${recovered === 1 ? 'y' : 'ies'} from simctl log show (${recovery.lineCount} app log lines scanned).`,
     );
   }
-  return mergeNetworkDumps(recovery.dump, dump, maxEntries);
+  return mergeNetworkScans(recovery.scan, scan, maxEntries);
 }
 
 function canRecoverSimulator(
@@ -88,7 +87,7 @@ async function recoverSimulatorTraffic(
   input: NetworkDumpInput,
   appLogPath: string,
   signal: AbortSignal,
-): Promise<{ dump: ScannedNetworkDump; lineCount: number } | undefined> {
+): Promise<{ scan: NetworkScan; lineCount: number } | undefined> {
   const args = [
     ...(device.simulatorSetPath ? ['--set', device.simulatorSetPath] : []),
     'spawn',
@@ -121,7 +120,7 @@ async function recoverSimulatorTraffic(
     );
   if (lines.length === 0) return undefined;
   return {
-    dump: readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
+    scan: readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
       ...input,
       path: `${appLogPath} (simctl log show recovery)`,
       exists: true,

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from './network-traffic.ts';
+import { mergeNetworkScans, readRecentNetworkTrafficFromText } from './network-traffic.ts';
 
 test('parses the existing include projections and newest-first order', () => {
-  const dump = readRecentNetworkTrafficFromText(
+  const { dump } = readRecentNetworkTrafficFromText(
     [
       '2026-02-24T10:00:00Z GET https://api.example.com/profile status=200',
       '2026-02-24T10:00:02Z {"method":"POST","url":"https://api.example.com/login","statusCode":401,"headers":{"x-id":"abc"},"requestBody":{"email":"u@example.com"},"responseBody":{"error":"denied"}}',
@@ -35,7 +35,7 @@ test('parses the existing include projections and newest-first order', () => {
 });
 
 test('keeps missing canonical app-log text distinct and merges recovery first', () => {
-  const missing = readRecentNetworkTrafficFromText('', {
+  const { dump: missing } = readRecentNetworkTrafficFromText('', {
     path: '/sessions/one/app.log',
     exists: false,
     backend: 'android',
@@ -70,13 +70,13 @@ test('keeps missing canonical app-log text distinct and merges recovery first', 
     limits: { maxEntries: 2, maxPayloadChars: 2048, maxScanLines: 100 },
   });
   assert.deepEqual(
-    mergeNetworkDumps(recovered, stale, 2).entries.map(({ url }) => url),
+    mergeNetworkScans(recovered, stale, 2).dump.entries.map(({ url }) => url),
     ['https://fresh.example.test', 'https://stale.example.test'],
   );
 });
 
 test('keeps Android adjacent enrichment disabled for Apple backends', () => {
-  const dump = readRecentNetworkTrafficFromText(
+  const { dump } = readRecentNetworkTrafficFromText(
     [
       '2026-03-31 17:43:33.031 response code: 200',
       '2026-03-31 17:43:33.032 URL: https://api.example.com/fixture',
@@ -97,7 +97,7 @@ test('keeps Android adjacent enrichment disabled for Apple backends', () => {
 });
 
 test('ignores documentation URLs without an explicit network signal', () => {
-  const dump = readRecentNetworkTrafficFromText(
+  const { dump } = readRecentNetworkTrafficFromText(
     '2026-04-02 08:14:44Z config warning. See https://docs.example.test/setup for help.\n',
     {
       path: '/sessions/one/app.log',
@@ -124,7 +124,7 @@ test('applies a validated absolute line offset to host-selected text', () => {
     maxScanLines: 100,
   };
 
-  const dump = readRecentNetworkTrafficFromText('GET https://example.test status=200', {
+  const { dump } = readRecentNetworkTrafficFromText('GET https://example.test status=200', {
     ...options,
     lineNumberOffset: 5000,
   });
@@ -142,7 +142,7 @@ test('applies a validated absolute line offset to host-selected text', () => {
 test('a URL logged mid-sentence drops the separator that follows it', () => {
   const line =
     '2026-09-09 18:22:27.805 Df spicygolf[33656:4505afd] [com.apple.network:connection] [C9 Hostname#c6f77afc:3040 tcp, url: http://localhost:3040/v4/messages/en_US, definite, attribution: developer] start';
-  const dump = readRecentNetworkTrafficFromText(`${line}\n`, {
+  const { dump } = readRecentNetworkTrafficFromText(`${line}\n`, {
     path: 'app.log',
     exists: true,
     backend: 'ios-simulator',
@@ -161,12 +161,16 @@ const OPENING_SUMMARY =
 const REUSED_SUMMARY =
   '2026-09-09 18:22:28.167 Df spicygolf[33656:4505ae4] [com.apple.CFNetwork:Summary] Task <2FAEF670-BB27-42A4-ACDD-6B6DF7D11510>.<2> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1, reused_after_ms=0, request_bytes=236, response_bytes=624, cache_hit=true}';
 
-function iosDump(lines: readonly string[]) {
+function iosScan(lines: readonly string[]) {
   return readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
     path: 'app.log',
     exists: true,
     backend: 'ios-simulator',
   });
+}
+
+function iosDump(lines: readonly string[]) {
+  return iosScan(lines).dump;
 }
 
 test('a request that reused a keep-alive connection is reported against its origin', () => {
@@ -224,7 +228,7 @@ test('android dumps do not pay for CFNetwork correlation', () => {
   const lines = `${[CONNECTION_START, REUSED_SUMMARY].join('\n')}\n`;
   assert.equal(iosDump([CONNECTION_START, REUSED_SUMMARY]).entries.length, 2);
 
-  const dump = readRecentNetworkTrafficFromText(lines, {
+  const { dump } = readRecentNetworkTrafficFromText(lines, {
     path: 'app.log',
     exists: true,
     backend: 'android',
@@ -315,32 +319,32 @@ const SECOND_REUSED_SUMMARY = REUSED_SUMMARY.replace(
 );
 
 test('two windows over disjoint unnamed traffic report both requests, not the larger count', () => {
-  const appLog = iosDump([REUSED_SUMMARY]);
-  const recovery = iosDump([SECOND_REUSED_SUMMARY]);
+  const appLog = iosScan([REUSED_SUMMARY]);
+  const recovery = iosScan([SECOND_REUSED_SUMMARY]);
 
-  const merged = mergeNetworkDumps(recovery, appLog, 200);
+  const merged = mergeNetworkScans(recovery, appLog, 200);
 
-  assert.equal(merged.unnamedRequests, 2);
+  assert.equal(merged.dump.unnamedRequests, 2);
 });
 
 test('two windows over the same unnamed request report it once', () => {
-  const appLog = iosDump([REUSED_SUMMARY, SECOND_REUSED_SUMMARY]);
-  const recovery = iosDump([SECOND_REUSED_SUMMARY]);
+  const appLog = iosScan([REUSED_SUMMARY, SECOND_REUSED_SUMMARY]);
+  const recovery = iosScan([SECOND_REUSED_SUMMARY]);
 
-  const merged = mergeNetworkDumps(recovery, appLog, 200);
+  const merged = mergeNetworkScans(recovery, appLog, 200);
 
-  assert.equal(merged.unnamedRequests, 2);
+  assert.equal(merged.dump.unnamedRequests, 2);
 });
 
 test('a request one window named is not still counted as unnamed from the other', () => {
-  const appLog = iosDump([REUSED_SUMMARY]);
-  const recovery = iosDump([CONNECTION_START, REUSED_SUMMARY]);
+  const appLog = iosScan([REUSED_SUMMARY]);
+  const recovery = iosScan([CONNECTION_START, REUSED_SUMMARY]);
 
-  assert.equal(appLog.unnamedRequests, 1);
-  assert.equal(recovery.unnamedRequests, 0);
+  assert.equal(appLog.dump.unnamedRequests, 1);
+  assert.equal(recovery.dump.unnamedRequests, 0);
 
-  const merged = mergeNetworkDumps(recovery, appLog, 200);
+  const merged = mergeNetworkScans(recovery, appLog, 200);
 
-  assert.equal(merged.unnamedRequests, 0);
-  assert.equal(merged.entries.filter((entry) => entry.pathUnavailable).length, 1);
+  assert.equal(merged.dump.unnamedRequests, 0);
+  assert.equal(merged.dump.entries.filter((entry) => entry.pathUnavailable).length, 1);
 });

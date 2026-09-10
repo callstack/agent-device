@@ -252,7 +252,7 @@ function bindLimrunAppLogs(
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const backend = backendForDevice(device);
-      const dump = readRecentNetworkTrafficFromText(recent.text, {
+      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
         ...input,
         path: recent.path,
         exists: recent.exists,

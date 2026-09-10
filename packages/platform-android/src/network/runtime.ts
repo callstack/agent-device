@@ -4,7 +4,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
+import { mergeNetworkScans, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertAndroidLogPackageSafe } from '../logs/package-name.ts';
 
@@ -20,7 +20,7 @@ export async function dumpAndroidNetworkTraffic(
   signal: AbortSignal,
 ): Promise<NetworkDumpResult> {
   const recent = await host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-  let dump = readRecentNetworkTrafficFromText(recent.text, {
+  let scan = readRecentNetworkTrafficFromText(recent.text, {
     ...input,
     path: recent.path,
     exists: recent.exists,
@@ -33,14 +33,14 @@ export async function dumpAndroidNetworkTraffic(
     assertAndroidLogPackageSafe(input.appBundleId);
     const recovered = await recoverPackageTraffic(host, device, input.appBundleId, signal);
     if (recovered) {
-      const recoveryDump = readRecentNetworkTrafficFromText(recovered.text, {
+      const recoveryScan = readRecentNetworkTrafficFromText(recovered.text, {
         ...input,
         path: `${recent.path} (adb logcat recovery)`,
         exists: true,
         backend: 'android',
       });
-      if (recoveryDump.entries.length > 0) {
-        dump = mergeNetworkDumps(recoveryDump, dump, input.maxEntries);
+      if (recoveryScan.dump.entries.length > 0) {
+        scan = mergeNetworkScans(recoveryScan, scan, input.maxEntries);
         notes.push(
           context.reason === 'stale-active'
             ? `Session app log stream was still bound to prior Android PID ${context.trackedPid}. Recovered recent Android HTTP entries from adb logcat for PID set ${recovered.pids.join(', ')}.`
@@ -58,13 +58,13 @@ export async function dumpAndroidNetworkTraffic(
       'Session app log stream is inactive. Run logs clear --restart, reproduce the request window again, then rerun network dump.',
     );
   }
-  if (dump.entries.length === 0) {
+  if (scan.dump.entries.length === 0) {
     notes.push('No HTTP(s) entries were found in recent session app logs.');
   }
   return Object.freeze({
     source: 'app-log',
     backend: 'android',
-    dump,
+    dump: scan.dump,
     notes: Object.freeze(notes),
   });
 }

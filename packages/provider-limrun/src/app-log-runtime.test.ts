@@ -494,3 +494,43 @@ test('closes every Limrun gesture and scroll cell without a live session', async
     });
   }
 });
+
+test('an iOS limrun dump bounded to one entry reports unnamed traffic without its identities', async () => {
+  // Five keep-alive requests CFNetwork logged no URL for, and no connection
+  // line to resolve them against: many more unnamed tasks than maxEntries.
+  const summaries = Array.from(
+    { length: 5 },
+    (_, index) =>
+      `2026-09-09 18:22:28.167 Df app[1:2] [com.apple.CFNetwork:Summary] Task <2FAEF670>.<${index + 10}> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1}`,
+  );
+  const base = unusedHost();
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({
+      host: {
+        ...base,
+        appLogs: {
+          ...base.appLogs,
+          readRecent: async () => ({
+            path: '/sessions/session/app.log',
+            exists: true,
+            text: `${summaries.join('\n')}\n`,
+            skippedLines: 0,
+          }),
+        },
+      },
+    }),
+  );
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+
+  const result = await binding.operations.networkDump?.({
+    sessionId: 'session',
+    maxEntries: 1,
+    include: 'summary',
+    maxPayloadChars: 2048,
+    maxScanLines: 4000,
+  });
+
+  if (result?.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.unnamedRequests).toBe(5);
+  expect(result.dump).not.toHaveProperty('unnamedRequestIds');
+});

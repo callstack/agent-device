@@ -42,26 +42,28 @@ type CfNetworkConnectionIndex = ReadonlyMap<
 >;
 
 /**
- * A dump plus the identities behind its `unnamedRequests`. Reconciling two scan
- * windows needs those identities; a caller returning a dump to its requester
- * does not, and an unbounded list of them has no place in a response.
+ * A scan's public dump, and the identities behind its `unnamedRequests`.
+ *
+ * The identities exist to reconcile two scan windows and have no place in a
+ * response, where their number tracks the log rather than the caller's entry
+ * limit. They sit beside the dump rather than on it so that a route returning
+ * `scan.dump` cannot carry them out by accident: every producer of a dump is a
+ * response boundary, and this is the one shape that does not rely on each of
+ * them remembering.
  */
-export type ScannedNetworkDump = NetworkDump & Readonly<{ unnamedRequestIds?: readonly string[] }>;
+export type NetworkScan = Readonly<{
+  dump: NetworkDump;
+  unnamedRequestIds: readonly string[];
+}>;
 
-/** The public projection: identities dropped, their count kept. */
-export function withoutScanIdentities(dump: ScannedNetworkDump): NetworkDump {
-  const { unnamedRequestIds: _identities, ...rest } = dump;
-  return Object.freeze(rest);
-}
-
-export function mergeNetworkDumps(
-  primary: ScannedNetworkDump,
-  secondary: ScannedNetworkDump,
-  maxEntries = primary.limits.maxEntries,
-): ScannedNetworkDump {
-  const entries = [...primary.entries];
+export function mergeNetworkScans(
+  primary: NetworkScan,
+  secondary: NetworkScan,
+  maxEntries = primary.dump.limits.maxEntries,
+): NetworkScan {
+  const entries = [...primary.dump.entries];
   const seen = new Set(entries.map(networkEntryKey));
-  for (const entry of secondary.entries) {
+  for (const entry of secondary.dump.entries) {
     const key = networkEntryKey(entry);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -72,18 +74,20 @@ export function mergeNetworkDumps(
   // request either window named is named, and the rest union by identity, so
   // neither window's blind spot inflates or masks the other's.
   const named = new Set(
-    [...primary.entries, ...secondary.entries]
+    [...primary.dump.entries, ...secondary.dump.entries]
       .map((entry) => entry.packetId)
       .filter((id): id is string => id !== undefined),
   );
   const unnamedRequestIds = [
-    ...new Set([...(primary.unnamedRequestIds ?? []), ...(secondary.unnamedRequestIds ?? [])]),
+    ...new Set([...primary.unnamedRequestIds, ...secondary.unnamedRequestIds]),
   ].filter((id) => !named.has(id));
   return Object.freeze({
-    ...primary,
-    matchedLines: entries.length,
-    entries: Object.freeze(entries),
-    unnamedRequests: unnamedRequestIds.length,
+    dump: Object.freeze({
+      ...primary.dump,
+      matchedLines: entries.length,
+      entries: Object.freeze(entries),
+      unnamedRequests: unnamedRequestIds.length,
+    }),
     unnamedRequestIds: Object.freeze(unnamedRequestIds),
   });
 }
@@ -91,7 +95,7 @@ export function mergeNetworkDumps(
 export function readRecentNetworkTrafficFromText(
   content: string,
   options: NetworkDumpParserOptions,
-): ScannedNetworkDump {
+): NetworkScan {
   const maxEntries = clampInt(options.maxEntries, 25, 1, 200);
   const include = options.include ?? 'summary';
   const maxPayloadChars = clampInt(options.maxPayloadChars, 2048, 64, 16_384);
@@ -99,14 +103,17 @@ export function readRecentNetworkTrafficFromText(
   const lineNumberOffset = requireLineNumberOffset(options.lineNumberOffset);
   if (!options.exists) {
     return Object.freeze({
-      path: options.path,
-      exists: false,
-      scannedLines: 0,
-      matchedLines: 0,
-      entries: Object.freeze([]),
-      unnamedRequests: 0,
-      include,
-      limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+      dump: Object.freeze({
+        path: options.path,
+        exists: false,
+        scannedLines: 0,
+        matchedLines: 0,
+        entries: Object.freeze([]),
+        unnamedRequests: 0,
+        include,
+        limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+      }),
+      unnamedRequestIds: Object.freeze([]),
     });
   }
   const allLines = content.split('\n');
@@ -133,15 +140,17 @@ export function readRecentNetworkTrafficFromText(
     if (parsed) entries.push(parsed);
   }
   return Object.freeze({
-    path: options.path,
-    exists: true,
-    scannedLines: lines.length,
-    matchedLines: entries.length,
-    entries: Object.freeze(entries),
-    unnamedRequests: unnamedRequestIds.length,
+    dump: Object.freeze({
+      path: options.path,
+      exists: true,
+      scannedLines: lines.length,
+      matchedLines: entries.length,
+      entries: Object.freeze(entries),
+      unnamedRequests: unnamedRequestIds.length,
+      include,
+      limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
+    }),
     unnamedRequestIds: Object.freeze(unnamedRequestIds),
-    include,
-    limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
   });
 }
 
