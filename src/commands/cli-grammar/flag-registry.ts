@@ -53,12 +53,10 @@ export function projectConfigFlagKeys(): ReadonlySet<FlagKey> {
  * declaration's `recorded` field. Recomputed per call for the same reason as
  * `projectConfigFlagKeys`.
  */
-export function recordedFlagKeys(): readonly FlagKey[] {
-  return [
-    ...new Set(
-      FLAG_DEFINITIONS.filter((definition) => definition.recorded).map(
-        (definition) => definition.key,
-      ),
+export function recordedFlagKeys(): ReadonlySet<FlagKey> {
+  return new Set(
+    FLAG_DEFINITIONS.filter((definition) => definition.recorded).map(
+      (definition) => definition.key,
     ),
-  ];
+  );
 }
