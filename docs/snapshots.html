@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.ad6dcb5a19.js"></script>
+<script defer src="/agent-device/static/js/index.f70fad557a.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -93,6 +93,7 @@ before any device work — on the CLI, the Node client, and MCP alike. Choose on
 <ul>
 <li>iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.</li>
 <li>Default to <code>snapshot -i</code> for agent loops.</li>
+<li>Repeated unfiltered Android snapshots with unchanged presented content and bounds return a compact acknowledgement. <code>-i</code>, <code>-d</code>, <code>-s</code>, <code>--json</code>, and <code>--raw</code> retain full output. Use <code>--force-full</code> to re-emit the tree explicitly.</li>
 <li>Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It is visible-first and may collapse helper/accessibility noise; use <code>--raw</code> or <code>--json</code> when you need the full provider tree.</li>
 <li>Off-screen interactive content is collapsed into discovery summaries such as <code>[off-screen below] 3 interactive items: &quot;Privacy&quot;, &quot;Battery&quot;, &quot;About&quot;</code>.</li>
 <li>If a target only appears in an off-screen summary, use <code>scroll &lt;direction&gt;</code> and re-snapshot until the target becomes visible.</li>

@@ -44,6 +44,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 
 - iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.
 - Default to `snapshot -i` for agent loops.
+- Repeated unfiltered Android snapshots with unchanged presented content and bounds return a compact acknowledgement. `-i`, `-d`, `-s`, `--json`, and `--raw` retain full output. Use `--force-full` to re-emit the tree explicitly.
 - Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It is visible-first and may collapse helper/accessibility noise; use `--raw` or `--json` when you need the full provider tree.
 - Off-screen interactive content is collapsed into discovery summaries such as `[off-screen below] 3 interactive items: "Privacy", "Battery", "About"`.
 - If a target only appears in an off-screen summary, use `scroll <direction>` and re-snapshot until the target becomes visible.
