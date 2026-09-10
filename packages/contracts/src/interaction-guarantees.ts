@@ -170,6 +170,11 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // not the bulk one. Every other platform, and any backend that omits the
   // hook, refuses on the visibility resolver's verdict unchanged — this is a
   // rescue-only override, never a way to relax a genuine refusal.
+  // The live read is the runner's direct querySelector, which runs against the
+  // single activeApp that prepareActiveCommandContext resolved for the snapshot
+  // tree as well — including an in-place system surface (the web sign-in sheet,
+  // #2448). Tree and rescue therefore read the SAME surface: a confirmation can
+  // never come from a different app than the refusal was computed on.
   offscreen: {
     kind: 'runtime',
     via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
