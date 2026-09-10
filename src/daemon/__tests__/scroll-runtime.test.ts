@@ -339,7 +339,7 @@ test('the edge plan proves its capture statically and the direction plan cannot 
   expectTypeOf<RequiredKeys<DirectionOperations>>().toEqualTypeOf<'scrollDirection'>();
 });
 
-/** Same shape the command runtime's `--until` tests use: a row walked into the viewport. */
+/** A row walked into the viewport, so the executor's pass count is observable. */
 function untilNodes(targetY: number, hiddenBelow: boolean) {
   return [
     {

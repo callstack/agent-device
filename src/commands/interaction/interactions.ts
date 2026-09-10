@@ -33,7 +33,7 @@ import {
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import type { ScrollInputDirection } from './runtime/scroll.ts';
+import type { ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
 
 export const interactionCliReaders = {
   click: (positionals, flags) => ({

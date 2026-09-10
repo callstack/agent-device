@@ -14,45 +14,48 @@ import { captureThrows, scrollSnapshot, windowRoot } from './scroll-edge-state-f
 
 test('formatScrollEdgeMessage: edge reached with zero passes reports already-at-edge (bottom)', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', 'bottom', 0, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'down', edge: 'bottom', passes: 0 }),
     'Already at bottom; no hidden content below detected',
   );
 });
 
 test('formatScrollEdgeMessage: edge reached with zero passes reports already-at-edge (top)', () => {
   assert.equal(
-    formatScrollEdgeMessage('up', 'top', 0, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'up', edge: 'top', passes: 0 }),
     'Already at top; no hidden content above detected',
   );
 });
 
 test('formatScrollEdgeMessage: edge reached after N passes', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', 'bottom', 4, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'down', edge: 'bottom', passes: 4 }),
     'Scrolled to bottom with 4 down passes',
   );
 });
 
 test('formatScrollEdgeMessage: no edge, pixel amount given', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', undefined, 0, undefined, 250),
+    formatScrollEdgeMessage({ direction: 'down', passes: 0, pixels: 250 }),
     'Scrolled down by 250px',
   );
 });
 
 test('formatScrollEdgeMessage: no edge, no pixels, symbolic amount given', () => {
-  assert.equal(formatScrollEdgeMessage('up', undefined, 0, 3, undefined), 'Scrolled up by 3');
-});
-
-test('formatScrollEdgeMessage: no edge, no pixels, no amount falls back to bare direction', () => {
   assert.equal(
-    formatScrollEdgeMessage('left', undefined, 0, undefined, undefined),
-    'Scrolled left',
+    formatScrollEdgeMessage({ direction: 'up', passes: 0, amount: 3 }),
+    'Scrolled up by 3',
   );
 });
 
+test('formatScrollEdgeMessage: no edge, no pixels, no amount falls back to bare direction', () => {
+  assert.equal(formatScrollEdgeMessage({ direction: 'left', passes: 0 }), 'Scrolled left');
+});
+
 test('formatScrollEdgeMessage: pixels takes priority over amount when both are set', () => {
-  assert.equal(formatScrollEdgeMessage('down', undefined, 0, 3, 250), 'Scrolled down by 250px');
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 0, amount: 3, pixels: 250 }),
+    'Scrolled down by 250px',
+  );
 });
 
 /**
@@ -61,15 +64,15 @@ test('formatScrollEdgeMessage: pixels takes priority over amount when both are s
  */
 test('an amount-based message names the honored travel when the planner reports it', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', undefined, 1, 3, undefined, 640),
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, amount: 3, honoredPixels: 640 }),
     'Scrolled down by 3 of the viewport (640px)',
   );
   assert.equal(
-    formatScrollEdgeMessage('down', undefined, 1, 0.65, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, amount: 0.65 }),
     'Scrolled down by 0.65',
   );
   assert.equal(
-    formatScrollEdgeMessage('down', undefined, 1, undefined, 5000, 640),
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, pixels: 5000, honoredPixels: 640 }),
     'Scrolled down by 640px',
   );
 });
@@ -298,7 +301,7 @@ test('runScrollEdgePasses: throws a COMMAND_FAILED AppError once the pass limit 
         'scroll bottom reached the safety limit before the snapshot showed the edge',
       );
       assert.deepEqual(error.details, {
-        hint: 'The scoped scroll container still reports hidden content. Use a smaller manual scroll + snapshot loop to inspect the current state.',
+        hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
       });
       return true;
     },

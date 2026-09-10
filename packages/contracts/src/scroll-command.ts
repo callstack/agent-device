@@ -82,6 +82,13 @@ export function normalizeScrollDurationMs(
   return durationMs;
 }
 
+/** The travel the planner produced, which saturates below a large requested amount. */
+export function honoredScrollPixels(
+  result: Record<string, unknown> | undefined,
+): number | undefined {
+  return typeof result?.pixels === 'number' ? result.pixels : undefined;
+}
+
 export function honoredScrollDurationMs(
   result: Record<string, unknown> | undefined,
 ): number | undefined {
@@ -102,7 +109,9 @@ export type ScrollCommandResult = {
   direction: ScrollDirection;
   /** Set for `top`/`bottom` requests: the extreme being scrolled to. */
   edge?: 'top' | 'bottom';
-  /** Edge scrolls only: how many scroll-and-check passes ran. */
+  /** Set for `--until` requests: the selector the passes stopped on. */
+  until?: string;
+  /** Edge and until scrolls only: how many scroll-and-check passes ran. */
   passes?: number;
   amount?: number;
   pixels?: number;

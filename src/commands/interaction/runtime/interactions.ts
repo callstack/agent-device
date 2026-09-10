@@ -35,8 +35,6 @@ export type {
   LongPressCommandOptions,
   LongPressCommandResult,
 } from './gestures.ts';
-export { scrollCommand } from './scroll.ts';
-export type { ScrollCommandOptions, ScrollCommandResult } from './scroll.ts';
 export type { InteractionTarget } from './resolution.ts';
 
 export type PressCommandOptions = CommandContext &

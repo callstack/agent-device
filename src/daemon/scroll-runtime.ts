@@ -2,6 +2,7 @@ import {
   assertExclusiveScrollDistanceInputs,
   assertScrollUntilCompatible,
   honoredScrollDurationMs,
+  honoredScrollPixels,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
   type ResolvedScrollExecutionOptions,
@@ -91,15 +92,13 @@ export async function resolveBoundScrollRuntime(
   assertScrollCommandInputs(amount, pixels, durationMs);
 
   const target = parseScrollTarget(directionInput);
-  assertScrollUntilCompatible({
-    ...(target.edge ? { edge: target.edge } : {}),
-    ...(until === undefined ? {} : { until }),
-  });
-  const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
-  const plan = resolveScrollRuntimePlan({
+  const stopCondition = {
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
-  });
+  };
+  assertScrollUntilCompatible(stopCondition);
+  const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
+  const plan = resolveScrollRuntimePlan(stopCondition);
   const admission = {
     command: 'scroll',
     device: params.device,
@@ -120,7 +119,11 @@ export async function resolveBoundScrollRuntime(
           ...admission,
           // The retired leaf refused an unsupported edge scroll by naming what the edge needs, so
           // the capture requirement keeps saying so rather than collapsing into "not supported".
-          unavailableResponse: (unavailable) => scrollEdgeUnsupported(edge, unavailable.hint),
+          unavailableResponse: (unavailable) =>
+            scrollCaptureUnsupported(
+              `scroll ${edge}, which verifies hidden content before scrolling,`,
+              unavailable.hint,
+            ),
           use: plan.use,
         },
         async (runtime, dispatchContext) =>
@@ -132,7 +135,11 @@ export async function resolveBoundScrollRuntime(
       return await resolveBoundGenericRuntime(
         {
           ...admission,
-          unavailableResponse: (unavailable) => scrollUntilUnsupported(unavailable.hint),
+          unavailableResponse: (unavailable) =>
+            scrollCaptureUnsupported(
+              'scroll --until, which checks whether the selector became visible,',
+              unavailable.hint,
+            ),
           use: plan.use,
         },
         async (runtime, dispatchContext) =>
@@ -149,19 +156,14 @@ export async function resolveBoundScrollRuntime(
   }
 }
 
-function scrollEdgeUnsupported(edge: ScrollEdge, hint: string | undefined) {
+/**
+ * Both verifying tiers refuse the same way and differ only in what they would have checked, so the
+ * refusal names that rather than collapsing into "not supported" — the shape the retired leaf had.
+ */
+function scrollCaptureUnsupported(subject: string, hint: string | undefined) {
   return errorResponse(
     'UNSUPPORTED_OPERATION',
-    `scroll ${edge} requires snapshot support to verify hidden content before scrolling`,
-    undefined,
-    hint === undefined ? undefined : { hint },
-  );
-}
-
-function scrollUntilUnsupported(hint: string | undefined) {
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    'scroll --until requires snapshot support to check whether the selector became visible',
+    `${subject} requires snapshot support`,
     undefined,
     hint === undefined ? undefined : { hint },
   );
@@ -280,20 +282,15 @@ function scrollResult(
       ...(durationMs !== undefined ? { durationMs } : {}),
       ...interactionResult,
     },
-    formatScrollEdgeMessage(
-      target.direction,
-      target.edge,
-      completedPasses,
-      options.amount,
-      options.pixels,
-      honoredScrollPixels(interactionResult),
-    ),
+    formatScrollEdgeMessage({
+      direction: target.direction,
+      edge: target.edge,
+      passes: completedPasses,
+      amount: options.amount,
+      pixels: options.pixels,
+      honoredPixels: honoredScrollPixels(interactionResult),
+    }),
   );
-}
-
-/** The travel the planner produced, which saturates below a large requested amount. */
-function honoredScrollPixels(result: Record<string, unknown>): number | undefined {
-  return typeof result.pixels === 'number' ? result.pixels : undefined;
 }
 
 /** The neutral intent one scroll carries, projected from a resolved command context. */

@@ -7,7 +7,6 @@ import {
   hoverCommand,
   longPressCommand,
   pressCommand,
-  scrollCommand,
   type ClickCommandOptions,
   type FillCommandOptions,
   type FillCommandResult,
@@ -20,8 +19,6 @@ import {
   type LongPressCommandResult,
   type PressCommandOptions,
   type PressCommandResult,
-  type ScrollCommandOptions,
-  type ScrollCommandResult,
 } from './interactions.ts';
 import {
   findCommand,
@@ -79,7 +76,6 @@ export type InteractionCommands = {
   focus: RuntimeCommand<FocusCommandOptions, FocusCommandResult>;
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
   hover: RuntimeCommand<HoverCommandOptions, HoverCommandResult>;
-  scroll: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   /**
    * #1638: the observation half of `--settle` for mutations that resolve no
@@ -143,7 +139,6 @@ export type BoundInteractionCommands = {
     target: InteractionTarget,
     options?: Omit<HoverCommandOptions, 'target'>,
   ) => Promise<HoverCommandResult>;
-  scroll: BoundRuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   settleObservation: BoundRuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
 };
@@ -167,7 +162,6 @@ export const interactionCommands: InteractionCommands = {
   focus: focusCommand,
   longPress: longPressCommand,
   hover: hoverCommand,
-  scroll: scrollCommand,
   gesture: gestureCommand,
   settleObservation: settleObservationCommand,
 };
@@ -198,7 +192,6 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     longPress: (target, options = {}) =>
       interactionCommands.longPress(runtime, { ...options, target }),
     hover: (target, options = {}) => interactionCommands.hover(runtime, { ...options, target }),
-    scroll: (options) => interactionCommands.scroll(runtime, options),
     gesture: (options) => interactionCommands.gesture(runtime, options),
     settleObservation: (options) => interactionCommands.settleObservation(runtime, options),
   };

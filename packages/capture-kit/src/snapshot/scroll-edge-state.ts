@@ -68,7 +68,7 @@ export async function runScrollEdgePasses<TResult>(params: {
         'COMMAND_FAILED',
         `scroll ${edge} reached the safety limit before the snapshot showed the edge`,
         {
-          hint: 'The scoped scroll container still reports hidden content. Use a smaller manual scroll + snapshot loop to inspect the current state.',
+          hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
         },
       );
     }
@@ -87,14 +87,15 @@ export async function runScrollEdgePasses<TResult>(params: {
  * padding, so a large `amount` saturates. Naming the honored distance is what keeps
  * `scroll down 3` from reporting a three-viewport scroll it never performed.
  */
-export function formatScrollEdgeMessage(
-  direction: ScrollDirection,
-  edge: ScrollEdge | undefined,
-  passes: number,
-  amount: number | undefined,
-  pixels: number | undefined,
-  honoredPixels?: number,
-): string {
+export function formatScrollEdgeMessage(params: {
+  direction: ScrollDirection;
+  edge?: ScrollEdge | undefined;
+  passes: number;
+  amount?: number | undefined;
+  pixels?: number | undefined;
+  honoredPixels?: number | undefined;
+}): string {
+  const { direction, edge, passes, amount, pixels, honoredPixels } = params;
   if (edge && passes === 0) {
     return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
   }

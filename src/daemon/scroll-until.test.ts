@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import {
   SCROLL_UNTIL_PASS_LIMIT,
   formatScrollUntilMessage,
   runScrollUntilVisible,
-  type ScrollUntilCapture,
 } from './scroll-until.ts';
+
+/** The provenance every `SnapshotResult` carries; the fields under test are the rest. */
+function capture(fields: Partial<SnapshotResult>): SnapshotResult {
+  return { backend: 'xctest', producer: 'runner', ...fields } as SnapshotResult;
+}
 
 const VIEWPORT = { x: 0, y: 0, width: 400, height: 800 };
 const SPARSE = { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' } as const;
@@ -29,7 +34,7 @@ function tree(rowY: number, label = 'Email'): SnapshotNode[] {
 }
 
 async function run(params: {
-  captures: ScrollUntilCapture[];
+  captures: SnapshotResult[];
   selector?: string;
   passLimit?: number;
   onScroll?: () => void;
@@ -50,7 +55,10 @@ async function run(params: {
 
 test('an already visible target costs one capture and no gesture', async () => {
   let scrolls = 0;
-  const result = await run({ captures: [{ nodes: tree(200) }], onScroll: () => (scrolls += 1) });
+  const result = await run({
+    captures: [capture({ nodes: tree(200) })],
+    onScroll: () => (scrolls += 1),
+  });
   assert.equal(result.passes, 0);
   assert.equal(scrolls, 0);
   assert.equal(result.result, undefined);
@@ -59,7 +67,7 @@ test('an already visible target costs one capture and no gesture', async () => {
 test('passes repeat until the selector is on screen, and the last gesture is reported', async () => {
   let scrolls = 0;
   const result = await run({
-    captures: [{ nodes: tree(2400) }, { nodes: tree(1600) }, { nodes: tree(200) }],
+    captures: [tree(2400), tree(1600), tree(200)].map((nodes) => capture({ nodes })),
     onScroll: () => (scrolls += 1),
   });
   assert.equal(result.passes, 2);
@@ -73,7 +81,7 @@ test('passes repeat until the selector is on screen, and the last gesture is rep
  */
 test('a present but scrolled-out target does not end the loop', async () => {
   await assert.rejects(
-    () => run({ captures: [{ nodes: tree(2400) }], passLimit: 1 }),
+    () => run({ captures: [capture({ nodes: tree(2400) })], passLimit: 1 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'scroll_until_pass_limit');
@@ -88,7 +96,7 @@ test('running out of content stops before the pass budget does', async () => {
     () =>
       run({
         // The row is on screen, so nothing is hidden below and the selector matches nothing.
-        captures: [{ nodes: tree(200, 'Other') }],
+        captures: [capture({ nodes: tree(200, 'Other') })],
         onScroll: () => (scrolls += 1),
       }),
     (error: unknown) => {
@@ -110,7 +118,7 @@ test('a horizontal scroll has no edge signal and is bounded by the budget alone'
         direction: 'right',
         platform: 'ios',
         passLimit: 3,
-        capture: async () => ({ nodes: tree(200) }),
+        capture: async () => capture({ nodes: tree(200) }),
         scroll: async () => {
           scrolls += 1;
           return {};
@@ -133,7 +141,7 @@ test('the default budget is the shared constant', async () => {
         selector: 'label=Missing',
         direction: 'right',
         platform: 'ios',
-        capture: async () => ({ nodes: tree(200) }),
+        capture: async () => capture({ nodes: tree(200) }),
         scroll: async () => ({}),
       }),
     (error: unknown) =>
@@ -147,10 +155,10 @@ test('the default budget is the shared constant', async () => {
  * gestures, so the refusal is proven to land before matching, edge analysis or scrolling.
  */
 test('an unreadable capture is refused rather than read as end-of-content', async () => {
-  for (const capture of [{}, { nodes: [] }] satisfies ScrollUntilCapture[]) {
+  for (const frame of [capture({}), capture({ nodes: [] })]) {
     let scrolls = 0;
     await assert.rejects(
-      () => run({ captures: [capture], onScroll: () => (scrolls += 1) }),
+      () => run({ captures: [frame], onScroll: () => (scrolls += 1) }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
@@ -163,31 +171,26 @@ test('an unreadable capture is refused rather than read as end-of-content', asyn
 });
 
 /**
- * The verdict arrives under two spellings: `SnapshotState` says `snapshotQuality`, a backend result
- * says `quality` and can nest a state as well. Reading only one is how a real backend sparse verdict
- * went unread once. Every arrangement carries content below the fold, so an edge verdict would be
- * wrong here too.
+ * A tree the backend calls sparse is one whose selectors are not trustworthy, so it cannot answer
+ * the question either way. It carries content below the fold, so an edge verdict would be wrong too.
  */
-test('a sparse verdict is refused under every spelling a capture can carry it in', async () => {
-  const arrangements: ScrollUntilCapture[] = [
-    { nodes: tree(2400), snapshotQuality: SPARSE },
-    { nodes: tree(2400), quality: SPARSE },
-    { quality: SPARSE, snapshot: { nodes: tree(2400) } },
-    { snapshot: { nodes: tree(2400), snapshotQuality: SPARSE } },
-  ];
-  for (const capture of arrangements) {
-    let scrolls = 0;
-    await assert.rejects(
-      () => run({ captures: [capture], onScroll: () => (scrolls += 1) }),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.captureRefusal, 'sparse-tree');
-        assert.match(String(error.message), /AX bridge unavailable/);
-        return true;
-      },
-    );
-    assert.equal(scrolls, 0);
-  }
+test('a sparse capture is refused before matching, edge analysis or scrolling', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      run({
+        captures: [capture({ nodes: tree(2400), quality: SPARSE })],
+        onScroll: () => (scrolls += 1),
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'sparse-tree');
+      assert.match(String(error.message), /AX bridge unavailable/);
+      return true;
+    },
+  );
+  assert.equal(scrolls, 0);
 });
 
 test('the legacy iOS application-root-only shape is refused', async () => {
@@ -195,20 +198,15 @@ test('the legacy iOS application-root-only shape is refused', async () => {
     () =>
       run({
         captures: [
-          {
+          capture({
             backend: 'xctest',
             nodes: [{ index: 0, ref: 'e1', type: 'Application', rect: VIEWPORT } as SnapshotNode],
-          },
+          }),
         ],
       }),
     (error: unknown) =>
       error instanceof AppError && error.details?.captureRefusal === 'sparse-tree',
   );
-});
-
-test('a malformed quality payload is not mistaken for a verdict', async () => {
-  const result = await run({ captures: [{ nodes: tree(200), quality: { state: 'not-a-state' } }] });
-  assert.equal(result.passes, 0);
 });
 
 /**
@@ -218,7 +216,7 @@ test('a malformed quality payload is not mistaken for a verdict', async () => {
 test('a populated capture is not refused, healthy or recovered', async () => {
   for (const state of ['healthy', 'recovered'] as const) {
     const result = await run({
-      captures: [{ nodes: tree(200), snapshotQuality: { state, backend: 'tree' } }],
+      captures: [capture({ nodes: tree(200), quality: { state, backend: 'tree' } })],
     });
     assert.equal(result.passes, 0);
   }
