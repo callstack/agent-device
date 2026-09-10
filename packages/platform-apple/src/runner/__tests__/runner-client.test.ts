@@ -1074,9 +1074,7 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
     signal.aborted
       ? Promise.resolve()
       : new Promise<void>((resolve) =>
-          signal.addEventListener('abort', () => resolve(), {
-            once: true,
-          }),
+          signal.addEventListener('abort', () => resolve(), { once: true }),
         );
   const canceledBuildStarted = deferred<void>();
   const survivorBuildStarted = deferred<void>();
