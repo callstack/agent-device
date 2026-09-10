@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
@@ -69,15 +69,13 @@ test('waits for delayed output and rejects an early nonzero exit', async () => {
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
 });
 
-test('surfaces the classified host-busy error when the recorder exits EBUSY during start', async () => {
+const BUSY_STDERR =
+  'Error starting video recorder: Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy"';
+
+test('surfaces a typed hint for the EBUSY host-recording exit that survives normalization', async () => {
   const root = mkdtempForTestSync('agent-device-recording-busy-');
   const busy = background(50);
-  busy.resolveWait({
-    stdout: '',
-    stderr:
-      'Error starting video recorder: Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy"',
-    exitCode: 16,
-  });
+  busy.resolveWait({ stdout: '', stderr: BUSY_STDERR, exitCode: 16 });
 
   const thrown = await withTransport(
     busy.process,
@@ -85,10 +83,29 @@ test('surfaces the classified host-busy error when the recorder exits EBUSY duri
   ).catch((error: unknown) => error);
 
   expect(thrown).toBeInstanceOf(AppError);
-  const appError = thrown as AppError;
-  expect(appError.code).toBe('COMMAND_FAILED');
-  expect(appError.details?.reason).toBe('apple-simulator-host-recording-busy');
-  expect(appError.details?.hint).toContain('SimStreamProcessorService');
+  const normalized = normalizeError(thrown);
+  expect(normalized.code).toBe('COMMAND_FAILED');
+  expect(normalized.hint).toContain('SimStreamProcessorService');
+  expect(normalized.details).toMatchObject({
+    reason: 'apple-simulator-host-recording-busy',
+    exitCode: 16,
+    processExitError: true,
+  });
+  expect(normalized.message).toContain('recording slot is busy');
+  expect(normalized.message).toContain('Resource busy');
+});
+
+test('keys the busy classification on the exit code, not the stderr text', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-not-busy-');
+  const failed = background(51);
+  failed.resolveWait({ stdout: '', stderr: BUSY_STDERR, exitCode: 1 });
+
+  await expect(
+    withTransport(
+      failed.process,
+      async () => await startAppleSimulatorRecording(simulator, path.join(root, 'other.mp4')),
+    ),
+  ).rejects.toThrow('simctl recordVideo exited with code 1');
 });
 
 test('cancellation during readiness kills and settles with the exact reason', async () => {
@@ -132,7 +149,7 @@ test('late provider acquisition after abort is rolled back exactly once', async 
   await expect(starting).rejects.toBe(reason);
   resolveStart?.(late.process);
   await vi.waitFor(() => expect(late.kill).toHaveBeenCalledTimes(1));
-  expect(late.kill).toHaveBeenCalledWith('SIGINT');
+  expect(late.kill).toHaveBeenCalledWith('SIGKILL');
 });
 
 test('resolved provider acquisition aborted before publication removes partial output and settles', async () => {
@@ -157,7 +174,7 @@ test('resolved provider acquisition aborted before publication removes partial o
 
   await expect(starting).rejects.toBe(reason);
   expect(acquired.kill).toHaveBeenCalledTimes(1);
-  expect(acquired.kill).toHaveBeenCalledWith('SIGINT');
+  expect(acquired.kill).toHaveBeenCalledWith('SIGKILL');
   expect(fs.existsSync(outputPath)).toBe(false);
 });
 
@@ -257,7 +274,7 @@ test.each([
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
 });
 
-test('pidless provider process is terminated gracefully and settled before start fails', async () => {
+test('pidless provider process is killed and settled before start fails', async () => {
   const running = background(undefined);
   await expect(
     withTransport(
@@ -265,7 +282,7 @@ test('pidless provider process is terminated gracefully and settled before start
       async () => await startAppleSimulatorRecording(simulator, '/tmp/pidless.mp4'),
     ),
   ).rejects.toThrow('complete process identity');
-  expect(running.kill).toHaveBeenCalledWith('SIGINT');
+  expect(running.kill).toHaveBeenCalledWith('SIGKILL');
 });
 
 function background(pid: number | undefined, command?: string) {

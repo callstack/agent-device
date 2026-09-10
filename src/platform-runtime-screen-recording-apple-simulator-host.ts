@@ -4,9 +4,10 @@ import type {
   ManagedProcessIdentity,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { ScreenRecordingBackgroundProcess } from '@agent-device/contracts/screen-recording-runtime-host';
+import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AppleSimulatorScreenRecordingProcess } from './platform-runtime-screen-recording-apple-transport.ts';
-import { classifyAppleSimulatorRecordingExit } from './platform-runtime-screen-recording-apple-simulator-error.ts';
 import {
   inspectManagedProcess,
   resolveManagedProcessIdentity,
@@ -20,9 +21,14 @@ const LIVENESS_GRACE_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const IDENTITY_POLL_MS = 25;
 const IDENTITY_TIMEOUT_MS = 2_000;
-// Per-signal grace when rolling back a recorder whose host slot may already be taken; SIGINT lets
-// `simctl recordVideo` finalize and detach so the host-wide lock is not left dangling (#2170).
-const STOP_GRACE_MS = 2_000;
+
+// POSIX EBUSY. `simctl recordVideo` exits with this when CoreSimulator's shared
+// `SimStreamProcessorService` still holds the one host-wide recording slot — a live recording
+// elsewhere, or a prior recorder that died without detaching. A signal death reports `exitCode: 1`,
+// never 16, so this is safe to key on the exit code rather than the stderr text (#2170).
+const HOST_RECORDING_BUSY_EXIT_CODE = 16;
+const HOST_RECORDING_BUSY_HINT =
+  'Another screen recording is active on this host, or a previous recorder died without detaching. Stop the other recording, or run `killall -9 SimStreamProcessorService` to clear the dangling stream service (it relaunches on demand), then retry.';
 
 const appleSimulatorRecordingCommandMatches: ManagedProcessCommandMatcher = (
   persisted,
@@ -71,7 +77,8 @@ export async function startAppleSimulatorRecording(
       throw new Error('simctl recordVideo did not expose a complete process identity');
     }
   } catch (error) {
-    await terminateAppleSimulatorChild(background);
+    background.child.kill('SIGKILL');
+    await background.wait.catch(() => undefined);
     signal?.throwIfAborted();
     throw error;
   }
@@ -153,40 +160,8 @@ function isSimulatorProcess(
 async function rollbackAcquiredSimulatorProcess(
   process: AppleSimulatorScreenRecordingProcess,
 ): Promise<void> {
-  await terminateAppleSimulatorChild(process);
-}
-
-// Escalate SIGINT → SIGTERM → SIGKILL so a rolled-back recorder can finalize-and-detach before a
-// force-kill, matching the graceful live-stop path. Killing a recorder that already took the
-// host slot ungracefully leaves every later recording on the host failing with EBUSY (#2170).
-async function terminateAppleSimulatorChild(
-  process: AppleSimulatorScreenRecordingProcess,
-): Promise<void> {
-  const escalation: ReadonlyArray<readonly [NodeJS.Signals, number]> = [
-    ['SIGINT', STOP_GRACE_MS],
-    ['SIGTERM', STOP_GRACE_MS],
-    ['SIGKILL', STOP_GRACE_MS],
-  ];
-  for (const [signal, grace] of escalation) {
-    process.child.kill(signal);
-    if (await settlesWithin(process.wait, grace)) return;
-  }
+  process.child.kill('SIGKILL');
   await process.wait.catch(() => undefined);
-}
-
-async function settlesWithin(wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return await Promise.race([
-    wait.then(
-      () => true,
-      () => true,
-    ),
-    new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), timeoutMs);
-    }),
-  ]).finally(() => {
-    clearTimeout(timer);
-  });
 }
 
 function createAppleSimulatorProcess(
@@ -274,10 +249,18 @@ function startError(outcome: AppleSimulatorExit): Error {
   if (outcome.kind === 'failed') {
     return outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
   }
-  return (
-    classifyAppleSimulatorRecordingExit(outcome.result) ??
-    new Error(`simctl recordVideo exited with code ${outcome.result.exitCode}`)
-  );
+  const { stdout, stderr, exitCode } = outcome.result;
+  if (exitCode === HOST_RECORDING_BUSY_EXIT_CODE) {
+    return new AppError(
+      'COMMAND_FAILED',
+      'simctl recordVideo could not start because the CoreSimulator host recording slot is busy (EBUSY)',
+      execFailureDetails(
+        { stdout, stderr, exitCode },
+        { reason: 'apple-simulator-host-recording-busy', hint: HOST_RECORDING_BUSY_HINT },
+      ),
+    );
+  }
+  return new Error(`simctl recordVideo exited with code ${exitCode}`);
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
