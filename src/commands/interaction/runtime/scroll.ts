@@ -378,7 +378,7 @@ async function captureRuntimeScrollNodes(
     includeRects: true,
   });
   const capture = result.snapshot ?? result;
-  const refusal = scrollUntilCaptureRefusal(capture);
+  const refusal = await scrollUntilCaptureRefusal(capture);
   if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
   return capture.nodes ?? [];
 }

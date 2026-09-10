@@ -274,7 +274,7 @@ async function captureUntilNodes(
     options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
     execution: runtimeExecutionFromContext(context),
   });
-  const refusal = scrollUntilCaptureRefusal(capture);
+  const refusal = await scrollUntilCaptureRefusal(capture);
   if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
   return capture.nodes ?? [];
 }

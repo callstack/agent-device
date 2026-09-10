@@ -7,7 +7,6 @@ import type {
   SnapshotQualityVerdict,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { isLegacySparseIosInteractiveSnapshot } from './absence-observation.ts';
 import type { SelectorPipelineOutcome } from './selector-pipeline.ts';
 
 /**
@@ -83,9 +82,9 @@ export type ScrollUntilCapture = {
  * whose tail is missing, and refusing it would fail large screens where the target is plainly in
  * view.
  */
-export function scrollUntilCaptureRefusal(
+export async function scrollUntilCaptureRefusal(
   capture: ScrollUntilCapture,
-): ScrollUntilCaptureRefusal | undefined {
+): Promise<ScrollUntilCaptureRefusal | undefined> {
   const nodes = capture.nodes;
   if (nodes === undefined) {
     return { reason: 'no-capture', detail: 'the capture returned no accessibility tree' };
@@ -100,6 +99,10 @@ export function scrollUntilCaptureRefusal(
       detail: quality.reason ?? 'the capture backend reported a sparse tree',
     };
   }
+  // Lazy for the same reason the pipeline edges are: `absence-observation` reaches `ad-script` for
+  // work unrelated to this two-line shape check, and paying that closure eagerly would put this
+  // module over the entry-surface ceiling.
+  const { isLegacySparseIosInteractiveSnapshot } = await import('./absence-observation.ts');
   if (
     isLegacySparseIosInteractiveSnapshot({
       backend: capture.backend as SnapshotState['backend'],

@@ -86,20 +86,20 @@ test('an off-screen twin does not satisfy a selector whose other match is on scr
   );
 });
 
-test('a capture with no tree at all is refused rather than read as an empty screen', () => {
-  assert.deepEqual(scrollUntilCaptureRefusal({}), {
+test('a capture with no tree at all is refused rather than read as an empty screen', async () => {
+  assert.deepEqual(await scrollUntilCaptureRefusal({}), {
     reason: 'no-capture',
     detail: 'the capture returned no accessibility tree',
   });
-  assert.deepEqual(scrollUntilCaptureRefusal({ nodes: [] }), {
+  assert.deepEqual(await scrollUntilCaptureRefusal({ nodes: [] }), {
     reason: 'no-capture',
     detail: 'the capture returned an empty accessibility tree',
   });
 });
 
-test('a backend sparse verdict is refused and carries the backend reason', () => {
+test('a backend sparse verdict is refused and carries the backend reason', async () => {
   assert.deepEqual(
-    scrollUntilCaptureRefusal({
+    await scrollUntilCaptureRefusal({
       nodes: tree({ ref: 'e2', label: 'Submit', y: 200 }),
       snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
     }),
@@ -107,9 +107,9 @@ test('a backend sparse verdict is refused and carries the backend reason', () =>
   );
 });
 
-test('the legacy iOS application-root-only shape is refused', () => {
+test('the legacy iOS application-root-only shape is refused', async () => {
   assert.deepEqual(
-    scrollUntilCaptureRefusal({
+    await scrollUntilCaptureRefusal({
       backend: 'xctest',
       nodes: [{ index: 0, ref: 'e1', type: 'Application', rect: VIEWPORT } as SnapshotNode],
     }),
@@ -121,9 +121,9 @@ test('the legacy iOS application-root-only shape is refused', () => {
  * Truncation is a readable tree missing its tail, not a failed read. Refusing it would fail large
  * screens where the target is plainly in view.
  */
-test('a truncated but populated capture is not refused', () => {
+test('a truncated but populated capture is not refused', async () => {
   assert.equal(
-    scrollUntilCaptureRefusal({
+    await scrollUntilCaptureRefusal({
       nodes: tree({ ref: 'e2', label: 'Submit', y: 200 }),
       snapshotQuality: { state: 'ok', backend: 'tree' },
     }),
