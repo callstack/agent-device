@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
@@ -68,6 +69,28 @@ test('waits for delayed output and rejects an early nonzero exit', async () => {
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
 });
 
+test('surfaces the classified host-busy error when the recorder exits EBUSY during start', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-busy-');
+  const busy = background(50);
+  busy.resolveWait({
+    stdout: '',
+    stderr:
+      'Error starting video recorder: Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy"',
+    exitCode: 16,
+  });
+
+  const thrown = await withTransport(
+    busy.process,
+    async () => await startAppleSimulatorRecording(simulator, path.join(root, 'busy.mp4')),
+  ).catch((error: unknown) => error);
+
+  expect(thrown).toBeInstanceOf(AppError);
+  const appError = thrown as AppError;
+  expect(appError.code).toBe('COMMAND_FAILED');
+  expect(appError.details?.reason).toBe('apple-simulator-host-recording-busy');
+  expect(appError.details?.hint).toContain('SimStreamProcessorService');
+});
+
 test('cancellation during readiness kills and settles with the exact reason', async () => {
   const root = mkdtempForTestSync('agent-device-recording-cancel-');
   const controller = new AbortController();
@@ -109,7 +132,7 @@ test('late provider acquisition after abort is rolled back exactly once', async 
   await expect(starting).rejects.toBe(reason);
   resolveStart?.(late.process);
   await vi.waitFor(() => expect(late.kill).toHaveBeenCalledTimes(1));
-  expect(late.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(late.kill).toHaveBeenCalledWith('SIGINT');
 });
 
 test('resolved provider acquisition aborted before publication removes partial output and settles', async () => {
@@ -134,7 +157,7 @@ test('resolved provider acquisition aborted before publication removes partial o
 
   await expect(starting).rejects.toBe(reason);
   expect(acquired.kill).toHaveBeenCalledTimes(1);
-  expect(acquired.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(acquired.kill).toHaveBeenCalledWith('SIGINT');
   expect(fs.existsSync(outputPath)).toBe(false);
 });
 
@@ -234,7 +257,7 @@ test.each([
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
 });
 
-test('pidless provider process is killed and settled before start fails', async () => {
+test('pidless provider process is terminated gracefully and settled before start fails', async () => {
   const running = background(undefined);
   await expect(
     withTransport(
@@ -242,7 +265,7 @@ test('pidless provider process is killed and settled before start fails', async 
       async () => await startAppleSimulatorRecording(simulator, '/tmp/pidless.mp4'),
     ),
   ).rejects.toThrow('complete process identity');
-  expect(running.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(running.kill).toHaveBeenCalledWith('SIGINT');
 });
 
 function background(pid: number | undefined, command?: string) {

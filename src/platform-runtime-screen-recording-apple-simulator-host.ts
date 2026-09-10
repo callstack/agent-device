@@ -6,6 +6,7 @@ import type {
 import type { ScreenRecordingBackgroundProcess } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleSimulatorScreenRecordingProcess } from './platform-runtime-screen-recording-apple-transport.ts';
+import { classifyAppleSimulatorRecordingExit } from './platform-runtime-screen-recording-apple-simulator-error.ts';
 import {
   inspectManagedProcess,
   resolveManagedProcessIdentity,
@@ -19,6 +20,9 @@ const LIVENESS_GRACE_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const IDENTITY_POLL_MS = 25;
 const IDENTITY_TIMEOUT_MS = 2_000;
+// Per-signal grace when rolling back a recorder whose host slot may already be taken; SIGINT lets
+// `simctl recordVideo` finalize and detach so the host-wide lock is not left dangling (#2170).
+const STOP_GRACE_MS = 2_000;
 
 const appleSimulatorRecordingCommandMatches: ManagedProcessCommandMatcher = (
   persisted,
@@ -67,8 +71,7 @@ export async function startAppleSimulatorRecording(
       throw new Error('simctl recordVideo did not expose a complete process identity');
     }
   } catch (error) {
-    background.child.kill('SIGKILL');
-    await background.wait.catch(() => undefined);
+    await terminateAppleSimulatorChild(background);
     signal?.throwIfAborted();
     throw error;
   }
@@ -150,8 +153,40 @@ function isSimulatorProcess(
 async function rollbackAcquiredSimulatorProcess(
   process: AppleSimulatorScreenRecordingProcess,
 ): Promise<void> {
-  process.child.kill('SIGKILL');
+  await terminateAppleSimulatorChild(process);
+}
+
+// Escalate SIGINT → SIGTERM → SIGKILL so a rolled-back recorder can finalize-and-detach before a
+// force-kill, matching the graceful live-stop path. Killing a recorder that already took the
+// host slot ungracefully leaves every later recording on the host failing with EBUSY (#2170).
+async function terminateAppleSimulatorChild(
+  process: AppleSimulatorScreenRecordingProcess,
+): Promise<void> {
+  const escalation: ReadonlyArray<readonly [NodeJS.Signals, number]> = [
+    ['SIGINT', STOP_GRACE_MS],
+    ['SIGTERM', STOP_GRACE_MS],
+    ['SIGKILL', STOP_GRACE_MS],
+  ];
+  for (const [signal, grace] of escalation) {
+    process.child.kill(signal);
+    if (await settlesWithin(process.wait, grace)) return;
+  }
   await process.wait.catch(() => undefined);
+}
+
+async function settlesWithin(wait: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return await Promise.race([
+    wait.then(
+      () => true,
+      () => true,
+    ),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    }),
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
 }
 
 function createAppleSimulatorProcess(
@@ -239,7 +274,10 @@ function startError(outcome: AppleSimulatorExit): Error {
   if (outcome.kind === 'failed') {
     return outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
   }
-  return new Error(`simctl recordVideo exited with code ${outcome.result.exitCode}`);
+  return (
+    classifyAppleSimulatorRecordingExit(outcome.result) ??
+    new Error(`simctl recordVideo exited with code ${outcome.result.exitCode}`)
+  );
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
