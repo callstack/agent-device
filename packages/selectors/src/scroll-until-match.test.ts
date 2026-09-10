@@ -97,14 +97,52 @@ test('a capture with no tree at all is refused rather than read as an empty scre
   });
 });
 
-test('a backend sparse verdict is refused and carries the backend reason', async () => {
+/**
+ * The verdict arrives under two spellings: `SnapshotState` says `snapshotQuality`, a
+ * `BackendSnapshotResult` says `quality`. Reading only one is how a real backend sparse verdict
+ * slipped through the first version of this check.
+ */
+test('a sparse verdict is refused under either spelling the capture can carry it in', async () => {
+  const nodes = tree({ ref: 'e2', label: 'Submit', y: 200 });
+  const sparse = { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' } as const;
+  const expected = { reason: 'sparse-tree', detail: 'AX bridge unavailable' };
+
+  assert.deepEqual(await scrollUntilCaptureRefusal({ nodes, snapshotQuality: sparse }), expected);
+  // The backend result's own spelling.
+  assert.deepEqual(await scrollUntilCaptureRefusal({ nodes, quality: sparse }), expected);
+  // A backend result whose verdict sits above the nested state it also carries.
   assert.deepEqual(
+    await scrollUntilCaptureRefusal({ quality: sparse, snapshot: { nodes } }),
+    expected,
+  );
+  // A nested state carrying its own verdict.
+  assert.deepEqual(
+    await scrollUntilCaptureRefusal({ snapshot: { nodes, snapshotQuality: sparse } }),
+    expected,
+  );
+});
+
+test('a malformed quality payload is not mistaken for a verdict', async () => {
+  assert.equal(
     await scrollUntilCaptureRefusal({
       nodes: tree({ ref: 'e2', label: 'Submit', y: 200 }),
-      snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+      quality: { state: 'not-a-state' },
     }),
-    { reason: 'sparse-tree', detail: 'AX bridge unavailable' },
+    undefined,
   );
+});
+
+test('a nested snapshot supplies the nodes when the top level has none', async () => {
+  assert.equal(
+    await scrollUntilCaptureRefusal({
+      snapshot: { nodes: tree({ ref: 'e2', label: 'X', y: 10 }) },
+    }),
+    undefined,
+  );
+  assert.deepEqual(await scrollUntilCaptureRefusal({ snapshot: { nodes: [] } }), {
+    reason: 'no-capture',
+    detail: 'the capture returned an empty accessibility tree',
+  });
 });
 
 test('the legacy iOS application-root-only shape is refused', async () => {

@@ -337,11 +337,20 @@ test('runtime scroll --until is refused on the edge directions, which already ca
  * The defect this pins: a capture that comes back unreadable used to reach the edge analyzer as an
  * empty tree, which reads it as "no room below" and reported end-of-content. A failed read is not
  * evidence about the content.
+ *
+ * The sparse cases use the backend's own spelling of the verdict. `BackendSnapshotResult` calls it
+ * `quality` while the nested `SnapshotState` calls it `snapshotQuality`, and selecting one level
+ * used to drop the other's. Each case counts gestures, so the refusal is proven to land before
+ * matching, edge analysis or scrolling.
  */
 test('runtime scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
+  let scrolls = 0;
   const device = createInteractionDevice(selectorSnapshot(), {
     captureSnapshot: async () => ({ nodes: [] }),
-    scroll: async () => ({}),
+    scroll: async () => {
+      scrolls += 1;
+      return {};
+    },
   });
 
   await assert.rejects(
@@ -353,9 +362,37 @@ test('runtime scroll --until reports an unreadable capture as a capture failure,
       return true;
     },
   );
+  assert.equal(scrolls, 0);
 });
 
-test('runtime scroll --until refuses a sparse capture rather than trusting its selectors', async () => {
+test('runtime scroll --until refuses a top-level backend sparse verdict beside a nested snapshot', async () => {
+  let scrolls = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({
+      snapshot: untilSnapshot(2400, true),
+      quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+    }),
+    scroll: async () => {
+      scrolls += 1;
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.scroll({ direction: 'down', until: 'label=Email' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'sparse-tree');
+      assert.match(String(error.message), /AX bridge unavailable/);
+      return true;
+    },
+  );
+  assert.equal(scrolls, 0);
+});
+
+test('runtime scroll --until refuses a sparse verdict carried on the nested snapshot itself', async () => {
+  let scrolls = 0;
   const device = createInteractionDevice(selectorSnapshot(), {
     captureSnapshot: async () => ({
       snapshot: {
@@ -363,7 +400,10 @@ test('runtime scroll --until refuses a sparse capture rather than trusting its s
         snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
       },
     }),
-    scroll: async () => ({}),
+    scroll: async () => {
+      scrolls += 1;
+      return {};
+    },
   });
 
   await assert.rejects(
@@ -374,4 +414,5 @@ test('runtime scroll --until refuses a sparse capture rather than trusting its s
       return true;
     },
   );
+  assert.equal(scrolls, 0);
 });

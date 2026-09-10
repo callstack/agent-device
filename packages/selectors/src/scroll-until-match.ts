@@ -1,5 +1,6 @@
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { ScrollUntilCaptureRefusal } from '@agent-device/capture-kit/scroll-until-visible';
+import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type {
   RawSnapshotNode,
@@ -60,13 +61,47 @@ function matchedNodes(outcome: SelectorPipelineOutcome): readonly SnapshotNode[]
   }
 }
 
-/** The fields a `--until` pass can read from either route's capture without reshaping it. */
+/**
+ * The fields a `--until` pass can read from either route's capture without reshaping it.
+ *
+ * The verdict is accepted under BOTH spellings on purpose. A `SnapshotState` calls it
+ * `snapshotQuality`; a `BackendSnapshotResult` calls it `quality` and may also carry a nested
+ * `snapshot`. Asking each caller to normalize is what let a real backend sparse verdict slip past
+ * the first version of this check, so the one place that asks the question reads every spelling
+ * the capture can arrive in.
+ */
 export type ScrollUntilCapture = {
   nodes?: readonly (RawSnapshotNode | SnapshotNode)[] | undefined;
   /** Widened to `string` because the backend capture result carries it untyped. */
   backend?: string | undefined;
   snapshotQuality?: SnapshotQualityVerdict | undefined;
+  quality?: unknown;
+  snapshot?: {
+    nodes?: readonly (RawSnapshotNode | SnapshotNode)[] | undefined;
+    backend?: string | undefined;
+    snapshotQuality?: SnapshotQualityVerdict | undefined;
+  };
 };
+
+/**
+ * The nested `SnapshotState` wins on nodes and backend, and the verdict is taken from whichever
+ * level carries one — selecting `result.snapshot` alone used to drop a top-level `quality`.
+ */
+function canonicalCapture(capture: ScrollUntilCapture): {
+  nodes?: readonly (RawSnapshotNode | SnapshotNode)[] | undefined;
+  backend?: string | undefined;
+  quality?: SnapshotQualityVerdict | undefined;
+} {
+  const nested = capture.snapshot;
+  return {
+    nodes: nested?.nodes ?? capture.nodes,
+    backend: nested?.backend ?? capture.backend,
+    quality:
+      nested?.snapshotQuality ??
+      capture.snapshotQuality ??
+      readSnapshotQualityVerdict(capture.quality),
+  };
+}
 
 /**
  * Whether this capture can answer the `--until` question, asked before the selector match and
@@ -85,14 +120,13 @@ export type ScrollUntilCapture = {
 export async function scrollUntilCaptureRefusal(
   capture: ScrollUntilCapture,
 ): Promise<ScrollUntilCaptureRefusal | undefined> {
-  const nodes = capture.nodes;
+  const { nodes, backend, quality } = canonicalCapture(capture);
   if (nodes === undefined) {
     return { reason: 'no-capture', detail: 'the capture returned no accessibility tree' };
   }
   if (nodes.length === 0) {
     return { reason: 'no-capture', detail: 'the capture returned an empty accessibility tree' };
   }
-  const quality = capture.snapshotQuality;
   if (quality?.state === 'sparse') {
     return {
       reason: 'sparse-tree',
@@ -105,7 +139,7 @@ export async function scrollUntilCaptureRefusal(
   const { isLegacySparseIosInteractiveSnapshot } = await import('./absence-observation.ts');
   if (
     isLegacySparseIosInteractiveSnapshot({
-      backend: capture.backend as SnapshotState['backend'],
+      backend: backend as SnapshotState['backend'],
       nodes: nodes as SnapshotNode[],
       ...(quality ? { snapshotQuality: quality } : {}),
     })

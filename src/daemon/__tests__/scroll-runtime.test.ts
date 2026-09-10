@@ -429,6 +429,94 @@ test('bound scroll --until is refused when the owner advertises no capture', asy
 });
 
 /** Same defect as the command runtime's: a failed read is not evidence that the content ran out. */
+/**
+ * The owner's capture result spells the verdict `quality`, which is the shape this route actually
+ * receives — an earlier version of this test asserted through `snapshotQuality` and passed while
+ * the real field went unread. The scroll spy proves each refusal lands before any gesture, and the
+ * sparse tree deliberately has content below the fold, so an edge verdict would be wrong there too.
+ */
+test('bound scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({}),
+          scroll: async () => {
+            scrolls += 1;
+            return {};
+          },
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'no-capture');
+      return true;
+    },
+  );
+  assert.equal(scrolls, 0);
+});
+
+test('bound scroll --until refuses a sparse capture before matching, edge analysis or scrolling', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({
+            nodes: untilNodes(2400, true),
+            quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+          }),
+          scroll: async () => {
+            scrolls += 1;
+            return {};
+          },
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'sparse-tree');
+      assert.match(String(error.message), /AX bridge unavailable/);
+      return true;
+    },
+  );
+  assert.equal(scrolls, 0);
+});
+
+test('bound scroll rejects --until on an edge direction before any device work', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['bottom'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({ nodes: untilNodes(300, true) }),
+          scroll: async () => {
+            throw new Error('scroll should be rejected before the backend call');
+          },
+        },
+      ),
+    /scroll bottom already scrolls to the bottom edge and cannot take --until/,
+  );
+});
+
+test('bound scroll --until is refused when the owner advertises no capture', async () => {
+  const resolved = await resolveBoundScrollRuntime({
+    device: IOS_SIMULATOR,
+    positionals: ['down'],
+    context: { until: 'label=Email' } as DaemonCommandContext,
+    ...bindings({ scroll: async () => ({}) }),
+  });
+  assert.equal(resolved.ok, false);
+});
+
+/** Same defect as the command runtime's: a failed read is not evidence that the content ran out. */
 test('bound scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
   await assert.rejects(
     () =>

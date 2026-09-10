@@ -377,10 +377,11 @@ async function captureRuntimeScrollNodes(
   const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
     includeRects: true,
   });
-  const capture = result.snapshot ?? result;
-  const refusal = await scrollUntilCaptureRefusal(capture);
+  // The whole result, not `result.snapshot`: the nested state and the top-level backend annotation
+  // spell the quality verdict differently, and picking one level drops the other's.
+  const refusal = await scrollUntilCaptureRefusal(result);
   if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
-  return capture.nodes ?? [];
+  return result.snapshot?.nodes ?? result.nodes ?? [];
 }
 
 function requireDirection(
