@@ -67,43 +67,24 @@ type ToolchainProbeFailure = {
 };
 
 /**
- * Everything one runner phase may spend: the single clock every step of the phase reads,
- * and the owning request's cancellation. Created once, where the phase begins, and handed
- * on as this object — no step below receives a timeout number it could open a second phase
- * with, which is how a cold probe stall and the build each spent the same budget (#2422).
+ * The one clock a runner phase spends, created once per phase and read with
+ * {@link requireRunnerPhaseRemainingMs}; `undefined` for a caller carrying no budget.
  */
-export type RunnerPhaseBudget = Readonly<{
-  /** The phase's clock; absent when its owner carries no budget at all. */
-  deadline?: Deadline;
-  /** The owning request's cancellation signal, if it carries one. */
-  signal?: AbortSignal;
-}>;
-
-/**
- * Opens a phase from the numeric timeout its public option carries: the one place a number
- * becomes a budget, so every boundary below it takes the {@link RunnerPhaseBudget} instead.
- */
-export function createRunnerPhaseBudget(
-  timeoutMs: number | undefined,
-  signal: AbortSignal | undefined,
-): RunnerPhaseBudget {
-  const bounded = timeoutMs !== undefined && Number.isFinite(timeoutMs);
-  return {
-    deadline: bounded ? Deadline.fromTimeoutMs(Math.max(0, timeoutMs)) : undefined,
-    signal,
-  };
+export function createRunnerPhaseDeadline(timeoutMs: number | undefined): Deadline | undefined {
+  if (timeoutMs === undefined || !Number.isFinite(timeoutMs)) return undefined;
+  return Deadline.fromTimeoutMs(Math.max(0, timeoutMs));
 }
 
 /**
- * What the phase has left for its next step, or `undefined` when it carries no deadline.
- * Throws rather than returning zero, so a spent phase fails before it spawns.
+ * What the phase has left for its next step, or `fallbackTimeoutMs` when it carries no
+ * deadline. Throws rather than returning zero, so a spent phase fails before it spawns.
  */
 export function requireRunnerPhaseRemainingMs(
-  budget: RunnerPhaseBudget | undefined,
+  deadline: Deadline | undefined,
+  fallbackTimeoutMs: number | undefined,
   phase: string,
 ): number | undefined {
-  const deadline = budget?.deadline;
-  if (!deadline) return undefined;
+  if (!deadline) return fallbackTimeoutMs;
   const remainingMs = Math.floor(deadline.remainingMs());
   if (remainingMs <= 0) throw runnerPhaseBudgetExhaustedError(phase);
   return remainingMs;
@@ -119,9 +100,19 @@ function runnerPhaseBudgetExhaustedError(phase: string): AppError {
 }
 
 /**
+ * What the phase that wants a runner cache decision has left to spend on it. A caller
+ * with neither field still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
+ */
+export type RunnerCacheProbeBudget = {
+  /** The owning phase's clock, shared with whatever the phase does next. */
+  deadline?: Deadline;
+  /** The owning request's cancellation signal, if it carries one. */
+  signal?: AbortSignal;
+};
+
+/**
  * The remaining-time and cancellation view the probes consult: one per fingerprint read,
- * so the three probes and their retries share a single budget. A phase with no deadline
- * still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
+ * so the three probes and their retries share a single budget.
  *
  * `spawnSync` cannot be interrupted once it has started, so cancellation is observed
  * between attempts; the per-attempt cap is what bounds how long that takes.
@@ -133,7 +124,9 @@ type ToolchainProbeClock = {
   throwIfCanceled(): void;
 };
 
-function createToolchainProbeClock(budget: RunnerPhaseBudget | undefined): ToolchainProbeClock {
+function createToolchainProbeClock(
+  budget: RunnerCacheProbeBudget | undefined,
+): ToolchainProbeClock {
   const phaseDeadline = budget?.deadline;
   const deadline = Deadline.fromTimeoutMs(
     Math.min(
@@ -224,7 +217,7 @@ export const IOS_RUNNER_CONTAINER_BUNDLE_IDS: string[] = resolveRunnerContainerB
 export function resolveExpectedRunnerCacheMetadata(
   device: DeviceInfo,
   projectRoot: string = findProjectRoot(),
-  budget?: RunnerPhaseBudget,
+  budget?: RunnerCacheProbeBudget,
 ): RunnerXctestrunCacheMetadata {
   const platformName = resolveRunnerPlatformName(device);
   return {
@@ -263,7 +256,7 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
  */
 function requireRunnerToolchainFingerprint(
   sdkName: string,
-  budget: RunnerPhaseBudget | undefined,
+  budget: RunnerCacheProbeBudget | undefined,
 ): RunnerToolchainFingerprint {
   // Before the cache, not just before the probes: a hit must not hide a cancellation.
   const clock = createToolchainProbeClock(budget);

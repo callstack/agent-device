@@ -12,12 +12,12 @@ export {
   type RunnerXctestrunCacheKind,
 } from './runner-cache.ts';
 export {
-  createRunnerPhaseBudget,
+  createRunnerPhaseDeadline,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerAppBundleId,
   resolveRunnerDerivedPath,
-  type RunnerPhaseBudget,
+  type RunnerCacheProbeBudget,
 } from './runner-cache-metadata.ts';
 export { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';

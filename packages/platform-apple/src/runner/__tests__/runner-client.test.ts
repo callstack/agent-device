@@ -52,7 +52,6 @@ import {
 } from '../runner-cache.ts';
 import { ensureXctestrunArtifact, xctestrunReferencesProjectRoot } from '../runner-artifact.ts';
 import {
-  createRunnerPhaseBudget,
   markRunnerXctestrunArtifactBadForRun,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
@@ -1100,10 +1099,10 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   });
 
   const canceledPromise = ensureXctestrunArtifact(canceledDevice, {
-    budget: createRunnerPhaseBudget(undefined, canceledController.signal),
+    signal: canceledController.signal,
   });
   const survivorPromise = ensureXctestrunArtifact(survivorDevice, {
-    budget: createRunnerPhaseBudget(undefined, survivorController.signal),
+    signal: survivorController.signal,
   });
 
   await Promise.all([canceledBuildStarted.promise, survivorBuildStarted.promise]);
@@ -1409,7 +1408,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   });
 
   const rebuilt = await ensureXctestrunArtifact(macOsDevice, {
-    budget: createRunnerPhaseBudget(300_000, undefined),
+    buildTimeoutMs: 300_000,
   });
 
   assert.equal(rebuilt.xctestrunPath, rebuiltXctestrunPath);
