@@ -361,7 +361,12 @@ function untilNodes(targetY: number, hiddenBelow: boolean) {
   ];
 }
 
-test('bound scroll --until stops on the pass whose capture shows the selector on screen', async () => {
+/**
+ * Route-level only: the executor's result envelope, the parse rejection, and admission. The loop's
+ * own behavior — arrival, end-of-content, the pass budget, and every capture refusal — is covered
+ * against the module in `scroll-until.test.ts` rather than duplicated through this harness.
+ */
+test('bound scroll --until reports the passes it spent and the selector it stopped on', async () => {
   const scrolls: string[] = [];
   const frames = [untilNodes(2400, true), untilNodes(1200, true), untilNodes(300, true)];
   const result = await runScroll(
@@ -377,30 +382,12 @@ test('bound scroll --until stops on the pass whose capture shows the selector on
   );
 
   assert.equal(result.until, 'label=Email');
+  assert.equal(result.direction, 'down');
   assert.equal(result.passes, 2);
-  assert.equal(scrolls.length, 2);
+  assert.deepEqual(scrolls, ['down', 'down']);
   assert.match(String(result.message), /Scrolled down 2 passes until label=Email was visible/);
 });
 
-test('bound scroll --until reports the end of the content rather than spending its budget', async () => {
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['down'],
-        { until: 'label=Missing' },
-        {
-          captureSnapshot: async () => ({ nodes: untilNodes(300, false) }),
-          scroll: async () => ({}),
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, 'scroll_until_edge_reached');
-      return true;
-    },
-  );
-});
-
 test('bound scroll rejects --until on an edge direction before any device work', async () => {
   await assert.rejects(
     () =>
@@ -414,11 +401,11 @@ test('bound scroll rejects --until on an edge direction before any device work',
           },
         },
       ),
-    /scroll bottom already scrolls to the bottom edge and cannot take --until/,
+    /cannot take --until/,
   );
 });
 
-test('bound scroll --until is refused when the owner advertises no capture', async () => {
+test('bound scroll --until is refused at admission when the owner declares no capture', async () => {
   const resolved = await resolveBoundScrollRuntime({
     device: IOS_SIMULATOR,
     positionals: ['down'],
@@ -426,135 +413,4 @@ test('bound scroll --until is refused when the owner advertises no capture', asy
     ...bindings({ scroll: async () => ({}) }),
   });
   assert.equal(resolved.ok, false);
-});
-
-/** Same defect as the command runtime's: a failed read is not evidence that the content ran out. */
-/**
- * The owner's capture result spells the verdict `quality`, which is the shape this route actually
- * receives — an earlier version of this test asserted through `snapshotQuality` and passed while
- * the real field went unread. The scroll spy proves each refusal lands before any gesture, and the
- * sparse tree deliberately has content below the fold, so an edge verdict would be wrong there too.
- */
-test('bound scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
-  let scrolls = 0;
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['down'],
-        { until: 'label=Email' },
-        {
-          captureSnapshot: async () => ({}),
-          scroll: async () => {
-            scrolls += 1;
-            return {};
-          },
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
-      assert.equal(error.details?.captureRefusal, 'no-capture');
-      return true;
-    },
-  );
-  assert.equal(scrolls, 0);
-});
-
-test('bound scroll --until refuses a sparse capture before matching, edge analysis or scrolling', async () => {
-  let scrolls = 0;
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['down'],
-        { until: 'label=Email' },
-        {
-          captureSnapshot: async () => ({
-            nodes: untilNodes(2400, true),
-            quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
-          }),
-          scroll: async () => {
-            scrolls += 1;
-            return {};
-          },
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
-      assert.equal(error.details?.captureRefusal, 'sparse-tree');
-      assert.match(String(error.message), /AX bridge unavailable/);
-      return true;
-    },
-  );
-  assert.equal(scrolls, 0);
-});
-
-test('bound scroll rejects --until on an edge direction before any device work', async () => {
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['bottom'],
-        { until: 'label=Email' },
-        {
-          captureSnapshot: async () => ({ nodes: untilNodes(300, true) }),
-          scroll: async () => {
-            throw new Error('scroll should be rejected before the backend call');
-          },
-        },
-      ),
-    /scroll bottom already scrolls to the bottom edge and cannot take --until/,
-  );
-});
-
-test('bound scroll --until is refused when the owner advertises no capture', async () => {
-  const resolved = await resolveBoundScrollRuntime({
-    device: IOS_SIMULATOR,
-    positionals: ['down'],
-    context: { until: 'label=Email' } as DaemonCommandContext,
-    ...bindings({ scroll: async () => ({}) }),
-  });
-  assert.equal(resolved.ok, false);
-});
-
-/** Same defect as the command runtime's: a failed read is not evidence that the content ran out. */
-test('bound scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['down'],
-        { until: 'label=Email' },
-        {
-          captureSnapshot: async () => ({}),
-          scroll: async () => ({}),
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
-      assert.equal(error.details?.captureRefusal, 'no-capture');
-      return true;
-    },
-  );
-});
-
-test('bound scroll --until refuses a sparse capture rather than trusting its selectors', async () => {
-  await assert.rejects(
-    () =>
-      runScroll(
-        ['down'],
-        { until: 'label=Email' },
-        {
-          captureSnapshot: async () => ({
-            nodes: untilNodes(2400, true),
-            snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
-          }),
-          scroll: async () => ({}),
-        },
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.captureRefusal, 'sparse-tree');
-      return true;
-    },
-  );
 });

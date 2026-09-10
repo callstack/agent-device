@@ -13,6 +13,9 @@ import { withProviderScenarioResource } from './harness.ts';
  * rather than on injected gestures because the Android gesture path runs through the persistent
  * helper, not an adb shell command the world can count.
  */
+/** Two screens below the fold, climbing one screen per capture: visible on the third capture. */
+const ARRIVAL_PASSES = 2;
+
 function climbingRow(): () => number {
   let captures = 0;
   return () => {
@@ -23,16 +26,20 @@ function climbingRow(): () => number {
 }
 
 function climbingHierarchy(targetTop: () => number): () => string {
-  return () =>
-    [
+  return () => {
+    // Read the stateful position ONCE: calling it per bound advanced the row twice per capture and
+    // produced an inverted rectangle on the first one.
+    const top = targetTop();
+    return [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<hierarchy rotation="0">',
       '  <node index="0" text="" resource-id="com.android.settings:id/main_content_scrollable_container" class="android.widget.ScrollView" package="com.android.settings" content-desc="" bounds="[0,0][390,600]" clickable="false" enabled="true">',
       '    <node index="0" text="Apps" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="true" enabled="true" focusable="true" focused="false" />',
-      `    <node index="1" text="Terms" resource-id="com.android.settings:id/terms" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,${targetTop()}][374,${targetTop() + 54}]" clickable="true" enabled="true" focusable="true" focused="false" />`,
+      `    <node index="1" text="Terms" resource-id="com.android.settings:id/terms" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,${top}][374,${top + 54}]" clickable="true" enabled="true" focusable="true" focused="false" />`,
       '  </node>',
       '</hierarchy>',
     ].join('\n');
+  };
 }
 
 test('Provider-backed integration scroll --until stops on the capture that brings the target on screen', async () => {
@@ -48,18 +55,15 @@ test('Provider-backed integration scroll --until stops on the capture that bring
         ...world.selection,
       });
 
-      const passes = typeof result.passes === 'number' ? result.passes : -1;
       assert.equal(result.until, 'text=Terms');
       assert.equal(result.direction, 'down');
-      assert.ok(
-        passes >= 1,
-        `expected at least one pass to reach the off-screen row, saw ${passes}`,
-      );
-      assert.match(String(result.message), /until text=Terms was visible/);
-      // Stopped on arrival rather than running the budget out.
-      assert.ok(
-        passes < SCROLL_UNTIL_PASS_LIMIT,
-        `expected the loop to stop on arrival, spent ${passes} passes`,
+      // An exact count is what proves repeated scrolling on valid geometry, rather than a lucky
+      // first capture or a budget burned to the limit.
+      assert.equal(result.passes, ARRIVAL_PASSES);
+      assert.ok(ARRIVAL_PASSES < SCROLL_UNTIL_PASS_LIMIT);
+      assert.match(
+        String(result.message),
+        new RegExp(`Scrolled down ${ARRIVAL_PASSES} passes until text=Terms was visible`),
       );
     },
   );
