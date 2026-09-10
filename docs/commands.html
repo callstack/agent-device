@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.5659eb976e.js"></script>
+<script defer src="/agent-device/static/js/index.65edd217fa.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -884,6 +884,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li>iOS simulator log capture now streams from inside the simulator with <code>simctl spawn &lt;udid&gt; log ...</code>, and <code>network dump</code> can recover recent simulator log history with <code>simctl log show</code> when the live app-log window is sparse.</li>
 <li>iOS log capture still relies on Unified Logging signals (for example <code>os_log</code>); plain stdout/stderr output may be limited depending on app/runtime.</li>
 <li>On iOS, <code>network dump</code> can return zero HTTP entries for real app activity when the app does not emit request metadata into Unified Logging. The response notes now distinguish between an empty repro window and a non-network app log window.</li>
+<li>On iOS, CFNetwork logs a request URL only on the line that opens a connection, so a request that reused a keep-alive connection has no URL anywhere in the log. Those requests are reported against the origin their connection was opened for, with <code>pathUnavailable: true</code>, their status, and their timing; ones whose connection was opened before the scanned window are counted in <code>unnamedRequests</code> instead, since they cannot be named at all. Treat a missing endpoint in an iOS dump as unproven rather than as evidence it was not called.</li>
 <li>Retention knobs: set <code>AGENT_DEVICE_APP_LOG_MAX_BYTES</code> and <code>AGENT_DEVICE_APP_LOG_MAX_FILES</code> to override rotation limits.</li>
 <li>Optional write-time redaction patterns: set <code>AGENT_DEVICE_APP_LOG_REDACT_PATTERNS</code> to a comma-separated regex list.</li>
 </ul>
