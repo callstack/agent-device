@@ -366,7 +366,7 @@ function sanitizeFlags(flags: CommandFlags | undefined): SessionAction['flags'] 
   if (!flags) return {};
   const result: Record<string, unknown> = {};
   for (const key of RECORDED_FLAG_KEYS) {
-    const value = flags[key as keyof CommandFlags];
+    const value = flags[key];
     if (value !== undefined) {
       result[key] = value;
     }

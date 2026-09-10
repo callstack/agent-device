@@ -115,6 +115,20 @@ test('a flag declaration without both admission fields does not compile', () => 
   assert.ok(declaration);
 });
 
+test('a CLI-only key cannot opt into recording', () => {
+  // `help` is a CLI token that never reaches `CommandFlags`, so `recorded: true`
+  // is a type error — the guard the old `satisfies keyof CommandFlags` list held.
+  // @ts-expect-error a non-recodable key must declare `recorded: false`.
+  const declaration: FlagDefinition = {
+    key: 'help',
+    names: ['--help'],
+    type: 'boolean',
+    projectConfig: false,
+    recorded: true,
+  };
+  assert.ok(declaration);
+});
+
 function getInRegistry(
   registry: typeof import('./flag-registry.ts'),
   key: 'daemonBaseUrl' | 'overlayRefs',
