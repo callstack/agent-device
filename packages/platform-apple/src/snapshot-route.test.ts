@@ -5,7 +5,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 // never resolves under the fake timers these tests drive. Tests that exercise the bypass inject
 // their own probe through the `systemSurfacePresent` option.
 vi.mock('./system-surface-presence.ts', () => ({
-  createSystemSurfacePresenceProbe: () => async () => false,
+  createSystemSurfacePresenceProbe: () => async () => 'absent',
 }));
 import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
@@ -59,22 +59,26 @@ test('eligible simulator capture publishes bridge acquisition without touching X
   expect(fallback).not.toHaveBeenCalled();
 });
 
-test('a presented system surface routes the capture to the runner and never touches the bridge', async () => {
-  const source = sourceReturning(bridgeAcquisition());
-  const fallback = vi.fn(async () => runnerResult());
-  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
-    source,
-    resolveTarget: vi.fn(async () => target),
-    systemSurfacePresent: async () => true,
-  });
+test.for(['present', 'unknown'] as const)(
+  'a %s system surface routes the capture to the runner and never touches the bridge',
+  async (presence) => {
+    const source = sourceReturning(bridgeAcquisition());
+    const fallback = vi.fn(async () => runnerResult());
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+      source,
+      resolveTarget: vi.fn(async () => target),
+      systemSurfacePresent: async () => presence,
+    });
 
-  await route.capture(ios, input, signal(), fallback);
+    await route.capture(ios, input, signal(), fallback);
 
-  // The host AX bridge cannot see the sheet, so the runner (fallback) must serve it and the bridge
-  // source must never be asked (#2438).
-  expect(fallback).toHaveBeenCalledOnce();
-  expect(source.acquire).not.toHaveBeenCalled();
-});
+    // The host AX bridge cannot see the sheet, so the runner (fallback) must serve it and the bridge
+    // source must never be asked. `unknown` takes the same path: an unproven probe must not fall
+    // through to a bridge capture that would answer from the occluded app tree (#2438).
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(source.acquire).not.toHaveBeenCalled();
+  },
+);
 
 test('typed bridge failure falls back once and disables retries for that app generation', async () => {
   const source = sourceReturning({

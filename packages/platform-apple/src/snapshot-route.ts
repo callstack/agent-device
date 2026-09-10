@@ -89,8 +89,10 @@ export function createAppleSnapshotRoute(
       // host AX bridge — the app is still the AX primaryApp, so the bridge would serve the occluded
       // app tree as if healthy (#2438). The XCTest runner can see and drive the surface, so route
       // this capture to it. The runner serves the surface only while it is genuinely foreground and
-      // otherwise serves the app, so this is correct even while a dismissed host lingers.
-      if (await systemSurfacePresent(device, signal)) return await fallback(input);
+      // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
+      // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
+      // capture that would answer confidently from the occluded app tree.
+      if ((await systemSurfacePresent(device, signal)) !== 'absent') return await fallback(input);
       let target: SimulatorSnapshotTarget;
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);

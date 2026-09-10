@@ -153,6 +153,21 @@ function hasMatchingPresentation(
   after: SnapshotState,
   command: string,
 ): boolean {
+  // A capture of an in-place system surface (a web sign-in sheet) and a capture of the app describe
+  // different surfaces. Refuse the comparison outright rather than letting legacy presentation
+  // matching corroborate a tap across that boundary (#2438).
+  if (baseline.iosSystemSurfaceBundleId !== after.iosSystemSurfaceBundleId) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_tap_failure_corroboration_surface_mismatch',
+      data: {
+        command,
+        baselineSurface: baseline.iosSystemSurfaceBundleId ?? 'app',
+        afterSurface: after.iosSystemSurfaceBundleId ?? 'app',
+      },
+    });
+    return false;
+  }
   const identityMatch = compareSnapshotIdentity(baseline, after);
   if (identityMatch !== undefined) {
     if (identityMatch) return true;

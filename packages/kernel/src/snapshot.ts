@@ -277,6 +277,12 @@ export type SnapshotState = {
    * occlusion (see `@agent-device/contracts/android-system-surface-disclosure`).
    */
   systemSurfaceOnly?: boolean;
+  /**
+   * iOS: the bundle id of the in-place system surface this capture describes (a web sign-in sheet
+   * presented over the app, #2438). Two captures that disagree here describe different surfaces and
+   * must never be compared as the same presentation; consumers that surface the tree disclose it.
+   */
+  iosSystemSurfaceBundleId?: string;
 } & SnapshotStateProvenance;
 
 export type SnapshotUnchanged = {

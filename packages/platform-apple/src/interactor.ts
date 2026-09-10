@@ -253,6 +253,7 @@ async function captureAppleRunnerSnapshot(
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,
     ...(result.quality ? { quality: result.quality } : {}),
+    ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

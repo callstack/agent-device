@@ -13,7 +13,7 @@ vi.mock('../simulator.ts', async (importOriginal) => {
 
 import { runCmd } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { openIosApp } from '../app-launch.ts';
+import { closeIosApp, openIosApp } from '../app-launch.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockRunCmd = vi.mocked(runCmd);
@@ -38,6 +38,46 @@ test('open refuses a system-surface host and never launches it', async () => {
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
       assert.equal(error.details?.reason, 'system-surface-host-not-openable');
       assert.match(error.message, /com\.apple\.SafariViewService/);
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+// The refusal must sit at every resolved-host launch/terminate, not only the plain `open <bundle>`
+// branch: the URL and deep-link branches return before it and would otherwise still launch the host.
+type OpenOptions = NonNullable<Parameters<typeof openIosApp>[2]>;
+
+test.for<[string, OpenOptions]>([
+  ['web URL', { url: 'https://example.com' }],
+  ['web URL with relaunch', { url: 'https://example.com', terminateRunningApp: true }],
+  ['deep link with relaunch', { url: 'myapp://path', terminateRunningApp: true }],
+  ['launch args', { launchArgs: ['--flag'] }],
+])('open refuses a system-surface host via the %s branch', async ([, options]) => {
+  await assert.rejects(
+    openIosApp(IOS_TEST_SIMULATOR, 'com.apple.SafariViewService', {
+      appBundleId: 'com.apple.SafariViewService',
+      ...options,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'system-surface-host-not-openable');
+      return true;
+    },
+  );
+  const touchedHost = mockRunCmd.mock.calls.some(
+    ([, args]) => Array.isArray(args) && args.includes('com.apple.SafariViewService'),
+  );
+  assert.equal(touchedHost, false, 'no simctl command may name the host bundle');
+});
+
+// Terminating the host cancels the presented session just as launching it does.
+test('close refuses to terminate a system-surface host', async () => {
+  await assert.rejects(
+    closeIosApp(IOS_TEST_SIMULATOR, 'com.apple.SafariViewService'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'system-surface-host-not-openable');
       return true;
     },
   );

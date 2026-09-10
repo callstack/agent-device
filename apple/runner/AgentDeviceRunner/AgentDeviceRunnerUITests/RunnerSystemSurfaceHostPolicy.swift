@@ -1,17 +1,9 @@
 import Foundation
 
-// iOS out-of-process system surfaces the runner observes and drives IN PLACE, never by activation.
-//
-// `com.apple.SafariViewService` hosts `ASWebAuthenticationSession` / `SFSafariViewController` out
-// of the app's process. Calling `XCUIApplication.activate()` (or `simctl launch`) on it cancels the
-// authentication session and blacks the view (issue #2438), so the runner never activates such a
-// host: it reads and drives it in place while it is genuinely presented over the session app.
-//
-// The canonical membership is the golden fixture shared with the TS twin. Drift on either side
-// turns CI red without a simulator:
-//   table:   contracts/fixtures/ios-system-surface-hosts.json
-//   TS twin: packages/contracts/src/ios-system-surface.ts
-//   TS test: packages/contracts/src/ios-system-surface.test.ts
+// iOS out-of-process system surfaces observed and driven IN PLACE, never activated: activating such
+// a host cancels what it presents (issue #2438; rationale in docs/adr/0004). Membership is the
+// golden fixture contracts/fixtures/ios-system-surface-hosts.json, mirrored by the TS twin
+// packages/contracts/src/ios-system-surface.ts; drift fails on either side without a simulator.
 enum SystemSurfaceHostKind: String {
   case webAuth = "web-auth"
 }

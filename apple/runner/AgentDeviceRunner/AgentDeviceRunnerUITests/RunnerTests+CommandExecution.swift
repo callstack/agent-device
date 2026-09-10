@@ -986,9 +986,7 @@ extension RunnerTests {
 
   struct ActiveCommandContext {
     let app: XCUIApplication
-    // Set when `app` is a system surface host (e.g. the web sign-in sheet) served in place over
-    // the still-bound session app, so the response can disclose it and lineage can keep an app
-    // baseline from being compared against a sheet capture (issue #2438).
+    /// Set when `app` is a system surface served in place over the still-bound session app (#2438).
     var systemSurface: SystemSurfaceHost? = nil
   }
 
@@ -1599,10 +1597,9 @@ extension RunnerTests {
     } else if shouldSkipAppActivationPreflight(command) {
       activeApp = resolveAppWithoutActivation(command: command)
     } else if let presented = presentedSystemSurfaceHost() {
-      // A system surface (e.g. the web sign-in sheet) is presented over the session app. Serve and
-      // drive it IN PLACE: never activate or relaunch it — that cancels what it presents (#2438) —
-      // and never adopt it as the cached session target. The session app binding stays intact, so
-      // once the surface is gone the next command resolves back to the app.
+      // Serve and drive the presented surface IN PLACE: never activate it (that cancels what it
+      // presents) and never adopt it as the cached session target, so once it is gone the next
+      // command resolves back to the still-bound session app (#2438).
       activeApp = presented.app
       systemSurface = presented.host
       if isInteractionCommand(command.command) {
@@ -1671,12 +1668,10 @@ extension RunnerTests {
     return .context(ActiveCommandContext(app: activeApp, systemSurface: systemSurface))
   }
 
-  /// A registered system surface host (e.g. `com.apple.SafariViewService`) that is genuinely on
-  /// screen right now, or nil. Presence is `state == .runningForeground`: the live spike for #2438
-  /// showed content heuristics (webViews/text fields present) cannot tell a live sheet from a
-  /// torn-down one, but foreground state can — and the only way such a host is foreground with a
-  /// stale tree is if it was activated/relaunched, which the open guard and this in-place policy
-  /// both refuse. `state` never activates and returns `.notRunning` cheaply when the host is absent.
+  /// A registered system surface host that is genuinely on screen, or nil. Presence is foreground
+  /// state, not tree content: a torn-down host still serves a rich tree, and it can only be
+  /// foreground-with-a-stale-tree if something activated it, which the open guard refuses. `state`
+  /// never activates and is cheap when the host is absent. See docs/adr/0004.
   private func presentedSystemSurfaceHost() -> (host: SystemSurfaceHost, app: XCUIApplication)? {
 #if os(iOS)
     for host in SystemSurfaceHostRegistry.hosts {

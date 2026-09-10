@@ -1,4 +1,5 @@
 import type { BackMode } from './back-mode.ts';
+import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
@@ -255,6 +256,11 @@ export type KeyboardEnterResult =
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
   comparisonIdentity?: IosSnapshotComparisonIdentity;
+  /**
+   * Set when the capture describes an in-place iOS system surface (a web sign-in sheet) presented
+   * over the session app rather than the app itself (#2438).
+   */
+  systemSurface?: IosSystemSurfaceProvenance;
 } & SnapshotProvenance;
 
 export type SnapshotRuntimeAcquiredResult = Readonly<{

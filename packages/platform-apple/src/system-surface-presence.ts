@@ -3,69 +3,115 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 
 /**
- * Cheap, device-scoped, stateless detection of whether a registered iOS system surface host
- * process is running for a Simulator (issue #2438).
+ * Whether a registered iOS system surface host is running for a Simulator (issue #2438).
  *
- * The local host AX bridge cannot see a system surface presented over the app — while the sheet is
- * up the app remains the AX `primaryApp`, so the bridge serves the (occluded) app tree, which looks
- * perfectly healthy. Only the XCTest runner can observe the sheet. This probe decides, host-side and
- * without the runner, whether a capture should take the runner path instead of the bridge.
- *
- * "The host process exists for this device" is deliberately conservative: it is true while the
- * sheet is up AND for a while after it is dismissed (the service lingers). Routing to the runner in
- * both cases is correct — the runner authoritatively serves the surface only while it is genuinely
- * foreground (`XCUIApplication.state`), and otherwise serves the app — so the only cost of a false
- * positive is one runner capture instead of a bridge capture. When no host process exists (the
- * overwhelming common case), the bridge fast path is untouched.
- *
- * The probe reads `ps -E` (process list with environment) and matches a host's simulator app-binary
- * path fragment on the same line as `SIMULATOR_UDID=<device>`. `ps` is ~150ms; a short per-device
- * memo keeps a polling `wait` from repaying it on every iteration.
+ * `unknown` is deliberate and is NOT collapsed into `absent`: the local host AX bridge cannot see a
+ * system surface presented over the app — while the sheet is up the app remains the AX `primaryApp`,
+ * so the bridge serves the (occluded) app tree, which looks perfectly healthy. Answering `absent`
+ * when we do not actually know would silently route such a capture to the bridge and return that
+ * occluded tree. Callers route anything that is not `absent` to the XCTest runner, which
+ * authoritatively serves the surface only while it is genuinely foreground and otherwise serves the
+ * app, so the cost of a false positive is one runner capture instead of a bridge capture.
  */
+export type SystemSurfacePresence = 'present' | 'absent' | 'unknown';
+
 export type SystemSurfacePresenceProbe = (
   device: DeviceInfo,
   signal?: AbortSignal,
-) => Promise<boolean>;
+) => Promise<SystemSurfacePresence>;
 
-const PRESENCE_MEMO_TTL_MS = 1_000;
+/**
+ * Only a positive observation is memoized. Absence must never be cached: a sheet opens between two
+ * captures, and a cached `absent` would send the very next capture to the bridge and answer from the
+ * occluded app tree. Re-probing on every non-present capture is what keeps that window closed.
+ */
+const PRESENT_MEMO_TTL_MS = 1_000;
 const PROBE_TIMEOUT_MS = 3_000;
 
 export function createSystemSurfacePresenceProbe(
   now: () => number = Date.now,
 ): SystemSurfacePresenceProbe {
-  const memo = new Map<string, { at: number; present: boolean }>();
+  const observedPresentAt = new Map<string, number>();
   return async (device, signal) => {
-    if (device.kind !== 'simulator') return false;
-    const cached = memo.get(device.id);
-    if (cached && now() - cached.at < PRESENCE_MEMO_TTL_MS) return cached.present;
-    const present = await probeSystemSurfacePresence(device, signal);
-    memo.set(device.id, { at: now(), present });
-    return present;
+    if (device.kind !== 'simulator') return 'absent';
+    const seenAt = observedPresentAt.get(device.id);
+    if (seenAt !== undefined && now() - seenAt < PRESENT_MEMO_TTL_MS) return 'present';
+    observedPresentAt.delete(device.id);
+    const presence = await probeSystemSurfacePresence(device, signal);
+    if (presence === 'present') observedPresentAt.set(device.id, now());
+    return presence;
   };
 }
 
 async function probeSystemSurfacePresence(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
-): Promise<boolean> {
-  let result;
+): Promise<SystemSurfacePresence> {
+  let sawUnknown = false;
+  for (const host of IOS_SYSTEM_SURFACE_HOSTS) {
+    const pids = await hostProcessIds(host.processExecutable, signal);
+    if (pids === 'unknown') {
+      sawUnknown = true;
+      continue;
+    }
+    for (const pid of pids) {
+      const scoped = await isProcessScopedToDevice(pid, device.id, signal);
+      if (scoped === 'unknown') sawUnknown = true;
+      else if (scoped) return 'present';
+    }
+  }
+  return sawUnknown ? 'unknown' : 'absent';
+}
+
+/**
+ * Pids of a host's simulator app binary, host-wide. `pgrep` exits 1 with no output when nothing
+ * matches, which is a real negative; any other failure is `unknown`. This stays cheap in the common
+ * case — no match means one small process-table scan and no environment read at all.
+ */
+async function hostProcessIds(
+  processExecutable: string,
+  signal: AbortSignal | undefined,
+): Promise<number[] | 'unknown'> {
+  const result = await runProbe('pgrep', ['-f', processExecutable], signal);
+  if (result === 'unknown') return 'unknown';
+  if (result.exitCode === 1) return [];
+  if (result.exitCode !== 0) return 'unknown';
+  return result.stdout
+    .split('\n')
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((pid) => Number.isSafeInteger(pid) && pid > 0);
+}
+
+/**
+ * Whether one host process belongs to this Simulator. Simulator processes carry `SIMULATOR_UDID` in
+ * their environment, so the device scope is exact rather than "some booted simulator". A process
+ * that vanished between the scan and this read reports `unknown` rather than a negative, because a
+ * dead pid and an unreadable one are indistinguishable here.
+ */
+async function isProcessScopedToDevice(
+  pid: number,
+  deviceId: string,
+  signal: AbortSignal | undefined,
+): Promise<boolean | 'unknown'> {
+  const result = await runProbe('ps', ['eww', '-p', String(pid), '-o', 'command='], signal);
+  if (result === 'unknown' || result.exitCode !== 0) return 'unknown';
+  return result.stdout.includes(`SIMULATOR_UDID=${deviceId}`);
+}
+
+async function runProbe(
+  command: string,
+  args: string[],
+  signal: AbortSignal | undefined,
+): Promise<{ exitCode: number; stdout: string } | 'unknown'> {
   try {
-    result = await runCmd('ps', ['-Awwwo', 'pid=,command=', '-E'], {
+    const result = await runCmd(command, args, {
       allowFailure: true,
       timeoutMs: PROBE_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
+    return { exitCode: result.exitCode, stdout: result.stdout };
   } catch {
-    // A probe failure must never fabricate a surface: fall back to the bridge path.
-    return false;
+    // A timeout or spawn failure is not evidence of absence.
+    return 'unknown';
   }
-  if (result.exitCode !== 0) return false;
-  const udidToken = `SIMULATOR_UDID=${device.id}`;
-  for (const line of result.stdout.split('\n')) {
-    if (!line.includes(udidToken)) continue;
-    for (const host of IOS_SYSTEM_SURFACE_HOSTS) {
-      if (line.includes(host.processExecutable)) return true;
-    }
-  }
-  return false;
 }

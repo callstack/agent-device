@@ -316,6 +316,35 @@ test('a producer or generation switch cannot corroborate a failed tap', async ()
   ).resolves.toBeUndefined();
 });
 
+// An app baseline and an in-place system-surface capture (a web sign-in sheet) describe different
+// surfaces. Without an explicit refusal both lack a comparisonKey and fall through to legacy
+// presentation matching, which could corroborate a tap across that boundary (#2438).
+test('a capture of a system surface cannot corroborate a tap taken against the app', async () => {
+  const sessionName = 'ios-system-surface-mismatch';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  const session = makeIosSession(sessionName, {
+    appBundleId: 'com.example.app',
+    snapshot: baseline,
+  });
+  sessionStore.set(sessionName, session);
+  const after = snapshot(imageViewerNodes);
+  after.iosSystemSurfaceBundleId = 'com.apple.SafariViewService';
+
+  await expect(
+    corroborateIosTapFailure({
+      error: new AppError('XCTEST_RECORDED_FAILURE', 'tap failed'),
+      command: 'click',
+      requestId: undefined,
+      flags: {},
+      session,
+      sessionStore,
+      contextFromFlags,
+      captureSnapshotForSession: async () => after,
+    }),
+  ).resolves.toBeUndefined();
+});
+
 test('a sparse changed capture keeps the tap failure', async () => {
   const sessionName = 'ios-sparse-tap-corroboration';
   const sessionStore = makeSessionStore();

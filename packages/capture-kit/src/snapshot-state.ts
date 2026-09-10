@@ -22,6 +22,7 @@ import { coveredAndroidReplacementNodeIndexes } from './snapshot/android-replace
 import { scopeSnapshotNodes } from './snapshot-desktop-projection.ts';
 import { normalizeSnapshotTree, pruneGroupNodes } from './snapshot-tree-ingestion.ts';
 import { iosSnapshotComparisonIdentityKey } from './ios-snapshot-planning.ts';
+import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { IosSnapshotComparisonIdentity } from '@agent-device/contracts/ios-snapshot';
 
 /**
@@ -43,6 +44,7 @@ export function buildSnapshotState(
     truncated?: boolean;
     quality?: unknown;
     comparisonIdentity?: IosSnapshotComparisonIdentity;
+    systemSurface?: IosSystemSurfaceProvenance;
   } & SnapshotCaptureProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
@@ -78,6 +80,7 @@ export function buildSnapshotState(
     ...(data.comparisonIdentity
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),
+    ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
     presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped
     // or filtered view, preserve that output contract but avoid pretending it is safe for

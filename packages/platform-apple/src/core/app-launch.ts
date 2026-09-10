@@ -16,10 +16,6 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '@agent-device/contracts/command';
-import {
-  isIosSystemSurfaceHost,
-  iosSystemSurfaceOpenRefusal,
-} from '@agent-device/contracts/ios-system-surface';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
@@ -133,15 +129,6 @@ export async function openIosApp(
   }
 
   const bundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
-  // A system-hosted surface (e.g. the web sign-in sheet in com.apple.SafariViewService) must never
-  // be launched or activated: doing so cancels what it presents (issue #2438). While it is on
-  // screen it appears in the session app's snapshots on its own and is driven in place.
-  if (isIosSystemSurfaceHost(bundleId)) {
-    throw new AppError('UNSUPPORTED_OPERATION', iosSystemSurfaceOpenRefusal(bundleId), {
-      reason: 'system-surface-host-not-openable',
-      appBundleId: bundleId,
-    });
-  }
   if (device.kind === 'simulator') {
     await launchIosSimulatorApp(device, bundleId, {
       ...(launchConsole ? { launchConsole } : {}),
@@ -192,13 +179,34 @@ export async function closeIosApp(
     return;
   }
 
+  await assertNotSystemSurfaceHost(bundleId);
   await resolveIosPhysicalDeviceControl(device).terminateApp(device, bundleId, {
     runnerOptions,
     runRunnerCommand: runAppleRunnerCommand,
   });
 }
 
+/**
+ * A system-hosted surface (e.g. the web sign-in sheet in `com.apple.SafariViewService`) must never
+ * be launched, activated, or terminated: doing so cancels what it presents (issue #2438). While it
+ * is on screen it appears in the session app's snapshots on its own and is driven in place.
+ *
+ * Every resolved-bundle launch and terminate calls this, so the URL and deep-link branches are
+ * covered too, not just a plain `open <bundle>`. The registry import is deferred to keep the
+ * app-lifecycle facade's eager closure flat.
+ */
+async function assertNotSystemSurfaceHost(bundleId: string): Promise<void> {
+  const { isIosSystemSurfaceHost, iosSystemSurfaceOpenRefusal } =
+    await import('@agent-device/contracts/ios-system-surface');
+  if (!isIosSystemSurfaceHost(bundleId)) return;
+  throw new AppError('UNSUPPORTED_OPERATION', iosSystemSurfaceOpenRefusal(bundleId), {
+    reason: 'system-surface-host-not-openable',
+    appBundleId: bundleId,
+  });
+}
+
 async function terminateIosSimulatorApp(device: DeviceInfo, bundleId: string): Promise<void> {
+  await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
   const terminateArgs = simctlArgs(device, ['terminate', device.id, bundleId]);
   const result = await runXcrun(terminateArgs, {
@@ -220,6 +228,7 @@ async function launchIosSimulatorApp(
   bundleId: string,
   options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
 ): Promise<void> {
+  await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
 
   let consecutiveFBSFailures = 0;
@@ -350,6 +359,7 @@ async function launchIosDeviceProcess(
     runnerOptions?: AppleRunnerCommandOptions;
   },
 ): Promise<void> {
+  await assertNotSystemSurfaceHost(bundleId);
   await resolveIosPhysicalDeviceControl(device).launchApp(device, bundleId, {
     ...options,
     runRunnerCommand: runAppleRunnerCommand,
