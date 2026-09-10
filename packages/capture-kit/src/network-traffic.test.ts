@@ -65,7 +65,7 @@ test('keeps missing canonical app-log text distinct and merges recovery first', 
     scannedLines: 0,
     matchedLines: 0,
     entries: [],
-    unnamedRequests: 0,
+    unnamedRequestIds: [],
     include: 'summary',
     limits: { maxEntries: 2, maxPayloadChars: 2048, maxScanLines: 100 },
   });
@@ -234,20 +234,20 @@ test('android dumps do not pay for CFNetwork correlation', () => {
     dump.entries.map((entry) => entry.url),
     ['http://localhost:3040/v4/messages/en_US'],
   );
-  assert.equal(dump.unnamedRequests, 0);
+  assert.equal(dump.unnamedRequestIds?.length, 0);
 });
 
 test('a reused request whose connection opened before the window is counted, not dropped', () => {
   const dump = iosDump([REUSED_SUMMARY]);
 
   assert.deepEqual(dump.entries, []);
-  assert.equal(dump.unnamedRequests, 1);
+  assert.equal(dump.unnamedRequestIds?.length, 1);
 });
 
 test('a resolved reused request is named, not counted as unnamed', () => {
   const dump = iosDump([CONNECTION_START, OPENING_SUMMARY, REUSED_SUMMARY]);
 
-  assert.equal(dump.unnamedRequests, 0);
+  assert.equal(dump.unnamedRequestIds?.length, 0);
   assert.equal(dump.entries.filter((entry) => entry.pathUnavailable).length, 1);
 });
 
@@ -268,7 +268,7 @@ test('a recycled connection number does not inherit the origin of a previous pro
     dump.entries.filter((entry) => entry.pathUnavailable),
     [],
   );
-  assert.equal(dump.unnamedRequests, 1);
+  assert.equal(dump.unnamedRequestIds?.length, 1);
 });
 
 test('a connection number is resolved within the process that opened it', () => {
@@ -291,7 +291,7 @@ test('a line with no readable process identity leaves its traffic unnamed', () =
     dump.entries.filter((entry) => entry.pathUnavailable),
     [],
   );
-  assert.equal(dump.unnamedRequests, 1);
+  assert.equal(dump.unnamedRequestIds?.length, 1);
 });
 
 test('a URL whose path ends in punctuation is not truncated into a different endpoint', () => {
@@ -306,4 +306,41 @@ test('a delimited url: field drops the separator the format put after it', () =>
   const dump = iosDump([CONNECTION_START]);
 
   assert.equal(dump.entries[0]?.url, 'http://localhost:3040/v4/messages/en_US');
+});
+
+// A second reused request on the same connection, distinct from REUSED_SUMMARY.
+const SECOND_REUSED_SUMMARY = REUSED_SUMMARY.replace(
+  'Task <2FAEF670-BB27-42A4-ACDD-6B6DF7D11510>.<2>',
+  'Task <9C1D77B4-0E52-4A18-9D31-7F0A2B4C6E88>.<3>',
+);
+
+test('two windows over disjoint unnamed traffic report both requests, not the larger count', () => {
+  const appLog = iosDump([REUSED_SUMMARY]);
+  const recovery = iosDump([SECOND_REUSED_SUMMARY]);
+
+  const merged = mergeNetworkDumps(recovery, appLog, 200);
+
+  assert.equal(merged.unnamedRequestIds?.length, 2);
+});
+
+test('two windows over the same unnamed request report it once', () => {
+  const appLog = iosDump([REUSED_SUMMARY, SECOND_REUSED_SUMMARY]);
+  const recovery = iosDump([SECOND_REUSED_SUMMARY]);
+
+  const merged = mergeNetworkDumps(recovery, appLog, 200);
+
+  assert.equal(merged.unnamedRequestIds?.length, 2);
+});
+
+test('a request one window named is not still counted as unnamed from the other', () => {
+  const appLog = iosDump([REUSED_SUMMARY]);
+  const recovery = iosDump([CONNECTION_START, REUSED_SUMMARY]);
+
+  assert.equal(appLog.unnamedRequestIds?.length, 1);
+  assert.equal(recovery.unnamedRequestIds?.length, 0);
+
+  const merged = mergeNetworkDumps(recovery, appLog, 200);
+
+  assert.deepEqual(merged.unnamedRequestIds, []);
+  assert.equal(merged.entries.filter((entry) => entry.pathUnavailable).length, 1);
 });

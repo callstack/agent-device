@@ -250,7 +250,7 @@ test('a keep-alive request whose connection predates the window keeps the dump f
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.dump.entries).toEqual([]);
-  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.dump.unnamedRequestIds).toHaveLength(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),
@@ -273,7 +273,7 @@ test('simulator recovery keeps traffic it saw but could not name', async () => {
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.dump.entries).toEqual([]);
-  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.dump.unnamedRequestIds).toHaveLength(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),
@@ -295,7 +295,7 @@ test('recovery-only traffic that cannot be named is still reported, not called e
   );
 
   if (result.source !== 'app-log') throw new Error('expected app-log result');
-  expect(result.dump.unnamedRequests).toBe(1);
+  expect(result.dump.unnamedRequestIds).toHaveLength(1);
   expect(result.notes).toEqual([
     expect.stringContaining('1 opened before this scan window'),
     expect.stringContaining('No HTTP(s) entries were found'),

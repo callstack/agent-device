@@ -23,6 +23,9 @@ const METHOD_WITH_URL_REGEX = new RegExp(`\\b(${HTTP_METHODS.join('|')})\\b\\s+h
 const URL_REGEX = /https?:\/\/[^\s"'<>\])]+/i;
 const CFNETWORK_CONNECTION_URL = /\[C(\d+)\b[^\]]*?\burl:\s*([^\s,\]]+)/;
 const CFNETWORK_TASK_SUMMARY = /\bsummary for task (?:success|failure)\s*\{([^}]*)\}/;
+// `Task <UUID>.<seq>` identifies one request across every line it appears on,
+// so the same request seen in two scan windows reconciles to one.
+const CFNETWORK_TASK_ID = /\bTask\s+<([0-9A-Fa-f-]+)>\.<(\d+)>/;
 // `name[pid:tid]` in the compact unified-log prefix. Connection numbers restart
 // per process, so a number alone would let a relaunched app inherit the origin
 // its predecessor opened; the pid is what keeps those apart.
@@ -52,11 +55,22 @@ export function mergeNetworkDumps(
     entries.push(entry);
     if (entries.length >= maxEntries) break;
   }
+  // The two windows can cover different, overlapping, or disjoint traffic. A
+  // request either window named is named, and the rest union by identity, so
+  // neither window's blind spot inflates or masks the other's.
+  const named = new Set(
+    [...primary.entries, ...secondary.entries]
+      .map((entry) => entry.packetId)
+      .filter((id): id is string => id !== undefined),
+  );
+  const unnamedRequestIds = [
+    ...new Set([...(primary.unnamedRequestIds ?? []), ...(secondary.unnamedRequestIds ?? [])]),
+  ].filter((id) => !named.has(id));
   return Object.freeze({
     ...primary,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
-    unnamedRequests: Math.max(primary.unnamedRequests ?? 0, secondary.unnamedRequests ?? 0),
+    unnamedRequestIds: Object.freeze(unnamedRequestIds),
   });
 }
 
@@ -76,7 +90,7 @@ export function readRecentNetworkTrafficFromText(
       scannedLines: 0,
       matchedLines: 0,
       entries: Object.freeze([]),
-      unnamedRequests: 0,
+      unnamedRequestIds: Object.freeze([]),
       include,
       limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
     });
@@ -107,9 +121,9 @@ export function readRecentNetworkTrafficFromText(
     scannedLines: lines.length,
     matchedLines: entries.length,
     entries: Object.freeze(entries),
-    unnamedRequests: cfNetworkConnections
-      ? countUnnamedCfNetworkRequests(lines, cfNetworkConnections)
-      : 0,
+    unnamedRequestIds: Object.freeze(
+      cfNetworkConnections ? collectUnnamedCfNetworkTasks(lines, cfNetworkConnections) : [],
+    ),
     include,
     limits: Object.freeze({ maxEntries, maxPayloadChars, maxScanLines }),
   });
@@ -157,6 +171,7 @@ type NetworkIdentity = Readonly<{
   status?: number;
   durationMs?: number;
   pathUnavailable?: boolean;
+  packetId?: string;
 }>;
 
 function parseNetworkIdentity(
@@ -227,7 +242,7 @@ function createNetworkEntry(
   return {
     ...identity,
     timestamp: parseNetworkTimestamp(line),
-    packetId: parseAndroidPacketId(line) ?? undefined,
+    packetId: identity.packetId ?? parseAndroidPacketId(line) ?? undefined,
     durationMs: identity.durationMs ?? parseAndroidDurationMs(line) ?? undefined,
     raw: truncate(line, maxPayloadChars),
     line: lineNumber,
@@ -334,26 +349,46 @@ function parseCfNetworkReusedTaskIdentity(
     status: readCfNetworkStatus(fields.get('response_status')),
     durationMs: readCfNetworkCount(fields.get('transaction_duration_ms')),
     pathUnavailable: true,
+    packetId: cfNetworkTaskId(line),
   };
 }
 
-function countUnnamedCfNetworkRequests(
+function collectUnnamedCfNetworkTasks(
   lines: readonly string[],
   index: CfNetworkConnectionIndex,
-): number {
-  let unnamed = 0;
+): string[] {
+  const unnamed = new Set<string>();
   for (const [lineIndex, line] of lines.entries()) {
-    if (!line.includes('summary for task')) continue;
-    const summary = CFNETWORK_TASK_SUMMARY.exec(line);
-    if (!summary) continue;
-    const fields = readCfNetworkSummaryFields(summary[1] as string);
-    if (fields.get('reused') !== '1') continue;
-    const connection = fields.get('connection');
-    const key = connection === undefined ? undefined : cfNetworkConnectionKey(line, connection);
-    if (key !== undefined && resolveCfNetworkOrigin(index, key, lineIndex)) continue;
-    unnamed += 1;
+    const task = unnamedCfNetworkTaskOn(line, index, lineIndex);
+    if (task !== undefined) unnamed.add(task);
   }
-  return unnamed;
+  return [...unnamed];
+}
+
+/** The identity of a reused task on this line that resolves to no origin. */
+function unnamedCfNetworkTaskOn(
+  line: string,
+  index: CfNetworkConnectionIndex,
+  lineIndex: number,
+): string | undefined {
+  if (!line.includes('summary for task')) return undefined;
+  const summary = CFNETWORK_TASK_SUMMARY.exec(line);
+  if (!summary) return undefined;
+  const fields = readCfNetworkSummaryFields(summary[1] as string);
+  if (fields.get('reused') !== '1') return undefined;
+  const connection = fields.get('connection');
+  const key = connection === undefined ? undefined : cfNetworkConnectionKey(line, connection);
+  if (key !== undefined && resolveCfNetworkOrigin(index, key, lineIndex)) return undefined;
+  return cfNetworkTaskId(line);
+}
+
+/** One request's identity, scoped to its process so a relaunch cannot alias it. */
+function cfNetworkTaskId(line: string): string | undefined {
+  const task = CFNETWORK_TASK_ID.exec(line);
+  if (!task) return undefined;
+  const process = LOG_PROCESS_IDENTITY.exec(line);
+  const scope = process ? `${process[1]}[${process[2]}]` : '';
+  return `${scope}#${task[1]}.${task[2]}`;
 }
 
 function resolveCfNetworkOrigin(

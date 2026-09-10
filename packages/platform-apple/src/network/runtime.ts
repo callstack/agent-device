@@ -43,7 +43,7 @@ function mergeRecoveredTraffic(
   maxEntries: number,
 ): NetworkDump {
   const recovered = recovery.dump.entries.length;
-  if (recovered === 0 && (recovery.dump.unnamedRequests ?? 0) === 0) {
+  if (recovered === 0 && (recovery.dump.unnamedRequestIds ?? []).length === 0) {
     if (recovery.lineCount > 0) {
       notes.push(
         `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
@@ -139,7 +139,7 @@ function buildPredicate(appBundleId: string): string {
  */
 function appendUnnamedRequestNote(notes: string[], dump: NetworkDump): void {
   const againstOrigin = dump.entries.filter((entry) => entry.pathUnavailable).length;
-  const unresolved = dump.unnamedRequests ?? 0;
+  const unresolved = (dump.unnamedRequestIds ?? []).length;
   const observed = againstOrigin + unresolved;
   if (observed === 0) return;
   const parts = [
