@@ -55,59 +55,6 @@ export function buildReactDevtoolsNpmExecArgs(args: string[]): string[] {
   ];
 }
 
-/**
- * Subcommands that answer a question about an attached app's React tree. The
- * passthrough starts a daemon on demand and answers them from its empty tree,
- * so `errors` reports the same "nothing found" as a healthy app with nothing
- * wrong. Gating them on attachment keeps a failed observation from reading as
- * a negative one.
- */
-const COMPONENT_READ_COMMANDS = new Set(['errors', 'find', 'count', 'get']);
-
-// The pinned passthrough has no machine-readable status, so the connected-app
-// count is read off its `status` rendering. A status the probe cannot parse
-// means unknown and lets the read through; a status it cannot obtain means no
-// daemon is reachable, which no component read can observe around.
-const CONNECTED_APPS_PATTERN = /^Apps: (\d+) connected/m;
-
-type Attachment = number | 'no-daemon' | 'unknown';
-
-async function readAttachment(cwd: string, env: NodeJS.ProcessEnv): Promise<Attachment> {
-  const result = await runCmdStreaming('npm', buildReactDevtoolsNpmExecArgs(['status']), {
-    cwd,
-    env,
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) return 'no-daemon';
-  const match = CONNECTED_APPS_PATTERN.exec(result.stdout);
-  return match ? Number(match[1]) : 'unknown';
-}
-
-async function assertComponentReadCanObserve(
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): Promise<void> {
-  const subcommand = args[0] ?? '';
-  if (!COMPONENT_READ_COMMANDS.has(subcommand)) return;
-  const attachment = await readAttachment(cwd, env);
-  if (attachment === 'unknown') return;
-  if (typeof attachment === 'number' && attachment > 0) return;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `react-devtools ${subcommand} observed nothing: ${
-      attachment === 'no-daemon'
-        ? 'the React DevTools daemon is not running'
-        : 'the React DevTools daemon has 0 apps connected'
-    }.`,
-    {
-      subcommand,
-      connectedApps: attachment === 'no-daemon' ? null : attachment,
-      hint: 'Attach an app first: `agent-device react-devtools wait --connected` blocks until one connects or reconnects. If none ever attaches, run `agent-device react-devtools start` and launch or relaunch the app.',
-    },
-  );
-}
-
 function isRemoteIosBridgeBackend(leaseBackend: CliFlags['leaseBackend']): boolean {
   return leaseBackend === 'ios-instance';
 }
@@ -239,7 +186,6 @@ export async function runReactDevtoolsCommand(
     if (shouldConfigureDirectReverse(args, options)) {
       await options.configureDirectPortReverse?.();
     }
-    await assertComponentReadCanObserve(args, cwd, env);
     const result = await runCmdStreaming('npm', buildReactDevtoolsNpmExecArgs(args), {
       cwd,
       env,

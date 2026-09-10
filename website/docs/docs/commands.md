@@ -852,7 +852,6 @@ agent-device react-devtools profile report @c5
 
 - `react-devtools` dynamically runs pinned `agent-react-devtools@0.4.0` through npm and passes arguments through 1:1.
 - The first run may download the pinned package from npm; later runs can reuse the npm cache.
-- Component reads (`errors`, `find`, `count`, `get`) fail with `COMMAND_FAILED` when the DevTools daemon is not running or reports zero connected apps, so an unobservable tree cannot be mistaken for an empty one. Use `react-devtools start` and `react-devtools wait --connected` to establish attachment first.
 - `agent-device` global flags work before or after `react-devtools`. Use `--` before downstream flags only when they intentionally share an `agent-device` global flag name.
 - Use it when a React Native workflow needs component hierarchy, props, state, hooks, render causes, slow components, or re-render counts.
 - For profiling, keep the window narrow and make one bounded first-pass survey: use the `profile stop` summary, run `profile slow --limit 5` and `profile rerenders --limit 5` once, add `profile timeline --limit 20` only when commit timing matters, then drill into a specific `@c` ref with `profile report`.
