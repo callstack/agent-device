@@ -1,6 +1,5 @@
-import { divergenceFixture } from './session-replay-divergence.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {
@@ -8,11 +7,25 @@ import {
   walkNonRawAndroidFixture,
 } from '../../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
 import { refFrameScope, refFrameState } from '../../../ref-frame.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 
-const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCapture } =
-  divergenceFixture;
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
+const mockDispatchCommand = legacyDispatchCapture;
 
 // #1264: a separate-window system overlay (a volume dialog / QS shade) must coexist
 // with the chrome filter and survive into `screen.refs` — even when its lone
@@ -20,7 +33,7 @@ const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCaptur
 // when the overlay mass-covers the app. The partial ref frame the capture activates
 // must then authorize exactly the emitted screen refs, covered fallback refs included.
 
-beforeEach(resetDivergenceCapture);
+beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
 
 // #1264 coexistence (chrome filter + overlay, real walked fixture): a
 // separate-window system overlay (volume dialog) that a full `snapshot` capture

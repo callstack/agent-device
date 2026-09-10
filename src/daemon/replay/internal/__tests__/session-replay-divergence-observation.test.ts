@@ -1,16 +1,35 @@
-import './session-replay-divergence-retry.fixtures.ts';
-import { divergenceFixture } from './session-replay-divergence.fixtures.ts';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { captureDivergenceObservation } from '../session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 
-const { captureDivergenceObservation, mockDispatchCommand, resetDivergenceCapture } =
-  divergenceFixture;
-beforeEach(resetDivergenceCapture);
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+// Stubs the Android freshness-retry delay to a no-op so the retry branch runs without
+// a wall-clock wait. Declared only here (and in the capture-policy sibling) — the two
+// siblings that exercise a retry branch — so it cannot no-op the delay elsewhere.
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
+});
+
+const mockDispatchCommand = legacyDispatchCapture;
+beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
 
 // #1385 P2: the retry deadline is a DELAY-ONLY budget, not a per-attempt
 // capture timeout — this loop does not itself bound how long a single

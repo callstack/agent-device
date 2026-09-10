@@ -1,14 +1,27 @@
-import { divergenceFixture } from './session-replay-divergence.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 
-const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCapture } =
-  divergenceFixture;
-beforeEach(resetDivergenceCapture);
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
+const mockDispatchCommand = legacyDispatchCapture;
+beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
 
 test('buildReplayFailureDivergence dedupes suggestions using the strongest basis', async () => {
   const root = mkdtempForTestSync('agent-device-replay-suggest-dedupe-');

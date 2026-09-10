@@ -1,6 +1,5 @@
-import { divergenceFixture } from './session-replay-divergence.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import {
   makeAndroidSession,
@@ -11,10 +10,24 @@ import {
   walkNonRawAndroidFixture,
 } from '../../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 
-const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCapture } =
-  divergenceFixture;
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
+const mockDispatchCommand = legacyDispatchCapture;
 
 // Divergence `screen.refs` shares one budget with the app's own controls, so chrome
 // that renders ahead of them in document order — an iOS software keyboard, unlabeled
@@ -23,7 +36,7 @@ const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCaptur
 // classification surface: iOS keyboard + accessory, structural noise, and the Android
 // status-bar/IME route exercised through the real non-raw walk.
 
-beforeEach(resetDivergenceCapture);
+beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
 
 // Live-shape fixture (iPhone 17 Pro sim, iOS 26): the software keyboard
 // renders in its own window ([Window] > [Keyboard] > 26 [Key] children).

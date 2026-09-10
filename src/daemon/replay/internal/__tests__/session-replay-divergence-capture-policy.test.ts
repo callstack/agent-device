@@ -1,21 +1,40 @@
-import './session-replay-divergence-retry.fixtures.ts';
-import { divergenceFixture } from './session-replay-divergence.fixtures.ts';
 import path from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
+import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 
-const { buildReplayFailureDivergence, mockDispatchCommand, resetDivergenceCapture } =
-  divergenceFixture;
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+// Stubs the Android freshness-retry delay to a no-op so the retry branch runs without
+// a wall-clock wait. Declared only here (and in the observation sibling) — the two
+// siblings that exercise a retry branch — so it cannot no-op the delay elsewhere.
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/retry')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
+});
+
+const mockDispatchCommand = legacyDispatchCapture;
 
 // #1264 capture parity: the divergence capture must reach the device through the SAME
 // `captureSnapshot` wrapper a plain `snapshot` uses (so it inherits Android freshness +
 // post-action retry and can never be STALER than a snapshot), and it must build its
 // flags from a fixed diagnostic policy — never from the failed action's narrowing flags.
 
-beforeEach(resetDivergenceCapture);
+beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
 
 // #1264 (capture parity, point 1): the divergence capture must go through the
 // SAME `captureSnapshot` wrapper as a plain `snapshot`, so it inherits Android

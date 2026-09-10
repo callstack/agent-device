@@ -1,20 +1,15 @@
 import { vi } from 'vitest';
 
-// ADR 0012 migration step 2: every replay step failure now attempts a post-failure
-// screen digest capture + suggestion re-resolution, both via the narrow snapshot
-// interactor seam. None of these fixtures model a real device runner, so without a
-// mock those calls fall through to the real (slow/hanging) runner dispatch path.
-// Reject fast so failure-path tests keep exercising `divergence.screen: unavailable`
-// deterministically, exactly like a real capture failure would.
+// The Maestro replay engine resolves a real device and — through the ADR 0012
+// post-failure divergence capture — the real snapshot interactor. Neither fixture
+// models a device runner, so both are stubbed here: `resolveTargetDevice` returns a
+// fixed Android/iOS device, and the interactor rejects fast so failure-path tests
+// keep exercising `divergence.screen: unavailable` deterministically.
 //
-// This declares the Maestro-heavy device resolution — `resolveTargetDevice` returns a
-// real Android/iOS device — ONCE, here, so every `session-replay-runtime-maestro-*.test.ts`
-// sibling shares it instead of copying it per file. It is kept apart from
-// `session-replay-runtime.test.ts`, whose OWN `vi.mock` of the same module resolves the
-// device differently: vitest allows one mock per module per file, so the two families
-// cannot merge. The SUT entry (`runReplayForTest`, below) is imported under these mocks
-// and handed back through the frozen object, so a sibling never imports the real
-// interactor/dispatch chain directly and hangs on an unmocked runner.
+// The Maestro-shaped device resolution lives in this fixtures module rather than
+// per-sibling because Vitest allows only one `vi.mock` per module per file, so the
+// Maestro family cannot reuse the differently-resolved device that
+// `session-replay-runtime.test.ts` declares for itself.
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
