@@ -17,9 +17,13 @@ import {
 import {
   formatScrollUntilMessage,
   runScrollUntilVisiblePasses,
+  scrollUntilCaptureError,
   scrollUntilNotFoundError,
 } from '@agent-device/capture-kit/scroll-until-visible';
-import { isSelectorVisibleInNodes } from '@agent-device/selectors/scroll-until-match';
+import {
+  isSelectorVisibleInNodes,
+  scrollUntilCaptureRefusal,
+} from '@agent-device/selectors/scroll-until-match';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
@@ -310,7 +314,7 @@ async function runUntilScroll(params: {
   const edge = verticalEdgeFor(direction);
   const result = await runScrollUntilVisiblePasses({
     ...(edge === undefined ? {} : { edge }),
-    captureNodes: async () => await captureRuntimeScrollNodes(runtime, options),
+    captureNodes: async () => await captureRuntimeScrollNodes(runtime, options, direction, until),
     isVisibleMatch: async (nodes) =>
       await isSelectorVisibleInNodes({
         nodes,
@@ -354,9 +358,15 @@ function verticalEdgeFor(direction: GestureDirection): ScrollEdge | undefined {
   return undefined;
 }
 
+/**
+ * The tree one pass reads, or a refusal. Never `?? []`: an unreadable capture that reached the edge
+ * analyzer as an empty tree is exactly how a failed read used to be reported as end-of-content.
+ */
 async function captureRuntimeScrollNodes(
   runtime: AgentDeviceRuntime,
   options: ScrollCommandOptions,
+  direction: GestureDirection,
+  selector: string,
 ) {
   if (!runtime.backend.captureSnapshot) {
     throw new AppError(
@@ -367,7 +377,10 @@ async function captureRuntimeScrollNodes(
   const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
     includeRects: true,
   });
-  return result.snapshot?.nodes ?? result.nodes ?? [];
+  const capture = result.snapshot ?? result;
+  const refusal = scrollUntilCaptureRefusal(capture);
+  if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
+  return capture.nodes ?? [];
 }
 
 function requireDirection(

@@ -332,3 +332,46 @@ test('runtime scroll --until is refused on the edge directions, which already ca
     /scroll bottom already scrolls to the bottom edge and cannot take --until/,
   );
 });
+
+/**
+ * The defect this pins: a capture that comes back unreadable used to reach the edge analyzer as an
+ * empty tree, which reads it as "no room below" and reported end-of-content. A failed read is not
+ * evidence about the content.
+ */
+test('runtime scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({ nodes: [] }),
+    scroll: async () => ({}),
+  });
+
+  await assert.rejects(
+    () => device.interactions.scroll({ direction: 'down', until: 'label=Email' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'no-capture');
+      return true;
+    },
+  );
+});
+
+test('runtime scroll --until refuses a sparse capture rather than trusting its selectors', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => ({
+      snapshot: {
+        ...untilSnapshot(2400, true),
+        snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+      },
+    }),
+    scroll: async () => ({}),
+  });
+
+  await assert.rejects(
+    () => device.interactions.scroll({ direction: 'down', until: 'label=Email' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.captureRefusal, 'sparse-tree');
+      return true;
+    },
+  );
+});

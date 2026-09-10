@@ -19,6 +19,20 @@ export const SCROLL_UNTIL_PASS_LIMIT = 12;
  */
 export type ScrollUntilVisibleOutcome = 'matched' | 'edge-reached' | 'pass-limit';
 
+/**
+ * Why a capture cannot answer the `--until` question at all.
+ *
+ * Distinct from the loop's outcomes on purpose: an unreadable capture is not evidence about the
+ * content, and collapsing the two is how `?? []` used to turn a failed read into "you reached the
+ * end of the list". The classifier that produces this lives in `@agent-device/selectors`, which is
+ * where the same readability question is already answered for absence assertions; the vocabulary
+ * lives here beside the outcomes it must not be confused with.
+ */
+export type ScrollUntilCaptureRefusal = {
+  reason: 'no-capture' | 'sparse-tree';
+  detail: string;
+};
+
 export type ScrollUntilVisibleResult<TResult> = {
   passes: number;
   outcome: ScrollUntilVisibleOutcome;
@@ -102,7 +116,9 @@ export function scrollUntilNotFoundError(params: {
       `scroll ${direction} reached the end of the scrollable content after ${passes} ${passes === 1 ? 'pass' : 'passes'} without ${selector} becoming visible`,
       {
         reason: 'scroll_until_edge_reached',
-        details: { selector, direction, passes },
+        selector,
+        direction,
+        passes,
         hint: `The content ends here, so no further ${direction} scroll can reveal it. Run snapshot -i to see what is on screen, scroll the opposite direction, or check the selector — the element may be on another screen.`,
       },
     );
@@ -112,8 +128,37 @@ export function scrollUntilNotFoundError(params: {
     `scroll ${direction} spent its ${passes}-pass budget without ${selector} becoming visible`,
     {
       reason: 'scroll_until_pass_limit',
-      details: { selector, direction, passes },
+      selector,
+      direction,
+      passes,
       hint: `Raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to confirm the selector matches something on this screen.`,
+    },
+  );
+}
+
+/**
+ * The capture could not be read, so neither the selector match nor the edge analyzer ran. Reported
+ * as its own failure rather than as an outcome, because "we could not see the screen" and "the
+ * content ran out" call for different next steps.
+ */
+export function scrollUntilCaptureError(params: {
+  direction: ScrollDirection;
+  selector: string;
+  refusal: ScrollUntilCaptureRefusal;
+}): AppError {
+  const { direction, selector, refusal } = params;
+  return new AppError(
+    'COMMAND_FAILED',
+    `scroll ${direction} --until ${selector} could not read the screen: ${refusal.detail}`,
+    {
+      reason: 'scroll_until_capture_unreadable',
+      selector,
+      direction,
+      captureRefusal: refusal.reason,
+      hint:
+        refusal.reason === 'no-capture'
+          ? 'Run snapshot -i to see whether the app is producing an accessibility tree at all, and retry once it does.'
+          : 'The accessibility tree came back sparse, so its refs and selectors are not trustworthy. Run screenshot, inspect the image, and navigate by coordinates until snapshot -i reports a full tree.',
     },
   );
 }

@@ -26,9 +26,13 @@ import {
 import {
   formatScrollUntilMessage,
   runScrollUntilVisiblePasses,
+  scrollUntilCaptureError,
   scrollUntilNotFoundError,
 } from '@agent-device/capture-kit/scroll-until-visible';
-import { isSelectorVisibleInNodes } from '@agent-device/selectors/scroll-until-match';
+import {
+  isSelectorVisibleInNodes,
+  scrollUntilCaptureRefusal,
+} from '@agent-device/selectors/scroll-until-match';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
@@ -216,7 +220,7 @@ async function executeUntilScroll(
     ...(verticalEdgeFor(target.direction) === undefined
       ? {}
       : { edge: verticalEdgeFor(target.direction) as ScrollEdge }),
-    captureNodes: async () => await captureUntilNodes(runtime, context),
+    captureNodes: async () => await captureUntilNodes(runtime, context, target.direction, selector),
     isVisibleMatch: async (nodes) =>
       await isSelectorVisibleInNodes({
         nodes,
@@ -256,15 +260,23 @@ function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefined {
   return undefined;
 }
 
-async function captureUntilNodes(runtime: BoundScrollUntil, context: DaemonCommandContext) {
-  return (
-    (
-      await runtime.operations.captureSnapshot({
-        options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
-        execution: runtimeExecutionFromContext(context),
-      })
-    ).nodes ?? []
-  );
+/**
+ * The tree one pass reads, or a refusal. Never `?? []`: an unreadable capture that reached the edge
+ * analyzer as an empty tree is exactly how a failed read used to be reported as end-of-content.
+ */
+async function captureUntilNodes(
+  runtime: BoundScrollUntil,
+  context: DaemonCommandContext,
+  direction: ScrollDirection,
+  selector: string,
+) {
+  const capture = await runtime.operations.captureSnapshot({
+    options: context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId },
+    execution: runtimeExecutionFromContext(context),
+  });
+  const refusal = scrollUntilCaptureRefusal(capture);
+  if (refusal) throw scrollUntilCaptureError({ direction, selector, refusal });
+  return capture.nodes ?? [];
 }
 
 async function captureEdgeState(

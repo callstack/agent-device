@@ -427,3 +427,46 @@ test('bound scroll --until is refused when the owner advertises no capture', asy
   });
   assert.equal(resolved.ok, false);
 });
+
+/** Same defect as the command runtime's: a failed read is not evidence that the content ran out. */
+test('bound scroll --until reports an unreadable capture as a capture failure, not end-of-content', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({}),
+          scroll: async () => ({}),
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_capture_unreadable');
+      assert.equal(error.details?.captureRefusal, 'no-capture');
+      return true;
+    },
+  );
+});
+
+test('bound scroll --until refuses a sparse capture rather than trusting its selectors', async () => {
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Email' },
+        {
+          captureSnapshot: async () => ({
+            nodes: untilNodes(2400, true),
+            snapshotQuality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+          }),
+          scroll: async () => ({}),
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.captureRefusal, 'sparse-tree');
+      return true;
+    },
+  );
+});
