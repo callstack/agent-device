@@ -54,7 +54,7 @@ const iosGestureUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
 } as const);
-/** A gesture tier this provider mode never exposes, whatever the session. */
+/** What an unnamed gesture tier reports on a live Limrun session. */
 const gestureUnsupportedProviderMode = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',

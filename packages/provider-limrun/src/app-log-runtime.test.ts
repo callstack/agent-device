@@ -481,11 +481,16 @@ test('closes every Limrun gesture and scroll cell without a live session', async
   const facts = await owner.inspectFacts(limrunAndroid);
   for (const operation of [
     'performGesturePlan',
+    'performDirectionalFlingPlan',
     'performMultiTouchGesturePlan',
     'performTargetAuthoredDrag',
     'gestureViewport',
     'scrollDirection',
   ] as const) {
-    expect(facts.operations[operation].available).toBe(false);
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+      hint: 'Limrun requires a matching live provider session for this device.',
+    });
   }
 });
