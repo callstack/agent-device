@@ -284,9 +284,14 @@ function requireRunnerToolchainFingerprint(
   sdkName: string,
   budget: RunnerCacheProbeBudget | undefined,
 ): RunnerToolchainFingerprint {
+  // Checked before the cache, not just before the probes: a canceled request
+  // must surface as canceled even on a cache hit, or adoption reads a stale
+  // "success" and goes on to probe uptime and write the lease (#2422).
+  const clock = createToolchainProbeClock(budget);
+  clock.throwIfCanceled();
   const cached = toolchainFingerprintCache().get(sdkName);
   if (cached) return cached;
-  const fingerprint = readRunnerToolchainFingerprint(sdkName, createToolchainProbeClock(budget));
+  const fingerprint = readRunnerToolchainFingerprint(sdkName, clock);
   if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
   toolchainFingerprintCache().set(sdkName, fingerprint.value);
   return fingerprint.value;

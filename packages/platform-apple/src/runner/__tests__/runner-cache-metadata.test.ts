@@ -338,8 +338,23 @@ describe('toolchain probe budget', () => {
     assert.equal(runCmdSync.mock.calls.length, 1);
   });
 
-  test('an already-canceled request runs no toolchain probe at all', () => {
+  test('an already-canceled request runs no toolchain probe at all, cold or with the fingerprint cache warm', () => {
     installFakeToolchainClock();
+    runCmdSync.mockClear();
+
+    assert.throws(
+      () =>
+        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, {
+          signal: AbortSignal.abort(),
+        }),
+      (error: unknown) => isRequestCanceledError(error),
+    );
+    assert.equal(runCmdSync.mock.calls.length, 0);
+
+    // Warm the real fingerprint memo with an ordinary request, then repeat
+    // with an already-aborted signal: the cache-hit path must check
+    // cancellation before it returns the memoized value, not skip it (#2422).
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     runCmdSync.mockClear();
 
     assert.throws(
