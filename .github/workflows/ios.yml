@@ -241,7 +241,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers 2>&1 | tee /tmp/agent-device-runner-regressions.log
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPinnedRegularDepthReachesAcquisitionAndPresentation 2>&1 | tee /tmp/agent-device-runner-regressions.log
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const log = readFileSync("/tmp/agent-device-runner-regressions.log", "utf8");
