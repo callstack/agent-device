@@ -29,7 +29,7 @@ const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
 // instruments, so this file reports the same lines with or without it.
 //
 // Membership is by demonstrated failure, not by a property of the code. In particular it is
-// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro.test.ts`
+// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro-run-script.test.ts`
 // does exactly that and stays in `unit-core`, instrumented and green. The proximate cause was
 // never reproduced — what these entries share is an observed record of vanishing from the
 // Coverage lane, and that record is the only thing that admits a file here. A new entry needs
