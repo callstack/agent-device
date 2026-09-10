@@ -520,6 +520,106 @@ function hasNoInPackageChild(
   return true;
 }
 
+/** Every entry that grew, indexed by each of its added modules -- one entry may appear under several. */
+function groupGrowthsByAddedModule(
+  growths: readonly GrowthForAggregation[],
+): Map<string, GrowthForAggregation[]> {
+  const entriesByAddedModule = new Map<string, GrowthForAggregation[]>();
+  for (const growth of growths) {
+    for (const added of growth.added) {
+      const group = entriesByAddedModule.get(added);
+      if (group) group.push(growth);
+      else entriesByAddedModule.set(added, [growth]);
+    }
+  }
+  return entriesByAddedModule;
+}
+
+/**
+ * One added-module group's contribution to the candidate homes: when at least two entries grew
+ * by `added`, every merge-base module the first entry evaluates that is (a) in the added
+ * module's own package, (b) not already claimed as a home for a different added module, and (c)
+ * also evaluated by every other entry in the group, is recorded as a home -- mutating
+ * `homePackage` and `homeGraph` in place.
+ */
+function collectSharedHomesForGroup(
+  added: string,
+  group: readonly GrowthForAggregation[],
+  repoRoot: string,
+  homePackage: Map<string, string>,
+  homeGraph: Map<string, ReadonlyMap<string, string | null>>,
+): void {
+  if (group.length < 2) return;
+  const [first, ...rest] = group;
+  if (!first) return;
+  const pkg = packageOf(path.relative(repoRoot, added));
+  for (const candidate of first.baseGraph.keys()) {
+    if (homePackage.has(candidate)) continue;
+    if (packageOf(path.relative(repoRoot, candidate)) !== pkg) continue;
+    if (!rest.every((other) => other.baseGraph.has(candidate))) continue;
+    homePackage.set(candidate, pkg);
+    homeGraph.set(candidate, first.baseGraph);
+  }
+}
+
+/**
+ * For each added module shared by two or more entries, the modules every one of those entries
+ * already evaluates at the merge-base, scoped to the added module's own package -- the candidate
+ * homes a shared symbol could plausibly move into. A module already claimed as a home for one
+ * added module is not reconsidered for another.
+ */
+function sharedGrowthHomeCandidates(
+  entriesByAddedModule: ReadonlyMap<string, readonly GrowthForAggregation[]>,
+  repoRoot: string,
+): {
+  homePackage: Map<string, string>;
+  homeGraph: Map<string, ReadonlyMap<string, string | null>>;
+} {
+  const homePackage = new Map<string, string>();
+  const homeGraph = new Map<string, ReadonlyMap<string, string | null>>();
+  for (const [added, group] of entriesByAddedModule) {
+    collectSharedHomesForGroup(added, group, repoRoot, homePackage, homeGraph);
+  }
+  return { homePackage, homeGraph };
+}
+
+/**
+ * Candidate homes with modules that have no in-package eager import of their own first --
+ * a leaf module is the safer home, since adding a symbol to it cannot itself grow anyone else's
+ * closure -- then alphabetically by repo-relative path.
+ */
+function sortHomesLeavesFirst(
+  homePackage: ReadonlyMap<string, string>,
+  homeGraph: ReadonlyMap<string, ReadonlyMap<string, string | null>>,
+  repoRoot: string,
+): string[] {
+  const isLeaf = (candidate: string): boolean =>
+    hasNoInPackageChild(
+      candidate,
+      homePackage.get(candidate) as string,
+      homeGraph.get(candidate) as ReadonlyMap<string, string | null>,
+      repoRoot,
+    );
+  return [...homePackage.keys()].sort((left, right) => {
+    const leftLeaf = isLeaf(left);
+    const rightLeaf = isLeaf(right);
+    if (leftLeaf !== rightLeaf) return leftLeaf ? -1 : 1;
+    return path.relative(repoRoot, left).localeCompare(path.relative(repoRoot, right));
+  });
+}
+
+/** Renders the sorted candidate homes as the bounded, capped message block. */
+function formatSharedGrowthHomes(sortedHomes: readonly string[], repoRoot: string): string {
+  const shown = sortedHomes.slice(0, MAX_SHARED_HOMES);
+  const hidden = sortedHomes.length - shown.length;
+  const lines = shown.map((file) => `  ${path.relative(repoRoot, file)}`);
+  const more = hidden > 0 ? `\n  (+${hidden} more)` : '';
+  return (
+    'Modules every failing entry already evaluates (possible homes for a shared symbol; not a ' +
+    `statement that any of them is the right owner):\n${lines.join('\n')}${more}`
+  );
+}
+
 /**
  * When two or more entries grow by the SAME newly-added module, the per-entry diagnostic above
  * cannot show the shape that actually matters: there is no old edge to make lazy, because the
@@ -544,56 +644,10 @@ export function describeSharedGrowthHomes(
   growths: readonly GrowthForAggregation[],
   repoRoot: string,
 ): string | null {
-  const entriesByAddedModule = new Map<string, GrowthForAggregation[]>();
-  for (const growth of growths) {
-    for (const added of growth.added) {
-      const group = entriesByAddedModule.get(added);
-      if (group) group.push(growth);
-      else entriesByAddedModule.set(added, [growth]);
-    }
-  }
-
-  const homePackage = new Map<string, string>();
-  const homeGraph = new Map<string, ReadonlyMap<string, string | null>>();
-  for (const [added, group] of entriesByAddedModule) {
-    if (group.length < 2) continue;
-    const [first, ...rest] = group;
-    if (!first) continue;
-    const pkg = packageOf(path.relative(repoRoot, added));
-    for (const candidate of first.baseGraph.keys()) {
-      if (homePackage.has(candidate)) continue;
-      if (packageOf(path.relative(repoRoot, candidate)) !== pkg) continue;
-      if (rest.every((other) => other.baseGraph.has(candidate))) {
-        homePackage.set(candidate, pkg);
-        homeGraph.set(candidate, first.baseGraph);
-      }
-    }
-  }
+  const entriesByAddedModule = groupGrowthsByAddedModule(growths);
+  const { homePackage, homeGraph } = sharedGrowthHomeCandidates(entriesByAddedModule, repoRoot);
   if (homePackage.size === 0) return null;
 
-  const sorted = [...homePackage.keys()].sort((left, right) => {
-    const leftLeaf = hasNoInPackageChild(
-      left,
-      homePackage.get(left) as string,
-      homeGraph.get(left) as ReadonlyMap<string, string | null>,
-      repoRoot,
-    );
-    const rightLeaf = hasNoInPackageChild(
-      right,
-      homePackage.get(right) as string,
-      homeGraph.get(right) as ReadonlyMap<string, string | null>,
-      repoRoot,
-    );
-    if (leftLeaf !== rightLeaf) return leftLeaf ? -1 : 1;
-    return path.relative(repoRoot, left).localeCompare(path.relative(repoRoot, right));
-  });
-
-  const shown = sorted.slice(0, MAX_SHARED_HOMES);
-  const hidden = sorted.length - shown.length;
-  const lines = shown.map((file) => `  ${path.relative(repoRoot, file)}`);
-  const more = hidden > 0 ? `\n  (+${hidden} more)` : '';
-  return (
-    'Modules every failing entry already evaluates (possible homes for a shared symbol; not a ' +
-    `statement that any of them is the right owner):\n${lines.join('\n')}${more}`
-  );
+  const sorted = sortHomesLeavesFirst(homePackage, homeGraph, repoRoot);
+  return formatSharedGrowthHomes(sorted, repoRoot);
 }
