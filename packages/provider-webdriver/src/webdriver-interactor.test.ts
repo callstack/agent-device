@@ -456,6 +456,7 @@ function launchWorld(platform: 'ios' | 'android', overrides?: CloudWebDriverCapa
   const client = {
     activateApp: async (id: string) => void transcript.push(`activate:${id}`),
     terminateApp: async (id: string) => void transcript.push(`terminate:${id}`),
+    currentActivity: async () => 'com.example.MainActivity',
     executeScript: async (script: string, args: unknown[]) =>
       void transcript.push(`${script}:${JSON.stringify(args?.[0] ?? {})}`),
   } as unknown as WebDriverClient;
@@ -515,15 +516,51 @@ test('launch arguments are refused on a provider that has not declared the capab
   assert.deepEqual(transcript, []);
 });
 
-test('launch arguments are refused on Android WebDriver sessions', async () => {
-  const { interactor } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+// Android carries launch arguments as typed intent extras, not process arguments. `stop` is what
+// makes them reach a fresh process; without it the extras would land on the running one.
+test('Android launch arguments become typed intent extras on a force-stopped start', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', {
+    launchArgs: ['--es', 'otaChannel', 'qa-1234', '--ez', 'fresh', 'true'],
+  });
+
+  assert.deepEqual(transcript, [
+    'mobile: startActivity:' +
+      JSON.stringify({
+        intent: 'com.example.app/com.example.MainActivity',
+        extras: [
+          ['s', 'otaChannel', 'qa-1234'],
+          ['z', 'fresh', 'true'],
+        ],
+        stop: true,
+      }),
+  ]);
+});
+
+test('an explicit --activity overrides the resolved current activity', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', {
+    activity: '.Launcher',
+    launchArgs: ['--es', 'k', 'v'],
+  });
+
+  assert.match(transcript[0] ?? '', /"intent":"com\.example\.app\/\.Launcher"/);
+});
+
+// Appium validates the extra's type field but not its operands, so a malformed pair would reach the
+// device as a silently missing extra. It has to be refused here.
+test('an unsupported Android launch argument is refused before reaching the device', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
 
   await assert.rejects(
-    interactor.open('com.example.app', { launchArgs: ['--es', 'k', 'v'] }),
+    interactor.open('com.example.app', { launchArgs: ['--flag', 'value'] }),
     (error: AppError) => {
-      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-      assert.match(error.message, /only supported on iOS/);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.match(error.message, /Unsupported Android launch argument: --flag/);
       return true;
     },
   );
+  assert.deepEqual(transcript, []);
 });

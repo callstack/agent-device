@@ -129,6 +129,12 @@ export class WebDriverClient {
     }
   }
 
+  /** Android only. Names the activity a relaunch has to target when the caller did not pass one. */
+  async currentActivity(): Promise<string | undefined> {
+    const value = await this.sessionRequest('GET', '/appium/device/current_activity');
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  }
+
   async performActions(actions: W3CActionSequence[]): Promise<void> {
     await this.sessionRequest('POST', '/actions', { actions });
   }

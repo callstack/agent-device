@@ -15,6 +15,7 @@ import {
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
+import { parseAndroidIntentExtras, qualifyAndroidActivity } from './android-intent-extras.ts';
 import {
   capabilitySupported,
   unsupportedCapabilityMessage,
@@ -150,7 +151,7 @@ class WebDriverInteractor implements Interactor {
     const appId = appBundleId ?? app;
     if (!appId) return;
     if (launchArgs.length > 0) {
-      await this.relaunchWithArguments(appId, launchArgs);
+      await this.relaunchWithArguments(appId, launchArgs, options.activity);
       return;
     }
     if (terminateRunningApp === true) await this.client.terminateApp(appId);
@@ -159,29 +160,44 @@ class WebDriverInteractor implements Interactor {
 
   /**
    * Process arguments are read once, at process start. Activating an already-running app
-   * foregrounds the old process and the arguments are never seen, so this always terminates first
+   * foregrounds the old process and the arguments are never seen, so this always restarts the app
    * regardless of what the caller asked for.
    */
-  private async relaunchWithArguments(appId: string, launchArgs: readonly string[]): Promise<void> {
+  private async relaunchWithArguments(
+    appId: string,
+    launchArgs: readonly string[],
+    activity?: string,
+  ): Promise<void> {
     this.requireSupport('launchArgs');
-    this.requireIosLaunchArguments();
-    await this.client.terminateApp(appId);
-    await this.client.executeScript('mobile: launchApp', [
-      { bundleId: appId, arguments: [...launchArgs] },
-    ]);
+    if (this.capabilities.platform === 'ios') {
+      await this.client.terminateApp(appId);
+      await this.client.executeScript('mobile: launchApp', [
+        { bundleId: appId, arguments: [...launchArgs] },
+      ]);
+      return;
+    }
+    await this.startAndroidActivityWithExtras(appId, launchArgs, activity);
   }
 
-  private requireIosLaunchArguments(): void {
-    if (this.capabilities.platform === 'ios') return;
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Launch arguments are only supported on iOS WebDriver sessions.',
-      {
-        hint: 'Drop --launch-args, or run the flow against an iOS device.',
-        platform: this.capabilities.platform,
-        provider: this.capabilities.provider,
-      },
-    );
+  private async startAndroidActivityWithExtras(
+    appId: string,
+    launchArgs: readonly string[],
+    activity?: string,
+  ): Promise<void> {
+    const extras = parseAndroidIntentExtras(launchArgs);
+    const target = activity ?? (await this.client.currentActivity());
+    if (!target) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Could not resolve the activity to relaunch with launch arguments.',
+        { hint: 'Pass --activity <component> so the relaunch names its target.', app: appId },
+      );
+    }
+    // `stop` force-stops the package before starting, which is what makes the extras reach a fresh
+    // process rather than an existing one.
+    await this.client.executeScript('mobile: startActivity', [
+      { intent: qualifyAndroidActivity(appId, target), extras, stop: true },
+    ]);
   }
 
   async openDevice(): Promise<void> {
