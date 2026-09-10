@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
-import { createCloudWebDriverCapabilities } from './capabilities.ts';
+import {
+  createCloudWebDriverCapabilities,
+  type CloudWebDriverCapabilityOverrides,
+} from './capabilities.ts';
+import { BROWSERSTACK_CAPABILITY_OVERRIDES } from './browserstack.ts';
 import type { WebDriverClient, W3CActionSequence } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 
@@ -445,4 +449,118 @@ test('endpoint plans become one timed W3C pointer move', async () => {
       },
     ],
   ]);
+});
+
+function launchWorld(platform: 'ios' | 'android', overrides?: CloudWebDriverCapabilityOverrides) {
+  const transcript: string[] = [];
+  const client = {
+    activateApp: async (id: string) => void transcript.push(`activate:${id}`),
+    terminateApp: async (id: string) => void transcript.push(`terminate:${id}`),
+    currentActivity: async () => 'com.example.MainActivity',
+    executeScript: async (script: string, args: unknown[]) =>
+      void transcript.push(`${script}:${JSON.stringify(args?.[0] ?? {})}`),
+  } as unknown as WebDriverClient;
+  const interactor = createWebDriverInteractor({
+    client,
+    backend: platform === 'ios' ? 'xctest' : 'android',
+    capabilities: createCloudWebDriverCapabilities({
+      provider: 'test',
+      platform,
+      ...(overrides ? { overrides } : {}),
+    }),
+  });
+  return { interactor, transcript };
+}
+
+// Process arguments are read once at process start, so activating a running app would foreground
+// the old process and drop them without any error. A launch carrying arguments must terminate.
+test('iOS launch arguments terminate the running app and go through mobile: launchApp', async () => {
+  const { interactor, transcript } = launchWorld('ios', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', { launchArgs: ['-channel', 'qa-IDP-1234'] });
+
+  assert.deepEqual(transcript, [
+    'terminate:com.example.app',
+    'mobile: launchApp:{"bundleId":"com.example.app","arguments":["-channel","qa-IDP-1234"]}',
+  ]);
+});
+
+test('a launch without arguments still activates rather than relaunching', async () => {
+  const { interactor, transcript } = launchWorld('ios', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', {});
+
+  assert.deepEqual(transcript, ['activate:com.example.app']);
+});
+
+test('terminateRunningApp is honoured on its own, without launch arguments', async () => {
+  const { interactor, transcript } = launchWorld('ios', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', { terminateRunningApp: true });
+
+  assert.deepEqual(transcript, ['terminate:com.example.app', 'activate:com.example.app']);
+});
+
+// The capability is opted into per provider. A provider that has not declared it must fail by
+// name rather than silently activating and losing the arguments.
+test('launch arguments are refused on a provider that has not declared the capability', async () => {
+  const { interactor, transcript } = launchWorld('ios');
+
+  await assert.rejects(
+    interactor.open('com.example.app', { launchArgs: ['-channel', 'qa'] }),
+    (error: AppError) => {
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      return true;
+    },
+  );
+  assert.deepEqual(transcript, []);
+});
+
+// Android carries launch arguments as typed intent extras, not process arguments. `stop` is what
+// makes them reach a fresh process; without it the extras would land on the running one.
+test('Android launch arguments become typed intent extras on a force-stopped start', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', {
+    launchArgs: ['--es', 'otaChannel', 'qa-1234', '--ez', 'fresh', 'true'],
+  });
+
+  assert.deepEqual(transcript, [
+    'mobile: startActivity:' +
+      JSON.stringify({
+        intent: 'com.example.app/com.example.MainActivity',
+        extras: [
+          ['s', 'otaChannel', 'qa-1234'],
+          ['z', 'fresh', 'true'],
+        ],
+        stop: true,
+      }),
+  ]);
+});
+
+test('an explicit --activity overrides the resolved current activity', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await interactor.open('com.example.app', {
+    activity: '.Launcher',
+    launchArgs: ['--es', 'k', 'v'],
+  });
+
+  assert.match(transcript[0] ?? '', /"intent":"com\.example\.app\/\.Launcher"/);
+});
+
+// Appium validates the extra's type field but not its operands, so a malformed pair would reach the
+// device as a silently missing extra. It has to be refused here.
+test('an unsupported Android launch argument is refused before reaching the device', async () => {
+  const { interactor, transcript } = launchWorld('android', BROWSERSTACK_CAPABILITY_OVERRIDES);
+
+  await assert.rejects(
+    interactor.open('com.example.app', { launchArgs: ['--flag', 'value'] }),
+    (error: AppError) => {
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.match(error.message, /Unsupported Android launch argument: --flag/);
+      return true;
+    },
+  );
+  assert.deepEqual(transcript, []);
 });

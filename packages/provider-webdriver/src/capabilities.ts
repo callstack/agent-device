@@ -5,6 +5,7 @@ export type CloudWebDriverOperation =
   | 'lease'
   | 'inventory'
   | 'install'
+  | 'launchArgs'
   | 'snapshot'
   | 'screenshot'
   | 'tap'
@@ -68,6 +69,10 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   install: {
     support: 'partial',
     note: 'Requires provider-specific upload or a path visible to the remote Appium server.',
+  },
+  launchArgs: {
+    support: 'unsupported',
+    note: 'Launching with process arguments needs a driver-specific launch extension; the shared WebDriver activate path cannot carry them.',
   },
   snapshot: {
     support: 'partial',

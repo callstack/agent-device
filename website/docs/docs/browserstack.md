@@ -79,6 +79,32 @@ BrowserStackLocal --key "$BROWSERSTACK_ACCESS_KEY" \
 This is a property of the daemon, not of the session: BrowserStack rejects session creation when a
 `forceLocal` capability is sent, so there is no `--provider-force-local` flag.
 
+## Launch arguments
+
+`--launch-args` is forwarded to the app, so a flow can vary per-launch configuration without
+re-leasing a device:
+
+```bash
+# iOS — process arguments
+agent-device open com.example.app \
+  --launch-args "-otaChannel" --launch-args "qa-1234"
+
+# Android — am start extras
+agent-device open com.example.app \
+  --launch-args "--es" --launch-args "otaChannel" --launch-args "qa-1234" \
+  --launch-args "--ez" --launch-args "fresh" --launch-args "true"
+```
+
+Launch arguments are read once, when the process starts, so a launch carrying them always restarts
+the app first — activating it would foreground the old process and drop them silently. A launch
+without arguments still activates as before.
+
+- **iOS** sends them as XCUITest process arguments.
+- **Android** takes `am start` extra flags (`--es <key> <value>`, `--ez`, `--ei`, `--esn <key>`, and
+  the array forms) and translates them into typed intent extras. The activity comes from
+  `--activity` when given, otherwise the current one. An unrecognised flag is rejected rather than
+  dropped, because Appium validates an extra's type but not its operands.
+
 ## CLI workflow
 
 ```bash
