@@ -100,6 +100,27 @@ export type AndroidScreenRecordingProcessOwnership =
   | 'ownership-lost'
   | 'uncertain';
 
+/**
+ * Whether an observation proves that the process named by the inspected identity is gone.
+ *
+ * `ownership-lost` is proof rather than doubt: the pid is present, yet the identity metadata that
+ * was readable there named something else — a reassigned pid, or an exited task whose command line
+ * is already gone — so the recorded process can no longer write its artifact. `uncertain` reads
+ * nothing conclusive and proves nothing, and a matching identity is provably still running.
+ */
+export function provesAndroidScreenRecordTermination(
+  ownership: AndroidScreenRecordingProcessOwnership,
+): boolean {
+  switch (ownership) {
+    case 'missing':
+    case 'ownership-lost':
+      return true;
+    case 'owned-alive':
+    case 'uncertain':
+      return false;
+  }
+}
+
 export type AndroidScreenRecordingStopOutcome =
   | 'stopped'
   | 'already-missing'

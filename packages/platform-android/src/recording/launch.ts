@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   cleanupChunks,
   AndroidScreenRecordingStartRollbackUnconfirmed,
@@ -167,7 +168,7 @@ async function retireCompletedEvidence(
       remotePath: chunk.remotePath,
       startTime: chunk.remoteStartTime,
     });
-    if (state !== 'missing')
+    if (!provesAndroidScreenRecordTermination(state))
       throw new Error('Android screenrecord completed evidence cannot be safely retired');
   }
   await cleanupChunks(transport, evidence.chunks);

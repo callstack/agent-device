@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type {
   AndroidScreenRecordingProcessIdentity,
+  AndroidScreenRecordingProcessOwnership,
   AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -140,7 +141,7 @@ async function inspectAndroidScreenRecordingProcess(
   signal?: AbortSignal,
 ): Promise<
   Readonly<{
-    status: 'missing' | 'owned-alive' | 'ownership-lost' | 'uncertain';
+    status: AndroidScreenRecordingProcessOwnership;
     process?: AndroidScreenRecordingProcessIdentity;
   }>
 > {

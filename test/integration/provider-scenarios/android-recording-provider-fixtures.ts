@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { likelyPlayableMp4Container } from './harness.ts';
 import {
   manifestPath,
@@ -9,12 +10,19 @@ import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanic
 
 export type PullCall = { remotePath: string; localPath: string };
 
-type NativeProcess = { remotePath: string; startTime: string; alive: boolean };
+type NativeProcess = {
+  remotePath: string;
+  startTime: string;
+  alive: boolean;
+  executable?: string;
+};
 type ProviderState = {
   manifests: Map<string, AndroidRecordingManifestFixture>;
   processes: Map<string, NativeProcess>;
   pulls: number;
 };
+/** A live, unrelated process the Android kernel placed on a previously recorded pid. */
+export type ReusedAndroidRecordingPid = { pid: string; startTime: string };
 
 export function createAndroidRecordingProvider(params: {
   manifests?: readonly AndroidRecordingManifestFixture[];
@@ -22,8 +30,9 @@ export function createAndroidRecordingProvider(params: {
   pulls?: PullCall[];
   onPull?: (remotePath: string, localPath: string, count: number) => void;
   deadPids?: readonly string[];
+  reusedPids?: readonly ReusedAndroidRecordingPid[];
 }): AndroidAdbProvider {
-  const state = createProviderState(params.manifests, params.deadPids);
+  const state = createProviderState(params.manifests, params.deadPids, params.reusedPids);
   return {
     exec: async (args) => respondToCommand(args, params, state),
   };
@@ -32,13 +41,24 @@ export function createAndroidRecordingProvider(params: {
 function createProviderState(
   initialManifests: readonly AndroidRecordingManifestFixture[] = [],
   deadPids: readonly string[] = [],
+  reusedPids: readonly ReusedAndroidRecordingPid[] = [],
 ): ProviderState {
   const state: ProviderState = { manifests: new Map(), processes: new Map(), pulls: 0 };
   for (const manifest of initialManifests) {
     state.manifests.set(manifestPath(manifest), manifest);
     addManifestProcesses(manifest, state.processes, deadPids);
   }
+  for (const reused of reusedPids) reusePid(reused, state.processes);
   return state;
+}
+
+function reusePid(reused: ReusedAndroidRecordingPid, processes: Map<string, NativeProcess>): void {
+  processes.set(reused.pid, {
+    remotePath: processes.get(reused.pid)?.remotePath ?? '',
+    startTime: reused.startTime,
+    alive: true,
+    executable: '/system/bin/servicemanager',
+  });
 }
 
 function respondToCommand(
@@ -192,14 +212,19 @@ function processResult(
 ) {
   const nativeProcess = processes.get(pid);
   if (!nativeProcess?.alive) return missing();
+  const executable = nativeProcess.executable ?? '/system/bin/screenrecord';
   return field === 'stat'
     ? ok(
-        `${pid} (screenrecord) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${nativeProcess.startTime}`,
+        `${pid} (${path.posix.basename(executable)}) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${nativeProcess.startTime}`,
       )
     : ok(
-        ['/system/bin/screenrecord', '--bit-rate', '8000000', nativeProcess.remotePath, ''].join(
-          '\0',
-        ),
+        [
+          executable,
+          ...(executable === '/system/bin/screenrecord'
+            ? ['--bit-rate', '8000000', nativeProcess.remotePath]
+            : []),
+          '',
+        ].join('\0'),
       );
 }
 

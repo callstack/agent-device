@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: Android `record start` no longer refuses to begin after a reused emulator reassigned the
+  previous recorder's pid. A completed recording's native marker is retired only once its recorder is
+  proven gone, but only an absent pid counted as proof — a pid that now names an unrelated process,
+  or a recorder that exited and waits to be reaped, did not. `record start` then failed every later
+  attempt with `Android screenrecord completed evidence cannot be safely retired`, and `record stop`
+  could not return an already-finalized recording. Proven termination now retires the marker and
+  returns the stored completion; a live or unreadable recorder still blocks, and the unrelated
+  process is never signalled (#2476).
 - Fixed: iOS Simulator snapshots of Safari and of apps with a `WKWebView` stopped showing the
   page in 0.21.0 — chrome plus empty `[webview]` nodes, no links, text, or form fields, so no ref
   could reach the page (#2484). The host AX bridge that 0.21.0 made the Simulator's snapshot source

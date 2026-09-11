@@ -196,6 +196,41 @@ test('retains an interrupted empty-stderr manifest probe as unavailable', async 
   }
 });
 
+test('proves termination for a reassigned pid and an exited task, and never for an unreadable one', async () => {
+  const commands: string[] = [];
+  let identity: { stat: string; cmdline: string } = {
+    stat: procStat(4004, '5432'),
+    cmdline: ['/system/bin/servicemanager', ''].join('\0'),
+  };
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args[1] ?? '';
+        commands.push(command);
+        if (command.endsWith('/stat')) return result(identity.stat);
+        if (command.endsWith('/cmdline')) return result(identity.cmdline);
+        return result('');
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
+      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
+      identity = {
+        stat: procStat(4004, '3766'),
+        cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', '/other.mp4', ''].join('\0'),
+      };
+      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
+      identity = { stat: procStat(4004, '3766'), cmdline: '' };
+      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
+      identity = { stat: procStat(4004, '3766'), cmdline: '' };
+      await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
+      expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
+    },
+  );
+});
+
 function procStat(pid: number, startTime: string): string {
   return `${pid} (screenrecord) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${startTime}`;
 }

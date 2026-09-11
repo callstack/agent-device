@@ -4,6 +4,7 @@ import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
 import {
   androidScreenRecordingDescriptorCodec,
@@ -192,11 +193,13 @@ async function completedEvidenceIsTerminal(transport: Transport, evidence: Nativ
   try {
     for (const chunk of evidence.chunks) {
       if (
-        (await transport.inspect({
-          pid: chunk.remotePid,
-          remotePath: chunk.remotePath,
-          startTime: chunk.remoteStartTime,
-        })) !== 'missing'
+        !provesAndroidScreenRecordTermination(
+          await transport.inspect({
+            pid: chunk.remotePid,
+            remotePath: chunk.remotePath,
+            startTime: chunk.remoteStartTime,
+          }),
+        )
       )
         return false;
     }

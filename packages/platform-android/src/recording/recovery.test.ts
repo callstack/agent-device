@@ -135,6 +135,56 @@ test('retains completed evidence while an exact persisted recorder identity rema
   expect(JSON.parse(manifest)).toHaveProperty('completion');
 });
 
+test('terminalizes completed evidence whose recorder pid was reassigned, touching nothing', async () => {
+  let manifest = '';
+  const removals: string[] = [];
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    inspect: async () => 'ownership-lost' as const,
+    remove: async (remotePath: string) => {
+      removals.push(`artifact:${remotePath}`);
+      return true;
+    },
+    removeManifest: async (manifestPath: string) => {
+      removals.push(`marker:${manifestPath}`);
+      return true;
+    },
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const native = JSON.parse(manifest);
+  manifest = JSON.stringify({
+    ...native,
+    completion: {
+      backend: 'adb screenrecord',
+      outPath: native.outputPath,
+      startedAt: native.startedAt,
+      completedAt: native.startedAt + 1,
+      scope: native.scope,
+      showTouches: native.showTouches,
+      recordOnlySession: native.recordOnlySession,
+    },
+  });
+
+  await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
+    status: 'completed',
+    result: {
+      backend: 'adb screenrecord',
+      outPath: native.outputPath,
+      startedAt: native.startedAt,
+      completedAt: native.startedAt + 1,
+      scope: native.scope,
+      showTouches: native.showTouches,
+      recordOnlySession: native.recordOnlySession,
+    },
+  });
+  expect(removals).toEqual([]);
+  expect(JSON.parse(manifest)).toHaveProperty('completion');
+});
+
 test('makes matching pending evidence cleanup-eligible and stops discovered exact recorder pids', async () => {
   let manifest = '';
   const removed: string[] = [];
