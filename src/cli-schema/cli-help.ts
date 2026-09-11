@@ -502,9 +502,8 @@ Rules:
   For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
   Remote Android and iOS bridge runs normally through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Expo support depends on the SDK's bundled React Native runtime.
   Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup. If the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
-  React Native 0.87+ removed the built-in DevTools websocket. The app must run agent-react-devtools init once (Metro wrapper plus an entry import) and be rebundled, or wait --connected never succeeds. On older React Native no app change is needed.
-  init edits the project's metro.config.js and entry file. When the profiling or debugging task is done, run agent-react-devtools uninit in the project and rebundle, so those edits are not left in the user's diff. Skip uninit only if the user asked to keep the setup.
-  With no app attached, status reports 0 connected and the observation commands fail; never read an empty result as a clean pass.
+  React Native 0.87+ needs a one-time npx agent-react-devtools init in the app project, then a rebundle, before wait --connected can succeed. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
+  If status shows 0 connected apps, nothing was observed; an empty result is not a clean pass.
 
 Example:
   agent-device react-devtools status
