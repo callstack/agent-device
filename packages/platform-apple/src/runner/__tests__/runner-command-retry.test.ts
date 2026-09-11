@@ -795,58 +795,6 @@ test('mutating commands preserve runner failure details from status recovery', a
   });
 });
 
-test('status recovery classifies a journaled RUNNER_BUSY exactly like a live one', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
-
-  mockEnsureRunnerSession.mockResolvedValueOnce(session);
-  mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
-    .mockResolvedValueOnce({
-      lifecycleState: 'failed',
-      lifecycleErrorCode: 'RUNNER_BUSY',
-      lifecycleErrorMessage: 'The iOS runner is still finishing a previous command.',
-      lifecycleErrorHint: 'Wait a few seconds and retry.',
-    });
-
-  await assert.rejects(
-    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      // Not RUNNER_BUSY on the wire: the code is diagnostic-only, exactly as on the live-response
-      // path, and the retriability it carries is what a polling `wait` rides out (#2484 follow-up).
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
-      assert.equal(error.details?.retriable, true);
-      assert.equal(error.details?.recovery, 'runner_reported_failure');
-      return true;
-    },
-  );
-});
-
-test('status recovery keeps RUNNER_WEDGED fatal and unretriable', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
-
-  mockEnsureRunnerSession.mockResolvedValueOnce(session);
-  mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
-    .mockResolvedValueOnce({
-      lifecycleState: 'failed',
-      lifecycleErrorCode: 'RUNNER_WEDGED',
-      lifecycleErrorMessage: 'The iOS runner main thread has been stuck.',
-    });
-
-  await assert.rejects(
-    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'RUNNER_WEDGED');
-      assert.equal(error.details?.runnerErrorCode, 'RUNNER_WEDGED');
-      assert.equal(error.details?.retriable, undefined);
-      return true;
-    },
-  );
-});
-
 test('mutating commands use recovery guidance when failed status has no runner hint', async () => {
   const session = makeRunnerSession({ port: 8100, ready: true });
 

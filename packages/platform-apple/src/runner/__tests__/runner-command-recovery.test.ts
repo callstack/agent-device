@@ -149,3 +149,58 @@ test('a completed read-only command without a retained response rethrows without
   await assert.rejects(result, (error: unknown) => error === transportError);
   assert.equal(invalidate.mock.calls.length, 0);
 });
+
+/**
+ * #2484 follow-up: the journal's code means exactly what the same code means on a live response.
+ * `RUNNER_BUSY` is diagnostic-only — it stays `COMMAND_FAILED` and survives as
+ * `details.runnerErrorCode` — and the retriability it carries is what a polling `wait` rides out
+ * rather than surrendering its budget to a condition that clears on its own.
+ */
+test('a journaled RUNNER_BUSY is classified exactly like a live one', async () => {
+  const { result, invalidate } = await runRecovery({
+    script: [
+      {
+        kind: 'ok',
+        data: {
+          lifecycleState: 'failed',
+          lifecycleErrorCode: 'RUNNER_BUSY',
+          lifecycleErrorMessage: 'The iOS runner is still finishing a previous command.',
+          lifecycleErrorHint: 'Wait a few seconds and retry.',
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+    assert.equal(error.details?.retriable, true);
+    assert.equal(error.details?.recovery, 'runner_reported_failure');
+    return true;
+  });
+  assert.equal(invalidate.mock.calls.length, 0);
+});
+
+test('a journaled RUNNER_WEDGED keeps its fatal code and stays unretriable', async () => {
+  const { result } = await runRecovery({
+    script: [
+      {
+        kind: 'ok',
+        data: {
+          lifecycleState: 'failed',
+          lifecycleErrorCode: 'RUNNER_WEDGED',
+          lifecycleErrorMessage: 'The iOS runner main thread has been stuck.',
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'RUNNER_WEDGED');
+    assert.equal(error.details?.runnerErrorCode, 'RUNNER_WEDGED');
+    assert.equal(error.details?.retriable, undefined);
+    return true;
+  });
+});
