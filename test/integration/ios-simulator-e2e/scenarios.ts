@@ -12,7 +12,8 @@ type ScenarioRunnerKey =
   | 'inventoryInstall'
   | 'lifecycleSystem'
   | 'observabilityArtifacts'
-  | 'snapshotDepthFrontier';
+  | 'snapshotDepthFrontier'
+  | 'webviewRemoteContent';
 
 type ScenarioDefinition = IosSimulatorScenario & {
   runner: ScenarioRunnerKey;
@@ -27,6 +28,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDefinition[] = [
     runner: 'snapshotDepthFrontier',
     tier: 'smoke',
   },
+  { id: 'smoke:webview-remote-content', runner: 'webviewRemoteContent', tier: 'smoke' },
   { id: 'smoke:capture-close', runner: 'captureClose', tier: 'smoke' },
   { id: 'full:lifecycle-system', runner: 'lifecycleSystem', tier: 'full' },
   {

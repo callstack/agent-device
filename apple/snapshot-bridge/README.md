@@ -48,6 +48,16 @@ resolution. Secondary owners such as the return-to-app status-bar control do
 not replace the native primary owner. The route's generation circuit remains
 disabled after fallback until that app relaunches.
 
+## Remote content
+
+The reader snapshots one process. A WebKit page — Safari's or a `WKWebView`'s —
+lives in a WebContent process and appears in that tree as an `AXRemoteElement`
+leaf under the web view. The guest returns the leaf as delivered; the host
+refuses a tree in which such a leaf sits under a web view and reaches the
+viewport, or reports no frame (`remote-content-boundary`), and routes that app
+generation to XCTest, which resolves remote elements (#2484). A zero-area or
+off-screen leaf is published: it hosts nothing the capture can miss.
+
 ## Bounded depth recovery
 
 A healthy capture uses one native request. If native acquisition rejects it,

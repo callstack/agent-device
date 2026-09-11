@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 
-import { assertWaitSelector, assertWaitText } from './live-assertions.ts';
+import {
+  assertWaitSelector,
+  assertWaitText,
+  type LiveSnapshotNode as SnapshotNode,
+  snapshotNodes,
+} from './live-assertions.ts';
 import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
@@ -8,14 +13,6 @@ const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
 const CHILD_ID = 'visible-depth-projected-child';
 const MISSING_HITTABILITY_WARNING =
   'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
-
-type SnapshotNode = {
-  depth?: unknown;
-  identifier?: unknown;
-  index?: unknown;
-  label?: unknown;
-  parentIndex?: unknown;
-};
 
 export async function assertRegularVisibleDepthFrontier(context: LiveContext): Promise<void> {
   await runStep(context, 'open regular visible-depth fixture', [
@@ -94,15 +91,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     'regular-visible-depth-frontier',
     'public regular depth 1 keeps a raw-deep visible child at presented depth 1 while raw depth remains traversal-bounded',
   );
-}
-
-function snapshotNodes(result: { json?: any }): SnapshotNode[] {
-  const nodes = result.json?.data?.nodes;
-  assert.ok(
-    Array.isArray(nodes),
-    `snapshot response did not contain nodes: ${JSON.stringify(result)}`,
-  );
-  return nodes as SnapshotNode[];
 }
 
 function requireIdentifier(nodes: SnapshotNode[], identifier: string, description: string) {

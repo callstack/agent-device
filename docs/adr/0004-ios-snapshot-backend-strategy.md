@@ -42,6 +42,22 @@ fallback when bridge acquisition or presentation fails. Disable the bridge for t
 after fallback; a new app generation re-enables it. Physical devices, providers, custom-action
 captures, and interactions remain on their existing owners.
 
+A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
+tree as an `AXRemoteElement` under the web view, with its children in that other process. The
+bridge reads one process, so it delivers the element as a leaf. The source refuses a tree in which
+such a leaf sits under a `WebView`-typed ancestor and reaches the viewport (`remote-content-boundary`)
+instead of publishing a screen without its page: refs issued from it would target the host views
+around the page rather than the page. A leaf whose frame is zero-area or off screen hosts nothing
+the capture can miss and is published; one that reports no frame is refused, because nothing proves
+it empty. Remote elements outside a web view are not classified — no capture has shown one — and a
+web view truncated away by the node or depth cap stays disclosed as truncation. XCTest resolves
+remote elements, so the fallback serves the page (#2484).
+
+The refusal opens the generation circuit like any other bridge failure, so a hybrid app that showed
+one web screen takes XCTest for its remaining native screens until it relaunches — the 0.20.x path
+for every screen. Re-asking the bridge per capture would instead charge a refused bridge round trip
+to every `wait` poll on the web screen; the circuit keeps that cost to one capture per generation.
+
 Keep the two public snapshot strategies explicit:
 
 - **Regular visible strategy**: use recursive XCTest snapshots, emit the effective user-visible

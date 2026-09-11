@@ -74,6 +74,74 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
     rect: { x: 0, y: 0, width: 390, height: 844 },
   });
   assert.equal(result.maxTraversalDepth, 2);
+  assert.equal(result.opaqueRemoteElements, 0);
+});
+
+test('the bridge tree counts web-hosted remote leaves that reach the viewport', () => {
+  const viewport = { X: 0, Y: 0, Width: 390, Height: 844 };
+  const remoteLeaf = (rect?: Record<string, number>) => ({
+    [application]: 'AXRemoteElement',
+    [baseType]: 'NSObject',
+    ...(rect ? { [frame]: rect } : {}),
+    [children]: [],
+  });
+  const decode = (host: Record<string, unknown>, root: Record<string, unknown> = {}) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'Application', [frame]: viewport, [children]: [host], ...root },
+      { truncated: false },
+      limits,
+    );
+  const webView = (content: Record<string, unknown>) => ({
+    [automationType]: 58,
+    [frame]: viewport,
+    [children]: [
+      {
+        [automationType]: 58,
+        [baseType]: 'WKContentView',
+        [frame]: viewport,
+        [children]: [content],
+      },
+    ],
+  });
+
+  const opaque = decode(webView(remoteLeaf(viewport)));
+  assert.equal(opaque.nodes[2]?.type, 'WebView');
+  assert.equal(opaque.nodes[3]?.role, 'AXRemoteElement');
+  assert.equal(opaque.opaqueRemoteElements, 1);
+
+  assert.equal(decode(webView(remoteLeaf())).opaqueRemoteElements, 1, 'frameless leaf refuses');
+  assert.equal(
+    decode(webView(remoteLeaf({ X: 0, Y: 0, Width: 0, Height: 0 }))).opaqueRemoteElements,
+    0,
+    'zero-area leaf hosts nothing',
+  );
+  assert.equal(
+    decode(webView(remoteLeaf({ X: 0, Y: 2000, Width: 390, Height: 600 }))).opaqueRemoteElements,
+    0,
+    'off-screen leaf is not on this screen',
+  );
+  assert.equal(
+    decode(webView(remoteLeaf({ X: 0, Y: 2000, Width: 390, Height: 600 })), { [frame]: undefined })
+      .opaqueRemoteElements,
+    1,
+    'without a viewport a positive-area leaf refuses',
+  );
+  assert.equal(
+    decode({ [automationType]: 0, [frame]: viewport, [children]: [remoteLeaf(viewport)] })
+      .opaqueRemoteElements,
+    0,
+    'a remote leaf outside a web view is not classified',
+  );
+  assert.equal(
+    decode(
+      webView({
+        ...remoteLeaf(viewport),
+        [children]: [{ [automationType]: 42, [label]: 'More information', [children]: [] }],
+      }),
+    ).opaqueRemoteElements,
+    0,
+    'a crossed boundary is not opaque',
+  );
 });
 
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {

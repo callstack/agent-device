@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: iOS Simulator snapshots of Safari and of apps with a `WKWebView` stopped showing the
+  page in 0.21.0 — chrome plus empty `[webview]` nodes, no links, text, or form fields, so no ref
+  could reach the page (#2484). The host AX bridge that 0.21.0 made the Simulator's snapshot source
+  reads one process, and WebKit content lives in another; the bridge delivered the boundary as
+  an `AXRemoteElement` leaf and the tree was published as if that were the screen. The source now
+  refuses a tree whose on-screen web view ends at that leaf (`remote-content-boundary`) and the
+  route serves XCTest, which resolves remote elements, for the rest of that app generation — the
+  same path 0.20.x used. The snapshot discloses the switch through its warning, and a relaunch
+  re-enables the bridge.
 - Fixed: JUnit reports remain readable when replay results contain characters forbidden by XML 1.0,
   replacing them with U+FFFD while preserving legal Unicode and whitespace. Original suite values
   remain available in JSON and other reporters.

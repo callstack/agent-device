@@ -17,6 +17,7 @@ import {
 import { assertAutomationInput } from './live-automation-scenario.ts';
 import { assertDeviceLifecycle } from './live-device-lifecycle.ts';
 import { assertRegularVisibleDepthFrontier } from './live-snapshot-depth-frontier.ts';
+import { assertWebViewRemoteContent } from './live-webview-remote-content.ts';
 import {
   assertLifecycleAndSystem,
   assertObservabilityAndArtifacts,
@@ -77,6 +78,7 @@ const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
   lifecycleSystem: assertLifecycleAndSystem,
   observabilityArtifacts: assertObservabilityAndArtifacts,
   snapshotDepthFrontier: assertRegularVisibleDepthFrontier,
+  webviewRemoteContent: assertWebViewRemoteContent,
 });
 
 export async function runIosSimulatorE2E(): Promise<void> {

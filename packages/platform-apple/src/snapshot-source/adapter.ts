@@ -231,6 +231,15 @@ function createAcquisition(
   if (typeof generation !== 'string' || !generation) {
     throw snapshotSourceError('malformed-tree', 'generation-invalid');
   }
+  // A tree that ends at a web view's out-of-process page would present the screen without the
+  // page, and refs issued from it would target the host views around it rather than the page.
+  // The source refuses it as a screen it cannot describe, like a missing automation mode, so the
+  // route serves the XCTest runner, which resolves remote elements (#2484).
+  if (decoded.opaqueRemoteElements > 0) {
+    throw snapshotSourceError('unsupported', 'remote-content-boundary', {
+      remoteElements: decoded.opaqueRemoteElements,
+    });
+  }
   const nodes = Object.freeze(
     decoded.nodes.map((node) => Object.freeze({ ...node, pid: target.pid })),
   );
