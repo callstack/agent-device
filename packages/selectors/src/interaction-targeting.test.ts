@@ -16,6 +16,7 @@ import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
   INDEXED_PARITY_POLICY_NODES,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from './interaction-targeting.fixtures.ts';
 
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
@@ -320,4 +321,19 @@ test('the batch resolver preserves every actionability policy branch', () => {
       [10, 'overly-broad-ancestor'],
     ],
   );
+});
+
+test('collapses a wrapper chain whose hittability is unverified and whose rects differ sub-pixel', () => {
+  const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+
+  const result = classifyActionableTouchCandidates(
+    snapshot.nodes,
+    snapshot.nodes.filter((node) => node.identifier === 'scoring_home_button'),
+  );
+
+  assert.equal(result.kind, 'equivalent');
+  if (result.kind === 'equivalent') {
+    assert.equal(result.node.index, 1);
+    assert.equal(result.node.type, 'XCUIElementTypeButton');
+  }
 });

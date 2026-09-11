@@ -14,6 +14,7 @@ import {
 } from '@agent-device/kernel/rect-center';
 import { intersectArea } from '@agent-device/kernel/screenshot-geometry';
 import { isSemanticTouchTarget } from './touch-semantics.ts';
+import { resolveUnverifiedWrapperControl } from './interaction-targeting-wrapper-chain.ts';
 
 type ActionableTouchResolutionReason =
   | 'same-rect-descendant'
@@ -54,7 +55,10 @@ export function classifyActionableTouchCandidates(
       resolveActionableTouchResolutionWithIndex(nodes, candidate, index).node.index !==
       actionable.index
     ) {
-      return { kind: 'ambiguous', candidates };
+      const wrapperControl = resolveUnverifiedWrapperControl(candidates);
+      return wrapperControl
+        ? { kind: 'equivalent', node: wrapperControl }
+        : { kind: 'ambiguous', candidates };
     }
   }
   return { kind: 'equivalent', node: actionable };
