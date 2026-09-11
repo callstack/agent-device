@@ -33,6 +33,45 @@ test('lease allocation transports an optional initial provider app', () => {
   });
 });
 
+test('lease allocation transports provider project, build, and session name (#2494)', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'qa-ios',
+      command: 'lease_allocate',
+      positionals: [],
+      flags: {
+        providerApp: 'bs://app-id',
+        providerOsVersion: '17',
+        device: 'iPhone 15',
+        providerProject: 'MyProject',
+        providerBuild: 'Build-2026-09-11',
+        providerSessionName: 'smoke — iOS',
+      },
+      meta: {
+        requestId: 'lease-req',
+        tenantId: 'acme',
+        runId: 'run-123',
+        leaseBackend: 'ios-instance',
+        leaseProvider: 'browserstack',
+      },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.deepEqual(payload.params, {
+    session: 'qa-ios',
+    tenantId: 'acme',
+    runId: 'run-123',
+    backend: 'ios-instance',
+    leaseProvider: 'browserstack',
+    providerApp: 'bs://app-id',
+    providerProject: 'MyProject',
+    providerBuild: 'Build-2026-09-11',
+    providerSessionName: 'smoke — iOS',
+  });
+});
+
 test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   const secret = 'adc_agent_remote-secret';
   const oversizedCode = `apiKey=${secret} ${'c'.repeat(500)}`;

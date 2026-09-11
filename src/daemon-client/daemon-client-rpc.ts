@@ -13,6 +13,7 @@ import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,
   leaseScopeToLeaseRpcParams,
+  readLeaseAllocateProviderMetadata,
   type LeaseRpcCommand,
 } from '@agent-device/contracts/lease-scope';
 
@@ -183,9 +184,7 @@ export function buildHttpRpcPayload(
     method: leaseRpcMethodForCommand(req.command),
     params: {
       ...buildLeaseRpcParams(req, req.command, options),
-      ...(req.command === 'lease_allocate' && typeof req.flags?.providerApp === 'string'
-        ? { providerApp: req.flags.providerApp }
-        : {}),
+      ...(req.command === 'lease_allocate' ? readLeaseAllocateProviderMetadata(req.flags) : {}),
     },
   };
 }

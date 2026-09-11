@@ -8,6 +8,7 @@ import {
   leaseScopeToConnectionMetadata,
   leaseScopeToLeaseRpcParams,
   leaseScopeToRequestMeta,
+  readLeaseAllocateProviderMetadata,
 } from '../lease-scope.ts';
 
 test('leaseScopeFromOptions normalizes public aliases and projects request meta', () => {
@@ -165,4 +166,29 @@ test('findMissingProxyLeaseFields enforces complete proxy ownership scope', () =
     }),
     [],
   );
+});
+
+test('readLeaseAllocateProviderMetadata carries the session-naming flags and drops the rest', () => {
+  assert.deepEqual(
+    readLeaseAllocateProviderMetadata({
+      platform: 'ios',
+      device: 'iPhone 15',
+      providerApp: 'bs://abc',
+      providerOsVersion: '17',
+      providerProject: 'MyProject',
+      providerBuild: 'Build-1',
+      providerSessionName: 'smoke',
+    }),
+    {
+      providerApp: 'bs://abc',
+      providerProject: 'MyProject',
+      providerBuild: 'Build-1',
+      providerSessionName: 'smoke',
+    },
+  );
+  assert.deepEqual(
+    readLeaseAllocateProviderMetadata({ providerApp: 'bs://abc', providerBuild: undefined }),
+    { providerApp: 'bs://abc' },
+  );
+  assert.deepEqual(readLeaseAllocateProviderMetadata(undefined), {});
 });
