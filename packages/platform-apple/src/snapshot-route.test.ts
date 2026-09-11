@@ -94,8 +94,8 @@ test('a presented system surface captures under the host lineage, never the app 
     systemSurfacePresent: async () => presentSurface,
   });
 
-  const first = await route.capture(ios, input, signal(), async () => runnerResult());
-  const second = await route.capture(ios, input, signal(), async () => runnerResult());
+  const first = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const second = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
 
   expect(first.comparisonIdentity).toMatchObject({
     producer: 'apple-runner',
@@ -112,6 +112,71 @@ test('a presented system surface captures under the host lineage, never the app 
     'Simulator AX snapshot inapplicable (system-surface-presented); used XCTest to read the system surface presented over the app.',
   ]);
 });
+
+// The host-side probe answers about a host PROCESS, which stays positive while a dismissed host
+// lingers — a documented false positive. Only the runner answers about the screen, and it stamps the
+// surface it served on the capture. Reading the probe for identity instead would lineage the app
+// capture to the host, make it compare EQUAL to the preceding sheet capture, and let a post-gesture
+// poll read the dismissal as a stable surface (#2438).
+test('a lingering probe cannot make a sheet capture and an app capture compare equal', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => presentSurface,
+  });
+
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const app = await route.capture(ios, input, signal(), async () => runnerResult());
+  const stillApp = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(sheet.comparisonIdentity?.lineage).toEqual({
+    targetId: `${ios.id}:${presentSurface.host.bundleId}`,
+  });
+  expect(app.comparisonIdentity?.lineage).toEqual({ targetId: target.targetId });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(sheet.comparisonIdentity!, app.comparisonIdentity!),
+  ).toBe(false);
+  // Two app captures taken in the same lingering window still compare equal, so a poll can settle on
+  // app content: the capture decides the lineage, and nothing here carries a per-capture residue.
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, stillApp.comparisonIdentity!),
+  ).toBe(true);
+  expect(app.warnings).toEqual([
+    'Simulator AX snapshot inapplicable (system-surface-host-lingering); used XCTest, which read app content: the system surface host process was still running but no longer presenting.',
+  ]);
+});
+
+// A pinned backend and a custom-actions read bypass the route's planning, but they still reach the
+// runner, and the runner serves the sheet there too. Without an identity that pair falls back to
+// legacy presentation matching, where a sheet and app content read as one presentation and could
+// corroborate a tap across the two (#2438).
+test.each([
+  ['a pinned backend', { preferredBackend: 'private-ax' }],
+  ['a custom-actions read', { customActions: true }],
+] as const)(
+  'a route-bypassing capture of a system surface is incomparable (%s)',
+  async (_label, bypass) => {
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+      source: sourceReturning(bridgeAcquisition()),
+      resolveTarget: vi.fn(async () => target),
+    });
+    const bypassInput = { options: { ...input.options, ...bypass } };
+
+    const sheet = await route.capture(ios, bypassInput, signal(), async () =>
+      surfaceRunnerResult(),
+    );
+    const app = await route.capture(ios, bypassInput, signal(), async () => runnerResult());
+
+    expect(sheet.comparisonIdentity).toMatchObject({
+      producer: 'apple-runner',
+      lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+      // Nothing fell back here: the runner is the requested producer, not a replacement for the bridge.
+      residue: [],
+    });
+    // An app capture off the route is untouched — identity included, as before.
+    expect(app).toEqual(runnerResult());
+  },
+);
 
 // Losing the bridge fast path must never be silent: an unprovable probe still owes the caller a
 // warning and an identity that cannot be compared against a bridge publication.
@@ -446,6 +511,14 @@ function sourceReturning(
 
 function runnerResult() {
   return { backend: 'xctest' as const, producer: 'apple-runner' as const, nodes: [] };
+}
+
+/** The runner's capture OF the sheet: it stamps the surface it actually served onto the result. */
+function surfaceRunnerResult() {
+  return {
+    ...runnerResult(),
+    systemSurface: { bundleId: presentSurface.host.bundleId, kind: presentSurface.host.kind },
+  };
 }
 
 function signal(): AbortSignal {
