@@ -158,6 +158,7 @@ export default defineConfig({
             // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
             'scripts/__tests__/mcp-metadata.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            'scripts/png-crop-benchmark/*.test.ts',
             'scripts/ios-ax-bridge-spike/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
