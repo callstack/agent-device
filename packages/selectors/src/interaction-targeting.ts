@@ -54,7 +54,7 @@ export function classifyActionableTouchCandidates(
       resolveActionableTouchResolutionWithIndex(nodes, candidate, index).node.index !==
       actionable.index
     ) {
-      const wrapperControl = resolveUnverifiedWrapperControl(candidates);
+      const wrapperControl = resolveUnverifiedWrapperControlWithIndex(candidates, index);
       return wrapperControl
         ? { kind: 'equivalent', node: wrapperControl }
         : { kind: 'ambiguous', candidates };
@@ -64,7 +64,7 @@ export function classifyActionableTouchCandidates(
 }
 
 function candidatesFormSingleAncestryChain(
-  candidates: SnapshotNode[],
+  candidates: readonly SnapshotNode[],
   byIndex: ReadonlyMap<number, SnapshotNode>,
 ): boolean {
   for (let i = 0; i < candidates.length; i += 1) {
@@ -106,15 +106,27 @@ const WRAPPER_RECT_SLACK = 1;
  * Regular iOS snapshots omit unverified hittability, and
  * `findPreferredActionableDescendant` requires verified hittability, so a
  * SwiftUI wrapper can never relate to its own control through the resolution
- * ladder: press and wait then see two actionable elements for one toolbar
- * button. The collapse stays narrow on purpose: every candidate above the
- * control must be a non-actionable wrapper, so a chain of two real controls (a
- * cell and the button inside it) keeps the existing ambiguity refusal instead of
- * silently pressing the descendant. Candidates carrying any hittability fact
- * also keep the existing rules.
+ * ladder: `press` sees two actionable elements and a uniqueness read (`is
+ * visible`, `get attrs`) sees two matches for one toolbar button. The collapse
+ * stays narrow on purpose: every candidate above the control must be a
+ * non-actionable wrapper, so a chain of two real controls (a cell and the button
+ * inside it) keeps the existing ambiguity refusal instead of silently resolving
+ * to the descendant. Candidates carrying any hittability fact, and candidates
+ * that do not form one ancestry chain, also keep the existing rules.
  */
-function resolveUnverifiedWrapperControl(candidates: readonly SnapshotNode[]): SnapshotNode | null {
+export function resolveUnverifiedWrapperControl(
+  nodes: SnapshotNode[],
+  candidates: readonly SnapshotNode[],
+): SnapshotNode | null {
+  return resolveUnverifiedWrapperControlWithIndex(candidates, buildActionableTouchIndex(nodes));
+}
+
+function resolveUnverifiedWrapperControlWithIndex(
+  candidates: readonly SnapshotNode[],
+  index: ActionableTouchIndex,
+): SnapshotNode | null {
   if (candidates.length < 2) return null;
+  if (!candidatesFormSingleAncestryChain(candidates, index.nodesByIndex)) return null;
   if (candidates.some((candidate) => candidate.hittable !== undefined)) return null;
   const control = candidates.reduce((deepest, candidate) =>
     (candidate.depth ?? 0) > (deepest.depth ?? 0) ? candidate : deepest,

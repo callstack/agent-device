@@ -191,11 +191,42 @@ export const INDEXED_PARITY_POLICY_NODES: RawSnapshotNode[] = [
 ];
 
 /**
+ * A cell and the button inside it, both reporting one identifier with no
+ * hittability evidence and rects within wrapper slack. Both are actionable
+ * targets, so this is two controls rather than one control and its wrapper: the
+ * collapse has to refuse it.
+ */
+export const TWO_ACTIONABLE_WRAPPER_CHAIN_NODES: RawSnapshotNode[] = [
+  {
+    index: 0,
+    depth: 1,
+    parentIndex: 2,
+    type: 'XCUIElementTypeCell',
+    identifier: 'profile',
+    rect: { x: 20, y: 63, width: 36, height: 36 },
+  },
+  {
+    index: 1,
+    depth: 2,
+    parentIndex: 0,
+    type: 'XCUIElementTypeButton',
+    identifier: 'profile',
+    rect: { x: 20.666666666666668, y: 63, width: 35, height: 36 },
+  },
+  {
+    index: 2,
+    depth: 0,
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 393, height: 852 },
+  },
+];
+
+/**
  * The SwiftUI toolbar shape on a regular iOS snapshot: a wrapper and its
  * control share one identifier, the platform reports NO hittability evidence
  * (so neither node is `hittable: true`), and the wrapper's rect carries the
- * union of the control's sub-pixel layout, beyond the 0.5 pt rectangle
- * tolerance. Captured from a live simulator with resolved sub-pixel values.
+ * union of the control's sub-pixel layout. Captured from a live simulator with
+ * resolved sub-pixel values.
  */
 export const UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES: RawSnapshotNode[] = [
   {

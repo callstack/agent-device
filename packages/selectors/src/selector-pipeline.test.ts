@@ -4,6 +4,11 @@ import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapsho
 import { SELECTOR_RESOLUTION_POLICIES } from '@agent-device/selectors';
 import { makeSnapshotState } from './snapshot-geometry.fixtures.ts';
 import {
+  ELEMENT14_DISTINCT_SUBTREE_NODES,
+  TWO_ACTIONABLE_WRAPPER_CHAIN_NODES,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
+} from './interaction-targeting.fixtures.ts';
+import {
   listSelectorPipelineMatches,
   resolveSelectorPipeline,
   runNodePipelineStages,
@@ -237,6 +242,78 @@ test('a row that refuses off-screen without a refusal shape fails loudly', async
     () => runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.promotedTarget, nodes, nodes[0]!),
     /supplies no refusal shape/,
   );
+});
+
+/** Captured from a live simulator: one SwiftUI toolbar button reported twice. */
+const WRAPPER_CHAIN_TREE = UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES;
+const WRAPPER_CHAIN_SELECTOR = 'id="scoring_home_button"';
+
+test('the uniqueness rows collapse one control reported through its own wrapper', async () => {
+  const nodes = nodesOf(WRAPPER_CHAIN_TREE);
+  for (const row of ['readUnique', 'cropTarget'] as const) {
+    const outcome = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES[row],
+      nodes,
+      WRAPPER_CHAIN_SELECTOR,
+      MATCH,
+    );
+    assert.equal(outcome.kind, 'target', row);
+    if (outcome.kind !== 'target') continue;
+    assert.equal(outcome.node.type, 'XCUIElementTypeButton', row);
+    assert.equal(outcome.selector, WRAPPER_CHAIN_SELECTOR, row);
+    // The refused candidate set survives the collapse: the answer is about one
+    // control, and the read still reports that it matched twice.
+    assert.equal(outcome.matches, 2, row);
+    assert.deepEqual(
+      outcome.matchedNodes.map((node) => node.type),
+      ['XCUIElementTypeOther', 'XCUIElementTypeButton'],
+      row,
+    );
+  }
+});
+
+test('a row that resolves on its own keeps its own answer on a wrapper chain', async () => {
+  const nodes = nodesOf(WRAPPER_CHAIN_TREE);
+  // `wait`/`is exists` take the document-order head, which is the wrapper: the
+  // question is presence, and this row never reaches the collapse.
+  for (const row of ['readAny', 'wait'] as const) {
+    const outcome = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES[row],
+      nodes,
+      WRAPPER_CHAIN_SELECTOR,
+      MATCH,
+    );
+    assert.equal(outcome.kind, 'target', row);
+    if (outcome.kind === 'target') assert.equal(outcome.node.index, 0, row);
+  }
+  // `get text` ranks visible→deepest→smallest-area, and depth separates a
+  // wrapper from its control, so the tiebreak already answers the control.
+  const readText = await resolveSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.readText,
+    nodes,
+    WRAPPER_CHAIN_SELECTOR,
+    MATCH,
+  );
+  assert.equal(readText.kind, 'target');
+  if (readText.kind === 'target') assert.equal(readText.node.index, 1);
+});
+
+test('the uniqueness rows still refuse matches that are not one wrapper chain', async () => {
+  const cases = [
+    ['two actionable controls', nodesOf(TWO_ACTIONABLE_WRAPPER_CHAIN_NODES), 'id="profile"'],
+    ['distinct subtrees', nodesOf(ELEMENT14_DISTINCT_SUBTREE_NODES), 'label="Team Standup"'],
+  ] as const;
+  for (const [name, nodes, selector] of cases) {
+    for (const row of ['readUnique', 'cropTarget'] as const) {
+      const outcome = await resolveSelectorPipeline(
+        SELECTOR_PIPELINE_POLICIES[row],
+        nodes,
+        selector,
+        MATCH,
+      );
+      assert.equal(outcome.kind, 'ambiguous', `${name} / ${row}`);
+    }
+  }
 });
 
 test('the poll stage answers only for the rows that poll', () => {

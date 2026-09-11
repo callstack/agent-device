@@ -9,6 +9,7 @@ import {
 } from '../../../../../runtime.ts';
 import { ref } from '../../selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES } from '@agent-device/selectors/interaction-targeting-fixtures';
 
 export function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([
@@ -446,6 +447,14 @@ export function ambiguousSelectorReadSnapshot(): SnapshotState {
       hittable: true,
     },
   ]);
+}
+
+/**
+ * One control reported twice by a live iOS snapshot (`interaction-targeting.fixtures`):
+ * the uniqueness reads answer about the control instead of refusing.
+ */
+export function unverifiedWrapperChainReadSnapshot(): SnapshotState {
+  return makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
 }
 
 /**

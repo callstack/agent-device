@@ -8,6 +8,7 @@ import {
   createSelectorDevice,
   observationStagesSnapshot,
   skippedAlternativeSelectorSnapshot,
+  unverifiedWrapperChainReadSnapshot,
 } from './test-utils/index.ts';
 
 /**
@@ -69,6 +70,38 @@ test('is fails closed on the same ambiguous selector (readUnique row)', async ()
   assert.ok(error instanceof AppError, 'is must refuse rather than answer about one duplicate');
   assert.equal(error.code, 'COMMAND_FAILED');
   assert.equal((error.details as { reason?: string } | undefined)?.reason, 'selector_not_found');
+});
+
+/**
+ * #2498: one control reported twice, by its own accessibility wrapper. The
+ * uniqueness rows ask which element the caller means, and there is exactly one
+ * element to mean.
+ */
+const WRAPPER_CHAIN_SELECTOR = 'id="scoring_home_button"';
+/** The button, not the wrapper that reports it. */
+const WRAPPER_CONTROL_REF = '@e2';
+
+test('is visible answers about the control a wrapper reports (readUnique row)', async () => {
+  const device = createSelectorDevice(unverifiedWrapperChainReadSnapshot());
+
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'visible',
+    selector: WRAPPER_CHAIN_SELECTOR,
+  });
+
+  assert.equal(result.pass, true);
+  assert.equal(`@${result.node?.ref}`, WRAPPER_CONTROL_REF);
+});
+
+test('get attrs answers about the control a wrapper reports (readUnique row)', async () => {
+  const device = createSelectorDevice(unverifiedWrapperChainReadSnapshot());
+
+  const result = await device.selectors.getAttrs(selector(WRAPPER_CHAIN_SELECTOR), {
+    session: 'default',
+  });
+
+  assert.equal(`@${result.node.ref}`, WRAPPER_CONTROL_REF);
 });
 
 test('is exists answers from the first matching alternative (readAny row)', async () => {

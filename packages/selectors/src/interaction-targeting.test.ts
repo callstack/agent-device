@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { test } from 'vitest';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   distinctRectPairArb,
   makeSnapshotState,
@@ -11,11 +12,13 @@ import {
   classifyActionableTouchCandidates,
   createActionableTouchResolver,
   resolveActionableTouchResolution,
+  resolveUnverifiedWrapperControl,
 } from './interaction-targeting.ts';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
   INDEXED_PARITY_POLICY_NODES,
+  TWO_ACTIONABLE_WRAPPER_CHAIN_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from './interaction-targeting.fixtures.ts';
 
@@ -436,4 +439,91 @@ test('refuses a wrapper chain whose deepest candidate is not a touch target', ()
   ]);
 
   assert.equal(classifyActionableTouchCandidates(snapshot.nodes, snapshot.nodes).kind, 'ambiguous');
+});
+
+/**
+ * The candidate set a uniqueness read hands the rule: every node reporting one
+ * identifier. The acting classifier refuses a set that is not one chain before
+ * it asks, so the rule carries its own chain check for the reads that ask
+ * directly.
+ */
+function identifierReports(
+  snapshot: ReturnType<typeof makeSnapshotState>,
+  identifier: string,
+): SnapshotNode[] {
+  return snapshot.nodes.filter((node) => node.identifier === identifier);
+}
+
+test('resolves the control of one ancestry chain through the rule on its own', () => {
+  const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+  const reports = identifierReports(snapshot, 'scoring_home_button');
+  assert.deepEqual(
+    reports.map((node) => node.type),
+    ['XCUIElementTypeOther', 'XCUIElementTypeButton'],
+  );
+
+  const control = resolveUnverifiedWrapperControl(snapshot.nodes, reports);
+
+  assert.equal(control?.type, 'XCUIElementTypeButton');
+  assert.equal(control?.index, 1);
+});
+
+test('refuses a candidate set that is one report, not a pair to collapse', () => {
+  // Reachable through the rect-requiring rows: a refused set can hold a single
+  // candidate once matches without a rect are dropped.
+  const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+  const reports = identifierReports(snapshot, 'scoring_home_button');
+
+  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, [reports[1]!]), null);
+});
+
+test('refuses one ancestry chain of two real controls through the rule on its own', () => {
+  const snapshot = makeSnapshotState(TWO_ACTIONABLE_WRAPPER_CHAIN_NODES);
+  const reports = identifierReports(snapshot, 'profile');
+  assert.deepEqual(
+    reports.map((node) => node.type),
+    ['XCUIElementTypeCell', 'XCUIElementTypeButton'],
+  );
+
+  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, reports), null);
+});
+
+test('refuses reports that sit in two separate ancestry chains', () => {
+  // No hittability evidence, rects agree within slack, one deepest control under
+  // non-actionable wrappers — every condition but the chain holds. Two subtrees
+  // each reporting one control are two controls, not one reported twice.
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 2,
+      parentIndex: 2,
+      type: 'XCUIElementTypeOther',
+      identifier: 'profile',
+      rect: { x: 20, y: 63, width: 36, height: 36 },
+    },
+    {
+      index: 1,
+      depth: 3,
+      parentIndex: 3,
+      type: 'XCUIElementTypeButton',
+      identifier: 'profile',
+      rect: { x: 20.666666666666668, y: 63, width: 35, height: 36 },
+    },
+    { index: 2, depth: 1, parentIndex: 4, type: 'XCUIElementTypeGroup' },
+    { index: 3, depth: 2, parentIndex: 4, type: 'XCUIElementTypeGroup' },
+    {
+      index: 4,
+      depth: 0,
+      type: 'XCUIElementTypeApplication',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+  ]);
+  const reports = identifierReports(snapshot, 'profile');
+  assert.deepEqual(
+    reports.map((node) => node.type),
+    ['XCUIElementTypeOther', 'XCUIElementTypeButton'],
+  );
+
+  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, reports), null);
+  assert.equal(classifyActionableTouchCandidates(snapshot.nodes, reports).kind, 'ambiguous');
 });

@@ -12,7 +12,10 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  * - `disambiguate` — unique match required, but the engine's visible→deepest→
  *   smallest-area tiebreak may pick a winner from an ambiguous set (`get text`).
  * - `fail-closed` — unique match required, ties reject (by design: `is`
- *   predicates and `get attrs` must never guess).
+ *   predicates and `get attrs` must never guess). A set that is one control
+ *   reported through its own accessibility wrapper is not a tie and nothing
+ *   guesses when it resolves to the control; the pipeline applies that
+ *   structural collapse after this door refuses (#2498).
  * - `first-match` — any match count accepted, first wins (existence reads and
  *   the wait loop, where presence is the question).
  * - `reject-candidates` — multiple matches stay visible to the caller, which
