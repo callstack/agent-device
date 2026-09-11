@@ -1,9 +1,9 @@
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
   PostActionSurfaceChange,
-  ResolvedInteractionTarget,
+  SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { iosSystemSurfaceTransitionDisclosure } from '@agent-device/contracts/ios-system-surface';
 
@@ -18,35 +18,15 @@ import { iosSystemSurfaceTransitionDisclosure } from '@agent-device/contracts/io
  * disclosure cannot hold on one route and drop on the other.
  */
 
-/** One side of a post-action comparison: the nodes, and the surface the capture they came from described. */
-export type SurfaceScopedNodes = {
-  nodes: SnapshotNode[];
-  /** Bundle id of the in-place iOS system surface; absent for ordinary app content. */
-  surfaceBundleId?: string;
-};
-
 /** How a capture of ordinary app content names its surface in a {@link PostActionSurfaceChange}. */
 const APP_SURFACE = 'app';
 
+/** Mints the one carried value from a capture: the nodes together with the surface they describe. */
 export function surfaceScopedNodes(snapshot: SnapshotState): SurfaceScopedNodes {
   return {
     nodes: snapshot.nodes,
     ...(snapshot.iosSystemSurfaceBundleId
       ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
-  };
-}
-
-/** The resolution-time baseline as one value, or nothing when the resolution captured none. */
-export function preActionBaseline(
-  resolved: ResolvedInteractionTarget,
-): SurfaceScopedNodes | undefined {
-  const nodes = 'preActionNodes' in resolved ? resolved.preActionNodes : undefined;
-  if (nodes === undefined) return undefined;
-  return {
-    nodes,
-    ...(resolved.preActionSurfaceBundleId
-      ? { surfaceBundleId: resolved.preActionSurfaceBundleId }
       : {}),
   };
 }

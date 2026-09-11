@@ -34,7 +34,7 @@ import {
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { truncateUtf8 } from './truncate-utf8.ts';
-import { surfaceScopedNodes, type SurfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from './post-action-surface.ts';
 import type {
   InteractionTarget,
   PointTarget,
@@ -43,6 +43,7 @@ import type {
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
   ResolvedInteractionTarget,
+  SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
@@ -229,23 +230,8 @@ async function resolvePointInteractionTarget(
   return {
     kind: 'point',
     point: { x: target.x, y: target.y },
-    ...(baseline ? preActionBaselineFields(baseline) : {}),
+    ...(baseline ? { preAction: baseline } : {}),
     ...(warning ? { warning } : {}),
-  };
-}
-
-/**
- * The pre-action baseline a post-action observation compares against: the tree AND the surface the
- * capture described (#2438). Emitted from one place so the nodes can never travel without their
- * surface identity.
- */
-function preActionBaselineFields(tree: SurfaceScopedNodes): {
-  preActionNodes: SnapshotNode[];
-  preActionSurfaceBundleId?: string;
-} {
-  return {
-    preActionNodes: tree.nodes,
-    ...(tree.surfaceBundleId ? { preActionSurfaceBundleId: tree.surfaceBundleId } : {}),
   };
 }
 
@@ -266,10 +252,8 @@ async function tryCaptureEvidenceBaseline(
 
 /** The node a ref target acts on, plus the tree the shared guards read it against. */
 type RefResolution = {
-  nodes: SnapshotState['nodes'];
+  tree: SurfaceScopedNodes;
   resolved: ResolvedRefNode;
-  /** The surface `nodes` describes (#2438), carried to the post-action comparison baseline. */
-  surfaceBundleId?: string;
 };
 
 /**
@@ -297,11 +281,13 @@ function adoptPreresolvedRefTarget(
     );
   }
   return {
-    nodes: preresolved.nodes,
+    tree: {
+      nodes: preresolved.nodes,
+      ...(preresolved.iosSystemSurfaceBundleId
+        ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
+        : {}),
+    },
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),
-    ...(preresolved.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
-      : {}),
   };
 }
 
@@ -311,7 +297,7 @@ async function readRefResolution(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
 ): Promise<RefResolution> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
-  return { ...surfaceScopedNodes(capture.snapshot), resolved: capture.resolved };
+  return { tree: surfaceScopedNodes(capture.snapshot), resolved: capture.resolved };
 }
 
 async function resolveRefInteractionTarget(
@@ -320,9 +306,10 @@ async function resolveRefInteractionTarget(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const { nodes, resolved, surfaceBundleId } = params.preresolvedTarget
+  const { tree, resolved } = params.preresolvedTarget
     ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
     : await readRefResolution(runtime, options, target);
+  const nodes = tree.nodes;
   // #1542: point/response read from the returned (possibly rescue-patched) node.
   const visibleNode = await runInteractionPipelineStages({
     policy: params.pipeline,
@@ -348,7 +335,7 @@ async function resolveRefInteractionTarget(
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
-      { nodes, ...(surfaceBundleId ? { surfaceBundleId } : {}) },
+      tree,
       params.action,
       resolved.resolution,
     ),
@@ -557,8 +544,7 @@ function buildResolutionDiagnosticEntry(
 // plus everything derived from it for the response. Every response field
 // describes the DISPATCHED node — the #1280 retarget rides only on the
 // `recordingTarget` side channel below. `tree` is the capture the node was
-// resolved from, surface identity included (#2438), so the pre-action baseline
-// it publishes can never lose which surface it describes.
+// resolved from, and becomes the pre-action baseline this publishes.
 function describeResolvedInteractionNode(
   runtime: AgentDeviceRuntime,
   node: SnapshotNode,
@@ -571,8 +557,7 @@ function describeResolvedInteractionNode(
   refLabel: string | undefined;
   targetHittable?: boolean;
   hint?: string;
-  preActionNodes: SnapshotState['nodes'];
-  preActionSurfaceBundleId?: string;
+  preAction: SurfaceScopedNodes;
   resolution: ResolutionDisclosure;
   recordingTarget?: RecordingTargetOverride;
 } {
@@ -585,7 +570,7 @@ function describeResolvedInteractionNode(
     }),
     refLabel: resolveRefLabel(node, nodes),
     ...describeNonHittableTarget(node, action),
-    ...preActionBaselineFields(tree),
+    preAction: tree,
     resolution,
     ...pressRecordingTargetOverride(runtime, node, nodes, action),
   };
@@ -979,8 +964,7 @@ export async function preflightNativeRefInteraction(
   targetHittable?: boolean;
   hint?: string;
   node?: SnapshotNode;
-  preActionNodes?: SnapshotNode[];
-  preActionSurfaceBundleId?: string;
+  preAction?: SurfaceScopedNodes;
 }> {
   const session = await runtime.sessions.get(options.session ?? 'default');
   const storedSnapshot = session?.snapshot;
@@ -1014,7 +998,7 @@ export async function preflightNativeRefInteraction(
     // ADR 0012 decision 3: the guard lookup above doubles as the record-time
     // evidence source for the fast path, at zero extra capture cost.
     node: visibleNode,
-    ...preActionBaselineFields(surfaceScopedNodes(storedSnapshot)),
+    preAction: surfaceScopedNodes(storedSnapshot),
   };
 }
 

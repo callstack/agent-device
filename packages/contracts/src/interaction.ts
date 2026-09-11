@@ -130,26 +130,28 @@ export type PreresolvedInteractionTarget = {
 };
 
 /**
- * The pre-action tree a post-action observation compares against, and the SURFACE the capture it
- * came from described (#2438: the bundle id of an in-place iOS system surface such as a web
- * sign-in sheet, absent for ordinary app content).
+ * One side of a post-action comparison: the nodes, and the SURFACE the capture they came from
+ * described (#2438: the bundle id of an in-place iOS system surface such as a web sign-in sheet,
+ * absent for ordinary app content).
  *
  * One value, never two channels: a capture of the sheet and a capture of the app describe
  * different surfaces, so a `--verify` digest comparison or a `--settle` diff across that boundary
- * is not about one presentation. The identity is attached where the nodes are taken, so every
- * comparison site can ask the question.
+ * is not about one presentation. Every boundary that carries a baseline carries this type, so
+ * nodes cannot arrive without the surface they describe.
  */
-type PreActionBaselineFields = {
-  preActionNodes?: SnapshotNode[];
-  preActionSurfaceBundleId?: string;
+export type SurfaceScopedNodes = {
+  nodes: SnapshotNode[];
+  /** Bundle id of the in-place iOS system surface; absent for ordinary app content. */
+  surfaceBundleId?: string;
 };
 
 export type ResolvedInteractionTarget =
-  | ({
+  | {
       kind: 'point';
       point: Point;
-    } & PreActionBaselineFields)
-  | ({
+      preAction?: SurfaceScopedNodes;
+    }
+  | {
       kind: 'ref';
       point?: Point;
       target: Extract<ResolvedTarget, { kind: 'ref' }>;
@@ -160,8 +162,9 @@ export type ResolvedInteractionTarget =
       hint?: string;
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
-    } & PreActionBaselineFields)
-  | ({
+      preAction?: SurfaceScopedNodes;
+    }
+  | {
       kind: 'selector';
       point: Point;
       target: Extract<ResolvedTarget, { kind: 'selector' }>;
@@ -172,7 +175,8 @@ export type ResolvedInteractionTarget =
       hint?: string;
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
-    } & PreActionBaselineFields);
+      preAction?: SurfaceScopedNodes;
+    };
 
 /**
  * A post-action capture that describes a DIFFERENT surface than the pre-action baseline (#2438): an

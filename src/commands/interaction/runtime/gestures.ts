@@ -394,14 +394,14 @@ function recordedDragTarget(target: ResolvedInteractionTarget): DragRecordingTar
     !('selectorChain' in target) ||
     !target.selectorChain?.length ||
     !target.node ||
-    !target.preActionNodes
+    !target.preAction
   ) {
     return undefined;
   }
   return {
     selectorChain: target.selectorChain,
     node: target.node,
-    preActionNodes: target.preActionNodes,
+    preActionNodes: target.preAction.nodes,
   };
 }
 

@@ -1,6 +1,9 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  SettleObservation,
+  SettleParams,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   captureSnapshotForSession,
@@ -73,19 +76,15 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  // The baseline travels with the surface its capture described (#2438), so the settled diff is
-  // never built across an in-place system surface appearing over (or leaving) the app.
-  const baseline: SettleBaseline = {
-    nodes: params.session.snapshot?.nodes ?? [],
-    ...(params.session.snapshot?.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: params.session.snapshot.iosSystemSurfaceBundleId }
+  const snapshot = params.session.snapshot;
+  const baseline: SurfaceScopedNodes = {
+    nodes: snapshot?.nodes ?? [],
+    ...(snapshot?.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
       : {}),
   };
   return { observe: async () => await observeSettled(params, settle, baseline) };
 }
-
-/** The pre-action tree the generic route diffs against, and the surface it describes. */
-type SettleBaseline = { nodes: SnapshotNode[]; surfaceBundleId?: string };
 
 /**
  * Best-effort like the settle engine itself: the action already succeeded, so a
@@ -97,7 +96,7 @@ type SettleBaseline = { nodes: SnapshotNode[]; surfaceBundleId?: string };
 async function observeSettled(
   context: GenericSettleContext,
   settle: SettleParams,
-  baseline: SettleBaseline,
+  baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
   const runtime = createGenericSettleRuntime(context);
   if (!runtime) return undefined;
@@ -106,8 +105,7 @@ async function observeSettled(
   // use for press/fill.
   const observation = await runtime.interactions.settleObservation({
     ...settle,
-    baselineNodes: baseline.nodes,
-    ...(baseline.surfaceBundleId ? { baselineSurfaceBundleId: baseline.surfaceBundleId } : {}),
+    baseline,
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });

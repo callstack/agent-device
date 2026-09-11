@@ -244,7 +244,7 @@ function recordedTargetCapture(
   // retargeted descendant, in lockstep with `recordingTargetExtra`'s chain
   // override — the recorded entry and its evidence always name ONE node.
   const node = readRecordingTarget(result)?.node ?? ('node' in result ? result.node : undefined);
-  const preActionNodes = 'preActionNodes' in result ? result.preActionNodes : undefined;
+  const preActionNodes = 'preAction' in result ? result.preAction?.nodes : undefined;
   return node && preActionNodes ? { recordedTarget: { node, preActionNodes } } : {};
 }
 

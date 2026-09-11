@@ -109,7 +109,7 @@ test('press @ref while recording attaches target-v1 evidence to the recorded act
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data).not.toHaveProperty('node');
-    expect(response.data).not.toHaveProperty('preActionNodes');
+    expect(response.data).not.toHaveProperty('preAction');
     expect(response.data).not.toHaveProperty('targetEvidence');
   }
 
@@ -125,7 +125,7 @@ test('press @ref while recording attaches target-v1 evidence to the recorded act
     verification: 'verified',
   });
   expect(recordedAction?.result).not.toHaveProperty('node');
-  expect(recordedAction?.result).not.toHaveProperty('preActionNodes');
+  expect(recordedAction?.result).not.toHaveProperty('preAction');
 });
 
 test('press @ref without recording never computes target-v1 evidence', async () => {
@@ -139,7 +139,7 @@ test('press @ref without recording never computes target-v1 evidence', async () 
   const recordedAction = sessionStore.get(sessionName)?.actions[0];
   expect(recordedAction?.targetEvidence).toBeUndefined();
   expect(recordedAction?.result).not.toHaveProperty('node');
-  expect(recordedAction?.result).not.toHaveProperty('preActionNodes');
+  expect(recordedAction?.result).not.toHaveProperty('preAction');
 });
 
 test('get text @ref while recording attaches target-v1 evidence to the recorded action, never to session history payloads', async () => {
@@ -285,7 +285,7 @@ function expectContainerBasedResponse(data: Record<string, unknown>): void {
   expect(data.targetHittable).toBeUndefined();
   expect(data).not.toHaveProperty('recordingTarget');
   expect(data).not.toHaveProperty('node');
-  expect(data).not.toHaveProperty('preActionNodes');
+  expect(data).not.toHaveProperty('preAction');
 }
 
 // The recorded action entry — the .ad writer's source — carries the

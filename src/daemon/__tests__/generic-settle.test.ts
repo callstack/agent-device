@@ -294,8 +294,8 @@ test('back --settle answers with the settled diff alongside the command result',
 // sheet and the session's stored pre-action tree of the app describe DIFFERENT surfaces. The diff
 // above would then be a whole-surface replacement presented as change within one surface — and
 // since the daemon treats `diff` presence as "this response issues refs", it would hand the caller
-// refs for that claim. This route plumbs the baseline's surface identity through
-// `baselineSurfaceBundleId`; the element-targeted route guarantees the same contract in
+// refs for that claim. This route plumbs the baseline's surface identity through the
+// `SurfaceScopedNodes` it hands the settle engine; the element-targeted route guarantees the same contract in
 // `src/commands/interaction/runtime/post-action-surface.test.ts`, and these tests assert it for
 // scroll/back so the two routes cannot drift.
 //

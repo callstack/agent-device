@@ -18,6 +18,7 @@ import type {
   SettleObservation,
   SettleParams,
   SettleTailEntry,
+  SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
@@ -30,11 +31,9 @@ import {
 } from './stable-capture.ts';
 import {
   crossSurfaceSettleHint,
-  preActionBaseline,
   resolvePostActionSurfaceChange,
   summarizePostActionEvidence,
   surfaceScopedNodes,
-  type SurfaceScopedNodes,
 } from './post-action-surface.ts';
 
 /**
@@ -57,10 +56,7 @@ import {
 
 export type SettleOutcome = {
   observation: SettleObservation;
-  /**
-   * The final capture — nodes and the surface they describe (#2438); doubles as the `--verify`
-   * evidence source, which needs both to know whether its baseline is comparable.
-   */
+  /** The final capture; doubles as the `--verify` evidence source. */
   settledCapture?: SurfaceScopedNodes;
 };
 
@@ -94,14 +90,8 @@ export async function settleAfterInteraction(
 
 export type SettleObservationCommandOptions = CommandContext &
   SettleParams & {
-    /** The pre-action tree the settled diff is taken against. */
-    baselineNodes: SnapshotNode[];
-    /**
-     * The surface `baselineNodes` describes (#2438): the bundle id of an in-place iOS system
-     * surface, absent for ordinary app content. Without it the settled diff could be built across
-     * a surface replacement.
-     */
-    baselineSurfaceBundleId?: string;
+    /** The pre-action tree the settled diff is taken against, and the surface it describes. */
+    baseline: SurfaceScopedNodes;
   };
 
 /**
@@ -115,18 +105,7 @@ export type SettleObservationCommandOptions = CommandContext &
 export const settleObservationCommand: RuntimeCommand<
   SettleObservationCommandOptions,
   SettleObservation
-> = async (runtime, options) =>
-  (
-    await settleAfterAction(runtime, options, {
-      ...options,
-      baseline: {
-        nodes: options.baselineNodes,
-        ...(options.baselineSurfaceBundleId
-          ? { surfaceBundleId: options.baselineSurfaceBundleId }
-          : {}),
-      },
-    })
-  ).observation;
+> = async (runtime, options) => (await settleAfterAction(runtime, options, options)).observation;
 
 /**
  * The target-less engine (#1638), for mutations that change the screen without
@@ -228,9 +207,7 @@ async function readSettledOutcome(
 /**
  * `--settle --verify` composition: the settle loop's final capture doubles as
  * the verify evidence source, so the pair costs zero extra captures. Without a
- * final capture there is no evidence — best-effort, like verify itself. The
- * baseline keeps its own surface identity, so a settled sheet capture is never
- * digest-compared against an app baseline (#2438).
+ * final capture there is no evidence — best-effort, like verify itself.
  */
 export function settleEvidence(
   settledCapture: SurfaceScopedNodes | undefined,
@@ -255,7 +232,7 @@ async function resolveSettleBaseline(
   // and pre-frame sessions.
   return (
     authorizedRefBaseline(resolved, session) ??
-    evidenceBaseline(resolved) ??
+    nonEmptyBaseline(resolved.preAction) ??
     sessionBaseline(session)
   );
 }
@@ -269,18 +246,15 @@ function authorizedRefBaseline(
   return frame ? nonEmptyBaseline(surfaceScopedNodes(frame)) : undefined;
 }
 
-function evidenceBaseline(resolved: ResolvedInteractionTarget): SurfaceScopedNodes | undefined {
-  const baseline = preActionBaseline(resolved);
-  return baseline ? nonEmptyBaseline(baseline) : undefined;
-}
-
 function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
   const tree = session?.refFrameSnapshot ?? session?.snapshot;
   return tree ? surfaceScopedNodes(tree) : { nodes: [] };
 }
 
-function nonEmptyBaseline(baseline: SurfaceScopedNodes): SurfaceScopedNodes | undefined {
-  return baseline.nodes.length ? baseline : undefined;
+function nonEmptyBaseline(
+  baseline: SurfaceScopedNodes | undefined,
+): SurfaceScopedNodes | undefined {
+  return baseline?.nodes.length ? baseline : undefined;
 }
 
 function buildSettleDiff(

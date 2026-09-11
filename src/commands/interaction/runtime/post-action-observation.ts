@@ -6,11 +6,7 @@ import type {
   SettleParams,
 } from '@agent-device/contracts/interaction';
 import { captureInteractionSnapshot } from './resolution.ts';
-import {
-  preActionBaseline,
-  summarizePostActionEvidence,
-  surfaceScopedNodes,
-} from './post-action-surface.ts';
+import { summarizePostActionEvidence, surfaceScopedNodes } from './post-action-surface.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 
 type ObservedResult<T extends object> = T & {
@@ -85,7 +81,7 @@ async function observeAfterInteraction(
       resolved,
     });
     const evidence = params.verify
-      ? settleEvidence(outcome.settledCapture, preActionBaseline(resolved))
+      ? settleEvidence(outcome.settledCapture, resolved.preAction)
       : undefined;
     return { settle: outcome.observation, ...(evidence ? { evidence } : {}) };
   }
@@ -98,13 +94,8 @@ async function observeAfterInteraction(
  * Post-action side of `--verify` (#1047): one interactive-only capture through
  * the same capture helper the resolution path already uses, digested and then
  * discarded. The node tree itself is never attached to the result, only the
- * cheap summary.
- *
- * Both sides of the comparison carry the surface they describe (#2438), so a
- * capture of an in-place system surface is never digest-compared against an app
- * baseline: `summarizePostActionEvidence` owns that rule for this route and the
- * `--settle --verify` route alike. A missing baseline still yields
- * `changedFromBefore: false` — no baseline, no claim.
+ * cheap summary. A missing baseline still yields `changedFromBefore: false` —
+ * no baseline, no claim.
  */
 async function captureVerifyEvidence(
   runtime: AgentDeviceRuntime,
@@ -113,10 +104,7 @@ async function captureVerifyEvidence(
 ): Promise<InteractionEvidence | undefined> {
   try {
     const capture = await captureInteractionSnapshot(runtime, options, true);
-    return summarizePostActionEvidence(
-      surfaceScopedNodes(capture.snapshot),
-      preActionBaseline(resolved),
-    );
+    return summarizePostActionEvidence(surfaceScopedNodes(capture.snapshot), resolved.preAction);
   } catch {
     return undefined;
   }
