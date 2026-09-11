@@ -121,6 +121,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'Runner XCTest selection and package-source boundary',
     'check:xctest-selection',
   ),
+  // Line parity needs no toolchain; the `swiftc -parse` half reports itself skipped on a host
+  // without Swift, so the gate is declared on the macOS lane where both halves run.
+  gate(
+    'packaged-runner-swift',
+    'Packaged runner Swift parses and keeps checkout line numbering',
+    'check:packaged-runner-swift',
+  ),
 
   // --- Gates that drive their own runner -------------------------------------
   // The ones no naming convention could find: an executable terminal for

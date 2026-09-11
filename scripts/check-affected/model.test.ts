@@ -89,6 +89,7 @@ test('Swift runner change selects both XCUITest platform builds', () => {
   assert.deepEqual(ids(['apple/runner/Sources/Runner/Main.swift']), [
     'swift-runner-ios',
     'swift-runner-macos',
+    'packaged-runner-swift',
     'replay-ios',
     'replay-ios-device',
     'replay-macos',
@@ -106,6 +107,7 @@ test('a runner XCTest source also selects the test-list and package-source check
       'swift-runner-ios',
       'swift-runner-macos',
       'xctest-selection',
+      'packaged-runner-swift',
       'replay-ios',
       'replay-ios-device',
       'replay-macos',
@@ -119,6 +121,19 @@ test('a runner XCTest source also selects the test-list and package-source check
   );
   // Swift elsewhere in the runner still selects only the builds.
   assert.ok(!ids(['apple/runner/Sources/Runner/Main.swift']).includes('xctest-selection'));
+});
+
+test('the scripts that rewrite runner Swift select the packaged-source check', () => {
+  // Every packaged byte comes out of these two, and the rewrite they perform is invisible to
+  // every other gate: no repo target compiles dist/apple/runner/**.
+  for (const file of [
+    'scripts/package-apple-runner-source.mjs',
+    'scripts/strip-swift-comments.mjs',
+  ]) {
+    assert.ok(ids([file]).includes('packaged-runner-swift'), file);
+  }
+  // Runner Swift outside the XCTest directory owns it too — the packager rewrites all of it.
+  assert.ok(ids(['apple/runner/Sources/Runner/Main.swift']).includes('packaged-runner-swift'));
 });
 
 test('Android helper change selects the android-helpers build', () => {

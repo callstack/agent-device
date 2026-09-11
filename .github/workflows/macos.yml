@@ -70,6 +70,14 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: macos-coverage }
 
+      # The npm package ships apple/runner/** as rewritten Swift source, and nothing in the repo
+      # compiles the result — the first consumer is a user's xcodebuild. This lane is the only one
+      # with a Swift toolchain, so it is where `swiftc -parse` over the packaged files runs; the
+      # line-parity half of the same gate needs no toolchain. Seconds, no simulator (#2461).
+      - name: Check the packaged runner Swift parses and keeps its line numbering
+        uses: ./.github/actions/run-gate
+        with: { gate: packaged-runner-swift }
+
       - name: Run iOS snapshot Swift/TypeScript differential
         uses: ./.github/actions/run-gate
         with: { gate: ios-snapshot-differential }

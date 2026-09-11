@@ -10,7 +10,11 @@ function swift(...lines: string[]): string {
   return `${lines.join('\n')}\n`;
 }
 
-test('drops comment-only lines and trailing comments, keeping blank lines', () => {
+// The packaged file's line N has to be the checkout's line N: `dist/apple/runner/**` is what a
+// user's `xcodebuild` and the runner name a file and line in, so a removed comment empties its
+// line and never deletes it. scripts/check-packaged-runner-swift.ts asserts the same property
+// over all 44 shipped files.
+test('empties a comment-only line instead of deleting it, keeping every line number', () => {
   const source = swift(
     '// header note',
     '/// doc comment',
@@ -21,7 +25,18 @@ test('drops comment-only lines and trailing comments, keeping blank lines', () =
     'let next = answer',
   );
 
-  assert.equal(strip(source), swift('', 'let answer = 42', '', 'let next = answer'));
+  const stripped = strip(source);
+  assert.equal(stripped, swift('', '', '', 'let answer = 42', '', '', 'let next = answer'));
+  assert.equal(stripped.split('\n').length, source.split('\n').length);
+  // The code lines sit on the lines they sat on in the source: 4 and 7, not 2 and 4.
+  assert.equal(stripped.split('\n')[3], 'let answer = 42');
+  assert.equal(stripped.split('\n')[6], 'let next = answer');
+});
+
+test('keeps line numbering when every line is a comment', () => {
+  const source = swift('// one', '   // two', '/* three */', '/// four');
+
+  assert.equal(strip(source), swift('', '', '', ''));
 });
 
 test('a file with no comments is returned byte for byte', () => {
@@ -213,7 +228,7 @@ test('removes nested block comments as one comment', () => {
   );
 
   const result = stripSwiftComments(source);
-  assert.equal(result.contents, swift('let after = 1'));
+  assert.equal(result.contents, swift('', '', '', 'let after = 1'));
   assert.equal(result.removedComments, 1);
 });
 
@@ -250,6 +265,7 @@ test('preserves conditional compilation directives and strips their trailing com
       '  #if os(iOS)',
       '  let platform = "ios"',
       '  #else',
+      '',
       '  let platform = "macos"',
       '  #endif',
       '#endif',

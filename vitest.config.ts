@@ -151,6 +151,9 @@ export default defineConfig({
             // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
             // to survive packaging before the npm package ships unbuildable Swift.
             'scripts/__tests__/strip-swift-comments.test.ts',
+            // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
+            // over two strings; the gate itself is what runs the packager and the Swift parse.
+            'scripts/__tests__/packaged-runner-swift.test.ts',
             // Parse-only guard on the checked-in registry entry: the npm package must declare
             // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
             'scripts/__tests__/mcp-metadata.test.ts',

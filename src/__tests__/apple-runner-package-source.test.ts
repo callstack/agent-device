@@ -90,6 +90,53 @@ test('package apple runner source strips unit-test blocks without mutating check
   );
 });
 
+// `dist/apple/runner/**` is the source an `xcodebuild` or runner failure names a file and line in
+// (it lands in runner.log), so both rewriting passes empty the lines they remove instead of
+// deleting them: packaged line N is checkout line N. scripts/check-packaged-runner-swift.ts holds
+// the same property over every shipped file; this pins the shape one file at a time.
+test('package apple runner source empties removed lines so line numbers still match', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-lines-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeStripFixtureTree(root);
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  const relativePath =
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift';
+  const sourceLines = fs.readFileSync(path.join(root, relativePath), 'utf8').split('\n');
+  const packagedLines = fs.readFileSync(path.join(root, 'dist', relativePath), 'utf8').split('\n');
+
+  assert.deepEqual(packagedLines, [
+    '', // // Packaged source carries no prose.
+    'extension RunnerTests {',
+    '', // /// Doc comment.
+    '  func runtimeHelper() {}',
+    '  let endpoint = "https://example.com/path"',
+    // The unit-test block and the platform guard nested inside it, seven lines of it.
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '  #if os(macOS)',
+    '  func macOnlyRuntimeHelper() {}',
+    '  #endif',
+    '}',
+    '',
+  ]);
+  assert.equal(packagedLines.length, sourceLines.length);
+  // The declarations that survive are the line they were written on, not an earlier one.
+  for (const name of ['runtimeHelper', 'macOnlyRuntimeHelper']) {
+    assert.equal(
+      packagedLines.findIndex((line) => line.includes(`func ${name}`)),
+      sourceLines.findIndex((line) => line.includes(`func ${name}`)),
+      name,
+    );
+  }
+});
+
 test('package apple runner source skips the explicit unit-test directory', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-unit-tests-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -257,7 +304,7 @@ test('package apple runner source judges shipped test methods after comments are
       ),
       'utf8',
     ),
-    'extension RunnerTests {\n}\n',
+    'extension RunnerTests {\n\n}\n',
   );
 });
 

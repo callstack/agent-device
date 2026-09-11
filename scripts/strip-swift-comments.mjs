@@ -11,6 +11,11 @@
 // compile on a user's machine. Anything the scanner cannot account for therefore throws here, at
 // packaging time, rather than shipping.
 //
+// Removal never moves a line. `dist/apple/runner/**` is the source an `xcodebuild` or runner
+// failure names a file and line in, and those line numbers are only worth reading if they land on
+// the same line of `apple/runner/**`, so a comment-only line is emitted empty instead of deleted.
+// The blank lines cost ~1 byte each against a ~72 kB saving.
+//
 // Bare `/…/` regex literals are the one construct no scanner can resolve: the same `/` opens a
 // comment, divides, and starts a regex literal, and which it is depends on the parse. Where one
 // could start, packaging fails instead of rewriting bytes the scanner cannot prove are code.
@@ -72,8 +77,10 @@ const FRAME_DESCRIPTIONS = {
 };
 
 /**
- * `source` with its comments removed. A line whose only content was a comment disappears;
- * pre-existing blank lines, and every byte inside a literal, survive untouched.
+ * `source` with its comments removed and its line numbering intact. A line whose only content
+ * was a comment is emitted empty rather than dropped, and a comment taken off the end of a code
+ * line takes no newline with it, so output line N is input line N for every N. Pre-existing blank
+ * lines, and every byte inside a literal, survive untouched.
  *
  * @param {string} source Swift source text.
  * @param {string} filePath Reported in errors, so an unreadable construct names its file.
@@ -391,20 +398,24 @@ function consumeBlockCommentCharacter(state) {
   return 0;
 }
 
-/**
- * Commits the line whose newline was just consumed. A line inside a literal is committed
- * verbatim: its trailing spaces and its emptiness are string content, not layout.
- */
+/** Commits the line whose newline was just consumed, blank line and all. */
 function endLine(state) {
   state.sourceLine += 1;
-  if (currentLiteral(state) !== undefined || !state.lineHasComment) {
-    state.lines.push(`${state.line}\n`);
-  } else if (state.line.trim() !== '') {
-    state.lines.push(`${state.line.trimEnd()}\n`);
-  }
+  state.lines.push(`${commitLine(state)}\n`);
   state.line = '';
   state.codeTail = (state.codeTail + '\n').slice(-CODE_TAIL_LENGTH);
   state.lineHasComment = false;
+}
+
+/**
+ * The text one output line carries. A line inside a literal is committed verbatim: its trailing
+ * spaces and its emptiness are string content, not layout. A line a comment came off loses the
+ * whitespace the comment left behind — and nothing else, so a line that was only a comment
+ * commits as empty rather than disappearing.
+ */
+function commitLine(state) {
+  if (currentLiteral(state) !== undefined || !state.lineHasComment) return state.line;
+  return state.line.trimEnd();
 }
 
 /** The trailing line of a source that does not end in a newline, plus the balance check. */
@@ -416,10 +427,5 @@ function finishFile(state) {
         `(started at line ${unterminated.startLine ?? state.sourceLine})`,
     );
   }
-  if (state.line === '') return;
-  if (state.lineHasComment) {
-    if (state.line.trim() !== '') state.lines.push(state.line.trimEnd());
-    return;
-  }
-  state.lines.push(state.line);
+  state.lines.push(commitLine(state));
 }
