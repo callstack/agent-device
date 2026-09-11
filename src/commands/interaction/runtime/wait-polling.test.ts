@@ -145,7 +145,12 @@ test('a retriable producer refusal is ridden out and named in the poll timeline'
   ]);
 });
 
-test('a wait spent entirely on retriable refusals fails with the refusal, not a generic timeout', async () => {
+/**
+ * The exhaustion case must stay distinguishable from a single immediate refusal — that difference
+ * is the whole point of riding the refusal out — so the wait's own timeline has to survive onto the
+ * error alongside the producer's code, message and retry details.
+ */
+test('a wait spent entirely on retriable refusals keeps both the refusal and its poll timeline', async () => {
   let currentMs = 0;
   const runtime = {
     clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
@@ -153,6 +158,7 @@ test('a wait spent entirely on retriable refusals fails with the refusal, not a 
   const busy = new AppError('COMMAND_FAILED', 'runner is still finishing a previous command', {
     runnerErrorCode: 'RUNNER_BUSY',
     retriable: true,
+    hint: 'Wait a few seconds and retry.',
   });
   const polling = createWaitPolling(runtime, {}, 10_000, SELECTOR_PIPELINE_POLICIES.wait);
 
@@ -165,7 +171,104 @@ test('a wait spent entirely on retriable refusals fails with the refusal, not a 
 
   assert.throws(
     () => waitTimeoutError('wait timed out for text: Jump to form', polling, undefined),
-    busy,
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.cause, busy);
+      const details = error.details ?? {};
+      assert.deepEqual(
+        {
+          code: error.code,
+          message: error.message,
+          runnerErrorCode: details.runnerErrorCode,
+          retriable: details.retriable,
+          hint: details.hint,
+          reason: details.reason,
+          captures: details.captures,
+          readableCaptures: details.readableCaptures,
+          waitedMs: details.waitedMs,
+          timeoutMs: details.timeoutMs,
+          polls: details.polls,
+        },
+        {
+          code: busy.code,
+          message: busy.message,
+          runnerErrorCode: 'RUNNER_BUSY',
+          retriable: true,
+          hint: 'Wait a few seconds and retry.',
+          reason: 'wait_capture_stalled',
+          captures: 3,
+          readableCaptures: 0,
+          waitedMs: 300,
+          timeoutMs: 10_000,
+          polls: [
+            { startedMs: 0, durationMs: 100, outcome: 'retriable' },
+            { startedMs: 100, durationMs: 100, outcome: 'retriable' },
+            { startedMs: 200, durationMs: 100, outcome: 'retriable' },
+          ],
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test('a content verdict that never became readable is preserved exactly as its producer wrote it', async () => {
+  let currentMs = 0;
+  const runtime = {
+    clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+  } as AgentDeviceRuntime;
+  const unreadable = new AppError('COMMAND_FAILED', 'capture was unreadable', {
+    observation: 'unreadable',
+  });
+  const polling = createWaitPolling(runtime, {}, 10_000, SELECTOR_PIPELINE_POLICIES.wait, {
+    isUnreadableError: (error) => error === unreadable,
+  });
+
+  await polling.capture(async () => {
+    currentMs += 100;
+    throw unreadable;
+  });
+
+  assert.throws(
+    () => waitTimeoutError('wait timed out', polling, undefined),
+    (error: unknown) => error === unreadable,
+  );
+});
+
+test('a deadline-cancelled poll after only refusals still reports the refusal with its timeline', async () => {
+  let currentMs = 0;
+  const runtime = {
+    clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+  } as AgentDeviceRuntime;
+  const busy = new AppError('COMMAND_FAILED', 'runner is still finishing a previous command', {
+    runnerErrorCode: 'RUNNER_BUSY',
+    retriable: true,
+  });
+  const polling = createWaitPolling(runtime, {}, 60, SELECTOR_PIPELINE_POLICIES.wait);
+
+  await polling.capture(async () => {
+    currentMs += 20;
+    throw busy;
+  });
+  // The last poll outlives the remaining real-time budget, so the deadline cancels it and the wait
+  // ends on `capture-stalled` rather than on an exhausted poll loop.
+  const last = await polling.capture(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    currentMs += 40;
+    return 'late';
+  });
+  assert.equal(last.timedOut, true);
+
+  assert.throws(
+    () => waitTimeoutError('wait timed out', polling, last.timedOut ? last.deadline : undefined),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+      assert.equal(error.details?.retriable, true);
+      assert.equal(error.details?.readableCaptures, 0);
+      assert.equal(error.details?.captures, 2);
+      return true;
+    },
   );
 });
 

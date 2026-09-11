@@ -19,7 +19,10 @@
   caller to retry. A poll refused with a failure its producer marked retriable is now ridden out
   like an unreadable capture: the wait keeps polling to its deadline, records the poll as
   `retriable` in its timeout evidence, and surfaces the refusal only if no readable capture ever
-  completed. A wedged runner (`RUNNER_WEDGED`) is not retriable and still ends the wait at once.
+  completed. That surfaced refusal keeps the producer's code, message and retry details and now
+  also carries the wait's own `captures`, `readableCaptures`, `waitedMs` and `polls`, so a budget
+  spent entirely on refusals is distinguishable from one immediate refusal. A wedged runner
+  (`RUNNER_WEDGED`) is not retriable and still ends the wait at once.
 - Fixed: a runner failure recovered from the lifecycle journal after its transport response was
   lost is now classified exactly like the same failure on a live response. `RUNNER_BUSY` reached
   callers as a bare `RUNNER_BUSY` wire code without the `retriable` flag on that path, while the
