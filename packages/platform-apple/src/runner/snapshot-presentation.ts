@@ -36,15 +36,14 @@ export type AppleRunnerSnapshotResult = Readonly<{
 export function readAppleSnapshotResult(
   result: Record<string, unknown>,
 ): AppleRunnerSnapshotResult {
+  const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
   return {
     nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
     qualityPayload: readQualityPayload(result.qualityPayload),
     runnerFatal: result.runnerFatal === true,
-    ...(readSystemSurfaceProvenance(result.systemSurface)
-      ? { systemSurface: readSystemSurfaceProvenance(result.systemSurface) }
-      : {}),
+    ...(systemSurface ? { systemSurface } : {}),
     message:
       typeof result.message === 'string' && result.message.trim().length > 0
         ? result.message

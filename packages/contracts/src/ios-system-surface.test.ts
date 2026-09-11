@@ -4,8 +4,8 @@ import { expect, test } from 'vitest';
 import {
   IOS_SYSTEM_SURFACE_DISCLOSURE,
   IOS_SYSTEM_SURFACE_HOSTS,
-  iosSystemSurfaceDisclosure,
   iosSystemSurfaceOpenRefusal,
+  iosSystemSurfaceTransitionDisclosure,
   isIosSystemSurfaceHost,
 } from './ios-system-surface.ts';
 
@@ -58,9 +58,11 @@ test('the open refusal names the bundle and does not claim to open it', () => {
   expect(refusal.toLowerCase()).not.toContain('opened it');
 });
 
-test('the disclosure is present only when provenance is present', () => {
-  expect(iosSystemSurfaceDisclosure(undefined)).toBeUndefined();
-  expect(
-    iosSystemSurfaceDisclosure({ bundleId: 'com.apple.SafariViewService', kind: 'web-auth' }),
-  ).toBe(IOS_SYSTEM_SURFACE_DISCLOSURE);
+test('the transition disclosure says the sheet is gone only when it left', () => {
+  expect(iosSystemSurfaceTransitionDisclosure('com.apple.SafariViewService')).toBe(
+    IOS_SYSTEM_SURFACE_DISCLOSURE,
+  );
+  const departed = iosSystemSurfaceTransitionDisclosure(undefined);
+  expect(departed).not.toBe(IOS_SYSTEM_SURFACE_DISCLOSURE);
+  expect(departed).toContain('gone now');
 });

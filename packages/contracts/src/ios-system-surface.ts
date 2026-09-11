@@ -74,12 +74,6 @@ export type IosSystemSurfaceProvenance = Readonly<{
 export const IOS_SYSTEM_SURFACE_DISCLOSURE =
   'A system web sign-in sheet is presented over the app, so this snapshot shows that sheet (hosted out of the app process). Its controls are real and interactive; complete or dismiss the sheet to return to app content.';
 
-export function iosSystemSurfaceDisclosure(
-  provenance: IosSystemSurfaceProvenance | undefined,
-): string | undefined {
-  return provenance ? IOS_SYSTEM_SURFACE_DISCLOSURE : undefined;
-}
-
 /**
  * The agent-facing sentence for a surface TRANSITION between two captures — the post-action
  * observation's case, where the pre-action baseline and the capture taken after the action describe

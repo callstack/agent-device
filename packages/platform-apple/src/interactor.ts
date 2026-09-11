@@ -35,7 +35,7 @@ import {
   readAppleSnapshotResult,
 } from './runner/snapshot-presentation.ts';
 import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
-import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
+import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -266,8 +266,7 @@ async function captureAppleRunnerSnapshot(
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];
   if (!result.quality && result.message) warnings.push(result.message);
-  const surfaceDisclosure = iosSystemSurfaceDisclosure(result.systemSurface);
-  if (surfaceDisclosure) warnings.push(surfaceDisclosure);
+  if (result.systemSurface) warnings.push(IOS_SYSTEM_SURFACE_DISCLOSURE);
   return warnings;
 }
 
