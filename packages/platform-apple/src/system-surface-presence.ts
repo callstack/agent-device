@@ -1,5 +1,8 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import {
+  IOS_SYSTEM_SURFACE_HOSTS,
+  type IosSystemSurfaceHost,
+} from '@agent-device/contracts/ios-system-surface';
 import { runAppleToolCommand } from './core/tool-provider.ts';
 
 /**
@@ -12,8 +15,15 @@ import { runAppleToolCommand } from './core/tool-provider.ts';
  * occluded tree. Callers route anything that is not `absent` to the XCTest runner, which
  * authoritatively serves the surface only while it is genuinely foreground and otherwise serves the
  * app, so the cost of a false positive is one runner capture instead of a bridge capture.
+ *
+ * A positive answer names the host it matched, because the capture it routes describes that host's
+ * surface rather than the app: the caller stamps the host into the capture's comparison lineage, so
+ * a surface capture cannot compare equal to an app capture.
  */
-export type SystemSurfacePresence = 'present' | 'absent' | 'unknown';
+export type SystemSurfacePresence =
+  | Readonly<{ kind: 'present'; host: IosSystemSurfaceHost }>
+  | 'absent'
+  | 'unknown';
 
 export type SystemSurfacePresenceProbe = (
   device: DeviceInfo,
@@ -31,14 +41,18 @@ const PROBE_TIMEOUT_MS = 3_000;
 export function createSystemSurfacePresenceProbe(
   now: () => number = Date.now,
 ): SystemSurfacePresenceProbe {
-  const observedPresentAt = new Map<string, number>();
+  const observedPresent = new Map<string, { at: number; host: IosSystemSurfaceHost }>();
   return async (device, signal) => {
     if (device.kind !== 'simulator') return 'absent';
-    const seenAt = observedPresentAt.get(device.id);
-    if (seenAt !== undefined && now() - seenAt < PRESENT_MEMO_TTL_MS) return 'present';
-    observedPresentAt.delete(device.id);
+    const seen = observedPresent.get(device.id);
+    if (seen !== undefined && now() - seen.at < PRESENT_MEMO_TTL_MS) {
+      return { kind: 'present', host: seen.host };
+    }
+    observedPresent.delete(device.id);
     const presence = await probeSystemSurfacePresence(device, signal);
-    if (presence === 'present') observedPresentAt.set(device.id, now());
+    if (presence !== 'absent' && presence !== 'unknown') {
+      observedPresent.set(device.id, { at: now(), host: presence.host });
+    }
     return presence;
   };
 }
@@ -57,7 +71,7 @@ async function probeSystemSurfacePresence(
     for (const pid of pids) {
       const scoped = await isProcessScopedToDevice(pid, device.id, signal);
       if (scoped === 'unknown') sawUnknown = true;
-      else if (scoped) return 'present';
+      else if (scoped) return { kind: 'present', host };
     }
   }
   return sawUnknown ? 'unknown' : 'absent';

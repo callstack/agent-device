@@ -20,6 +20,10 @@ import {
   pickupSnapshot,
   pickupSnapshotWithExtraText,
 } from './post-gesture-stabilization-fixtures.ts';
+import {
+  appCaptureComparisonKey,
+  systemSurfaceCaptureComparisonKey,
+} from './ios-comparison-key-fixture.ts';
 
 // Pure verdict/classifier coverage (decidePostGestureStabilityVerdict) lives
 // in the sibling post-gesture-stabilization-verdict.test.ts, and the
@@ -497,18 +501,20 @@ test('capturePostGestureStabilizedResult re-baselines instead of concluding when
 test('capturePostGestureStabilizedResult re-baselines when an in-place system surface appears (iOS)', async () => {
   // A web sign-in sheet is hosted out of the app's process. Its tree and the app's tree describe
   // different surfaces, so a quiet capture of the sheet says nothing about a gesture taken against
-  // the app. Both captures are XCTest here: without the surface in the comparison token they would
-  // agree on backend alone and produce a verdict from incomparable node sets.
+  // the app. Both captures are XCTest: what keeps them incomparable is that the route lineages a
+  // surface capture to its host, so their comparison keys differ by construction (#2438).
   vi.useFakeTimers();
   const session = makeSession('ios');
   session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
     snapshotQuality: { state: 'healthy', backend: 'tree' },
+    comparisonKey: appCaptureComparisonKey(session.device.id, 'com.example.app'),
   });
   markPostGestureStabilization(session, 'scroll');
 
   const capture = vi.fn(async () =>
     makeSnapshotState(pickupSnapshot(500).nodes, {
       snapshotQuality: { state: 'healthy', backend: 'tree' },
+      comparisonKey: systemSurfaceCaptureComparisonKey(session.device.id),
       iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
     }),
   );
@@ -539,6 +545,7 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
   const session = makeSession('ios');
   session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
     snapshotQuality: { state: 'healthy', backend: 'tree' },
+    comparisonKey: systemSurfaceCaptureComparisonKey(session.device.id),
     iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
   });
   markPostGestureStabilization(session, 'scroll');
@@ -546,6 +553,7 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
   const capture = vi.fn(async () =>
     makeSnapshotState(pickupSnapshot(500).nodes, {
       snapshotQuality: { state: 'healthy', backend: 'tree' },
+      comparisonKey: appCaptureComparisonKey(session.device.id, 'com.example.app'),
     }),
   );
 

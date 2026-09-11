@@ -153,21 +153,6 @@ function hasMatchingPresentation(
   after: SnapshotState,
   command: string,
 ): boolean {
-  // A capture of an in-place system surface (a web sign-in sheet) and a capture of the app describe
-  // different surfaces. Refuse the comparison outright rather than letting legacy presentation
-  // matching corroborate a tap across that boundary (#2438).
-  if (baseline.iosSystemSurfaceBundleId !== after.iosSystemSurfaceBundleId) {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'ios_tap_failure_corroboration_surface_mismatch',
-      data: {
-        command,
-        baselineSurface: baseline.iosSystemSurfaceBundleId ?? 'app',
-        afterSurface: after.iosSystemSurfaceBundleId ?? 'app',
-      },
-    });
-    return false;
-  }
   const identityMatch = compareSnapshotIdentity(baseline, after);
   if (identityMatch !== undefined) {
     if (identityMatch) return true;
@@ -181,6 +166,12 @@ function hasMatchingPresentation(
   return hasMatchingLegacyPresentation(baseline, after, command);
 }
 
+/**
+ * Key equality, where the key is the capture's whole presentation identity — producer, generation,
+ * and the surface the capture described, since an in-place system surface (a web sign-in sheet) is
+ * captured under its own host lineage (#2438). So a cross-surface pair is refused here, without
+ * this module knowing that system surfaces exist.
+ */
 function compareSnapshotIdentity(
   baseline: SnapshotState,
   after: SnapshotState,

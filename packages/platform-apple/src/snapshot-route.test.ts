@@ -8,6 +8,7 @@ vi.mock('./system-surface-presence.ts', () => ({
   createSystemSurfacePresenceProbe: () => async () => 'absent',
 }));
 import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
@@ -35,6 +36,9 @@ const target = {
 
 const input = { options: { appBundleId: 'com.example.app' } } as const;
 
+/** A proven-present surface as the probe reports it: the matched host travels with the verdict. */
+const presentSurface = { kind: 'present', host: IOS_SYSTEM_SURFACE_HOSTS[0]! } as const;
+
 test('eligible simulator capture publishes bridge acquisition without touching XCTest', async () => {
   const acquired = bridgeAcquisition();
   const source = sourceReturning(acquired);
@@ -59,8 +63,8 @@ test('eligible simulator capture publishes bridge acquisition without touching X
   expect(fallback).not.toHaveBeenCalled();
 });
 
-test.for(['present', 'unknown'] as const)(
-  'a %s system surface routes the capture to the runner and never touches the bridge',
+test.for([presentSurface, 'unknown'] as const)(
+  'an unabsent system surface routes the capture to the runner and never touches the bridge',
   async (presence) => {
     const source = sourceReturning(bridgeAcquisition());
     const fallback = vi.fn(async () => runnerResult());
@@ -79,6 +83,35 @@ test.for(['present', 'unknown'] as const)(
     expect(source.acquire).not.toHaveBeenCalled();
   },
 );
+
+// The structural guarantee every comparison site downstream relies on (#2438): a surface capture is
+// lineaged to the HOST, not to the app (`target.targetId` here), so its comparison key cannot equal
+// an app capture's and no comparison site needs its own surface check.
+test('a presented system surface captures under the host lineage, never the app lineage', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => presentSurface,
+  });
+
+  const first = await route.capture(ios, input, signal(), async () => runnerResult());
+  const second = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(first.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    // No `unknown-generation` residue: the surface is not an app generation, and a per-capture
+    // residue id would make two captures of the same sheet incomparable with each other too.
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+  ).toBe(true);
+  // The bridge is healthy here and simply cannot see the surface, so the app's wording would lie.
+  expect(first.warnings).toEqual([
+    'Simulator AX snapshot inapplicable (system-surface-presented); used XCTest to read the system surface presented over the app.',
+  ]);
+});
 
 // Losing the bridge fast path must never be silent: an unprovable probe still owes the caller a
 // warning and an identity that cannot be compared against a bridge publication.

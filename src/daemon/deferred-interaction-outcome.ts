@@ -363,14 +363,14 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   return outcome;
 }
 
+/**
+ * What makes two captures comparable at all. The iOS comparison key already carries the whole
+ * presentation identity, including the surface the capture described — an in-place system surface (a
+ * web sign-in sheet) is captured under its own host lineage (#2438) — so a sheet appearing or
+ * dismissing mid-poll reads as incomparable rather than as a stable surface.
+ */
 function snapshotComparisonKey(snapshot: SnapshotState | undefined): string | undefined {
-  const base = snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
-  const surface = snapshot?.iosSystemSurfaceBundleId;
-  // An app capture and an in-place system-surface capture (a web sign-in sheet) describe different
-  // surfaces. Without the surface in this token two XCTest captures compare equal on backend alone,
-  // so a sheet appearing or dismissing would read as a stable surface (#2438).
-  if (surface === undefined) return base;
-  return `${base ?? 'unknown-backend'}@${surface}`;
+  return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
 }
 
 function isPostGestureStabilizingAction(

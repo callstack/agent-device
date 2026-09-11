@@ -7,6 +7,7 @@ vi.mock('./core/tool-provider.ts', async (importOriginal) => {
 });
 
 import { runAppleToolCommand } from './core/tool-provider.ts';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { createSystemSurfacePresenceProbe } from './system-surface-presence.ts';
 
 const mockRunCmd = vi.mocked(runAppleToolCommand);
@@ -35,6 +36,8 @@ function stubProbes(replies: { pgrep?: ProbeReply | Error; ps?: ProbeReply | Err
 
 const RUNNING = { exitCode: 0, stdout: '900\n' } as const;
 const NOT_RUNNING = { exitCode: 1, stdout: '' } as const;
+/** The verdict a matched host produces: the host travels with it, to become the capture's lineage. */
+const PRESENT = { kind: 'present', host: IOS_SYSTEM_SURFACE_HOSTS[0]! } as const;
 const scopedTo = (udid: string): ProbeReply => ({
   exitCode: 0,
   stdout: `/…/SafariViewService.app/SafariViewService SIMULATOR_UDID=${udid}`,
@@ -44,9 +47,9 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-test('a host process scoped to this device is present', async () => {
+test('a host process scoped to this device is present, and names the host it matched', async () => {
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
-  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('present');
+  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toEqual(PRESENT);
 });
 
 test('the same host running for another device is absent', async () => {
@@ -108,7 +111,7 @@ test('absence is not cached: a sheet opening within the TTL is seen immediately'
 
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   clock += 10; // far inside the memo TTL
-  await expect(probe(sim)).resolves.toBe('present');
+  await expect(probe(sim)).resolves.toEqual(PRESENT);
 });
 
 test('unknown is not cached either', async () => {
@@ -119,7 +122,7 @@ test('unknown is not cached either', async () => {
 
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   clock += 10;
-  await expect(probe(sim)).resolves.toBe('present');
+  await expect(probe(sim)).resolves.toEqual(PRESENT);
 });
 
 test('a positive observation is memoized within the TTL and re-probed after it', async () => {
@@ -128,7 +131,7 @@ test('a positive observation is memoized within the TTL and re-probed after it',
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   await probe(sim);
   const callsAfterFirst = mockRunCmd.mock.calls.length;
-  await expect(probe(sim)).resolves.toBe('present');
+  await expect(probe(sim)).resolves.toEqual(PRESENT);
   expect(mockRunCmd.mock.calls.length).toBe(callsAfterFirst);
 
   clock += 2_000; // past the TTL

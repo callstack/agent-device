@@ -39,6 +39,9 @@ import {
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 
+/** Why this capture left the bridge: a system surface the bridge cannot see was on screen. */
+const SYSTEM_SURFACE_PRESENTED = 'system-surface-presented';
+
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
     capture(
@@ -93,7 +96,6 @@ export function createAppleSnapshotRoute(
       // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
       // capture that would answer confidently from the occluded app tree.
       const surfacePresence = await systemSurfacePresent(device, signal);
-      if (surfacePresence === 'present') return await fallback(input);
       if (surfacePresence === 'unknown') {
         // The probe could not answer. Take the runner rather than a bridge capture that would
         // answer confidently from the occluded app tree — but say so: silently losing the bridge
@@ -105,6 +107,18 @@ export function createAppleSnapshotRoute(
           requestFor(input),
           'system-surface-probe-unavailable',
           [unknownGenerationResidue()],
+        );
+      }
+      if (surfacePresence !== 'absent') {
+        // The capture describes the host's surface, not the app, so it is lineaged to that host: its
+        // comparison identity differs from an app capture's by construction, while two captures of
+        // the same surface share one and stay comparable with each other.
+        return await runFallback(
+          input,
+          fallback,
+          { targetId: `${device.id}:${surfacePresence.host.bundleId}` },
+          requestFor(input),
+          SYSTEM_SURFACE_PRESENTED,
         );
       }
       let target: SimulatorSnapshotTarget;
@@ -277,13 +291,24 @@ async function runFallback(
       { kind: 'fallback-source', producer: 'apple-runner' } as const,
     ]),
   });
-  const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
-  const warning = `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
   return {
     ...result,
     comparisonIdentity,
-    warnings: [...(result.warnings ?? []), warning],
+    warnings: [...(result.warnings ?? []), fallbackWarning(reason, lineage)],
   };
+}
+
+/**
+ * A presented system surface is not a bridge failure: the bridge is healthy and simply cannot see
+ * the surface, so it is inapplicable here rather than unavailable — and the capture belongs to that
+ * surface, not to an app generation. Every other reason keeps the unavailable sentence.
+ */
+function fallbackWarning(reason: string, lineage: IosSnapshotLineage): string {
+  if (reason === SYSTEM_SURFACE_PRESENTED) {
+    return `Simulator AX snapshot inapplicable (${reason}); used XCTest to read the system surface presented over the app.`;
+  }
+  const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
+  return `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
 }
 
 type FallbackIdentity = Readonly<{
