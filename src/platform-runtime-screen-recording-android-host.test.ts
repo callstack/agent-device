@@ -196,12 +196,19 @@ test('retains an interrupted empty-stderr manifest probe as unavailable', async 
   }
 });
 
-test('proves termination for a reassigned pid and an exited task, and never for an unreadable one', async () => {
+test('proves termination from each ownership-lost producer without signalling', async () => {
   const commands: string[] = [];
-  let identity: { stat: string; cmdline: string } = {
-    stat: procStat(4004, '5432'),
+  const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
+  const reassignedPid = {
+    stat: procStat(4004, '3766'),
     cmdline: ['/system/bin/servicemanager', ''].join('\0'),
   };
+  const otherArtifact = {
+    stat: procStat(4004, '3766'),
+    cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', '/other.mp4', ''].join('\0'),
+  };
+  const exitedTask = { stat: procStat(4004, '3766'), cmdline: '' };
+  let identity = reassignedPid;
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
@@ -215,16 +222,11 @@ test('proves termination for a reassigned pid and an exited task, and never for 
     { serial: android.id },
     async () => {
       const transport = await createAndroidScreenRecordingTransport(android);
-      const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
-      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
-      identity = {
-        stat: procStat(4004, '3766'),
-        cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', '/other.mp4', ''].join('\0'),
-      };
-      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
-      identity = { stat: procStat(4004, '3766'), cmdline: '' };
-      await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
-      identity = { stat: procStat(4004, '3766'), cmdline: '' };
+      for (const replacement of [reassignedPid, otherArtifact, exitedTask]) {
+        identity = replacement;
+        await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
+      }
+      identity = exitedTask;
       await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
       expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
     },

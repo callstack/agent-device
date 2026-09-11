@@ -72,6 +72,29 @@ test('reattaches an ended pid with an artifact as finishable recovery and report
     });
 });
 
+test('discloses truncation when recovery proved the recorder gone before record stop', async () => {
+  let manifest = '';
+  const observations = ['ownership-lost', 'missing'] as const;
+  let observation = 0;
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    inspect: async () => observations[Math.min(observation++, observations.length - 1)],
+    stop: async () => 'uncertain' as const,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const reattached = await runtime.screenRecordingReattach({ envelope: started.envelope });
+  expect(reattached.status).toBe('active');
+  if (reattached.status === 'active')
+    await expect(reattached.handle.finish()).resolves.toMatchObject({
+      status: 'completed',
+      result: { warning: expect.stringContaining('likely after reaching the 180s platform limit') },
+    });
+});
+
 test('returns fenced native completion after a crash between native finalization and daemon terminalization', async () => {
   let manifest = '';
   const removals: string[] = [];

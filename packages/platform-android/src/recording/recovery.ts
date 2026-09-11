@@ -176,7 +176,7 @@ async function reattachEvidence(params: {
         evidence,
         manifestPath: descriptor.manifestPath,
         recording: current,
-        reachedLimit: running === 'missing',
+        reachedLimit: provesAndroidScreenRecordTermination(running),
       });
       nativeCleanupConfirmed = true;
       return outcome;
