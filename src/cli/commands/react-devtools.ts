@@ -8,7 +8,7 @@ import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 
-const AGENT_REACT_DEVTOOLS_VERSION = '0.4.0';
+const AGENT_REACT_DEVTOOLS_VERSION = '0.5.0';
 export const AGENT_REACT_DEVTOOLS_PACKAGE = `agent-react-devtools@${AGENT_REACT_DEVTOOLS_VERSION}`;
 const AGENT_REACT_DEVTOOLS_BIN = 'agent-react-devtools';
 
