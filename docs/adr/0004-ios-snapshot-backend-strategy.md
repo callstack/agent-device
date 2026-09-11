@@ -310,6 +310,12 @@ resolves back to the app. On the Simulator a cheap, device-scoped host-side prob
 host process running for the device) routes the capture to the runner instead of the bridge; when no
 host is running the bridge fast path is untouched.
 
+A presented surface also outranks an explicitly requested bundle id: the runner checks for a
+presented host before it resolves or activates `command.appBundleId`, so a command that names a
+*different* app is still served the sheet. That is deliberate — the sheet occludes the screen, so
+the named app has nothing readable under it, and the capture discloses which surface it describes —
+and it costs nothing once the sheet is gone, because the session binding never moved.
+
 Presence is `XCUIApplication.state == .runningForeground`, not tree content. The live spike showed a
 torn-down host still serving a *richer* tree than a live one, so content heuristics cannot separate
 live from dead; foreground state can. Crucially, the only way a host is foreground with a stale tree
