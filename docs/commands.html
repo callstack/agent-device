@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.693049ec95.js"></script>
+<script defer src="/agent-device/static/js/index.bba4831bdb.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -851,6 +851,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li>In <code>--json</code> mode, each overlay ref also includes a screenshot-space <code>center</code> point for coordinate fallback like <code>press &lt;x&gt; &lt;y&gt;</code>.</li>
 <li>Burned-in touch overlays are exported only on macOS hosts, because the overlay pipeline depends on Swift + AVFoundation helpers.</li>
 <li>On Linux or other non-macOS hosts, <code>record stop</code> still succeeds and returns the raw video plus telemetry sidecar, and includes <code>overlayWarning</code> when burn-in overlays were skipped.</li>
+<li>On iOS simulators, a busy CoreSimulator host recording slot makes <code>record start</code> return non-retriable <code>DEVICE_IN_USE</code> with <code>details.reason: apple_simulator_recording_busy</code>. Use <code>record stop</code> in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.</li>
 <li>Android uses <code>adb shell screenrecord</code>, which has a 180s platform limit. <code>record start</code> publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, <code>record stop</code> recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.</li>
 </ul>
 <p><strong>Session app logs (token-efficient debugging):</strong> Logging is off by default in normal flows. Enable it on demand for debugging. Logs are written to a file so agents can grep instead of loading full output into context.</p>
