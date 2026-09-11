@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.65edd217fa.js"></script>
+<script defer src="/agent-device/static/js/index.76b095fdc8.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -105,6 +105,7 @@ attempts own cleanup, and it is rejected for Maestro YAML because that runtime o
 <li>Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.</li>
 <li>The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use <code>--verbose</code> to include step traces in completed-test progress output.</li>
 <li><code>--reporter</code> is repeatable. Built-ins are <code>default</code> for the console summary and <code>junit:&lt;path&gt;</code> for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include <code>--reporter default</code> when you also want terminal output. <code>--report-junit &lt;path&gt;</code> remains a compatibility alias for <code>--reporter junit:&lt;path&gt;</code>.</li>
+<li>JUnit reports preserve legal Unicode and whitespace, and replace characters forbidden by XML 1.0 (such as terminal ESC or NUL) with <code>U+FFFD</code> (<code>�</code>) so CI parsers can read the report. JSON and other reporters retain the original suite values.</li>
 <li>When <code>--fail-fast</code> and retries are both set, the current test still consumes its retries before the suite stops.</li>
 </ul>
 <h3 class="rp-toc-include" id="custom-test-reporters"><a href="#custom-test-reporters" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Custom test reporters</h3>

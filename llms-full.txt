@@ -3927,6 +3927,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 - Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.
 - The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use `--verbose` to include step traces in completed-test progress output.
 - `--reporter` is repeatable. Built-ins are `default` for the console summary and `junit:<path>` for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include `--reporter default` when you also want terminal output. `--report-junit <path>` remains a compatibility alias for `--reporter junit:<path>`.
+- JUnit reports preserve legal Unicode and whitespace, and replace characters forbidden by XML 1.0 (such as terminal ESC or NUL) with `U+FFFD` (`�`) so CI parsers can read the report. JSON and other reporters retain the original suite values.
 - When `--fail-fast` and retries are both set, the current test still consumes its retries before the suite stops.
 
 ### Custom test reporters
