@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed: Android `record start` no longer refuses to begin after a reused emulator reassigned the
+  previous recorder's pid. A completed recording's native marker is retired only once its recorder is
+  proven gone, but only an absent pid counted as proof — a pid that now names an unrelated process,
+  or a recorder that exited and waits to be reaped, did not. `record start` then failed every later
+  attempt with `Android screenrecord completed evidence cannot be safely retired`, and `record stop`
+  could not return an already-finalized recording. Proven termination now retires the marker and
+  returns the stored completion; a live or unreadable recorder still blocks, and the unrelated
+  process is never signalled. A reused pid that runs a replacement `screenrecord` on the same
+  remote path proves the old recorder gone but not that the path is free, so that marker and
+  artifact are retained until the replacement ends, and neither is signalled (#2476).
 - Fixed: a polling `wait` no longer surrenders its whole budget the first time the iOS runner
   answers `RUNNER_BUSY`. That code means an earlier command exceeded the runner's execution
   watchdog and its abandoned main-thread work is still draining, which clears on its own, so a

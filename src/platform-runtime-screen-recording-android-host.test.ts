@@ -196,6 +196,72 @@ test('retains an interrupted empty-stderr manifest probe as unavailable', async 
   }
 });
 
+test('proves termination from each ownership-lost producer without signalling', async () => {
+  const commands: string[] = [];
+  const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
+  const reassignedPid = {
+    stat: procStat(4004, '3766'),
+    cmdline: ['/system/bin/servicemanager', ''].join('\0'),
+  };
+  const otherArtifact = {
+    stat: procStat(4004, '3766'),
+    cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', '/other.mp4', ''].join('\0'),
+  };
+  const exitedTask = { stat: procStat(4004, '3766'), cmdline: '' };
+  let identity = reassignedPid;
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args[1] ?? '';
+        commands.push(command);
+        if (command.endsWith('/stat')) return result(identity.stat);
+        if (command.endsWith('/cmdline')) return result(identity.cmdline);
+        return result('');
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      for (const replacement of [reassignedPid, otherArtifact, exitedTask]) {
+        identity = replacement;
+        await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
+      }
+      identity = exitedTask;
+      await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
+      expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
+    },
+  );
+});
+
+test('classifies a replacement recorder on the same path as a foreign writer and never signals it', async () => {
+  const commands: string[] = [];
+  const recorded = { pid: '4004', remotePath: '/sdcard/capture.mp4', startTime: '3766' };
+  const replacementRecorder = {
+    stat: procStat(4004, '9911'),
+    cmdline: ['/system/bin/screenrecord', '--bit-rate', '8000000', recorded.remotePath, ''].join(
+      '\0',
+    ),
+  };
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args[1] ?? '';
+        commands.push(command);
+        if (command.endsWith('/stat')) return result(replacementRecorder.stat);
+        if (command.endsWith('/cmdline')) return result(replacementRecorder.cmdline);
+        return result('');
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      await expect(transport.inspect(recorded)).resolves.toBe('foreign-writer');
+      await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
+      expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
+    },
+  );
+});
+
 function procStat(pid: number, startTime: string): string {
   return `${pid} (screenrecord) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${startTime}`;
 }
