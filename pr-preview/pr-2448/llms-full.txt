@@ -2286,7 +2286,7 @@ agent-device react-devtools profile timeline --limit 20
 agent-device react-devtools profile report @c5
 ```
 
-- `react-devtools` dynamically runs pinned `agent-react-devtools@0.4.0` through npm and passes arguments through 1:1.
+- `react-devtools` dynamically runs pinned `agent-react-devtools@0.5.0` through npm and passes arguments through 1:1.
 - The first run may download the pinned package from npm; later runs can reuse the npm cache.
 - `agent-device` global flags work before or after `react-devtools`. Use `--` before downstream flags only when they intentionally share an `agent-device` global flag name.
 - Use it when a React Native workflow needs component hierarchy, props, state, hooks, render causes, slow components, or re-render counts.
