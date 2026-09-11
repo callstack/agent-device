@@ -16,11 +16,13 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { ScrollDirectionInput } from '@agent-device/contracts/scroll-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
   runScrollEdgePasses,
+  scrollSurfaceFingerprint,
   type ScrollEdge,
   type ScrollEdgeState,
 } from '@agent-device/capture-kit/scroll-edge-state';
@@ -192,10 +194,32 @@ async function executeEdgeScroll(
   options: ResolvedScrollExecutionOptions,
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
+  // The loop discovers its scope from the first capture; the rest-wait has to watch the same
+  // scoped container the loop decides on, so it reads the scope this closure records.
+  let scope: string | undefined;
   const edgeResult = await runScrollEdgePasses({
     edge,
-    captureState: async (scope) => await captureEdgeState(runtime, edge, scope, context),
+    captureState: async (stateScope) => {
+      const state = await captureEdgeState(runtime, edge, stateScope, context);
+      scope = state.scope ?? scope;
+      return state;
+    },
     scroll: async () => await scrollOnce(runtime, target, options, context),
+    settleAfterPass: async () => {
+      await pollForScrollRest(
+        async () =>
+          (
+            await runtime.operations.captureSnapshot({
+              options: {
+                ...(context.appBundleId === undefined ? {} : { appBundleId: context.appBundleId }),
+                scope,
+              },
+              execution: runtimeExecutionFromContext(context),
+            })
+          ).nodes ?? [],
+        edge,
+      );
+    },
   });
   return scrollResult(target, options, edgeResult.passes, edgeResult.result ?? {});
 }
@@ -263,6 +287,32 @@ async function scrollOnce(
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown> | void> {
   return await runtime.operations.scrollDirection(scrollInput(target.direction, options, context));
+}
+
+const SCROLL_REST_TIMEOUT_MS = 1200;
+const SCROLL_REST_POLL_MS = 120;
+
+/**
+ * Wait for the last fling to come to rest before the loop decides or flings again. A rubber-band
+ * bounce keeps shifting the surface for a beat after a fling; deciding or re-scrolling mid-bounce
+ * reads a phantom new state and stacks another fling on top, which is how one stuck scroll becomes a
+ * runaway bounce. Two consecutive captures with the same surface fingerprint means the content is at
+ * rest. Bounded, so a never-settling animation cannot hang a pass.
+ */
+async function pollForScrollRest(
+  captureNodes: () => Promise<readonly (RawSnapshotNode | SnapshotNode)[]>,
+  edge: ScrollEdge,
+  timeoutMs = SCROLL_REST_TIMEOUT_MS,
+  pollMs = SCROLL_REST_POLL_MS,
+): Promise<void> {
+  let previous: string | undefined;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const fingerprint = await scrollSurfaceFingerprint(await captureNodes(), edge);
+    if (fingerprint === previous) return;
+    previous = fingerprint;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
 }
 
 /** The one response shape both executors report. Owner fields win, as the retired leaf had them. */

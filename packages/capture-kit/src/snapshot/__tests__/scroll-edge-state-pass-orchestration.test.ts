@@ -284,6 +284,8 @@ test('runScrollEdgePasses: throws a COMMAND_FAILED AppError once the pass limit 
   await assert.rejects(
     runScrollEdgePasses({
       edge: 'bottom',
+      // No fingerprint on these manual captures, so no-progress detection is inert and only the
+      // 40-pass backstop can end the loop. The real capture path always sets a fingerprint.
       captureState: async () => ({
         canScroll: true,
         emptySnapshot: false,
@@ -300,13 +302,60 @@ test('runScrollEdgePasses: throws a COMMAND_FAILED AppError once the pass limit 
         error.message,
         'scroll bottom reached the safety limit before the snapshot showed the edge',
       );
-      assert.deepEqual(error.details, {
-        hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
-      });
+      assert.equal(error.details?.reason, 'scroll_edge_pass_limit');
+      assert.equal(error.details?.passes, 40);
+      assert.match(String(error.details?.hint), /--until <selector>/);
       return true;
     },
   );
   assert.equal(scrollCalls, 40);
+});
+
+test('runScrollEdgePasses: stops as no-progress after a couple of passes when the fingerprint never moves', async () => {
+  let scrollCalls = 0;
+  await assert.rejects(
+    runScrollEdgePasses({
+      edge: 'bottom',
+      // canScroll stays true but the surface fingerprint is byte-identical every capture — the
+      // stuck-container signature (the gesture is not reaching this scroll view).
+      captureState: async () => ({
+        canScroll: true,
+        emptySnapshot: false,
+        fingerprint: 'stuck-surface',
+      }),
+      scroll: async () => {
+        scrollCalls += 1;
+        return undefined;
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'scroll_edge_no_progress');
+      assert.equal(error.details?.edge, 'bottom');
+      assert.match(String(error.details?.hint), /not reaching this container/);
+      return true;
+    },
+  );
+  // The whole point: a stuck container stops within a few flings, not 40.
+  assert.equal(scrollCalls, 3);
+});
+
+test('runScrollEdgePasses: a moving fingerprint never trips no-progress and scrolls to the edge', async () => {
+  let scrollCalls = 0;
+  const result = await runScrollEdgePasses({
+    edge: 'bottom',
+    captureState: async () => ({
+      canScroll: scrollCalls < 5,
+      emptySnapshot: false,
+      fingerprint: `surface-${scrollCalls}`,
+    }),
+    scroll: async () => {
+      scrollCalls += 1;
+      return undefined;
+    },
+  });
+  assert.equal(result.passes, 5);
 });
 
 test('unique container scope is retained across edge pass captures', async () => {

@@ -193,11 +193,6 @@ test('bound scroll bottom does not scroll when no hidden content is below', asyn
 test('bound scroll bottom scrolls only while a scoped capture confirms hidden content', async () => {
   const calls: ScrollCall[] = [];
   const snapshotScopes: unknown[] = [];
-  const snapshots = [
-    makeScrollSnapshot({ hiddenBelow: true, message: 'Middle message' }),
-    makeScrollSnapshot({ hiddenBelow: true, message: 'Middle message' }),
-    makeScrollSnapshot({ hiddenBelow: false, message: 'Latest message' }),
-  ];
   const result = await runScroll(
     ['bottom'],
     {},
@@ -208,7 +203,12 @@ test('bound scroll bottom scrolls only while a scoped capture confirms hidden co
       },
       captureSnapshot: async (input) => {
         snapshotScopes.push(input.options?.scope);
-        return snapshots[Math.min(snapshotScopes.length - 1, snapshots.length - 1)];
+        // Driven by scroll count, not capture count, so the rest-wait's own captures cannot move the
+        // goalposts: content is hidden until the one pass has run, then the edge is reached.
+        return makeScrollSnapshot({
+          hiddenBelow: calls.length === 0,
+          message: calls.length === 0 ? 'Middle message' : 'Latest message',
+        });
       },
     },
   );
@@ -225,32 +225,35 @@ test('bound scroll bottom scrolls only while a scoped capture confirms hidden co
   });
   assert.equal(result.passes, 1);
   assert.equal(result.lastPass, 1);
-  assert.deepEqual(snapshotScopes, [undefined, 'Messages', 'Messages']);
+  // The loop verifies against the scoped container it discovered, not the unscoped tree.
+  assert.ok(snapshotScopes.includes('Messages'));
 });
 
-test('bound scroll bottom tolerates unchanged signatures while hidden content advances', async () => {
+test('bound scroll bottom stops when the surface never shifts under hidden content', async () => {
   const calls: ScrollCall[] = [];
-  const snapshots = [
-    makeScrollSnapshot({ hiddenBelow: true, message: 'Repeated row' }),
-    makeScrollSnapshot({ hiddenBelow: true, message: 'Repeated row' }),
-    makeScrollSnapshot({ hiddenBelow: true, message: 'Repeated row' }),
-    makeScrollSnapshot({ hiddenBelow: false, message: 'Repeated row' }),
-  ];
-  let snapshotIndex = 0;
-  const result = await runScroll(
-    ['bottom'],
-    {},
-    {
-      scroll: async (direction, options) => {
-        calls.push({ direction, options });
-        return { lastPass: calls.length };
-      },
-      captureSnapshot: async () => snapshots[Math.min(snapshotIndex++, snapshots.length - 1)],
-    },
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['bottom'],
+        {},
+        {
+          scroll: async (direction, options) => {
+            calls.push({ direction, options });
+            return { lastPass: calls.length };
+          },
+          // Hidden content below forever, row fixed: the surface signature is byte-identical across
+          // passes. A gesture that reports hidden content but moves nothing is the stuck-container
+          // signature, and the loop must stop on it rather than fling to the 40-pass backstop.
+          captureSnapshot: async () =>
+            makeScrollSnapshot({ hiddenBelow: true, message: 'Repeated row' }),
+        },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.reason === 'scroll_edge_no_progress',
   );
-
-  assert.equal(calls.length, 2);
-  assert.equal(result.passes, 2);
+  assert.equal(calls.length, 3);
 });
 
 test('bound scroll bottom keeps scoped capture failures scoped', async () => {

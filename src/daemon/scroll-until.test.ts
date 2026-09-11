@@ -90,6 +90,32 @@ test('a present but scrolled-out target does not end the loop', async () => {
   );
 });
 
+/**
+ * The stuck-container defect: content below the fold, so the edge analyzer says "keep going", but the
+ * gesture never moves this scroller, so every capture is identical. Without a progress check this
+ * flings the whole 12-pass budget; with it, the loop gives up after two and says why.
+ */
+test('a vertical scroll that moves nothing gives up early instead of spending the full budget', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      run({
+        // Same tree every pass: the Email row is below the fold (hidden content below → keeps
+        // scrolling), never becomes visible, and nothing on screen shifts between captures.
+        captures: [capture({ nodes: tree(2400) })],
+        onScroll: () => (scrolls += 1),
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_no_progress');
+      assert.equal(error.details?.passes, 3);
+      assert.match(String(error.details?.hint), /not reaching this container/);
+      return true;
+    },
+  );
+  assert.equal(scrolls, 3);
+});
+
 test('running out of content stops before the pass budget does', async () => {
   let scrolls = 0;
   await assert.rejects(

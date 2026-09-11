@@ -9,6 +9,9 @@ import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeli
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   canScrollFurtherAtEdge,
+  pushScrollSurfaceSignature,
+  scrollSurfaceFingerprint,
+  scrollSurfaceIsStuck,
   type ScrollEdge,
 } from '@agent-device/capture-kit/scroll-edge-state';
 
@@ -28,6 +31,12 @@ import {
  * better reached by `scroll bottom` or a search field.
  */
 export const SCROLL_UNTIL_PASS_LIMIT = 12;
+
+/**
+ * Cap for the vertical stuck-signature window fed to `scrollSurfaceIsStuck`. Matches the capture-kit
+ * edge loop so both loops notice a stuck container after the same handful of non-advancing passes.
+ */
+const SCROLL_UNTIL_STUCK_WINDOW = 6;
 
 /** Why a capture cannot answer the `--until` question at all. Never an outcome about the content. */
 type ScrollUntilCaptureRefusal = { reason: 'no-capture' | 'sparse-tree'; detail: string };
@@ -57,24 +66,71 @@ export async function runScrollUntilVisible<TResult>(params: {
   const edge = verticalEdgeFor(direction);
   let passes = 0;
   let result: TResult | undefined;
+  const recentSignatures: string[] = [];
 
   while (true) {
-    const captured = await capture();
-    const refusal = captureRefusal(captured);
-    if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
-    const nodes = (captured.nodes ?? []) as SnapshotNode[];
-    if (await isSelectorVisible(nodes, selector, platform)) {
+    const decision = await decideUntilPass({
+      captured: await capture(),
+      selector,
+      direction,
+      platform,
+      edge,
+      passes,
+      passLimit,
+      recentSignatures,
+    });
+    if (decision.visible) {
       return { passes, ...(result === undefined ? {} : { result }) };
-    }
-    if (edge && !(await canScrollFurtherAtEdge(nodes, edge))) {
-      throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
-    }
-    if (passes >= passLimit) {
-      throw scrollUntilNotFoundError(direction, selector, 'pass-limit', passes);
     }
     result = await scroll();
     passes += 1;
   }
+}
+
+/**
+ * What one capture tells us about the `--until` loop, answered in the order that matters: refuse an
+ * unusable read, report an arrived target, then the two ways a pass cannot usefully continue. Every
+ * terminal condition raises its own typed error; a non-terminal pass returns `{ visible: false }` so
+ * the caller flings once more and asks again. The stuck window mutates in place so the loop keeps one
+ * running history across passes.
+ */
+async function decideUntilPass(params: {
+  captured: SnapshotResult;
+  selector: string;
+  direction: ScrollDirection;
+  platform: Platform | PublicPlatform;
+  edge: ScrollEdge | undefined;
+  passes: number;
+  passLimit: number;
+  recentSignatures: string[];
+}): Promise<{ visible: boolean }> {
+  const { captured, selector, direction, platform, edge, passes, passLimit, recentSignatures } =
+    params;
+  const refusal = captureRefusal(captured);
+  if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
+  const nodes = (captured.nodes ?? []) as SnapshotNode[];
+  if (await isSelectorVisible(nodes, selector, platform)) {
+    return { visible: true };
+  }
+  if (edge && !(await canScrollFurtherAtEdge(nodes, edge))) {
+    throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
+  }
+  if (passes >= passLimit) {
+    throw scrollUntilNotFoundError(direction, selector, 'pass-limit', passes);
+  }
+  if (edge) {
+    // Vertical only: a stuck container revisits the same one or two signatures. Checked after the
+    // pass-limit branch so an explicit small budget still reports `scroll_until_pass_limit`.
+    pushScrollSurfaceSignature(
+      recentSignatures,
+      await scrollSurfaceFingerprint(nodes, edge),
+      SCROLL_UNTIL_STUCK_WINDOW,
+    );
+    if (scrollSurfaceIsStuck(recentSignatures)) {
+      throw scrollUntilNoProgressError(direction, selector, passes);
+    }
+  }
+  return { visible: false };
 }
 
 export function formatScrollUntilMessage(
@@ -173,6 +229,28 @@ function scrollUntilNotFoundError(
       direction,
       passes,
       hint: `Raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to confirm the selector matches something on this screen.`,
+    },
+  );
+}
+
+/** The scroll was not reaching the container, not just falling short of a budget — the fix differs. */
+function scrollUntilNoProgressError(
+  direction: ScrollDirection,
+  selector: string,
+  passes: number,
+): AppError {
+  const spent = `${passes} ${passes === 1 ? 'pass' : 'passes'}`;
+  return new AppError(
+    'COMMAND_FAILED',
+    `scroll ${direction} --until ${selector} moved nothing across ${spent}: the on-screen content never shifted`,
+    {
+      reason: 'scroll_until_no_progress',
+      selector,
+      direction,
+      passes,
+      hint:
+        `The scroll is not reaching this container. If a field is focused, dismiss the keyboard first; if it is nested inside another scroller, target it directly. ` +
+        `Some lists ignore synthesized scrolls — a raw drag moves them: swipe x1 y1 x2 y2 started inside the list.`,
     },
   );
 }
