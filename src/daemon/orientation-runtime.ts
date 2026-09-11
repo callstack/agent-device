@@ -63,6 +63,21 @@ async function executeSetOrientation(
   const result = await runtime.operations.setOrientation(
     setOrientationInput(requestedRotation, context),
   );
-  const orientation = result?.orientation ?? requestedRotation;
-  return { action: 'orientation', orientation, ...successText(`Rotated to ${orientation}`) };
+  const reported = result?.orientation;
+  if (reported) {
+    return {
+      action: 'orientation',
+      orientation: reported,
+      ...successText(`Rotated to ${reported}`),
+    };
+  }
+  // An owner that reports no resulting rotation is not evidence the device rotated: keep the
+  // requested rotation for compatibility, but disclose the unconfirmed claim instead of asserting it.
+  return {
+    action: 'orientation',
+    orientation: requestedRotation,
+    confirmed: false,
+    warning: `Requested ${requestedRotation}; the device owner reported no resulting orientation, so the rotation is unconfirmed.`,
+    ...successText(`Rotation requested: ${requestedRotation} (unconfirmed)`),
+  };
 }

@@ -142,7 +142,7 @@ test('resolves one admitted binding and reports the owner-observed rotation', as
   });
 });
 
-test('falls back to the requested rotation when the owner reports nothing', async () => {
+test('keeps the requested rotation but discloses that the owner reported nothing', async () => {
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundOrientationRuntime({
@@ -156,7 +156,10 @@ test('falls back to the requested rotation when the owner reports nothing', asyn
   expect(await resolved.execute(orientationExecutionParams(['portrait']))).toEqual({
     action: 'orientation',
     orientation: 'portrait',
-    message: 'Rotated to portrait',
+    confirmed: false,
+    warning:
+      'Requested portrait; the device owner reported no resulting orientation, so the rotation is unconfirmed.',
+    message: 'Rotation requested: portrait (unconfirmed)',
   });
 });
 
