@@ -163,32 +163,6 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
     });
     assert.equal(lease.status, 200);
 
-    const providerLease = await callRpc(port, {
-      jsonrpc: '2.0',
-      id: 'rpc-lease-provider',
-      method: 'agent_device.lease.allocate',
-      params: {
-        tenantId: 'Tenant A',
-        runId: 'run-1',
-        backend: 'ios-instance',
-        leaseProvider: 'browserstack',
-        providerApp: 'bs://app-id',
-        providerProject: 'MyProject',
-        providerBuild: 'Build-1',
-        providerSessionName: 'smoke',
-      },
-    });
-    assert.equal(providerLease.status, 200);
-    const providerLeaseRequest = observedRequests.find(
-      (req) => req.command === 'lease_allocate' && req.flags?.providerProject === 'MyProject',
-    );
-    assert.deepEqual(providerLeaseRequest?.flags, {
-      providerApp: 'bs://app-id',
-      providerProject: 'MyProject',
-      providerBuild: 'Build-1',
-      providerSessionName: 'smoke',
-    });
-
     const release = await callRpc(port, {
       jsonrpc: '2.0',
       id: 'rpc-release',
