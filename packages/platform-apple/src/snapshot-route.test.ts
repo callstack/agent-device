@@ -146,6 +146,77 @@ test('a lingering probe cannot make a sheet capture and an app capture compare e
   ]);
 });
 
+// The probe is a separate observation from the capture, so a sheet can appear in the gap between
+// them. With the bridge circuit already disabled for this generation the route takes the plain
+// fallback, which used to stamp the planned app lineage onto whatever came back — so the sheet
+// capture carried the app generation and could corroborate a tap against an app capture (#2438).
+test('a sheet that appears after an absent probe is identified by the surface, not the app', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning({
+      stage: 'failed',
+      failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+    }),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'absent',
+  });
+
+  // The first capture disables the circuit for this generation; both later captures take the
+  // `circuit-disabled` path, where the route plans nothing about a surface.
+  const app = await route.capture(ios, input, signal(), async () => runnerResult());
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const sheetAgain = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+
+  expect(sheet.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(app.comparisonIdentity?.lineage).toEqual({
+    targetId: target.targetId,
+    generation: target.generation,
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, sheet.comparisonIdentity!),
+  ).toBe(false);
+  // Two captures of the same sheet still compare equal, so a poll can settle on the sheet.
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(
+      sheet.comparisonIdentity!,
+      sheetAgain.comparisonIdentity!,
+    ),
+  ).toBe(true);
+  // The reason the bridge was skipped survives — it is independent of what the runner found — but
+  // the sentence cannot claim an app generation this capture did not read.
+  expect(sheet.warnings).toEqual([
+    'Simulator AX snapshot unavailable (circuit-disabled); used XCTest, which read the system surface presented over the app.',
+  ]);
+});
+
+// Same gap, reached through the probe-unavailable arm: that arm adds a per-capture
+// `unknown-generation` residue for an app capture, and app-generation evidence must not ride along
+// on a capture of a surface — it would make two captures of the same sheet incomparable too.
+test('a surface capture drops the app-generation residue of the arm that reached it', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'unknown',
+  });
+
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const sheetAgain = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+
+  expect(sheet.comparisonIdentity).toMatchObject({
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(
+      sheet.comparisonIdentity!,
+      sheetAgain.comparisonIdentity!,
+    ),
+  ).toBe(true);
+});
+
 // A pinned backend and a custom-actions read bypass the route's planning, but they still reach the
 // runner, and the runner serves the sheet there too. Without an identity that pair falls back to
 // legacy presentation matching, where a sheet and app content read as one presentation and could
