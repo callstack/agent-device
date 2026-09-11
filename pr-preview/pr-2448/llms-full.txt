@@ -3919,6 +3919,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 ```
 
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
+- Quote relative globs to expand them on the caller from its working directory, including when the directory name contains glob characters such as `[` or `{`. A missing file input without glob characters reports an error.
 - `context platform=...` inside each `.ad` file is the target source of truth for suite execution.
 - `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present.
 - `context timeout=...` and `context retries=...` can be declared per script; CLI flags override metadata. Retries are capped at `3`, and duplicate keys in the context header fail fast instead of silently overriding each other.
