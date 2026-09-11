@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import { createWaitPolling } from './wait-polling.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { createWaitPolling, waitTimeoutError } from './wait-polling.ts';
 
 test('poll delay is bounded by the remaining wait budget', async () => {
   let currentMs = 0;
@@ -98,4 +99,89 @@ test('a long wait keeps its first polls and its last polls in the failure eviden
   assert.equal(evidence.polls[4]?.startedMs, 400);
   assert.equal(evidence.polls[5]?.startedMs, 1_500);
   assert.equal(evidence.polls.at(-1)?.startedMs, 3_900);
+});
+
+/**
+ * #2484 follow-up: an iOS runner draining the abandoned main-thread work of a command that
+ * exceeded its execution watchdog refuses every command with a retriable `RUNNER_BUSY`. A `wait`
+ * used to surrender its whole budget to that first refusal; it must poll through it instead, and
+ * a poll refused this way is its own outcome in the evidence, not a content verdict.
+ */
+test('a retriable producer refusal is ridden out and named in the poll timeline', async () => {
+  let currentMs = 0;
+  const runtime = {
+    clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+  } as AgentDeviceRuntime;
+  const busy = new AppError('COMMAND_FAILED', 'runner is still finishing a previous command', {
+    runnerErrorCode: 'RUNNER_BUSY',
+    retriable: true,
+  });
+  // `wait absent` replaces the content classification wholesale; the retriable arm is about
+  // whether the producer could answer at all, so it must hold under any caller's classification.
+  const polling = createWaitPolling(runtime, {}, 10_000, SELECTOR_PIPELINE_POLICIES.wait, {
+    isUnreadableError: () => false,
+  });
+
+  const refused = await polling.capture(async () => {
+    currentMs += 30;
+    throw busy;
+  });
+  assert.equal(refused.timedOut, false);
+  assert.equal(refused.value, undefined);
+  assert.equal(polling.hasTimeRemaining(), true);
+
+  const recovered = await polling.capture(async () => {
+    currentMs += 10;
+    return 'seen';
+  });
+  assert.equal(recovered.timedOut, false);
+  assert.equal(recovered.value, 'seen');
+
+  const evidence = polling.failureEvidence();
+  assert.equal(evidence.readableCaptures, 1);
+  assert.deepEqual(evidence.polls, [
+    { startedMs: 0, durationMs: 30, outcome: 'retriable' },
+    { startedMs: 30, durationMs: 10, outcome: 'readable' },
+  ]);
+});
+
+test('a wait spent entirely on retriable refusals fails with the refusal, not a generic timeout', async () => {
+  let currentMs = 0;
+  const runtime = {
+    clock: { now: () => currentMs, sleep: async (_durationMs: number) => {} },
+  } as AgentDeviceRuntime;
+  const busy = new AppError('COMMAND_FAILED', 'runner is still finishing a previous command', {
+    runnerErrorCode: 'RUNNER_BUSY',
+    retriable: true,
+  });
+  const polling = createWaitPolling(runtime, {}, 10_000, SELECTOR_PIPELINE_POLICIES.wait);
+
+  for (let index = 0; index < 3; index += 1) {
+    await polling.capture(async () => {
+      currentMs += 100;
+      throw busy;
+    });
+  }
+
+  assert.throws(
+    () => waitTimeoutError('wait timed out for text: Jump to form', polling, undefined),
+    busy,
+  );
+});
+
+test('a non-retriable producer failure still ends the wait at its first poll', async () => {
+  const runtime = {
+    clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+  } as AgentDeviceRuntime;
+  // RUNNER_WEDGED: past the wedge threshold the runner cannot recover on its own, so polling it
+  // again would only spend the budget on a failure the daemon has to cure with a restart.
+  const wedged = new AppError('RUNNER_WEDGED', 'the runner main thread is wedged');
+  const polling = createWaitPolling(runtime, {}, 10_000, SELECTOR_PIPELINE_POLICIES.wait);
+
+  await assert.rejects(
+    polling.capture(async () => {
+      throw wedged;
+    }),
+    wedged,
+  );
 });

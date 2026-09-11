@@ -1,5 +1,4 @@
-import { AppError, toAppErrorCode, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   type ExecResult,
   withKeyedLock,
@@ -29,6 +28,7 @@ import {
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
 import {
+  classifyRunnerReportedError,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -932,10 +932,10 @@ function buildRunnerResponseError(json: RunnerResponsePayload, logPath?: string)
   const runnerErrorCode = readRunnerErrorCode(json.error?.code);
   const errorMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
   const hint = typeof json.error?.hint === 'string' ? json.error.hint : undefined;
-  return new AppError(runnerAppErrorCode(runnerErrorCode), errorMessage ?? 'Runner error', {
+  const classification = classifyRunnerReportedError(runnerErrorCode);
+  return new AppError(classification.code, errorMessage ?? 'Runner error', {
     runner: json,
-    runnerErrorCode,
-    retriable: runnerErrorCode === 'RUNNER_BUSY' ? true : undefined,
+    ...classification.details,
     xcodebuild: {
       exitCode: 1,
       stdout: '',
@@ -948,23 +948,6 @@ function buildRunnerResponseError(json: RunnerResponsePayload, logPath?: string)
 
 function readRunnerErrorCode(rawCode: unknown): string | undefined {
   return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
-}
-
-/**
- * Runner codes that classify a failure for the host without renaming it on the wire. They stay
- * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
- * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet.
- */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlySet<string> = new Set([
-  'RUNNER_BUSY',
-  ALERT_NOT_FOUND_RUNNER_CODE,
-]);
-
-function runnerAppErrorCode(runnerErrorCode: string | undefined): AppError['code'] {
-  if (runnerErrorCode !== undefined && DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.has(runnerErrorCode)) {
-    return 'COMMAND_FAILED';
-  }
-  return runnerErrorCode ? toAppErrorCode(runnerErrorCode) : 'COMMAND_FAILED';
 }
 
 function readRunnerResponseData(json: RunnerResponsePayload): Record<string, unknown> {

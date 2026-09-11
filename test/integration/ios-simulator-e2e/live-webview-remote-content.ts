@@ -5,6 +5,9 @@ import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';
+// Native chrome of the lab, rendered with the route and before the page: it proves the deep link
+// landed without asking the runner to query a screen whose web view is still loading.
+const LAB_CHROME_ID = 'close-webview-lab';
 // The first WebContent process of the run spawns here; a cold CI simulator needs more than the
 // shared 10 s wait budget before the page's tree exists.
 const PAGE_LOAD_WAIT_MS = '20000';
@@ -32,7 +35,7 @@ export async function assertWebViewRemoteContent(context: LiveContext): Promise<
     '--launch-url',
     WEBVIEW_LAB_DEEP_LINK,
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context);
+  await acceptDeepLinkConfirmationIfPresent(context, [`id="${LAB_CHROME_ID}"`]);
   // `wait` observes through the same route as `snapshot`: page content is reachable only once the
   // route has stopped publishing the bridge's page-less tree.
   await runStep(context, 'wait for the WebView page to expose its link', [

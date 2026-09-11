@@ -1,5 +1,6 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError, toAppErrorCode } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
+import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
@@ -15,6 +16,14 @@ import {
   type BootFailureReason,
 } from './host.ts';
 import type { RunnerSession } from './runner-session-types.ts';
+
+/**
+ * The runner's own code for "an earlier command exceeded the execution watchdog and its abandoned
+ * main-thread work is still draining" (#1105). It is transient by construction — past the wedge
+ * threshold the runner escalates to `RUNNER_WEDGED` instead — so every host path must publish it
+ * as retriable.
+ */
+const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
 
 const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -312,6 +321,42 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
     (runnerErrorVerdict(error, 'restartBeforeSend') ?? false) &&
     shouldRetryRunnerConnectError(error)
   );
+}
+
+/**
+ * Runner codes that classify a failure for the host without renaming it on the wire. They stay
+ * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
+ * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet.
+ */
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlySet<string> = new Set([
+  RUNNER_BUSY_RUNNER_CODE,
+  ALERT_NOT_FOUND_RUNNER_CODE,
+]);
+
+/** Wire code plus the details every path must publish for one runner-reported error code. */
+export type RunnerReportedErrorClass = Readonly<{
+  code: AppError['code'];
+  details: Readonly<{ runnerErrorCode?: string; retriable?: true }>;
+}>;
+
+/**
+ * The one reading of a runner-reported error code (#2484 follow-up). A runner failure reaches the
+ * host by two routes — the command's own response, and the lifecycle journal a status probe reads
+ * back after the transport response was lost — and both must classify it identically, or the same
+ * runner condition surfaces under two codes with only one of them marked retriable.
+ */
+export function classifyRunnerReportedError(
+  runnerErrorCode: string | undefined,
+): RunnerReportedErrorClass {
+  const diagnosticOnly =
+    runnerErrorCode !== undefined && DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.has(runnerErrorCode);
+  return Object.freeze({
+    code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
+    details: Object.freeze({
+      runnerErrorCode,
+      ...(runnerErrorCode === RUNNER_BUSY_RUNNER_CODE ? { retriable: true as const } : {}),
+    }),
+  });
 }
 
 export function resolveRunnerEarlyExitHint(

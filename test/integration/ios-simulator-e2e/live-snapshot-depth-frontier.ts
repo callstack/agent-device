@@ -22,7 +22,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--launch-url',
     VISIBLE_DEPTH_DEEP_LINK,
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context);
+  await acceptDeepLinkConfirmationIfPresent(context, [`id="${CHILD_ID}"`]);
   // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
   await assertWaitSelector(context, `id="${CHILD_ID}"`);
 

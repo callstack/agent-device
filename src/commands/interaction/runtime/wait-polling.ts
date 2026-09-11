@@ -18,11 +18,17 @@ export const DEFAULT_WAIT_TIMEOUT_MS = SELECTOR_PIPELINE_POLICIES.wait.poll.defa
 export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated' | 'runner-restart-exhausted';
 
 /**
- * How one poll ended: a readable capture, an unreadable content verdict the wait rode out, the
+ * How one poll ended: a readable capture, an unreadable content verdict the wait rode out, a
+ * producer refusal the wait rode out because the producer itself classified it as retriable, the
  * deadline cancelling the capture in flight, or that cancellation carrying runner-restart
  * evidence. Whether a readable capture matched is the caller's verdict, not the poll's.
  */
-export type WaitPollOutcome = 'readable' | 'unreadable' | 'deadline' | 'runner-restart';
+export type WaitPollOutcome =
+  | 'readable'
+  | 'unreadable'
+  | 'retriable'
+  | 'deadline'
+  | 'runner-restart';
 
 /** One poll on the wait's own clock: when it started after the wait began and how long it ran. */
 export type WaitPollRecord = {
@@ -69,8 +75,10 @@ export type WaitPollingClassification = {
   preserveUnreadableOnStall?: boolean;
 };
 
-type UnreadablePollTracker = {
+type UnobservedPollTracker = {
   attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
+  /** Why the most recent poll produced no observation, for that poll's timeline entry. */
+  lastUnobservedOutcome: () => Extract<WaitPollOutcome, 'unreadable' | 'retriable'> | undefined;
   recordReadableCapture: () => void;
   readableCaptures: () => number;
   rethrowIfNeverReadable: () => void;
@@ -97,7 +105,7 @@ export function createWaitPolling(
   const budget = selectorPollBudget(policy);
   const timeoutMs = requestedTimeoutMs ?? budget.defaultTimeoutMs;
   const startedAtMs = now(runtime);
-  const unreadable = createUnreadablePollTracker(classification.isUnreadableError);
+  const unobserved = createUnobservedPollTracker(classification.isUnreadableError);
   const polls: WaitPollRecord[] = [];
   let timeoutEvidence: Partial<WaitFailureEvidence> = {};
   const remainingMs = () => Math.max(0, timeoutMs - (now(runtime) - startedAtMs));
@@ -113,15 +121,17 @@ export function createWaitPolling(
         options,
         remainingMs(),
         async (signal) =>
-          await unreadable.attempt(async () => {
+          await unobserved.attempt(async () => {
             const value = await capture(signal);
             captureWasReadable = true;
             return value;
           }),
       );
       if (!result.timedOut) {
-        if (captureWasReadable) unreadable.recordReadableCapture();
-        recordPoll(captureWasReadable ? 'readable' : 'unreadable');
+        if (captureWasReadable) unobserved.recordReadableCapture();
+        recordPoll(
+          captureWasReadable ? 'readable' : (unobserved.lastUnobservedOutcome() ?? 'unreadable'),
+        );
         return result;
       }
       const runnerRestart = runnerRestartTimeoutEvidence(result.error);
@@ -137,7 +147,7 @@ export function createWaitPolling(
         deadline:
           runnerRestart !== undefined
             ? ('runner-restart-exhausted' as const)
-            : unreadable.readableCaptures() === 0
+            : unobserved.readableCaptures() === 0
               ? ('capture-stalled' as const)
               : ('capture-truncated' as const),
       };
@@ -145,14 +155,14 @@ export function createWaitPolling(
     hasTimeRemaining: () => remainingMs() > 0,
     failureEvidence: (): WaitFailureEvidence => ({
       timeoutMs,
-      readableCaptures: unreadable.readableCaptures(),
+      readableCaptures: unobserved.readableCaptures(),
       captures: polls.length,
       polls: compactPollTimeline(polls),
       waitedMs: now(runtime) - startedAtMs,
       ...timeoutEvidence,
     }),
     preserveUnreadableOnStall: classification.preserveUnreadableOnStall,
-    rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
+    rethrowIfNeverReadable: unobserved.rethrowIfNeverReadable,
     sleepUntilNextPoll: async () =>
       await sleepWithWaitCancellation(runtime, options, Math.min(budget.intervalMs, remainingMs())),
     timeoutMs,
@@ -245,28 +255,51 @@ function copyStringDetail<Key extends keyof WaitFailureEvidence>(
   return typeof value === 'string' ? ({ [key]: value } as Pick<WaitFailureEvidence, Key>) : {};
 }
 
-function createUnreadablePollTracker(
+/**
+ * A failure the producer itself classified as retriable — the iOS runner draining the abandoned
+ * main-thread work of a command that exceeded its execution watchdog reports `RUNNER_BUSY` this
+ * way (#2484 follow-up). It says the surface was not observable on *this* poll, not that it stays
+ * unobservable: `wait` is a budgeted retry loop, so it keeps polling and lets the deadline rather
+ * than the first refusal decide. A runner past its wedge threshold reports `RUNNER_WEDGED`, which
+ * is not retriable and still ends the wait at once.
+ */
+function isRetriablePollFailure(error: unknown): boolean {
+  return error instanceof AppError && error.details?.retriable === true;
+}
+
+/**
+ * Rides out the polls that produced no observation and keeps the last one's error, so a wait that
+ * never saw a readable capture fails with the reason its polls actually hit rather than a generic
+ * timeout. The content classification is the caller's (`wait absent` reads its own observation
+ * verdicts); the retriable-refusal arm applies to every wait, because it is about whether the
+ * producer could answer at all.
+ */
+function createUnobservedPollTracker(
   isUnreadableError: (error: unknown) => boolean = isUnreadableCaptureContentError,
-): UnreadablePollTracker {
+): UnobservedPollTracker {
   let readableCaptureCount = 0;
-  let lastUnreadableError: unknown;
+  let lastUnobservedError: unknown;
+  let lastUnobservedOutcome: Extract<WaitPollOutcome, 'unreadable' | 'retriable'> | undefined;
   return {
     attempt: async <T>(capture: () => Promise<T>): Promise<T | undefined> => {
       try {
         return await capture();
       } catch (error) {
-        if (!isUnreadableError(error)) throw error;
-        lastUnreadableError = error;
+        if (isUnreadableError(error)) lastUnobservedOutcome = 'unreadable';
+        else if (isRetriablePollFailure(error)) lastUnobservedOutcome = 'retriable';
+        else throw error;
+        lastUnobservedError = error;
         return undefined;
       }
     },
+    lastUnobservedOutcome: () => lastUnobservedOutcome,
     recordReadableCapture: () => {
       readableCaptureCount += 1;
     },
     readableCaptures: () => readableCaptureCount,
     rethrowIfNeverReadable: () => {
-      if (readableCaptureCount === 0 && lastUnreadableError !== undefined) {
-        throw lastUnreadableError;
+      if (readableCaptureCount === 0 && lastUnobservedError !== undefined) {
+        throw lastUnobservedError;
       }
     },
   };

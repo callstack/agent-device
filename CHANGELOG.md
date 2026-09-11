@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed: a polling `wait` no longer surrenders its whole budget the first time the iOS runner
+  answers `RUNNER_BUSY`. That code means an earlier command exceeded the runner's execution
+  watchdog and its abandoned main-thread work is still draining, which clears on its own, so a
+  `wait text ... 20000` could fail in under a second with a failure the runner itself asked the
+  caller to retry. A poll refused with a failure its producer marked retriable is now ridden out
+  like an unreadable capture: the wait keeps polling to its deadline, records the poll as
+  `retriable` in its timeout evidence, and surfaces the refusal only if no readable capture ever
+  completed. A wedged runner (`RUNNER_WEDGED`) is not retriable and still ends the wait at once.
+- Fixed: a runner failure recovered from the lifecycle journal after its transport response was
+  lost is now classified exactly like the same failure on a live response. `RUNNER_BUSY` reached
+  callers as a bare `RUNNER_BUSY` wire code without the `retriable` flag on that path, while the
+  live path published it as `COMMAND_FAILED` with `details.runnerErrorCode` and `retriable: true`;
+  both paths now read the runner's code through one classifier.
 - Fixed: iOS Simulator snapshots of Safari and of apps with a `WKWebView` stopped showing the
   page in 0.21.0 — chrome plus empty `[webview]` nodes, no links, text, or form fields, so no ref
   could reach the page (#2484). The host AX bridge that 0.21.0 made the Simulator's snapshot source

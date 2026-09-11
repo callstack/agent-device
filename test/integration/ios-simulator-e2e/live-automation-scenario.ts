@@ -17,6 +17,10 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
+/** Long enough for a deep-link route to mount, short enough to leave budget for the alert probe. */
+const DEEP_LINK_DESTINATION_WAIT_MS = '2500';
+/** The Automation lab's own first landmark; see `acceptDeepLinkConfirmationIfPresent`. */
+const AUTOMATION_LAB_LANDMARK = ['text', 'Automation lab'] as const;
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
@@ -76,7 +80,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
   await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
-  await acceptDeepLinkConfirmationIfPresent(context);
+  await acceptDeepLinkConfirmationIfPresent(context, AUTOMATION_LAB_LANDMARK);
   await assertWaitText(context, 'Automation lab');
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
@@ -244,14 +248,26 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
 }
 
-export async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
-  const destination = await runStep(
+/**
+ * iOS sometimes puts an "Open in <app>?" confirmation in front of a custom-scheme deep link, so a
+ * scenario that launched one must accept it before asserting anything. `destination` is the `wait`
+ * predicate for the route's own first landmark, and it decides whether the alert probe runs at all:
+ * a landmark that arrived proves no confirmation is in the way. Each caller passes its own — a
+ * shared one would never match off its route, making every caller pay the full probe, and
+ * `alert get` against a live WKWebView screen is exactly the XCTest query that exceeds the runner's
+ * execution watchdog and leaves the next command refused as `RUNNER_BUSY` (#2484 follow-up).
+ */
+export async function acceptDeepLinkConfirmationIfPresent(
+  context: LiveContext,
+  destination: readonly string[],
+): Promise<void> {
+  const arrived = await runStep(
     context,
     'wait for deep-link destination before inspecting system UI',
-    ['wait', 'text', 'Automation lab', '2500'],
+    ['wait', ...destination, DEEP_LINK_DESTINATION_WAIT_MS],
     { allowFailure: true },
   );
-  if (destination.status === 0) return;
+  if (arrived.status === 0) return;
 
   const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get'], {
     allowFailure: true,
