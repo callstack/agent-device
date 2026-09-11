@@ -358,6 +358,34 @@ test('runScrollEdgePasses: a moving fingerprint never trips no-progress and scro
   assert.equal(result.passes, 5);
 });
 
+test('runScrollEdgePasses: a fresh surface signature continues after identical passes', async () => {
+  let scrollCalls = 0;
+  // The surface sits at `a` for three captures, then a pass finally reveals `b`. `b` is a signature
+  // the window has not seen, so the loop keeps going rather than stopping as no-progress on the pass
+  // that actually advanced.
+  const captures = [
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'b' },
+    { canScroll: false, fingerprint: 'b' },
+  ];
+  let index = 0;
+  const result = await runScrollEdgePasses({
+    edge: 'bottom',
+    captureState: async () => ({
+      emptySnapshot: false,
+      ...(captures[index++] ?? { canScroll: false }),
+    }),
+    scroll: async () => {
+      scrollCalls += 1;
+      return undefined;
+    },
+  });
+  assert.equal(result.passes, 4);
+  assert.equal(scrollCalls, 4);
+});
+
 test('unique container scope is retained across edge pass captures', async () => {
   const scopes: Array<string | undefined> = [];
   const snapshots = [scrollSnapshot(true), scrollSnapshot(true), scrollSnapshot(false)];

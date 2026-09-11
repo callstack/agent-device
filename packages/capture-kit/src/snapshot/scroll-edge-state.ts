@@ -81,15 +81,19 @@ export async function scrollSurfaceFingerprint(
 
 /**
  * Has a scroll stopped making progress? True once `recentSignatures` holds at least
- * `SCROLL_EDGE_STUCK_MIN_LENGTH` captures within the last `SCROLL_EDGE_STUCK_WINDOW` and no more
- * than two of them are distinct — the signature of a container that ignores the gesture or is only
- * rubber-banding. Callers cap `recentSignatures` to the window. Exported so `scroll --until` reuses
- * the one definition of "stuck" rather than a second copy.
+ * `SCROLL_EDGE_STUCK_MIN_LENGTH` captures within the last `SCROLL_EDGE_STUCK_WINDOW`, no more than
+ * two are distinct, AND the newest capture is one the window already showed — the signature of a
+ * container that ignores the gesture or only rubber-bands. A newest signature the window has not seen
+ * is a pass that just made real progress, so `A,A,A,B` continues while `A,B,A,B` is stuck. Callers
+ * cap `recentSignatures` to the window. Exported so `scroll --until` reuses the one definition of
+ * "stuck" rather than a second copy.
  */
 export function scrollSurfaceIsStuck(recentSignatures: readonly string[]): boolean {
   if (recentSignatures.length < SCROLL_EDGE_STUCK_MIN_LENGTH) return false;
   const window = recentSignatures.slice(-SCROLL_EDGE_STUCK_WINDOW);
-  return new Set(window).size <= SCROLL_EDGE_STUCK_MAX_DISTINCT;
+  if (new Set(window).size > SCROLL_EDGE_STUCK_MAX_DISTINCT) return false;
+  const newest = window.at(-1);
+  return newest !== undefined && window.slice(0, -1).includes(newest);
 }
 
 /**
