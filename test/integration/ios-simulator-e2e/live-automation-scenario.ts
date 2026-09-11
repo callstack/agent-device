@@ -17,8 +17,13 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
-/** Long enough for a deep-link route to mount, short enough to leave budget for the alert probe. */
-const DEEP_LINK_DESTINATION_WAIT_MS = '2500';
+/**
+ * Deliberately generous. This budget decides whether the alert probe below runs at all, so it must
+ * outlast the slowest honest route mount on a cold CI simulator — the WebView lab took over 2.5 s
+ * there while rendering correctly. Waiting longer costs nothing when a confirmation really is up,
+ * because the route never renders until it is accepted; being too short costs the whole scenario.
+ */
+const DEEP_LINK_DESTINATION_WAIT_MS = '15000';
 /** The Automation lab's own first landmark; see `acceptDeepLinkConfirmationIfPresent`. */
 const AUTOMATION_LAB_LANDMARK = ['text', 'Automation lab'] as const;
 const AUTOMATION_DEEP_LINK =
@@ -252,10 +257,12 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
  * iOS sometimes puts an "Open in <app>?" confirmation in front of a custom-scheme deep link, so a
  * scenario that launched one must accept it before asserting anything. `destination` is the `wait`
  * predicate for the route's own first landmark, and it decides whether the alert probe runs at all:
- * a landmark that arrived proves no confirmation is in the way. Each caller passes its own — a
- * shared one would never match off its route, making every caller pay the full probe, and
- * `alert get` against a live WKWebView screen is exactly the XCTest query that exceeds the runner's
- * execution watchdog and leaves the next command refused as `RUNNER_BUSY` (#2484 follow-up).
+ * a landmark that arrived proves no confirmation is in the way. Each caller passes its own, because
+ * a shared landmark never matches off its route and sends every caller into the probe — and
+ * `alert get` against a live WKWebView screen is the XCTest query that exceeds the runner's
+ * execution watchdog, leaving every later command refused as `RUNNER_BUSY` (#2484 follow-up). The
+ * landmark must therefore be a native node the route renders before its content, and the budget
+ * above must outlast a cold mount, so the probe is reached only when something really is blocking.
  */
 export async function acceptDeepLinkConfirmationIfPresent(
   context: LiveContext,
