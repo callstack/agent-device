@@ -192,6 +192,18 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
 
   assert.equal(buildActionSummary(back), 'Went back using system navigation');
   assert.equal(buildActionSummary(orientation), 'Rotated to landscape-left');
+
+  // An owner that reported no resulting rotation keeps the requested value, so
+  // the recorded action must not claim the device rotated.
+  const unconfirmedOrientation = action('orientation', {
+    action: 'orientation',
+    orientation: 'portrait',
+    confirmed: false,
+    warning:
+      'Requested portrait; the device owner reported no resulting orientation, so the rotation is unconfirmed.',
+    message: 'Rotation requested: portrait (unconfirmed)',
+  });
+  assert.equal(buildActionSummary(unconfirmedOrientation), 'Requested portrait (unconfirmed)');
   assert.equal(buildActionSummary(viewport), 'Set viewport to 402×874');
   assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard');
   assert.equal(buildActionSummary(gesture), 'Ran pan gesture');

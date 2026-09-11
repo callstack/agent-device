@@ -31,11 +31,20 @@ export type BackCommandResult = {
   settle?: SettleObservation;
 };
 
-/** `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`. */
+/**
+ * `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`.
+ *
+ * An owner that reports no resulting rotation is not evidence that the device
+ * rotated. That case keeps the requested `orientation` for compatibility, but
+ * discloses `confirmed: false` plus a `warning`, and names the request in
+ * `message` (`Rotation requested: <orientation> (unconfirmed)`).
+ */
 export type OrientationCommandResult = {
   action: 'orientation';
   orientation: DeviceRotation;
   message: string;
+  confirmed?: boolean;
+  warning?: string;
 };
 
 /** `app-switcher` — `{ action: 'app-switcher', message: 'Opened app switcher' }`. */

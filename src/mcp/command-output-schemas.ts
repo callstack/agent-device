@@ -491,6 +491,8 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       action: constSchema('orientation'),
       orientation: enumSchema(DEVICE_ROTATIONS),
       message: stringSchema(),
+      confirmed: booleanSchema(),
+      warning: stringSchema(),
     },
     ['action', 'orientation', 'message'],
   ),

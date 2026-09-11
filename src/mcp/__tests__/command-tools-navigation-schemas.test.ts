@@ -33,6 +33,8 @@ const NAVIGATION_DISPATCH_SHAPES: Readonly<
         enum: ['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right'],
       },
       message: { type: 'string' },
+      confirmed: { type: 'boolean' },
+      warning: { type: 'string' },
     },
     required: ['action', 'orientation', 'message'],
   },
