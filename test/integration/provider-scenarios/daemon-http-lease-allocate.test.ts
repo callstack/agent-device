@@ -8,9 +8,11 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../../src/__tests__/test-utils/loopback.ts';
 
-// The compact lease envelope is the only projection that has to name provider session metadata by
-// key; the daemon's lease request must carry every one of those keys, and only those.
-test('Provider-backed integration daemon HTTP lease allocate forwards provider session metadata as request flags', async (t) => {
+// The compact lease envelope is the only projection that has to name the provider-allocation flags
+// by key; the daemon's lease request must carry every one the lease-lifecycle provider reads, and
+// only those. The end-to-end proof that these reach a real provider session lives in
+// cloud-webdriver-lease-http.test.ts.
+test('Provider-backed integration daemon HTTP lease allocate forwards provider allocation flags as request flags', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP lease allocate coverage')) return;
 
   const observedRequests: DaemonRequest[] = [];
@@ -39,10 +41,18 @@ test('Provider-backed integration daemon HTTP lease allocate forwards provider s
           runId: 'run-1',
           backend: 'ios-instance',
           leaseProvider: 'browserstack',
+          clientId: 'client-a',
+          deviceKey: 'dk-1',
+          platform: 'ios',
+          device: 'iPhone 15',
           providerApp: 'bs://app-id',
+          providerOsVersion: '17',
           providerProject: 'MyProject',
           providerBuild: 'Build-1',
           providerSessionName: 'smoke',
+          providerDeviceOrientation: 'portrait',
+          providerNoResignApp: true,
+          awsRegion: 'us-west-2',
         },
       }),
     });
@@ -50,10 +60,16 @@ test('Provider-backed integration daemon HTTP lease allocate forwards provider s
 
     const leaseRequest = observedRequests.find((req) => req.command === 'lease_allocate');
     assert.deepEqual(leaseRequest?.flags, {
+      platform: 'ios',
+      device: 'iPhone 15',
       providerApp: 'bs://app-id',
+      providerOsVersion: '17',
       providerProject: 'MyProject',
       providerBuild: 'Build-1',
       providerSessionName: 'smoke',
+      providerDeviceOrientation: 'portrait',
+      providerNoResignApp: true,
+      awsRegion: 'us-west-2',
     });
   } finally {
     await closeLoopbackServer(server);

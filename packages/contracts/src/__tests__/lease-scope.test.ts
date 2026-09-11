@@ -8,7 +8,7 @@ import {
   leaseScopeToConnectionMetadata,
   leaseScopeToLeaseRpcParams,
   leaseScopeToRequestMeta,
-  readLeaseAllocateProviderMetadata,
+  readLeaseAllocateProviderFlags,
 } from '../lease-scope.ts';
 
 test('leaseScopeFromOptions normalizes public aliases and projects request meta', () => {
@@ -168,9 +168,15 @@ test('findMissingProxyLeaseFields enforces complete proxy ownership scope', () =
   );
 });
 
-test('readLeaseAllocateProviderMetadata carries the session-naming flags and drops the rest', () => {
+test('readLeaseAllocateProviderFlags carries the provider-allocation flags and drops the rest', () => {
   assert.deepEqual(
-    readLeaseAllocateProviderMetadata({
+    readLeaseAllocateProviderFlags({
+      session: 'default',
+      token: 'secret',
+      runId: 'run-a',
+      deviceKey: 'dk-1',
+      provider: 'browserstack',
+      ttlMs: 1000,
       platform: 'ios',
       device: 'iPhone 15',
       providerApp: 'bs://abc',
@@ -178,17 +184,34 @@ test('readLeaseAllocateProviderMetadata carries the session-naming flags and dro
       providerProject: 'MyProject',
       providerBuild: 'Build-1',
       providerSessionName: 'smoke',
+      providerDeviceOrientation: 'landscape',
+      providerGeoLocation: '52.5,13.4',
+      providerLanguage: 'en',
+      providerNoResignApp: true,
+      awsRegion: 'us-west-2',
+      awsProjectArn: 'arn:aws:devicefarm:0',
+      awsInteractionMode: 'NO_VIDEO',
     }),
     {
+      platform: 'ios',
+      device: 'iPhone 15',
       providerApp: 'bs://abc',
+      providerOsVersion: '17',
       providerProject: 'MyProject',
       providerBuild: 'Build-1',
       providerSessionName: 'smoke',
+      providerDeviceOrientation: 'landscape',
+      providerGeoLocation: '52.5,13.4',
+      providerLanguage: 'en',
+      providerNoResignApp: true,
+      awsRegion: 'us-west-2',
+      awsProjectArn: 'arn:aws:devicefarm:0',
+      awsInteractionMode: 'NO_VIDEO',
     },
   );
   assert.deepEqual(
-    readLeaseAllocateProviderMetadata({ providerApp: 'bs://abc', providerBuild: undefined }),
+    readLeaseAllocateProviderFlags({ providerApp: 'bs://abc', providerBuild: undefined }),
     { providerApp: 'bs://abc' },
   );
-  assert.deepEqual(readLeaseAllocateProviderMetadata(undefined), {});
+  assert.deepEqual(readLeaseAllocateProviderFlags(undefined), {});
 });

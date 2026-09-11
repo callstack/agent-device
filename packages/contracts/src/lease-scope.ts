@@ -1,6 +1,7 @@
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
+import type { CommandFlags } from './command-flags.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
@@ -199,32 +200,60 @@ export function leaseScopeToLeaseRpcParams(
 }
 
 /**
- * Provider session metadata that must travel with `lease_allocate` so the daemon's lease-lifecycle
- * provider can name the session it creates. The line transport forwards the whole request and these
- * flags arrive for free; the compact lease envelope is the only projection that has to name them, so
- * the client's producer and the daemon's consumer read the SAME list and cannot drop a sibling.
+ * Request flags that must travel with `lease_allocate` so the daemon's lease-lifecycle provider can
+ * prepare the session — device selection, the app/os, the session-naming fields, and the configured
+ * device-feature and AWS knobs. The line transport forwards the whole request and these arrive for
+ * free; the compact lease envelope is the only projection that has to name them, so the client's
+ * producer and the daemon's consumer read the SAME list and cannot drop a sibling the provider needs.
  */
-const LEASE_ALLOCATE_PROVIDER_METADATA_FLAG_KEYS = [
+const LEASE_ALLOCATE_PROVIDER_FLAG_KEYS = [
+  // Device selection the lease-lifecycle provider needs to create the session.
+  'platform',
+  'device',
+  // The Cloud provider profile fields; pinned exhaustive against that vocabulary below.
   'providerApp',
+  'providerOsVersion',
   'providerProject',
   'providerBuild',
   'providerSessionName',
-] as const satisfies readonly (keyof CloudProviderProfileFields)[];
+  'providerDeviceOrientation',
+  'providerGeoLocation',
+  'providerTimezone',
+  'providerLanguage',
+  'providerLocale',
+  'providerNetworkProfile',
+  'providerCustomNetwork',
+  'providerNoResignApp',
+  'awsProjectArn',
+  'awsDeviceArn',
+  'awsAppArn',
+  'awsRegion',
+  'awsInteractionMode',
+] as const satisfies readonly (keyof CommandFlags)[];
 
-type LeaseAllocateProviderMetadata = Partial<
-  Pick<CloudProviderProfileFields, (typeof LEASE_ALLOCATE_PROVIDER_METADATA_FLAG_KEYS)[number]>
->;
+type LeaseAllocateProviderFlagKey = (typeof LEASE_ALLOCATE_PROVIDER_FLAG_KEYS)[number];
 
-/** Reads the provider session metadata out of a flags bag or a lease-envelope param bag. */
-export function readLeaseAllocateProviderMetadata(
+// A Cloud provider profile field added without joining the projection would be dropped from the
+// envelope and fail `prepareSession` on the remote daemon — this makes that omission fail to build.
+type LeaseAllocateProfileKeysAreExhaustive =
+  Exclude<keyof CloudProviderProfileFields, LeaseAllocateProviderFlagKey> extends never
+    ? true
+    : Exclude<keyof CloudProviderProfileFields, LeaseAllocateProviderFlagKey>;
+const leaseAllocateProfileKeysExhaustive: LeaseAllocateProfileKeysAreExhaustive = true;
+void leaseAllocateProfileKeysExhaustive;
+
+type LeaseAllocateProviderFlags = Partial<Pick<CommandFlags, LeaseAllocateProviderFlagKey>>;
+
+/** Reads the provider-allocation flags out of a request flags bag or a lease-envelope param bag. */
+export function readLeaseAllocateProviderFlags(
   source: Record<string, unknown> | undefined,
-): LeaseAllocateProviderMetadata {
-  const metadata: Record<string, string> = {};
-  for (const key of LEASE_ALLOCATE_PROVIDER_METADATA_FLAG_KEYS) {
+): LeaseAllocateProviderFlags {
+  const flags: Record<string, string | boolean> = {};
+  for (const key of LEASE_ALLOCATE_PROVIDER_FLAG_KEYS) {
     const value = source?.[key];
-    if (typeof value === 'string') metadata[key] = value;
+    if (typeof value === 'string' || typeof value === 'boolean') flags[key] = value;
   }
-  return metadata;
+  return flags as LeaseAllocateProviderFlags;
 }
 
 export function leaseScopeToConnectionMetadata(

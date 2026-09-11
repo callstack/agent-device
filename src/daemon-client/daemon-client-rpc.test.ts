@@ -33,7 +33,7 @@ test('lease allocation transports an optional initial provider app', () => {
   });
 });
 
-test('lease allocation transports provider project, build, and session name (#2494)', () => {
+test('lease allocation transports the provider configuration the session needs (#2494)', () => {
   const payload = buildHttpRpcPayload(
     {
       token: 'daemon-token',
@@ -41,12 +41,15 @@ test('lease allocation transports provider project, build, and session name (#24
       command: 'lease_allocate',
       positionals: [],
       flags: {
+        platform: 'ios',
+        device: 'iPhone 15',
         providerApp: 'bs://app-id',
         providerOsVersion: '17',
-        device: 'iPhone 15',
         providerProject: 'MyProject',
         providerBuild: 'Build-2026-09-11',
         providerSessionName: 'smoke — iOS',
+        providerDeviceOrientation: 'portrait',
+        providerNoResignApp: true,
       },
       meta: {
         requestId: 'lease-req',
@@ -65,10 +68,15 @@ test('lease allocation transports provider project, build, and session name (#24
     runId: 'run-123',
     backend: 'ios-instance',
     leaseProvider: 'browserstack',
+    platform: 'ios',
+    device: 'iPhone 15',
     providerApp: 'bs://app-id',
+    providerOsVersion: '17',
     providerProject: 'MyProject',
     providerBuild: 'Build-2026-09-11',
     providerSessionName: 'smoke — iOS',
+    providerDeviceOrientation: 'portrait',
+    providerNoResignApp: true,
   });
 });
 
