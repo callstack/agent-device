@@ -1,19 +1,28 @@
 import { expect, test } from 'vitest';
 import {
   type AndroidScreenRecordingProcessOwnership,
+  provesAndroidScreenRecordPathUnclaimed,
   provesAndroidScreenRecordTermination,
 } from './screen-recording-runtime-host.ts';
 
-const TERMINATION_PROOF: readonly (readonly [AndroidScreenRecordingProcessOwnership, boolean])[] = [
-  ['missing', true],
-  ['ownership-lost', true],
-  ['owned-alive', false],
-  ['uncertain', false],
+type Proof = readonly [
+  ownership: AndroidScreenRecordingProcessOwnership,
+  termination: boolean,
+  pathUnclaimed: boolean,
 ];
 
-test.each(TERMINATION_PROOF)(
-  'observation %s proves recorder termination as %s',
-  (ownership, expected) => {
-    expect(provesAndroidScreenRecordTermination(ownership)).toBe(expected);
+const PROOFS: readonly Proof[] = [
+  ['missing', true, true],
+  ['ownership-lost', true, true],
+  ['foreign-writer', true, false],
+  ['owned-alive', false, false],
+  ['uncertain', false, false],
+];
+
+test.each(PROOFS)(
+  'observation %s proves termination as %s and an unclaimed path as %s',
+  (ownership, termination, pathUnclaimed) => {
+    expect(provesAndroidScreenRecordTermination(ownership)).toBe(termination);
+    expect(provesAndroidScreenRecordPathUnclaimed(ownership)).toBe(pathUnclaimed);
   },
 );

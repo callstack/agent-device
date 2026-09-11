@@ -21,8 +21,15 @@ type ProviderState = {
   processes: Map<string, NativeProcess>;
   pulls: number;
 };
-/** A live, unrelated process the Android kernel placed on a previously recorded pid. */
-export type ReusedAndroidRecordingPid = { pid: string; startTime: string };
+/**
+ * A live process the Android kernel placed on a previously recorded pid: unrelated by default, or a
+ * replacement `screenrecord` writing the same remote path.
+ */
+export type ReusedAndroidRecordingPid = {
+  pid: string;
+  startTime: string;
+  role?: 'unrelated' | 'replacement-recorder';
+};
 
 export function createAndroidRecordingProvider(params: {
   manifests?: readonly AndroidRecordingManifestFixture[];
@@ -57,7 +64,10 @@ function reusePid(reused: ReusedAndroidRecordingPid, processes: Map<string, Nati
     remotePath: processes.get(reused.pid)?.remotePath ?? '',
     startTime: reused.startTime,
     alive: true,
-    executable: '/system/bin/servicemanager',
+    executable:
+      reused.role === 'replacement-recorder'
+        ? '/system/bin/screenrecord'
+        : '/system/bin/servicemanager',
   });
 }
 

@@ -9,7 +9,9 @@
   attempt with `Android screenrecord completed evidence cannot be safely retired`, and `record stop`
   could not return an already-finalized recording. Proven termination now retires the marker and
   returns the stored completion; a live or unreadable recorder still blocks, and the unrelated
-  process is never signalled (#2476).
+  process is never signalled. A reused pid that runs a replacement `screenrecord` on the same
+  remote path proves the old recorder gone but not that the path is free, so that marker and
+  artifact are retained until the replacement ends, and neither is signalled (#2476).
 - Fixed: iOS Simulator snapshots of Safari and of apps with a `WKWebView` stopped showing the
   page in 0.21.0 — chrome plus empty `[webview]` nodes, no links, text, or form fields, so no ref
   could reach the page (#2484). The host AX bridge that 0.21.0 made the Simulator's snapshot source

@@ -94,19 +94,23 @@ export type AndroidScreenRecordingProcessIdentity = Readonly<{
   startTime: string;
 }>;
 
+/**
+ * `ownership-lost`: the pid is present, yet the identity readable there names something else — a
+ * reassigned pid, or an exited task whose command line is already gone. `foreign-writer`: the pid
+ * runs `screenrecord` on the recorded remote path but started at a different time, so a recorder
+ * that is not ours is writing that artifact. `uncertain` reads nothing conclusive.
+ */
 export type AndroidScreenRecordingProcessOwnership =
   | 'missing'
   | 'owned-alive'
   | 'ownership-lost'
+  | 'foreign-writer'
   | 'uncertain';
 
 /**
- * Whether an observation proves that the process named by the inspected identity is gone.
- *
- * `ownership-lost` is proof rather than doubt: the pid is present, yet the identity metadata that
- * was readable there named something else — a reassigned pid, or an exited task whose command line
- * is already gone — so the recorded process can no longer write its artifact. `uncertain` reads
- * nothing conclusive and proves nothing, and a matching identity is provably still running.
+ * Whether an observation proves that the process named by the inspected identity is gone. Both
+ * `ownership-lost` and `foreign-writer` are proof rather than doubt: the recorded process can no
+ * longer write its artifact.
  */
 export function provesAndroidScreenRecordTermination(
   ownership: AndroidScreenRecordingProcessOwnership,
@@ -114,7 +118,27 @@ export function provesAndroidScreenRecordTermination(
   switch (ownership) {
     case 'missing':
     case 'ownership-lost':
+    case 'foreign-writer':
       return true;
+    case 'owned-alive':
+    case 'uncertain':
+      return false;
+  }
+}
+
+/**
+ * Whether an observation proves that nothing writes the recorded remote path any more, which is
+ * what removing the artifact requires. A recorder proven gone is not proof of that: a
+ * `foreign-writer` has claimed the same path.
+ */
+export function provesAndroidScreenRecordPathUnclaimed(
+  ownership: AndroidScreenRecordingProcessOwnership,
+): boolean {
+  switch (ownership) {
+    case 'missing':
+    case 'ownership-lost':
+      return true;
+    case 'foreign-writer':
     case 'owned-alive':
     case 'uncertain':
       return false;

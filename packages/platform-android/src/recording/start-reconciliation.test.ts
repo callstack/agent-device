@@ -138,6 +138,43 @@ test.each([
   expect(calls).toEqual([]);
 });
 
+test('retains completed evidence and its marker while a replacement recorder writes the same path', async () => {
+  const marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'foreign-writer' as const,
+    stop: async ({ pid }: { pid: string }) => {
+      calls.push(`signal:${pid}`);
+      return 'already-missing' as const;
+    },
+    remove: async (path: string) => {
+      calls.push(`artifact:${path}`);
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
+    'another recorder is writing',
+  );
+  expect(calls).toEqual([]);
+});
+
 test('retirement failure blocks launch and can succeed on a later retry', async () => {
   let marker = JSON.stringify(completedEvidence());
   let allowRemoval = false;

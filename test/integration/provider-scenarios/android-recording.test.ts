@@ -198,6 +198,72 @@ test('Provider-backed integration Android record start retires completed evidenc
   );
 });
 
+test('Provider-backed integration Android record start retains completed evidence while a replacement recorder writes its path', async () => {
+  await withAndroidRecordingScenario(
+    'agent-device-provider-scenario-android-foreign-writer-',
+    async (tmpDir) => {
+      const calls: string[][] = [];
+      const outputPath = path.join(tmpDir, 'foreign.mp4');
+      const remotePath = '/sdcard/agent-device-recording-723456789.mp4';
+      const manifest = buildAndroidRecordingManifest({
+        outPath: outputPath,
+        remotePath,
+        sessionName: 'default',
+        chunks: [{ index: 1, remotePath, remotePid: '4004', remoteStartTime: '3766' }],
+        completion: {
+          backend: 'adb screenrecord',
+          outPath: outputPath,
+          startedAt: 123456789,
+          completedAt: 123456999,
+          scope: 'device',
+          showTouches: true,
+          recordOnlySession: false,
+        },
+      });
+      const daemon = await createAndroidRecordingScenarioHarness({
+        androidAdbProvider: () =>
+          createAndroidRecordingProvider({
+            calls,
+            manifests: [manifest],
+            reusedPids: [{ pid: '4004', startTime: '9911', role: 'replacement-recorder' }],
+          }),
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+      });
+      try {
+        assertRpcError(
+          await daemon.callCommand('record', ['start', outputPath], {
+            platform: 'android',
+            serial: PROVIDER_SCENARIO_ANDROID.id,
+            recordingScope: 'device',
+          }),
+          'UNKNOWN',
+          /another recorder is writing/,
+        );
+        assert.equal(
+          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          false,
+          'the replacement recorder keeps its artifact',
+        );
+        assert.equal(
+          calls.some((args) => args.join(' ') === ANDROID_MARKER_REMOVAL),
+          false,
+          'the completed marker is retained',
+        );
+        assert.equal(
+          calls.some((args) => args[1]?.startsWith('kill ')),
+          false,
+        );
+        assert.equal(
+          calls.some((args) => args[1]?.startsWith('screenrecord --bit-rate ')),
+          false,
+        );
+      } finally {
+        await daemon.close();
+      }
+    },
+  );
+});
+
 test('Provider-backed integration Android record start refuses completed evidence whose recorder is alive', async () => {
   await withAndroidRecordingScenario(
     'agent-device-provider-scenario-android-pid-alive-',
