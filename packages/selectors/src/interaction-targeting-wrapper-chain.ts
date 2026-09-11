@@ -7,15 +7,19 @@ import { isSemanticTouchTarget } from './touch-semantics.ts';
 const WRAPPER_RECT_SLACK = 1;
 
 /**
- * The deepest semantic touch target of a single ancestry chain whose candidates
- * all lack hittability evidence, or null when the chain does not denote one
+ * The control of a single ancestry chain that is one actionable control wrapped
+ * by non-actionable wrappers, or null when the chain does not denote one
  * control.
  *
  * Regular iOS snapshots omit unverified hittability, and
  * `findPreferredActionableDescendant` requires verified hittability, so a
  * SwiftUI wrapper can never relate to its own control through the resolution
  * ladder: press and wait then see two actionable elements for one toolbar
- * button. Candidates carrying any hittability fact keep the existing rules.
+ * button. The collapse stays narrow on purpose: every candidate above the
+ * control must be a non-actionable wrapper, so a chain of two real controls (a
+ * cell and the button inside it) keeps the existing ambiguity refusal instead of
+ * silently pressing the descendant. Candidates carrying any hittability fact
+ * also keep the existing rules.
  */
 export function resolveUnverifiedWrapperControl(
   candidates: readonly SnapshotNode[],
@@ -26,6 +30,10 @@ export function resolveUnverifiedWrapperControl(
     (candidate.depth ?? 0) > (deepest.depth ?? 0) ? candidate : deepest,
   );
   if (!isSemanticTouchTarget(control)) return null;
+  const wrapsOnlyNonActionable = candidates.every(
+    (candidate) => candidate === control || !isSemanticTouchTarget(candidate),
+  );
+  if (!wrapsOnlyNonActionable) return null;
   const controlRect = normalizeRect(control.rect);
   if (!controlRect) return null;
   return candidates.every((candidate) =>

@@ -68,6 +68,36 @@ test('refuses a chain whose rects differ beyond sub-pixel slack', () => {
   );
 });
 
+test('refuses a chain of two real controls that share one rect', () => {
+  // A cell and the button inside it share an identifier and their rects agree
+  // within slack. Both are actionable, so collapsing to the descendant would
+  // silently press the wrong control; the ambiguity refusal must survive.
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 1,
+      type: 'XCUIElementTypeCell',
+      identifier: 'row_action',
+      rect: { x: 20, y: 63, width: 36, height: 36 },
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'XCUIElementTypeButton',
+      identifier: 'row_action',
+      rect: { x: 20.5, y: 63, width: 35, height: 36 },
+    },
+  ]);
+
+  assert.equal(
+    resolveUnverifiedWrapperControl(
+      snapshot.nodes.filter((node) => node.identifier === 'row_action'),
+    ),
+    null,
+  );
+});
+
 test('refuses a chain whose deepest candidate is not a semantic touch target', () => {
   const snapshot = makeSnapshotState([
     {
