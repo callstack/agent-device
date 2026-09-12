@@ -8,8 +8,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { encodeScreenRecordingCompletionMetadata } from '../screen-recording-completion-metadata.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
+import { encodeScreenRecordingCompletionMetadata } from '../screen-recording-session-resource.ts';
 import {
   resolveScreenRecordingStopRecovery,
   screenRecordingManifestIsTerminal,

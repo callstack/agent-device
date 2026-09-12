@@ -1,9 +1,7 @@
 import { expect, test } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
-import {
-  decodeScreenRecordingCompletionMetadata,
-  encodeScreenRecordingCompletionMetadata,
-} from '../screen-recording-completion-metadata.ts';
+import { decodeScreenRecordingCompletionMetadata } from '../screen-recording-completion-metadata.ts';
+import { encodeScreenRecordingCompletionMetadata } from '../screen-recording-session-resource.ts';
 
 const MINIMAL_COMPLETION: ScreenRecordingCompletion = {
   backend: 'simctl',
@@ -28,7 +26,7 @@ const FULL_COMPLETION: ScreenRecordingCompletion = {
   ],
 };
 
-test('completion metadata round-trips every stop response field', () => {
+test('a manifest written by the resource definition reads back as the same stop response', () => {
   expect(decode(FULL_COMPLETION)).toEqual(FULL_COMPLETION);
 });
 
