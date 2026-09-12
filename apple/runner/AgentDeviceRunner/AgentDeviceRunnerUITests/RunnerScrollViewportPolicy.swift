@@ -59,6 +59,25 @@ enum ScrollGestureOutcome {
   case occluded(keyboardMinY: Double, visibleHeight: Double)
 }
 
+extension ScrollGestureDispatch {
+  /// Reports the gesture against the band its plan ran inside, beside the keyboard evidence. The
+  /// synthesis frame stays the full viewport so the coordinates rotate correctly, which leaves the
+  /// payload measured against an axis the caller never planned on: `pixels` are a fraction of the
+  /// band, so the band is what `referenceWidth` and `referenceHeight` have to name.
+  func attachingEvidence(to response: Response) -> Response {
+    guard response.ok else { return response }
+    var payload = response.data ?? DataPayload()
+    payload.referenceWidth = Double(planFrame.width)
+    payload.referenceHeight = Double(planFrame.height)
+    guard let keyboardMinY else {
+      return Response(ok: response.ok, data: payload, error: response.error)
+    }
+    payload.keyboardAvoided = true
+    payload.keyboardMinY = keyboardMinY
+    return Response(ok: response.ok, data: payload, error: response.error)
+  }
+}
+
 extension RunnerScrollViewport {
   /// Plans the swipe inside the band the keyboard left and keeps the viewport as the coordinate basis,
   /// so a clip shortens the travel without moving the gesture's lane.
@@ -337,6 +356,22 @@ extension RunnerTests {
       keyboard.minY - ScrollViewportPolicy.accessoryAllowance,
       "a landscape swipe must stay clear of the keys"
     )
+
+    let reported = gesture.attachingEvidence(
+      to: Response(
+        ok: true,
+        data: DataPayload(referenceWidth: viewport.width, referenceHeight: viewport.height),
+        error: nil
+      )
+    )
+    XCTAssertEqual(
+      reported.data?.referenceHeight,
+      band.height,
+      "the payload names the band the plan ran inside, not the synthesis frame"
+    )
+    XCTAssertEqual(reported.data?.referenceWidth, viewport.width)
+    XCTAssertEqual(reported.data?.keyboardMinY, keyboardMinY)
+    XCTAssertEqual(reported.data?.keyboardAvoided, true)
 
     let orientedStartY = gesture.planFrame.minY + gesture.plan.y1
     let dispatched = nativeSynthesizedPoint(

@@ -1983,8 +1983,8 @@ extension RunnerTests {
         guard scrollDurationIsValid(command.durationMs) else {
           return invalidScrollDurationResponse(commandName: "scroll")
         }
-        return attachingScrollViewportEvidence(
-          executeScrollDragGesture(
+        return gesture.attachingEvidence(
+          to: executeScrollDragGesture(
             activeApp: activeApp,
             x: gesture.planFrame.minX + gesture.plan.x1,
             y: gesture.planFrame.minY + gesture.plan.y1,
@@ -1994,8 +1994,7 @@ extension RunnerTests {
             message: "scrolled",
             context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
             releaseBehavior: command.scrollReleaseBehavior
-          ),
-          keyboardMinY: gesture.keyboardMinY
+          )
         )
       }
     case .desktopScroll:
@@ -2575,14 +2574,6 @@ extension RunnerTests {
   /// Adds the #2500 avoidance evidence to a scroll response. Only the frame resolver knows whether
   /// it trimmed the swipe for a keyboard, and only `scroll` has this evidence to carry, so it is
   /// attached where the frame was resolved rather than threaded through every gesture response.
-  private func attachingScrollViewportEvidence(_ response: Response, keyboardMinY: Double?) -> Response {
-    guard response.ok, let keyboardMinY else { return response }
-    var payload = response.data ?? DataPayload()
-    payload.keyboardAvoided = true
-    payload.keyboardMinY = keyboardMinY
-    return Response(ok: response.ok, data: payload, error: response.error)
-  }
-
   /// The refusal a keyboard forces. It performs no gesture: swiping into the keys would leave the
   /// surface where it was, which the daemon's no-progress fingerprint reads as a stuck container
   /// (#2499) and an agent reads as a broken scroll. The TS owner maps the code to the
