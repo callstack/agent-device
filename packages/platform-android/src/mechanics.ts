@@ -322,7 +322,7 @@ export {
   executeAndroidTouchHelperPlan,
   normalizeAndroidTouchHelperGestureRequest,
   readAndroidTouchHelperFinalRecord,
-  readAndroidTouchHelperViewport,
+  readAndroidTouchHelperViewportReading,
 } from './touch-helper.ts';
 export {
   lowerAndroidTouchPlan,

@@ -22,7 +22,10 @@ import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-sess
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { getAndroidSnapshotHelperSessionDeviceKey } from '../snapshot-helper-retirement.ts';
 import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
-import { executeAndroidTouchHelperPlan, readAndroidTouchHelperViewport } from '../touch-helper.ts';
+import {
+  executeAndroidTouchHelperPlan,
+  readAndroidTouchHelperViewportReading,
+} from '../touch-helper.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import {
   ANDROID_TOUCH_HELPER_MANIFEST as manifest,
@@ -250,7 +253,7 @@ test('a daemon-session viewport read starts the session so the gesture reuses it
     },
     { serial: device.id },
     async () => {
-      const viewport = await readAndroidTouchHelperViewport(device, {
+      const viewport = await readAndroidTouchHelperViewportReading(device, {
         helperSessionScope: 'daemon-session',
       });
       const gesture = await executeAndroidTouchHelperPlan(
@@ -261,7 +264,7 @@ test('a daemon-session viewport read starts the session so the gesture reuses it
     },
   );
 
-  assert.deepEqual(result.viewport, { x: 0, y: 0, width: 400, height: 800 });
+  assert.deepEqual(result.viewport, { viewport: { x: 0, y: 0, width: 400, height: 800 } });
   assert.equal(result.gesture.helperTransport, 'persistent-session');
   assert.equal(viewportCommands, 1);
   assert.equal(gestureCommands, 1);
@@ -297,10 +300,10 @@ test('a command-scoped viewport read stays one-shot and starts no session', asyn
       }),
     },
     { serial: device.id },
-    async () => await readAndroidTouchHelperViewport(device),
+    async () => await readAndroidTouchHelperViewportReading(device),
   );
 
-  assert.deepEqual(viewport, { x: 5, y: 6, width: 300, height: 400 });
+  assert.deepEqual(viewport, { viewport: { x: 5, y: 6, width: 300, height: 400 } });
   assert.ok(oneShotArgs?.includes('viewport'));
   assert.equal(sessionCommands, 0);
 });
@@ -673,10 +676,10 @@ test('viewport falls back to one-shot instrumentation after a session error', as
       }),
     },
     { serial: device.id },
-    async () => await readAndroidTouchHelperViewport(device),
+    async () => await readAndroidTouchHelperViewportReading(device),
   );
 
-  assert.deepEqual(viewportResult, { x: 5, y: 6, width: 300, height: 400 });
+  assert.deepEqual(viewportResult, { viewport: { x: 5, y: 6, width: 300, height: 400 } });
   assert.ok(oneShotArgs?.includes('viewport'));
   assert.equal(await session.isSessionAlive(), false);
 });
@@ -719,9 +722,9 @@ test('a structured ok=false viewport response stops the session before the one-s
       }),
     },
     { serial: device.id },
-    async () => await readAndroidTouchHelperViewport(device),
+    async () => await readAndroidTouchHelperViewportReading(device),
   );
 
-  assert.deepEqual(viewportResult, { x: 5, y: 6, width: 300, height: 400 });
+  assert.deepEqual(viewportResult, { viewport: { x: 5, y: 6, width: 300, height: 400 } });
   assert.ok(oneShotArgs?.includes('viewport'));
 });

@@ -1,4 +1,4 @@
-import { test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   backAndroid,
@@ -13,9 +13,146 @@ import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { AndroidTouchInjector } from '../adb-executor.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
+import {
+  ANDROID_TOUCH_HELPER_MANIFEST as HELPER_MANIFEST,
+  androidTouchHelperResultRecord as helperRecord,
+} from './touch-helper.fixtures.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
+
+// The keyboard-aware viewport read goes through the snapshot helper rather than a touch provider,
+// so the scroll tests below resolve the fixture APK instead of a bundled one.
+vi.mock('../helper-package-install.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../helper-package-install.ts')>();
+  return {
+    ...actual,
+    resolveAndroidHelperArtifact: async () => ({
+      apkPath: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.apkPath,
+      manifest: {
+        ...HELPER_MANIFEST,
+        sha256: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.sha256,
+      },
+    }),
+  };
+});
+
+beforeEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+afterEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+/**
+ * Answers one helper session: the version probe says "current" so no install is faked, the viewport
+ * read reports `window` plus an optional IME window, and the gesture accepts whatever it is given.
+ */
+function helperRouteAdb(window: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  keyboard?: { x: number; y: number; width: number; height: number };
+}) {
+  return (args: string[]) => {
+    if (args.includes('--show-versioncode')) {
+      return {
+        stdout: `package:${HELPER_MANIFEST.packageName} versionCode:999999`,
+        stderr: '',
+      };
+    }
+    if (args.includes('viewport')) {
+      const { keyboard, ...app } = window;
+      return {
+        stdout: [
+          helperRecord({
+            ok: 'true',
+            x: String(app.x),
+            y: String(app.y),
+            width: String(app.width),
+            height: String(app.height),
+            ...(keyboard
+              ? {
+                  keyboardX: String(keyboard.x),
+                  keyboardY: String(keyboard.y),
+                  keyboardWidth: String(keyboard.width),
+                  keyboardHeight: String(keyboard.height),
+                }
+              : {}),
+          }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    if (args[0] === 'shell' && args[1] === 'am') {
+      return {
+        stdout: [
+          helperRecord({ ok: 'true', kind: 'pan', injectedEvents: '18', elapsedMs: '320' }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    return undefined;
+  };
+}
+
+const PORTRAIT_WINDOW = { x: 0, y: 0, width: 1080, height: 2280 };
+const LOWER_HALF_KEYBOARD = { x: 0, y: 1600, width: 1080, height: 680 };
+
+test('scrollAndroid keeps the swipe above the IME window and names the clipped band', async () => {
+  // The full window would place a center-symmetric swipe at y 1140..~1500 — on the keys. Clipping
+  // first means the injected path and the reported reference height both stop above the keyboard
+  // by the accessory allowance, so a focused field no longer swallows the gesture (#2500).
+  await withFakeAdb(
+    helperRouteAdb({ ...PORTRAIT_WINDOW, keyboard: LOWER_HALF_KEYBOARD }),
+    async ({ device }) => {
+      const result = await scrollAndroid(device, 'down', { pixels: 600 });
+      const lowest = Math.max(Number(result.y1), Number(result.y2));
+      assert.equal(result.keyboardAvoided, true);
+      assert.equal(result.keyboardMinY, 1600);
+      assert.equal(result.referenceHeight, 1588, 'clipped axis is the band above the allowance');
+      assert.equal(result.pixels, 600, 'requested travel fits the clipped band');
+      assert.ok(lowest <= 1588, `swipe endpoint ${lowest} landed under the keyboard`);
+    },
+  );
+});
+
+test('scrollAndroid swipes the whole window when no IME window is on screen', async () => {
+  await withFakeAdb(helperRouteAdb({ ...PORTRAIT_WINDOW }), async ({ device }) => {
+    const result = await scrollAndroid(device, 'down', { pixels: 600 });
+    assert.equal('keyboardAvoided' in result, false);
+    assert.equal(result.referenceHeight, 2280);
+  });
+});
+
+test('scrollAndroid refuses rather than flinging into a keyboard that owns the window', async () => {
+  // A landscape IME leaves 40px of a 900px window: a swipe there reads as a stuck surface, so the
+  // command refuses with its own typed reason instead of the generic no-progress stop.
+  await withFakeAdb(
+    helperRouteAdb({
+      ...PORTRAIT_WINDOW,
+      keyboard: { x: 0, y: 120, width: 1080, height: 2160 },
+    }),
+    async ({ device }) => {
+      await assert.rejects(scrollAndroid(device, 'down', { pixels: 600 }), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(
+          (error as { details?: { reason?: string } }).details?.reason,
+          'scroll_keyboard_occludes_surface',
+        );
+        return true;
+      });
+    },
+  );
+});
 
 test('scrollAndroid plans explicit pixel travel through semantic touch injection', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
