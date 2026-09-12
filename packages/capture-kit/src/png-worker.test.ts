@@ -21,6 +21,13 @@ test('resultTransferList skips views that do not own their whole ArrayBuffer', (
   assert.deepEqual(resultTransferList({ kind: 'encode', png: shortView }), []);
 });
 
+test('resultTransferList transfers a cropped encoding and skips an untouched file', () => {
+  const cropped = Buffer.alloc(32); // Buffer.alloc never uses the shared pool
+
+  assert.deepEqual(resultTransferList({ kind: 'crop', png: cropped }), [cropped.buffer]);
+  assert.deepEqual(resultTransferList({ kind: 'crop', png: null }), []);
+});
+
 test('resultTransferList transfers only the fully-owned views of a mixed result', () => {
   const ownedDiffData = Buffer.alloc(16); // Buffer.alloc never uses the shared pool
   const pooledMask = new Uint8Array(new ArrayBuffer(32), 4, 8); // offset view, pooled-Buffer shape

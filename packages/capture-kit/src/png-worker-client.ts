@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
 import { decodePng, PNG } from './png.ts';
 import {
@@ -19,7 +20,7 @@ import {
 } from './png-worker-contract.ts';
 
 /**
- * Async wrappers that offload CPU-heavy PNG decode/encode and screenshot
+ * Async wrappers that offload CPU-heavy PNG decode/encode/crop and screenshot
  * pixel diffing to a worker thread so daemon request handlers do not block
  * the shared event loop. When the worker entry cannot be resolved or fails
  * to start, every call transparently falls back to the in-process
@@ -170,12 +171,12 @@ function runWorkerJob<Kind extends PngWorkerJobKind>(
 /** Runs a job on the worker, falling back to `runSync` when it is unavailable. */
 async function runPngJob<Kind extends PngWorkerJobKind>(
   job: PngWorkerJobFor<Kind>,
-  runSync: () => PngWorkerJobResultFor<Kind>,
+  runSync: () => PngWorkerJobResultFor<Kind> | Promise<PngWorkerJobResultFor<Kind>>,
 ): Promise<PngWorkerJobResultFor<Kind>> {
   try {
     return await runWorkerJob(job);
   } catch (error) {
-    if (error instanceof PngWorkerUnavailableError) return runSync();
+    if (error instanceof PngWorkerUnavailableError) return await runSync();
     throw error;
   }
 }
@@ -211,6 +212,24 @@ export async function encodePngAsync(png: PNG): Promise<Buffer> {
     () => ({ kind: 'encode', png: PNG.sync.write(png) }),
   );
   return toBuffer(result.png);
+}
+
+/**
+ * Crops encoded PNG bytes to `box`, returning the new encoding, or `null` when `box` already
+ * covers the image so the caller keeps the bytes it has.
+ */
+export async function cropPngBytesAsync(
+  source: Buffer,
+  box: Rect,
+  label: string,
+): Promise<Buffer | null> {
+  const result = await runPngJob({ kind: 'crop', png: source, label, box }, async () => {
+    // Read on demand so the region reader's modules stay out of the import closure of every
+    // entry that only needs the worker's other jobs.
+    const { cropPngBytes } = await import('./png-crop-bytes.ts');
+    return { kind: 'crop', png: cropPngBytes(source, box, label) };
+  });
+  return result.png === null ? null : toBuffer(result.png);
 }
 
 export async function computePngRgbDifferenceAsync(
