@@ -14,6 +14,7 @@ export type AndroidUiHierarchy = {
   enabled?: boolean;
   visibleToUser?: boolean;
   focused?: boolean;
+  selected?: boolean;
   editable?: boolean;
   password?: boolean;
   hintShowing?: boolean;

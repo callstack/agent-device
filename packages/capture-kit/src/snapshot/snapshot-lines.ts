@@ -240,11 +240,14 @@ function buildLineMetadata(
 ): string[] {
   const metadata: string[] = [];
   if (node.enabled === false) metadata.push('disabled');
+  // Selection is a state a snapshot diff can report as changed, and the diff renders its lines
+  // without text-surface summarizing. A fact the diff compares has to be visible in the line it
+  // prints, or a selection flip reads as a changed pair whose two lines look identical.
+  if (node.selected === true) metadata.push('selected');
   metadata.push(...(node.presentationHints ?? []));
   if (!options.summarizeTextSurfaces) {
     return uniqueMetadata(metadata);
   }
-  if (node.selected === true) metadata.push('selected');
   if (node.focused === true) metadata.push('focused');
   if (isEditableRole(type)) metadata.push('editable');
   if (looksScrollable(node, type)) metadata.push('scrollable');

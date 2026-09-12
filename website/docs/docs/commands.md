@@ -375,7 +375,7 @@ agent-device get attrs @e1
   act on stale React Native screens. API 23 cannot report sibling `drawing-order`, so this scan fails
   conservative and `androidSnapshot.occlusionScanUnavailable: true` discloses the difference.
   Android `--raw` is the acquired tree: it also keeps nodes Android marks invisible and stale
-  application windows. The helper does not report `checked`/`selected` state, and it caps
+  application windows. The helper does not report `checked`/`checkable` state, and it caps
   captures at 5000 nodes before any `--scope` applies (`truncated: true`).
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in

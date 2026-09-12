@@ -799,7 +799,7 @@ test('formatSnapshotText keeps flattened output and adds duplicate nav warning',
   assert.match(text, /@e2 \[button\] "Inbox"/);
 });
 
-test('formatSnapshotLine keeps snapshot-only metadata off the default formatter path', () => {
+test('formatSnapshotLine marks selection anywhere, and keeps text-surface metadata off the default path', () => {
   const line = formatSnapshotLine(
     {
       ref: 'e1',
@@ -814,7 +814,9 @@ test('formatSnapshotLine keeps snapshot-only metadata off the default formatter 
     0,
     false,
   );
-  assert.doesNotMatch(line, /\[selected\]/);
+  // Selection is a state a snapshot diff compares, and diff lines take this default path: a fact
+  // the diff weighs has to be readable in the line it prints. Text-surface metadata is not.
+  assert.match(line, /\[selected\]/);
   assert.doesNotMatch(line, /\[editable\]/);
   assert.doesNotMatch(line, /\[scrollable\]/);
 });

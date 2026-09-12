@@ -2,6 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import {
   androidSnapshotPublicationInput,
   androidUiNodes,
@@ -147,7 +149,7 @@ test('parseUiHierarchy reads Android bounds with negative coordinates', () => {
 
 test('androidUiNodes exposes decoded Android hierarchy metadata', () => {
   const xml =
-    '<hierarchy><node package="com.example.app" class="android.widget.EditText" text="Fish &amp; Chips" content-desc="Search&#10;field" resource-id="com.example.app:id/search" bounds="[10,20][110,70]" clickable="false" enabled="true" visible-to-user="true" drawing-order="4" focusable="true" focused="true" password="true" window-index="0" window-type="1" window-layer="3" window-active="true" window-focused="false" window-bounds="[0,0][390,844]"/></hierarchy>';
+    '<hierarchy><node package="com.example.app" class="android.widget.EditText" text="Fish &amp; Chips" content-desc="Search&#10;field" resource-id="com.example.app:id/search" bounds="[10,20][110,70]" clickable="false" enabled="true" visible-to-user="true" drawing-order="4" focusable="true" focused="true" selected="true" password="true" window-index="0" window-type="1" window-layer="3" window-active="true" window-focused="false" window-bounds="[0,0][390,844]"/></hierarchy>';
 
   assert.deepEqual(Array.from(androidUiNodes(xml)), [
     {
@@ -164,6 +166,7 @@ test('androidUiNodes exposes decoded Android hierarchy metadata', () => {
       drawingOrder: 4,
       focusable: true,
       focused: true,
+      selected: true,
       password: true,
       windowIndex: 0,
       windowType: 1,
@@ -174,6 +177,41 @@ test('androidUiNodes exposes decoded Android hierarchy metadata', () => {
     },
   ]);
   assert.equal('drawingOrder' in parseUiHierarchyTree(xml).children[0]!, false);
+  assert.equal(parseUiHierarchyTree(xml).children[0]!.selected, true);
+});
+
+// The #2462 screen: a bottom tab bar where the only difference between the selected tab and its
+// sibling is the accessibility `selected` flag the helper now carries.
+const ANDROID_TAB_BAR_XML = `<hierarchy>
+  <node class="android.widget.FrameLayout" resource-id="com.example.app:id/tab_bar" bounds="[0,724][390,800]" enabled="true" visible-to-user="true">
+    <node class="android.view.View" resource-id="com.example.app:id/home-tab" content-desc="Home" bounds="[0,724][195,800]" clickable="true" enabled="true" visible-to-user="true" selected="true"/>
+    <node class="android.view.View" resource-id="com.example.app:id/local-tab" content-desc="Local" bounds="[195,724][390,800]" clickable="true" enabled="true" visible-to-user="true" selected="false"/>
+  </node>
+</hierarchy>`;
+
+test('a published Android snapshot answers a selected-qualified read (#2462)', async () => {
+  const nodes = publishUiHierarchy(ANDROID_TAB_BAR_XML).nodes;
+
+  // The `get attrs` / `is selected` door, not a hand-picked resolution policy.
+  const read = async (expression: string) => {
+    const outcome = await resolveSelectorPipeline(
+      SELECTOR_PIPELINE_POLICIES.readUnique,
+      nodes,
+      expression,
+      { platform: 'android' },
+    );
+    return outcome.kind === 'target' ? outcome.node.identifier : outcome.kind;
+  };
+
+  assert.equal(
+    await read('id=com.example.app:id/home-tab selected=true'),
+    'com.example.app:id/home-tab',
+  );
+  assert.equal(await read('id=com.example.app:id/local-tab selected=true'), 'none');
+  assert.equal(
+    await read('id=com.example.app:id/local-tab selected=false'),
+    'com.example.app:id/local-tab',
+  );
 });
 
 test('parseUiHierarchy discards stale inactive Android application windows', () => {

@@ -352,6 +352,7 @@ function createAndroidRawSnapshotNode(
     rect: node.rect,
     enabled: node.enabled,
     focused: node.focused,
+    selected: node.selected,
     editable: node.editable,
     password: node.password,
     hintShowing: node.hintShowing,

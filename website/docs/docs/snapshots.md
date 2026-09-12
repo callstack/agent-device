@@ -113,13 +113,18 @@ the strategy owns which tiers it may use.
 - Private-accessibility recovery and `--actions` reads are simulator-specific. Physical iOS devices
   have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.
 
-## Android field metadata
+## Android node metadata
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts whenever the
-accessibility tree reports them. Explicit `false` and `0` are kept; an absent field means the fact
-was unavailable, not false. `hintShowing` needs Android API 26 or later.
+`selected`, `editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts
+whenever the accessibility tree reports them. Explicit `false` and `0` are kept; an absent field
+means the fact was unavailable, not false. `hintShowing` needs Android API 26 or later.
 
+- `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
+  segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
+  `false`; an older helper APK omits the field, which means the answer is unavailable rather than
+  unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
+  selector, and a Maestro `selected:` qualifier all match on it.
 - `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
   reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
   before reading `value` as the entered contents.
