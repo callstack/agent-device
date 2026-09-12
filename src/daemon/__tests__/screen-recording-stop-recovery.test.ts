@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
@@ -24,19 +25,6 @@ const SESSION_DEVICE: DeviceInfo = {
   kind: 'emulator',
 };
 
-test('a completed manifest hands its surviving export to a later stop', async () => {
-  const harness = makeHarness();
-  const completion = await completeRecording(harness, {
-    clientOutPath: '/workspace/capture.mp4',
-    telemetryPath: '/workspace/capture.gesture-telemetry.json',
-  });
-
-  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
-    { kind: 'completed', completion },
-  );
-  expect(screenRecordingManifestIsTerminal(harness.params)).toBe(true);
-});
-
 test('a completed manifest with no surviving video serves nothing', async () => {
   const harness = makeHarness();
   await completeRecording(harness);
@@ -45,6 +33,39 @@ test('a completed manifest with no surviving video serves nothing', async () => 
   expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
     { kind: 'none' },
   );
+});
+
+test('a completed manifest hands back the whole stop response it stored', async () => {
+  const harness = makeHarness();
+  const completion = fullCompletion(harness.videoPath);
+  fs.writeFileSync(harness.videoPath, 'mp4');
+  writeManifest(harness, encodeScreenRecordingCompletionMetadata(completion));
+
+  expect(resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE })).toEqual(
+    { kind: 'completed', completion },
+  );
+  expect(screenRecordingManifestIsTerminal(harness.params)).toBe(true);
+});
+
+test('a completed manifest whose stored response is damaged serves nothing', async () => {
+  const harness = makeHarness();
+  const stored = encodeScreenRecordingCompletionMetadata(fullCompletion(harness.videoPath));
+  fs.writeFileSync(harness.videoPath, 'mp4');
+
+  const damages: JsonObject[] = [
+    { outPath: 0 },
+    { clientOutPath: '' },
+    { completedAt: 'later' },
+    { chunks: [{ index: 'first', path: '/daemon/capture-0.mp4' }] },
+    { activeSessionApp: { bundleId: '' } },
+  ];
+
+  for (const damaged of damages) {
+    writeManifest(harness, withStoredCompletion(stored, damaged));
+    expect(
+      resolveScreenRecordingStopRecovery({ ...harness.params, device: SESSION_DEVICE }),
+    ).toEqual({ kind: 'none' });
+  }
 });
 
 test('a completed manifest with no completion metadata serves nothing', async () => {
@@ -97,6 +118,32 @@ test('a session with no recording manifest has nothing to recover', () => {
   );
   expect(screenRecordingManifestIsTerminal(harness.params)).toBe(false);
 });
+
+function fullCompletion(outPath: string): ScreenRecordingCompletion {
+  return {
+    backend: 'simctl',
+    outPath,
+    startedAt: 1,
+    completedAt: 4,
+    scope: 'app',
+    showTouches: true,
+    recordOnlySession: false,
+    clientOutPath: '/workspace/capture.mp4',
+    telemetryPath: '/workspace/capture.gesture-telemetry.json',
+    warning: 'recording was truncated at the platform limit',
+    overlayWarning: 'touch overlay burn-in is only available on macOS hosts',
+    activeSessionApp: { bundleId: 'dev.example.app', name: 'Example' },
+    chunks: [
+      { index: 0, path: '/daemon/capture-0.mp4', clientOutPath: '/workspace/capture-0.mp4' },
+      { index: 1, path: '/daemon/capture-1.mp4' },
+    ],
+  };
+}
+
+function withStoredCompletion(metadata: JsonObject, patch: JsonObject): JsonObject {
+  const completion = metadata.completion as JsonObject;
+  return { ...metadata, completion: { ...completion, ...patch } };
+}
 
 function makeHarness() {
   const sessionStore = makeSessionStore('screen-recording-stop-recovery-');

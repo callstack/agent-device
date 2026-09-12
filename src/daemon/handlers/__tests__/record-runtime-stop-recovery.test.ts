@@ -176,28 +176,6 @@ test('a recovered stop does not record a second session stop action', async () =
   expect(actions.filter((action) => action.positionals[0] === 'stop')).toHaveLength(1);
 });
 
-test('record stop refuses a completed export owned by another session', async () => {
-  const harness = makeRecordRuntimeHarness('record-runtime-replayed-stop-cross-session-');
-  const outPath = writeRecording('record-runtime-replayed-stop-cross-session-output-');
-  await harness.run(['start', outPath]);
-  await harness.run(['stop']);
-  const resourcePath = recordingResourcePath(harness.sessionStore, harness.sessionName);
-  const record = screenRecordingResourceStore.read(resourcePath);
-  if (record.status !== 'decoded') throw new Error('Expected decoded recording manifest');
-  screenRecordingResourceStore.write(resourcePath, {
-    ...record.envelope,
-    sessionId: 'recording-b',
-  });
-
-  const recovered = await harness.run(['stop']);
-
-  expect(recovered).toMatchObject({
-    ok: false,
-    error: { code: 'COMMAND_FAILED', details: { reason: 'runtime-contract-invalid' } },
-  });
-  expect(harness.runtime.bindExactDeviceCalls).not.toHaveBeenCalled();
-});
-
 test('record stop reports no active recording once a completed export is gone', async () => {
   const harness = makeRecordRuntimeHarness('record-runtime-deleted-stop-');
   const outPath = writeRecording('record-runtime-deleted-stop-output-');

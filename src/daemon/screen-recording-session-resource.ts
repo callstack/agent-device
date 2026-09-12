@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from '@agent-device/contracts/client';
+import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -64,74 +64,47 @@ export function finishLiveScreenRecording(params: {
 }
 
 /**
- * The completion properties a finished recording writes into its session manifest, and the key each
- * one lands on. The manifest outlives the request that produced it: a caller that stopped waiting
- * while the daemon was still exporting asks again with a later `record stop`, which reads these keys
- * back in `screen-recording-completion-metadata.ts`.
- *
- * The declaration lives here because session teardown reaches this module while it loads, and that
- * eager closure takes no new module (ADR-0019's loading-shape budget). Writing a completion is
- * property reads only; reading one needs the recording vocabulary and stays behind the stop path. The
- * mapped type obliges every completion property to name a key here, so a field cannot be added to the
- * stop response and left out of the manifest.
+ * The manifest key holding a finished recording's stop response. The completion is stored as the one
+ * object `record stop` returned, so a replay cannot lose a field on its way through the manifest;
+ * `screen-recording-stop-recovery.ts` reads it back and serves it.
  */
-export const screenRecordingCompletionFields = {
-  backend: { key: 'backend', write: (c: ScreenRecordingCompletion) => c.backend },
-  outPath: { key: 'outputPath', write: (c: ScreenRecordingCompletion) => c.outPath },
-  startedAt: { key: 'startedAt', write: (c: ScreenRecordingCompletion) => c.startedAt },
-  completedAt: { key: 'completedAt', write: (c: ScreenRecordingCompletion) => c.completedAt },
-  scope: { key: 'scope', write: (c: ScreenRecordingCompletion) => c.scope },
-  showTouches: { key: 'showTouches', write: (c: ScreenRecordingCompletion) => c.showTouches },
-  recordOnlySession: {
-    key: 'recordOnlySession',
-    write: (c: ScreenRecordingCompletion) => c.recordOnlySession,
-  },
-  clientOutPath: {
-    key: 'clientOutPath',
-    write: (c: ScreenRecordingCompletion) => c.clientOutPath,
-  },
-  telemetryPath: {
-    key: 'telemetryPath',
-    write: (c: ScreenRecordingCompletion) => c.telemetryPath,
-  },
-  warning: { key: 'warning', write: (c: ScreenRecordingCompletion) => c.warning },
-  overlayWarning: {
-    key: 'overlayWarning',
-    write: (c: ScreenRecordingCompletion) => c.overlayWarning,
-  },
-  activeSessionApp: {
-    key: 'activeSessionApp',
-    write: (c: ScreenRecordingCompletion) => encodeAppIdentity(c.activeSessionApp),
-  },
-  chunks: {
-    key: 'chunks',
-    write: (c: ScreenRecordingCompletion) => c.chunks?.map(encodeChunk),
-  },
-} satisfies {
-  [K in keyof ScreenRecordingCompletion]: Readonly<{
-    /** Key inside the durable manifest's completion metadata. */
-    key: string;
-    write: (completion: ScreenRecordingCompletion) => JsonValue | undefined;
-  }>;
-};
+export const SCREEN_RECORDING_COMPLETION_METADATA_KEY = 'completion';
 
 export function encodeScreenRecordingCompletionMetadata(
   completion: ScreenRecordingCompletion,
 ): JsonObject {
-  const metadata: Record<string, JsonValue> = {};
-  for (const field of Object.values(screenRecordingCompletionFields)) {
-    const value = field.write(completion);
-    if (value !== undefined) metadata[field.key] = value;
-  }
-  return metadata;
+  return {
+    [SCREEN_RECORDING_COMPLETION_METADATA_KEY]: {
+      backend: completion.backend,
+      outPath: completion.outPath,
+      startedAt: completion.startedAt,
+      completedAt: completion.completedAt,
+      scope: completion.scope,
+      showTouches: completion.showTouches,
+      recordOnlySession: completion.recordOnlySession,
+      ...(completion.clientOutPath === undefined
+        ? {}
+        : { clientOutPath: completion.clientOutPath }),
+      ...(completion.telemetryPath === undefined
+        ? {}
+        : { telemetryPath: completion.telemetryPath }),
+      ...(completion.warning === undefined ? {} : { warning: completion.warning }),
+      ...(completion.overlayWarning === undefined
+        ? {}
+        : { overlayWarning: completion.overlayWarning }),
+      ...(completion.activeSessionApp === undefined
+        ? {}
+        : { activeSessionApp: encodeAppIdentity(completion.activeSessionApp) }),
+      ...(completion.chunks === undefined ? {} : { chunks: completion.chunks.map(encodeChunk) }),
+    },
+  };
 }
 
-function encodeAppIdentity(app: RecordingAppIdentity | undefined): JsonValue | undefined {
-  if (app === undefined) return undefined;
+function encodeAppIdentity(app: RecordingAppIdentity): JsonObject {
   return { bundleId: app.bundleId, ...(app.name === undefined ? {} : { name: app.name }) };
 }
 
-function encodeChunk(chunk: ScreenRecordingChunk): JsonValue {
+function encodeChunk(chunk: ScreenRecordingChunk): JsonObject {
   return {
     index: chunk.index,
     path: chunk.path,
