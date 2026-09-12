@@ -344,6 +344,8 @@ async function sendSocketRequest(
                 false,
                 timeoutMs,
                 req.flags?.platform,
+                req.session,
+                req.positionals?.[0],
               ),
             );
           }, timeoutMs)
@@ -471,6 +473,8 @@ async function sendHttpRequest(
                 remote,
                 timeoutMs,
                 req.flags?.platform,
+                req.session,
+                req.positionals?.[0],
               ),
             );
           }, timeoutMs)

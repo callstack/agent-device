@@ -11,6 +11,7 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
+import { encodeScreenRecordingCompletionMetadata } from './screen-recording-completion-metadata.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import { screenRecordingResourceStore } from './screen-recording-resource-store.ts';
@@ -29,15 +30,7 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
     read: (session) => session.screenRecording,
     replace: (session, screenRecording) => ({ ...session, screenRecording }),
   },
-  completionMetadata: (completion) => ({
-    backend: completion.backend,
-    outputPath: completion.outPath,
-    startedAt: completion.startedAt,
-    completedAt: completion.completedAt,
-    scope: completion.scope,
-    showTouches: completion.showTouches,
-    recordOnlySession: completion.recordOnlySession,
-  }),
+  completionMetadata: encodeScreenRecordingCompletionMetadata,
   messages: {
     noActive: 'no active recording',
     cleanupPendingHint:

@@ -44,6 +44,8 @@ export function handleRequestTimeout(
   remote: boolean,
   timeoutMs: number,
   platform: PlatformSelector | undefined,
+  session: string | undefined,
+  action: string | undefined,
 ): AppError {
   // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
   // timeout, on purpose: the request's declared --platform is not
@@ -87,7 +89,14 @@ export function handleRequestTimeout(
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,
     requestId,
-    hint: resolveRequestTimeoutHint({ remote, resetDaemon, command, appleCleanupEvidence }),
+    hint: resolveRequestTimeoutHint({
+      remote,
+      resetDaemon,
+      command,
+      appleCleanupEvidence,
+      session,
+      action,
+    }),
   });
 }
 
@@ -112,9 +121,20 @@ export function resolveRequestTimeoutHint(params: {
   resetDaemon: boolean;
   command: string | undefined;
   appleCleanupEvidence: boolean;
+  /** The request's first positional, for commands whose recovery depends on which action ran. */
+  action?: string;
+  session?: string;
 }): string {
-  const { remote, resetDaemon, command, appleCleanupEvidence } = params;
+  const { remote, resetDaemon, command, appleCleanupEvidence, session, action } = params;
   if (remote) {
+    // A remote daemon survives this client window, so a `record stop` that ran out of time is still
+    // exporting there and its finished file stays retrievable by asking again. A local timeout
+    // resets the daemon mid-export, where that promise would be false.
+    if (command === PUBLIC_COMMANDS.record && action === 'stop') {
+      return `The remote daemon is still exporting the recording. Run agent-device record stop${
+        session ? ` --session ${session}` : ''
+      } again to wait for that export and receive the completed recording.`;
+    }
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (!resetDaemon) {
