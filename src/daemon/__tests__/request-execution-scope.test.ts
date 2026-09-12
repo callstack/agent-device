@@ -509,7 +509,11 @@ test('expired leases remove owned sessions before the next command and free capa
   expect(nextLease.tenantId).toBe('tenant-b');
 });
 
-test('expired leased session cleanup waits for the request execution lock', async () => {
+// #2509: the slowest command in a cloud session killed every command after it.
+// Nothing heartbeats a lease while its request works, so one capture that ran
+// past the lease TTL expired its own lease, which tore the provider session down
+// under the client that was still waiting for it.
+test('an admitted request that outlives the lease TTL keeps its lease and session', async () => {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry({
@@ -530,8 +534,49 @@ test('expired leased session cleanup waits for the request execution lock', asyn
       },
     }),
   );
+
+  const slow = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  // The capture is still being waited on when it crosses the TTL, as a cloud
+  // page-source read does on a screen that never goes idle.
+  expect(await slow.runLocked(async () => (now = 1_011))).toBe(1_011);
+
+  const next = await createRequestExecutionScope({
+    req: makeRequest({ command: 'screenshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(await next.runLocked(async () => 'ran')).toBe('ran');
+  expect(sessionStore.get('default')).toBeDefined();
+});
+
+test('expired leased session cleanup waits for the request execution lock', async () => {
+  let now = 1_000;
+  const requestId = 'request-scope-holds-execution-lock';
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry({
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+  });
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        expiresAt: lease.expiresAt,
+      },
+    }),
+  );
   const first = await createRequestExecutionScope({
-    req: makeRequest({ command: 'click' }),
+    req: makeRequest({ command: 'click', meta: { requestId } }),
     sessionStore,
     leaseRegistry,
   });
@@ -554,16 +599,24 @@ test('expired leased session cleanup waits for the request execution lock', asyn
       }),
   );
   await firstEnteredPromise;
+  // The client walked away from this request. Abandoned work no longer defers the
+  // expiry it is sitting on, which is what makes this case about the lock and not
+  // about in-flight lease liveness.
+  markRequestCanceled(requestId);
 
   now = 1_011;
   const secondRun = second.runLocked(async () => 'second');
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(sessionStore.get('default')).toBeDefined();
 
-  releaseFirst();
-  await firstRun;
-  await expect(secondRun).resolves.toBe('second');
-  expect(sessionStore.get('default')).toBeUndefined();
+  try {
+    releaseFirst();
+    await firstRun;
+    await expect(secondRun).resolves.toBe('second');
+    expect(sessionStore.get('default')).toBeUndefined();
+  } finally {
+    clearRequestCanceled(requestId);
+  }
 });
 
 test('tenant lease rejection flushes diagnostics into the effective session request log', async () => {

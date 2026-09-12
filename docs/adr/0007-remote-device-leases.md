@@ -51,6 +51,22 @@ owning lease expiry.
 Backend-only leases remain valid for older remote clients, while provider-aware
 clients get device-level contention and clearer recovery.
 
+## Admitted request work
+
+A lease renews when a request is admitted and never again while that request runs, so an admitted
+command slower than the inactivity TTL used to expire the lease that was paying for its own device
+and tear the session down underneath the client still waiting for its result. Admitted work
+therefore preserves its lease the way a human-control hold does: while the request is still wanted
+it defers expiry, and finishing while still wanted renews the lease for its existing inactivity TTL
+from the moment the work ended. A request whose client hung up preserves nothing — it neither defers
+expiry past that cancellation nor renews the lease when it finally lands — so a handler that ignores
+its cancellation cannot hold a rented device open.
+
+Which leases this reaches depends on the inactivity TTL the client asked for: the daemon default is
+one minute, while a cloud WebDriver connection profile asks for ten. A single command that runs
+longer than its own lease is therefore ordinary on the default and only reachable through a profile
+on the longer one.
+
 ## Human control
 
 Human-control holds coexist with an open remote session. They belong to `LeaseRegistry` and use
