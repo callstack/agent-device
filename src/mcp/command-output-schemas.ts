@@ -554,6 +554,12 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       pixels: numberSchema(),
       durationMs: numberSchema(),
       message: stringSchema(),
+      keyboardAvoided: booleanSchema(
+        'Present only when an on-screen keyboard forced the swipe into the band above it; the reported pixels were planned against the shorter referenceHeight.',
+      ),
+      keyboardMinY: numberSchema(
+        'Where the keyboard began, in the same unit as the gesture coordinates. Clipped scrolls only.',
+      ),
     },
     ['direction'],
   ),

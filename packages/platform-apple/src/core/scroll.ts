@@ -7,7 +7,10 @@ import {
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
+  scrollKeyboardOccludesSurfaceError,
 } from '@agent-device/contracts/scroll-gesture';
+import { AppError } from '@agent-device/kernel/errors';
+import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE } from '../runner/runner-contract.ts';
 
 export type NormalizedScrollOptions = {
   amount?: number;
@@ -17,6 +20,30 @@ export type NormalizedScrollOptions = {
 };
 
 export type AppleScrollOptions = ScrollExecutionOptions;
+
+/**
+ * Turns the runner's keyboard-occlusion refusal into the reason a caller acts on (#2500).
+ *
+ * The runner owns the live keyboard frame and declines to place a swipe it cannot keep above the
+ * keys; it answers with a typed runner code rather than prose so nothing here has to read an error
+ * message. The numbers stay on the runner's side of the boundary — re-deriving them from a frame
+ * this process does not hold would be a second source of truth — so the reason and hint are the
+ * evidence, joined to whatever the transport already recorded (`logPath`, `runnerErrorCode`).
+ */
+export function withAppleScrollKeyboardOcclusion(
+  error: unknown,
+  direction: ScrollDirection,
+): unknown {
+  if (!(error instanceof AppError)) return error;
+  if (error.details?.['runnerErrorCode'] !== SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE) {
+    return error;
+  }
+  const refusal = scrollKeyboardOccludesSurfaceError(direction);
+  return new AppError(refusal.code, refusal.message, {
+    ...(error.details ?? {}),
+    ...(refusal.details ?? {}),
+  });
+}
 
 export function materializeIosScrollOptions(
   options: AppleScrollOptions | undefined,
@@ -91,6 +118,7 @@ export function normalizeAppleScrollResult(
   const verticalTravel =
     y1 !== undefined && y2 !== undefined ? Math.round(Math.abs(y2 - y1)) : undefined;
   const travelPixels = selectScrollTravelPixels(options, horizontalTravel, verticalTravel);
+  const keyboardMinY = readFiniteNumber(runnerResult.keyboardMinY);
 
   return {
     ...(x1 !== undefined ? { x1 } : {}),
@@ -99,6 +127,11 @@ export function normalizeAppleScrollResult(
     ...(y2 !== undefined ? { y2 } : {}),
     ...(referenceWidth !== undefined ? { referenceWidth } : {}),
     ...(referenceHeight !== undefined ? { referenceHeight } : {}),
+    // Avoidance evidence (#2500) is reported only when it happened: `referenceHeight` above already
+    // names the clipped axis, and a plain `false` here could not tell "no keyboard" apart from a
+    // platform that never runs the clip.
+    ...(runnerResult.keyboardAvoided === true ? { keyboardAvoided: true } : {}),
+    ...(keyboardMinY !== undefined ? { keyboardMinY } : {}),
     ...(options?.amount !== undefined ? { amount: options.amount } : {}),
     ...(travelPixels !== undefined ? { pixels: travelPixels } : {}),
     ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
