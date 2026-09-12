@@ -1954,33 +1954,24 @@ extension RunnerTests {
         )
       }
       let viewport = resolvedScrollViewport(app: activeApp, context: scrollContext)
-      let frame: CGRect
-      let keyboardMinY: Double?
-      switch viewport {
+      let defaults = runnerDragCommandDefaults(command)
+      switch viewport.gestureDispatch(
+        direction: direction,
+        amount: defaults.scrollAmount,
+        pixels: command.pixels
+      ) {
       case .occluded(let occlusionKeyboardMinY, let visibleHeight):
         return scrollKeyboardOccludedResponse(
           direction: direction.rawValue,
           keyboardMinY: occlusionKeyboardMinY,
           visibleHeight: visibleHeight
         )
-      case .swipe(let swipeFrame, let clippedAboveKeyboardMinY):
-        frame = swipeFrame
-        keyboardMinY = clippedAboveKeyboardMinY
-      }
-      guard frame.width > 0, frame.height > 0 else {
+      case .unusableFrame:
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
-      }
-      let defaults = runnerDragCommandDefaults(command)
-      guard let plan = runnerScrollGesturePlan(
-        direction: direction,
-        amount: defaults.scrollAmount,
-        pixels: command.pixels,
-        referenceWidth: frame.width,
-        referenceHeight: frame.height
-      ) else {
+      case .unusablePlan:
         return Response(
           ok: false,
           error: ErrorPayload(
@@ -1988,24 +1979,25 @@ extension RunnerTests {
             message: "scroll could not compute a gesture plan"
           )
         )
+      case .gesture(let gesture):
+        guard scrollDurationIsValid(command.durationMs) else {
+          return invalidScrollDurationResponse(commandName: "scroll")
+        }
+        return attachingScrollViewportEvidence(
+          executeScrollDragGesture(
+            activeApp: activeApp,
+            x: gesture.planFrame.minX + gesture.plan.x1,
+            y: gesture.planFrame.minY + gesture.plan.y1,
+            x2: gesture.planFrame.minX + gesture.plan.x2,
+            y2: gesture.planFrame.minY + gesture.plan.y2,
+            durationMs: defaults.durationMs,
+            message: "scrolled",
+            context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
+            releaseBehavior: command.scrollReleaseBehavior
+          ),
+          keyboardMinY: gesture.keyboardMinY
+        )
       }
-      guard scrollDurationIsValid(command.durationMs) else {
-        return invalidScrollDurationResponse(commandName: "scroll")
-      }
-      return attachingScrollViewportEvidence(
-        executeScrollDragGesture(
-          activeApp: activeApp,
-          x: frame.minX + plan.x1,
-          y: frame.minY + plan.y1,
-          x2: frame.minX + plan.x2,
-          y2: frame.minY + plan.y2,
-          durationMs: defaults.durationMs,
-          message: "scrolled",
-          context: scrollContext.withReferenceFrame(frame),
-          releaseBehavior: command.scrollReleaseBehavior
-        ),
-        keyboardMinY: keyboardMinY
-      )
     case .desktopScroll:
       guard let rawDirection = command.direction,
         let direction = RunnerScrollDirection(rawValue: rawDirection)

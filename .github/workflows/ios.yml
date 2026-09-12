@@ -167,6 +167,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportKeyboardClipMatchesGoldenParityTable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportPolicyUsesParityTableConstants \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedGesturePoliciesMatchCommandContracts \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFreshCoordinateTapContainsUnavailableTextInputProbe \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeIssueScopeIsThreadBound \

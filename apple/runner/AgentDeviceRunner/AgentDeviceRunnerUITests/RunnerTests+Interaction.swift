@@ -11,7 +11,7 @@ private struct RunnerUnsupportedOperationError: LocalizedError {
   var errorDescription: String? { message }
 }
 
-private enum RunnerInterfaceOrientation {
+enum RunnerInterfaceOrientation {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   static let unknown = 0
 #endif

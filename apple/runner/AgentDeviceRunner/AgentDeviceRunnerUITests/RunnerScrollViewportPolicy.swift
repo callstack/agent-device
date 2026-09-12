@@ -30,10 +30,69 @@ enum RunnerScrollKeyboardClip: Equatable {
 
 /** Where one directional scroll may place its swipe, once the keyboard has taken its share. */
 enum RunnerScrollViewport {
-  /** The frame to plan inside, plus the keyboard top when the swipe was clipped for one. */
-  case swipe(frame: CGRect, keyboardMinY: Double?)
+  /**
+   * The band to plan the swipe inside, the frame to rotate its coordinates against, and the keyboard
+   * top when the band was clipped for one. The two frames are separate on purpose: a clip shortens
+   * only the band, while `nativeSynthesizedPoint` derives a `landscapeRight` native x from the
+   * frame's HEIGHT, so rotating inside the band moves the dispatched path sideways off the planned
+   * one.
+   */
+  case swipe(planFrame: CGRect, coordinateFrame: CGRect, keyboardMinY: Double?)
   /** Nothing to swipe. The caller answers `occlusionRunnerCode` and performs no gesture. */
   case occluded(keyboardMinY: Double, visibleHeight: Double)
+}
+
+/// The gesture one directional scroll dispatches, built from a resolved viewport in one place so the
+/// band the plan was made inside and the frame its coordinates rotate against cannot be swapped.
+struct ScrollGestureDispatch {
+  let plan: RunnerScrollGesturePlan
+  let planFrame: CGRect
+  let coordinateFrame: CGRect
+  let keyboardMinY: Double?
+}
+
+/** What a resolved viewport turns into for the command: a gesture, or the reason there is none. */
+enum ScrollGestureOutcome {
+  case gesture(ScrollGestureDispatch)
+  case unusableFrame
+  case unusablePlan
+  case occluded(keyboardMinY: Double, visibleHeight: Double)
+}
+
+extension RunnerScrollViewport {
+  /// Plans the swipe inside the band the keyboard left and keeps the viewport as the coordinate basis,
+  /// so a clip shortens the travel without moving the gesture's lane.
+  func gestureDispatch(
+    direction: RunnerScrollDirection,
+    amount: Double?,
+    pixels: Double?
+  ) -> ScrollGestureOutcome {
+    switch self {
+    case .occluded(let keyboardMinY, let visibleHeight):
+      return .occluded(keyboardMinY: keyboardMinY, visibleHeight: visibleHeight)
+    case .swipe(let planFrame, let coordinateFrame, let keyboardMinY):
+      guard planFrame.width > 0, planFrame.height > 0 else {
+        return .unusableFrame
+      }
+      guard let plan = runnerScrollGesturePlan(
+        direction: direction,
+        amount: amount,
+        pixels: pixels,
+        referenceWidth: planFrame.width,
+        referenceHeight: planFrame.height
+      ) else {
+        return .unusablePlan
+      }
+      return .gesture(
+        ScrollGestureDispatch(
+          plan: plan,
+          planFrame: planFrame,
+          coordinateFrame: coordinateFrame,
+          keyboardMinY: keyboardMinY
+        )
+      )
+    }
+  }
 }
 
 enum ScrollViewportPolicy {
@@ -82,6 +141,20 @@ enum ScrollViewportPolicy {
     )
   }
 
+  /// Splits a clip verdict into the two frames a dispatch needs. The gesture planner runs inside the
+  /// clipped band; the coordinate rotation keeps the frame the viewport was resolved against, because
+  /// the rotation basis is a property of the screen, not of what the keyboard left free.
+  static func frames(referenceFrame: CGRect, clip: RunnerScrollKeyboardClip) -> RunnerScrollViewport {
+    switch clip {
+    case .unobstructed:
+      return .swipe(planFrame: referenceFrame, coordinateFrame: referenceFrame, keyboardMinY: nil)
+    case .avoided(let frame, let keyboardMinY):
+      return .swipe(planFrame: frame, coordinateFrame: referenceFrame, keyboardMinY: keyboardMinY)
+    case .occluded(let keyboardMinY, let visibleHeight):
+      return .occluded(keyboardMinY: keyboardMinY, visibleHeight: visibleHeight)
+    }
+  }
+
   private static func isUsable(_ rect: CGRect) -> Bool {
     return [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite)
       && rect.width > 0 && rect.height > 0
@@ -102,16 +175,16 @@ extension RunnerTests {
     // all: a policy that forbids the probe, and a probe that finds no keyboard.
     guard context.allowsKeyboardProbe else {
       logScrollViewport(decision: "probeSkipped", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
-      return .swipe(frame: context.referenceFrame, keyboardMinY: nil)
+      return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: .unobstructed)
     }
     guard let keyboardFrame = visibleKeyboardFrame(app: app) else {
       logScrollViewport(decision: "noKeyboard", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
-      return .swipe(frame: context.referenceFrame, keyboardMinY: nil)
+      return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: .unobstructed)
     }
-    switch ScrollViewportPolicy.clip(viewport: context.referenceFrame, keyboard: keyboardFrame) {
+    let clip = ScrollViewportPolicy.clip(viewport: context.referenceFrame, keyboard: keyboardFrame)
+    switch clip {
     case .unobstructed:
       logScrollViewport(decision: "unobstructed", keyboardMinY: nil, swipeHeight: context.referenceFrame.height, context: context)
-      return .swipe(frame: context.referenceFrame, keyboardMinY: nil)
     case .avoided(let frame, let keyboardMinY):
       logScrollViewport(
         decision: "avoided",
@@ -119,7 +192,6 @@ extension RunnerTests {
         swipeHeight: frame.height,
         context: context
       )
-      return .swipe(frame: frame, keyboardMinY: keyboardMinY)
     case .occluded(let keyboardMinY, let visibleHeight):
       logScrollViewport(
         decision: "occluded",
@@ -127,10 +199,11 @@ extension RunnerTests {
         swipeHeight: visibleHeight,
         context: context
       )
-      return .occluded(keyboardMinY: keyboardMinY, visibleHeight: visibleHeight)
     }
+    return ScrollViewportPolicy.frames(referenceFrame: context.referenceFrame, clip: clip)
 #else
-    return .swipe(frame: resolvedTouchReferenceFrame(app: app, appFrame: app.frame), keyboardMinY: nil)
+    let fallbackFrame = resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+    return ScrollViewportPolicy.frames(referenceFrame: fallbackFrame, clip: .unobstructed)
 #endif
   }
 
@@ -235,6 +308,55 @@ extension RunnerTests {
     let constants = try loadScrollViewportPolicyFixture().constants
     XCTAssertEqual(constants.minVisibleFraction, ScrollViewportPolicy.minVisibleFraction)
     XCTAssertEqual(constants.accessoryAllowance, ScrollViewportPolicy.accessoryAllowance)
+  }
+
+  /// A clipped landscape band shortens the frame, and `nativeSynthesizedPoint` derives a
+  /// `landscapeRight` native x from the frame's HEIGHT. Rotating inside the band therefore moves the
+  /// dispatched path sideways by exactly what the keyboard took, off the lane the plan was built for,
+  /// so the plan band and the coordinate basis stay separate values through dispatch (#2500).
+  func testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis() throws {
+    let viewport = CGRect(x: 0, y: 0, width: 1210, height: 834)
+    let keyboard = CGRect(x: 0, y: 588, width: 1210, height: 246)
+    let clip = ScrollViewportPolicy.clip(viewport: viewport, keyboard: keyboard)
+    guard case .avoided(let band, let keyboardMinY) = clip else {
+      return XCTFail("expected a landscape keyboard to be avoided, got \(clip)")
+    }
+    XCTAssertEqual(band.height, 576)
+
+    guard case .gesture(let gesture) = ScrollViewportPolicy.frames(
+      referenceFrame: viewport,
+      clip: clip
+    ).gestureDispatch(direction: .up, amount: nil, pixels: nil) else {
+      return XCTFail("expected a gesture inside the clipped band")
+    }
+    XCTAssertEqual(gesture.planFrame, band)
+    XCTAssertEqual(gesture.keyboardMinY, keyboardMinY)
+    XCTAssertEqual(gesture.coordinateFrame, viewport, "the rotation basis must survive the clip")
+    XCTAssertLessThanOrEqual(
+      max(gesture.plan.y1, gesture.plan.y2),
+      keyboard.minY - ScrollViewportPolicy.accessoryAllowance,
+      "a landscape swipe must stay clear of the keys"
+    )
+
+    let orientedStartY = gesture.planFrame.minY + gesture.plan.y1
+    let dispatched = nativeSynthesizedPoint(
+      orientedX: gesture.planFrame.minX + gesture.plan.x1,
+      orientedY: orientedStartY,
+      in: gesture.coordinateFrame,
+      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    )
+    let clippedBasis = nativeSynthesizedPoint(
+      orientedX: gesture.planFrame.minX + gesture.plan.x1,
+      orientedY: orientedStartY,
+      in: gesture.planFrame,
+      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    )
+    XCTAssertEqual(
+      dispatched.x - clippedBasis.x,
+      viewport.height - band.height,
+      accuracy: 0.001,
+      "rotating inside the clipped band would shift native x by what the keyboard took"
+    )
   }
 
   private func loadScrollViewportPolicyFixture() throws -> ScrollViewportPolicyFixture {
