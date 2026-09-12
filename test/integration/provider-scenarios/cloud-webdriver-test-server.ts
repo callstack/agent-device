@@ -5,11 +5,20 @@ export type CloudWebDriverHttpCall = {
   path: string;
   headers: IncomingHttpHeaders;
   body?: unknown;
+  /** The caller's cancellation, so a fixture can prove it reached the wire. */
+  signal?: AbortSignal;
 };
 
 export type CloudWebDriverTestResponse = {
   body: unknown;
   status?: number;
+  /**
+   * A driver that never answers. The request stays in flight until the caller's own
+   * cancellation reaches the transport, then rejects with that caller's reason.
+   * Models the #2509 shape — a server-side command the client gave up on — which a
+   * fixture that can only answer fast or answer wrong cannot express.
+   */
+  neverAnswers?: boolean;
 };
 
 /**
@@ -34,10 +43,16 @@ export abstract class CloudWebDriverTestServer {
       method: request.method,
       path: new URL(request.url).pathname,
       headers: Object.fromEntries(request.headers.entries()),
+      ...(init?.signal === null || init?.signal === undefined
+        ? {}
+        : { signal: init.signal as AbortSignal }),
       ...(await requestBody(request)),
     };
     this.calls.push(call);
     const response = this.respond(call);
+    if (response.neverAnswers === true) {
+      return await neverAnsweredResponse(call.signal);
+    }
     return new Response(JSON.stringify(response.body), {
       status: response.status ?? 200,
       headers: { 'Content-Type': 'application/json' },
@@ -63,6 +78,21 @@ export async function startCloudWebDriverTestServer<T extends CloudWebDriverTest
 
 export function cloudWebDriverTestJson(body: unknown, status = 200): CloudWebDriverTestResponse {
   return { body, status };
+}
+
+/** A driver that never answers: only the caller's cancellation ends it. */
+async function neverAnsweredResponse(signal: AbortSignal | undefined): Promise<Response> {
+  return await new Promise<Response>((_resolve, reject) => {
+    if (!signal) {
+      reject(new Error('A never-answered request needs the caller cancellation to end it.'));
+      return;
+    }
+    if (signal.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    signal.addEventListener('abort', () => reject(signal.reason as Error), { once: true });
+  });
 }
 
 async function requestBody(request: Request): Promise<{ body?: unknown }> {

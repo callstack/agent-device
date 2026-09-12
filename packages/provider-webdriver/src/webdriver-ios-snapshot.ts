@@ -3,18 +3,11 @@ import {
   resolveIosViewportEvidenceFromRoots,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
-import type { WebDriverClient } from './webdriver-client.ts';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 const APPIUM_PRODUCER = 'appium-source' as const;
 
-export async function captureWebDriverIosSnapshot(
-  client: Pick<WebDriverClient, 'source'>,
-  targetId?: string,
-): Promise<SnapshotRuntimeAcquiredResult> {
-  return acquireWebDriverIosSnapshot(await client.source(), targetId);
-}
-
+/** Turns one already-read Appium page source into acquired iOS facts. */
 export function acquireWebDriverIosSnapshot(
   source: string,
   targetId?: string,
