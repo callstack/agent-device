@@ -19,7 +19,6 @@
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
-    "scripts/runner-request-count/run.ts",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
@@ -31,7 +30,6 @@
     "examples/sdk/contracts-result.ts",
     "examples/sdk/batch-orchestration.ts",
     "examples/sdk/ai-sdk-tools.ts",
-    "test/scripts/metro-prepare-packaged-smoke.mjs",
     "test/integration/*.test.ts",
     "website/docs/404.mdx",
     "website/rspress.config.ts"
