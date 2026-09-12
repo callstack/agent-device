@@ -631,3 +631,26 @@ test('abandoned work renews nothing while work still wanted holds the lease', as
   wanted.release();
   assert.equal(registry.listActiveLeases()[0]?.expiresAt, 14_000);
 });
+
+// The ordinary release path, not expiry: a released lease is never read by the
+// expiry sweep again, so a work claim left against it would never be cleaned.
+test('releasing a lease drops the work claims recorded against it', () => {
+  const registry = new LeaseRegistry({ defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-9' });
+  const pass = registry.retainLeaseWork(lease, () => true);
+
+  registry.releaseLease({ leaseId: lease.leaseId });
+  pass.release();
+
+  assert.deepEqual(inFlightClaimKeys(registry), []);
+  assert.equal(registry.listActiveLeases().length, 0, 'a released lease must not come back');
+});
+
+function inFlightClaimKeys(registry: LeaseRegistry): string[] {
+  const work = (
+    registry as unknown as {
+      inFlightWork: { entriesByLeaseId: Map<string, unknown> };
+    }
+  ).inFlightWork;
+  return [...work.entriesByLeaseId.keys()];
+}

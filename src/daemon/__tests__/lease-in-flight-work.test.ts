@@ -53,3 +53,33 @@ test('passes on different leases defer independently', () => {
   expect(work.isDeferred('lease-b')).toBe(true);
   other.release();
 });
+
+// Leases churn with every connect and close, and a released lease is never read by
+// the expiry sweep again. A key left behind per released lease is a permanent claim
+// on memory the daemon can never reclaim.
+test('releasing the last pass leaves no claim recorded for its lease', () => {
+  const work = new LeaseInFlightWorkRegistry();
+  const first = work.retain('lease-a', () => true);
+  const second = work.retain('lease-b', () => true);
+
+  first.release();
+  second.release();
+
+  expect(claimedLeaseIds(work)).toEqual([]);
+});
+
+// Work that outlives its own lease renews nothing, and holds no key either.
+test('forgetting a lease releases its claims and disarms the passes running on it', () => {
+  const work = new LeaseInFlightWorkRegistry();
+  const pass = work.retain('lease-a', () => true);
+
+  work.forget('lease-a');
+
+  expect(claimedLeaseIds(work)).toEqual([]);
+  expect(pass.release()).toBe(false);
+});
+
+function claimedLeaseIds(work: LeaseInFlightWorkRegistry): string[] {
+  const claims = (work as unknown as { entriesByLeaseId: Map<string, unknown> }).entriesByLeaseId;
+  return [...claims.keys()];
+}

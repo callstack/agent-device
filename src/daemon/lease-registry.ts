@@ -145,6 +145,7 @@ export class LeaseRegistry {
     }
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease);
+    this.inFlightWork.forget(lease.leaseId);
     return { released: true, lease };
   }
 

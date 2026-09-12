@@ -2,9 +2,10 @@
  * Which leased devices have admitted request work running on them right now.
  *
  * A remote lease renews when a request is admitted and never again while that
- * request works, so work that legitimately outlives the lease TTL — a cloud
- * page-source read on a screen that never goes idle (#2509) — expired the very
- * lease paying for the device, and the session with it.
+ * request works, so a command that legitimately outlives its lease's inactivity
+ * TTL expired the very lease paying for the device it was using, and the session
+ * with it. The daemon's default inactivity TTL is one minute; a cloud WebDriver
+ * connection profile asks for ten, which decides which leases this reaches.
  */
 
 /** Whether the client behind one request is still waiting for its result. */
@@ -38,7 +39,21 @@ export class LeaseInFlightWorkRegistry {
     const entries = this.entriesByLeaseId.get(leaseId) ?? new Set<LeaseWorkEntry>();
     entries.add(entry);
     this.entriesByLeaseId.set(leaseId, entries);
-    return { leaseId, release: () => this.releasePass(entries, entry) };
+    return { leaseId, release: () => this.releasePass(leaseId, entries, entry) };
+  }
+
+  /**
+   * Drops every claim on a lease that no longer exists, and marks them released so
+   * work that outlives its own lease renews nothing — including a lease later
+   * allocated under the same id.
+   */
+  forget(leaseId: string): void {
+    const entries = this.entriesByLeaseId.get(leaseId);
+    if (!entries) return;
+    for (const entry of entries) {
+      entry.released = true;
+    }
+    this.entriesByLeaseId.delete(leaseId);
   }
 
   /** True while any pass on this lease is still wanted. Unwanted passes defer nothing. */
@@ -55,10 +70,15 @@ export class LeaseInFlightWorkRegistry {
   }
 
   /** Idempotent: only the first release of a pass can report its work as wanted. */
-  private releasePass(entries: Set<LeaseWorkEntry>, entry: LeaseWorkEntry): boolean {
+  private releasePass(
+    leaseId: string,
+    entries: Set<LeaseWorkEntry>,
+    entry: LeaseWorkEntry,
+  ): boolean {
     if (entry.released) return false;
     entry.released = true;
     entries.delete(entry);
+    if (entries.size === 0) this.entriesByLeaseId.delete(leaseId);
     return entry.wanted();
   }
 }
