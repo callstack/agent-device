@@ -181,6 +181,7 @@ final class RunnerTests: XCTestCase {
   var systemModalProbeOverrideForTesting: ((Date) -> DataPayload?)?
   var blockingSystemModalPresenceOverrideForTesting: Bool?
   var alertResolutionOverrideForTesting: ((Date) -> RunnerAlert?)?
+  var alertButtonHittabilityProbeOverrideForTesting: ((Date) -> Bool)?
   #endif
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
   // issues this session muted, so wedge investigations see the volume without grepping logs.
