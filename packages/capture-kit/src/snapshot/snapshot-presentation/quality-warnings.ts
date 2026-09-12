@@ -33,6 +33,20 @@ function customActionCoverageWarning(verdict: SnapshotQualityVerdict): string[] 
   return lines;
 }
 
+/**
+ * One disclosure for every backend that reports a cut capture: the iOS Simulator bridge and the
+ * Android helper stop at a node cap, the XCTest runner and the web provider at their own bounds.
+ * Every one walks the tree in document order, so what falls off is what comes last — footers,
+ * tab bars, the items after a long list — even when it is on screen. The fact is the shared
+ * `truncated` flag; the dimension and limit stay backend-side, so the copy names neither.
+ */
+export function truncatedCaptureWarning(truncated: boolean | undefined): string[] {
+  if (truncated !== true) return [];
+  return [
+    'This capture was cut at a backend limit, so elements later in the tree — footers, tab bars, items after a long list — may be missing even when they are on screen; their refs and selectors cannot be resolved from this snapshot. Navigate or scroll so fewer elements render and re-run, and use screenshot as visual truth for what is missing.',
+  ];
+}
+
 export function recoveredSnapshotQualityWarning(
   backend: SnapshotQualityVerdict['backend'],
 ): string {

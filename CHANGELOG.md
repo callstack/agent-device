@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Changed: a capture that a backend cut at one of its limits now says so in the snapshot's
+  warnings, on every platform, instead of only setting `truncated: true` in JSON. The text path
+  had no disclosure at all, so an agent read a screen missing its footer, tab bar, or the items
+  after a long list as complete — the backends walk the tree in document order, so what falls
+  off is what comes last, on screen or not. One shared warning renders from the shared flag; the
+  limit and dimension stay backend-side.
+- Changed: the iOS Simulator AX bridge caps a capture at 5000 nodes, up from 1500, the Android
+  helper's bound. Measured on a synthetic 600-row screen, acquisition time did not move with the
+  cap (the native read fetches the whole tree; the cap only stops conversion) while the 1500 cut
+  dropped the screen's on-screen footer.
 - Fixed: Android snapshots carry the accessibility `selected` state an app sets on a control, so
   `is selected`, a `selected=true` selector, and a Maestro `selected:` qualifier work on Android
   (#2462). The helper never serialized the attribute, and the host reads only the helper's XML, so

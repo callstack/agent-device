@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { readSnapshotQualityVerdict } from '../../snapshot-quality-verdict.ts';
-import { renderSnapshotQualityWarnings } from './quality-warnings.ts';
+import { renderSnapshotQualityWarnings, truncatedCaptureWarning } from './quality-warnings.ts';
 
 const sharedRecoveryReason =
   'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>';
@@ -269,4 +269,15 @@ test('the coverage line is independent of degradation state', () => {
 
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] ?? '', /read for 3 of 8 merged elements/);
+});
+
+test('a cut capture is disclosed once, from the shared truncated flag alone', () => {
+  assert.deepEqual(truncatedCaptureWarning(false), []);
+  assert.deepEqual(truncatedCaptureWarning(undefined), []);
+  const [warning, ...rest] = truncatedCaptureWarning(true);
+  assert.deepEqual(rest, []);
+  assert.match(warning ?? '', /cut at a backend limit/);
+  assert.match(warning ?? '', /footers, tab bars/);
+  assert.match(warning ?? '', /refs and selectors cannot be resolved/);
+  assert.match(warning ?? '', /screenshot/);
 });

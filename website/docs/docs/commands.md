@@ -377,6 +377,12 @@ agent-device get attrs @e1
   Android `--raw` is the acquired tree: it also keeps nodes Android marks invisible and stale
   application windows. The helper does not report `checked`/`checkable` state, and it caps
   captures at 5000 nodes before any `--scope` applies (`truncated: true`).
+- `truncated: true` means the backend cut the capture at one of its limits — the Android helper
+  and the iOS Simulator AX bridge at 5000 nodes, the XCTest runner and the web provider at their
+  own bounds. Every backend walks the tree in document order, so what falls off is what comes
+  last: footers, tab bars, items after a long list, even when on screen. The snapshot carries a
+  warning that says so; navigate or scroll so fewer elements render and re-run, and use
+  `screenshot` as visual truth for the rest.
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in
   the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the

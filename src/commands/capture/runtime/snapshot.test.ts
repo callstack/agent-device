@@ -350,7 +350,7 @@ test('runtime snapshot renders the structured quality verdict and skips legacy d
 
   const result = await device.capture.snapshot({ session: 'default' });
 
-  assert.equal(result.warnings?.length, 2);
+  assert.equal(result.warnings?.length, 3);
   assert.match(
     String(result.warnings?.[0]),
     /Detected an overly complex or slow accessibility tree/,
@@ -359,6 +359,8 @@ test('runtime snapshot renders the structured quality verdict and skips legacy d
   assert.match(String(result.warnings?.[0]), /It is OK to continue/);
   assert.match(String(result.warnings?.[0]), /snapshotQuality\.reason/);
   assert.match(String(result.warnings?.[1]), /@e2 \[Other\] merges many labels/);
+  // The fixture is a cut capture; the shared disclosure follows the verdict's own warnings.
+  assert.match(String(result.warnings?.[2]), /cut at a backend limit/);
   assert.deepEqual(result.snapshotQuality?.state, 'recovered');
 });
 
@@ -703,3 +705,30 @@ function assertReactNativeOverlayWarning(warnings: string[] | undefined) {
   assert.match(warnings[0] ?? '', /agent-device react-native dismiss-overlay/);
   assert.match(warnings[0] ?? '', /verifies the overlay is gone/);
 }
+
+test('runtime snapshot discloses a cut capture the same way on every backend', async () => {
+  for (const backend of ['android', 'xctest'] as const) {
+    const device = createSnapshotOnlyDevice({
+      nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+      truncated: true,
+      backend,
+    });
+
+    const result = await device.capture.snapshot({ session: 'default' });
+
+    assert.equal(result.truncated, true, backend);
+    const cut = (result.warnings ?? []).filter((warning) => /cut at a backend limit/.test(warning));
+    assert.equal(cut.length, 1, `${backend}: ${JSON.stringify(result.warnings)}`);
+  }
+
+  const complete = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    truncated: false,
+    backend: 'android',
+  });
+  const result = await complete.capture.snapshot({ session: 'default' });
+  assert.equal(
+    (result.warnings ?? []).some((warning) => /cut at a backend limit/.test(warning)),
+    false,
+  );
+});
