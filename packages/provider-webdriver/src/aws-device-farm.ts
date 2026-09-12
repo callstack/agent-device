@@ -239,16 +239,16 @@ export function createAwsDeviceFarmPrepareSession(
       typeof options.webdriverCapabilities === 'function'
         ? options.webdriverCapabilities(lease)
         : (options.webdriverCapabilities ?? {});
+    const awsDefaults = options.platform === 'android' ? { 'appium:autoLaunch': false } : {};
     return {
       ...base,
       endpoint,
       platform: options.platform,
       deviceName,
-      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(
-        options.platform,
-        deviceName,
-        configured,
-      ),
+      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(options.platform, deviceName, {
+        ...awsDefaults,
+        ...configured,
+      }),
       cleanup: async () => {
         await options.client.stopRemoteAccessSession(running.arn);
         return { awsDeviceFarmSessionArn: running.arn };
