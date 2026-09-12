@@ -600,7 +600,9 @@ function webDriverOperationForGesture(plan: GesturePlan): CloudWebDriverOperatio
  * driver answers this call by walking the live UI tree, so a screen that never
  * goes idle — looping video, live ticker, continuous animation — gives the walk no
  * reason to settle. The transport's reason code is kept as-is; what the capture
- * adds is what the wait was waiting for.
+ * adds is what the wait was waiting for, and the one thing the caller cannot do,
+ * since this read's budget is the transport's own and no wider than the command's
+ * `--timeout` envelope around it.
  */
 function webDriverSourceTimeoutError(error: AppError): AppError {
   return new AppError(
@@ -610,8 +612,9 @@ function webDriverSourceTimeoutError(error: AppError): AppError {
       ...error.details,
       hint:
         'A screen that never goes idle (looping video, live ticker, continuous animation) ' +
-        'gives the driver no moment to read the UI tree. Retry with a larger --timeout, ' +
-        'or drive the screen from refs an earlier snapshot already captured.',
+        "gives the driver no moment to read the UI tree. This read has the transport's own " +
+        'budget and does not grow with --timeout; take a screenshot, or drive the screen from ' +
+        'refs an earlier snapshot already captured.',
     },
     error,
   );

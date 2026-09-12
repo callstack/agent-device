@@ -352,6 +352,10 @@ test('a source capture that runs out of budget keeps the timeout reason and name
     assert.equal(error.details?.reason, 'webdriver_request_timeout');
     assert.equal(isWebDriverRequestTimeout(error), true);
     assert.match(String(error.details?.hint), /never goes idle/);
+    // Reviewing #2509 found the advice that failed there was a longer `--timeout`,
+    // which cannot reach this read. The hint says so and offers what does work.
+    assert.match(String(error.details?.hint), /does not grow with --timeout/);
+    assert.match(String(error.details?.hint), /screenshot/);
     return true;
   });
 });
