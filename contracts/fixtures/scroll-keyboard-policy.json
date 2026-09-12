@@ -1,0 +1,145 @@
+{
+  "constants": {
+    "minVisibleFraction": 0.15,
+    "accessoryAllowance": 12,
+    "occlusionReason": "scroll_keyboard_occludes_surface"
+  },
+  "cases": [
+    {
+      "name": "iPhone portrait keyboard covering the lower 310pt leaves the band above the accessory allowance",
+      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "keyboard": { "x": 0, "y": 564, "width": 402, "height": 310 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 0, "width": 402, "height": 552 },
+        "keyboardMinY": 564
+      }
+    },
+    {
+      "name": "keyboard flush with the viewport bottom occludes nothing",
+      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "keyboard": { "x": 0, "y": 874, "width": 402, "height": 310 },
+      "expected": { "kind": "unobstructed" }
+    },
+    {
+      "name": "keyboard entirely above the viewport occludes nothing",
+      "viewport": { "x": 0, "y": 400, "width": 402, "height": 474 },
+      "keyboard": { "x": 0, "y": 100, "width": 402, "height": 300 },
+      "expected": { "kind": "unobstructed" }
+    },
+    {
+      "name": "landscape keyboard leaving 28pt of a 402pt axis is refused instead of swiping under the keys",
+      "viewport": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "keyboard": { "x": 0, "y": 40, "width": 874, "height": 362 },
+      "expected": { "kind": "occluded", "keyboardMinY": 40, "visibleHeight": 28 }
+    },
+    {
+      "name": "keyboard covering the whole viewport is refused with zero visible height",
+      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "keyboard": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "expected": { "kind": "occluded", "keyboardMinY": 0, "visibleHeight": 0 }
+    },
+    {
+      "name": "keyboard whose top sits above the viewport top is refused with the visible height clamped to zero",
+      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "keyboard": { "x": 0, "y": -100, "width": 402, "height": 974 },
+      "expected": { "kind": "occluded", "keyboardMinY": -100, "visibleHeight": 0 }
+    },
+    {
+      "name": "band exactly at the 15% floor is kept: the refusal boundary is inclusive",
+      "viewport": { "x": 0, "y": 0, "width": 400, "height": 800 },
+      "keyboard": { "x": 0, "y": 132, "width": 400, "height": 668 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 0, "width": 400, "height": 120 },
+        "keyboardMinY": 132
+      }
+    },
+    {
+      "name": "band one point below the 15% floor is refused",
+      "viewport": { "x": 0, "y": 0, "width": 400, "height": 800 },
+      "keyboard": { "x": 0, "y": 131, "width": 400, "height": 669 },
+      "expected": { "kind": "occluded", "keyboardMinY": 131, "visibleHeight": 119 }
+    },
+    {
+      "name": "keyboard starting exactly on the swipe centre line owns the surface",
+      "viewport": { "x": 0, "y": 0, "width": 400, "height": 800 },
+      "keyboard": { "x": 200, "y": 500, "width": 200, "height": 300 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 0, "width": 400, "height": 488 },
+        "keyboardMinY": 500
+      }
+    },
+    {
+      "name": "floating keyboard starting one point past the swipe centre line is not struck",
+      "viewport": { "x": 0, "y": 0, "width": 400, "height": 800 },
+      "keyboard": { "x": 201, "y": 500, "width": 199, "height": 300 },
+      "expected": { "kind": "unobstructed" }
+    },
+    {
+      "name": "centred floating keyboard under half the viewport width sits in the swipe's path",
+      "viewport": { "x": 0, "y": 0, "width": 834, "height": 1112 },
+      "keyboard": { "x": 257, "y": 780, "width": 320, "height": 332 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 0, "width": 834, "height": 768 },
+        "keyboardMinY": 780
+      }
+    },
+    {
+      "name": "keyboard beside a split-screen app leaves that app's viewport swipeable",
+      "viewport": { "x": 0, "y": 0, "width": 390, "height": 844 },
+      "keyboard": { "x": 390, "y": 500, "width": 390, "height": 344 },
+      "expected": { "kind": "unobstructed" }
+    },
+    {
+      "name": "Android absolute-pixel window clips against the window origin, not the display origin",
+      "viewport": { "x": 0, "y": 120, "width": 1080, "height": 2000 },
+      "keyboard": { "x": 0, "y": 1600, "width": 1080, "height": 520 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 120, "width": 1080, "height": 1468 },
+        "keyboardMinY": 1600
+      }
+    },
+    {
+      "name": "adjustPan window panned up under the IME still clips to its own 188px remainder",
+      "viewport": { "x": 0, "y": 900, "width": 1080, "height": 900 },
+      "keyboard": { "x": 0, "y": 1100, "width": 1080, "height": 700 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 900, "width": 1080, "height": 188 },
+        "keyboardMinY": 1100
+      }
+    },
+    {
+      "name": "adjustPan window with only 88px of 900px left above the IME is refused",
+      "viewport": { "x": 0, "y": 900, "width": 1080, "height": 900 },
+      "keyboard": { "x": 0, "y": 1000, "width": 1080, "height": 800 },
+      "expected": { "kind": "occluded", "keyboardMinY": 1000, "visibleHeight": 88 }
+    },
+    {
+      "name": "shallow Android keyboard covering under a quarter of a tall window still clips its own top",
+      "viewport": { "x": 0, "y": 0, "width": 1080, "height": 2200 },
+      "keyboard": { "x": 0, "y": 1700, "width": 1080, "height": 500 },
+      "expected": {
+        "kind": "avoided",
+        "viewport": { "x": 0, "y": 0, "width": 1080, "height": 1688 },
+        "keyboardMinY": 1700
+      }
+    },
+    {
+      "name": "empty keyboard frame fails open: a keyboard the platform cannot measure is not evidence of occlusion",
+      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "keyboard": { "x": 0, "y": 0, "width": 0, "height": 0 },
+      "expected": { "kind": "unobstructed" }
+    },
+    {
+      "name": "empty viewport frame fails open too: resolving the best frame is the caller's job",
+      "viewport": { "x": 0, "y": 0, "width": 0, "height": 0 },
+      "keyboard": { "x": 0, "y": 564, "width": 402, "height": 310 },
+      "expected": { "kind": "unobstructed" }
+    }
+  ]
+}

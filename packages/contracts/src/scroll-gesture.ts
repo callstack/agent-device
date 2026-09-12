@@ -329,3 +329,136 @@ export function clampGestureCoordinate(value: number, marginPx: number, size: nu
 
   return Math.min(max, Math.max(min, Math.round(value)));
 }
+
+/**
+ * What an on-screen keyboard leaves of the scroll viewport, and what happens when it leaves too
+ * little.
+ *
+ * `buildScrollGesturePlan` centres a directional swipe, so a focused field puts its lower endpoint
+ * under the keyboard: the gesture lands on keys, the surface never moves, and the edge loop reads a
+ * stuck container (#2499) instead of a refusal. Reducing the reference height BEFORE the planner
+ * runs keeps the swipe inside what is visible without touching the planner, so reported travel
+ * stays honest. The runner and the Android helper each read their own live keyboard frame; a frame
+ * threaded from the daemon would be a snapshot that predates the keyboard.
+ *
+ * Pure geometry, so the decision is proven against a golden table both this file and the Swift twin
+ * (`ScrollViewportPolicy` in apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/
+ * RunnerScrollViewportPolicy.swift) assert against, so drift turns CI red without a simulator. The
+ * table carries only frames representable in both languages: `CGRect` standardizes a negative
+ * extent into a positive height at a moved origin, so a negative `height` is tested here alone.
+ */
+
+/** Below this fraction of the viewport, the clipped band cannot hold a reliable swipe. */
+export const SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION = 0.15;
+
+/**
+ * A fixed allowance kept above the keyboard's top edge, in the frame's own unit (points on iOS,
+ * pixels on Android). `keyboard.frame` reports the key plane, not the input accessory or composer
+ * bar riding above it, so a swipe that ends exactly at the reported edge can still land on a bar.
+ */
+export const SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE = 12;
+
+/**
+ * The one reason a directional scroll refuses to swipe at all (#2500). The iOS runner answers with
+ * its own runner error code for the same condition; that code is the Apple runner's wire
+ * vocabulary and lives with it, not here, because Android raises this reason locally.
+ */
+export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON = 'scroll_keyboard_occludes_surface';
+
+export type ScrollKeyboardClip =
+  /** No keyboard, or one that does not own this surface: swipe the whole viewport. */
+  | { kind: 'unobstructed' }
+  /** The viewport trimmed above the keyboard. Report the reduced reference height honestly. */
+  | { kind: 'avoided'; viewport: Rect; keyboardMinY: number }
+  /**
+   * Too little surface left above the keyboard to swipe. Swiping anyway reads as a stuck
+   * container to the no-progress fingerprint, so the caller refuses with
+   * `SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON` instead.
+   */
+  | { kind: 'occluded'; keyboardMinY: number; visibleHeight: number };
+
+/** The numbers a refusing owner can name about the surface it declined to swipe. */
+export type ScrollKeyboardOcclusion = Extract<ScrollKeyboardClip, { kind: 'occluded' }> & {
+  viewportHeight: number;
+};
+
+/**
+ * Clips a scroll viewport to the band above an occluding keyboard.
+ *
+ * Fails open on an unusable frame: a keyboard the platform cannot measure is not evidence that the
+ * surface is blocked, and turning a missing frame into a refusal would refuse every scroll on a
+ * device with a broken keyboard query. The floor is the caller's refusal, not this rule.
+ */
+export function clipScrollViewportAboveKeyboard(
+  viewport: Rect,
+  keyboard: Rect,
+): ScrollKeyboardClip {
+  if (!isMeasurableRect(viewport) || !isMeasurableRect(keyboard)) return { kind: 'unobstructed' };
+  // A vertical swipe runs along the viewport's centre line, which is the only part of the width the
+  // keyboard has to reach to be struck: a 320pt keyboard centred in an 834pt viewport is 38% of the
+  // width and sits exactly in the path. A horizontal swipe runs along the OTHER centre line, so
+  // clipping it too is early rather than wrong — it only lifts the swipe clear of the keys.
+  const swipeCenterX = viewport.x + viewport.width / 2;
+  if (swipeCenterX < keyboard.x || swipeCenterX >= keyboard.x + keyboard.width) {
+    return { kind: 'unobstructed' };
+  }
+  const keyboardMinY = keyboard.y;
+  if (keyboardMinY >= viewport.y + viewport.height || keyboard.y + keyboard.height <= viewport.y) {
+    return { kind: 'unobstructed' };
+  }
+  const visibleHeight = Math.max(
+    0,
+    keyboardMinY - SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE - viewport.y,
+  );
+  if (visibleHeight < SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION * viewport.height) {
+    return { kind: 'occluded', keyboardMinY, visibleHeight };
+  }
+  return {
+    kind: 'avoided',
+    viewport: { ...viewport, height: visibleHeight },
+    keyboardMinY,
+  };
+}
+
+/**
+ * The refusal a scroll reports when the keyboard owns the surface. `avoidanceNeverDismisses` is the
+ * point: a dismiss drops focus, which breaks a `type`/`scroll`/`type` loop, is not idempotent
+ * across platforms (Android's ESC loop can throw `UNSUPPORTED_OPERATION`), and mutates state
+ * session-action provenance does not record. So the caller names the tradeoff instead of paying it.
+ *
+ * `occlusion` is optional because the owner that measured the frame may be the runner rather than
+ * this process: the iOS XCTest runner refuses in its own coordinate space and reports the typed
+ * runner code, and re-deriving its numbers here would be a second source of truth.
+ */
+export function scrollKeyboardOccludesSurfaceError(
+  direction: ScrollDirection,
+  occlusion?: ScrollKeyboardOcclusion,
+): AppError {
+  const percent = Math.round(SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION * 100);
+  const measured =
+    occlusion === undefined
+      ? 'the keyboard leaves too little visible surface for a swipe'
+      : `the keyboard leaves ${occlusion.visibleHeight}px of ${occlusion.viewportHeight}px visible, below the ${percent}% needed for a swipe`;
+  return new AppError('COMMAND_FAILED', `scroll ${direction} refused: ${measured}`, {
+    reason: SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
+    ...(occlusion === undefined
+      ? {}
+      : {
+          keyboardMinY: occlusion.keyboardMinY,
+          visibleHeight: occlusion.visibleHeight,
+          viewportHeight: occlusion.viewportHeight,
+        }),
+    minVisibleFraction: SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
+    hint:
+      'The on-screen keyboard covers the surface this scroll would swipe, so it cannot reach it. ' +
+      'Run `keyboard dismiss` and retry, accepting that it drops focus (re-tap the field to keep typing), or scroll before focusing the field.',
+  });
+}
+
+function isMeasurableRect(rect: Rect): boolean {
+  return (
+    [rect.x, rect.y, rect.width, rect.height].every((value) => Number.isFinite(value)) &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
