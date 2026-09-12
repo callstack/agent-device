@@ -4,6 +4,7 @@ import android.app.UiAutomation;
 import android.graphics.Rect;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
@@ -29,6 +30,33 @@ final class GestureViewportReader {
     }
   }
 
+  /**
+   * One reported window's edges in screen pixels. Plain fields because {@code Rect} is a device type
+   * whose constructors throw off-device, and which of several input method windows a swipe strikes is
+   * arithmetic that has to be testable without one.
+   */
+  static final class WindowEdges {
+    final int left;
+    final int top;
+    final int right;
+    final int bottom;
+
+    WindowEdges(int left, int top, int right, int bottom) {
+      this.left = left;
+      this.top = top;
+      this.right = right;
+      this.bottom = bottom;
+    }
+
+    static WindowEdges of(Rect rect) {
+      return new WindowEdges(rect.left, rect.top, rect.right, rect.bottom);
+    }
+
+    Rect toRect() {
+      return new Rect(left, top, right, bottom);
+    }
+  }
+
   @SuppressWarnings("deprecation")
   static Reading readReading(UiAutomation automation) {
     try {
@@ -45,20 +73,18 @@ final class GestureViewportReader {
     AccessibilityTreeCapture.enableInteractiveWindowRetrieval(automation);
     Rect activeBounds = null;
     Rect fallbackBounds = null;
-    Rect inputMethodBounds = null;
+    List<WindowEdges> inputMethodWindows = new ArrayList<>();
     List<AccessibilityWindowInfo> windows = automation.getWindows();
     try {
       for (AccessibilityWindowInfo window : windows) {
         int type = window.getType();
         if (type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-          // Keep the largest IME window: a composer bar and its key plane can be reported as
-          // separate windows, and the scroll only needs how far down the free surface reaches.
+          // Copy every input method window. Which of them a swipe has to clear depends on the
+          // application window, which this loop has not finished reading, so they are collected here
+          // and resolved once it has.
           Rect bounds = new Rect();
           window.getBoundsInScreen(bounds);
-          if (!bounds.isEmpty() && (inputMethodBounds == null || bounds.height() * bounds.width()
-              > inputMethodBounds.height() * inputMethodBounds.width())) {
-            inputMethodBounds = bounds;
-          }
+          if (!bounds.isEmpty()) inputMethodWindows.add(WindowEdges.of(bounds));
           continue;
         }
         if (type != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
@@ -76,7 +102,40 @@ final class GestureViewportReader {
         window.recycle();
       }
     }
-    return new Reading(resolveApplication(automation, activeBounds, fallbackBounds), inputMethodBounds);
+    Rect application = resolveApplication(automation, activeBounds, fallbackBounds);
+    WindowEdges struck = struckInputMethod(
+        inputMethodWindows, application == null ? null : WindowEdges.of(application));
+    return new Reading(application, struck == null ? null : struck.toRect());
+  }
+
+  /**
+   * The input method share a swipe has to stay above, or null when none of it is in the way.
+   *
+   * <p>A composer bar and its key plane can arrive as separate windows, and the larger rectangle is
+   * usually the lower key plane: keeping only that leaves the swipe inside the composer reaching
+   * further up the screen. So this unions the windows the swipe's centre line crosses — the same line
+   * the shared clip rule tests — and ignores the ones beside it that the swipe cannot reach.
+   */
+  static WindowEdges struckInputMethod(List<WindowEdges> inputMethodWindows, WindowEdges application) {
+    WindowEdges struck = null;
+    for (WindowEdges bounds : inputMethodWindows) {
+      if (application != null) {
+        double swipeCenterX = application.left + (application.right - application.left) / 2.0;
+        boolean strikesSwipePath = swipeCenterX >= bounds.left && swipeCenterX < bounds.right;
+        boolean overlapsWindow = bounds.bottom > application.top && bounds.top < application.bottom;
+        if (!strikesSwipePath || !overlapsWindow) continue;
+      }
+      if (struck == null) {
+        struck = bounds;
+        continue;
+      }
+      struck = new WindowEdges(
+          Math.min(struck.left, bounds.left),
+          Math.min(struck.top, bounds.top),
+          Math.max(struck.right, bounds.right),
+          Math.max(struck.bottom, bounds.bottom));
+    }
+    return struck;
   }
 
   static Rect read(UiAutomation automation) {
