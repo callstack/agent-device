@@ -565,9 +565,9 @@ test('canceling a superseded activation cannot remove its successor or another h
   assert.equal(registry.listHumanControlHolds(authority)[0]?.reason, 'successor');
 });
 
-// #2509: nothing heartbeats a lease while its request works, so an admitted
-// capture that legitimately outruns the lease TTL expired its own lease and lost
-// the device it was still holding. In-flight work defers expiry and renews on
+// Nothing heartbeats a lease while its request works, so an admitted capture
+// that legitimately outruns the lease TTL expires its own lease and loses the
+// device it was still holding. In-flight work defers expiry and renews on
 // completion, exactly as a human-control hold does.
 test('in-flight request work defers expiry and renews the lease when it finishes', async () => {
   let now = 0;

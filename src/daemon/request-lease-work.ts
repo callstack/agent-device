@@ -9,7 +9,7 @@ import type { DaemonRequest } from './daemon-request.ts';
  * A lease renews when a request is admitted and never again while that request
  * works, so the slowest command in a session used to expire the very lease that
  * was paying for the device and tear the session down underneath the client still
- * waiting for its result (#2509). The pass defers expiry only while the work is
+ * waiting for its result. The pass defers expiry only while the work is
  * still wanted, which the request-cancel registry already knows: once the client
  * hangs up the request protects nothing, so a handler that ignores its
  * cancellation cannot hold a rented device open.

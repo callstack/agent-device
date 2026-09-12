@@ -509,10 +509,11 @@ test('expired leases remove owned sessions before the next command and free capa
   expect(nextLease.tenantId).toBe('tenant-b');
 });
 
-// #2509: the slowest command in a cloud session killed every command after it.
-// Nothing heartbeats a lease while its request works, so one capture that ran
-// past the lease TTL expired its own lease, which tore the provider session down
-// under the client that was still waiting for it.
+// A lease renewed only at admission lets one command slower than its inactivity TTL
+// expire the lease paying for the device it is using, and expiry then tears the
+// provider session down under the client still waiting for that same command. Found
+// while investigating #2509, whose cloud session ran on a ten-minute lease and so
+// lost its session some other way.
 test('an admitted request that outlives the lease TTL keeps its lease and session', async () => {
   let now = 1_000;
   const sessionStore = makeSessionStore('agent-device-request-scope-');

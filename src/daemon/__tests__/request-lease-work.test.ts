@@ -23,8 +23,8 @@ function admittedRequest(
   };
 }
 
-// #2509: a capture that ran past the lease TTL expired the lease that was paying
-// for the device, so the session died underneath the client still waiting for it.
+// A capture that runs past the lease TTL used to expire the lease paying for the
+// device, so the session died underneath the client still waiting for it.
 test('admitted work that outlives the lease TTL keeps the lease it is working on', async () => {
   let now = 0;
   const leaseRegistry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
