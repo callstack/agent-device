@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.bba4831bdb.js"></script>
+<script defer src="/agent-device/static/js/index.da28977a85.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -848,6 +848,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li><code>screenshot --scale &lt;factor&gt; --overlay-refs</code> writes a smaller image and draws refs for that final image size; avoid very small scales when text, icons, or labels need to remain readable.</li>
 <li><code>diff screenshot</code> compares the current live screenshot to <code>--baseline</code>, or compares <code>--baseline</code> to an optional saved <code>current.png</code> path without requiring an active session. Its text output reports ranked changed regions with screen-space rectangles, changed-pixel counts, and each region&#x27;s share of the diff; JSON also includes normalized rectangles. The earlier best-effort <code>ocr</code> and <code>nonTextDeltas</code> analyzers are retired; their optional result fields remain for source compatibility but are no longer emitted, so use the baseline/current images and diff artifact with vision for qualitative interpretation. It writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when <code>--out</code> is provided. Live iOS simulator diffs normalize status-bar chrome by default; use <code>screenshot --normalize-status-bar</code> when capturing reusable baselines.</li>
 <li><code>diff screenshot --overlay-refs</code> additionally writes a separate current-screen overlay guide for live captures without using that annotated image for the pixel comparison. If current-screen refs intersect changed regions, the output lists the best ref matches under those regions. Saved-image comparisons do not have live accessibility refs, so <code>--overlay-refs</code> is unavailable when a <code>current.png</code> path is provided.</li>
+<li><code>diff screenshot --threshold &lt;0-1&gt;</code> sets the per-pixel RGB tolerance (default <code>0.1</code>): <code>0</code> requires exact colors and <code>1</code> ignores all color differences. Image dimensions must still match at every threshold.</li>
 <li>In <code>--json</code> mode, each overlay ref also includes a screenshot-space <code>center</code> point for coordinate fallback like <code>press &lt;x&gt; &lt;y&gt;</code>.</li>
 <li>Burned-in touch overlays are exported only on macOS hosts, because the overlay pipeline depends on Swift + AVFoundation helpers.</li>
 <li>On Linux or other non-macOS hosts, <code>record stop</code> still succeeds and returns the raw video plus telemetry sidecar, and includes <code>overlayWarning</code> when burn-in overlays were skipped.</li>
