@@ -1,4 +1,4 @@
-import type { JsonObject } from '@agent-device/contracts/client';
+import type { JsonObject, JsonValue } from '@agent-device/contracts/client';
 import {
   RECORDING_SCOPE_VALUES,
   type RecordingAppIdentity,
@@ -12,8 +12,9 @@ import { isRecord } from '@agent-device/kernel/record';
 
 /**
  * A finished export outlives the request that produced it: a caller that stopped waiting while the
- * daemon was still exporting comes back for the recording with a later `record stop`. Encoding and
- * decoding live together so the manifest cannot grow a stop-response field that recovery drops.
+ * daemon was still exporting comes back for the recording with a later `record stop`. One codec per
+ * completion property drives both directions, and the mapped declaration refuses a property with no
+ * codec, so the manifest cannot grow a stop-response field that recovery silently drops.
  *
  * Decoding is all-or-nothing. A manifest that fails to decode replays nothing, instead of handing
  * back a stop response that quietly lost a chunk or the caller-side output path — that path is what
@@ -25,78 +26,76 @@ export type ScreenRecordingCompletionDecode =
 
 const DAMAGED = Symbol('damaged');
 
+type CompletionCodec<K extends keyof ScreenRecordingCompletion> = Readonly<{
+  /** Key inside the durable manifest's completion metadata. */
+  key: string;
+  read: (value: unknown) => ScreenRecordingCompletion[K] | typeof DAMAGED;
+  write: (completion: ScreenRecordingCompletion) => JsonValue | undefined;
+}>;
+
+type CompletionCodecs = {
+  [K in keyof ScreenRecordingCompletion]: CompletionCodec<K>;
+};
+
+const COMPLETION_CODECS = {
+  backend: { key: 'backend', read: readText, write: (c) => c.backend },
+  outPath: { key: 'outputPath', read: readText, write: (c) => c.outPath },
+  startedAt: { key: 'startedAt', read: readNumber, write: (c) => c.startedAt },
+  completedAt: { key: 'completedAt', read: readNumber, write: (c) => c.completedAt },
+  scope: { key: 'scope', read: readScope, write: (c) => c.scope },
+  showTouches: { key: 'showTouches', read: readBoolean, write: (c) => c.showTouches },
+  recordOnlySession: {
+    key: 'recordOnlySession',
+    read: readBoolean,
+    write: (c) => c.recordOnlySession,
+  },
+  clientOutPath: {
+    key: 'clientOutPath',
+    read: readOptionalText,
+    write: (c) => c.clientOutPath,
+  },
+  telemetryPath: { key: 'telemetryPath', read: readOptionalText, write: (c) => c.telemetryPath },
+  warning: { key: 'warning', read: readOptionalText, write: (c) => c.warning },
+  overlayWarning: {
+    key: 'overlayWarning',
+    read: readOptionalText,
+    write: (c) => c.overlayWarning,
+  },
+  activeSessionApp: {
+    key: 'activeSessionApp',
+    read: readAppIdentity,
+    write: (c) =>
+      c.activeSessionApp === undefined ? undefined : encodeAppIdentity(c.activeSessionApp),
+  },
+  chunks: {
+    key: 'chunks',
+    read: readChunks,
+    write: (c) => (c.chunks === undefined ? undefined : c.chunks.map(encodeChunk)),
+  },
+} satisfies CompletionCodecs;
+
 export function encodeScreenRecordingCompletionMetadata(
   completion: ScreenRecordingCompletion,
 ): JsonObject {
-  return {
-    backend: completion.backend,
-    outputPath: completion.outPath,
-    startedAt: completion.startedAt,
-    completedAt: completion.completedAt,
-    scope: completion.scope,
-    showTouches: completion.showTouches,
-    recordOnlySession: completion.recordOnlySession,
-    ...(completion.clientOutPath === undefined ? {} : { clientOutPath: completion.clientOutPath }),
-    ...(completion.telemetryPath === undefined ? {} : { telemetryPath: completion.telemetryPath }),
-    ...(completion.warning === undefined ? {} : { warning: completion.warning }),
-    ...(completion.overlayWarning === undefined
-      ? {}
-      : { overlayWarning: completion.overlayWarning }),
-    ...(completion.activeSessionApp === undefined
-      ? {}
-      : { activeSessionApp: encodeAppIdentity(completion.activeSessionApp) }),
-    ...(completion.chunks === undefined ? {} : { chunks: completion.chunks.map(encodeChunk) }),
-  };
+  const metadata: Record<string, JsonValue> = {};
+  for (const codec of Object.values(COMPLETION_CODECS)) {
+    const value = codec.write(completion);
+    if (value !== undefined) metadata[codec.key] = value;
+  }
+  return metadata;
 }
 
 export function decodeScreenRecordingCompletionMetadata(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletionDecode {
   if (metadata === undefined) return invalid('the manifest carries no completion metadata');
-  const backend = readText(metadata.backend);
-  if (isDamaged(backend)) return invalid('backend');
-  const outPath = readText(metadata.outputPath);
-  if (isDamaged(outPath)) return invalid('outputPath');
-  const startedAt = readNumber(metadata.startedAt);
-  if (isDamaged(startedAt)) return invalid('startedAt');
-  const completedAt = readNumber(metadata.completedAt);
-  if (isDamaged(completedAt)) return invalid('completedAt');
-  const scope = readScope(metadata.scope);
-  if (isDamaged(scope)) return invalid('scope');
-  const showTouches = readBoolean(metadata.showTouches);
-  if (isDamaged(showTouches)) return invalid('showTouches');
-  const recordOnlySession = readBoolean(metadata.recordOnlySession);
-  if (isDamaged(recordOnlySession)) return invalid('recordOnlySession');
-  const clientOutPath = readOptionalText(metadata.clientOutPath);
-  if (isDamaged(clientOutPath)) return invalid('clientOutPath');
-  const telemetryPath = readOptionalText(metadata.telemetryPath);
-  if (isDamaged(telemetryPath)) return invalid('telemetryPath');
-  const warning = readOptionalText(metadata.warning);
-  if (isDamaged(warning)) return invalid('warning');
-  const overlayWarning = readOptionalText(metadata.overlayWarning);
-  if (isDamaged(overlayWarning)) return invalid('overlayWarning');
-  const activeSessionApp = readAppIdentity(metadata.activeSessionApp);
-  if (isDamaged(activeSessionApp)) return invalid('activeSessionApp');
-  const chunks = readChunks(metadata.chunks);
-  if (isDamaged(chunks)) return invalid('chunks');
-  return {
-    status: 'decoded',
-    completion: {
-      backend,
-      outPath,
-      startedAt,
-      completedAt,
-      scope,
-      showTouches,
-      recordOnlySession,
-      ...(clientOutPath === undefined ? {} : { clientOutPath }),
-      ...(telemetryPath === undefined ? {} : { telemetryPath }),
-      ...(warning === undefined ? {} : { warning }),
-      ...(overlayWarning === undefined ? {} : { overlayWarning }),
-      ...(activeSessionApp === undefined ? {} : { activeSessionApp }),
-      ...(chunks === undefined ? {} : { chunks }),
-    },
-  };
+  const completion: Record<string, unknown> = {};
+  for (const [name, codec] of Object.entries(COMPLETION_CODECS)) {
+    const value = codec.read(metadata[codec.key]);
+    if (value === DAMAGED) return invalid(codec.key);
+    if (value !== undefined) completion[name] = value;
+  }
+  return { status: 'decoded', completion: completion as ScreenRecordingCompletion };
 }
 
 function invalid(field: string): ScreenRecordingCompletionDecode {
