@@ -218,10 +218,10 @@ test('packaged Cloud WebDriver expiry releases the live provider session', async
 
 // #2509: on a screen that never goes idle — a looping onboarding video — the driver's
 // page-source read outlived the request that asked for it. The client had given up,
-// but the read stayed in flight and the session went with it: every command after it,
-// including one that never touches the UI tree, came back saying the lease was gone,
-// so one stuck list ended a whole rented-device run. A capture nobody is waiting for
-// has to end, and the session has to survive it.
+// but nothing at the wire said so: the read stayed in flight and every command after
+// it, including one that never touches the UI tree, queued behind a capture nobody was
+// waiting for. A capture nobody is waiting for has to end, and the session has to stay
+// usable after it.
 test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its session', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const { daemon, server } = world;
@@ -249,7 +249,7 @@ test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its
       assert.equal(
         sourceCalls(server)[0]?.signal?.aborted,
         true,
-        'the provider read must be cancelled, not left running behind the next command',
+        'the abandoned read must be hung up at the wire, not left held by our transport',
       );
 
       await withProviderScenarioTempDir('agent-device-cloud-webdriver-cancel-', async (tempDir) => {
