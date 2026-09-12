@@ -7,7 +7,8 @@
   had no disclosure at all, so an agent read a screen missing its footer, tab bar, or the items
   after a long list as complete — the backends walk the tree in document order, so what falls
   off is what comes last, on screen or not. One shared warning renders from the shared flag; the
-  limit and dimension stay backend-side.
+  limit and dimension stay backend-side. The depth-cap warning no longer suggests `--scope` as a
+  way to read deeper: on iOS, scope narrows the presented view and acquisition stays scope-blind.
 - Changed: the iOS Simulator AX bridge caps a capture at 5000 nodes, up from 1500, the Android
   helper's bound. Measured on a synthetic 600-row screen, acquisition time did not move with the
   cap (the native read fetches the whole tree; the cap only stops conversion) while the 1500 cut

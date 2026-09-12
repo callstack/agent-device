@@ -84,7 +84,7 @@ function appAccessibilityDefectWarning(verdict: SnapshotQualityVerdict): string[
 function depthWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.effectiveDepth === undefined) return [];
   return [
-    `Some deeper accessibility nodes were omitted; this tree is capped at depth ${verdict.effectiveDepth}. Re-run with --depth ${verdict.effectiveDepth} --scope <container> only if you need deeper content.`,
+    `Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth ${verdict.effectiveDepth}. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.`,
   ];
 }
 

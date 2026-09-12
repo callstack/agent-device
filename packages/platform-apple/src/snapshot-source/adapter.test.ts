@@ -78,11 +78,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(rawDepthOne.stage, 'acquired');
     assert.equal(fixture.requestedDepths.at(-1), 1);
-    assert.ok(
-      rawDepthOne.acquisition.residue.some(
-        (item) => item.kind === 'truncated' && item.dimension === 'depth',
-      ),
-    );
+    assert.ok(rawDepthOne.acquisition.residue.some((item) => item.kind === 'truncated'));
 
     fixture.responsePid = 999;
     const outcome = await source.acquire({

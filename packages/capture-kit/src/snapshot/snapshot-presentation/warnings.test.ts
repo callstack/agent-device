@@ -35,7 +35,7 @@ test('penalty-deferred recovered captures suppress the fallback warning but keep
   );
 
   assert.deepEqual(warnings, [
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 
@@ -53,7 +53,7 @@ test('non-presentation recovery keeps the generic warning for the same reason te
 
   assert.deepEqual(warnings, [
     'Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 
@@ -71,7 +71,7 @@ test('presentation failures identify a runner bug and preserve composed warnings
 
   assert.deepEqual(warnings, [
     'Agent Device could not safely present the captured accessibility tree and fell back to the private-ax snapshot backend. This is an Agent Device runner bug, not an app accessibility-tree issue. Use screenshot as visual truth and report snapshotQuality.reason with the screenshot.',
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 

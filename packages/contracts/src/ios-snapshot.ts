@@ -114,7 +114,6 @@ export type IosHittabilityEvidence =
     }>;
 
 export type IosProviderPrunedField = 'nodes' | 'depth' | 'scope' | 'interactive-only';
-export type IosTruncationDimension = 'nodes' | 'depth' | 'payload';
 
 export type IosAcquisitionResidue =
   | Readonly<{
@@ -127,8 +126,6 @@ export type IosAcquisitionResidue =
     }>
   | Readonly<{
       kind: 'truncated';
-      dimension: IosTruncationDimension;
-      limit?: number;
     }>
   | Readonly<{
       kind: 'stale-generation';
