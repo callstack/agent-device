@@ -534,7 +534,7 @@ If `connect` fails, use the reported `aws devicefarm get-*` error to check the c
 
 On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot expose focus at all, use `press <target>` followed by `type <text>`. That sends text without confirming the destination.
 
-A screen that never goes still — a looping video, a live ticker, continuous animation — gives the driver no quiet moment to read the UI tree, so `snapshot` can run past its budget and fail with a reason that names the cause. The failed read is cancelled with its request instead of being dropped while it still runs, so it stops occupying the session and later commands are not queued behind a capture nobody is waiting for. A `screenshot` of the same screen keeps working because it never reads the tree. Retry with a larger `--timeout`, or drive the screen from `@refs` an earlier snapshot captured. `--depth` trims a tree after it arrives, so it cannot shorten a read that never returned.
+A screen that never goes still — a looping video, a live ticker, continuous animation — gives the driver no quiet moment to read the UI tree, so `snapshot` can run past its budget and fail with a reason that names the cause. The failed read is cancelled with its request instead of being dropped while it still runs, so it stops occupying the session and later commands are not queued behind a capture nobody is waiting for. That budget belongs to the read itself: a larger `--timeout` widens the command around it and cannot shorten the walk, so it is not the recovery. A `screenshot` of the same screen keeps working because it never reads the tree, and `@refs` an earlier snapshot captured stay valid to drive from. `--depth` trims a tree after it arrives, so it cannot shorten a read that never returned.
 
 
 
@@ -1813,7 +1813,7 @@ agent-device get attrs @e1
   act on stale React Native screens. API 23 cannot report sibling `drawing-order`, so this scan fails
   conservative and `androidSnapshot.occlusionScanUnavailable: true` discloses the difference.
   Android `--raw` is the acquired tree: it also keeps nodes Android marks invisible and stale
-  application windows. The helper does not report `checked`/`selected` state, and it caps
+  application windows. The helper does not report `checked`/`checkable` state, and it caps
   captures at 5000 nodes before any `--scope` applies (`truncated: true`).
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in
@@ -2385,7 +2385,7 @@ agent-device record stop                # Stop active recording
 - Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` (or `screenshotScale` in config) as a token-conscious screenshot default for agent workflows. An explicit `--scale` overrides it.
 - Keep the scale default unset, or use `--scale 1`, when full-resolution screenshots are required for reusable pixel-diff baselines.
 - `screenshot --overlay-refs` captures a fresh full snapshot and burns visible `@eN` refs plus their target rectangles into the saved PNG.
-- `screenshot --crop-on <selector>` captures a fresh full snapshot of the same screen and crops the saved PNG to the frame the selector resolves to. The selector must resolve to exactly one framed node; the result carries a `warnings` entry when the frame is clipped to the image. Currently accepted on iOS simulators and Android emulators — every other target is refused before any device work, and the flag cannot be combined with `--overlay-refs` or `--fullscreen` because both move the captured frame away from the snapshot viewport the crop is measured against.
+- `screenshot --crop-on <selector>` captures a fresh full snapshot of the same screen and crops the saved PNG to the frame the selector resolves to. The crop is re-encoded, so byte-comparing it against an older crop of the same frame is unreliable; a crop whose pixels are all opaque is written as truecolor RGB, while one containing transparency keeps RGBA. The selector must resolve to exactly one framed node; the result carries a `warnings` entry when the frame is clipped to the image. Currently accepted on iOS simulators and Android emulators — every other target is refused before any device work, and the flag cannot be combined with `--overlay-refs` or `--fullscreen` because both move the captured frame away from the snapshot viewport the crop is measured against.
 - `screenshot --normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator's current chrome visible.
 - `screenshot --scale <factor> --overlay-refs` writes a smaller image and draws refs for that final image size; avoid very small scales when text, icons, or labels need to remain readable.
 - `diff screenshot` compares the current live screenshot to `--baseline`, or compares `--baseline` to an optional saved `current.png` path without requiring an active session. Its text output reports ranked changed regions with screen-space rectangles, changed-pixel counts, and each region's share of the diff; JSON also includes normalized rectangles. The earlier best-effort `ocr` and `nonTextDeltas` analyzers are retired; their optional result fields remain for source compatibility but are no longer emitted, so use the baseline/current images and diff artifact with vision for qualitative interpretation. It writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when `--out` is provided. Live iOS simulator diffs normalize status-bar chrome by default; use `screenshot --normalize-status-bar` when capturing reusable baselines.
@@ -4488,13 +4488,18 @@ the strategy owns which tiers it may use.
 - Private-accessibility recovery and `--actions` reads are simulator-specific. Physical iOS devices
   have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.
 
-## Android field metadata
+## Android node metadata
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts whenever the
-accessibility tree reports them. Explicit `false` and `0` are kept; an absent field means the fact
-was unavailable, not false. `hintShowing` needs Android API 26 or later.
+`selected`, `editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts
+whenever the accessibility tree reports them. Explicit `false` and `0` are kept; an absent field
+means the fact was unavailable, not false. `hintShowing` needs Android API 26 or later.
 
+- `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
+  segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
+  `false`; an older helper APK omits the field, which means the answer is unavailable rather than
+  unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
+  selector, and a Maestro `selected:` qualifier all match on it.
 - `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
   reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
   before reading `value` as the entered contents.
