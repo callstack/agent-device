@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2504/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2504/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2504/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2504/static/js/index.882cfb9a2a.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2504/static/js/index.b42985e170.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -102,6 +102,7 @@ attempts own cleanup, and it is rejected for Maestro YAML because that runtime o
 <li><code>--platform</code> is a filter for suite discovery; files without platform metadata are skipped when a filter is present.</li>
 <li><code>context timeout=...</code> and <code>context retries=...</code> can be declared per script; CLI flags override metadata. Retries are capped at <code>3</code>, and duplicate keys in the context header fail fast instead of silently overriding each other.</li>
 <li>By default, suite artifacts are written under <code>.agent-device/test-artifacts/&lt;run-id&gt;/...</code>. Each attempt writes <code>replay.ad</code>, <code>result.txt</code>, and <code>replay-timing.ndjson</code>. Failed attempts also keep copied logs and artifact files when the replay produced them.</li>
+<li>Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. <code>result.txt</code> lists the retained names in <code>copiedArtifacts</code>.</li>
 <li><code>replay-timing.ndjson</code> records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.</li>
 <li>Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.</li>
 <li>The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use <code>--verbose</code> to include step traces in completed-test progress output.</li>
