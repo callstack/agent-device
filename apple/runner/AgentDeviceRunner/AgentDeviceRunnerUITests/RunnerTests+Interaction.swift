@@ -909,18 +909,6 @@ extension RunnerTests {
     return CGRect(x: 0, y: 0, width: width, height: height)
   }
 
-  func synthesizedFrameAvoidingKeyboardWhenAllowed(
-    app: XCUIApplication,
-    context: SynthesizedCoordinateContext
-  ) -> CGRect {
-#if os(iOS)
-    guard context.allowsKeyboardProbe else { return context.referenceFrame }
-    return frameAvoidingKeyboard(app: app, frame: context.referenceFrame)
-#else
-    return context.referenceFrame
-#endif
-  }
-
   func keyboardAvoidingSynthesizedDragPoints(
     app: XCUIApplication,
     x: Double,
