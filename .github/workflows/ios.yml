@@ -165,6 +165,9 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEmptyReplacementWithoutResolvableTargetFailsClosed \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportKeyboardClipMatchesGoldenParityTable \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportPolicyUsesParityTableConstants \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedGesturePoliciesMatchCommandContracts \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFreshCoordinateTapContainsUnavailableTextInputProbe \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeIssueScopeIsThreadBound \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbePreservesEnclosingRunnerWait \
