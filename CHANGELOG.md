@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed: an iOS capture that no backend could read now says which backend was asked and what was on
+  screen, instead of failing on the internal `regular iOS snapshot presentation requires a valid
+  viewport` invariant alone (#2560). The runner declares such a payload sparse — backend, reason code,
+  and its own reason — and the daemon read that verdict, then discarded it while reconstructing a
+  viewport from a synthetic root that has none. A `snapshot --actions` capture of a web sign-in sheet
+  therefore reported a viewport problem and named neither the private-AX backend that cannot read an
+  out-of-process surface nor the surface presented over the app. The verdict now travels with the
+  refusal as `error.details.snapshotQuality`, and the hint composes the shared sparse-capture advice
+  with the bundle id of the surface host when one is presented. On `replay` and `test` the verdict now
+  survives into the `REPLAY_DIVERGENCE` details, which carried only four cause keys before. Captures
+  that used to succeed are untouched: a sparse payload whose tree presentation can still serve presents
+  exactly as before, and a payload the runner did not declare sparse keeps the plain invariant byte for
+  byte.
+
 - Changed: a capture that a backend cut at one of its limits now says so in the snapshot's
   warnings, on every platform, instead of only setting `truncated: true` in JSON. The text path
   had no disclosure at all, so an agent read a screen missing its footer, tab bar, or the items

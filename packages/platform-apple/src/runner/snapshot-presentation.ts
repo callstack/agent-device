@@ -10,7 +10,11 @@ import {
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
-import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
+import {
+  isSparseSnapshotQualityVerdict,
+  readSnapshotQualityVerdict,
+} from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
   createIosSnapshotRequest,
   buildIosSnapshotPresentationKey,
@@ -107,8 +111,52 @@ export function presentAppleRunnerSnapshot(
   try {
     return presentIosRunnerSnapshot(input, request).nodes;
   } catch (error) {
-    throwSnapshotEngineError(error);
+    throwSnapshotPresentationError(error, result);
   }
+}
+
+/**
+ * A payload the runner itself declared sparse is a quality verdict, not a presentation invariant
+ * violation: no backend served the request, so the payload carries a synthetic root with no viewport
+ * for the daemon to reconstruct. The engine reason stays the reason; the producer's verdict travels
+ * with it, because a bare engine invariant tells the caller neither which backend was asked nor that
+ * the capture was known-incomplete. The advice stays owned by the shared quality-warning renderer, so
+ * a sparse refusal says the same thing here as it does wherever a sparse capture surfaces.
+ */
+function throwSnapshotPresentationError(error: unknown, result: AppleRunnerSnapshotResult): never {
+  const verdict = result.quality;
+  if (error instanceof IosSnapshotEngineError && isSparseSnapshotQualityVerdict(verdict)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      error.message,
+      {
+        ...toIosSnapshotEngineErrorDetails(error),
+        snapshotQuality: {
+          state: verdict.state,
+          backend: verdict.backend,
+          ...(verdict.reason ? { reason: verdict.reason } : {}),
+          ...(verdict.reasonCode ? { reasonCode: verdict.reasonCode } : {}),
+        },
+        hint: sparseCaptureHint(result.systemSurface, verdict),
+      },
+      error,
+    );
+  }
+  throwSnapshotEngineError(error);
+}
+
+function sparseCaptureHint(
+  systemSurface: IosSystemSurfaceProvenance | undefined,
+  verdict: SnapshotQualityVerdict,
+): string {
+  return [
+    systemSurface
+      ? `${systemSurface.bundleId} hosts the surface presented over the app, and this capture targeted that surface.`
+      : undefined,
+    ...renderSnapshotQualityWarnings(verdict, []),
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join(' ');
 }
 
 function readQualityPayload(value: unknown): IosRunnerQualityPayloadFacts | undefined {

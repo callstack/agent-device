@@ -318,17 +318,29 @@ test('sparse runner payloads with no viewport fail before publishing actionable 
           reason: 'no usable snapshot backend',
           reasonCode: 'sparse-tree',
         },
+        systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
       }),
     },
   );
 
-  await assert.rejects(
-    interactor.snapshot(),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'COMMAND_FAILED' &&
-      error.details?.reason === 'missing-viewport',
-  );
+  await assert.rejects(interactor.snapshot(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'missing-viewport');
+    // The wire verdict and the registry-trusted surface travel with the refusal, so the caller
+    // learns which backend was asked and what was on screen instead of a bare engine invariant.
+    assert.deepEqual(error.details?.snapshotQuality, {
+      state: 'sparse',
+      backend: 'tree',
+      reason: 'no usable snapshot backend',
+      reasonCode: 'sparse-tree',
+    });
+    assert.match(
+      String(error.details?.hint),
+      /com\.apple\.SafariViewService hosts the surface presented over the app/,
+    );
+    return true;
+  });
 });
 
 test('snapshot rejects a scoped quality payload at the runner boundary', async () => {
