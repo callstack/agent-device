@@ -877,7 +877,7 @@ there, not about retiring the directory.
 
 **Entry-to-platform hop count.** Corrected 2026-09-03, re-measured for #2278 at `27a97ee619`:
 the counting definition, ordered chains, hop roles, and commit for this measurement are in
-[`0019-end-state-hop-trace.md`](./0019-end-state-hop-trace.md), which supersedes the numbers
+[`0023-end-state-hop-trace.md`](./0023-end-state-hop-trace.md), which supersedes the numbers
 below. A file-by-file re-trace at HEAD measured 41 hops for `press`/Android and 47/49 hops
 (shared 30 plus 17/19 per arm) for `snapshot`/iOS, which is now a dual-arm route (in-simulator
 AX bridge primary, XCTest runner fallback). The previously stated 38/29 named no ordered chain,

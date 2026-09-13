@@ -65,7 +65,10 @@ One-off `npx` usage is fine for humans and scripts that intentionally fetch from
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 22.12 or newer
+- Node.js 24 or newer for web automation, which hard-fails below it. The rest of the CLI keeps the
+  22.12 floor, so check `node --version` in the shell that runs `agent-device web setup` and
+  `agent-device doctor` before trusting a web result.
 - Xcode for iOS simulator/device automation (`simctl` + `devicectl`)
 - Android SDK / ADB for Android
 - HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
