@@ -438,6 +438,20 @@ test('device login rejects a verification URI carrying terminal escape bytes bef
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('device login names the unusable field of a start response missing credentials', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-auth-login-missing-credentials-');
+  for (const missingField of ['deviceCode', 'userCode'] as const) {
+    const refused = await runRefusedDeviceLogin({
+      stateDir: tempRoot,
+      startOverrides: { [missingField]: '' },
+    });
+
+    assert.deepEqual(refused.normalized.details, { field: missingField });
+    assertRefusedWithoutOutput(refused);
+  }
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,

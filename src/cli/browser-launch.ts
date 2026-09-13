@@ -1,3 +1,9 @@
+/**
+ * Hands a URL to the host's default browser without a shell. The auth flow reaches this module at
+ * the call site, not at import time: opening a browser belongs to one interactive path, and the CLI
+ * entry's eager module closure is budgeted (ADR 0019).
+ */
+
 import { runCmd } from '@agent-device/host-kit/command';
 
 const BROWSER_LAUNCH_TIMEOUT_MS = 5000;

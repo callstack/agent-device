@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readCloudJsonResponse } from './cloud-response.ts';
-import { isSafeBrowserUrl, openUrlInBrowser } from './browser-launch.ts';
 
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
@@ -225,7 +224,7 @@ export async function loginWithDeviceAuth(options: {
     },
     fetchImpl: options.io?.fetch,
   });
-  assertDeviceAuthStart(start);
+  await assertDeviceAuthStart(start);
 
   const verificationUrl = hasToken(start.verificationUriComplete)
     ? start.verificationUriComplete
@@ -476,14 +475,18 @@ type UnusableDeviceAuthStartField =
  * Both verification URIs are printed and one of them is launched, so the start response is checked
  * as it arrives rather than at each use.
  */
-function assertDeviceAuthStart(response: DeviceAuthStartResponse): void {
+async function assertDeviceAuthStart(response: DeviceAuthStartResponse): Promise<void> {
   if (!hasToken(response.deviceCode)) {
     throw unusableDeviceAuthStartResponse('deviceCode');
   }
   if (!hasToken(response.userCode)) {
     throw unusableDeviceAuthStartResponse('userCode');
   }
-  if (!hasToken(response.verificationUri) || !isSafeBrowserUrl(response.verificationUri)) {
+  if (!hasToken(response.verificationUri)) {
+    throw unusableDeviceAuthStartResponse('verificationUri');
+  }
+  const { isSafeBrowserUrl } = await import('./browser-launch.ts');
+  if (!isSafeBrowserUrl(response.verificationUri)) {
     throw unusableDeviceAuthStartResponse('verificationUri');
   }
   if (
@@ -574,6 +577,7 @@ async function openBrowser(url: string, io?: AuthIo): Promise<void> {
     await io.openBrowser(url);
     return;
   }
+  const { openUrlInBrowser } = await import('./browser-launch.ts');
   if (!(await openUrlInBrowser(url))) {
     writeStderr(io, `Open this URL on your machine:\n${url}\n`);
   }
