@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2534/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2534/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2534/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2534/static/js/index.0205988a81.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2534/static/js/index.b28a44a358.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -105,6 +105,7 @@ before any device work — on the CLI, the Node client, and MCP alike. Choose on
 <li>Re-snapshot after any UI mutation before reusing refs.</li>
 <li>On Android after navigation or submit, snapshot capture retries suspicious trees for a short post-action deadline and <code>@ref</code> interactions refresh while that freshness window is active. If <code>snapshot -i</code> still disagrees with the visible screen, trust <code>screenshot</code>, wait briefly, then take one fresh snapshot instead of looping stale snapshots.</li>
 <li>For automation runs affected by Android animation churn, use <code>settings animations off</code> as an opt-in stabilizer and restore with <code>settings animations on</code> after the run.</li>
+<li>On a device cloud the tree is read by the provider&#x27;s driver, so a screen that never goes still — a looping video, a live ticker, continuous animation — gives that read no quiet moment and it can run out of its budget while <code>screenshot</code> still returns. The read is cancelled with the request that asked for it, so agent-device stops waiting on it and stops holding the session open for it; the driver&#x27;s own walk can continue on the provider, where it may still occupy that session&#x27;s queue. Two dead ends: the read carries its own budget, so a larger <code>--timeout</code> cannot lengthen it, and <code>settings animations</code> is not implemented on hosted WebDriver sessions.</li>
 <li>Use <code>diff snapshot</code> between mutations to validate structural changes with lower output volume.</li>
 <li>Use <code>snapshot --diff</code> when you discover the feature from snapshot help, but keep <code>diff snapshot</code> as the default exploration command.</li>
 <li>Keep <code>--raw</code> for troubleshooting only when you need the full tree instead of visible-first output.</li>
