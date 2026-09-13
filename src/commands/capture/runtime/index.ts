@@ -1,4 +1,5 @@
 import type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
+import { bindRuntimeCommands } from '../../runtime-types.ts';
 import type {
   BoundOf,
   DiffSnapshotCommandOptions,
@@ -6,6 +7,7 @@ import type {
   ScreenshotCommandOptions,
   SnapshotCommandOptions,
 } from '../../runtime-types.ts';
+import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
 import {
   diffScreenshotCommand,
   type DiffScreenshotCommandOptions,
@@ -29,3 +31,7 @@ export const captureCommands: CaptureCommands = {
   snapshot: snapshotCommand,
   diffSnapshot: diffSnapshotCommand,
 };
+
+export function bindCaptureCommands(runtime: AgentDeviceRuntime): BoundCaptureCommands {
+  return bindRuntimeCommands(captureCommands, runtime);
+}

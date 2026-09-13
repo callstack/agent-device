@@ -8,7 +8,8 @@ import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
-import { type CommandSessionRecord, createAgentDevice } from '../runtime.ts';
+import type { CommandSessionRecord } from '../runtime-contract.ts';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
@@ -128,7 +129,7 @@ function createSnapshotRuntime(
   } & RuntimeAdmissionBindings,
 ) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
-  return createAgentDevice({
+  return createCommandSurfaceAgentDevice({
     backend: createDaemonSnapshotBackend({
       req,
       logPath,
