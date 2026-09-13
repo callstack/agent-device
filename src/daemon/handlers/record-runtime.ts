@@ -169,8 +169,9 @@ async function startRecording(
 }
 
 function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: SessionState) {
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    params.sessionStore.resolveSessionDir(params.sessionName),
+  const resourcePath = screenRecordingDurableResource.resourcePath(
+    params.sessionStore,
+    params.sessionName,
   );
   return {
     fence: screenRecordingDurableResource.createNextFence({

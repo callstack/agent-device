@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import type { JsonObject } from '@agent-device/contracts/client';
-import type { RecordingAppIdentity, RecordingScope } from '@agent-device/contracts/recording';
-import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
+import { isRecordingScope, type RecordingAppIdentity } from '@agent-device/contracts/recording';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
@@ -74,8 +73,9 @@ function readSessionManifest(params: ScreenRecordingManifestParams): Readonly<{
   resourcePath: string;
   record: DurableCaptureResourceRecord<'screen-recording'>;
 }> {
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    params.sessionStore.resolveSessionDir(params.sessionName),
+  const resourcePath = screenRecordingDurableResource.resourcePath(
+    params.sessionStore,
+    params.sessionName,
   );
   return { resourcePath, record: screenRecordingDurableResource.store.read(resourcePath) };
 }
@@ -119,8 +119,8 @@ function readStoredCompletion(
 /** The values a stop response computes on rather than repeats. */
 function isServedCompletion(stored: Record<string, unknown>): boolean {
   return (
-    isNonEmptyText(stored.outPath) &&
-    isNonEmptyText(stored.backend) &&
+    isNonEmptyString(stored.outPath) &&
+    isNonEmptyString(stored.backend) &&
     isFiniteNumber(stored.startedAt) &&
     isFiniteNumber(stored.completedAt) &&
     isRecordingScope(stored.scope) &&
@@ -138,24 +138,20 @@ function isWholeOptionalResponse(stored: Record<string, unknown>): boolean {
   );
 }
 
-function isNonEmptyText(value: unknown): value is string {
+function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
 function isOptionalText(value: unknown): value is string | undefined {
-  return value === undefined || isNonEmptyText(value);
+  return value === undefined || isNonEmptyString(value);
 }
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function isRecordingScope(value: unknown): value is RecordingScope {
-  return RECORDING_SCOPE_VALUES.some((scope) => scope === value);
-}
-
 function isAppIdentity(value: unknown): value is RecordingAppIdentity {
-  if (!isRecord(value) || !isNonEmptyText(value.bundleId)) return false;
+  if (!isRecord(value) || !isNonEmptyString(value.bundleId)) return false;
   return isOptionalText(value.name);
 }
 
@@ -170,7 +166,7 @@ function isChunks(value: unknown): value is readonly ScreenRecordingChunk[] {
       (chunk) =>
         isRecord(chunk) &&
         Number.isFinite(chunk.index) &&
-        isNonEmptyText(chunk.path) &&
+        isNonEmptyString(chunk.path) &&
         isOptionalText(chunk.clientOutPath),
     )
   );
