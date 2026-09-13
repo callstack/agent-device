@@ -843,6 +843,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
           recordOnlySession: booleanSchema(),
           activeSessionApp: looseObjectSchema(),
           durationMs: numberSchema(),
+          capturedDurationMs: numberSchema(),
           showTouches: booleanSchema(),
           warning: stringSchema(),
           overlayWarning: stringSchema(),

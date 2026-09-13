@@ -84,6 +84,13 @@ export type ScreenRecordingCompletion = Readonly<{
   clientOutPath?: string;
   startedAt: number;
   completedAt: number;
+  /**
+   * Duration the finished video timelines actually cover, when the backend can measure them. A
+   * backend that encodes only on screen changes can capture less video than the `startedAt` to
+   * `completedAt` window reports as the recording duration; a chunked recording sums its chunk
+   * timelines, which excludes whatever a chunk handover cost.
+   */
+  capturedDurationMs?: number;
   scope: RecordingScope;
   showTouches: boolean;
   recordOnlySession: boolean;

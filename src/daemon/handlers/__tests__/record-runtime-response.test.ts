@@ -65,3 +65,21 @@ test('stop response derives client telemetry and chunk artifact paths', () => {
     }),
   );
 });
+
+test('stop response separates the recording window from the clip that was captured', () => {
+  const completion = {
+    backend: 'adb screenrecord',
+    outPath: '/daemon/capture.mp4',
+    startedAt: 1_000,
+    completedAt: 17_000,
+    scope: 'device',
+    showTouches: false,
+    recordOnlySession: false,
+  } as const;
+  const measured = buildRecordingStopResponse({ ...completion, capturedDurationMs: 7_000 });
+  const unmeasured = buildRecordingStopResponse(completion);
+  if (!measured.ok || !unmeasured.ok) throw new Error('expected a successful recording stop');
+
+  expect(measured.data).toMatchObject({ durationMs: 16_000, capturedDurationMs: 7_000 });
+  expect(unmeasured.data).not.toHaveProperty('capturedDurationMs');
+});

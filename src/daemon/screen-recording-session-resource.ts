@@ -79,6 +79,9 @@ export function encodeScreenRecordingCompletionMetadata(
       outPath: completion.outPath,
       startedAt: completion.startedAt,
       completedAt: completion.completedAt,
+      ...(completion.capturedDurationMs === undefined
+        ? {}
+        : { capturedDurationMs: completion.capturedDurationMs }),
       scope: completion.scope,
       showTouches: completion.showTouches,
       recordOnlySession: completion.recordOnlySession,

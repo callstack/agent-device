@@ -123,6 +123,7 @@ function isServedCompletion(stored: Record<string, unknown>): boolean {
     isNonEmptyString(stored.backend) &&
     isFiniteNumber(stored.startedAt) &&
     isFiniteNumber(stored.completedAt) &&
+    (stored.capturedDurationMs === undefined || isFiniteNumber(stored.capturedDurationMs)) &&
     isRecordingScope(stored.scope) &&
     typeof stored.showTouches === 'boolean' &&
     typeof stored.recordOnlySession === 'boolean'

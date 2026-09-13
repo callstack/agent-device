@@ -1,6 +1,7 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { cleanupChunks, pullChunks, stopOwnedChunks, waitForStableArtifacts } from './chunks.ts';
+import { readElapsedUptimeMs, recordingWindowMs } from './device-clock.ts';
 import { completed } from './completion.ts';
 import { createCompletedNativeManifest, type NativeManifest } from './manifest.ts';
 import { persistNativeManifest } from './manifest-store.ts';
@@ -14,6 +15,8 @@ export async function finalizeAndroidRecording(params: {
   evidence: NativeManifest;
   manifestPath: string;
   recording: ScreenRecordingLiveSnapshot;
+  /** Recorder clock at launch. Without it the clip length is still measured, just never compared. */
+  startedUptimeMs?: number;
   reachedLimit?: boolean;
 }): Promise<
   Readonly<{
@@ -21,6 +24,9 @@ export async function finalizeAndroidRecording(params: {
     result: import('@agent-device/contracts/screen-recording-runtime').ScreenRecordingCompletion;
   }>
 > {
+  // Read the recorder's clock before the signal below: everything after that signal is this
+  // tool's own export latency rather than time the screen sat unchanged.
+  const stoppedUptimeMs = await readElapsedUptimeMs(params.transport);
   const reachedLimit =
     (await stopOwnedChunks(params.transport, params.evidence.chunks)) ||
     params.reachedLimit === true;
@@ -31,13 +37,17 @@ export async function finalizeAndroidRecording(params: {
     params.recording.outPath,
     params.recording.clientOutPath,
   );
-  const outcome = await completed(
-    params.host,
-    params.recording,
-    outputChunks,
-    'Android recording',
+  const outcome = await completed({
+    host: params.host,
+    recording: params.recording,
+    chunks: outputChunks,
+    targetLabel: 'Android recording',
     reachedLimit,
-  );
+    windowMs: recordingWindowMs({
+      stoppedUptimeMs,
+      startedUptimeMs: params.startedUptimeMs,
+    }),
+  });
   await persistNativeManifest(
     params.transport,
     params.manifestPath,

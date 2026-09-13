@@ -56,6 +56,7 @@ test('a completed manifest whose stored response is damaged serves nothing', asy
     { outPath: 0 },
     { clientOutPath: '' },
     { completedAt: 'later' },
+    { capturedDurationMs: 'soon' },
     { chunks: [{ index: 'first', path: '/daemon/capture-0.mp4' }] },
     { activeSessionApp: { bundleId: '' } },
   ];
@@ -125,6 +126,7 @@ function fullCompletion(outPath: string): ScreenRecordingCompletion {
     outPath,
     startedAt: 1,
     completedAt: 4,
+    capturedDurationMs: 3,
     scope: 'app',
     showTouches: true,
     recordOnlySession: false,

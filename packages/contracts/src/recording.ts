@@ -27,6 +27,7 @@ export type RecordingStopCommandResult = {
   recordOnlySession?: boolean;
   activeSessionApp?: RecordingAppIdentity;
   durationMs: number;
+  capturedDurationMs?: number;
   showTouches: boolean;
   warning?: string;
   overlayWarning?: string;

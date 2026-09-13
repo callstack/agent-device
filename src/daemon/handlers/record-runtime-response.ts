@@ -89,6 +89,9 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
       recordOnlySession: completion.recordOnlySession,
       activeSessionApp: completion.activeSessionApp,
       durationMs: Math.max(0, completion.completedAt - completion.startedAt),
+      ...(completion.capturedDurationMs === undefined
+        ? {}
+        : { capturedDurationMs: completion.capturedDurationMs }),
       showTouches: completion.showTouches,
       warning: completion.warning,
       overlayWarning: completion.overlayWarning,

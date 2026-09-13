@@ -134,7 +134,8 @@ function completionIdentityIsValid(candidate: Partial<ScreenRecordingCompletion>
     typeof candidate.outPath === 'string' &&
     (candidate.clientOutPath === undefined || typeof candidate.clientOutPath === 'string') &&
     Number.isFinite(candidate.startedAt) &&
-    Number.isFinite(candidate.completedAt)
+    Number.isFinite(candidate.completedAt) &&
+    (candidate.capturedDurationMs === undefined || Number.isFinite(candidate.capturedDurationMs))
   );
 }
 

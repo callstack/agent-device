@@ -82,6 +82,14 @@
       "types": "./src/react-native-overlay.ts",
       "default": "./src/react-native-overlay.ts"
     },
+    "./recording-mp4-fixtures": {
+      "types": "./src/recording/mp4.fixtures.ts",
+      "default": "./src/recording/mp4.fixtures.ts"
+    },
+    "./recording-mp4-duration": {
+      "types": "./src/recording/mp4-duration.ts",
+      "default": "./src/recording/mp4-duration.ts"
+    },
     "./recording-output-path": {
       "types": "./src/recording/output-path.ts",
       "default": "./src/recording/output-path.ts"

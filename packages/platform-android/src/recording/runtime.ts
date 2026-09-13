@@ -160,6 +160,7 @@ async function startAndroidRecording(params: {
         evidence: createNativeManifest(device, input, startedAt, chunks, undefined, transport.mode),
         manifestPath,
         recording: current,
+        startedUptimeMs: initial.startedUptimeMs,
       });
       nativeCleanupConfirmed = true;
       return outcome;

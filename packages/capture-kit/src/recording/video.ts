@@ -4,6 +4,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 
+import { findMp4Atom } from './mp4-atoms.ts';
 import { hasPlayableWebmStructure } from './video-webm.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
@@ -154,49 +155,11 @@ function likelyPlayableVideoContainer(filePath: string): 'mp4' | 'webm' | undefi
   if (filePath.toLowerCase().endsWith('.webm')) {
     return hasPlayableWebmStructure(filePath) ? 'webm' : undefined;
   }
-  const atoms = inspectTopLevelAtoms(filePath);
-  return atoms.includes('ftyp') && atoms.includes('moov') ? 'mp4' : undefined;
+  return isMp4Container(filePath) ? 'mp4' : undefined;
 }
 
-function inspectTopLevelAtoms(filePath: string): string[] {
-  try {
-    const fd = fs.openSync(filePath, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      let offset = 0;
-      const atoms: string[] = [];
-      while (offset + 8 <= size && atoms.length < 16) {
-        const header = Buffer.alloc(8);
-        const bytesRead = fs.readSync(fd, header, 0, 8, offset);
-        if (bytesRead < 8) {
-          break;
-        }
-
-        let atomSize = header.readUInt32BE(0);
-        const atomType = header.toString('latin1', 4, 8);
-        atoms.push(atomType);
-
-        if (atomSize === 1) {
-          const extended = Buffer.alloc(8);
-          const extendedRead = fs.readSync(fd, extended, 0, 8, offset + 8);
-          if (extendedRead < 8) {
-            break;
-          }
-          atomSize = Number(extended.readBigUInt64BE(0));
-        }
-
-        // A top-level MP4 atom size of 0 extends to EOF. We stop here because there is no
-        // next sibling atom to inspect, and advancing by 0 would loop forever.
-        if (!Number.isFinite(atomSize) || atomSize <= 0) {
-          break;
-        }
-        offset += atomSize;
-      }
-      return atoms;
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return [];
-  }
+function isMp4Container(filePath: string): boolean {
+  return (
+    findMp4Atom(filePath, ['ftyp']) !== undefined && findMp4Atom(filePath, ['moov']) !== undefined
+  );
 }
