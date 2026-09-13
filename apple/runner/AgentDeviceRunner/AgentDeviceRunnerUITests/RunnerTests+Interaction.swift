@@ -11,7 +11,7 @@ private struct RunnerUnsupportedOperationError: LocalizedError {
   var errorDescription: String? { message }
 }
 
-private enum RunnerInterfaceOrientation {
+enum RunnerInterfaceOrientation {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   static let unknown = 0
 #endif
@@ -907,18 +907,6 @@ extension RunnerTests {
       height = screenshotSize.height
     }
     return CGRect(x: 0, y: 0, width: width, height: height)
-  }
-
-  func synthesizedFrameAvoidingKeyboardWhenAllowed(
-    app: XCUIApplication,
-    context: SynthesizedCoordinateContext
-  ) -> CGRect {
-#if os(iOS)
-    guard context.allowsKeyboardProbe else { return context.referenceFrame }
-    return frameAvoidingKeyboard(app: app, frame: context.referenceFrame)
-#else
-    return context.referenceFrame
-#endif
   }
 
   func keyboardAvoidingSynthesizedDragPoints(

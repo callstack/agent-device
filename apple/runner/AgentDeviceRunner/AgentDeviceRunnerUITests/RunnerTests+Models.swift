@@ -268,6 +268,10 @@ struct DataPayload: Codable {
   var gestureFallback: String?
   var gestureFallbackMessage: String?
   var gestureFallbackHint: String?
+  // Scroll keyboard avoidance evidence (#2500): the swipe was clipped to the band above an
+  // on-screen keyboard, and where that band ended. `referenceHeight` already names the clipped axis.
+  var keyboardAvoided: Bool?
+  var keyboardMinY: Double?
   var maestroNonHittableCoordinateFallbackUsed: Bool?
   var textEntryRoute: String?
   var runnerFatal: Bool?

@@ -1953,21 +1953,25 @@ extension RunnerTests {
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
       }
-      let frame = scrollReferenceFrame(app: activeApp, context: scrollContext)
-      guard frame.width > 0, frame.height > 0 else {
+      let viewport = resolvedScrollViewport(app: activeApp, context: scrollContext)
+      let defaults = runnerDragCommandDefaults(command)
+      switch viewport.gestureDispatch(
+        direction: direction,
+        amount: defaults.scrollAmount,
+        pixels: command.pixels
+      ) {
+      case .occluded(let occlusionKeyboardMinY, let visibleHeight):
+        return scrollKeyboardOccludedResponse(
+          direction: direction.rawValue,
+          keyboardMinY: occlusionKeyboardMinY,
+          visibleHeight: visibleHeight
+        )
+      case .unusableFrame:
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
-      }
-      let defaults = runnerDragCommandDefaults(command)
-      guard let plan = runnerScrollGesturePlan(
-        direction: direction,
-        amount: defaults.scrollAmount,
-        pixels: command.pixels,
-        referenceWidth: frame.width,
-        referenceHeight: frame.height
-      ) else {
+      case .unusablePlan:
         return Response(
           ok: false,
           error: ErrorPayload(
@@ -1975,21 +1979,24 @@ extension RunnerTests {
             message: "scroll could not compute a gesture plan"
           )
         )
+      case .gesture(let gesture):
+        guard scrollDurationIsValid(command.durationMs) else {
+          return invalidScrollDurationResponse(commandName: "scroll")
+        }
+        return gesture.attachingEvidence(
+          to: executeScrollDragGesture(
+            activeApp: activeApp,
+            x: gesture.planFrame.minX + gesture.plan.x1,
+            y: gesture.planFrame.minY + gesture.plan.y1,
+            x2: gesture.planFrame.minX + gesture.plan.x2,
+            y2: gesture.planFrame.minY + gesture.plan.y2,
+            durationMs: defaults.durationMs,
+            message: "scrolled",
+            context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
+            releaseBehavior: command.scrollReleaseBehavior
+          )
+        )
       }
-      guard scrollDurationIsValid(command.durationMs) else {
-        return invalidScrollDurationResponse(commandName: "scroll")
-      }
-      return executeScrollDragGesture(
-        activeApp: activeApp,
-        x: frame.minX + plan.x1,
-        y: frame.minY + plan.y1,
-        x2: frame.minX + plan.x2,
-        y2: frame.minY + plan.y2,
-        durationMs: defaults.durationMs,
-        message: "scrolled",
-        context: scrollContext.withReferenceFrame(frame),
-        releaseBehavior: command.scrollReleaseBehavior
-      )
     case .desktopScroll:
       guard let rawDirection = command.direction,
         let direction = RunnerScrollDirection(rawValue: rawDirection)
@@ -2564,12 +2571,30 @@ extension RunnerTests {
     )
   }
 
-  private func scrollReferenceFrame(app: XCUIApplication, context: SynthesizedCoordinateContext) -> CGRect {
-#if os(iOS)
-    return synthesizedFrameAvoidingKeyboardWhenAllowed(app: app, context: context)
-#else
-    return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
-#endif
+  /// Adds the #2500 avoidance evidence to a scroll response. Only the frame resolver knows whether
+  /// it trimmed the swipe for a keyboard, and only `scroll` has this evidence to carry, so it is
+  /// attached where the frame was resolved rather than threaded through every gesture response.
+  /// The refusal a keyboard forces. It performs no gesture: swiping into the keys would leave the
+  /// surface where it was, which the daemon's no-progress fingerprint reads as a stuck container
+  /// (#2499) and an agent reads as a broken scroll. The TS owner maps the code to the
+  /// `scroll_keyboard_occludes_surface` reason and the "dismiss the keyboard" hint.
+  private func scrollKeyboardOccludedResponse(
+    direction: String,
+    keyboardMinY: Double,
+    visibleHeight: Double
+  ) -> Response {
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: ScrollViewportPolicy.occlusionRunnerCode,
+        message: String(
+          format:
+            "scroll %@ refused: the keyboard leaves %.0fpt of visible surface above it, too little to swipe",
+          direction,
+          visibleHeight
+        )
+      )
+    )
   }
 
   private func dragCommandName(message: String) -> String {
