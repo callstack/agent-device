@@ -25,18 +25,18 @@ test('failed attempt outcome carries warnings from the error details (#2560)', (
   });
 });
 
-test('failed attempt outcome omits absent or empty warnings', () => {
+test('failed attempt outcome reads an empty warnings array when absent or non-string', () => {
   const withoutWarnings = toReplayTestAttemptOutcome({
     ok: false,
     error: { code: 'COMMAND_FAILED', message: 'step failed' },
   });
-  expect('warnings' in withoutWarnings).toBe(false);
+  expect(withoutWarnings.status === 'failed' && withoutWarnings.warnings).toEqual([]);
 
   const emptyWarnings = toReplayTestAttemptOutcome({
     ok: false,
     error: { code: 'COMMAND_FAILED', message: 'step failed', details: { warnings: [7] } },
   });
-  expect('warnings' in emptyWarnings).toBe(false);
+  expect(emptyWarnings.status === 'failed' && emptyWarnings.warnings).toEqual([]);
 });
 
 test('passed attempt outcome keeps reading warnings from response data', () => {

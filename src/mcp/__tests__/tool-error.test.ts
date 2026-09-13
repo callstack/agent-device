@@ -36,6 +36,22 @@ test('formatToolErrorText omits the candidates block for non-ambiguous errors', 
   const text = formatToolErrorText(normalizeToolError(err));
 
   assert.equal(text.includes('Candidates:'), false);
+  assert.equal(text.includes('Warning:'), false);
+});
+
+// #2560: a failed `replay` carries the run's accumulated warnings at error level;
+// the MCP reader must see them too, not only --json consumers.
+test('formatToolErrorText renders run-level warnings carried in error details', () => {
+  const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2 (tapOn "Save")', {
+    warnings: ['Optional Maestro assertVisible skipped at line 1: no match'],
+  });
+
+  const text = formatToolErrorText(normalizeToolError(err));
+
+  assert.match(
+    text,
+    /^Error \(REPLAY_DIVERGENCE\)[\s\S]*\nWarning: Optional Maestro assertVisible skipped at line 1: no match/,
+  );
 });
 
 test('formatToolErrorText renders a structured cause', () => {

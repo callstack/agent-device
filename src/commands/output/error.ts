@@ -54,14 +54,14 @@ export function printHumanError(
   }
 }
 
-function readResponseWarnings(details: Record<string, unknown> | undefined): string[] {
+export function readResponseWarnings(details: Record<string, unknown> | undefined): string[] {
   const warnings = details?.warnings;
   return Array.isArray(warnings)
     ? warnings.filter((warning): warning is string => typeof warning === 'string')
     : [];
 }
 
-function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
+export function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
   return views.flatMap((view) => {
     if (view.kind === 'element-match') {
       const remaining = view.matches - view.candidates.length;

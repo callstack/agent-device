@@ -145,7 +145,7 @@ export type ReplayTestAttemptFailed = {
   error: ReplayTestAttemptError;
   artifactPaths: readonly string[];
   /** Warnings accumulated before the failing step (skipped `optional` steps, capture degradations). */
-  warnings?: readonly string[];
+  warnings: readonly string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   /**
    * The host's verdict that this failure is environmental (device/runner/boot) rather than a
@@ -276,6 +276,7 @@ export type ReplayTestExecutionDependencies = Omit<
 export function replayTestAttemptFailure(params: {
   error: ReplayTestAttemptError;
   artifactPaths?: readonly string[];
+  warnings?: readonly string[];
   infrastructure?: boolean;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): ReplayTestAttemptFailed {
@@ -283,6 +284,7 @@ export function replayTestAttemptFailure(params: {
     status: 'failed',
     error: params.error,
     artifactPaths: params.artifactPaths ?? [],
+    warnings: params.warnings ?? [],
     infrastructure: params.infrastructure ?? false,
     ...(params.snapshotDiagnostics ? { snapshotDiagnostics: params.snapshotDiagnostics } : {}),
   };

@@ -117,6 +117,7 @@ test('runReplayTestAttempt keeps cancellation active until a timed-out replay se
     status: 'failed',
     error: { code: 'COMMAND_FAILED', message: 'request canceled' },
     artifactPaths: [],
+    warnings: [],
     infrastructure: false,
   });
   await replaySettled;
@@ -142,6 +143,7 @@ test('runReplayTestAttempt keeps a passing replay passed when finalization fails
       status: 'failed',
       error: { code: 'COMMAND_FAILED', message: 'failed to stop recording' },
       artifactPaths: [],
+      warnings: [],
       infrastructure: false,
     }),
     cleanupSession,
@@ -167,6 +169,7 @@ test('runReplayTestAttempt marks a failed cleanup as infrastructure so the sched
       status: 'failed',
       error: { code: 'COMMAND_FAILED', message: 'open "System Settings" failed' },
       artifactPaths: [],
+      warnings: [],
       infrastructure: false,
     }),
     cleanupSession,

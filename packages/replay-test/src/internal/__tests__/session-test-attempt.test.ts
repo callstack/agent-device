@@ -22,6 +22,7 @@ const FAILED_WITHOUT_WARNINGS: ReplayTestAttemptOutcome = {
   status: 'failed',
   error: { code: 'COMMAND_FAILED', message: 'tap failed' },
   artifactPaths: [],
+  warnings: [],
   infrastructure: false,
 };
 

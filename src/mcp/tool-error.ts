@@ -1,10 +1,11 @@
 import {
   normalizeError,
   readErrorCandidateViews,
-  type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
+import { formatErrorCandidateViews, readResponseWarnings } from '../commands/output/error.ts';
+import { collapseWarningText } from '../commands/output-common.ts';
 
 export function normalizeToolError(error: unknown): NormalizedError {
   return normalizeError(error);
@@ -17,30 +18,12 @@ export function formatToolErrorText(normalized: NormalizedError): string {
     lines.push(`Cause: ${code}${normalized.cause.message}`);
   }
   if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
+  for (const warning of readResponseWarnings(normalized.details)) {
+    lines.push(`Warning: ${collapseWarningText(warning)}`);
+  }
   lines.push(...formatErrorCandidateViews(readErrorCandidateViews(normalized.details)));
   if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
   const divergence = formatReplayDivergenceReport(normalized.details);
   if (divergence) lines.push(divergence);
   return lines.join('\n');
-}
-
-function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {
-  return views.flatMap((view) => {
-    if (view.kind === 'element-match') {
-      const remaining = view.matches - view.candidates.length;
-      return [
-        'Candidates:',
-        ...view.candidates.map(
-          (candidate) => `  ${pinCandidateLine(candidate, view.refsGeneration)}`,
-        ),
-        ...(remaining > 0 ? [`  +${remaining} more`] : []),
-      ];
-    }
-    return ['Devices:', ...view.devices.map((device) => `  ${device.id}  ${device.name}`)];
-  });
-}
-
-function pinCandidateLine(candidate: string, generation: number | undefined): string {
-  if (generation === undefined) return candidate;
-  return candidate.replace(/^@(e\d+)(?=\s|$)/, `@$1~s${generation}`);
 }
