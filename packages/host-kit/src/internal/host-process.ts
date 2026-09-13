@@ -1,6 +1,7 @@
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync } from './exec.ts';
 import { sleep } from './timeouts.ts';
+import { readMacosProcesses } from './macos-process.ts';
 
 const PS_TIMEOUT_MS = 1_000;
 const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';
@@ -111,17 +112,21 @@ export function readHostProcessIdentityObservations(
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
     });
-    if (result.exitCode !== 0) return observations;
-    for (const line of result.stdout.split('\n')) {
-      const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
-      if (!match) continue;
-      const pid = Number.parseInt(match[1]!, 10);
-      if (!Number.isInteger(pid) || pid <= 0) continue;
-      observations.set(pid, { state: match[2]!, startTime: match[3]! });
+    if (result.exitCode === 0) {
+      for (const line of result.stdout.split('\n')) {
+        const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
+        if (!match) continue;
+        const pid = Number.parseInt(match[1]!, 10);
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        observations.set(pid, { state: match[2]!, startTime: match[3]! });
+      }
+      return observations;
     }
   } catch {
-    // A failed ps snapshot is unknown evidence; callers remain fail-closed.
+    // macOS sandboxes can refuse execution of the setuid ps binary.
   }
+  for (const entry of readMacosProcesses(selected))
+    observations.set(entry.pid, { state: entry.state, startTime: entry.startTime });
   return observations;
 }
 
@@ -132,12 +137,21 @@ function readProcessField(pid: number, field: 'lstart=' | 'command=' | 'state=')
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
     });
-    if (result.exitCode !== 0) return null;
-    const value = result.stdout.trim();
-    return value.length > 0 ? value : null;
+    if (result.exitCode === 0) {
+      const value = result.stdout.trim();
+      return value.length > 0 ? value : null;
+    }
   } catch {
-    return null;
+    // macOS sandboxes can refuse execution of the setuid ps binary.
   }
+  const observation = readMacosProcesses([pid])[0];
+  if (!observation) return null;
+  const fields = {
+    'lstart=': observation.startTime,
+    'state=': observation.state,
+    'command=': observation.command,
+  };
+  return fields[field] || null;
 }
 
 export function parseHostProcessList(stdout: string): HostProcessInfo[] {
@@ -157,16 +171,24 @@ export function parseHostProcessList(stdout: string): HostProcessInfo[] {
 export async function listHostProcesses(
   options: ListHostProcessesOptions,
 ): Promise<HostProcessInfo[]> {
-  const result = await (options.runCommand ?? runCmd)(
-    options.runCommand ? 'ps' : HOST_PS_COMMAND,
-    ['-ax', '-o', 'pid=,ppid=,command='],
-    {
-      allowFailure: true,
-      timeoutMs: options.timeoutMs,
-    },
-  );
-  if (result.exitCode !== 0) return [];
-  return parseHostProcessList(result.stdout);
+  try {
+    const result = await (options.runCommand ?? runCmd)(
+      options.runCommand ? 'ps' : HOST_PS_COMMAND,
+      ['-ax', '-o', 'pid=,ppid=,command='],
+      {
+        allowFailure: true,
+        timeoutMs: options.timeoutMs,
+      },
+    );
+    if (result.exitCode === 0) return parseHostProcessList(result.stdout);
+  } catch {
+    // macOS sandboxes can refuse execution of the setuid ps binary.
+  }
+  return options.runCommand
+    ? []
+    : readMacosProcesses('all', options.timeoutMs)
+        .filter((entry) => entry.command)
+        .map(({ pid, ppid, command }) => ({ pid, ppid: ppid || undefined, command }));
 }
 
 export function expandProcessTree(

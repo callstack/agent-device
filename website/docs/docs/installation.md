@@ -90,6 +90,8 @@ vega device list
 
 ## macOS desktop notes
 
+On macOS, a sandbox may prevent the system `ps` executable from running. Process ownership checks then use a read-only native helper, compiled on first use with Apple command-line tools and cached in a private temporary directory by source hash and architecture. The fallback observes only same-user processes and does not weaken the sandbox. If compilation or native inspection is denied too, recording and cleanup retain their existing fail-closed ownership behavior.
+
 - The macOS desktop path uses a local `agent-device-macos-helper` for permission checks (`settings permission ...`), alert handling, and helper-backed desktop snapshot surfaces (`frontmost-app`, `desktop`, `menubar`).
 - Source checkouts build the helper lazily on first use and cache it under `~/.agent-device/macos-helper/current/`.
 - Release distribution should ship a stable signed/notarized helper build so macOS trust/TCC state is tied to a durable code signature instead of an ad-hoc local binary.
