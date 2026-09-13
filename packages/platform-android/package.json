@@ -24,6 +24,10 @@
       "types": "./src/adb-host.ts",
       "default": "./src/adb-host.ts"
     },
+    "./device-boot": {
+      "types": "./src/device-boot.ts",
+      "default": "./src/device-boot.ts"
+    },
     "./mechanics": {
       "types": "./src/mechanics.ts",
       "default": "./src/mechanics.ts"

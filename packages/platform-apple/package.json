@@ -84,6 +84,10 @@
       "types": "./src/simulator-facade.ts",
       "default": "./src/simulator-facade.ts"
     },
+    "./simulator-boot": {
+      "types": "./src/simulator-boot.ts",
+      "default": "./src/simulator-boot.ts"
+    },
     "./tool-provider": {
       "types": "./src/tool-provider-facade.ts",
       "default": "./src/tool-provider-facade.ts"

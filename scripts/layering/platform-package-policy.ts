@@ -71,6 +71,7 @@ const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
 const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
+const ANDROID_DEVICE_BOOT_FACADE = '@agent-device/platform-android/device-boot';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
     APPLE_RUNNER_FACADE,
@@ -89,17 +90,18 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simctl',
     '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/tool-provider',
   ],
-  android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE],
+  android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
 };
 
-function isAndroidMechanicsFacetImport(file: string, specifier: string): boolean {
+function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
-  if (specifier !== ANDROID_MECHANICS_FACADE) return false;
-  // The mechanics facet is the named implementation seam for root/core/SDK consumers. Daemon
-  // production code still reaches platform behavior through the request-bound runtime gateway;
-  // tests may import the facet to exercise the package-owned mechanics directly.
+  if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
+  // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
+  // code still reaches platform behavior through the request-bound runtime gateway; tests may
+  // import a facet to exercise the package-owned mechanics directly.
   return !file.startsWith('src/daemon/') || !isProductionSource(file);
 }
 
@@ -279,7 +281,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !isAppleFacadeSubpathImport(site.spec) &&
       !isAllowedPlatformRootImport(file, site, importedFamily) &&
       !isPackageOwnedFacadeTest(file, importedFamily, site.spec) &&
-      !isAndroidMechanicsFacetImport(file, site.spec)
+      !isAndroidFacetSubpathImport(file, site.spec)
     ) {
       violations.push(
         violation(

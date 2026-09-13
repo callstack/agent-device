@@ -164,6 +164,10 @@
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
     },
+    "./device-boot": {
+      "types": "./src/device-boot.ts",
+      "default": "./src/device-boot.ts"
+    },
     "./device-readiness-runtime": {
       "types": "./src/device-readiness-runtime.ts",
       "default": "./src/device-readiness-runtime.ts"

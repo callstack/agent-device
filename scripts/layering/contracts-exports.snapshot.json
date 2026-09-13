@@ -38,6 +38,7 @@
   "@agent-device/contracts/command-platform-execution",
   "@agent-device/contracts/daemon-http",
   "@agent-device/contracts/device",
+  "@agent-device/contracts/device-boot",
   "@agent-device/contracts/device-readiness-runtime",
   "@agent-device/contracts/device-shutdown-runtime",
   "@agent-device/contracts/divergence",

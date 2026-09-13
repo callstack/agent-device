@@ -518,6 +518,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/simctl',
     '@agent-device/platform-apple/simulator',
+    '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/tool-provider',
   ]);
@@ -536,6 +537,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
     '@agent-device/platform-android',
     '@agent-device/platform-android/adb-host',
+    '@agent-device/platform-android/device-boot',
     '@agent-device/platform-android/mechanics',
   ]);
   assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
