@@ -445,7 +445,7 @@ async function runAppleScroll(
       runnerOpts,
     );
   } catch (error) {
-    throw withAppleScrollKeyboardOcclusion(error, direction);
+    throw withAppleScrollKeyboardOcclusion(error);
   }
 
   return normalizeAppleScrollResultWithResolvedFrame(runnerResult, direction, iosOptions);

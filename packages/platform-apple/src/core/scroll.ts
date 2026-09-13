@@ -6,8 +6,8 @@ import {
 } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
+  SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS,
   buildScrollGesturePlan,
-  scrollKeyboardOccludesSurfaceError,
 } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import { SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE } from '../runner/runner-contract.ts';
@@ -22,26 +22,19 @@ export type NormalizedScrollOptions = {
 export type AppleScrollOptions = ScrollExecutionOptions;
 
 /**
- * Turns the runner's keyboard-occlusion refusal into the reason a caller acts on (#2500).
- *
- * The runner owns the live keyboard frame and declines to place a swipe it cannot keep above the
- * keys; it answers with a typed runner code rather than prose so nothing here has to read an error
- * message. The numbers stay on the runner's side of the boundary — re-deriving them from a frame
- * this process does not hold would be a second source of truth — so the reason and hint are the
- * evidence, joined to whatever the transport already recorded (`logPath`, `runnerErrorCode`).
+ * Gives the runner's keyboard-occlusion refusal the shared reason and hint (#2500). The runner
+ * measured the keyboard in its own coordinate space, so its message and transport details
+ * (`runnerErrorCode`, `logPath`) are kept as they are; only the details every platform publishes
+ * are added, matched on the typed runner code rather than on error text.
  */
-export function withAppleScrollKeyboardOcclusion(
-  error: unknown,
-  direction: ScrollDirection,
-): unknown {
+export function withAppleScrollKeyboardOcclusion(error: unknown): unknown {
   if (!(error instanceof AppError)) return error;
   if (error.details?.['runnerErrorCode'] !== SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE) {
     return error;
   }
-  const refusal = scrollKeyboardOccludesSurfaceError(direction);
-  return new AppError(refusal.code, refusal.message, {
-    ...(error.details ?? {}),
-    ...(refusal.details ?? {}),
+  return new AppError(error.code, error.message, {
+    ...error.details,
+    ...SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS,
   });
 }
 

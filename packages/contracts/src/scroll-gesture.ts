@@ -359,11 +359,22 @@ export const SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION = 0.15;
 export const SCROLL_KEYBOARD_ACCESSORY_ALLOWANCE = 12;
 
 /**
- * The one reason a directional scroll refuses to swipe at all (#2500). The iOS runner answers with
- * its own runner error code for the same condition; that code is the Apple runner's wire
- * vocabulary and lives with it, not here, because Android raises this reason locally.
+ * The one reason a directional scroll refuses to swipe at all (#2500), with the hint every owner
+ * publishes beside it: Android measures the occlusion in this process, and the iOS runner answers
+ * with its own runner code that the Apple scroll owner joins to these same details, so a
+ * caller branches on `reason` and reads one hint whichever owner refused. Avoidance never dismisses
+ * the keyboard: a dismiss drops focus, which breaks a `type`/`scroll`/`type` loop, is not idempotent
+ * across platforms, and mutates state session-action provenance does not record. So the hint names
+ * the tradeoff instead of paying it.
  */
 export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON = 'scroll_keyboard_occludes_surface';
+
+export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS = Object.freeze({
+  reason: SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
+  hint:
+    'The on-screen keyboard covers the surface this scroll would swipe, so it cannot reach it. ' +
+    'Run `keyboard dismiss` and retry, accepting that it drops focus (re-tap the field to keep typing), or scroll before focusing the field.',
+});
 
 export type ScrollKeyboardClip =
   /** No keyboard, or one that does not own this surface: swipe the whole viewport. */
@@ -377,8 +388,10 @@ export type ScrollKeyboardClip =
    */
   | { kind: 'occluded'; keyboardMinY: number; visibleHeight: number };
 
-/** The numbers a refusing owner can name about the surface it declined to swipe. */
-export type ScrollKeyboardOcclusion = Extract<ScrollKeyboardClip, { kind: 'occluded' }> & {
+/** The numbers a refusing owner names about the surface it declined to swipe. */
+export type ScrollKeyboardOcclusion = {
+  keyboardMinY: number;
+  visibleHeight: number;
   viewportHeight: number;
 };
 
@@ -421,38 +434,26 @@ export function clipScrollViewportAboveKeyboard(
 }
 
 /**
- * The refusal a scroll reports when the keyboard owns the surface. `avoidanceNeverDismisses` is the
- * point: a dismiss drops focus, which breaks a `type`/`scroll`/`type` loop, is not idempotent
- * across platforms (Android's ESC loop can throw `UNSUPPORTED_OPERATION`), and mutates state
- * session-action provenance does not record. So the caller names the tradeoff instead of paying it.
- *
- * `occlusion` is optional because the owner that measured the frame may be the runner rather than
- * this process: the iOS XCTest runner refuses in its own coordinate space and reports the typed
- * runner code, and re-deriving its numbers here would be a second source of truth.
+ * The refusal an owner that measured the keyboard in this process reports. The iOS runner measures
+ * in its own coordinate space and answers with its runner code instead; the Apple scroll owner
+ * adds the same `SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS` to that error.
  */
 export function scrollKeyboardOccludesSurfaceError(
   direction: ScrollDirection,
-  occlusion?: ScrollKeyboardOcclusion,
+  occlusion: ScrollKeyboardOcclusion,
 ): AppError {
   const percent = Math.round(SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION * 100);
-  const measured =
-    occlusion === undefined
-      ? 'the keyboard leaves too little visible surface for a swipe'
-      : `the keyboard leaves ${occlusion.visibleHeight}px of ${occlusion.viewportHeight}px visible, below the ${percent}% needed for a swipe`;
-  return new AppError('COMMAND_FAILED', `scroll ${direction} refused: ${measured}`, {
-    reason: SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON,
-    ...(occlusion === undefined
-      ? {}
-      : {
-          keyboardMinY: occlusion.keyboardMinY,
-          visibleHeight: occlusion.visibleHeight,
-          viewportHeight: occlusion.viewportHeight,
-        }),
-    minVisibleFraction: SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
-    hint:
-      'The on-screen keyboard covers the surface this scroll would swipe, so it cannot reach it. ' +
-      'Run `keyboard dismiss` and retry, accepting that it drops focus (re-tap the field to keep typing), or scroll before focusing the field.',
-  });
+  return new AppError(
+    'COMMAND_FAILED',
+    `scroll ${direction} refused: the keyboard leaves ${occlusion.visibleHeight}px of ${occlusion.viewportHeight}px visible, below the ${percent}% needed for a swipe`,
+    {
+      keyboardMinY: occlusion.keyboardMinY,
+      visibleHeight: occlusion.visibleHeight,
+      viewportHeight: occlusion.viewportHeight,
+      minVisibleFraction: SCROLL_KEYBOARD_MIN_VISIBLE_FRACTION,
+      ...SCROLL_KEYBOARD_OCCLUDES_SURFACE_DETAILS,
+    },
+  );
 }
 
 function isMeasurableRect(rect: Rect): boolean {

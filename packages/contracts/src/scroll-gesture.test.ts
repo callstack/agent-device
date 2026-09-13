@@ -306,7 +306,6 @@ test('an unusable keyboard frame fails open instead of refusing every scroll', (
 
 test('the occlusion refusal is keyed on its reason, not on its message', () => {
   const error = scrollKeyboardOccludesSurfaceError('down', {
-    kind: 'occluded',
     keyboardMinY: 564,
     visibleHeight: 40,
     viewportHeight: 874,
@@ -318,21 +317,4 @@ test('the occlusion refusal is keyed on its reason, not on its message', () => {
   assert.equal(error.details?.visibleHeight, 40);
   assert.equal(error.details?.viewportHeight, 874);
   assert.match(String(error.details?.hint), /keyboard dismiss/);
-});
-
-test('an unmeasured refusal still names the same reason, so error text never gates recovery', () => {
-  // The iOS runner refuses in its own coordinate space and reports only its typed runner code, so
-  // the Apple owner rebuilds this error without numbers. Matching on `reason` has to yield the
-  // same key with or without a measurement, or the message becomes the discriminator.
-  const unmeasured = scrollKeyboardOccludesSurfaceError('down');
-  const measured = scrollKeyboardOccludesSurfaceError('down', {
-    kind: 'occluded',
-    keyboardMinY: 564,
-    visibleHeight: 40,
-    viewportHeight: 874,
-  });
-  assert.equal(unmeasured.details?.reason, measured.details?.reason);
-  assert.equal(unmeasured.details?.keyboardMinY, undefined);
-  assert.equal(unmeasured.details?.visibleHeight, undefined);
-  assert.ok(!String(unmeasured.message).includes('px of'), 'no fabricated measurement may appear');
 });

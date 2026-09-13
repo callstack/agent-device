@@ -7,19 +7,6 @@ import {
   withAppleScrollKeyboardOcclusion,
 } from '../scroll.ts';
 
-const RUNNER_OCCLUSION_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
-
-function runnerOcclusionError(): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    'scroll down refused: the keyboard leaves 28pt of surface',
-    {
-      runnerErrorCode: RUNNER_OCCLUSION_CODE,
-      logPath: '/tmp/runner.log',
-    },
-  );
-}
-
 test('a clipped runner frame yields travel and evidence for the band actually swiped', () => {
   // The runner clips the interaction frame above the keyboard and reports the clipped axis, so the
   // TS recomputation of `pixels` must be honest about the shorter travel (#2500). Reading the
@@ -76,34 +63,29 @@ test('avoidance from a runner that reports no keyboard edge is still avoidance',
   assert.equal('keyboardMinY' in result, false);
 });
 
-test('the runner keyboard refusal becomes the typed reason a caller can branch on', () => {
-  const mapped = withAppleScrollKeyboardOcclusion(runnerOcclusionError(), 'down');
+test('the runner keyboard refusal gains the shared reason and hint and keeps its own message', () => {
+  const runnerError = new AppError(
+    'COMMAND_FAILED',
+    'scroll down refused: the keyboard leaves 28pt of visible surface above it',
+    { runnerErrorCode: 'SCROLL_KEYBOARD_OCCLUDES_SURFACE', logPath: '/tmp/runner.log' },
+  );
+  const mapped = withAppleScrollKeyboardOcclusion(runnerError);
   assert.ok(mapped instanceof AppError);
   assert.equal(mapped.code, 'COMMAND_FAILED');
+  assert.equal(mapped.message, runnerError.message);
   assert.equal(mapped.details?.reason, SCROLL_KEYBOARD_OCCLUDES_SURFACE_REASON);
   assert.match(String(mapped.details?.hint), /keyboard dismiss/);
-});
-
-test('the mapped refusal keeps the transport diagnostics the original error carried', () => {
-  const mapped = withAppleScrollKeyboardOcclusion(runnerOcclusionError(), 'down');
-  assert.ok(mapped instanceof AppError);
   assert.equal(mapped.details?.logPath, '/tmp/runner.log');
-  assert.equal(mapped.details?.runnerErrorCode, RUNNER_OCCLUSION_CODE);
+  assert.equal(mapped.details?.runnerErrorCode, 'SCROLL_KEYBOARD_OCCLUDES_SURFACE');
 });
 
-test('the nearest negatives stay untouched, so only the refusal code renames an error', () => {
-  // Same code, different classification: a generic scroll failure must not read as an occlusion, or
-  // the caller would be told to dismiss a keyboard that is not in the way.
-  const generic = new AppError(
-    'COMMAND_FAILED',
-    'scroll could not resolve a usable interaction frame',
-    {
-      logPath: '/tmp/runner.log',
-    },
-  );
-  assert.equal(withAppleScrollKeyboardOcclusion(generic, 'down'), generic);
-  const transport = new Error('socket hang up');
-  assert.equal(withAppleScrollKeyboardOcclusion(transport, 'down'), transport);
+test('only the refusal code is renamed, so a generic scroll failure never reads as an occlusion', () => {
+  const generic = new AppError('COMMAND_FAILED', 'scroll could not resolve a usable frame', {
+    logPath: '/tmp/runner.log',
+  });
+  assert.equal(withAppleScrollKeyboardOcclusion(generic), generic);
   const alert = new AppError('COMMAND_FAILED', 'no alert', { runnerErrorCode: 'ALERT_NOT_FOUND' });
-  assert.equal(withAppleScrollKeyboardOcclusion(alert, 'down'), alert);
+  assert.equal(withAppleScrollKeyboardOcclusion(alert), alert);
+  const transport = new Error('socket hang up');
+  assert.equal(withAppleScrollKeyboardOcclusion(transport), transport);
 });
