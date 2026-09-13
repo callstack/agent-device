@@ -197,6 +197,48 @@ test('a normalized nested failure preserves typed recovery signals on REPLAY_DIV
   expect(response.error.details?.recovery).toBe('runner_recycle_budget_exhausted');
 });
 
+test('a capture the runner declared sparse reaches the divergence details as a verdict', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-sparse-verdict-');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['click "Not Now"']);
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayForTest({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'regular iOS snapshot presentation requires a valid viewport',
+        hint: 'com.apple.SafariViewService hosts the surface presented over the app.',
+        details: {
+          reason: 'invalid-viewport',
+          field: 'viewport',
+          snapshotQuality: {
+            state: 'sparse',
+            backend: 'private-ax',
+            reasonCode: 'requested-backend',
+          },
+        },
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  expect(response.error.details?.snapshotQuality).toEqual({
+    state: 'sparse',
+    backend: 'private-ax',
+    reasonCode: 'requested-backend',
+  });
+});
+
 test('a failing replay step captures an available screen digest with blessed refs', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-screen-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
