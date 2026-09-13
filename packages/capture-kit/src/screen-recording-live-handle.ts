@@ -24,9 +24,21 @@ export function createScreenRecordingLiveHandle(
 ): ScreenRecordingLiveHandle {
   let snapshot = freezeSnapshot(initial);
   let finish: Promise<FinishOutcome<ScreenRecordingCompletion>> | undefined;
+  let finishRequested = false;
   let cleanup: Promise<CleanupOutcome> | undefined;
   let disposal: Promise<void> | undefined;
-  const finishRecording = () => (finish ??= implementation.finish(snapshot));
+  // Once a finish or a cleanup has been asked for, the recording no longer accepts telemetry.
+  const terminal = (): boolean => finishRequested || cleanup !== undefined;
+  const finishRecording = () => {
+    // Only a finished recording stays memoized. A finish the host refused has to be re-driven
+    // by the next `record stop`, which is how a recording recovers without a daemon restart.
+    finishRequested = true;
+    finish ??= implementation.finish(snapshot).catch((error: unknown) => {
+      finish = undefined;
+      throw error;
+    });
+    return finish;
+  };
   const forceCleanup = () =>
     (cleanup ??= finish
       ? finish.then(
@@ -40,25 +52,25 @@ export function createScreenRecordingLiveHandle(
   return Object.freeze({
     inspect: () => snapshot,
     appendGestureEvents: (events: readonly RecordingGestureEvent[]) => {
-      if (events.length === 0 || finish || cleanup) return;
+      if (events.length === 0 || terminal()) return;
       snapshot = freezeSnapshot({
         ...snapshot,
         gestureEvents: [...snapshot.gestureEvents, ...events],
       });
     },
     setTouchReferenceFrame: (touchReferenceFrame: GestureReferenceFrame | undefined) => {
-      if (finish || cleanup) return;
+      if (terminal()) return;
       snapshot = freezeSnapshot({
         ...snapshot,
         ...(touchReferenceFrame ? { touchReferenceFrame } : {}),
       });
     },
     setRunnerSessionId: (runnerSessionId: string) => {
-      if (finish || cleanup || runnerSessionId.trim().length === 0) return;
+      if (terminal() || runnerSessionId.trim().length === 0) return;
       snapshot = freezeSnapshot({ ...snapshot, runnerSessionId });
     },
     invalidate: (invalidatedReason: string) => {
-      if (finish || cleanup || snapshot.invalidatedReason) return;
+      if (terminal() || snapshot.invalidatedReason) return;
       snapshot = freezeSnapshot({ ...snapshot, invalidatedReason });
     },
     finish: finishRecording,

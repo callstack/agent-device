@@ -1,21 +1,36 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 
-const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
+const { mockRunCmdSync, mockRunCmd } = vi.hoisted(() => ({
+  mockRunCmdSync: vi.fn(),
+  mockRunCmd: vi.fn(),
+}));
 
 vi.mock('./exec.ts', async () => {
   const actual = await vi.importActual<typeof import('./exec.ts')>('./exec.ts');
-  return { ...actual, runCmdSync: mockRunCmdSync };
+  return { ...actual, runCmd: mockRunCmd, runCmdSync: mockRunCmdSync };
 });
 
-import { isProcessZombie, readHostProcessIdentityObservations } from './host-process.ts';
+import {
+  isProcessZombie,
+  readHostProcessIdentityObservations,
+  readProcessIdentityFacts,
+} from './host-process.ts';
 
 function psReturns(stdout: string, exitCode = 0): void {
   mockRunCmdSync.mockReturnValue({ stdout, stderr: '', exitCode });
 }
 
+function psAnswersEachField(fields: Record<string, string>): void {
+  mockRunCmd.mockImplementation(async (_cmd: string, args: string[]) => {
+    const value = fields[args[3]!];
+    return { stdout: value ?? '', stderr: '', exitCode: value === undefined ? 1 : 0 };
+  });
+}
+
 beforeEach(() => {
   mockRunCmdSync.mockReset();
+  mockRunCmd.mockReset();
 });
 
 test('isProcessZombie detects the Z state code with trailing flags', () => {
@@ -61,4 +76,58 @@ test('reads many process identities from one ps snapshot', () => {
     '-o',
     'pid=,state=,lstart=',
   ]);
+});
+
+test('the ownership read spends the budget its caller names on every field', async () => {
+  psAnswersEachField({
+    'lstart=': 'Mon Aug 10 20:00:00 2026',
+    'command=': '/bin/simctl io recordVideo out.mp4',
+    'state=': 'Ss',
+  });
+
+  const facts = await readProcessIdentityFacts(4242, 5_000);
+
+  assert.deepEqual(facts, {
+    startTime: 'Mon Aug 10 20:00:00 2026',
+    command: '/bin/simctl io recordVideo out.mp4',
+    zombie: false,
+  });
+  assert.equal(mockRunCmd.mock.calls.length, 3);
+  for (const call of mockRunCmd.mock.calls) {
+    assert.equal(call[2]?.timeoutMs, 5_000);
+  }
+});
+
+test('the ownership read reports an unanswered host as unknown, not as absence', async () => {
+  mockRunCmd.mockRejectedValue(new Error('/bin/ps timed out after 5000ms'));
+
+  assert.deepEqual(await readProcessIdentityFacts(4242, 5_000), {
+    startTime: null,
+    command: null,
+    zombie: null,
+  });
+});
+
+test('the ownership read leaves the zombie question open when only the state is unreadable', async () => {
+  psAnswersEachField({
+    'lstart=': 'Mon Aug 10 20:00:00 2026',
+    'command=': '/bin/simctl io recordVideo out.mp4',
+  });
+
+  assert.deepEqual(await readProcessIdentityFacts(4242, 5_000), {
+    startTime: 'Mon Aug 10 20:00:00 2026',
+    command: '/bin/simctl io recordVideo out.mp4',
+    zombie: null,
+  });
+});
+
+test('the ownership read answers the zombie question from the state field', async () => {
+  psAnswersEachField({ 'lstart=': 'x', 'command=': 'y', 'state=': 'ZN' });
+
+  assert.deepEqual(await readProcessIdentityFacts(4242), {
+    startTime: 'x',
+    command: 'y',
+    zombie: true,
+  });
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.timeoutMs, 1_000);
 });

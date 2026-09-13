@@ -16,6 +16,19 @@ export type HostProcessIdentityObservation = Readonly<{
   startTime: string;
 }>;
 
+/**
+ * What the host says about one pid when a caller is about to signal it. Each field is `null`
+ * when the host did not answer, which is unknown evidence rather than absence: only a `ps`
+ * that names a different process proves the pid changed hands. `zombie` is `null` together
+ * with an unreadable process state, since a zombie passes `kill(pid, 0)` and still reports
+ * its original start time, so nothing else exposes that it already terminated.
+ */
+export type HostProcessIdentityFacts = Readonly<{
+  startTime: string | null;
+  command: string | null;
+  zombie: boolean | null;
+}>;
+
 type HostProcessRunCommand = (
   cmd: string,
   args: string[],
@@ -85,6 +98,24 @@ export function isProcessGroupAlive(pid: number): boolean {
   }
 }
 
+/**
+ * Reads who owns a pid, off the event loop, with a budget the caller names. The three fields
+ * are read concurrently so a loaded host pays one budget for the set rather than one per
+ * field. Use this rather than the synchronous probes when the answer decides whether a
+ * process is signaled: waiting is reversible and signaling the wrong process is not.
+ */
+export async function readProcessIdentityFacts(
+  pid: number,
+  timeoutMs = PS_TIMEOUT_MS,
+): Promise<HostProcessIdentityFacts> {
+  const [startTime, command, state] = await Promise.all([
+    readProcessFieldAsync(pid, 'lstart=', timeoutMs),
+    readProcessFieldAsync(pid, 'command=', timeoutMs),
+    readProcessFieldAsync(pid, 'state=', timeoutMs),
+  ]);
+  return { startTime, command, zombie: state === null ? null : state.startsWith('Z') };
+}
+
 export function readProcessStartTime(pid: number): string | null {
   return readProcessField(pid, 'lstart=');
 }
@@ -125,19 +156,42 @@ export function readHostProcessIdentityObservations(
   return observations;
 }
 
-function readProcessField(pid: number, field: 'lstart=' | 'command=' | 'state='): string | null {
+type HostProcessField = 'lstart=' | 'command=' | 'state=';
+
+function readProcessField(pid: number, field: HostProcessField): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   try {
     const result = runCmdSync(HOST_PS_COMMAND, ['-p', String(pid), '-o', field], {
       allowFailure: true,
       timeoutMs: PS_TIMEOUT_MS,
     });
-    if (result.exitCode !== 0) return null;
-    const value = result.stdout.trim();
-    return value.length > 0 ? value : null;
+    return processFieldValue(result);
   } catch {
     return null;
   }
+}
+
+async function readProcessFieldAsync(
+  pid: number,
+  field: HostProcessField,
+  timeoutMs: number,
+): Promise<string | null> {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    const result = await runCmd(HOST_PS_COMMAND, ['-p', String(pid), '-o', field], {
+      allowFailure: true,
+      timeoutMs,
+    });
+    return processFieldValue(result);
+  } catch {
+    return null;
+  }
+}
+
+function processFieldValue(result: ExecResult): string | null {
+  if (result.exitCode !== 0) return null;
+  const value = result.stdout.trim();
+  return value.length > 0 ? value : null;
 }
 
 export function parseHostProcessList(stdout: string): HostProcessInfo[] {

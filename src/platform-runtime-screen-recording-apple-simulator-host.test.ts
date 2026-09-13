@@ -19,6 +19,11 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
   isProcessZombie: () => false,
   readProcessStartTime: (pid: number) => processes.starts.get(pid) ?? null,
   readProcessCommand: (pid: number) => processes.commands.get(pid) ?? null,
+  readProcessIdentityFacts: async (pid: number) => ({
+    startTime: processes.starts.get(pid) ?? null,
+    command: processes.commands.get(pid) ?? null,
+    zombie: false,
+  }),
   listHostProcesses: async () =>
     [...processes.alive.keys()].map((pid) => ({
       pid,
@@ -353,6 +358,46 @@ test.each([
   await expect(process.terminate()).rejects.toThrow('process ownership changed');
   expect(running.kill).not.toHaveBeenCalled();
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });
+});
+
+test('ends the recorder through its handle when the host cannot confirm its identity', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-unreadable-identity-');
+  const outputPath = path.join(root, 'capture.mp4');
+  fs.writeFileSync(outputPath, 'recording');
+  const running = background(51, `xcrun simctl io ${simulator.id} recordVideo ${outputPath}`);
+  const process = await withTransport(
+    running.process,
+    async () => await startAppleSimulatorRecording(simulator, outputPath),
+  );
+
+  // A loaded host can fail the identity probe it would normally confirm ownership with.
+  // That proves nothing about who owns the pid, and must not strand the recording.
+  processes.starts.delete(51);
+  await expect(process.terminate()).resolves.toBeUndefined();
+  expect(running.kill).toHaveBeenCalledWith('SIGINT');
+  await expect(process.wait).resolves.toMatchObject({ exitCode: 0 });
+});
+
+test('a recorder whose stop was refused can be stopped by the next stop', async () => {
+  const root = mkdtempForTestSync('agent-device-recording-refused-stop-');
+  const outputPath = path.join(root, 'capture.mp4');
+  fs.writeFileSync(outputPath, 'recording');
+  const running = background(50, `xcrun simctl io ${simulator.id} recordVideo ${outputPath}`);
+  const process = await withTransport(
+    running.process,
+    async () => await startAppleSimulatorRecording(simulator, outputPath),
+  );
+
+  // A refused attempt stays refused for that attempt only. Whatever made this one refuse,
+  // the next `record stop` must be able to end the same recorder rather than replay the
+  // rejection for the rest of the session.
+  processes.starts.set(50, 'start-of-a-different-process');
+  await expect(process.terminate()).rejects.toThrow('process ownership changed');
+  expect(running.kill).not.toHaveBeenCalled();
+
+  processes.starts.set(50, 'start-50');
+  await expect(process.terminate()).resolves.toBeUndefined();
+  expect(running.kill).toHaveBeenCalledWith('SIGINT');
 });
 
 test('pidless provider process is killed and settled before start fails', async () => {

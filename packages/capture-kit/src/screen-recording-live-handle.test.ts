@@ -80,6 +80,25 @@ test('failed finish permits one forced cleanup', async () => {
   assert.equal(cleanup.mock.calls.length, 1);
 });
 
+test('retried finish re-drives a failed finish and replays a finished one', async () => {
+  let attempts = 0;
+  const finish = vi.fn(async () => {
+    attempts += 1;
+    if (attempts === 1) throw new Error('host could not confirm the recorder');
+    return completed();
+  });
+  const handle = createScreenRecordingLiveHandle(snapshot(), {
+    finish,
+    forceCleanup: async () => ({ status: 'cleaned' }) as const,
+  });
+
+  await assert.rejects(async () => await handle.finish(), /could not confirm the recorder/);
+  assert.deepEqual(await handle.finish(), completed());
+  assert.deepEqual(await handle.finish(), completed());
+
+  assert.equal(finish.mock.calls.length, 2);
+});
+
 function snapshot() {
   return {
     backend: 'fixture',

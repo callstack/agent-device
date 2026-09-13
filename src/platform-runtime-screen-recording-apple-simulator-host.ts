@@ -176,20 +176,24 @@ function createAppleSimulatorProcess(
 ): ScreenRecordingBackgroundProcess {
   let termination: Promise<void> | undefined;
   let terminatedByOwner = false;
-  const terminate = () =>
-    (termination ??= terminateManagedProcessSet(
-      markers,
-      background,
-      appleSimulatorRecordingCommandMatches,
-    ).then((outcome) => {
-      if (outcome === 'ownership-lost') {
-        throw new Error('simctl recordVideo process ownership changed before cleanup');
-      }
-      if (outcome !== 'terminated' && outcome !== 'already-missing') {
-        throw new Error('simctl recordVideo cleanup was not confirmed');
-      }
-      terminatedByOwner = outcome === 'terminated';
-    }));
+  const runTermination = () =>
+    terminateManagedProcessSet(markers, background, appleSimulatorRecordingCommandMatches).then(
+      (outcome) => {
+        if (outcome === 'ownership-lost') {
+          throw new Error('simctl recordVideo process ownership changed before cleanup');
+        }
+        terminatedByOwner = outcome === 'terminated';
+      },
+    );
+  // Only a confirmed termination stays memoized: `record stop` is the one seam its owner gets
+  // to re-drive a termination the host refused.
+  const terminate = () => {
+    termination ??= runTermination().catch((error: unknown) => {
+      termination = undefined;
+      throw error;
+    });
+    return termination;
+  };
   const wait = background.wait.then(async (result) => {
     const ownerTermination = termination;
     if (ownerTermination) await ownerTermination.catch(() => undefined);
