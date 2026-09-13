@@ -335,7 +335,19 @@ async function sendSocketRequest(
         ? setTimeout(() => {
             settled = true;
             socket.destroy();
-            reject(handleRequestTimeout({ info, statePaths, req, remote: false, timeoutMs }));
+            reject(
+              handleRequestTimeout({
+                info,
+                statePaths,
+                remote: false,
+                timeoutMs,
+                requestId: req.meta?.requestId,
+                command: req.command,
+                platform: req.flags?.platform,
+                session: req.session,
+                action: req.positionals?.[0],
+              }),
+            );
           }, timeoutMs)
         : undefined;
 
@@ -452,7 +464,19 @@ async function sendHttpRequest(
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
             request.destroy();
-            reject(handleRequestTimeout({ info, statePaths, req, remote, timeoutMs }));
+            reject(
+              handleRequestTimeout({
+                info,
+                statePaths,
+                remote,
+                timeoutMs,
+                requestId: req.meta?.requestId,
+                command: req.command,
+                platform: req.flags?.platform,
+                session: req.session,
+                action: req.positionals?.[0],
+              }),
+            );
           }, timeoutMs)
         : undefined;
 
