@@ -63,6 +63,12 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   divergence: unknown;
   scrubVars: readonly ReplayVarScrubEntry[];
+  /**
+   * Composable warnings accumulated before the failing step (skipped `optional`
+   * steps, capture degradations). They describe the run, not this step's cause,
+   * so they ride at response-error level rather than through the cause allowlist.
+   */
+  warnings?: readonly string[];
 }): DaemonResponse {
   const {
     error,
@@ -75,6 +81,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
     snapshotDiagnostics,
     divergence,
     scrubVars,
+    warnings,
   } = params;
   return {
     ok: false,
@@ -97,6 +104,7 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
         positionals,
         artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
+        ...(warnings && warnings.length > 0 ? { warnings: [...warnings] } : {}),
         divergence,
       },
     },
@@ -117,6 +125,7 @@ const SAFE_CAUSE_DETAIL_KEYS = [
   'retriable',
   'snapshotQuality',
   'supportedOn',
+  'systemSurface',
 ] as const;
 
 function pickSafeCauseDetails(

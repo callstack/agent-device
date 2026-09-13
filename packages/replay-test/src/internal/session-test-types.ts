@@ -144,6 +144,8 @@ export type ReplayTestAttemptFailed = {
   status: 'failed';
   error: ReplayTestAttemptError;
   artifactPaths: readonly string[];
+  /** Warnings accumulated before the failing step (skipped `optional` steps, capture degradations). */
+  warnings?: readonly string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   /**
    * The host's verdict that this failure is environmental (device/runner/boot) rather than a

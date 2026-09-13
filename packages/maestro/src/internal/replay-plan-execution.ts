@@ -96,6 +96,7 @@ async function executeObservedStep(
         ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
         error: failure.error,
         artifactPaths: [...state.artifacts],
+        warnings: [...state.warnings],
       }),
     );
     throw failure;

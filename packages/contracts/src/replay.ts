@@ -108,6 +108,8 @@ export type ReplaySuiteTestFailed = {
   attempts: number;
   artifactsDir?: string;
   error: DaemonError;
+  /** Warnings accumulated before the failing step (skipped `optional` steps, capture degradations). */
+  warnings?: string[];
   /** Present when the owning runtime classified the failure as device/runner infrastructure. */
   infrastructure?: true;
   shardIndex?: number;

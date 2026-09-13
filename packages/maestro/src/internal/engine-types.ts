@@ -138,6 +138,8 @@ export type MaestroEngineObserver = {
       runtimeMetrics?: MaestroRuntimeMetrics;
       error: unknown;
       artifactPaths: readonly string[];
+      /** Warnings accumulated before this failure, including skipped `optional` steps. */
+      warnings: readonly string[];
     },
   ): void;
 };

@@ -139,6 +139,19 @@
   exactly as before, and a payload the runner did not declare sparse keeps the plain invariant byte for
   byte.
 
+- Fixed: skipped `optional: true` Maestro steps are no longer invisible on the human surface
+  (#2560). The warning a skip leaves now travels with the run whether it later passes or fails:
+  `replay` prints a `Warning:` line after its summary and repeats the run's warnings after a
+  failed run's error, `test` prints a `Warnings:` section after the suite summary naming each
+  test, and a failed test result gained the `warnings` array the passing result already had, so
+  `--json` and JUnit carry the skipped steps of a failing test too.
+- Fixed: an Apple runner presentation refusal now carries the registry identity of the system
+  surface the tree was acquired from as `error.details.systemSurface` (#2560). Previously a
+  selector-backed command failing at the capture boundary under `optional: true` gave nothing
+  naming that boundary — the web sign-in sheet out of `SafariViewService` was invisible in the
+  error, and the miss looked like a selector problem inside the app. The sparse-declared case
+  already names the surface host in its hint via #2572; this covers the provenance everywhere
+  the runner reports one.
 - Changed: a capture that a backend cut at one of its limits now says so in the snapshot's
   warnings, on every platform, instead of only setting `truncated: true` in JSON. The text path
   had no disclosure at all, so an agent read a screen missing its footer, tab bar, or the items

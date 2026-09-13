@@ -157,6 +157,7 @@ export async function buildTypedMaestroFailureResponse(params: {
     snapshotDiagnostics: params.snapshotDiagnostics,
     divergence: bounded,
     scrubVars,
+    warnings: failure.warnings,
   });
 }
 

@@ -14,10 +14,12 @@ import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-d
  */
 export function toReplayTestAttemptOutcome(response: DaemonResponse): ReplayTestAttemptOutcome {
   if (!response.ok) {
+    const warnings = readStringArray(response.error.details?.warnings);
     return {
       status: 'failed',
       error: response.error,
       artifactPaths: readArtifactPaths(response.error.details?.artifactPaths),
+      ...(warnings.length > 0 ? { warnings } : {}),
       infrastructure: isReplayInfrastructureFailure(response),
       ...snapshotDiagnostics(response.error.details?.snapshotDiagnostics),
     };

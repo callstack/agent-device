@@ -23,6 +23,7 @@ import {
   replayErrorLogLine,
   replayTestDisplayNameWithFile,
   replayTestFailureFileLine,
+  replayTestWarningLines,
   type FailedReplayTestResult,
   type PassedReplayTestResult,
 } from './format.ts';
@@ -115,8 +116,29 @@ function renderReplayTestSummary(
 ): void {
   const flaky = data.tests.filter(isFlakyReplayTestResult);
   context.stdout.write(`${formatReplayTestSummaryLine(data, flaky.length)}\n`);
+  renderWarningsSection(data.tests, context);
   renderFailureDetails(data.tests.filter(isFailedReplayTestResult), context);
   renderFlakyTestSummary(flaky, context);
+}
+
+// Steps inside a test can be skipped (`optional: true`) or their capture can
+// degrade, leaving a warning as the only trace — whether the test then passes or
+// fails, the human surface must carry it, not only --json and JUnit (#2560).
+function renderWarningsSection(
+  results: ReplaySuiteResult['tests'],
+  context: ReplayTestReporterContext,
+): void {
+  const warned = results
+    .map((result) => ({ result, lines: replayTestWarningLines(result) }))
+    .filter((entry) => entry.lines.length > 0);
+  if (warned.length === 0) return;
+  context.stdout.write('\n');
+  context.stdout.write('Warnings:\n');
+  for (const { result, lines } of warned) {
+    for (const line of lines) {
+      context.stdout.write(`  ${replayTestDisplayNameWithFile(result)}: ${line}\n`);
+    }
+  }
 }
 
 function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {

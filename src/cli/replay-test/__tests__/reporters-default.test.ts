@@ -175,6 +175,83 @@ function failingSuiteWithDivergence(): ReplaySuiteResult {
   };
 }
 
+function failingSuiteWithWarnings(): ReplaySuiteResult {
+  const failed = {
+    file: '/tmp/flow.yaml',
+    title: 'sign-in',
+    session: 'test-session',
+    status: 'failed' as const,
+    durationMs: 10,
+    attempts: 1,
+    warnings: ['Optional Maestro assertVisible skipped at /tmp/flow.yaml:line 3: sheet owns focus'],
+    error: { code: 'COMMAND_FAILED', message: 'tapOn Save did not resolve' },
+  };
+  return {
+    total: 1,
+    executed: 1,
+    passed: 0,
+    failed: 1,
+    skipped: 0,
+    notRun: 0,
+    durationMs: 10,
+    failures: [failed],
+    tests: [failed],
+  };
+}
+
+function passingSuiteWithWarnings(): ReplaySuiteResult {
+  const passed = {
+    file: '/tmp/flow.yaml',
+    title: 'sign-in',
+    session: 'test-session',
+    status: 'passed' as const,
+    durationMs: 20,
+    attempts: 1,
+    replayed: 3,
+    healed: 0,
+    warnings: ['Optional Maestro tapOn skipped at /tmp/flow.yaml:line 12: target did not resolve'],
+  };
+  return {
+    total: 1,
+    executed: 1,
+    passed: 1,
+    failed: 0,
+    skipped: 0,
+    notRun: 0,
+    durationMs: 20,
+    failures: [],
+    tests: [passed],
+  };
+}
+
+test('default replay test reporter surfaces per-test warnings on a passing suite (#2560)', () => {
+  const reporter = createDefaultReplayTestReporter();
+  const { context, stdout } = createReporterContext({ stderrIsTty: false });
+  reporter.onSuiteEnd?.(passingSuiteWithWarnings(), context);
+  const out = stdout.join('');
+  assert.match(out, /Warnings:\n/);
+  assert.match(out, /sign-in.*warning: Optional Maestro tapOn skipped at \/tmp\/flow\.yaml/s);
+});
+
+test('default replay test reporter omits the warnings section without warnings', () => {
+  const reporter = createDefaultReplayTestReporter();
+  const { context, stdout } = createReporterContext({ stderrIsTty: false });
+  reporter.onSuiteEnd?.(emptySuite(), context);
+  assert.equal(stdout.join('').includes('Warnings:'), false);
+});
+
+test('default replay test reporter surfaces warnings accumulated before a failure (#2560)', () => {
+  const reporter = createDefaultReplayTestReporter();
+  const { context, stdout } = createReporterContext({ stderrIsTty: false });
+  reporter.onSuiteEnd?.(failingSuiteWithWarnings(), context);
+  const out = stdout.join('');
+  assert.match(out, /Warnings:\n/);
+  assert.match(
+    out,
+    /sign-in.*warning: Optional Maestro assertVisible skipped at .*sheet owns focus/s,
+  );
+});
+
 test('default replay test reporter surfaces the divergence repair report on a failure', () => {
   const reporter = createDefaultReplayTestReporter();
   const { context, stdout } = createReporterContext({ stderrIsTty: false });

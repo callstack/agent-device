@@ -59,6 +59,8 @@ export type MaestroFailedAction = MaestroActionEvent & {
   readonly runtimeMetrics?: MaestroCompletedActionEvent['runtimeMetrics'];
   readonly error: unknown;
   readonly artifactPaths: readonly string[];
+  /** Warnings accumulated before this failure, including skipped `optional` steps. */
+  readonly warnings: readonly string[];
   readonly isControl: boolean;
   readonly redactions: readonly { name: string; value: string }[];
   readonly resume:
@@ -215,6 +217,7 @@ function createObserver(
         durationMs: event.durationMs,
         error: event.error,
         artifactPaths: event.artifactPaths,
+        warnings: [...event.warnings],
         isControl: isMaestroControlCommandDescriptor(event.command),
         redactions:
           event.command.kind === 'inputText' && event.command.text.length > 0

@@ -1,8 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
 import type { AppleRunnerSnapshotResult } from '../snapshot-presentation.ts';
-import { presentAppleRunnerSnapshot } from '../snapshot-presentation.ts';
+import { presentAppleRunnerSnapshot, readAppleSnapshotResult } from '../snapshot-presentation.ts';
 
 const NO_VIEWPORT_ROOT = { index: 0, type: 'Application', label: 'App' };
 
@@ -73,6 +75,10 @@ test('a sparse capture of a presented system surface names the surface host', ()
     String(error.details?.hint),
     /com\.apple\.SafariViewService hosts the surface presented over the app/,
   );
+  assert.deepEqual(error.details?.systemSurface, {
+    bundleId: 'com.apple.SafariViewService',
+    kind: 'web-auth',
+  });
 });
 
 test('a sparse payload failing another invariant still carries the verdict', () => {
@@ -123,5 +129,63 @@ test('a sparse verdict still presents the nodes it did read', () => {
   assert.deepEqual(
     nodes.map((node) => node.label),
     ['App', 'Not Now'],
+  );
+});
+
+const SYSTEM_SHEET: IosSystemSurfaceProvenance = {
+  bundleId: 'com.apple.SafariViewService',
+  kind: 'web-auth',
+};
+
+test('a presented system surface travels with an undeclared-payload refusal as typed provenance', () => {
+  try {
+    presentAppleRunnerSnapshot('device-1', undefined, {
+      nodes: [NO_VIEWPORT_ROOT],
+      quality: { state: 'healthy', backend: 'tree' },
+      systemSurface: SYSTEM_SHEET,
+    });
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.deepEqual((error.details as Record<string, unknown>).systemSurface, SYSTEM_SHEET);
+    assert.equal((error.details as Record<string, unknown>).snapshotQuality, undefined);
+    return;
+  }
+  assert.fail('expected the presentation to refuse the payload');
+});
+
+test('readAppleSnapshotResult keeps registry-known system surface provenance only', () => {
+  const known = readAppleSnapshotResult({
+    nodes: [],
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+  });
+  assert.deepEqual(known.systemSurface, SYSTEM_SHEET);
+
+  const unknown = readAppleSnapshotResult({
+    nodes: [],
+    systemSurface: { bundleId: 'com.example.PhishingService', kind: 'web-auth' },
+  });
+  assert.equal(unknown.systemSurface, undefined);
+});
+
+test('a healthy payload with valid viewport roots still presents', () => {
+  const screen: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+  const button: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Not Now',
+    rect: { x: 16, y: 400, width: 80, height: 32 },
+    hittable: true,
+  };
+  const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [screen, button],
+  });
+  assert.deepEqual(
+    nodes.map((node) => node.index),
+    [0, 1],
   );
 });

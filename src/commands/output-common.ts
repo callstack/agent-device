@@ -31,20 +31,32 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
 }
 
 /**
- * `messageCliOutput` plus one `Warning:` line per entry of the response's `warnings`
+ * The response message plus one `Warning:` line per entry of the response's `warnings`
  * array — the composable warnings channel (`open`, `debug`, snapshot capture use it too),
  * so a warning the daemon appended reaches the human CLI reader, not only `--json`.
  */
+export function messageWithWarningsText(result: Record<string, unknown>): string | null {
+  const message = readCommandMessage(result);
+  const warnings = Array.isArray(result.warnings)
+    ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
+    : [];
+  if (warnings.length === 0) return message;
+  return [message, ...warnings.map((warning) => `Warning: ${collapseWarningText(warning)}`)]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */
+export function collapseWarningText(warning: string): string {
+  return warning.replaceAll(/\s*\n\s*/g, ' ');
+}
+
+/** `messageCliOutput` carrying {@link messageWithWarningsText} as its text. */
 export const messageWithWarningsOutput = resultOutput(
-  (result: Record<string, unknown>): CliOutput => {
-    const output = messageCliOutput(result);
-    const warnings = Array.isArray(result.warnings)
-      ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
-      : [];
-    if (warnings.length === 0) return output;
-    const lines = [output.text, ...warnings.map((warning) => `Warning: ${warning}`)];
-    return { data: output.data, text: lines.filter(Boolean).join('\n') };
-  },
+  (result: Record<string, unknown>): CliOutput => ({
+    data: result,
+    text: messageWithWarningsText(result),
+  }),
 );
 
 /**

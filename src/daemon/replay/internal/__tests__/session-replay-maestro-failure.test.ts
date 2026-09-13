@@ -50,6 +50,7 @@ beforeEach(() => {
 async function buildFailureScenario(
   command: MaestroRuntimeCommand,
   nodes: SnapshotNode[],
+  options: { warnings?: readonly string[] } = {},
 ): Promise<{
   response: Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>;
   sessionStore: SessionStore;
@@ -64,7 +65,7 @@ async function buildFailureScenario(
   const failure = await captureMaestroFailure(command, path.join(root, 'flow.yaml'));
   const response = await buildTypedMaestroFailureResponse({
     error: { code: 'COMMAND_FAILED', message: 'typed Maestro action failed' },
-    failure,
+    failure: options.warnings ? { ...failure, warnings: options.warnings } : failure,
     replayPath: path.join(root, 'flow.yaml'),
     req: baseReq({ flags: { replayBackend: 'maestro', platform: 'ios' } }),
     sessionName,
@@ -79,9 +80,43 @@ async function buildFailureScenario(
 async function buildFailureResponse(
   command: MaestroRuntimeCommand,
   nodes: SnapshotNode[],
+  options: { warnings?: readonly string[] } = {},
 ): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
-  return (await buildFailureScenario(command, nodes)).response;
+  return (await buildFailureScenario(command, nodes, options)).response;
 }
+
+test('typed Maestro failure response carries warnings accumulated before the failing step (#2560)', async () => {
+  const response = await buildFailureResponse(
+    {
+      kind: 'tapOn' as const,
+      source: { path: '/flows/login.yaml', line: 4 },
+      target: { space: 'target' as const, selector: { id: 'save' } },
+    },
+    [],
+    { warnings: ['Optional Maestro assertVisible skipped at line 2: no match'] },
+  );
+
+  const details = response.error.details;
+  expect(details).toBeDefined();
+  expect(details.warnings).toEqual([
+    'Optional Maestro assertVisible skipped at line 2: no match',
+  ]);
+  expect((details.divergence as { kind: string }).kind).toBe('action-failure');
+});
+
+test('typed Maestro failure response omits an empty warnings channel', async () => {
+  const response = await buildFailureResponse(
+    {
+      kind: 'tapOn' as const,
+      source: { path: '/flows/login.yaml', line: 4 },
+      target: { space: 'target' as const, selector: { id: 'save' } },
+    },
+    [],
+    { warnings: [] },
+  );
+
+  expect('warnings' in (response.error.details ?? {})).toBe(false);
+});
 
 test('typed Maestro failure projection keeps action and source provenance', async () => {
   const command = {

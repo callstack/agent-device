@@ -45,7 +45,7 @@ export function readAppleSnapshotResult(
     nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
-    qualityPayload: readQualityPayload(result.qualityPayload),
+    qualityPayload: readQualityPayload(result.qualityPayload, systemSurface),
     runnerFatal: result.runnerFatal === true,
     ...(systemSurface ? { systemSurface } : {}),
     message:
@@ -131,6 +131,7 @@ function throwSnapshotPresentationError(error: unknown, result: AppleRunnerSnaps
       error.message,
       {
         ...toIosSnapshotEngineErrorDetails(error),
+        ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
         snapshotQuality: {
           state: verdict.state,
           backend: verdict.backend,
@@ -142,7 +143,7 @@ function throwSnapshotPresentationError(error: unknown, result: AppleRunnerSnaps
       error,
     );
   }
-  throwSnapshotEngineError(error);
+  throwSnapshotEngineError(error, result.systemSurface);
 }
 
 function sparseCaptureHint(
@@ -159,7 +160,10 @@ function sparseCaptureHint(
     .join(' ');
 }
 
-function readQualityPayload(value: unknown): IosRunnerQualityPayloadFacts | undefined {
+function readQualityPayload(
+  value: unknown,
+  systemSurface?: IosSystemSurfaceProvenance,
+): IosRunnerQualityPayloadFacts | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value) || !Array.isArray(value.nodes) || typeof value.truncated !== 'boolean') {
     throwSnapshotEngineError(
@@ -167,6 +171,7 @@ function readQualityPayload(value: unknown): IosRunnerQualityPayloadFacts | unde
         'invalid-quality-payload',
         'iOS runner returned an invalid quality payload',
       ),
+      systemSurface,
     );
   }
   if (value.scope !== undefined && value.scope !== null) {
@@ -176,6 +181,7 @@ function readQualityPayload(value: unknown): IosRunnerQualityPayloadFacts | unde
         'iOS runner quality payload must be unscoped',
         { field: 'scope' },
       ),
+      systemSurface,
     );
   }
   return { nodes: value.nodes as RawSnapshotNode[], truncated: value.truncated, scope: null };
@@ -204,12 +210,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function throwSnapshotEngineError(error: unknown): never {
+function throwSnapshotEngineError(
+  error: unknown,
+  systemSurface?: IosSystemSurfaceProvenance,
+): never {
   if (!(error instanceof IosSnapshotEngineError)) throw error;
   throw new AppError(
     'COMMAND_FAILED',
     error.message,
-    toIosSnapshotEngineErrorDetails(error),
+    {
+      ...toIosSnapshotEngineErrorDetails(error),
+      ...(systemSurface ? { systemSurface } : {}),
+    },
     error,
   );
 }
