@@ -5,7 +5,11 @@ export {
   recordingQualityInputToExportQuality,
 } from '../recording-export-quality.ts';
 export type { RecordingExportQuality } from '../recording-export-quality.ts';
-export { RECORDING_SCOPE_VALUES, isWholeScreenRecordingScope } from '../recording-scope.ts';
+export {
+  RECORDING_SCOPE_VALUES,
+  isRecordingScope,
+  isWholeScreenRecordingScope,
+} from '../recording-scope.ts';
 export type { RecordingScope } from '../recording-scope.ts';
 export type {
   RecordingAppIdentity,
