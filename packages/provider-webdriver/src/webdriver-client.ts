@@ -244,8 +244,14 @@ export class WebDriverClient {
     await this.sessionRequest('POST', '/orientation', { orientation });
   }
 
-  async source(): Promise<string> {
-    const value = await this.sessionRequest('GET', '/source');
+  /**
+   * The driver's whole page source. This is the provider's most expensive call and
+   * the only one whose duration the device's own UI decides — a screen that never
+   * goes idle has no reason to settle — so a caller that can be cancelled should
+   * hand its `signal` down rather than abandon a read still running server-side.
+   */
+  async source(overrides?: WebDriverRequestOverrides): Promise<string> {
+    const value = await this.sessionRequest('GET', '/source', undefined, overrides);
     if (typeof value !== 'string') {
       throw new AppError('COMMAND_FAILED', 'WebDriver source response was not a string', {
         valueType: typeof value,

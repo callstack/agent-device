@@ -5,6 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { WebDriverClient, W3CActionSequence } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
+import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 
 // #1658: `fill` used to send its keys in the request right after the tap. A
 // WebView input takes first responder asynchronously, so on a web login form
@@ -290,6 +291,86 @@ test('Android WebDriver interactor keeps legacy-derived source facts at its call
   assert.equal(result.nodes?.[1]?.hittable, true);
   assert.equal(source.mock.calls.length, 1);
 });
+
+// #2509: the interactor took a request-bound signal and named it away. A capture
+// that ran past its budget could therefore never be cancelled: the client gave up
+// while the provider kept walking the tree, and being per-session-serial it made
+// every later command queue behind an orphan nobody was waiting for.
+test('Android snapshot binds the provider source read to its request signal', async () => {
+  const controller = new AbortController();
+  const forwarded: Array<{ signal?: AbortSignal } | undefined> = [];
+  const interactor = createWebDriverInteractor({
+    client: {
+      source: async (overrides?: { signal?: AbortSignal }) => {
+        forwarded.push(overrides);
+        return ANDROID_ONBOARDING_SOURCE;
+      },
+    } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+
+  await interactor.snapshot({ signal: controller.signal });
+
+  assert.deepEqual(forwarded, [{ signal: controller.signal }]);
+});
+
+// The iOS acquisition adapter reads the same route, so it needs the same binding.
+test('iOS snapshot binds the provider source read to its request signal', async () => {
+  const controller = new AbortController();
+  const forwarded: Array<{ signal?: AbortSignal } | undefined> = [];
+  const interactor = createWebDriverInteractor({
+    client: {
+      source: async (overrides?: { signal?: AbortSignal }) => {
+        forwarded.push(overrides);
+        return '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>';
+      },
+    } as unknown as WebDriverClient,
+    backend: 'xctest',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'ios' }),
+    targetId: 'ios-1',
+  });
+
+  await interactor.snapshot({ signal: controller.signal });
+
+  assert.deepEqual(forwarded, [{ signal: controller.signal }]);
+});
+
+// #2509 asked for an error that names the problem: a screen that never goes idle
+// (looping video, live marquee) keeps the provider's tree walk from settling, and
+// on rented hardware every second of it is billed. The reason code stays the
+// transport's; what the capture adds is what it means.
+test('a source capture that runs out of budget keeps the timeout reason and names the cause', async () => {
+  const interactor = createWebDriverInteractor({
+    client: { source: async () => throwWebDriverSourceTimeout() } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+
+  await assert.rejects(interactor.snapshot(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'webdriver_request_timeout');
+    assert.equal(isWebDriverRequestTimeout(error), true);
+    assert.match(String(error.details?.hint), /never goes idle/);
+    // Reviewing #2509 found the advice that failed there was a longer `--timeout`,
+    // which cannot reach this read. The hint says so and offers what does work.
+    assert.match(String(error.details?.hint), /does not grow with --timeout/);
+    assert.match(String(error.details?.hint), /screenshot/);
+    return true;
+  });
+});
+
+function throwWebDriverSourceTimeout(): never {
+  throw new AppError('COMMAND_FAILED', 'WebDriver GET /source timed out after 30000ms.', {
+    reason: 'webdriver_request_timeout',
+    method: 'GET',
+    path: '/source',
+    timeoutMs: 30_000,
+  });
+}
+
+const ANDROID_ONBOARDING_SOURCE =
+  '<hierarchy rotation="0"><android.widget.Button content-desc="Continue" bounds="[0,0][100,40]" displayed="true" enabled="true" /></hierarchy>';
 
 async function runFill(world: ReturnType<typeof createTextEntryWorld>) {
   vi.useFakeTimers();
