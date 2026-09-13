@@ -4,7 +4,6 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 
-import { findMp4Atom } from './mp4-atoms.ts';
 import { hasPlayableWebmStructure } from './video-webm.ts';
 
 // Duration zero must pass: a recording of a fully static screen legitimately contains a single
@@ -69,7 +68,7 @@ export async function waitForStableFile(
 }
 
 export async function isPlayableVideo(filePath: string): Promise<boolean> {
-  const container = likelyPlayableVideoContainer(filePath);
+  const container = await likelyPlayableVideoContainer(filePath);
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
@@ -142,7 +141,7 @@ function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boole
   );
 }
 
-function likelyPlayableVideoContainer(filePath: string): 'mp4' | 'webm' | undefined {
+async function likelyPlayableVideoContainer(filePath: string): Promise<'mp4' | 'webm' | undefined> {
   try {
     const stats = fs.statSync(filePath);
     if (!stats.isFile() || stats.size <= 0) {
@@ -155,10 +154,13 @@ function likelyPlayableVideoContainer(filePath: string): 'mp4' | 'webm' | undefi
   if (filePath.toLowerCase().endsWith('.webm')) {
     return hasPlayableWebmStructure(filePath) ? 'webm' : undefined;
   }
-  return isMp4Container(filePath) ? 'mp4' : undefined;
+  return (await isMp4Container(filePath)) ? 'mp4' : undefined;
 }
 
-function isMp4Container(filePath: string): boolean {
+// Loaded on the first validated file rather than on import: this scan is what a recording
+// completion asks for, and nothing that merely imports this module should evaluate it.
+async function isMp4Container(filePath: string): Promise<boolean> {
+  const { findMp4Atom } = await import('./mp4-atoms.ts');
   return (
     findMp4Atom(filePath, ['ftyp']) !== undefined && findMp4Atom(filePath, ['moov']) !== undefined
   );
