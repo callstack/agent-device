@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readCloudJsonResponse } from './cloud-response.ts';
+import { isSafeBrowserUrl, openUrlInBrowser } from './browser-launch.ts';
 
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
 const DEVICE_AUTH_START_PATH = '/api/control-plane/device-auth/start';
@@ -227,15 +227,14 @@ export async function loginWithDeviceAuth(options: {
   });
   assertDeviceAuthStart(start);
 
-  const verificationUrl = start.verificationUriComplete ?? start.verificationUri;
-  const printableUrl =
-    authMode === 'local-browser'
-      ? start.verificationUri
-      : appendUserCode(start.verificationUri, start.userCode);
+  const verificationUrl = hasToken(start.verificationUriComplete)
+    ? start.verificationUriComplete
+    : start.verificationUri;
   if (authMode === 'local-browser') {
     writeStderr(options.io, `Opening ${start.verificationUri}...\n`);
     await openBrowser(verificationUrl, options.io);
   } else {
+    const printableUrl = appendUserCode(start.verificationUri, start.userCode);
     writeStderr(
       options.io,
       `Open this URL on your machine:\n${printableUrl}\n\nWaiting for approval for 10 minutes...\n`,
@@ -467,14 +466,38 @@ async function postJson<T>(options: {
   });
 }
 
+type UnusableDeviceAuthStartField =
+  | 'deviceCode'
+  | 'userCode'
+  | 'verificationUri'
+  | 'verificationUriComplete';
+
+/**
+ * Both verification URIs are printed and one of them is launched, so the start response is checked
+ * as it arrives rather than at each use.
+ */
 function assertDeviceAuthStart(response: DeviceAuthStartResponse): void {
-  if (
-    !hasToken(response.deviceCode) ||
-    !hasToken(response.userCode) ||
-    !hasToken(response.verificationUri)
-  ) {
-    throw new AppError('COMMAND_FAILED', 'Cloud auth start returned an unusable response.');
+  if (!hasToken(response.deviceCode)) {
+    throw unusableDeviceAuthStartResponse('deviceCode');
   }
+  if (!hasToken(response.userCode)) {
+    throw unusableDeviceAuthStartResponse('userCode');
+  }
+  if (!hasToken(response.verificationUri) || !isSafeBrowserUrl(response.verificationUri)) {
+    throw unusableDeviceAuthStartResponse('verificationUri');
+  }
+  if (
+    hasToken(response.verificationUriComplete) &&
+    !isSafeBrowserUrl(response.verificationUriComplete)
+  ) {
+    throw unusableDeviceAuthStartResponse('verificationUriComplete');
+  }
+}
+
+function unusableDeviceAuthStartResponse(field: UnusableDeviceAuthStartField): AppError {
+  return new AppError('COMMAND_FAILED', 'Cloud auth start returned an unusable response.', {
+    field,
+  });
 }
 
 function detectAuthMode(
@@ -551,16 +574,7 @@ async function openBrowser(url: string, io?: AuthIo): Promise<void> {
     await io.openBrowser(url);
     return;
   }
-  const platform = process.platform;
-  try {
-    if (platform === 'darwin') {
-      await runCmd('open', [url], { allowFailure: true, timeoutMs: 5000 });
-    } else if (platform === 'win32') {
-      await runCmd('cmd', ['/c', 'start', '', url], { allowFailure: true, timeoutMs: 5000 });
-    } else {
-      await runCmd('xdg-open', [url], { allowFailure: true, timeoutMs: 5000 });
-    }
-  } catch {
+  if (!(await openUrlInBrowser(url))) {
     writeStderr(io, `Open this URL on your machine:\n${url}\n`);
   }
 }
