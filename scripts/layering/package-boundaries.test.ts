@@ -409,6 +409,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/post-gesture-stability',
     '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
+    '@agent-device/capture-kit/recording-mp4-duration',
+    '@agent-device/capture-kit/recording-mp4-fixtures',
     '@agent-device/capture-kit/recording-output-path',
     '@agent-device/capture-kit/recording-overlay',
     '@agent-device/capture-kit/recording-telemetry',
