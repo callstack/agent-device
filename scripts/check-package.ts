@@ -11,6 +11,8 @@
  *  3. runtime dependency closure — every bare specifier the shipped files import is a Node builtin
  *     or a declared `dependencies` entry, and every declared entry is actually imported.
  *  4. every `exports` subpath imports, and the `bin` runs, from outside the workspace.
+ *  5. the installed tree carries no daemon source, which is what lets an installed
+ *     client treat its version as the whole of its code identity (#2458).
  *
  * Step 3 is the static half and step 4 the runtime half of the same question: nothing the package
  * imports may depend on workspace linking. Keep both — a specifier reachable only through a lazy
@@ -27,6 +29,7 @@ import {
   type PackedManifest as PackedDependencies,
 } from './lib/shipped-imports.ts';
 import { assertInstalledSnapshotBridge } from './size-report-install.mjs';
+import { DAEMON_SOURCE_ENTRY, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 
 type PackedManifest = PackedDependencies & {
   exports: Record<string, unknown>;
@@ -122,8 +125,25 @@ function installIntoCleanConsumer(tarball: string): string {
   return path.join(consumerDir, 'node_modules', 'agent-device');
 }
 
-/** Imports every documented entry point in one process so a failure names the subpath that broke. */
-function importEveryExport(manifest: PackedManifest): void {
+/**
+ * An installed client treats its version as the whole of its code identity, because a
+ * published tree carries no daemon source to rebuild from (`daemon-launch-spec.ts`).
+ * This is the only check here that sees the tree npm would actually install, so it is
+ * where that premise gets proven (#2458).
+ */
+function assertInstalledTreeIsNotASourceCheckout(installedRoot: string): void {
+  if (isSourceCheckoutProjectRoot(installedRoot)) {
+    throw new Error(
+      `${installedRoot} ships ${DAEMON_SOURCE_ENTRY}, so installs of one version would ` +
+        "fingerprint their code again and replace each other's running daemon (#2458).",
+    );
+  }
+  step('Confirmed the installed tree carries no daemon source, so its version pins its code.');
+}
+
+/** Imports every documented entry point in one process so a failure names the subpath that broke. */ function importEveryExport(
+  manifest: PackedManifest,
+): void {
   const specifiers = Object.keys(manifest.exports).map((subpath) =>
     path.posix.join('agent-device', subpath),
   );
@@ -182,6 +202,7 @@ try {
   lintTarball(tarball);
   const installedRoot = installIntoCleanConsumer(tarball);
   assertInstalledSnapshotBridge(installedRoot);
+  assertInstalledTreeIsNotASourceCheckout(installedRoot);
   if (verifySnapshotBridgePreparation) {
     if (process.platform !== 'darwin') {
       throw new Error('--verify-snapshot-bridge-preparation requires macOS and Xcode.');

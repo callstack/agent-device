@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
-import { findProjectRoot } from '@agent-device/host-kit/version';
+import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import type {
@@ -56,13 +56,6 @@ function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): 
     return globalStateDir;
   }
   return path.join(globalStateDir, 'dev', buildSourceCheckoutStateDirName(projectRoot));
-}
-
-function isSourceCheckoutProjectRoot(projectRoot: string): boolean {
-  return (
-    fs.existsSync(path.join(projectRoot, 'package.json')) &&
-    fs.existsSync(path.join(projectRoot, 'src', 'daemon.ts'))
-  );
 }
 
 function buildSourceCheckoutStateDirName(projectRoot: string): string {

@@ -12,7 +12,6 @@ import {
 } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
-import { readVersion } from '@agent-device/host-kit/version';
 
 import { findUnrecoveredRepairCommitFailure } from '../daemon/session-repair-tombstone.ts';
 import {
@@ -23,7 +22,7 @@ import {
   type DaemonServerMode,
   type DaemonTransportPreference,
 } from '../daemon/config.ts';
-import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from './daemon-launch-spec.ts';
+import { resolveDaemonLaunchSpec, resolveDaemonTakeoverReason } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 import {
@@ -214,26 +213,6 @@ function isDaemonTransportUnavailableError(error: unknown): boolean {
     (error.message === DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE ||
       error.message === DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE)
   );
-}
-
-/**
- * Why this daemon cannot be reused, or `undefined` when it can be.
- *
- * One ladder answers both questions, so a daemon can never be reused and
- * announced as replaced, or replaced without a reason to print. The code
- * signature is asked for after the version because it is the expensive check
- * (`resolveLocalDaemonCodeSignature`), and a version mismatch already decides.
- */
-async function resolveDaemonTakeoverReason(
-  info: DaemonInfo,
-  reachable: boolean,
-): Promise<string | undefined> {
-  if (info.version !== readVersion()) return `version mismatch (client v${readVersion()})`;
-  if (info.codeSignature !== (await resolveLocalDaemonCodeSignature())) {
-    return 'code-signature mismatch';
-  }
-  if (!reachable) return 'unreachable';
-  return undefined;
 }
 
 function emitDaemonTakeoverNotice(info: DaemonInfo, reason: string, stateDir: string): void {

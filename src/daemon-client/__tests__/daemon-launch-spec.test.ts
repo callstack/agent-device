@@ -3,16 +3,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
-import { resolveDaemonLaunchSpec, resolveLocalDaemonCodeSignature } from '../daemon-launch-spec.ts';
+import {
+  resolveDaemonLaunchSpec,
+  resolveDaemonTakeoverReason,
+  resolveLocalDaemonCodeSignature,
+} from '../daemon-launch-spec.ts';
+import { isSourceCheckoutProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
+
+vi.mock('@agent-device/host-kit/version', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@agent-device/host-kit/version')>();
+  return {
+    ...original,
+    isSourceCheckoutProjectRoot: vi.fn(original.isSourceCheckoutProjectRoot),
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Restores the real predicate that `vi.fn` was built with, so no case hands its
+  // tree shape to the next one.
+  vi.mocked(isSourceCheckoutProjectRoot).mockReset();
 });
 
-// The daemon-reuse check reads the launch entry and its code signature on
-// every command. The entry is fixed for the process; the signature is not, so
-// it stays live and leans on the stat-validated cache instead.
+// A source checkout re-reads the launch entry and its code signature on every
+// command. The entry is fixed for the process; the signature is not, so it stays
+// live and leans on the stat-validated cache instead. An installed package has no
+// signature to re-read: its version pins its bytes (`#2458`).
 
 test('resolveDaemonLaunchSpec probes the entry candidates once per process', () => {
   resetAllProcessMemosForTests();
@@ -76,4 +93,108 @@ test('a source client fingerprints the source entry through the stat-validated c
     process.execArgv = execArgv;
     resetAllProcessMemosForTests();
   }
+});
+
+/**
+ * Which daemon a command keeps. `daemon-client-lifecycle.test.ts` pins the same
+ * decision end to end from a source checkout, which is what this test process runs
+ * in; these cases flip the one input that separates a checkout from an installed
+ * package of a published version (#2458).
+ */
+function useClientTree(sourceCheckout: boolean): void {
+  vi.mocked(isSourceCheckoutProjectRoot).mockReturnValue(sourceCheckout);
+}
+
+function runningDaemon(info: { version?: string; codeSignature?: string }) {
+  return {
+    token: 'local-secret',
+    pid: 999_999,
+    httpPort: 41_234,
+    transport: 'http' as const,
+    version: info.version ?? readVersion(),
+    codeSignature: info.codeSignature,
+  };
+}
+
+test('an installed client fingerprints nothing, because its version pins its bytes (#2458)', async () => {
+  // Two installs of one published version stamp identical bytes with different
+  // mtimes, so a signature can only ever say "different" about the same code.
+  resetAllProcessMemosForTests();
+  useClientTree(false);
+  const statSpy = vi.spyOn(fs, 'statSync');
+
+  assert.equal(await resolveLocalDaemonCodeSignature(), undefined);
+  assert.equal(statSpy.mock.calls.length, 0);
+});
+
+test('an installed client keeps a reachable daemon whose code signature differs from its own (#2458)', async () => {
+  useClientTree(false);
+
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({ codeSignature: 'some-other-install' }), true),
+    undefined,
+  );
+});
+
+test('a source checkout keeps a reachable daemon whose code signature matches its own', async () => {
+  useClientTree(true);
+  const ownCodeSignature = await resolveLocalDaemonCodeSignature();
+  assert.ok(ownCodeSignature);
+
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({ codeSignature: ownCodeSignature }), true),
+    undefined,
+  );
+});
+
+test('a source checkout replaces a reachable daemon whose code signature differs', async () => {
+  // A rebuild leaves the version alone, so the signature is the only thing that can
+  // notice a daemon serving code its client no longer has.
+  useClientTree(true);
+
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({ codeSignature: 'an-older-build' }), true),
+    'code-signature mismatch',
+  );
+});
+
+test('a source checkout replaces a daemon that reported no code signature at all', async () => {
+  useClientTree(true);
+
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({}), true),
+    'code-signature mismatch',
+  );
+});
+
+test('a mismatched version replaces the daemon whichever tree the client runs from', async () => {
+  const expected = `version mismatch (client v${readVersion()})`;
+  for (const sourceCheckout of [false, true]) {
+    useClientTree(sourceCheckout);
+
+    assert.equal(
+      await resolveDaemonTakeoverReason(
+        runningDaemon({ version: '0.0.0-mismatch', codeSignature: 'any' }),
+        true,
+      ),
+      expected,
+    );
+  }
+});
+
+test('a reachable daemon of a matching version survives, an unreachable one does not', async () => {
+  useClientTree(false);
+
+  assert.equal(await resolveDaemonTakeoverReason(runningDaemon({}), true), undefined);
+  assert.equal(await resolveDaemonTakeoverReason(runningDaemon({}), false), 'unreachable');
+});
+
+test('the tree shape is asked per call, not memoized with the signature', async () => {
+  // A long-lived client (the MCP server) must notice a daemon rebuilt underneath it,
+  // so nothing about this answer is cached — including which tree it came from.
+  useClientTree(false);
+  assert.equal(await resolveLocalDaemonCodeSignature(), undefined);
+
+  useClientTree(true);
+  assert.ok(await resolveLocalDaemonCodeSignature());
 });
