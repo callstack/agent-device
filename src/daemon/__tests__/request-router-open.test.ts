@@ -11,7 +11,18 @@ import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-s
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
-  return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
+  const startTime = 'test-process-start';
+  return {
+    ...actual,
+    readProcessStartTime: vi.fn(() => startTime),
+    // The ownership decision reads all three facts in one call, so it has to answer with the
+    // same fabricated start time this fixture writes into its markers.
+    readProcessIdentityFacts: vi.fn(async (pid: number) => ({
+      startTime,
+      command: actual.readProcessCommand(pid),
+      zombie: false,
+    })),
+  };
 });
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
