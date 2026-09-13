@@ -12,13 +12,16 @@ import {
 import {
   type ScrollDirection,
   buildScrollGesturePlan,
+  clipScrollViewportAboveKeyboard,
+  scrollKeyboardOccludesSurfaceError,
 } from '@agent-device/contracts/scroll-gesture';
 import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidAdb } from './adb.ts';
-import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
+import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
@@ -175,26 +178,27 @@ export async function scrollAndroid(
 ): Promise<Record<string, unknown>> {
   // The viewport read and the gesture are two helper calls one command apart: giving the read the
   // command's session scope keeps both on the same instrumentation.
-  const viewport = await readAndroidGestureViewport(device, {
+  const { viewport, keyboard } = await readAndroidGestureViewportReading(device, {
     helperSessionScope: options?.helperSessionScope,
   });
+  const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
   const relativePlan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,
     pixels: options?.pixels,
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
+    referenceWidth: swipeSurface.viewport.width,
+    referenceHeight: swipeSurface.viewport.height,
   });
   const scrollPlan = {
     ...relativePlan,
     // Injected coordinates are absolute, so their zero-origin reference frame
     // must include the viewport offset as well as its dimensions.
-    referenceWidth: viewport.x + viewport.width,
-    referenceHeight: viewport.y + viewport.height,
-    x1: viewport.x + relativePlan.x1,
-    y1: viewport.y + relativePlan.y1,
-    x2: viewport.x + relativePlan.x2,
-    y2: viewport.y + relativePlan.y2,
+    referenceWidth: swipeSurface.viewport.x + swipeSurface.viewport.width,
+    referenceHeight: swipeSurface.viewport.y + swipeSurface.viewport.height,
+    x1: swipeSurface.viewport.x + relativePlan.x1,
+    y1: swipeSurface.viewport.y + relativePlan.y1,
+    x2: swipeSurface.viewport.x + relativePlan.x2,
+    y2: swipeSurface.viewport.y + relativePlan.y2,
   };
   const durationMs = Math.max(
     options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
@@ -211,7 +215,7 @@ export async function scrollAndroid(
         },
         durationMs,
       },
-      viewport,
+      swipeSurface.viewport,
       'android',
     ),
     releaseBehavior: options?.releaseBehavior ?? 'controlled',
@@ -219,8 +223,43 @@ export async function scrollAndroid(
 
   return {
     ...scrollPlan,
+    ...swipeSurface.evidence,
     ...(options?.durationMs !== undefined ? { durationMs } : {}),
     ...backend,
+  };
+}
+
+/**
+ * The band one Android scroll may swipe, refusing when the keyboard owns the window (#2500).
+ *
+ * The IME bounds come from this command's own window read, in absolute screen pixels like the
+ * application window beside them; they are never shared with another platform's space. Android is
+ * the case the clip exists for beyond iOS: an `adjustPan` or `adjustNothing` activity keeps a window
+ * whose recorded bounds already run under the IME, so a plan built from them aims at keys.
+ */
+type AndroidScrollSurface = Readonly<{
+  viewport: Rect;
+  evidence: Readonly<{ keyboardAvoided?: true; keyboardMinY?: number }>;
+}>;
+
+function resolveAndroidScrollSurface(
+  direction: ScrollDirection,
+  viewport: Rect,
+  keyboard: Rect | undefined,
+): AndroidScrollSurface {
+  if (keyboard === undefined) return { viewport, evidence: {} };
+  const clip = clipScrollViewportAboveKeyboard(viewport, keyboard);
+  if (clip.kind === 'occluded') {
+    throw scrollKeyboardOccludesSurfaceError(direction, {
+      keyboardMinY: clip.keyboardMinY,
+      visibleHeight: clip.visibleHeight,
+      viewportHeight: viewport.height,
+    });
+  }
+  if (clip.kind !== 'avoided') return { viewport, evidence: {} };
+  return {
+    viewport: clip.viewport,
+    evidence: { keyboardAvoided: true, keyboardMinY: clip.keyboardMinY },
   };
 }
 

@@ -14,7 +14,10 @@ import {
   parseInstrumentationRecords,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
-import { validateAndroidGestureViewport } from './gesture-viewport.ts';
+import {
+  validateAndroidGestureViewport,
+  type AndroidGestureViewportReading,
+} from './gesture-viewport.ts';
 import type { AndroidLoweredTouchPlan } from './touch-plan-lowering.ts';
 import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
@@ -116,10 +119,10 @@ export async function executeAndroidTouchHelperPlan(
   };
 }
 
-export async function readAndroidTouchHelperViewport(
+export async function readAndroidTouchHelperViewportReading(
   device: DeviceInfo,
   helper: AndroidHelperSessionOptions = {},
-): Promise<Rect> {
+): Promise<AndroidGestureViewportReading> {
   const prepared = await prepareAndroidTouchHelper(device);
   if (helper.helperSessionScope === 'daemon-session') {
     // Without a live session both this read and the gesture that follows would each start their
@@ -329,7 +332,7 @@ function readGestureResult(record: Record<string, string>): Record<string, unkno
   };
 }
 
-function readViewportResult(record: Record<string, string>): Rect {
+function readViewportResult(record: Record<string, string>): AndroidGestureViewportReading {
   const x = readInstrumentationResultNumber(record.x);
   const y = readInstrumentationResultNumber(record.y);
   const width = readInstrumentationResultNumber(record.width);
@@ -337,5 +340,25 @@ function readViewportResult(record: Record<string, string>): Rect {
   if (x === undefined || y === undefined || width === undefined || height === undefined) {
     throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
   }
-  return validateAndroidGestureViewport({ x, y, width, height });
+  const keyboard = readKeyboardResult(record);
+  return {
+    viewport: validateAndroidGestureViewport({ x, y, width, height }),
+    ...(keyboard ? { keyboard } : {}),
+  };
+}
+
+/**
+ * Absence of any keyboard key is the helper's way of saying no input method window is on screen.
+ * The frame is not validated here: the shared clip rule fails open on one it cannot measure, and a
+ * helper that cannot size the IME must not fail every scroll.
+ */
+function readKeyboardResult(record: Record<string, string>): Rect | undefined {
+  const x = readInstrumentationResultNumber(record.keyboardX);
+  const y = readInstrumentationResultNumber(record.keyboardY);
+  const width = readInstrumentationResultNumber(record.keyboardWidth);
+  const height = readInstrumentationResultNumber(record.keyboardHeight);
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    return undefined;
+  }
+  return { x, y, width, height };
 }
