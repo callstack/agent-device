@@ -18,15 +18,14 @@ export type AndroidGestureViewportReading = Readonly<{
 }>;
 
 export function validateAndroidGestureViewport(viewport: Rect): Rect {
-  if (!isMeasurableRect(viewport))
+  if (
+    !Number.isFinite(viewport.x) ||
+    !Number.isFinite(viewport.y) ||
+    !Number.isFinite(viewport.width) ||
+    !Number.isFinite(viewport.height) ||
+    viewport.width <= 0 ||
+    viewport.height <= 0
+  )
     throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
   return viewport;
-}
-
-export function isMeasurableRect(rect: Rect): boolean {
-  return (
-    [rect.x, rect.y, rect.width, rect.height].every((value) => Number.isFinite(value)) &&
-    rect.width > 0 &&
-    rect.height > 0
-  );
 }

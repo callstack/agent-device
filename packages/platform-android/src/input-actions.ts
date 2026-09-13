@@ -251,7 +251,8 @@ function resolveAndroidScrollSurface(
   const clip = clipScrollViewportAboveKeyboard(viewport, keyboard);
   if (clip.kind === 'occluded') {
     throw scrollKeyboardOccludesSurfaceError(direction, {
-      ...clip,
+      keyboardMinY: clip.keyboardMinY,
+      visibleHeight: clip.visibleHeight,
       viewportHeight: viewport.height,
     });
   }

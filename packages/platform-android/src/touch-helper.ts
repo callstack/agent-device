@@ -15,7 +15,6 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import {
-  isMeasurableRect,
   validateAndroidGestureViewport,
   type AndroidGestureViewportReading,
 } from './gesture-viewport.ts';
@@ -348,7 +347,11 @@ function readViewportResult(record: Record<string, string>): AndroidGestureViewp
   };
 }
 
-/** Absence of any keyboard key is the helper's way of saying no input method window is on screen. */
+/**
+ * Absence of any keyboard key is the helper's way of saying no input method window is on screen.
+ * The frame is not validated here: the shared clip rule fails open on one it cannot measure, and a
+ * helper that cannot size the IME must not fail every scroll.
+ */
 function readKeyboardResult(record: Record<string, string>): Rect | undefined {
   const x = readInstrumentationResultNumber(record.keyboardX);
   const y = readInstrumentationResultNumber(record.keyboardY);
@@ -357,8 +360,5 @@ function readKeyboardResult(record: Record<string, string>): Rect | undefined {
   if (x === undefined || y === undefined || width === undefined || height === undefined) {
     return undefined;
   }
-  // An IME window the helper cannot size is dropped, not refused: the clip rule already fails open
-  // on a missing frame, and a helper that cannot see it must not fail every scroll.
-  const keyboard = { x, y, width, height };
-  return isMeasurableRect(keyboard) ? keyboard : undefined;
+  return { x, y, width, height };
 }
