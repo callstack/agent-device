@@ -32,6 +32,7 @@ import {
   normalizeAppleScrollResult,
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,
+  withAppleScrollKeyboardOcclusion,
   type AppleScrollOptions,
 } from './core/scroll.ts';
 import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
@@ -429,16 +430,23 @@ async function runAppleScroll(
   const iosOptions = materializeIosScrollOptions(options);
 
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
-  const runnerResult = await runRunnerCommand(
-    device,
-    {
-      command: 'scroll',
-      direction,
-      ...scrollRunnerFields(iosOptions),
-      appBundleId: ctx.appBundleId,
-    },
-    runnerOpts,
-  );
+  // The runner is also the only party holding the live keyboard frame, so a surface it refuses to
+  // swipe under the keys arrives here as its typed runner code and leaves as a typed reason (#2500).
+  let runnerResult: Record<string, unknown>;
+  try {
+    runnerResult = await runRunnerCommand(
+      device,
+      {
+        command: 'scroll',
+        direction,
+        ...scrollRunnerFields(iosOptions),
+        appBundleId: ctx.appBundleId,
+      },
+      runnerOpts,
+    );
+  } catch (error) {
+    throw withAppleScrollKeyboardOcclusion(error);
+  }
 
   return normalizeAppleScrollResultWithResolvedFrame(runnerResult, direction, iosOptions);
 }

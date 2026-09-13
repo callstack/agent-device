@@ -118,4 +118,15 @@ export type ScrollCommandResult = {
   durationMs?: number;
   message?: string;
   settle?: SettleObservation;
+  /**
+   * Set only when an on-screen keyboard made the owner clip the swipe into the band above it
+   * (#2500). Absent means the swipe was not clipped, which is not the same claim as `false`: a
+   * platform that never runs the clip has nothing to report. The platform leaf's `referenceHeight`
+   * names the shortened axis the reported `pixels` were planned against, and `keyboardMinY` names
+   * where the keyboard began. A surface the owner refused to swipe at all fails instead, under the
+   * `scroll_keyboard_occludes_surface` reason.
+   */
+  keyboardAvoided?: true;
+  /** The keyboard's edge in the same unit as the gesture coordinates, when the swipe was clipped. */
+  keyboardMinY?: number;
 };

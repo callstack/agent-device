@@ -324,13 +324,23 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
 }
 
 /**
+ * The code the XCTest runner answers with when it declines to place a scroll gesture under the
+ * on-screen keyboard (#2500). It is the runner's own vocabulary, so it is declared here beside the
+ * set that keeps it off the wire, and the Apple scroll owner matches it on `details.runnerErrorCode`
+ * rather than on error text.
+ */
+export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
+
+/**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
- * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet.
+ * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet, and
+ * the scroll keyboard refusal for a surface the runner declined to swipe under the keys.
  */
 const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlySet<string> = new Set([
   RUNNER_BUSY_RUNNER_CODE,
   ALERT_NOT_FOUND_RUNNER_CODE,
+  SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
 ]);
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
