@@ -24,6 +24,9 @@ VERSION="$(node -p 'require("./package.json").version')"
 AGENT_DEVICE_ANDROID_HELPER=ime sh ./scripts/build-android-helper.sh "$VERSION" .tmp/android-ime-helper
 ```
 
+The shared script needs its build-tools version named by `AGENT_DEVICE_ANDROID_BUILD_TOOLS`; see
+the [snapshot helper's Build section](../snapshot-helper/README.md#build) for the full rule.
+
 ## Run
 
 ```sh

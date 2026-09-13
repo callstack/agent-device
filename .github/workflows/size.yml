@@ -31,6 +31,9 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # The helper build refuses to guess its build-tools version on CI.
+      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -58,7 +61,7 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
 
       # dist is fully determined by the base commit, so reuse it across PR runs
       # against the same base. Startup medians are still measured fresh on this

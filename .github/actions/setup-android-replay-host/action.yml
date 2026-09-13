@@ -39,6 +39,17 @@ runs:
         echo "value=${{ hashFiles('android/snapshot-helper/AndroidManifest.xml', 'android/snapshot-helper/debug.keystore', 'android/snapshot-helper/src/**', 'android/ime-helper/AndroidManifest.xml', 'android/ime-helper/res/**', 'android/ime-helper/src/**', 'scripts/build-android-helper.sh', 'scripts/package-android-helper.sh', '.github/actions/setup-android-replay-host/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
+    # The helper build refuses to guess its build-tools version on CI, and that version decides
+    # the APK bytes, so both cache keys name it as well.
+    - name: Declare the pinned Android build tools
+      if: inputs.package-helpers == 'true'
+      id: android-build-tools
+      run: |
+        BUILD_TOOLS_VERSION=36.0.0
+        echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS=$BUILD_TOOLS_VERSION" >> "$GITHUB_ENV"
+        echo "version=$BUILD_TOOLS_VERSION" >> "$GITHUB_OUTPUT"
+      shell: bash
+
     - name: Restore packaged Android helpers
       if: inputs.package-helpers == 'true'
       id: android-helpers-cache
@@ -47,7 +58,7 @@ runs:
         path: |
           android/snapshot-helper/dist
           android/ime-helper/dist
-        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ steps.android-build-tools.outputs.version }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
 
     - name: Install Android helper SDK packages
       if: inputs.package-helpers == 'true' && steps.android-helpers-cache.outputs.cache-hit != 'true'
@@ -62,7 +73,7 @@ runs:
           exit 1
         fi
         yes | "$SDKMANAGER" --licenses >/dev/null || true
-        "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+        "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
       shell: bash
 
     - name: Package npm-bundled Android helpers
@@ -86,4 +97,4 @@ runs:
         path: |
           android/snapshot-helper/dist
           android/ime-helper/dist
-        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
+        key: android-helpers-${{ runner.os }}-${{ runner.arch }}-api36-bt${{ steps.android-build-tools.outputs.version }}-v${{ steps.android-helper-source.outputs.version }}-${{ steps.android-helper-source.outputs.value }}
