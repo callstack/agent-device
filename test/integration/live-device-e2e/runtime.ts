@@ -92,6 +92,8 @@ export function createLiveDeviceHarness<
   Context extends LiveDeviceContext<BehaviorId>,
   BehaviorId extends string,
 >(options: HarnessOptions<Context, BehaviorId>) {
+  const reportedFailures = new WeakSet<Error>();
+
   async function runScenario(context: Context, scenario: LiveScenario<Context>): Promise<void> {
     context.currentScenario = scenario.id;
     const commandCounts = evidenceCounts(
@@ -118,9 +120,32 @@ export function createLiveDeviceHarness<
         behaviorCounts,
       );
       context.completedScenarios.push(scenario.id);
+    } catch (error) {
+      await recordScenarioFailure(context, error);
+      throw error;
     } finally {
       context.timings.push({ durationMs: Date.now() - startedAt, id: scenario.id });
       options.writeCoverageReport(context);
+    }
+  }
+
+  async function recordScenarioFailure(context: Context, error: unknown): Promise<void> {
+    if (error instanceof Error && reportedFailures.has(error)) return;
+    try {
+      const evidence = await captureFailedStepEvidence(context);
+      fs.writeFileSync(
+        path.join(context.artifactDir, 'failed-step.txt'),
+        [
+          `scenario: ${context.currentScenario}`,
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+          `artifacts: ${context.artifactDir}`,
+          `screenshot: ${evidence.screenshotPath ?? '(capture failed)'}`,
+          `snapshot: ${evidence.snapshotPath ?? '(capture failed)'}`,
+          `device: ${evidence.devicePath ?? '(not collected)'}`,
+        ].join('\n'),
+      );
+    } catch {
+      // Artifact I/O is best-effort and must not replace the scenario failure.
     }
   }
 
@@ -186,7 +211,9 @@ export function createLiveDeviceHarness<
         `device: ${evidence.devicePath ?? '(not collected)'}`,
       ].join('\n');
       fs.writeFileSync(path.join(context.artifactDir, 'failed-step.txt'), message);
-      assert.fail(message);
+      const failure = new assert.AssertionError({ message });
+      reportedFailures.add(failure);
+      throw failure;
     }
     if (stepOptions.expectFailure === true && result.status === 0) {
       assert.fail(`${step} unexpectedly succeeded\ncommand: agent-device ${fullArgs.join(' ')}`);
