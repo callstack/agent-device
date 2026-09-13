@@ -6,6 +6,7 @@ import { isAgentDeviceDaemonProcess } from '../daemon/daemon-process.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '../daemon/config.ts';
+import type { DaemonRequest } from '../daemon/daemon-request.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import {
   removeDaemonInfo,
@@ -37,16 +38,19 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
 }
 
 export function handleRequestTimeout(
-  info: DaemonInfo,
-  statePaths: DaemonPaths,
-  requestId: string | undefined,
-  command: string | undefined,
-  remote: boolean,
-  timeoutMs: number,
-  platform: PlatformSelector | undefined,
-  session: string | undefined,
-  action: string | undefined,
+  params: Readonly<{
+    info: DaemonInfo;
+    statePaths: DaemonPaths;
+    /** The request that ran out of its window, so its command, session, and action cannot drift apart. */
+    req: DaemonRequest;
+    remote: boolean;
+    timeoutMs: number;
+  }>,
 ): AppError {
+  const { info, statePaths, req, remote, timeoutMs } = params;
+  const command = req.command;
+  const requestId = req.meta?.requestId;
+  const platform = req.flags?.platform;
   // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
   // timeout, on purpose: the request's declared --platform is not
   // authoritative for session-bound execution. An existing session's real
@@ -94,8 +98,8 @@ export function handleRequestTimeout(
       resetDaemon,
       command,
       appleCleanupEvidence,
-      session,
-      action,
+      session: req.session,
+      action: req.positionals?.[0],
     }),
   });
 }

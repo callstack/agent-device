@@ -335,19 +335,7 @@ async function sendSocketRequest(
         ? setTimeout(() => {
             settled = true;
             socket.destroy();
-            reject(
-              handleRequestTimeout(
-                info,
-                statePaths,
-                req.meta?.requestId,
-                req.command,
-                false,
-                timeoutMs,
-                req.flags?.platform,
-                req.session,
-                req.positionals?.[0],
-              ),
-            );
+            reject(handleRequestTimeout({ info, statePaths, req, remote: false, timeoutMs }));
           }, timeoutMs)
         : undefined;
 
@@ -464,19 +452,7 @@ async function sendHttpRequest(
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
             request.destroy();
-            reject(
-              handleRequestTimeout(
-                info,
-                statePaths,
-                req.meta?.requestId,
-                req.command,
-                remote,
-                timeoutMs,
-                req.flags?.platform,
-                req.session,
-                req.positionals?.[0],
-              ),
-            );
+            reject(handleRequestTimeout({ info, statePaths, req, remote, timeoutMs }));
           }, timeoutMs)
         : undefined;
 
