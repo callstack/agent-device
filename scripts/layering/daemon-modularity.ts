@@ -72,8 +72,33 @@ export function checkDaemonModularityRatchets(
     ...checkSessionStateBaseline(measured.sessionState, reference.sessionState),
     ...checkTypeCycleBaseline(measured.largestTypeCycle, reference.largestTypeCycle),
     ...checkDaemonTypesImporters(edges),
+    ...checkDaemonCliSchemaBoundary(edges),
     ...checkLogicalModuleImports(edges),
   ];
+}
+
+// The daemon resolves command routes through the registry and fills request defaults through the
+// command registry, so it never needs the CLI schema layer. #2543 cut the last two value edges
+// (`request-execution-scope.ts` and `session-action-recorder.ts`); this pins that decoupling so a
+// future daemon module cannot reach `src/cli-schema/` again and re-pull the parser closure.
+const DAEMON_FORBIDDEN_CLI_SCHEMA_ROOT = 'src/cli-schema/';
+
+function checkDaemonCliSchemaBoundary(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
+  return edges
+    .filter(
+      (edge) =>
+        edge.file.startsWith('src/daemon/') &&
+        matchesDeclaredRoot(edge.target, DAEMON_FORBIDDEN_CLI_SCHEMA_ROOT),
+    )
+    .map((edge) => ({
+      rule: 'R10 daemon-modularity',
+      file: edge.file,
+      line: edge.line,
+      message:
+        `${edge.file} must not import ${edge.target}: the daemon resolves routes through ` +
+        '@agent-device/command-registry and must not load the CLI schema layer. Declare the shared ' +
+        'shape in the command registry or contracts, not in src/cli-schema/.',
+    }));
 }
 
 export function checkRetiredSessionLifecyclePaths(
