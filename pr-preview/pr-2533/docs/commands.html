@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2533/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2533/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2533/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2533/static/js/index.15a559c0a6.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2533/static/js/index.1bc9d3cd25.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -335,8 +335,14 @@ and mark exactly ordered covered controls <code>interactionBlocked: &quot;covere
 act on stale React Native screens. API 23 cannot report sibling <code>drawing-order</code>, so this scan fails
 conservative and <code>androidSnapshot.occlusionScanUnavailable: true</code> discloses the difference.
 Android <code>--raw</code> is the acquired tree: it also keeps nodes Android marks invisible and stale
-application windows. The helper does not report <code>checked</code>/<code>selected</code> state, and it caps
+application windows. The helper does not report <code>checked</code>/<code>checkable</code> state, and it caps
 captures at 5000 nodes before any <code>--scope</code> applies (<code>truncated: true</code>).</li>
+<li><code>truncated: true</code> means the backend cut the capture at one of its limits — the Android helper
+and the iOS Simulator AX bridge at 5000 nodes, the XCTest runner and the web provider at their
+own bounds. Every backend walks the tree in document order, so what falls off is what comes
+last: footers, tab bars, items after a long list, even when on screen. The snapshot carries a
+warning that says so; navigate or scroll so fewer elements render and re-run, and use
+<code>screenshot</code> as visual truth for the rest.</li>
 <li><code>--scope &lt;text|@ref&gt;</code> returns the subtree of the first node in document order whose label, value,
 or identifier contains the scope text (case-insensitive) and whose subtree still has content in
 the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the
@@ -843,7 +849,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li>Set <code>AGENT_DEVICE_SCREENSHOT_SCALE=0.3</code> (or <code>screenshotScale</code> in config) as a token-conscious screenshot default for agent workflows. An explicit <code>--scale</code> overrides it.</li>
 <li>Keep the scale default unset, or use <code>--scale 1</code>, when full-resolution screenshots are required for reusable pixel-diff baselines.</li>
 <li><code>screenshot --overlay-refs</code> captures a fresh full snapshot and burns visible <code>@eN</code> refs plus their target rectangles into the saved PNG.</li>
-<li><code>screenshot --crop-on &lt;selector&gt;</code> captures a fresh full snapshot of the same screen and crops the saved PNG to the frame the selector resolves to. The selector must resolve to exactly one framed node; the result carries a <code>warnings</code> entry when the frame is clipped to the image. Currently accepted on iOS simulators and Android emulators — every other target is refused before any device work, and the flag cannot be combined with <code>--overlay-refs</code> or <code>--fullscreen</code> because both move the captured frame away from the snapshot viewport the crop is measured against.</li>
+<li><code>screenshot --crop-on &lt;selector&gt;</code> captures a fresh full snapshot of the same screen and crops the saved PNG to the frame the selector resolves to. The crop is re-encoded, so byte-comparing it against an older crop of the same frame is unreliable; a crop whose pixels are all opaque is written as truecolor RGB, while one containing transparency keeps RGBA. The selector must resolve to exactly one framed node; the result carries a <code>warnings</code> entry when the frame is clipped to the image. Currently accepted on iOS simulators and Android emulators — every other target is refused before any device work, and the flag cannot be combined with <code>--overlay-refs</code> or <code>--fullscreen</code> because both move the captured frame away from the snapshot viewport the crop is measured against.</li>
 <li><code>screenshot --normalize-status-bar</code> temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator&#x27;s current chrome visible.</li>
 <li><code>screenshot --scale &lt;factor&gt; --overlay-refs</code> writes a smaller image and draws refs for that final image size; avoid very small scales when text, icons, or labels need to remain readable.</li>
 <li><code>diff screenshot</code> compares the current live screenshot to <code>--baseline</code>, or compares <code>--baseline</code> to an optional saved <code>current.png</code> path without requiring an active session. Its text output reports ranked changed regions with screen-space rectangles, changed-pixel counts, and each region&#x27;s share of the diff; JSON also includes normalized rectangles. The earlier best-effort <code>ocr</code> and <code>nonTextDeltas</code> analyzers are retired; their optional result fields remain for source compatibility but are no longer emitted, so use the baseline/current images and diff artifact with vision for qualitative interpretation. It writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when <code>--out</code> is provided. Live iOS simulator diffs normalize status-bar chrome by default; use <code>screenshot --normalize-status-bar</code> when capturing reusable baselines.</li>
