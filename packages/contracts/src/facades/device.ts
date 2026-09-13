@@ -1,9 +1,5 @@
 export type { TriggerAppEventCommandResult } from '../app-events.ts';
-export {
-  DEFAULT_APPS_FILTER,
-  assertResolvedAppsFilter,
-  resolveAppsFilter,
-} from '../app-inventory.ts';
+export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts';
 export type { AppsFilter } from '../app-inventory.ts';
 export type { AppStateCommandResult } from '../app-state.ts';
 export {

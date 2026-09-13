@@ -6,7 +6,6 @@ import {
   getFlagDefinition,
   getFlagDefinitions,
   projectConfigFlagKeys,
-  recordedFlagKeys,
 } from '@agent-device/command-registry/flag-registry';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
@@ -24,7 +23,6 @@ export {
   getFlagDefinitions,
   GLOBAL_FLAG_KEYS,
   projectConfigFlagKeys,
-  recordedFlagKeys,
 };
 
 // Bases hold only the flags every command supports; prose arrives with the facet's schema,
@@ -72,20 +70,4 @@ function readCommandSchema(command: string): CommandSchema | undefined {
   const override = getCliCommandOverride(command);
   if (!base || !override) return undefined;
   return { ...base, ...override };
-}
-
-export function applyCommandDefaults(
-  command: string | null,
-  flags: Record<string, unknown>,
-): boolean {
-  const commandSchema = getCommandSchema(command);
-  if (!commandSchema?.defaults) return false;
-  let changed = false;
-  for (const [key, value] of Object.entries(commandSchema.defaults) as Array<[FlagKey, unknown]>) {
-    if (flags[key] === undefined) {
-      flags[key] = value;
-      changed = true;
-    }
-  }
-  return changed;
 }

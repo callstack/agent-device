@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { recordedFlagKeys } from '../cli-schema/command-schema.ts';
+import { recordedFlagKeys } from '@agent-device/command-registry/flag-registry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';

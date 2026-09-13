@@ -70,6 +70,32 @@ test('createRequestExecutionScope applies tenant scoping and locked lease admiss
   expect(admittedLeaseId).toBe(lease.leaseId);
 });
 
+test('createRequestExecutionScope is the single defaulting authority for the apps filter', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-defaults-');
+  const leaseRegistry = new LeaseRegistry();
+
+  const defaulted = await createRequestExecutionScope({
+    req: makeRequest({ command: 'apps' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(defaulted.req.flags?.appsFilter).toBe('user-installed');
+
+  const overridden = await createRequestExecutionScope({
+    req: makeRequest({ command: 'apps', flags: { appsFilter: 'all' } }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(overridden.req.flags?.appsFilter).toBe('all');
+
+  const untouched = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(untouched.req.flags?.appsFilter).toBeUndefined();
+});
+
 test('createRequestExecutionScope resolves session-scoped request and runner log paths', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const cwd = fs.mkdtempSync(path.join(TEST_ROOT, 'cwd-scope-'));

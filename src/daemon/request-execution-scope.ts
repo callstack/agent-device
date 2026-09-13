@@ -6,7 +6,6 @@ import {
   getDiagnosticsMeta,
   updateDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   type DaemonCommandContext,
@@ -56,7 +55,10 @@ import {
 } from './request-runtime-binding.ts';
 import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
-import { resolveCommandDeviceClaimPolicy } from '@agent-device/command-registry/registry';
+import {
+  applyCommandDefaults,
+  resolveCommandDeviceClaimPolicy,
+} from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps

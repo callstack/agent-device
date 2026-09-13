@@ -1,6 +1,6 @@
 // The typed-flags request from contracts/, not the daemon's server-side refinement: these
 // descriptors read `command`, `positionals` and `flags` and never touch `internal`.
-import type { DispatchedCommand } from '@agent-device/contracts/command';
+import type { CommandFlags, DispatchedCommand } from '@agent-device/contracts/command';
 import type {
   RuntimeUseStep,
   RuntimeUseStepSelector,
@@ -1969,4 +1969,29 @@ export function listCommandResponseDataTransformFieldNames(): string[] {
       ),
     ),
   ].sort();
+}
+
+// The flag values a command applies when the caller omits them — the single source for both the
+// CLI parser and the daemon request scope. It lives in the registry (not a command facet, not a
+// new module) because the registry is already in both callers' eager closure and declares every
+// other command default here as a literal (see the `defaultValue` descriptors above).
+const COMMAND_DEFAULTS: Partial<Record<DescriptorCliCommandName, Partial<CommandFlags>>> = {
+  apps: { appsFilter: 'user-installed' },
+};
+
+export function applyCommandDefaults(
+  command: string | null,
+  flags: Record<string, unknown>,
+): boolean {
+  if (!command || !isCliCommandName(command)) return false;
+  const defaults = COMMAND_DEFAULTS[command];
+  if (!defaults) return false;
+  let changed = false;
+  for (const key of Object.keys(defaults) as Array<keyof CommandFlags>) {
+    if (flags[key] === undefined) {
+      flags[key] = defaults[key];
+      changed = true;
+    }
+  }
+  return changed;
 }

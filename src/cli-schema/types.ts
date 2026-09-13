@@ -1,5 +1,4 @@
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
-import type { CliFlags } from '@agent-device/contracts/command';
 import type { CommandText } from '@agent-device/command-registry/command-text';
 
 /**
@@ -12,7 +11,6 @@ export type CommandSchema = {
   allowsExtraPositionals?: boolean;
   allowedFlags?: readonly FlagKey[];
   supportedFlags?: readonly FlagKey[];
-  defaults?: Partial<CliFlags>;
   /**
    * Replaces the generated synopsis grammar in `--help`, for shapes the generator cannot express.
    * The flag tail after it stays generated from `usageFlags`, so this string never restates the
