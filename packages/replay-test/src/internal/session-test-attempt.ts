@@ -388,8 +388,8 @@ function buildReplayTestFailedResult(
     attempts: outcome.attempts,
     artifactsDir: context.testArtifactsDir,
     error,
-    ...(attemptOutcome?.status === 'failed' && attemptOutcome.warnings
-      ? { warnings: [...attemptOutcome.warnings] }
+    ...(attemptOutcome?.status === 'failed' && (attemptOutcome.warnings?.length ?? 0) > 0
+      ? { warnings: [...attemptOutcome.warnings!] }
       : {}),
     ...(attemptOutcome?.status === 'failed' && attemptOutcome.infrastructure
       ? { infrastructure: true as const }

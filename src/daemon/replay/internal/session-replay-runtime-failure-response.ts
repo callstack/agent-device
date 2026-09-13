@@ -104,7 +104,9 @@ export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
         positionals,
         artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-        ...(warnings && warnings.length > 0 ? { warnings: [...warnings] } : {}),
+        ...(warnings && warnings.length > 0
+          ? { warnings: warnings.map((warning) => scrubReplayVarValues(warning, scrubVars)) }
+          : {}),
         divergence,
       },
     },

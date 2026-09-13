@@ -99,13 +99,8 @@ async function executeOptionalCommand(
 
 function formatOptionalWarning(command: MaestroRuntimeCommand, error: unknown): string {
   const source = `${command.source.path ? `${command.source.path}:` : ''}line ${command.source.line}`;
-  const detail =
-    error instanceof AppError
-      ? typeof error.details?.hint === 'string'
-        ? `${error.message} (${error.details.hint})`
-        : error.message
-      : String(error);
-  return `Optional Maestro ${command.kind} skipped at ${source}: ${detail}`;
+  const message = error instanceof AppError ? error.message : String(error);
+  return `Optional Maestro ${command.kind} skipped at ${source}: ${message}`;
 }
 
 function isOptionalCommand(command: MaestroRuntimeCommand): boolean {

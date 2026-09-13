@@ -96,11 +96,9 @@ test('typed Maestro failure response carries warnings accumulated before the fai
     { warnings: ['Optional Maestro assertVisible skipped at line 2: no match'] },
   );
 
+  if (!response.error.details) throw new Error('expected error details on the failure response');
   const details = response.error.details;
-  expect(details).toBeDefined();
-  expect(details.warnings).toEqual([
-    'Optional Maestro assertVisible skipped at line 2: no match',
-  ]);
+  expect(details.warnings).toEqual(['Optional Maestro assertVisible skipped at line 2: no match']);
   expect((details.divergence as { kind: string }).kind).toBe('action-failure');
 });
 

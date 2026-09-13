@@ -366,30 +366,6 @@ describe('executeMaestroProgram', () => {
     );
   });
 
-  test('optional-skip warnings append the failure hint', async () => {
-    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
-      request.invalidateObservation();
-      throw maestroTestFailure('Maestro target did not resolve to a visible element.', {
-        hint: 'Regular presentation requires valid viewport evidence.',
-      });
-    });
-    const port = makePort({
-      observe: vi.fn(async ({ generation }) => ({ generation, matched: false })),
-      execute,
-    });
-    const program = parseMaestroProgram(
-      ['---', '- tapOn:', '    text: Missing target', '    optional: true'].join('\n'),
-    );
-
-    const result = await executeMaestroProgram(program, port);
-
-    expect(result.warnings).toEqual([
-      expect.stringMatching(
-        /Optional Maestro tapOn skipped at line 2: .*\(Regular presentation requires valid viewport evidence\.\)/,
-      ),
-    ]);
-  });
-
   test('observer failure cannot mask nested leaf failure provenance', async () => {
     const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
       request.invalidateObservation();

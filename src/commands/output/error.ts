@@ -6,6 +6,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
+import { collapseWarningText } from '../output-common.ts';
 
 export function printHumanError(
   err: AppError | NormalizedError,
@@ -19,6 +20,12 @@ export function printHumanError(
   }
   if (normalized.hint) {
     process.stderr.write(`Hint: ${normalized.hint}\n`);
+  }
+  // Composable warnings (skipped `optional` steps, capture degradations) describe the run,
+  // not this step's cause, so they ride at error level and must reach the reader of a
+  // failed run too — a warning-only trace is otherwise invisible outside --json (#2560).
+  for (const warning of readResponseWarnings(normalized.details)) {
+    process.stderr.write(`Warning: ${collapseWarningText(warning)}\n`);
   }
   const candidateLines = formatErrorCandidateViews(readErrorCandidateViews(normalized.details));
   if (candidateLines.length > 0) {
@@ -45,6 +52,13 @@ export function printHumanError(
   if (options.showDetails && normalized.details) {
     process.stderr.write(`${JSON.stringify(normalized.details, null, 2)}\n`);
   }
+}
+
+function readResponseWarnings(details: Record<string, unknown> | undefined): string[] {
+  const warnings = details?.warnings;
+  return Array.isArray(warnings)
+    ? warnings.filter((warning): warning is string => typeof warning === 'string')
+    : [];
 }
 
 function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {

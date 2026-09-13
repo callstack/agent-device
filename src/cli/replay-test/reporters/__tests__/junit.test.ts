@@ -80,6 +80,38 @@ test('buildReplayJunitXml escapes tricky failure title/message and round-trips t
   assert.ok(failure.text?.startsWith(TRICKY_MESSAGE));
 });
 
+test('buildReplayJunitXml carries accumulated warnings of a failed test into system-out (#2560)', () => {
+  const suite: ReplaySuiteResult = {
+    total: 1,
+    executed: 1,
+    passed: 0,
+    failed: 1,
+    skipped: 0,
+    notRun: 0,
+    durationMs: 1200,
+    failures: [],
+    tests: [
+      {
+        file: '/tmp/flows/login.yaml',
+        title: 'sign-in',
+        session: 'default',
+        status: 'failed',
+        durationMs: 1200,
+        attempts: 1,
+        warnings: ['Optional Maestro assertVisible skipped at line 3: sheet owns focus'],
+        error: { code: 'COMMAND_FAILED', message: 'tapOn Save did not resolve' },
+      },
+    ],
+  };
+  suite.failures = suite.tests.filter((result) => result.status === 'failed');
+
+  const nodes = writeSuiteAndParse(suite);
+  const testcase = findChild(findChild(nodes[0]!, 'testsuite')!, 'testcase');
+  assert.ok(testcase);
+  const systemOut = findChild(testcase, 'system-out');
+  assert.ok(systemOut?.text?.includes('warning: Optional Maestro assertVisible skipped at line 3'));
+});
+
 test('buildReplayJunitXml escapes tricky skip message', () => {
   const suite: ReplaySuiteResult = {
     total: 1,

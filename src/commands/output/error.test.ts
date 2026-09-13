@@ -76,6 +76,31 @@ test('printHumanError renders a compact divergence report unconditionally (not g
   // Not gated behind --debug: showDetails defaults to false/undefined here.
 });
 
+// --- #2560: run-level warnings ride the failed response to the human surface ---
+
+test('printHumanError renders run-level warnings carried in error details', async () => {
+  const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2 (tapOn "Save")', {
+    step: 2,
+    warnings: ['Optional Maestro assertVisible skipped at line 1: no match', 7],
+  });
+
+  const output = await captureStderr(() => printHumanError(err));
+
+  assert.match(
+    output,
+    /Error \(REPLAY_DIVERGENCE\)[\s\S]*^Warning: Optional Maestro assertVisible skipped at line 1: no match$/m,
+  );
+  assert.equal(output.includes('Warning: 7'), false);
+});
+
+test('printHumanError prints no Warning lines without a warnings channel', async () => {
+  const err = new AppError('COMMAND_FAILED', 'tap failed');
+
+  const output = await captureStderr(() => printHumanError(err));
+
+  assert.equal(output.includes('Warning:'), false);
+});
+
 // --- #1597: AMBIGUOUS_MATCH candidates print unconditionally, capped at 5 ---
 
 test('printHumanError lists AMBIGUOUS_MATCH candidates unconditionally, not gated behind --debug', async () => {
