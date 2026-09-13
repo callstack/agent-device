@@ -534,6 +534,8 @@ If `connect` fails, use the reported `aws devicefarm get-*` error to check the c
 
 On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot expose focus at all, use `press <target>` followed by `type <text>`. That sends text without confirming the destination.
 
+A screen that never goes still — a looping video, a live ticker, continuous animation — gives the provider's driver no quiet moment to read the UI tree, so `snapshot -i` can run out of its read budget on a rented device while `screenshot` of the same screen still returns. Snapshots covers what that failure means and what to do instead; on a metered device the difference matters, because every second of the walk is billed. Take the screenshot, drive from `@refs` an earlier snapshot captured, and remember that `--depth` trims a tree after it arrives, so it cannot shorten a read that never returned.
+
 
 
 ---
@@ -3155,7 +3157,10 @@ One-off `npx` usage is fine for humans and scripts that intentionally fetch from
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 22.12 or newer
+- Node.js 24 or newer for web automation, which hard-fails below it. The rest of the CLI keeps the
+  22.12 floor, so check `node --version` in the shell that runs `agent-device web setup` and
+  `agent-device doctor` before trusting a web result.
 - Xcode for iOS simulator/device automation (`simctl` + `devicectl`)
 - Android SDK / ADB for Android
 - HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
@@ -4439,6 +4444,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 - Re-snapshot after any UI mutation before reusing refs.
 - On Android after navigation or submit, snapshot capture retries suspicious trees for a short post-action deadline and `@ref` interactions refresh while that freshness window is active. If `snapshot -i` still disagrees with the visible screen, trust `screenshot`, wait briefly, then take one fresh snapshot instead of looping stale snapshots.
 - For automation runs affected by Android animation churn, use `settings animations off` as an opt-in stabilizer and restore with `settings animations on` after the run.
+- On a device cloud the tree is read by the provider's driver, so a screen that never goes still — a looping video, a live ticker, continuous animation — gives that read no quiet moment and it can run out of its budget while `screenshot` still returns. The read is cancelled with the request that asked for it, so agent-device stops waiting on it and stops holding the session open for it; the driver's own walk can continue on the provider, where it may still occupy that session's queue. Two dead ends: the read carries its own budget, so a larger `--timeout` cannot lengthen it, and `settings animations` is not implemented on hosted WebDriver sessions.
 - Use `diff snapshot` between mutations to validate structural changes with lower output volume.
 - Use `snapshot --diff` when you discover the feature from snapshot help, but keep `diff snapshot` as the default exploration command.
 - Keep `--raw` for troubleshooting only when you need the full tree instead of visible-first output.

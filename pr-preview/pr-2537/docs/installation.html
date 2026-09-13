@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2537/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2537/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2537/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2537/static/js/index.6f27678f21.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2537/static/js/index.e2081e07ab.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -54,7 +54,10 @@ toolchain, and dev-server readiness before handing the CLI to an agent.</p>
 <p>One-off <code>npx</code> usage is fine for humans and scripts that intentionally fetch from npm. For agents, prefer a global install, a project-local install, or a version supplied by the user or project config so repeated commands resolve to a known CLI. Do not ask agents to choose a version or run <code>npx -y agent-device@latest</code> without an explicit trust decision.</p>
 <h2 class="rp-toc-include" id="requirements"><a href="#requirements" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Requirements</h2>
 <ul>
-<li>Node.js 22+</li>
+<li>Node.js 22.12 or newer</li>
+<li>Node.js 24 or newer for web automation, which hard-fails below it. The rest of the CLI keeps the
+22.12 floor, so check <code>node --version</code> in the shell that runs <code>agent-device web setup</code> and
+<code>agent-device doctor</code> before trusting a web result.</li>
 <li>Xcode for iOS simulator/device automation (<code>simctl</code> + <code>devicectl</code>)</li>
 <li>Android SDK / ADB for Android</li>
 <li>HarmonyOS Command Line Tools for HarmonyOS (<code>hdc</code> available through <code>HDC_SDK_PATH</code>, <code>DEVECO_SDK_HOME</code>, or <code>HARMONYOS_COMMAND_LINE_TOOLS</code>)</li>
