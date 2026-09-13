@@ -504,6 +504,11 @@
         "summarizeAgentBrowserProcesses",
         "summarizeManagedAgentBrowserProcesses"
       ]
+    },
+    {
+      "comment": "src/runtime.ts keeps its published type surface while its implementation moves to src/runtime-factory.ts (#2540). These two re-exports have no in-repo consumer; they stay so the module's exported shape is unchanged.",
+      "file": "src/runtime.ts",
+      "exports": ["CommandPolicy", "CommandSessionRecord"]
     }
   ],
   "usedClassMembers": [

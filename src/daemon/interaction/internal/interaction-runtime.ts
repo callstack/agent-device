@@ -5,7 +5,7 @@ import type {
   BackendActionResult,
   BackendSnapshotResult,
 } from '../../../backend.ts';
-import { createAgentDevice } from '../../../runtime.ts';
+import { createCommandSurfaceAgentDevice } from '../../../runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
@@ -112,7 +112,7 @@ export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput):
 }
 
 function createInteractionAgentDevice(params: InteractionRuntimeInput) {
-  return createAgentDevice({
+  return createCommandSurfaceAgentDevice({
     backend: createInteractionBackend(params),
     ...createDaemonRuntimePolicy('interaction commands', { plural: true }),
     sessions: params.runtimeSessions,
