@@ -1,6 +1,6 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './session-state.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';

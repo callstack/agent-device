@@ -14,7 +14,15 @@ import { platformResourceCleanup } from '../../../platform-runtime-resource-clea
 import { closeIosApp } from '@agent-device/platform-apple/app-lifecycle';
 import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
-import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
+import {
+  isActiveProviderDevice,
+  setActiveProviderDeviceRuntimes,
+} from '../../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+
+// The daemon reads provider ownership through its own typed admission seam; production
+// installs it from root composition, and these tests compose it the same way.
+installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);

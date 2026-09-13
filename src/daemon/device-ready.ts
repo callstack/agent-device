@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 // Exported so unit tests can assert TTL behavior without duplicating the value.

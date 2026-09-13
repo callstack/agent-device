@@ -4,7 +4,15 @@ import { resetGetRuntimeFixture } from '../../__tests__/interaction-get-runtime-
 import fs from 'node:fs';
 import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
-import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
+import {
+  isActiveProviderDevice,
+  setActiveProviderDeviceRuntimes,
+} from '../../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+
+// The daemon reads provider ownership through its own typed admission seam; production
+// installs it from root composition, and these tests compose it the same way.
+installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import { AppError } from '@agent-device/kernel/errors';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';

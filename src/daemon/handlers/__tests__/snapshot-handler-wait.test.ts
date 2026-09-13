@@ -1,7 +1,15 @@
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { resetGetRuntimeFixture } from '../../__tests__/interaction-get-runtime-fixture.ts';
-import { setActiveProviderDeviceRuntimes } from '../../../provider-device-runtime.ts';
+import {
+  isActiveProviderDevice,
+  setActiveProviderDeviceRuntimes,
+} from '../../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+
+// The daemon reads provider ownership through its own typed admission seam; production
+// installs it from root composition, and these tests compose it the same way.
+installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import type { SessionState } from '../../session-state.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import {

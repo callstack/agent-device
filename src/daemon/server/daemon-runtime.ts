@@ -5,7 +5,11 @@ import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  isActiveProviderDevice,
+} from '../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
 import {
   androidObservation,
   createPlatformRuntimeGateway,
@@ -277,6 +281,7 @@ export async function startDaemonRuntime(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
+  installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
   const requestPlatformProviders = createRequestPlatformProviders({
     providers: {
       appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
