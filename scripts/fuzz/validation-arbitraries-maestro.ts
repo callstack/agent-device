@@ -47,17 +47,12 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- scrollUntilVisible:', '    element:', `        text: ${text}`],
     () => ['- repeat:', '    times: 2', '    commands:', '      - back'],
     () => ['- runFlow: other.yaml'],
+    () => [`- evalScript: ${text}`],
   ];
   return options[pick % options.length]!();
 }
 
-const FAKE_MAESTRO_COMMANDS = [
-  'clickOn',
-  'tapOnPoint',
-  'evalScript',
-  'launchActivity',
-  'inputTextt',
-] as const;
+const FAKE_MAESTRO_COMMANDS = ['clickOn', 'tapOnPoint', 'launchActivity', 'inputTextt'] as const;
 
 /** `code` is per class, like the CLI table: a class whose contract changes moves alone. */
 type MaestroMutation = { name: string; code: string; lines: (salt: number) => string[] };

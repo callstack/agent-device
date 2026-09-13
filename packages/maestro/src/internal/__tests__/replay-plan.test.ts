@@ -110,6 +110,36 @@ describe('typed Maestro replay plan', () => {
     });
   });
 
+  test('refuses --from past a runScript or evalScript step, which can produce outputEnv values', async () => {
+    // Each fixture puts its output-producing step first so the resume scan hits
+    // that step's own no-skip branch rather than an unrelated opaque step first —
+    // the shared `replay-plan.test.ts` fixture above only ever reaches its opaque
+    // `repeat`/`retry` branch, leaving the runScript/evalScript branch untested.
+    const runScriptPlan = await compileMaestroReplayPlan(
+      parseMaestroProgram(['---', '- runScript: setup.js', '- inputText: after'].join('\n')),
+      { platform: 'android', target: 'simulator' },
+    );
+    expect(
+      evaluateMaestroReplayResume(runScriptPlan, { from: 2, planDigest: runScriptPlan.digest }),
+    ).toMatchObject({
+      allowed: false,
+      reason: 'step 1 (runScript) can produce outputEnv values and cannot be skipped safely.',
+    });
+
+    const evalScriptPlan = await compileMaestroReplayPlan(
+      parseMaestroProgram(
+        ['---', '- evalScript: ${output.x = 1}', '- inputText: after'].join('\n'),
+      ),
+      { platform: 'android', target: 'simulator' },
+    );
+    expect(
+      evaluateMaestroReplayResume(evalScriptPlan, { from: 2, planDigest: evalScriptPlan.digest }),
+    ).toMatchObject({
+      allowed: false,
+      reason: 'step 1 (evalScript) can produce outputEnv values and cannot be skipped safely.',
+    });
+  });
+
   test('executes from a stable plan index and reports plan ordinals', async () => {
     const program = parseMaestroProgram('---\n- inputText: first\n- inputText: second\n');
     const execute = vi.fn(async (request) => {

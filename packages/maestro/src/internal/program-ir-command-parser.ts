@@ -6,6 +6,7 @@ import type {
   MaestroClearStateCommand,
   MaestroCommand,
   MaestroEraseTextCommand,
+  MaestroEvalScriptCommand,
   MaestroExtendedWaitUntilCommand,
   MaestroHideKeyboardCommand,
   MaestroInputTextCommand,
@@ -125,6 +126,7 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
   stopApp: parseStopApp,
   clearState: parseClearState,
   runScript: parseMaestroRunScriptCommand,
+  evalScript: parseEvalScript,
   runFlow: (value, node, context) =>
     parseMaestroRunFlowCommand(value, node, context, parseMaestroCommandList),
   repeat: (value, node, context) =>
@@ -457,6 +459,18 @@ function parseClearState(
   const source = sourceAt(commandNode, context);
   if (isNullNode(value)) return { kind: 'clearState', source };
   return { kind: 'clearState', source, appId: readRequiredString(value, 'clearState', context) };
+}
+
+function parseEvalScript(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroEvalScriptCommand {
+  return {
+    kind: 'evalScript',
+    source: sourceAt(commandNode, context),
+    script: readRequiredString(value, 'evalScript', context),
+  };
 }
 
 function parseLaunchArguments(

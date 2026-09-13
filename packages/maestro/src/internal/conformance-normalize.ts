@@ -82,6 +82,7 @@ export type CanonicalCommand =
   | { kind: 'retry'; maxRetries?: string | number }
   | { kind: 'runFlow'; label?: string; source: 'file' | 'commands' }
   | { kind: 'runScript' }
+  | { kind: 'evalScript' }
   | { kind: 'unsupported'; command: string };
 
 // ---------------------------------------------------------------------------
@@ -228,6 +229,8 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
       });
     case 'RunScriptCommand':
       return { kind: 'runScript' };
+    case 'EvalScriptCommand':
+      return { kind: 'evalScript' };
     default:
       return { kind: 'unsupported', command: unsupportedName(command.type) };
   }
@@ -462,6 +465,8 @@ function canonicalizeAgentCommand(
       });
     case 'runScript':
       return { kind: 'runScript' };
+    case 'evalScript':
+      return { kind: 'evalScript' };
     default: {
       const exhaustive: never = command;
       throw new Error(`Unhandled agent command: ${JSON.stringify(exhaustive)}`);

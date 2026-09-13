@@ -58,12 +58,6 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     reason: 'Standalone setPermissions is outside the supported subset.',
     unsupported: ['setPermissions'],
   },
-  'upstream/053_repeat_times': {
-    classification: 'we-reject',
-    reason:
-      'repeat is supported, but the flow also uses evalScript and a ${output.list.length} times expression.',
-    unsupported: ['evalScript'],
-  },
   // --- Deliberately stricter than upstream ---
   'invalid/duplicate-keys': {
     classification: 'we-reject',
