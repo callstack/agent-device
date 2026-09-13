@@ -128,7 +128,7 @@ async function acquireSimulatorProcess(
     if ('child' in acquisition) {
       await rollbackAcquiredSimulatorProcess(acquisition);
     } else {
-      void started.then(rollbackAcquiredSimulatorProcess);
+      void started.then(rollbackAcquiredSimulatorProcess).catch(() => undefined);
     }
     throw signal.reason;
   }
@@ -143,7 +143,7 @@ async function acquireSimulatorProcess(
     return await Promise.race([started, aborted]);
   } catch (error) {
     if (!signal.aborted) throw error;
-    void started.then(rollbackAcquiredSimulatorProcess);
+    void started.then(rollbackAcquiredSimulatorProcess).catch(() => undefined);
     throw signal.reason;
   } finally {
     removeAbort();
