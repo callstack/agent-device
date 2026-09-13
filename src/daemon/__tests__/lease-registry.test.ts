@@ -564,3 +564,93 @@ test('canceling a superseded activation cannot remove its successor or another h
   );
   assert.equal(registry.listHumanControlHolds(authority)[0]?.reason, 'successor');
 });
+
+// Nothing heartbeats a lease while its request works, so an admitted capture
+// that legitimately outruns the lease TTL expires its own lease and loses the
+// device it was still holding. In-flight work defers expiry and renews on
+// completion, exactly as a human-control hold does.
+test('in-flight request work defers expiry and renews the lease when it finishes', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const pass = registry.retainLeaseWork(lease, () => true);
+
+  now = 9_000;
+  assert.deepEqual(registry.consumeExpiredLeases(), []);
+  assert.equal(registry.consumeExpiredLease(lease.leaseId), undefined);
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+
+  pass.release();
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 14_000);
+  now = 14_000;
+  assert.equal(registry.consumeExpiredLeases()[0]?.leaseId, lease.leaseId);
+});
+
+// The deferral belongs to work somebody is still waiting for. A request whose
+// client hung up stops deferring the moment it is cancelled, and re-earns nothing
+// when it finally lands, so a handler that ignores cancellation cannot pin a
+// rented device open forever.
+test('a cancelled request stops deferring expiry and cannot revive its lease', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  let wanted = true;
+  const pass = registry.retainLeaseWork(lease, () => wanted);
+
+  wanted = false;
+  now = 9_000;
+  assert.deepEqual(
+    registry.consumeExpiredLeases().map((entry) => entry.leaseId),
+    [lease.leaseId],
+  );
+  pass.release();
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+// The closest negative: two requests on one device, one abandoned. Releasing the
+// abandoned work must renew nothing while the wanted work still defers expiry.
+test('abandoned work renews nothing while work still wanted holds the lease', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  let abandonedWanted = true;
+  const abandoned = registry.retainLeaseWork(lease, () => abandonedWanted);
+  const wanted = registry.retainLeaseWork(lease, () => true);
+
+  abandonedWanted = false;
+  now = 9_000;
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+
+  abandoned.release();
+  assert.equal(
+    registry.listActiveLeases()[0]?.expiresAt,
+    5_000,
+    'abandoned work must not renew the lease it was sitting on',
+  );
+
+  wanted.release();
+  assert.equal(registry.listActiveLeases()[0]?.expiresAt, 14_000);
+});
+
+// The ordinary release path, not expiry: a released lease is never read by the
+// expiry sweep again, so a work claim left against it would never be cleaned.
+test('releasing a lease drops the work claims recorded against it', () => {
+  const registry = new LeaseRegistry({ defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-9' });
+  const pass = registry.retainLeaseWork(lease, () => true);
+
+  registry.releaseLease({ leaseId: lease.leaseId });
+  pass.release();
+
+  assert.deepEqual(inFlightClaimKeys(registry), []);
+  assert.equal(registry.listActiveLeases().length, 0, 'a released lease must not come back');
+});
+
+function inFlightClaimKeys(registry: LeaseRegistry): string[] {
+  const work = (
+    registry as unknown as {
+      inFlightWork: { entriesByLeaseId: Map<string, unknown> };
+    }
+  ).inFlightWork;
+  return [...work.entriesByLeaseId.keys()];
+}
