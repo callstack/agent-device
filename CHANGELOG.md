@@ -41,6 +41,22 @@
   process is never signalled. A reused pid that runs a replacement `screenrecord` on the same
   remote path proves the old recorder gone but not that the path is free, so that marker and
   artifact are retained until the replacement ends, and neither is signalled (#2476).
+- Fixed: Android `record start` no longer refuses forever on an emulator re-adopted under a new
+  serial. The device-side marker records the device identity that wrote it and a later start retired it
+  only when that identity matched, so a marker left by an earlier session on the same AVD blocked every
+  recording on the re-adopted device with `Android screenrecord native recovery evidence already exists`
+  — reported as an internal error whose hint asked for a bug report — while `record stop` answered that
+  no recording was active and no session could reach the marker, because recovery always binds the
+  device identity its own record names. A marker now retires when its recording is terminal or when it
+  names a device identity this transport can no longer address, and only once every recorder it names
+  has provably released its artifact; an interrupted launch commits no recorder identity, so its
+  artifact is checked against the recorders running on the device first. A recorder that is still
+  writing is left alone: `record start` refuses with `DEVICE_IN_USE` and `details.writer` naming whether
+  the marker's own recorder or another one holds the path, and only the unmanaged one ends on its own at
+  Android's 180 second limit. What still refuses — unreadable or undecodable evidence, a marker the other
+  transport mode wrote, and an open recording this device identity still owns — is now a typed error
+  naming the marker path and the command that clears it, `record stop --session <name>` or removing the
+  marker once no session owns it, instead of `UNKNOWN` (#2550).
 - Fixed: a polling `wait` no longer surrenders its whole budget the first time the iOS runner
   answers `RUNNER_BUSY`. That code means an earlier command exceeded the runner's execution
   watchdog and its abandoned main-thread work is still draining, which clears on its own, so a

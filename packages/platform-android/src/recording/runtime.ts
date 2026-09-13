@@ -19,7 +19,8 @@ import {
   type NativeChunk,
 } from './manifest.ts';
 import { rollbackChunks, stopChunk } from './chunks.ts';
-import { persistNativeManifest, startInitialTransaction, startPendingChunk } from './launch.ts';
+import { startInitialTransaction, startPendingChunk } from './launch.ts';
+import { persistNativeManifest } from './manifest-store.ts';
 import { snapshot } from './completion.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';

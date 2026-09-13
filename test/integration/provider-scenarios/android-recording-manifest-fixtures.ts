@@ -33,6 +33,7 @@ export function buildAndroidRecordingManifest(options: {
   remotePath: string;
   sessionName: string;
   startedAt?: number;
+  deviceId?: string;
   chunks?: Array<{
     index: number;
     remotePath: string;
@@ -49,7 +50,7 @@ export function buildAndroidRecordingManifest(options: {
     fenceToken: 'provider-fixture-fence',
     fenceGeneration: 1,
     sessionId: options.sessionName,
-    deviceId: PROVIDER_SCENARIO_ANDROID.id,
+    deviceId: options.deviceId ?? PROVIDER_SCENARIO_ANDROID.id,
     startedAt: options.startedAt ?? 123456789,
     outputPath: options.outPath,
     scope: 'device',

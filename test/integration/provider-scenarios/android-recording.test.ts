@@ -198,6 +198,52 @@ test('Provider-backed integration Android record start retires completed evidenc
   );
 });
 
+test('Provider-backed integration Android record start retires evidence stranded by a re-adopted emulator serial', async () => {
+  await withAndroidRecordingScenario(
+    'agent-device-provider-scenario-android-re-adopted-',
+    async (tmpDir) => {
+      const calls: string[][] = [];
+      const outputPath = path.join(tmpDir, 're-adopted.mp4');
+      const remotePath = '/sdcard/agent-device-recording-823456789.mp4';
+      const manifest = buildAndroidRecordingManifest({
+        outPath: path.join(tmpDir, 'abandoned.mp4'),
+        remotePath,
+        sessionName: 'parked',
+        deviceId: 'emulator-5588',
+        chunks: [{ index: 1, remotePath, remotePid: '4004', remoteStartTime: '3766' }],
+      });
+      const daemon = await createAndroidRecordingScenarioHarness({
+        androidAdbProvider: () =>
+          createAndroidRecordingProvider({ calls, manifests: [manifest], deadPids: ['4004'] }),
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+      });
+      try {
+        const started = await daemon.callCommand('record', ['start', outputPath], {
+          platform: 'android',
+          serial: PROVIDER_SCENARIO_ANDROID.id,
+          recordingScope: 'device',
+        });
+        assert.equal(assertRpcOk<{ recording?: unknown }>(started).recording, 'started');
+        assert.ok(
+          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          'retired the stranded chunk artifact',
+        );
+        assert.ok(
+          calls.some((args) => args.join(' ') === ANDROID_MARKER_REMOVAL),
+          'retired the stranded marker',
+        );
+        assert.equal(
+          calls.some((args) => args[1]?.startsWith('kill ')),
+          false,
+          'a dead recorder is never signalled',
+        );
+      } finally {
+        await daemon.close();
+      }
+    },
+  );
+});
+
 test('Provider-backed integration Android record start retains completed evidence while a replacement recorder writes its path', async () => {
   await withAndroidRecordingScenario(
     'agent-device-provider-scenario-android-foreign-writer-',
@@ -236,7 +282,7 @@ test('Provider-backed integration Android record start retains completed evidenc
             serial: PROVIDER_SCENARIO_ANDROID.id,
             recordingScope: 'device',
           }),
-          'UNKNOWN',
+          'DEVICE_IN_USE',
           /another recorder is writing/,
         );
         assert.equal(
@@ -297,8 +343,8 @@ test('Provider-backed integration Android record start refuses completed evidenc
             serial: PROVIDER_SCENARIO_ANDROID.id,
             recordingScope: 'device',
           }),
-          'UNKNOWN',
-          /cannot be safely retired/,
+          'DEVICE_IN_USE',
+          /its recorder is writing/,
         );
         assert.equal(
           calls.some((args) => args[1]?.startsWith('kill ')),

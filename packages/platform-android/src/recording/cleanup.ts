@@ -3,7 +3,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
 import { pending } from './completion.ts';
 import type { NativeManifest } from './manifest.ts';
-import { removeNativeManifest } from './launch.ts';
+import { removeNativeManifest } from './manifest-store.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 

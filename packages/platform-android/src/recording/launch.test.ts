@@ -65,9 +65,10 @@ test('retained native evidence blocks replacement before output preparation or l
     owner: localRuntimeOwner('android'),
     signal: new AbortController().signal,
   });
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
-    'native recovery evidence already exists',
-  );
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'native_recovery_evidence_unreadable' },
+  });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
 
@@ -98,9 +99,10 @@ test('unavailable native evidence blocks replacement before output preparation o
     owner: localRuntimeOwner('android'),
     signal: new AbortController().signal,
   });
-  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
-    'native recovery evidence is unavailable',
-  );
+  await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'native_recovery_evidence_unavailable' },
+  });
   expect({ starts, writes, prepared }).toEqual({ starts: 0, writes: 0, prepared: 0 });
 });
 

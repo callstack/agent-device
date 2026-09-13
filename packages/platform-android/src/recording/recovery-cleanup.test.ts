@@ -153,9 +153,10 @@ test('retains evidence when the recorder presence probe is uncertain', async () 
       reason: 'transport-failed',
     });
     expect(manifest).not.toBe('');
-    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toThrow(
-      'native recovery evidence already exists',
-    );
+    await expect(runtime.screenRecordingStart(recordingInput())).rejects.toMatchObject({
+      code: 'DEVICE_IN_USE',
+      details: { reason: 'native_recovery_evidence_open' },
+    });
   } finally {
     vi.useRealTimers();
   }

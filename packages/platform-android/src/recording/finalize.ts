@@ -3,7 +3,7 @@ import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen
 import { cleanupChunks, pullChunks, stopOwnedChunks, waitForStableArtifacts } from './chunks.ts';
 import { completed } from './completion.ts';
 import { createCompletedNativeManifest, type NativeManifest } from './manifest.ts';
-import { persistNativeManifest } from './launch.ts';
+import { persistNativeManifest } from './manifest-store.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
 

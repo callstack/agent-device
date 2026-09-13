@@ -1,27 +1,17 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
-import { provesAndroidScreenRecordPathUnclaimed } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
-  cleanupChunks,
   AndroidScreenRecordingStartRollbackUnconfirmed,
   candidateRemotePaths,
   rollbackChunks,
   startChunkAt,
 } from './chunks.ts';
-import {
-  createNativeManifest,
-  decodeNativeManifest,
-  type NativeChunk,
-  type NativeManifest,
-} from './manifest.ts';
+import { createNativeManifest, type NativeChunk } from './manifest.ts';
+import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
+import { reconcileStartEvidence } from './start-reconciliation.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
-type ManifestCandidate = Readonly<{
-  manifestPath: string;
-  read: Awaited<ReturnType<Transport['readManifest']>>;
-}>;
-type CompletedCandidate = Readonly<{ manifestPath: string; evidence: NativeManifest }>;
 
 export async function startInitialTransaction(params: {
   transport: Transport;
@@ -32,7 +22,7 @@ export async function startInitialTransaction(params: {
   prepareOutput: () => Promise<void>;
 }): Promise<Readonly<{ chunk: NativeChunk; manifestPath: string }>> {
   const { transport, device, input, startedAt, signal, prepareOutput } = params;
-  await reconcileCompletedStartEvidence(transport, device);
+  await reconcileStartEvidence(transport, device);
   await prepareOutput();
   let last: unknown;
   for (const remotePath of candidateRemotePaths(undefined)) {
@@ -97,91 +87,6 @@ async function rollbackPublishedChunk(
   await removeNativeManifest(transport, manifestPath).catch(() => {});
 }
 
-/**
- * A terminal marker outlives native cleanup until a later, fenced start reconciles it. Never
- * retire open or uncertain evidence: that would erase the only recovery authority after a crash.
- */
-async function reconcileCompletedStartEvidence(
-  transport: Transport,
-  device: DeviceInfo,
-): Promise<void> {
-  const candidates = await readManifestCandidates(transport);
-  const completed = candidates.flatMap((candidate) =>
-    completedCandidate(candidate, device, transport.mode),
-  );
-  for (const candidate of completed) {
-    await retireCompletedEvidence(transport, candidate.evidence, candidate.manifestPath);
-  }
-}
-
-async function readManifestCandidates(transport: Transport): Promise<readonly ManifestCandidate[]> {
-  return await Promise.all(
-    candidateRemotePaths(undefined).map(async (remotePath) => {
-      const manifestPath = transport.manifestPathFor(remotePath);
-      return { manifestPath, read: await transport.readManifest(manifestPath) };
-    }),
-  );
-}
-
-function completedCandidate(
-  candidate: ManifestCandidate,
-  device: DeviceInfo,
-  transportMode: NativeManifest['transportMode'],
-): readonly CompletedCandidate[] {
-  if (candidate.read.status === 'missing') return [];
-  if (candidate.read.status !== 'read') throw unavailableEvidence();
-  const evidence = decodeNativeManifest(candidate.read.contents);
-  if (!isRetireableCompletedEvidence(evidence, device, transportMode)) throw existingEvidence();
-  return [{ manifestPath: candidate.manifestPath, evidence }];
-}
-
-function isRetireableCompletedEvidence(
-  evidence: NativeManifest | undefined,
-  device: DeviceInfo,
-  transportMode: NativeManifest['transportMode'],
-): evidence is NativeManifest {
-  return (
-    evidence !== undefined &&
-    evidence.completion !== undefined &&
-    evidence.pendingRemotePath === undefined &&
-    evidence.deviceId === device.id &&
-    evidence.transportMode === transportMode
-  );
-}
-
-function unavailableEvidence(): Error {
-  return new Error('Android screenrecord native recovery evidence is unavailable');
-}
-
-function existingEvidence(): Error {
-  return new Error('Android screenrecord native recovery evidence already exists');
-}
-
-async function retireCompletedEvidence(
-  transport: Transport,
-  evidence: NativeManifest,
-  manifestPath: string,
-): Promise<void> {
-  for (const chunk of evidence.chunks) {
-    const state = await transport.inspect({
-      pid: chunk.remotePid,
-      remotePath: chunk.remotePath,
-      startTime: chunk.remoteStartTime,
-    });
-    if (state === 'foreign-writer')
-      throw new Error(
-        'Android screenrecord completed evidence names an artifact another recorder is writing; it is retained until that recorder ends',
-      );
-    if (!provesAndroidScreenRecordPathUnclaimed(state))
-      throw new Error('Android screenrecord completed evidence cannot be safely retired');
-  }
-  await cleanupChunks(transport, evidence.chunks);
-  await removeNativeManifest(transport, manifestPath);
-  const confirmed = await transport.readManifest(manifestPath);
-  if (confirmed.status !== 'missing')
-    throw new Error('Android screenrecord completed evidence removal could not be confirmed');
-}
-
 export async function startPendingChunk(params: {
   transport: Transport;
   device: DeviceInfo;
@@ -228,23 +133,5 @@ async function removeFailedCandidateManifest(
     await removeNativeManifest(transport, manifestPath);
   } catch {
     throw new AndroidScreenRecordingStartRollbackUnconfirmed(launchError);
-  }
-}
-
-export async function persistNativeManifest(
-  transport: Transport,
-  manifestPath: string,
-  evidence: NativeManifest,
-  signal?: AbortSignal,
-): Promise<void> {
-  await transport.writeManifest({ manifestPath, contents: JSON.stringify(evidence) }, signal);
-}
-
-export async function removeNativeManifest(
-  transport: Transport,
-  manifestPath: string,
-): Promise<void> {
-  if (!(await transport.removeManifest(manifestPath))) {
-    throw new Error(`failed to remove Android recording manifest: ${manifestPath}`);
   }
 }
