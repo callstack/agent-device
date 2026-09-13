@@ -1,6 +1,7 @@
 import type { AgentDeviceRuntime } from '../runtime-contract.ts';
 import { bindRuntimeCommands } from './runtime-types.ts';
 import {
+  bindCaptureCommands,
   captureCommands,
   type BoundCaptureCommands,
   type CaptureCommands,
@@ -80,7 +81,7 @@ export const commands: AgentDeviceCommands = {
 
 export function bindCommands(runtime: AgentDeviceRuntime): BoundAgentDeviceCommands {
   return {
-    capture: bindRuntimeCommands(captureCommands, runtime),
+    capture: bindCaptureCommands(runtime),
     selectors: bindSelectorCommands(runtime),
     interactions: bindInteractionCommands(runtime),
     system: bindRuntimeCommands(systemCommands, runtime),

@@ -1,5 +1,5 @@
 import type { AgentDeviceRuntimeConfig } from '../runtime-contract.ts';
-import { localCommandPolicy } from '../runtime.ts';
+import { localCommandPolicy } from '../runtime-factory.ts';
 import { createUnsupportedArtifactAdapter } from './runtime-artifacts.ts';
 
 export function createDaemonRuntimePolicy(

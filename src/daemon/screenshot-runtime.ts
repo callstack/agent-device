@@ -13,7 +13,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentDeviceBackend } from '../backend.ts';
 import type { ArtifactAdapter } from '../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
+import { localCommandPolicy } from '../runtime-factory.ts';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
@@ -116,7 +117,7 @@ export async function captureScreenshotArtifact(
   }>,
 ): Promise<CapturedScreenshot> {
   const { session, sessionName, outPath, dispatchContext } = params;
-  const runtime = createAgentDevice({
+  const runtime = createCommandSurfaceAgentDevice({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
     sessions: createDaemonRuntimeSessionStore({
