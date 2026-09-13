@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.83443cbb39.js"></script>
+<script defer src="/agent-device/static/js/index.cae5e6589a.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -860,6 +860,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li>On Linux or other non-macOS hosts, <code>record stop</code> still succeeds and returns the raw video plus telemetry sidecar, and includes <code>overlayWarning</code> when burn-in overlays were skipped.</li>
 <li>On iOS simulators, a busy CoreSimulator host recording slot makes <code>record start</code> return non-retriable <code>DEVICE_IN_USE</code> with <code>details.reason: apple_simulator_recording_busy</code>. Use <code>record stop</code> in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.</li>
 <li>Android uses <code>adb shell screenrecord</code>, which has a 180s platform limit. <code>record start</code> publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, <code>record stop</code> recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.</li>
+<li><code>record stop</code> is safe to repeat. When its request window ends while the daemon is still exporting — typical for a long touch-overlay burn-in on a remote daemon — the export keeps running there, and a second <code>record stop</code> in the same session returns that completed recording, including the caller-side output path, without starting another recording. A finished recording whose video file is already gone reports <code>no active recording</code>.</li>
 </ul>
 <p><strong>Session app logs (token-efficient debugging):</strong> Logging is off by default in normal flows. Enable it on demand for debugging. Logs are written to a file so agents can grep instead of loading full output into context.</p>
 <div class="rp-codeblock language-bash"><div class="rp-codeblock__content"><div class="rp-codeblock__content__scroll-container rp-scrollbar rp-scrollbar--always"><pre class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)" tabindex="0" data-lang="bash"><code><span class="line"><span style="color:var(--shiki-token-function)">agent-device</span><span style="color:var(--shiki-token-string)"> logs</span><span style="color:var(--shiki-token-string)"> path</span><span style="color:var(--shiki-token-comment)">                  # Print session log file path (e.g. ~/.agent-device/sessions/default/app.log)</span></span>
