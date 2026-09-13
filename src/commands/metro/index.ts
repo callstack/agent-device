@@ -19,7 +19,10 @@ import {
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
-import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../cli-grammar/flag-groups.ts';
+import {
+  METRO_PREPARE_FLAGS,
+  METRO_RELOAD_FLAGS,
+} from '@agent-device/command-registry/flag-groups';
 import { metroCliOutputFormatters } from './output.ts';
 import { readMetroPrepareKind } from './prepare-kind.ts';
 

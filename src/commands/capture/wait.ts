@@ -3,7 +3,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { WaitCommandOptions } from '@agent-device/contracts/client';
 import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import type { WaitParsed } from '@agent-device/command-registry/wait-positionals';
-import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { SELECTOR_SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';

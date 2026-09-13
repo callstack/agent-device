@@ -9,8 +9,8 @@ import {
   readOptionalNumber as optionalNumberValue,
   type CliFlags,
 } from '@agent-device/contracts/command';
-import { getFlagDefinitionsForKey } from './cli-grammar/flag-registry.ts';
-import type { FlagDefinition, FlagKey } from './cli-grammar/flag-types.ts';
+import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';

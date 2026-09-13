@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test, vi } from 'vitest';
-import { getFlagDefinitions, getFlagDefinitionsForKey } from './cli-grammar/flag-registry.ts';
-import type { FlagDefinition, FlagKey } from './cli-grammar/flag-types.ts';
+import {
+  getFlagDefinitions,
+  getFlagDefinitionsForKey,
+} from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { listCommandMetadata } from './command-metadata.ts';
 import type { JsonSchema } from './command-contract.ts';
 import { optionField } from './command-input.ts';
@@ -57,7 +60,7 @@ async function buildWithPlantedOption(
   vi.resetModules();
 
   // Plant first: nothing in this module graph has built a command yet.
-  const registry = await import('./cli-grammar/flag-registry.ts');
+  const registry = await import('@agent-device/command-registry/flag-registry');
   const declaration = registry
     .getFlagDefinitionsForKey(key)
     .find((candidate) => candidate.inputDescription !== undefined);

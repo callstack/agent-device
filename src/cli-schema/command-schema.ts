@@ -7,13 +7,13 @@ import {
   getFlagDefinitions,
   projectConfigFlagKeys,
   recordedFlagKeys,
-} from '../commands/cli-grammar/flag-registry.ts';
+} from '@agent-device/command-registry/flag-registry';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   DEVICE_SELECTION_FLAG_KEYS,
   GLOBAL_FLAG_KEYS,
-} from '../commands/cli-grammar/flag-groups.ts';
-import { type FlagDefinition, type FlagKey } from '../commands/cli-grammar/flag-types.ts';
+} from '@agent-device/command-registry/flag-groups';
+import { type FlagDefinition, type FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
 
 export type { FlagDefinition, FlagKey };

@@ -18,7 +18,7 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { AsyncDaemonWriter, CliReader, CommandInput } from '../cli-grammar/types.ts';
-import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import {
   collectReplayShellEnv,

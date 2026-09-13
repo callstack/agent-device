@@ -5,8 +5,8 @@ import {
   commandSupportsVerifyEvidence,
 } from '@agent-device/command-registry/registry';
 import { settleInputFromFlags } from './cli-grammar/common.ts';
-import { SETTLE_FLAGS } from './cli-grammar/flag-groups.ts';
-import type { FlagKey } from './cli-grammar/flag-types.ts';
+import { SETTLE_FLAGS } from '@agent-device/command-registry/flag-groups';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { booleanField, integerField } from './command-input.ts';
 
 /**

@@ -9,7 +9,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotFlagsFromOptions,
 } from '@agent-device/kernel/snapshot';
-import { getFlagDefinitions } from './cli-grammar/flag-registry.ts';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CommandMetadata } from './command-contract.ts';
 

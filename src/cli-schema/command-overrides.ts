@@ -5,7 +5,7 @@ import type { CommandSchema } from './types.ts';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   METRO_PREPARE_FLAGS,
-} from '../commands/cli-grammar/flag-groups.ts';
+} from '@agent-device/command-registry/flag-groups';
 
 type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
 

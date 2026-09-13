@@ -4,7 +4,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
-import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { booleanField, integerField, optionField, stringField } from '../command-input.ts';
 import {
   commonInputFromFlags,

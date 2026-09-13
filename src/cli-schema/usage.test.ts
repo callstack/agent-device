@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import type { CommandText } from '../commands/command-text.ts';
+import type { CommandText } from '@agent-device/command-registry/command-text';
 import {
   getCliCommandSchema,
   getFlagDefinitions,

@@ -1,5 +1,8 @@
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { cliAliasesForCommand, normalizeCliCommandAlias } from './cli-command-aliases.ts';
+import {
+  cliAliasesForCommand,
+  normalizeCliCommandAlias,
+} from '@agent-device/command-registry/cli-command-aliases';
 import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '@agent-device/command-registry/registry';

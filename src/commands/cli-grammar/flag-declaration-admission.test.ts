@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { getFlagDefinitionsForKey } from './flag-registry.ts';
-import type { FlagDefinition } from './flag-types.ts';
+import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { resolveConfigBackedFlagDefaults } from '../../cli-schema/cli-config.ts';
 import { recordActionEntry } from '../../daemon/session-action-recorder.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
@@ -59,7 +59,7 @@ test('project-config admission follows the declaration: an undeclared key is ref
   // Planted: flip the declaration before `cli-config` builds, and the identical file is
   // admitted. A hand-maintained allowlist in `cli-config.ts` could not follow this.
   vi.resetModules();
-  const registry = await import('./flag-registry.ts');
+  const registry = await import('@agent-device/command-registry/flag-registry');
   const planted = getInRegistry(registry, 'daemonBaseUrl');
   Object.assign(planted, { projectConfig: true });
   const { resolveConfigBackedFlagDefaults: derivePlanted } =
@@ -95,7 +95,7 @@ test('recorder sanitization follows the declaration: an undeclared key is droppe
   // Planted: flip the declaration before the recorder builds, and the production
   // `sanitizeFlags` now copies the same value.
   vi.resetModules();
-  const registry = await import('./flag-registry.ts');
+  const registry = await import('@agent-device/command-registry/flag-registry');
   const planted = getInRegistry(registry, 'overlayRefs');
   Object.assign(planted, { recorded: true });
   const { recordActionEntry: recordPlanted } =
@@ -130,7 +130,7 @@ test('a CLI-only key cannot opt into recording', () => {
 });
 
 function getInRegistry(
-  registry: typeof import('./flag-registry.ts'),
+  registry: typeof import('@agent-device/command-registry/flag-registry'),
   key: 'daemonBaseUrl' | 'overlayRefs',
 ): FlagDefinition {
   const declaration = registry.getFlagDefinitionsForKey(key)[0];

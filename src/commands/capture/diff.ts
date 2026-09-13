@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   booleanField,

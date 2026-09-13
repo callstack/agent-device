@@ -16,7 +16,7 @@ import {
   cliCommandAlias,
   normalizeCliCommandAlias,
   retiredCliCommandMessage,
-} from '../../commands/cli-command-aliases.ts';
+} from '@agent-device/command-registry/cli-command-aliases';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {

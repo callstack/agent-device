@@ -3,7 +3,10 @@ import type { CommandSchema, CommandSchemaOverride } from '../../cli-schema/type
 import type { AnyDaemonWriter, CliReader } from '../cli-grammar/types.ts';
 import type { CommandMetadata, JsonSchema } from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
-import { resolveFacetText, type FacetCommandText } from '../command-text.ts';
+import {
+  resolveFacetText,
+  type FacetCommandText,
+} from '@agent-device/command-registry/command-text';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 

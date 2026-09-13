@@ -70,6 +70,26 @@
     "./batch-policy": {
       "types": "./src/batch-policy.ts",
       "default": "./src/batch-policy.ts"
+    },
+    "./flag-types": {
+      "types": "./src/flag-types.ts",
+      "default": "./src/flag-types.ts"
+    },
+    "./flag-registry": {
+      "types": "./src/flag-registry.ts",
+      "default": "./src/flag-registry.ts"
+    },
+    "./flag-groups": {
+      "types": "./src/flag-groups.ts",
+      "default": "./src/flag-groups.ts"
+    },
+    "./command-text": {
+      "types": "./src/command-text.ts",
+      "default": "./src/command-text.ts"
+    },
+    "./cli-command-aliases": {
+      "types": "./src/cli-command-aliases.ts",
+      "default": "./src/cli-command-aliases.ts"
     }
   }
 }

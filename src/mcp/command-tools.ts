@@ -11,7 +11,7 @@ import {
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
-import { mcpBody } from '../commands/command-text.ts';
+import { mcpBody } from '@agent-device/command-registry/command-text';
 import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
   resolveCommandRecordsSessionAction,

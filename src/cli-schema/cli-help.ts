@@ -4,8 +4,8 @@ import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,
 } from '@agent-device/maestro';
-import { normalizeCliCommandAlias } from '../commands/cli-command-aliases.ts';
-import { helpBody } from '../commands/command-text.ts';
+import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
+import { helpBody } from '@agent-device/command-registry/command-text';
 import {
   DEVICE_SELECTION_FLAG_KEYS,
   getCliCommandSchema,

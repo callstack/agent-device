@@ -3,7 +3,8 @@
 Thread a flag only through the layers that consume it:
 
 1. `packages/contracts/src/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
-   `src/commands/cli-grammar/flag-definitions-*.ts` owner and the relevant group in `flag-groups.ts`
+   `packages/command-registry/src/flag-definitions-*.ts` owner and the relevant group in
+   `packages/command-registry/src/flag-groups.ts`
    (for example `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the
    flag; find the owner with
    `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For

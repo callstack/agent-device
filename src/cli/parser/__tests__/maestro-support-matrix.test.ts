@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { expect, test } from 'vitest';
 import { usageForCommand } from '../args.ts';
-import { getFlagDefinitions } from '../../../commands/cli-grammar/flag-registry.ts';
+import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import {
   MAESTRO_COMPATIBILITY_ADR_URL,
   MAESTRO_COMPATIBILITY_ISSUE_URL,

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { mergeDefinedFlags } from './merge-flags.ts';
-import { type FlagKey } from '../commands/cli-grammar/flag-types.ts';
+import { type FlagKey } from '@agent-device/command-registry/flag-types';
 import { projectConfigFlagKeys } from './command-schema.ts';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import {

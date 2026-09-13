@@ -20,7 +20,10 @@ import type {
   TypeTextOptions,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
+import {
+  REPEATED_TOUCH_FLAGS,
+  SELECTOR_SNAPSHOT_FLAGS,
+} from '@agent-device/command-registry/flag-groups';
 import { postActionObservationCliFlags } from '../post-action-observation-grammar.ts';
 import {
   toClientElementTarget,
