@@ -26,25 +26,22 @@ import {
 } from './device-claim-paths.ts';
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
+  ownershipFromClaim,
   type AllocatorClaimIdentity,
   type DeviceClaim,
+  type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
+import {
+  isAbandonedDeviceClaim,
+  isClaimOwnedByThisDaemon,
+  resolveExistingClaim,
+  settleVerifiedOrphanedClaim,
+  type DeviceClaimReconciler,
+} from './device-claim-settlement.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
-export type DeviceClaimReconciliationResult =
-  | { status: 'reconciled' }
-  | { status: 'retained'; reason: string };
-
-export type DeviceClaimReconciler = (
-  claim: DeviceClaim,
-) => Promise<DeviceClaimReconciliationResult>;
-
-export type DeviceClaimSessionOwnership = {
-  deviceKey: string;
-  ownerToken: string;
-  ownerPid: number;
-  ownerStartTime: string | null;
-};
+export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
+export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
 
 export type DeviceClaimAcquireResult =
   | { status: 'acquired'; ownership: DeviceClaimSessionOwnership }
@@ -134,7 +131,7 @@ async function claimHeldDevice(params: {
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
-  const existingResult = await resolveExistingClaim({
+  const existing = await resolveExistingClaim({
     deviceKey,
     owner,
     session: params.session,
@@ -142,7 +139,8 @@ async function claimHeldDevice(params: {
     stateDir: params.stateDir,
     reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
   });
-  if (existingResult.status !== 'available') return existingResult;
+  if (existing.status === 'conflict') return existing;
+  if (existing.status === 'held') return { status: 'acquired', ownership: existing.ownership };
   const now = Date.now();
   const claim: DeviceClaim = {
     schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
@@ -162,21 +160,6 @@ async function claimHeldDevice(params: {
   };
   writeDeviceClaim(claim);
   return { status: 'acquired', ownership: ownershipFromClaim(claim) };
-}
-
-function isClaimOwnedByThisDaemon(
-  claim: DeviceClaim,
-  stateDir: string,
-  owner: ReturnType<typeof readCurrentOwnerIdentity>,
-): boolean {
-  return (
-    claim.stateDir === stateDir &&
-    ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
-  );
-}
-
-function isAbandonedDeviceClaim(claim: DeviceClaim): boolean {
-  return claim.abandonedAtMs !== undefined;
 }
 
 /**
@@ -203,68 +186,12 @@ export function processOwnsActiveDeviceClaim(device: DeviceInfo): boolean {
   );
 }
 
-function isAbandonedClaimOfThisDaemon(
-  claim: DeviceClaim,
-  stateDir: string,
-  owner: ReturnType<typeof readCurrentOwnerIdentity>,
-): boolean {
-  return isAbandonedDeviceClaim(claim) && isClaimOwnedByThisDaemon(claim, stateDir, owner);
-}
-
 /** The canonical claim-facing identity of a local device: family, Apple OS, and id. */
 export function deviceClaimIdentity(device: DeviceInfo): DeviceIdentity {
   return deviceIdentity({
     ...device,
     ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
   });
-}
-
-async function resolveExistingClaim(params: {
-  deviceKey: string;
-  owner: ReturnType<typeof readCurrentOwnerIdentity>;
-  session: string;
-  workspace: string;
-  stateDir: string;
-  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
-}): Promise<DeviceClaimAcquireResult | { status: 'available' }> {
-  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey));
-  if (!existing) return { status: 'available' };
-  if (
-    existing.claim &&
-    isAbandonedClaimOfThisDaemon(existing.claim, params.stateDir, params.owner)
-  ) {
-    emitClaimSupersede(params.deviceKey, existing.claim);
-    return { status: 'available' };
-  }
-  if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
-    return { status: 'acquired', ownership: ownershipFromClaim(existing.claim) };
-  }
-  if (!existing.claim || !deviceClaimOwnerCannotRelease(existing.classification)) {
-    emitClaimConflict(params.deviceKey, existing);
-    return { status: 'conflict', conflict: existing };
-  }
-  const reconciliation = await settleVerifiedOrphanedClaim(
-    existing.claim,
-    params.reconcileOrphanedDeviceClaim,
-  );
-  if (reconciliation.status === 'retained') {
-    emitClaimConflict(params.deviceKey, existing, reconciliation.reason);
-    return { status: 'conflict', conflict: existing };
-  }
-  return { status: 'available' };
-}
-
-function isCurrentClaimOwner(
-  claim: DeviceClaim,
-  params: Pick<Parameters<typeof acquireDeviceClaim>[0], 'session' | 'workspace' | 'stateDir'>,
-  owner: ReturnType<typeof readCurrentOwnerIdentity>,
-): boolean {
-  return (
-    claim.session === params.session &&
-    claim.workspace === params.workspace &&
-    claim.stateDir === params.stateDir &&
-    ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
-  );
 }
 
 /**
@@ -548,69 +475,4 @@ function sweepMayReconcile(
   if (!deviceClaimOwnerCannotRelease(classification)) return false;
   if (classification !== 'owner-daemon-superseded') return true;
   return path.resolve(ownerStateDir) === path.resolve(daemonStateDir);
-}
-
-/** The one diagnostic that names who holds a device when an acquisition is refused. */
-export function emitClaimConflict(
-  deviceKey: string,
-  existing: InspectedDeviceClaim,
-  reconciliationReason?: string,
-): void {
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'device_claim_conflict',
-    data: {
-      deviceKey,
-      classification: existing.classification,
-      ...describeClaimOwner(existing),
-      ...(reconciliationReason ? { reconciliationReason } : {}),
-    },
-  });
-}
-
-/** The owner projection of either claim kind, for diagnostics that name who holds the device. */
-function describeClaimOwner(existing: InspectedDeviceClaim): Record<string, unknown> {
-  if (existing.allocatorClaim) {
-    return {
-      ownerStateDir: existing.allocatorClaim.stateDir,
-      allocatorInstanceId: existing.allocatorClaim.allocator.instanceId,
-      identityIncarnationId: existing.allocatorClaim.allocator.identityIncarnationId,
-    };
-  }
-  return { ownerSession: existing.claim?.session, ownerStateDir: existing.claim?.stateDir };
-}
-
-function emitClaimSupersede(deviceKey: string, abandoned: DeviceClaim): void {
-  emitDiagnostic({
-    level: 'info',
-    phase: 'device_claim_abandoned_superseded',
-    data: {
-      deviceKey,
-      abandonedSession: abandoned.session,
-      abandonedAtMs: abandoned.abandonedAtMs,
-    },
-  });
-}
-
-async function settleVerifiedOrphanedClaim(
-  claim: DeviceClaim,
-  reconcile: DeviceClaimReconciler,
-): Promise<DeviceClaimReconciliationResult> {
-  const result = await reconcile(claim);
-  if (result.status === 'retained') return result;
-  try {
-    fs.unlinkSync(resolveDeviceClaimPath(claim.deviceKey));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  return { status: 'reconciled' };
-}
-
-function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {
-  return {
-    deviceKey: claim.deviceKey,
-    ownerToken: claim.ownerToken,
-    ownerPid: claim.ownerPid,
-    ownerStartTime: claim.ownerStartTime,
-  };
 }

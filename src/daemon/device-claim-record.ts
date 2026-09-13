@@ -42,6 +42,27 @@ export type DeviceClaim = {
 };
 
 /**
+ * The ownership token a claim grants its holder: everything a clearing surface must match to let
+ * that holder release, abandon, or keep fencing the claim, and nothing else.
+ */
+export type DeviceClaimSessionOwnership = {
+  deviceKey: string;
+  ownerToken: string;
+  ownerPid: number;
+  ownerStartTime: string | null;
+};
+
+/** The ownership token carried by a persisted claim record. */
+export function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {
+  return {
+    deviceKey: claim.deviceKey,
+    ownerToken: claim.ownerToken,
+    ownerPid: claim.ownerPid,
+    ownerStartTime: claim.ownerStartTime,
+  };
+}
+
+/**
  * ADR 0021 §4: a claim held for the pool lifetime of one allocator-managed identity. Its principal
  * is an INSTALLATION — the state dir, the allocator instance, and the identity incarnation — and
  * never a process, so it carries no `ownerPid`/`ownerStartTime`/`ownerToken`/`session`/`workspace`

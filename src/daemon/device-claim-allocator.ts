@@ -20,7 +20,8 @@ import {
   type AllocatorHeldDeviceClaim,
 } from './device-claim-record.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
-import { deviceClaimIdentity, emitClaimConflict } from './device-claims.ts';
+import { emitClaimConflict } from './device-claim-settlement.ts';
+import { deviceClaimIdentity } from './device-claims.ts';
 
 /**
  * The full principal of an allocator-held claim: one installation's state dir, the allocator
