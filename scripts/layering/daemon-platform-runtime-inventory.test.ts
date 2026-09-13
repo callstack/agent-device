@@ -44,7 +44,7 @@ for (const [file, target, symbol] of [
     const found = edgeViolations(sources, importer);
     assert.equal(found.length, 1);
     assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-    assert.match(found[0]!.message, /unclassified daemon-to-root|classified symbols drifted/);
+    assert.match(found[0]!.message, /unclassified daemon coupling|classified symbols drifted/);
   });
 }
 
@@ -77,7 +77,7 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.equal(found[0]!.line, 1);
-  assert.match(found[0]!.message, /unclassified daemon-to-root platform-runtime coupling/);
+  assert.match(found[0]!.message, /unclassified daemon coupling to platform mechanics/);
   assert.match(
     found[0]!.message,
     /src\/daemon\/fixture\.ts -> src\/platform-runtime-android-tool-host\.ts/,
@@ -254,4 +254,100 @@ test('the root composition family is src/platform-runtime.ts plus src/platform-r
   assert.equal(isRootPlatformRuntimeTarget('src/platform-runtime.ts.bak'), false);
   assert.equal(isRootPlatformRuntimeTarget('src/platforms/runtime.ts'), false);
   assert.equal(isRootPlatformRuntimeTarget('src/daemon/platform-runtime.ts'), false);
+});
+
+const ROOT_PLATFORM_STUB = 'export const gateway = 1;\nvoid gateway;\n';
+const PROVIDER_HUB_STUB =
+  "import { gateway } from './platform-runtime.ts';\n" +
+  'void gateway;\n' +
+  'export function createProviderDeviceRuntimeRequestProviders() {}\n' +
+  'export function isActiveProviderDevice() { return false; }\n';
+
+test('R76 catches a daemon import of a root hub that reaches the platform family', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/hub-runtime.ts':
+      "import { gateway } from './platform-runtime.ts';\nvoid gateway;\n" +
+      'export function hubFact() {}\n',
+    'src/daemon/fixture.ts': "import { hubFact } from '../hub-runtime.ts';\nvoid hubFact;\n",
+  };
+  const found = edgeViolations(sources, 'src/daemon/fixture.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /src\/daemon\/fixture\.ts -> src\/hub-runtime\.ts/);
+});
+
+test('R76 accepts the classified provider-runtime hub edge at the composition site', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/provider-device-runtime.ts': PROVIDER_HUB_STUB,
+    'src/daemon/server/daemon-runtime.ts':
+      'import {\n' +
+      '  createProviderDeviceRuntimeRequestProviders,\n' +
+      '  isActiveProviderDevice,\n' +
+      "} from '../../provider-device-runtime.ts';\n" +
+      'void [createProviderDeviceRuntimeRequestProviders, isActiveProviderDevice];\n',
+  };
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
+});
+
+test('R76 catches a symbol added to the classified provider-runtime hub edge', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/provider-device-runtime.ts': `${PROVIDER_HUB_STUB}export function setProviderDevice() {}\n`,
+    'src/daemon/server/daemon-runtime.ts':
+      'import {\n' +
+      '  createProviderDeviceRuntimeRequestProviders,\n' +
+      '  isActiveProviderDevice,\n' +
+      '  setProviderDevice,\n' +
+      "} from '../../provider-device-runtime.ts';\n" +
+      'void [createProviderDeviceRuntimeRequestProviders, isActiveProviderDevice, setProviderDevice];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  assert.equal(found.length, 1);
+  assert.match(found[0]!.message, /classified symbols drifted/);
+  assert.match(found[0]!.message, /setProviderDevice/);
+});
+
+test('R76 classifies the dynamic interactor lookup instead of skipping it', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/provider-device-runtime.ts': PROVIDER_HUB_STUB,
+    'src/core/interactors.ts':
+      "import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';\n" +
+      'void [getProviderDeviceInteractor, isActiveProviderDevice];\n' +
+      'export function getInteractor(device: unknown) {}\n',
+    'src/daemon/snapshot-interactor-capture.ts':
+      "const { getInteractor } = await import('../core/interactors.ts');\nvoid getInteractor;\n",
+  };
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/snapshot-interactor-capture.ts'), []);
+});
+
+test('R76 catches a binding added to the dynamic interactor lookup', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/provider-device-runtime.ts': PROVIDER_HUB_STUB,
+    'src/core/interactors.ts':
+      "import { isActiveProviderDevice } from '../provider-device-runtime.ts';\n" +
+      'void isActiveProviderDevice;\n' +
+      'export function getInteractor(device: unknown) {}\n' +
+      'export function getRetryInteractor(device: unknown) {}\n',
+    'src/daemon/snapshot-interactor-capture.ts':
+      "const { getInteractor, getRetryInteractor } = await import('../core/interactors.ts');\n" +
+      'void [getInteractor, getRetryInteractor];\n',
+  };
+  const found = edgeViolations(sources, 'src/daemon/snapshot-interactor-capture.ts');
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /classified symbols drifted/);
+});
+
+test('R76 does not turn an intra-daemon hop into a classified hub edge', () => {
+  const sources = {
+    'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
+    'src/daemon/dispatch.ts':
+      "import { gateway } from '../platform-runtime.ts';\nvoid gateway;\nexport function dispatch() {}\n",
+    'src/daemon/handler.ts': "import { dispatch } from './dispatch.ts';\nvoid dispatch;\n",
+  };
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/handler.ts'), []);
 });
