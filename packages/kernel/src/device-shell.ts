@@ -81,17 +81,14 @@ export function relayDeviceShellArgv<Rebuilt extends readonly string[]>(
   return rebuilt;
 }
 
-function isDeviceShellArgv(args: readonly string[]): boolean {
-  return args.includes('shell') || args.includes('exec-out');
-}
-
 /**
  * The executor-boundary guard: refuses a `shell`/`exec-out` argv that {@link deviceShellArgv} did
  * not build. Checked on the value, so a variable-built or indirect argv is caught the same as a
  * literal one.
  */
 export function assertDeviceShellArgv(args: readonly string[], boundary: string): void {
-  if (!isDeviceShellArgv(args) || mintedDeviceShellArgv.has(args)) return;
+  const isDeviceShell = args.includes('shell') || args.includes('exec-out');
+  if (!isDeviceShell || mintedDeviceShellArgv.has(args)) return;
   throw new AppError(
     'INVALID_ARGS',
     `${boundary}: device-shell argv must be built with deviceShellArgv (got ${JSON.stringify(args)}).`,

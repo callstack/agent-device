@@ -291,10 +291,6 @@ function stripAdbSerialArgs(
   ]);
 }
 
-// The device-shell boundary for an adb executor. `runAdbShell`/`runAdbExecOut` are the only
-// producers of a `shell`/`exec-out` argv; `guardDeviceShell` wraps every executor the cluster
-// hands out so a raw one is refused at the value, whichever path built it.
-
 /** Runs `adb shell <words>` through an executor; every word is quoted for the device shell. */
 export async function runAdbShell(
   adb: AndroidAdbExecutor,
@@ -313,6 +309,7 @@ export async function runAdbExecOut(
   return await adb(deviceShellArgv('exec-out', words), options);
 }
 
+/** Every executor the cluster hands out refuses a device-shell argv the funnel did not build. */
 function guardDeviceShell(executor: AndroidAdbExecutor): AndroidAdbExecutor {
   return async (args, options) => {
     assertDeviceShellArgv(args, 'adb');
