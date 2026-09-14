@@ -165,23 +165,32 @@ record stop  (request: ensure export)
   0. guard: session and device match; fence held
        manifest completed → replay the committed export (no stop work)
        fence lost with an open manifest → ownership-fence-lost
-  1. backend.stop(handle ?? descriptor, budget)      → observation        phase: stopped
-  2. backend.collect(descriptor, rawPath)            → raw capture        phase: collected
-  3. finalizer: playability, trim, overlay, telemetry: rawPath → exportPath phase: finalized
+  1. backend.stop(handle ?? descriptor, budget)      → observation  (recorded; not a checkpoint)
+  2. backend.collect(descriptor, rawPath)            → raw capture, playability sniff passed
+                                                                      checkpoint: collected
+  3. finalizer: trim, overlay, telemetry: rawPath → exportPath      checkpoint: finalized
   4. commit: manifest completed { export, recorder observation }; respond
 ```
 
-Each step records its phase in the manifest before the next begins, and a retry resumes at the
-first phase not yet recorded, never earlier. The raw capture is preserved until step 4 commits;
-the finalizer reads it and writes the export beside it, so a retry after a failed commit re-runs
-nothing that changes the video. Today `exportProcessedVideo` trims and overlays **in place**
-(`overlay.ts` renames the processed file over the input), which is why the raw copy is required:
-without it, a retry after a commit failure would trim an already-trimmed clip or burn the overlay
-twice. After commit the raw capture is removed; a failed removal is a diagnostic, never an error.
+**Checkpoints mark durable, valid artifacts; they never mark attempts.** `collected` is recorded
+only after the raw capture passes the playability sniff (`ftyp` + `moov`, the existing check in
+`video.ts`), so a pull of a not-yet-finalized MP4 leaves no checkpoint. `finalized` is recorded
+after the export is written. Step 1 records its observation but is **re-attempted on every retry
+while the observation is `unconfirmed` and no export is committed**: an Android `/proc` that was
+unreadable once is probed again, and a recorder that has since become readable is signalled. A
+`confirmed` or `lost` observation is not re-attempted. A retry resumes at the first missing
+checkpoint after re-running step 1 when it must.
 
-Failures at 1, 2, 3, or 4 leave the manifest `open` with the last recorded phase and every artifact
-in place; the next stop re-drives from the next phase (step 1 re-drive is what #2565 proves for
-the simulator today). No forced cleanup runs on that path (rule 6).
+The raw capture is preserved until step 4 commits; the finalizer reads it and writes the export
+beside it, so a retry after a failed commit re-runs nothing that changes the video. Today
+`exportProcessedVideo` trims and overlays **in place** (`overlay.ts` renames the processed file
+over the input), which is why the raw copy is required: without it, a retry after a commit
+failure would trim an already-trimmed clip or burn the overlay twice. After commit the raw capture
+is removed; a failed removal is a diagnostic, never an error.
+
+Failures at 1, 2, 3, or 4 leave the manifest `open` with the recorded observation and checkpoints
+and every artifact in place; the next stop re-drives as above (step 1 re-drive is what #2565
+proves for the simulator today). No forced cleanup runs on that path (rule 6).
 
 When step 4 commits with `recorder: 'unconfirmed' | 'lost'`, the descriptor keeps the identity
 and the manifest keeps the observation. The next `record stop` replays. Termination is retried
@@ -208,16 +217,28 @@ settle recorder  (request: recovery only)
    guard **before** launching. Recovery may end an `ours` recorder and collect its export into the
    old session's manifest; it never deletes what it cannot prove abandoned.
 4. Ask the backend's admission fact. A foreign live writer is `DEVICE_IN_USE` naming the writer.
-5. Launch under a new artifact path and a new fence generation.
+5. If the session's current manifest is still unsettled after recovery (`open`, or `completed`
+   with `recorder !== 'confirmed'`), **archive it under its fence generation** before adoption:
+   `screen-recording.resource.json` → `screen-recording.<generation>.resource.json`, an atomic
+   rename in the same session directory. The store lists both shapes (`store.list` already walks
+   session directories; it gains the glob), and the next fence generation is the maximum over
+   every manifest in the directory plus one, not the current file plus one as
+   `createNextDurableCaptureFence` computes today.
+6. Launch under a new artifact path and that fence generation.
 
 A completed manifest, a manifest naming another serial, a reused pid, or an unreadable process
-table no longer refuses a start. They are recovery inputs, not admission inputs.
+table no longer refuses a start. They are recovery inputs, not admission inputs. Adoption never
+overwrites a manifest that recovery could still need: the one-file-per-session layout stays for
+the *current* recording, and unsettled predecessors remain durably enumerable by generation. An
+archived manifest is removed only when it is settled: `completed` with `recorder: 'confirmed'`,
+or `completed` with `recorder: 'lost'` (nothing left to signal). `record stop` and replay read
+only the current manifest; archived ones belong to recovery.
 
 ### 2.5 Recovery
 
 Recovery has two entry points and one body. At daemon start, and at step 3 of admission, it
-enumerates manifests (`store.list`, already present) that are `open` and not actively owned, or
-`completed` with `recorder !== 'confirmed'`. For each, it acquires the ownership guard (the
+enumerates manifests (`store.list`, already present; current and archived generations) that are
+`open` and not actively owned, or `completed` with `recorder !== 'confirmed'`. For each, it acquires the ownership guard (the
 existing fence takeover; a stale fence is left alone with a diagnostic) and asks the coordinator
 to **settle the recorder** (2.3). For a completed manifest that runs the backend stop and rewrites
 only the termination observation; the committed export is never re-collected, re-finalized, or
@@ -317,6 +338,14 @@ completion with `recorder`, or an error that leaves evidence in place.
   `confirmed`, and the export file is unchanged.
 - Android stop with `/proc` unreadable → no `kill` sent, artifact pulled, `unconfirmed`; with
   `/proc` naming another process → no `kill`, `lost`.
+- Android stop with `/proc` unreadable and the pull returning a `moov`-less file → no `collected`
+  checkpoint, manifest `open`; `/proc` readable on the retry → `kill -2` sent, exit observed,
+  re-pull passes the sniff, completion `confirmed`. (Finding: a recorded attempt must not imply
+  termination.)
+- Start over a session whose manifest is `completed` with `recorder: 'unconfirmed'` → the manifest
+  is archived under its generation, the new manifest gets generation + 1, `store.list` returns
+  both, and recovery later settles the archived one and removes it. (Finding: adoption must not
+  overwrite unresolved evidence.)
 - HarmonyOS live stop issues exactly one toggle; recovery issues none.
 - Start over an actively owned open manifest → refused; over an abandoned one → recovery runs
   first, old artifact retained unless committed, start proceeds under a new path.

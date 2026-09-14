@@ -295,12 +295,6 @@ Bounded, versioned identity and recovery state from which the same runtime owner
 A fenced recovery attempt by the descriptor's exact runtime owner returning a live handle, completed
 result, missing state, or typed refusal.
 
-**Recorder observation**:
-What a backend saw when it stopped a screen recorder: confirmed (exit or stop acknowledgement
-seen), unconfirmed (identity unreadable, or no exit seen inside the budget), or lost (identity
-proven to belong to another process, or a dead runner or browser session). Independent of whether
-a playable export exists.
-
 ### Maestro compatibility
 
 **Maestro program**:
