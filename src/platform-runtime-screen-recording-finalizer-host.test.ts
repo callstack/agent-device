@@ -32,3 +32,24 @@ test('requires stable playable media before publishing finalization telemetry', 
   expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4');
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });
+
+test('names the retry and the escape for a recording that never became playable', async () => {
+  video.isPlayable.mockResolvedValueOnce(false);
+
+  await expect(
+    createScreenRecordingFinalizer().complete({
+      outputPath: '/tmp/capture.mp4',
+      showTouches: false,
+      gestureEvents: [],
+      targetLabel: 'test recording',
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('was not finalized into a playable video'),
+    details: {
+      reason: 'recording-output-unplayable',
+      retriable: true,
+      hint: expect.stringContaining('close this session'),
+    },
+  });
+});

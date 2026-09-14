@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   getRecordingOverlaySupportWarning,
@@ -20,7 +21,18 @@ async function finalizeScreenRecording(
   await waitForStableFile(input.outputPath);
   await waitForPlayableVideo(input.outputPath);
   if (!(await isPlayableVideo(input.outputPath))) {
-    throw new Error(`recording was not finalized into a playable video: ${input.outputPath}`);
+    throw new AppError(
+      'COMMAND_FAILED',
+      `recording was not finalized into a playable video: ${input.outputPath}`,
+      {
+        reason: 'recording-output-unplayable',
+        retriable: true,
+        hint:
+          'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
+          'next stop, and the recording keeps its evidence either way. If the recorder died before ' +
+          'writing a video, close this session to release the device and record again.',
+      },
+    );
   }
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
