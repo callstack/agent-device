@@ -11,19 +11,35 @@ import { ANDROID_EMULATOR } from './__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 import './platform-runtime-android-adb-host.ts';
 
-/** Publishes a fake `adb` on PATH for the duration of `run`. */
-async function withFakeAdbOnPath<T>(scriptBody: string, run: () => Promise<T>): Promise<T> {
+/**
+ * Publishes a fake `adb` on PATH for the duration of `run`. Anything the script needs
+ * from the test — a path, a port — arrives through `env`, never spliced into the source
+ * the fake is built from.
+ */
+async function withFakeAdbOnPath<T>(
+  scriptBody: string,
+  run: () => Promise<T>,
+  env: Record<string, string> = {},
+): Promise<T> {
   const tmpDir = mkdtempForTestSync('agent-device-adb-host-binding-');
   const adbPath = path.join(tmpDir, 'adb');
   fs.writeFileSync(adbPath, `#!/usr/bin/env node\n${scriptBody}`);
   fs.chmodSync(adbPath, 0o755);
   const previousPath = process.env.PATH;
+  const previousEnv = new Map(
+    Object.keys(env).map((key) => [key, process.env[key] as string | undefined]),
+  );
   process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
+  for (const [key, value] of Object.entries(env)) process.env[key] = value;
   try {
     return await run();
   } finally {
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
+    for (const [key, value] of previousEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 
@@ -172,7 +188,8 @@ test.skipIf(process.platform === 'win32')(
     const outcome = await withFakeAdbOnPath(
       [
         'const fs = require("node:fs");',
-        `setTimeout(() => { fs.writeFileSync(${JSON.stringify(markerPath)}, 'ended'); }, 250);`,
+        'const markerPath = process.env.FAKE_ADB_MARKER_PATH;',
+        "setTimeout(() => { fs.writeFileSync(markerPath, 'ended'); }, 250);",
       ].join('\n'),
       async () => {
         const provider = createLocalAndroidAdbProvider(ANDROID_EMULATOR);
@@ -190,6 +207,7 @@ test.skipIf(process.platform === 'win32')(
           });
         });
       },
+      { FAKE_ADB_MARKER_PATH: markerPath },
     );
 
     assert.equal(outcome.signal, null);

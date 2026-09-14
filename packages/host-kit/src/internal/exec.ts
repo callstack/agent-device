@@ -6,6 +6,7 @@ import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:chi
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { createCommandKillSettlement } from './command-kill-settlement.ts';
 import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
 import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
 
@@ -160,36 +161,25 @@ function runSpawnedCommand(
     let stderr = '';
     let didTimeout = false;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
-    const timeoutHandle = timeoutMs
-      ? setTimeout(() => {
-          didTimeout = true;
-          killProcessTree(child, options.detached);
-        }, timeoutMs)
-      : null;
-    const abort = watchCommandAbort(child, options);
-    // One settlement, whichever termination reaches it first. `close` waits for the
-    // stdio pipes to drain, and a descendant that inherited them keeps them open
-    // after the direct child is gone, which would wedge the request and the device
-    // lock it holds. Once this module asked for the kill there is nothing left to
-    // drain: the command has already failed on our deadline or the request's
-    // cancellation.
+    let timeoutHandle: NodeJS.Timeout | null = null;
     let settled = false;
-    const finish = (): boolean => {
+    function finish(): boolean {
       if (settled) return false;
       settled = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
+      destroyCommandStreams(child);
       execTrace.emitForegroundCompletion(cmd, args);
       return true;
-    };
-    const fail = (error: AppError): void => {
+    }
+    function fail(error: AppError): void {
       if (finish()) reject(error);
-    };
-    const settle = (code: number | null): void => {
+    }
+    function settle(code: number | null): void {
       if (!finish()) return;
-      const exitCode = code ?? 1;
+      const finalExitCode = code ?? 1;
       if (!abort.didAbort && didTimeout && timeoutMs) {
-        reject(createTimeoutError(executable, cmd, args, timeoutMs, exitCode, stdout, stderr));
+        reject(createTimeoutError(executable, cmd, args, timeoutMs, finalExitCode, stdout, stderr));
         return;
       }
       const failure = commandCloseFailure(
@@ -197,7 +187,7 @@ function runSpawnedCommand(
         executable,
         cmd,
         args,
-        exitCode,
+        finalExitCode,
         options.allowFailure,
         stdout,
         stderr,
@@ -209,10 +199,24 @@ function runSpawnedCommand(
       resolve({
         stdout,
         stderr,
-        exitCode,
+        exitCode: finalExitCode,
         stdoutBuffer: stdoutChunks ? Buffer.concat(stdoutChunks) : undefined,
       });
-    };
+    }
+    // A deadline that fires after the child exited on its own still has to settle: the
+    // group kill that would have ended the pipe holder can no longer run through a child
+    // Node already reaped.
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options.detached),
+      settle,
+    });
+    const abort = watchCommandAbort(options, settlement.requestKill);
+    timeoutHandle = timeoutMs
+      ? setTimeout(() => {
+          didTimeout = true;
+          settlement.requestKill();
+        }, timeoutMs)
+      : null;
 
     if (!options.binaryStdout) child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -244,9 +248,7 @@ function runSpawnedCommand(
       fail(spawnRejectionError(abort, executable, cmd, args, err));
     });
 
-    child.once('exit', (code) => {
-      if (didTimeout || abort.didAbort) settle(code);
-    });
+    child.once('exit', settlement.recordExit);
     child.once('close', settle);
   });
 }
@@ -422,7 +424,6 @@ export function runCmdBackground(
   let stdout = '';
   let stderr = '';
   const captureOutput = options.captureOutput ?? true;
-  const abort = watchCommandAbort(child, options);
 
   if (captureOutput) {
     child.stdout?.setEncoding('utf8');
@@ -438,21 +439,23 @@ export function runCmdBackground(
 
   const wait = new Promise<ExecResult>((resolve, reject) => {
     let settled = false;
-    // Same rule as the foreground: a kill this module issued ends the wait on
-    // `exit`, because a descendant that inherited the pipes can hold `close`
-    // open indefinitely and the cancellation would never reach its caller.
-    const settle = (code: number | null): void => {
-      if (settled) return;
+    function finish(event: 'error' | 'exit'): boolean {
+      if (settled) return false;
       settled = true;
       abort.dispose();
-      execTrace.emitBackgroundCompletion(cmd, args, 'exit');
-      const exitCode = code ?? 1;
+      destroyCommandStreams(child);
+      execTrace.emitBackgroundCompletion(cmd, args, event);
+      return true;
+    }
+    function settle(code: number | null): void {
+      if (!finish('exit')) return;
+      const finalExitCode = code ?? 1;
       const failure = commandCloseFailure(
         abort,
         executable,
         cmd,
         args,
-        exitCode,
+        finalExitCode,
         options.allowFailure,
         stdout,
         stderr,
@@ -461,18 +464,17 @@ export function runCmdBackground(
         reject(failure);
         return;
       }
-      resolve({ stdout, stderr, exitCode });
-    };
+      resolve({ stdout, stderr, exitCode: finalExitCode });
+    }
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options.detached),
+      settle,
+    });
+    const abort = watchCommandAbort(options, settlement.requestKill);
     child.on('error', (err) => {
-      if (settled) return;
-      settled = true;
-      abort.dispose();
-      execTrace.emitBackgroundCompletion(cmd, args, 'error');
-      reject(spawnRejectionError(abort, executable, cmd, args, err));
+      if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
-    child.once('exit', (code) => {
-      if (abort.didAbort) settle(code);
-    });
+    child.once('exit', settlement.recordExit);
     child.once('close', settle);
   });
 
@@ -807,13 +809,13 @@ function normalizeTimeoutMs(value: number | undefined): number | undefined {
 }
 
 function watchCommandAbort(
-  child: ChildProcess,
   options: Pick<ExecOptions, 'detached' | 'signal'>,
+  onKill: () => void,
 ): { readonly didAbort: boolean; dispose: () => void } {
   let didAbort = false;
   const onAbort = () => {
     didAbort = true;
-    killProcessTree(child, options.detached);
+    onKill();
   };
   if (options.signal?.aborted) {
     onAbort();
@@ -830,19 +832,49 @@ function watchCommandAbort(
   };
 }
 
+/**
+ * A detached command owns a process group, and the descendants we are trying to reach
+ * are its members — which is what keeps the group id reserved. So the group is still
+ * signalled after the direct child is reaped: those members are holding the pipes this
+ * command is waiting on. An empty group's id is not reserved, and a group id that no
+ * longer resolves tells us the members are gone, so the signal is skipped rather than
+ * aimed at whatever process holds that id now.
+ */
 function killProcessTree(child: ChildProcess, detached: boolean | undefined): void {
-  // A child Node already reaped leaves its pid — and therefore its process-group id
-  // — free for the kernel to hand to an unrelated process, so a late group signal
-  // from a stale deadline could strike a stranger. Nothing waits for a kill of a
-  // child that is already gone: the settlement happens on `exit`.
-  if (child.exitCode !== null || child.signalCode !== null) return;
   if (detached && child.pid && process.platform !== 'win32') {
-    try {
-      process.kill(-child.pid, 'SIGKILL');
-      return;
-    } catch {}
+    if (isProcessGroupReachable(child.pid)) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {}
+    }
+    return;
   }
+  // A non-detached child leaves its pid free for the kernel to hand to an unrelated
+  // process once Node has reaped it, so a late signal from a stale deadline could
+  // strike a stranger. Nothing waits for a kill of a child that is already gone:
+  // settlement happens on `exit`.
+  if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill('SIGKILL');
+}
+
+function isProcessGroupReachable(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the group exists and simply isn't ours to signal.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * A kill that cannot reach an inherited-pipe holder must at least stop this process
+ * from holding the other end of those pipes open after it has settled.
+ */
+function destroyCommandStreams(child: ChildProcess): void {
+  child.stdin?.destroy();
+  child.stdout?.destroy();
+  child.stderr?.destroy();
 }
 
 async function writeChildStdin(

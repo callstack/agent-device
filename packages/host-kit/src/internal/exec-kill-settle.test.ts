@@ -140,33 +140,147 @@ test.runIf(process.platform !== 'win32')(
 );
 
 test.runIf(process.platform !== 'win32')(
-  'a cancellation arriving after the child was reaped signals no process group',
+  'a deadline that fires after the child exited settles without waiting for the pipe holder',
   async () => {
-    // The direct child exits at once and leaves `sleep 0.4` draining the streams.
-    // Its pid — and therefore its process-group id — is reusable from the moment it
-    // is reaped, so the cancellation must not address that group any more.
-    let childReaped: () => void = () => {};
-    const reaped = new Promise<void>((resolve) => {
-      childReaped = resolve;
-    });
-    const controller = new AbortController();
-    const running = runCmdStreaming('/bin/sh', ['-c', 'sleep 0.4 &'], {
-      signal: controller.signal,
-      detached: true,
-      onSpawn: (child) => {
-        child.once('exit', childReaped);
+    // The direct child is gone, so no kill can reach the descendant that inherited its
+    // pipes, and `close` only arrives when that descendant finishes. Settlement has to
+    // come from the deadline noticing an already-exited child.
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => runCmd('/bin/sh', ['-c', 'sleep 2 & exit 0'], { timeoutMs: 100 }),
+      (error: unknown) => {
+        assert.equal(isCommandTimeoutError(error), true);
+        return true;
       },
-    });
-    const rejection = settledRejection(running);
-
-    await reaped;
-    controller.abort();
-    const outcome = await rejection;
-
-    assert.ok(outcome, 'a canceled command must not resolve');
-    const details = (outcome.error as { details?: Record<string, unknown> }).details;
-    assert.equal(details?.reason, 'request_canceled');
+    );
+    assert.ok(Date.now() - startedAt < 1_000, 'settled only once the pipe holder finished');
   },
+  10_000,
+);
+
+// The kill paths below address a process group whose leader this worker already reaped,
+// and the hermetic signal setup ends a worker's authority over a pid at that moment.
+// So the group writes are intercepted here, which is the seam that setup points at for
+// a real kill path, and the probe answer is what each test is choosing between.
+
+type GroupWrite = { readonly pid: number; readonly signal: string | number };
+
+function interceptGroupWrites(probeAnswer: 'reachable' | 'gone'): {
+  restore: () => void;
+  signals: GroupWrite[];
+} {
+  const original = process.kill.bind(process);
+  const signals: GroupWrite[] = [];
+  process.kill = ((pid: number, signal: string | number = 'SIGTERM') => {
+    if (pid >= 0) return original(pid, signal as NodeJS.Signals);
+    if (signal === 0) {
+      if (probeAnswer === 'gone') {
+        throw Object.assign(new Error('no such process group'), { code: 'ESRCH' });
+      }
+      return true;
+    }
+    signals.push({ pid, signal });
+    return true;
+  }) as typeof process.kill;
+  return { signals, restore: () => (process.kill = original) };
+}
+
+test.runIf(process.platform !== 'win32')(
+  'a detached deadline still kills the group its reaped child left behind',
+  async () => {
+    const groupWrites = interceptGroupWrites('reachable');
+    let childPid = 0;
+    try {
+      const startedAt = Date.now();
+      await assert.rejects(
+        () =>
+          runCmdStreaming('/bin/sh', ['-c', 'sleep 2 & exit 0'], {
+            detached: true,
+            timeoutMs: 100,
+            onSpawn: (child) => {
+              childPid = child.pid ?? 0;
+            },
+          }),
+        (error: unknown) => {
+          assert.equal(isCommandTimeoutError(error), true);
+          return true;
+        },
+      );
+      assert.ok(Date.now() - startedAt < 1_000, 'settled only once the pipe holder finished');
+      assert.deepEqual(groupWrites.signals, [{ pid: -childPid, signal: 'SIGKILL' }]);
+    } finally {
+      groupWrites.restore();
+    }
+  },
+  10_000,
+);
+
+test.runIf(process.platform !== 'win32')(
+  'a detached deadline whose group is already gone signals nothing and still settles',
+  async () => {
+    // A group with no members left has an id the kernel can hand to anyone, so a stale
+    // deadline must not aim a signal at it.
+    const groupWrites = interceptGroupWrites('gone');
+    try {
+      const startedAt = Date.now();
+      await assert.rejects(
+        () => runCmd('/bin/sh', ['-c', 'sleep 2 & exit 0'], { detached: true, timeoutMs: 100 }),
+        (error: unknown) => {
+          assert.equal(isCommandTimeoutError(error), true);
+          return true;
+        },
+      );
+      assert.ok(Date.now() - startedAt < 1_000, 'settled only once the pipe holder finished');
+      assert.deepEqual(groupWrites.signals, []);
+    } finally {
+      groupWrites.restore();
+    }
+  },
+  10_000,
+);
+
+test.runIf(process.platform !== 'win32')(
+  'a request that was already canceled kills the command it arrives on',
+  async () => {
+    // The kill is issued before the caller finishes wiring, so a settlement that read
+    // the watcher mid-construction would fail here rather than at the next await.
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      () => runCmd('/bin/sh', ['-c', 'sleep 5'], { signal: controller.signal }),
+      (error: unknown) => {
+        assert.equal(
+          (error as { details?: Record<string, unknown> }).details?.reason,
+          'request_canceled',
+        );
+        return true;
+      },
+    );
+  },
+  5_000,
+);
+
+test.runIf(process.platform !== 'win32')(
+  'a background request that was already canceled ends its wait',
+  async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const background = runCmdBackground('/bin/sh', ['-c', 'sleep 5'], {
+      signal: controller.signal,
+    });
+
+    await assert.rejects(
+      () => background.wait,
+      (error: unknown) => {
+        assert.equal(
+          (error as { details?: Record<string, unknown> }).details?.reason,
+          'request_canceled',
+        );
+        return true;
+      },
+    );
+  },
+  5_000,
 );
 
 test.runIf(process.platform !== 'win32')(
