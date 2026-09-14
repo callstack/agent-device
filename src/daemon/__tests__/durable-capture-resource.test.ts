@@ -24,6 +24,7 @@ test('one coordinator exposes the typed manifest and all lifecycle entrypoints',
 
   await expect(
     testCaptureResource.finishLive({
+      intent: 'capture',
       session: active,
       sessionName: context.sessionName,
       sessionStore: context.sessionStore,

@@ -177,7 +177,12 @@ async function adoptAndroidRecording(params: {
     finish: () =>
       finishLiveDurableCapture(
         definition,
-        { session, sessionName: params.sessionName, sessionStore },
+        {
+          session,
+          sessionName: params.sessionName,
+          sessionStore,
+          intent: 'capture',
+        },
         resourcePath,
       ),
     manifestRecord: () => store.read(resourcePath),

@@ -33,7 +33,7 @@ export async function stopSessionPerfCapture(params: {
 }): Promise<void> {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.perfCapture) return;
-  await finishLivePerfCapture({ ...params, session: currentSession });
+  await finishLivePerfCapture({ ...params, session: currentSession, intent: 'disposal' });
 }
 
 export async function stopSessionSnapshotHelper(
@@ -211,6 +211,7 @@ export async function finishSessionScreenRecording(params: {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.screenRecording) return;
   await finishLiveScreenRecording({
+    intent: 'disposal',
     session: currentSession,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,
@@ -225,6 +226,7 @@ export async function finishSessionAudioProbe(params: {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.audioProbe) return;
   await finishLiveAudioProbe({
+    intent: 'disposal',
     session: currentSession,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,

@@ -260,6 +260,7 @@ async function stopPerfCapture(
     capture.handle.setOutputPath(SessionStore.expandHome(request.outPath, params.req.meta?.cwd));
   }
   const completion = await finishLivePerfCapture({
+    intent: 'capture',
     session,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,

@@ -7,6 +7,7 @@ import {
   recoverDurableCaptureResource,
   recoverDurableCaptureResourcesAfterDaemonLock,
   type AdoptStartedDurableCaptureParams,
+  type DurableCaptureFinishIntent,
   type DurableCaptureRecoveryParams,
   type DurableCaptureResourceDefinition,
   type DurableCaptureSessionStore,
@@ -21,6 +22,8 @@ import { safeSessionName } from './session-paths.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './session-state.ts';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
+
+export type { DurableCaptureFinishIntent };
 
 type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<
   AdoptStartedDurableCaptureParams<K, H, SessionState>,
@@ -84,6 +87,7 @@ export function createDurableCaptureResource<
       session: SessionState;
       sessionName: string;
       sessionStore: SessionStore;
+      intent: DurableCaptureFinishIntent;
     }): Promise<C> {
       return finishLiveDurableCapture(
         definition,

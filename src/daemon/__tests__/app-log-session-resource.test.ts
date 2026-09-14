@@ -294,6 +294,7 @@ test('app-log disposes on a failed finish because its retry is that same finish 
 
   await expect(
     finishSessionAppLog({
+      intent: 'capture',
       ...context,
       session: context.sessionStore.get(context.sessionName) ?? context.session,
     }),

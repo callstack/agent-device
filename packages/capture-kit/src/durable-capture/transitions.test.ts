@@ -38,7 +38,12 @@ test('finish failure remains primary when cleanup and cleanup-pending persistenc
     await expect(
       finishLiveDurableCapture(
         definition,
-        { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+        {
+          session: active,
+          sessionName: context.sessionName,
+          sessionStore: context.sessionStore,
+          intent: 'capture',
+        },
         context.resourcePath,
       ),
     ).rejects.toBe(finishError);
@@ -64,7 +69,12 @@ test('an uncertain finish preserves its error after confirmed compensating clean
   await expect(
     finishLiveDurableCapture(
       testCaptureDefinition,
-      { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+      {
+        session: active,
+        sessionName: context.sessionName,
+        sessionStore: context.sessionStore,
+        intent: 'capture',
+      },
       context.resourcePath,
     ),
   ).rejects.toMatchObject({ details: { reason: 'cleanup-unconfirmed' } });
@@ -95,7 +105,12 @@ test('an uncertain finish retains live evidence when compensating cleanup is unc
     await expect(
       finishLiveDurableCapture(
         testCaptureDefinition,
-        { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+        {
+          session: active,
+          sessionName: context.sessionName,
+          sessionStore: context.sessionStore,
+          intent: 'capture',
+        },
         context.resourcePath,
       ),
     ).rejects.toBe(finishError);
@@ -129,7 +144,12 @@ test('a preserved finish leaves the record open without disposing what its retry
     await expect(
       finishLiveDurableCapture(
         definition,
-        { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+        {
+          session: active,
+          sessionName: context.sessionName,
+          sessionStore: context.sessionStore,
+          intent: 'capture',
+        },
         context.resourcePath,
       ),
     ).rejects.toBe(finishError);
@@ -160,7 +180,12 @@ test('a preserved finish that reports uncertainty still leaves the record retrya
   await expect(
     finishLiveDurableCapture(
       definition,
-      { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+      {
+        session: active,
+        sessionName: context.sessionName,
+        sessionStore: context.sessionStore,
+        intent: 'capture',
+      },
       context.resourcePath,
     ),
   ).rejects.toMatchObject({ details: { reason: 'cleanup-unconfirmed' } });
@@ -171,5 +196,38 @@ test('a preserved finish that reports uncertainty still leaves the record retrya
       lifecycle: 'open',
       metadata: { phase: 'cleanup-pending', cleanupPendingReason: 'cleanup-unconfirmed' },
     },
+  });
+});
+
+test('a disposal finish disposes a preserving kind’s material too', async () => {
+  const context = makeDurableCaptureContext();
+  const finishError = new Error('teardown collect failed');
+  const definition = createTestCaptureDefinition(testCaptureStore, 'preserve-retry-material');
+  const start = makeDurableCaptureStartResult(context, { finishError });
+  await adoptStartedDurableCapture(
+    definition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const active = context.sessions.get(context.sessionName);
+  if (!active) throw new Error('Expected adopted test capture session');
+
+  await expect(
+    finishLiveDurableCapture(
+      definition,
+      {
+        session: active,
+        sessionName: context.sessionName,
+        sessionStore: context.sessionStore,
+        intent: 'disposal',
+      },
+      context.resourcePath,
+    ),
+  ).rejects.toBe(finishError);
+  expect(start.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessions.get(context.sessionName)?.capture).toBeUndefined();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
 });

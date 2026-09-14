@@ -107,6 +107,7 @@ async function startAudioProbe(
   // coordinator so the previous envelope terminalizes before a new fence is minted.
   if (session.audioProbe) {
     await finishLiveAudioProbe({
+      intent: 'capture',
       session,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,
@@ -162,6 +163,7 @@ async function audioProbeStatus(
     // The sampler completed on its own: finish through the coordinator so the envelope
     // terminalizes and the slot clears, but answer with the observed status.
     await finishLiveAudioProbe({
+      intent: 'capture',
       session,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,
@@ -173,6 +175,7 @@ async function audioProbeStatus(
 async function stopAudioProbe(params: AudioParams, session: SessionState): Promise<DaemonResponse> {
   if (!session.audioProbe) return { ok: true, data: inactiveAudioProbeResult() };
   const completion = await finishLiveAudioProbe({
+    intent: 'capture',
     session,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,

@@ -8,6 +8,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
 import type {
+  DurableCaptureFinishIntent,
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
   DurableCaptureSessionStore,
@@ -21,7 +22,12 @@ export async function finishLiveDurableCapture<
   S,
 >(
   definition: DurableCaptureResourceDefinition<K, H, C, S>,
-  params: { session: S; sessionName: string; sessionStore: DurableCaptureSessionStore<S> },
+  params: {
+    session: S;
+    sessionName: string;
+    sessionStore: DurableCaptureSessionStore<S>;
+    intent: DurableCaptureFinishIntent;
+  },
   resourcePath: string,
 ): Promise<C> {
   const active = definition.sessionSlot.read(params.session);
@@ -31,6 +37,7 @@ export async function finishLiveDurableCapture<
       handle: active.handle,
       fence: active.envelope.fence,
       resourcePath,
+      intent: params.intent,
     });
     clearLiveSlot(definition, params);
     return result;
@@ -53,6 +60,7 @@ export async function finishDurableCaptureHandle<
     handle: H;
     fence: DurableCaptureResourceFenceLease<K>['envelope']['fence'];
     resourcePath: string;
+    intent: DurableCaptureFinishIntent;
   },
 ): Promise<C> {
   return await withDurableCaptureResourceFence({
@@ -65,7 +73,7 @@ export async function finishDurableCaptureHandle<
       try {
         finishOutcome = await params.handle.finish();
       } catch (finishError) {
-        await respondToFailedFinish(definition, lease, params, finishError);
+        await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
       }
       if (finishOutcome.status === 'completed') {
@@ -74,7 +82,7 @@ export async function finishDurableCaptureHandle<
       }
       transitionFinishOutcome(definition, lease, finishOutcome);
       const finishError = cleanupPendingError(definition, finishOutcome);
-      await respondToFailedFinish(definition, lease, params, finishError);
+      await respondToFailedFinish(definition, lease, params, finishError, params.intent);
       throw finishError;
     },
   });
@@ -85,8 +93,9 @@ async function respondToFailedFinish<K extends string, H extends LiveResourceHan
   lease: DurableCaptureResourceFenceLease<K>,
   params: { handle: H; resourcePath: string },
   finishError: unknown,
+  intent: DurableCaptureFinishIntent,
 ): Promise<void> {
-  if (definition.failedFinishPolicy === 'preserve-retry-material') {
+  if (intent === 'capture' && definition.failedFinishPolicy === 'preserve-retry-material') {
     emitFailedFinishPreservedDiagnostic(definition, params, finishError);
     return;
   }

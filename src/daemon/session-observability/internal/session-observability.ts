@@ -318,6 +318,7 @@ async function handleLogsClearRestart(
   const { session, sessionName, sessionStore } = params;
   if (session.appLog) {
     await finishSessionAppLog({
+      intent: 'capture',
       session,
       sessionName,
       sessionStore,
@@ -350,6 +351,7 @@ async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse
   }
   const outPath = sessionStore.resolveAppLogPath(sessionName);
   await finishSessionAppLog({
+    intent: 'capture',
     session,
     sessionName,
     sessionStore,

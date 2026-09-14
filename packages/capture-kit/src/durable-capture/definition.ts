@@ -30,9 +30,9 @@ export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposabl
 }>;
 
 /**
- * What a failed `finish` may do to a kind's material (ADR 0024 rule 6). Forced cleanup belongs to
- * session teardown and failed-start rollback; a kind declares here whether a failed finish in the
- * shared coordinator still earns one.
+ * What a failed capture finish may do to a kind's material (ADR 0024 rule 6). A kind declares here
+ * whether the shared coordinator's failed capture finish still earns a forced cleanup; a disposal
+ * finish ignores this and always disposes.
  */
 export type DurableCaptureFailedFinishPolicy =
   /**
@@ -45,6 +45,13 @@ export type DurableCaptureFailedFinishPolicy =
    * wants this says so where its definition is built.
    */
   | 'dispose-on-failed-finish';
+
+/**
+ * Why a finish is asked for. A `capture` finish tries to produce the resource's export and may keep
+ * retry material under a preserving kind's policy; a `disposal` finish hands the resource back for
+ * good — session teardown is the only such caller — and disposes whatever a failed finish left.
+ */
+export type DurableCaptureFinishIntent = 'capture' | 'disposal';
 
 /**
  * The session-free half of a definition. Recovery reattaches and terminalizes a persisted

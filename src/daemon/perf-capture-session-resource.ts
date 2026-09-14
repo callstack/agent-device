@@ -10,6 +10,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
+import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger.ts';
 import { perfCaptureResourceStore } from './perf-capture-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
@@ -61,6 +62,7 @@ export function finishLivePerfCapture(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
+  intent: DurableCaptureFinishIntent;
 }): Promise<PerfNativeCaptureCompletion> {
   return perfCaptureDurableResource.finishLive(params);
 }

@@ -127,6 +127,7 @@ test('a perf stop whose pull failed re-collects the device-side trace the first 
   );
   const stop = () =>
     finishLivePerfCapture({
+      intent: 'capture',
       session: sessionStore.get(sessionName) ?? session,
       sessionName,
       sessionStore,

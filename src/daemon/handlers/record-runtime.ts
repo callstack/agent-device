@@ -228,6 +228,7 @@ async function stopRecording(
       kind === 'stop-live'
         ? {
             completion: await finishLiveScreenRecording({
+              intent: 'capture',
               session,
               sessionName: params.sessionName,
               sessionStore: params.sessionStore,
