@@ -276,7 +276,6 @@ function snapshot(
   backend: string,
   timing: Readonly<{
     recorderStartUptimeMs?: number;
-    targetAppReadyUptimeMs?: number;
     runnerSessionId?: string;
   }> = {},
   clockAnchor?: Readonly<{ wallClockAtMs: number; uptimeMs: number }>,
@@ -306,9 +305,6 @@ function snapshot(
           gestureClockOriginUptimeMs: timing.recorderStartUptimeMs,
           runnerStartedAtUptimeMs: timing.recorderStartUptimeMs,
         }),
-    ...(timing.targetAppReadyUptimeMs === undefined
-      ? {}
-      : { targetAppReadyUptimeMs: timing.targetAppReadyUptimeMs }),
     ...(timing.runnerSessionId === undefined ? {} : { runnerSessionId: timing.runnerSessionId }),
   });
 }

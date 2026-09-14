@@ -36,9 +36,6 @@ export async function runAppleRecordingRunner(
     ...(typeof result.recorderStartUptimeMs === 'number'
       ? { recorderStartUptimeMs: result.recorderStartUptimeMs }
       : {}),
-    ...(typeof result.targetAppReadyUptimeMs === 'number'
-      ? { targetAppReadyUptimeMs: result.targetAppReadyUptimeMs }
-      : {}),
   });
 }
 

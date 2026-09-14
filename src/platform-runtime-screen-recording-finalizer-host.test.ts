@@ -18,7 +18,6 @@ vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
 vi.mock('@agent-device/capture-kit/recording-overlay', () => ({
   getRecordingOverlaySupportWarning: () => undefined,
   overlayRecordingTouches: vi.fn(async () => {}),
-  trimRecordingStart: vi.fn(async () => {}),
 }));
 
 test('requires stable playable media before publishing finalization telemetry', async () => {

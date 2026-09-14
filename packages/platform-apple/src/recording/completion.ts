@@ -18,15 +18,6 @@ export async function completeAppleRecording(
       showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
       gestureEvents: snapshot.gestureEvents,
       exportQuality: snapshot.exportQuality ?? 'medium',
-      ...(snapshot.runnerStartedAtUptimeMs !== undefined &&
-      snapshot.targetAppReadyUptimeMs !== undefined
-        ? {
-            trimStartMs: Math.max(
-              0,
-              snapshot.targetAppReadyUptimeMs - snapshot.runnerStartedAtUptimeMs,
-            ),
-          }
-        : {}),
       targetLabel,
     });
   } catch (error) {

@@ -2,7 +2,6 @@ import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-
 import {
   getRecordingOverlaySupportWarning,
   overlayRecordingTouches,
-  trimRecordingStart,
 } from '@agent-device/capture-kit/recording-overlay';
 import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
 import {
@@ -23,12 +22,8 @@ async function finalizeScreenRecording(
   if (!(await isPlayableVideo(input.outputPath))) {
     throw new Error(`recording was not finalized into a playable video: ${input.outputPath}`);
   }
-  if (input.trimStartMs && input.trimStartMs > 0) {
-    await trimRecordingStart({ videoPath: input.outputPath, trimStartMs: input.trimStartMs });
-  }
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
-    ...(input.trimStartMs === undefined ? {} : { trimStartMs: input.trimStartMs }),
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
   return await overlayTouches(input, telemetryPath);

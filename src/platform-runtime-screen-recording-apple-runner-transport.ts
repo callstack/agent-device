@@ -16,7 +16,6 @@ type AppleRunnerScreenRecordingStartResult = Readonly<{
   runnerSessionId: string;
   remotePath?: string;
   recorderStartUptimeMs?: number;
-  targetAppReadyUptimeMs?: number;
 }>;
 
 export type AppleRunnerScreenRecordingTransport = Readonly<{
@@ -104,16 +103,13 @@ function runnerOutputPath(
 function freezeRunnerStartResult(
   runnerSessionId: string,
   remotePath: string | undefined,
-  timing: Readonly<{ recorderStartUptimeMs?: unknown; targetAppReadyUptimeMs?: unknown }>,
+  timing: Readonly<{ recorderStartUptimeMs?: unknown }>,
 ): AppleRunnerScreenRecordingStartResult {
   return Object.freeze({
     runnerSessionId,
     ...(remotePath === undefined ? {} : { remotePath }),
     ...(typeof timing.recorderStartUptimeMs === 'number'
       ? { recorderStartUptimeMs: timing.recorderStartUptimeMs }
-      : {}),
-    ...(typeof timing.targetAppReadyUptimeMs === 'number'
-      ? { targetAppReadyUptimeMs: timing.targetAppReadyUptimeMs }
       : {}),
   });
 }

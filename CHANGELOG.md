@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Changed: `record stop` no longer carries a start-trim step no recorder could arm. The trim cut the
+  interval between recorder start and target-app readiness, but the runner's `recordStart` answer has
+  never carried either timing and the simulator path supplies none, so every built-in recording took
+  the untrimmed branch while the packaged Swift trimmer, its contract fields, and the telemetry
+  timestamp shifting stayed shipped with it. Gesture telemetry now carries the timestamps it recorded;
+  recorded videos are byte-for-byte the videos those paths already produced. Overlay burn-in, output
+  stability checks, and the recorder-start gesture-clock anchor are unchanged (#2584).
 - Fixed: an iOS capture that no backend could read now says which backend was asked and what was on
   screen, instead of failing on the internal `regular iOS snapshot presentation requires a valid
   viewport` invariant alone (#2560). The runner declares such a payload sparse — backend, reason code,

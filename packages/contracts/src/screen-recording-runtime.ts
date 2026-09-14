@@ -72,7 +72,6 @@ export type ScreenRecordingLiveSnapshot = Readonly<{
   gestureClockOriginAtMs?: number;
   gestureClockOriginUptimeMs?: number;
   runnerStartedAtUptimeMs?: number;
-  targetAppReadyUptimeMs?: number;
   runnerSessionId?: string;
   invalidatedReason?: string;
 }>;

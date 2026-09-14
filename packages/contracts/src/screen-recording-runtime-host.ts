@@ -32,7 +32,6 @@ export type AppleScreenRecordingRunnerRequest =
 
 export type AppleScreenRecordingRunnerResult = Readonly<{
   recorderStartUptimeMs?: number;
-  targetAppReadyUptimeMs?: number;
   runnerSessionId?: string;
   runnerAuthority?: 'local-lease' | 'scoped-provider';
   remotePath?: string;
@@ -239,7 +238,7 @@ export type WebScreenRecordingHost = Readonly<{
   resolve(device: DeviceInfo): Promise<WebScreenRecordingTransport | undefined>;
 }>;
 
-/** Closed post-processing authority for stable/playable validation, telemetry, trim, and overlays. */
+/** Closed post-processing authority for stable/playable validation, telemetry, and overlays. */
 export type ScreenRecordingFinalizer = Readonly<{
   complete(
     input: Readonly<{
@@ -247,7 +246,6 @@ export type ScreenRecordingFinalizer = Readonly<{
       showTouches: boolean;
       gestureEvents: readonly RecordingGestureEvent[];
       exportQuality?: RecordingExportQuality;
-      trimStartMs?: number;
       targetLabel: string;
     }>,
     signal?: AbortSignal,

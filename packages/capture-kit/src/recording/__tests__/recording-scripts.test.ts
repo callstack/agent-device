@@ -44,20 +44,6 @@ beforeAll(async () => {
 });
 
 test(
-  'recording trim Swift script typechecks',
-  async (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('Swift recording scripts are only validated on macOS');
-    }
-
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-trim.swift'), [
-      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
-    ]);
-  },
-  SWIFT_TYPECHECK_TIMEOUT_MS,
-);
-
-test(
   'recording inspect Swift script typechecks',
   async (t) => {
     if (process.platform !== 'darwin') {

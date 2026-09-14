@@ -53,7 +53,6 @@ function resolveRecordingScriptPath(scriptName: string): string {
 }
 
 let overlayScriptPath: string | undefined;
-let trimScriptPath: string | undefined;
 let exportSupportScriptPath: string | undefined;
 
 export function getRecordingOverlaySupportWarning(
@@ -68,11 +67,6 @@ export function getRecordingOverlaySupportWarning(
 function getOverlayScriptPath(): string {
   overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift');
   return overlayScriptPath;
-}
-
-function getTrimScriptPath(): string {
-  trimScriptPath ??= resolveRecordingScriptPath('recording-trim.swift');
-  return trimScriptPath;
 }
 
 function getExportSupportScriptPath(): string {
@@ -131,21 +125,6 @@ function temporarySiblingVideoPath(videoPath: string): string {
   const parsed = path.parse(videoPath);
   const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return path.join(parsed.dir, `.${parsed.name}.agent-device-${suffix}${parsed.ext || '.mp4'}`);
-}
-
-export async function trimRecordingStart(params: {
-  videoPath: string;
-  trimStartMs: number;
-}): Promise<void> {
-  const { videoPath, trimStartMs } = params;
-  if (!(trimStartMs > 0)) return;
-
-  await exportProcessedVideo({
-    videoPath,
-    scriptPath: getTrimScriptPath(),
-    scriptArgs: ['--trim-start-ms', String(trimStartMs)],
-    commandDescription: 'Failed to trim the start of the iOS recording',
-  });
 }
 
 export async function overlayRecordingTouches(params: {

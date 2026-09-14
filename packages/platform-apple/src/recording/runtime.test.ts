@@ -25,7 +25,6 @@ test('uses the closed Apple runner and finalizer for a CoreDevice recording', as
           return {
             ...coreDeviceRunnerStart,
             recorderStartUptimeMs: 10,
-            targetAppReadyUptimeMs: 12,
           };
         },
         retrieveRunnerRecording: async (_device, remotePath, outputPath) => {
@@ -54,7 +53,12 @@ test('uses the closed Apple runner and finalizer for a CoreDevice recording', as
     activeSessionApp: { bundleId: 'com.example.app' },
     fence: { token: 'fence', generation: 1 },
   });
-  const outcome = await started.pendingHandle.transfer().finish();
+  const handle = started.pendingHandle.transfer();
+  expect(handle.inspect()).toMatchObject({
+    gestureClockOriginUptimeMs: 10,
+    runnerStartedAtUptimeMs: 10,
+  });
+  const outcome = await handle.finish();
   assert.equal(outcome.status, 'completed');
   if (outcome.status === 'completed') {
     assert.equal(outcome.result.telemetryPath, '/tmp/capture.gesture-telemetry.json');
