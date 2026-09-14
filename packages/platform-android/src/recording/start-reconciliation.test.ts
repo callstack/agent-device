@@ -9,11 +9,304 @@ import {
 import { createCompletedNativeManifest, createNativeManifest } from './manifest.ts';
 import { bindAndroidScreenRecordingRuntime } from './runtime.ts';
 
+const start = async (overrides: Record<string, unknown>) =>
+  await bindAndroidScreenRecordingRuntime({
+    host: recordingHost(overrides),
+    device: androidRecordingDevice,
+    owner: localRuntimeOwner('android'),
+    signal: new AbortController().signal,
+  });
 const newInput = () => ({ ...recordingInput(), fence: { token: 'fence-2', generation: 3 } });
 
+test('reconciles coherent completed evidence before output preparation or launch', async () => {
+  let marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'missing' as const,
+    remove: async (path: string) => {
+      calls.push(`artifact:${path}`);
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      marker = '';
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  const started = await runtime.screenRecordingStart(newInput());
+  expect(calls).toEqual([
+    'artifact:/sdcard/agent-device-recording-1.mp4',
+    'manifest',
+    'prepare',
+    'launch',
+  ]);
+  await started.pendingHandle.transfer().forceCleanup();
+});
+
+test('retires completed evidence whose recorder pid was reassigned, signaling nothing', async () => {
+  let marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'ownership-lost' as const,
+    stop: async ({ pid }: { pid: string }) => {
+      calls.push(`signal:${pid}`);
+      return 'already-missing' as const;
+    },
+    remove: async (path: string) => {
+      calls.push(`artifact:${path}`);
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      marker = '';
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  const started = await runtime.screenRecordingStart(newInput());
+  expect(calls).toEqual([
+    'artifact:/sdcard/agent-device-recording-1.mp4',
+    'manifest',
+    'prepare',
+    'launch',
+  ]);
+  await started.pendingHandle.transfer().forceCleanup();
+});
+
+test.each([
+  ['an unconfirmed recorder identity', 'uncertain', 'cannot be safely retired'],
+  ['a live recorder', 'owned-alive', 'its recorder is writing'],
+])('refuses completed evidence named by %s', async (_name, ownership, message) => {
+  const marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => ownership,
+    stop: async ({ pid }: { pid: string }) => {
+      calls.push(`signal:${pid}`);
+      return 'already-missing' as const;
+    },
+    remove: async () => {
+      calls.push('artifact');
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(message);
+  expect(calls).toEqual([]);
+});
+
+test('retains completed evidence and its marker while a replacement recorder writes the same path', async () => {
+  const marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'foreign-writer' as const,
+    stop: async ({ pid }: { pid: string }) => {
+      calls.push(`signal:${pid}`);
+      return 'already-missing' as const;
+    },
+    remove: async (path: string) => {
+      calls.push(`artifact:${path}`);
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
+    'another recorder is writing',
+  );
+  expect(calls).toEqual([]);
+});
+
+test('retirement failure blocks launch and can succeed on a later retry', async () => {
+  let marker = JSON.stringify(completedEvidence());
+  let allowRemoval = false;
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard') && marker
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'missing' as const,
+    remove: async () => allowRemoval,
+    removeManifest: async () => {
+      marker = '';
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow('failed to remove');
+  expect(calls).toEqual([]);
+  expect(marker).not.toBe('');
+  allowRemoval = true;
+  const started = await runtime.screenRecordingStart(newInput());
+  expect(calls).toEqual(['prepare', 'launch']);
+  await started.pendingHandle.transfer().forceCleanup();
+});
+
+test('requires manifest retirement confirmation after artifact cleanup', async () => {
+  const marker = JSON.stringify(completedEvidence());
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    inspect: async () => 'missing' as const,
+    remove: async () => {
+      calls.push('artifact');
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
+    'removal could not be confirmed',
+  );
+  expect(calls).toEqual(['artifact', 'manifest']);
+});
+
+test.each([
+  [
+    'open',
+    JSON.stringify(
+      createNativeManifest(
+        androidRecordingDevice,
+        recordingInput(),
+        1,
+        [
+          {
+            index: 1,
+            remotePath: '/sdcard/agent-device-recording-1.mp4',
+            remotePid: '41',
+            remoteStartTime: '7',
+          },
+        ],
+        undefined,
+        'local',
+      ),
+    ),
+  ],
+  ['corrupt', '{broken'],
+  [
+    'changed completion outPath',
+    JSON.stringify(tamperCompletion({ outPath: '/tmp/unrelated.mp4' })),
+  ],
+  ['changed completion backend', JSON.stringify(tamperCompletion({ backend: 'other recorder' }))],
+  ['changed completion startedAt', JSON.stringify(tamperCompletion({ startedAt: 9 }))],
+  [
+    'changed completion chunk path',
+    JSON.stringify(tamperCompletion({ chunks: [{ index: 1, path: '/tmp/unrelated.mp4' }] })),
+  ],
+])('does not retire %s native evidence', async (_name, marker) => {
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    remove: async () => {
+      calls.push('artifact');
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
+    'native recovery evidence',
+  );
+  expect(calls).toEqual([]);
+});
+
 /**
- * One device marker the runtime can read, plus transport stubs that record every retirement side
- * effect in the order it happens. A test overrides only what its scenario is about.
+ * One marker the runtime can read, plus transport stubs that record every retirement side effect in
+ * the order it happens. New scenarios name only the probe outcome they are about; the scenarios
+ * above build their transport inline.
  */
 function evidenceRig(marker: string, directory = '/sdcard') {
   let contents = marker;
@@ -65,46 +358,12 @@ const retirementOf = (remotePath: string) => [
   'launch',
 ];
 
-test('reconciles coherent completed evidence before output preparation or launch', async () => {
-  const rig = evidenceRig(JSON.stringify(completedEvidence()));
+test('retires evidence a re-adopted device identity stranded, before output preparation or launch', async () => {
+  const rig = evidenceRig(strandedEvidence(completedEvidence()));
   const runtime = await rig.bind({ inspect: async () => 'missing' });
   const started = await runtime.screenRecordingStart(newInput());
   expect(rig.calls).toEqual(retirementOf('/sdcard/agent-device-recording-1.mp4'));
   await started.pendingHandle.transfer().forceCleanup();
-});
-
-test('retires completed evidence whose recorder pid was reassigned, signaling nothing', async () => {
-  const rig = evidenceRig(JSON.stringify(completedEvidence()));
-  const runtime = await rig.bind({
-    inspect: async () => 'ownership-lost',
-    stop: async ({ pid }: { pid: string }) => {
-      rig.calls.push(`signal:${pid}`);
-      return 'already-missing' as const;
-    },
-  });
-  const started = await runtime.screenRecordingStart(newInput());
-  expect(rig.calls).toEqual(retirementOf('/sdcard/agent-device-recording-1.mp4'));
-  await started.pendingHandle.transfer().forceCleanup();
-});
-
-test.each([
-  ['an unconfirmed recorder identity', 'uncertain', 'native_recording_recorder_unproven'],
-  ['a live recorder', 'owned-alive', 'native_recording_artifact_claimed'],
-  ['a replacement recorder', 'foreign-writer', 'native_recording_artifact_claimed'],
-])('refuses completed evidence named by %s', async (_name, ownership, reason) => {
-  const rig = evidenceRig(JSON.stringify(completedEvidence()));
-  const runtime = await rig.bind({
-    inspect: async () => ownership,
-    stop: async ({ pid }: { pid: string }) => {
-      rig.calls.push(`signal:${pid}`);
-      return 'already-missing' as const;
-    },
-  });
-  await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
-    code: ownership === 'uncertain' ? 'COMMAND_FAILED' : 'DEVICE_IN_USE',
-    details: { reason },
-  });
-  expect(rig.calls).toEqual([]);
 });
 
 test('retains open evidence from this device identity even after its recorder is gone', async () => {
@@ -117,16 +376,8 @@ test('retains open evidence from this device identity even after its recorder is
   expect(rig.calls).toEqual([]);
 });
 
-test('retires evidence a re-adopted device identity stranded, before output preparation or launch', async () => {
-  const rig = evidenceRig(strandedEvidence(openEvidence()));
-  const runtime = await rig.bind({ inspect: async () => 'missing' });
-  const started = await runtime.screenRecordingStart(newInput());
-  expect(rig.calls).toEqual(retirementOf('/sdcard/agent-device-recording-1.mp4'));
-  await started.pendingHandle.transfer().forceCleanup();
-});
-
 test('refuses stranded evidence whose recorder is still writing its artifact', async () => {
-  const rig = evidenceRig(strandedEvidence(openEvidence()));
+  const rig = evidenceRig(strandedEvidence(completedEvidence()));
   const runtime = await rig.bind({ inspect: async () => 'owned-alive' });
   await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
     code: 'DEVICE_IN_USE',
@@ -141,10 +392,7 @@ test('refuses stranded evidence whose recorder is still writing its artifact', a
 
 test('retires a stranded interrupted launch and drops the artifact it never committed', async () => {
   const rig = evidenceRig(strandedEvidence(interruptedEvidence()));
-  const runtime = await rig.bind({
-    findRunning: async () => [],
-    inspect: async () => 'missing',
-  });
+  const runtime = await rig.bind({ findRunning: async () => [] });
   const started = await runtime.screenRecordingStart(newInput());
   expect(rig.calls).toEqual(retirementOf('/sdcard/agent-device-recording-9.mp4'));
   await started.pendingHandle.transfer().forceCleanup();
@@ -153,7 +401,10 @@ test('retires a stranded interrupted launch and drops the artifact it never comm
 test('refuses a stranded interrupted launch whose artifact a recorder is still writing', async () => {
   const rig = evidenceRig(strandedEvidence(interruptedEvidence()));
   const runtime = await rig.bind({
-    findRunning: async () => [{ pid: '88', remotePath: '/sdcard/x', startTime: '4' }],
+    findRunning: async () => ({
+      writers: [{ pid: '88', remotePath: '/sdcard/x', startTime: '4' }],
+      conclusive: true,
+    }),
   });
   await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
     code: 'DEVICE_IN_USE',
@@ -210,63 +461,6 @@ test('refuses evidence a different transport mode wrote', async () => {
   expect(rig.calls).toEqual([]);
 });
 
-test('retirement failure blocks launch and can succeed on a later retry', async () => {
-  let allowRemoval = false;
-  const rig = evidenceRig(JSON.stringify(completedEvidence()));
-  const runtime = await rig.bind({
-    inspect: async () => 'missing',
-    remove: async () => allowRemoval,
-    removeManifest: async () => {
-      rig.clear();
-      return true;
-    },
-  });
-  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow('failed to remove');
-  expect(rig.calls).toEqual([]);
-  expect(rig.remains()).toBe(true);
-  allowRemoval = true;
-  const started = await runtime.screenRecordingStart(newInput());
-  expect(rig.calls).toEqual(['prepare', 'launch']);
-  await started.pendingHandle.transfer().forceCleanup();
-});
-
-test('requires manifest retirement confirmation after artifact cleanup', async () => {
-  const rig = evidenceRig(JSON.stringify(completedEvidence()));
-  const runtime = await rig.bind({
-    inspect: async () => 'missing',
-    removeManifest: async () => {
-      rig.calls.push('manifest');
-      return true;
-    },
-  });
-  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
-    'removal could not be confirmed',
-  );
-  expect(rig.calls).toEqual(['artifact:/sdcard/agent-device-recording-1.mp4', 'manifest']);
-});
-
-test.each([
-  ['open', JSON.stringify(openEvidence())],
-  ['corrupt', '{broken'],
-  [
-    'changed completion outPath',
-    JSON.stringify(tamperCompletion({ outPath: '/tmp/unrelated.mp4' })),
-  ],
-  ['changed completion backend', JSON.stringify(tamperCompletion({ backend: 'other recorder' }))],
-  ['changed completion startedAt', JSON.stringify(tamperCompletion({ startedAt: 9 }))],
-  [
-    'changed completion chunk path',
-    JSON.stringify(tamperCompletion({ chunks: [{ index: 1, path: '/tmp/unrelated.mp4' }] })),
-  ],
-])('does not retire %s native evidence', async (_name, marker) => {
-  const rig = evidenceRig(marker);
-  const runtime = await rig.bind();
-  await expect(runtime.screenRecordingStart(newInput())).rejects.toThrow(
-    'native recovery evidence',
-  );
-  expect(rig.calls).toEqual([]);
-});
-
 function openEvidence() {
   return createNativeManifest(
     androidRecordingDevice,
@@ -302,15 +496,32 @@ function strandedEvidence(evidence: object) {
 
 function completedEvidence() {
   const input = recordingInput();
-  return createCompletedNativeManifest(openEvidence(), {
-    backend: 'adb screenrecord',
-    outPath: input.outputPath,
-    startedAt: 1,
-    completedAt: 2,
-    scope: input.scope,
-    showTouches: input.showTouches,
-    recordOnlySession: input.recordOnlySession,
-  });
+  return createCompletedNativeManifest(
+    createNativeManifest(
+      androidRecordingDevice,
+      input,
+      1,
+      [
+        {
+          index: 1,
+          remotePath: '/sdcard/agent-device-recording-1.mp4',
+          remotePid: '41',
+          remoteStartTime: '7',
+        },
+      ],
+      undefined,
+      'local',
+    ),
+    {
+      backend: 'adb screenrecord',
+      outPath: input.outputPath,
+      startedAt: 1,
+      completedAt: 2,
+      scope: input.scope,
+      showTouches: input.showTouches,
+      recordOnlySession: input.recordOnlySession,
+    },
+  );
 }
 
 function tamperCompletion(patch: Record<string, unknown>) {
