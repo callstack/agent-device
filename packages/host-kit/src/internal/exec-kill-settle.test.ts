@@ -158,6 +158,12 @@ test.runIf(process.platform !== 'win32')(
   10_000,
 );
 
+// A command this module asked to be killed is finished once its child is gone, without
+// waiting for the stdio pipes to drain: a descendant that inherited them keeps `close`
+// from arriving, and the request behind the command — and the device lock it holds —
+// would wait forever. Whether the kill request or the child's exit arrives first is not a
+// question the callers answer, so both report to one settlement.
+//
 // The kill paths below address a process group whose leader this worker already reaped,
 // and the hermetic signal setup ends a worker's authority over a pid at that moment.
 // So the group writes are intercepted here, which is the seam that setup points at for
