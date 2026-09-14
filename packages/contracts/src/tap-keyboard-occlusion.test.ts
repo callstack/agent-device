@@ -5,7 +5,6 @@ import path from 'node:path';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import {
   resolveKeyboardTapOcclusion,
-  resolveVisibleKeyboardSurface,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
 } from './tap-keyboard-occlusion.ts';
@@ -84,20 +83,4 @@ test('the refusal reason belongs to the table, not this file', () => {
   assert.equal(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.reason, TAP_KEYBOARD_OCCLUDES_TARGET_REASON);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /keyboard enter/);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /dismiss key/);
-});
-
-test('a surface is only derived from keyboard nodes with a usable rect and a viewport to measure', () => {
-  const viewport: Rect = { x: 0, y: 0, width: 402, height: 874 };
-  const key: RawSnapshotNode = {
-    index: 1,
-    type: 'Key',
-    rect: { x: 0, y: 600, width: 402, height: 54 },
-  };
-  assert.deepEqual(resolveVisibleKeyboardSurface([key], viewport), {
-    frame: { x: 0, y: 600, width: 402, height: 274 },
-    controlRects: [key.rect!],
-  });
-  assert.equal(resolveVisibleKeyboardSurface([{ index: 0, type: 'Button' }], viewport), null);
-  assert.equal(resolveVisibleKeyboardSurface([key], null), null);
-  assert.equal(resolveVisibleKeyboardSurface([key], { x: 0, y: 0, width: 0, height: 0 }), null);
 });

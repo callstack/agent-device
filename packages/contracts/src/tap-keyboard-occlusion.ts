@@ -61,10 +61,10 @@ export type KeyboardTapOcclusion =
   /** No keyboard in the tree: nothing to refuse. */
   | { kind: 'no-keyboard' }
   /**
-   * Keyboard nodes exist but the band cannot be measured — no resolvable viewport, or no usable
-   * keyboard rect. Fails open like every other missing platform fact; the distinction from
-   * `no-keyboard` exists so a caller can disclose that it could not check rather than claiming the
-   * target was clear.
+   * Keyboard nodes exist but the band cannot be measured — no resolvable viewport, no usable keyboard
+   * rect, or geometry that is not docked to the bottom edge the band would need. Fails open like every
+   * other missing platform fact; the distinction from `no-keyboard` exists so a caller can disclose
+   * that it could not check rather than claiming the target was clear.
    */
   | { kind: 'undetermined' }
   | { kind: 'clear'; surface: KeyboardSurface }
@@ -149,25 +149,37 @@ function collectKeyboardPlaneIndices(
 }
 
 /**
+ * How far the keyboard's own reported geometry may stop short of the viewport's bottom edge and still
+ * own the band down to it. A docked software keyboard is flush with the bottom of the screen, but the
+ * projection stops reporting it above the home-indicator strip: measured on iPhone 17 Pro (iOS 26.2),
+ * the reported key plane bottoms out at 816 of an 874 pt portrait viewport, 58 pt short, and at 402 of
+ * a 402 pt landscape viewport, exactly on the edge. A surface stopping further up than this budget is
+ * not docked — an iPad floating or split keyboard, or an app-drawn keypad — and its geometry says
+ * nothing about the bottom of the screen. Height is no proxy for docking: the same keyboard measures
+ * 233 pt against an 874 pt viewport in portrait and 327 pt against a 402 pt one in landscape, so the
+ * fraction that admits the first is the fraction that refuses to look at the second.
+ */
+const KEYBOARD_BOTTOM_ANCHOR_TOLERANCE = 80;
+
+/**
  * The band the visible keyboard owns, or null when the tree holds no keyboard or the band cannot be
  * measured. Fails open on an unusable frame, mirroring `clipScrollViewportAboveKeyboard`: a keyboard
  * the platform cannot measure is not evidence that a surface is blocked.
  */
-export function resolveVisibleKeyboardSurface(
+function resolveVisibleKeyboardSurface(
   nodes: readonly RawSnapshotNode[],
   viewport: Rect | null,
 ): KeyboardSurface | null {
-  const anchors = nodes.filter(isKeyboardAnchorNode);
-  const anchorRects = usableRects(anchors);
+  const anchorRects = usableRects(nodes.filter(isKeyboardAnchorNode));
   if (anchorRects.length === 0) return null;
   const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
   if (!viewport || viewport.width <= 0 || viewport.height <= 0) return null;
+  const reportedRects = usableRects(surfaceNodes);
+  if (reportedRects.length === 0) return null;
   const minY = Math.min(...anchorRects.map((rect) => rect.y));
   const bottomEdge = viewport.y + viewport.height;
-  // A software keyboard occupies the bottom of the screen. Anything anchored higher is an
-  // app-drawn keypad wearing the same accessibility type, and its own geometry is not evidence
-  // about the bottom of the viewport.
-  if (minY < viewport.y + viewport.height / 2) return null;
+  const reportedBottom = Math.max(...reportedRects.map((rect) => rect.y + rect.height));
+  if (reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
   const minX = Math.min(...anchorRects.map((rect) => rect.x));
   const maxRight = Math.max(...anchorRects.map((rect) => rect.x + rect.width));
   const planes = collectKeyboardPlaneIndices(nodes, surfaceNodes);

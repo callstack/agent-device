@@ -1,220 +1,449 @@
 {
-  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the target's rect center, matching isTapPointInsideViewport. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence.",
-  "constants": { "occlusionReason": "tap_keyboard_occludes_target" },
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the target's rect center, matching isTapPointInsideViewport. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. The band is derived only from keyboard geometry that is docked to the viewport bottom edge: measured on iPhone 17 Pro (iOS 26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, so an 80 pt docking budget is what separates a docked keyboard from an iPad floating or split keyboard, whose band stays unmeasured and fails open. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence.",
+  "constants": {
+    "occlusionReason": "tap_keyboard_occludes_target"
+  },
   "cases": [
     {
       "name": "iPhone tab-bar item whose center is under the key plane is refused",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "TabBar",
           "label": "Tab Bar",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 791, "width": 402, "height": 83 }
+          "rect": {
+            "x": 0,
+            "y": 791,
+            "width": 402,
+            "height": 83
+          }
         },
         {
           "index": 2,
           "type": "Button",
           "label": "Form",
           "parentIndex": 1,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         },
         {
           "index": 3,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         },
         {
           "index": 4,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 752, "width": 99, "height": 54 }
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 2 },
+      "target": {
+        "index": 2
+      },
       "expected": {
         "kind": "occluded",
-        "frame": { "x": 4, "y": 590, "width": 395, "height": 284 }
+        "frame": {
+          "x": 4,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        }
       }
     },
     {
       "name": "the band reaches the viewport bottom, so a target in the unreported home-indicator strip is refused too",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Checkout",
           "parentIndex": 0,
-          "rect": { "x": 140, "y": 820, "width": 120, "height": 44 }
+          "rect": {
+            "x": 140,
+            "y": 820,
+            "width": 120,
+            "height": 44
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "space",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 752, "width": 402, "height": 54 }
+          "rect": {
+            "x": 0,
+            "y": 752,
+            "width": 402,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "an element only partly under the keyboard keeps tapping: the rule is the center, not the overlap",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "SearchField",
           "label": "Search",
           "parentIndex": 0,
-          "rect": { "x": 17, "y": 500, "width": 308, "height": 120 }
+          "rect": {
+            "x": 17,
+            "y": 500,
+            "width": 308,
+            "height": 120
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "a tap point exactly on the band's top edge is on the keyboard, not above it",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Send",
           "parentIndex": 0,
-          "rect": { "x": 20, "y": 563, "width": 80, "height": 54 }
+          "rect": {
+            "x": 20,
+            "y": 563,
+            "width": 80,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "space",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 590, "width": 402, "height": 54 }
+          "rect": {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "a key the caller named is the tap they meant, so the keyboard never blocks its own keys",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Keyboard",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 583, "width": 402, "height": 233 }
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Q",
           "parentIndex": 1,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 2 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "the key plane itself is keyboard-owned as well",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Keyboard",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 583, "width": 402, "height": 233 }
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Q",
           "parentIndex": 1,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "app chrome flattened to the same parent as the keys stays app content",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Other",
           "label": "composer",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 700, "width": 402, "height": 60 }
+          "rect": {
+            "x": 0,
+            "y": 700,
+            "width": 402,
+            "height": 60
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "space",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 590, "width": 402, "height": 54 }
+          "rect": {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "Android input method window owns the band by package provenance",
-      "viewport": { "x": 0, "y": 0, "width": 1080, "height": 2400 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
       "nodes": [
         {
           "index": 0,
           "type": "android.widget.FrameLayout",
           "bundleId": "com.example.app",
-          "rect": { "x": 0, "y": 0, "width": 1080, "height": 2400 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
         },
         {
           "index": 1,
@@ -222,37 +451,69 @@
           "label": "Submit",
           "bundleId": "com.example.app",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 1900, "width": 200, "height": 120 }
+          "rect": {
+            "x": 300,
+            "y": 1900,
+            "width": 200,
+            "height": 120
+          }
         },
         {
           "index": 2,
           "type": "android.widget.FrameLayout",
           "bundleId": "com.google.android.inputmethod.latin",
-          "rect": { "x": 0, "y": 1500, "width": 1080, "height": 900 }
+          "rect": {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
         }
       ],
-      "target": { "index": 1 },
+      "target": {
+        "index": 1
+      },
       "expected": {
         "kind": "occluded",
-        "frame": { "x": 0, "y": 1500, "width": 1080, "height": 900 }
+        "frame": {
+          "x": 0,
+          "y": 1500,
+          "width": 1080,
+          "height": 900
+        }
       }
     },
     {
       "name": "an IME-owned node the caller named is not occluded by its own window",
-      "viewport": { "x": 0, "y": 0, "width": 1080, "height": 2400 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
       "nodes": [
         {
           "index": 0,
           "type": "android.widget.FrameLayout",
           "bundleId": "com.example.app",
-          "rect": { "x": 0, "y": 0, "width": 1080, "height": 2400 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
         },
         {
           "index": 1,
           "type": "android.widget.FrameLayout",
           "bundleId": "com.google.android.inputmethod.latin",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 1500, "width": 1080, "height": 900 }
+          "rect": {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
         },
         {
           "index": 2,
@@ -260,295 +521,610 @@
           "bundleId": "com.google.android.inputmethod.latin",
           "identifier": "com.google.android.inputmethod.latin:id/key_pos_enter",
           "parentIndex": 1,
-          "rect": { "x": 800, "y": 2200, "width": 240, "height": 160 }
+          "rect": {
+            "x": 800,
+            "y": 2200,
+            "width": 240,
+            "height": 160
+          }
         }
       ],
-      "target": { "index": 2 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "a window offset below the display origin measures the band against its own bottom edge",
-      "viewport": { "x": 0, "y": 120, "width": 1080, "height": 2000 },
+      "viewport": {
+        "x": 0,
+        "y": 120,
+        "width": 1080,
+        "height": 2000
+      },
       "nodes": [
         {
           "index": 0,
           "type": "android.widget.FrameLayout",
           "bundleId": "com.google.android.inputmethod.latin",
-          "rect": { "x": 0, "y": 1600, "width": 1080, "height": 520 }
+          "rect": {
+            "x": 0,
+            "y": 1600,
+            "width": 1080,
+            "height": 520
+          }
         },
         {
           "index": 1,
           "type": "android.widget.Button",
           "label": "Submit",
           "bundleId": "com.example.app",
-          "rect": { "x": 400, "y": 1950, "width": 200, "height": 100 }
+          "rect": {
+            "x": 400,
+            "y": 1950,
+            "width": 200,
+            "height": 100
+          }
         }
       ],
-      "target": { "index": 1 },
+      "target": {
+        "index": 1
+      },
       "expected": {
         "kind": "occluded",
-        "frame": { "x": 0, "y": 1600, "width": 1080, "height": 520 }
+        "frame": {
+          "x": 0,
+          "y": 1600,
+          "width": 1080,
+          "height": 520
+        }
       }
     },
     {
       "name": "a narrow keyboard owns only its own columns, so app content beside it keeps tapping",
-      "viewport": { "x": 0, "y": 0, "width": 834, "height": 1112 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1112
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 834, "height": 1112 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1112
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Side action",
           "parentIndex": 0,
-          "rect": { "x": 640, "y": 900, "width": 150, "height": 60 }
+          "rect": {
+            "x": 640,
+            "y": 1050,
+            "width": 150,
+            "height": 60
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 257, "y": 780, "width": 60, "height": 54 }
+          "rect": {
+            "x": 257,
+            "y": 1058,
+            "width": 60,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "a bare coordinate behind the keyboard reads the same decision the element path gets",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 752, "width": 99, "height": 54 }
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "point": { "x": 340, "y": 822 } },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "point": {
+          "x": 340,
+          "y": 822
+        }
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "a bare coordinate landing on a key is the keyboard the caller asked for",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 100, "y": 590, "width": 200, "height": 54 }
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "point": { "x": 200, "y": 610 } },
-      "expected": { "kind": "clear" }
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 610
+        }
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "a bare coordinate inside the reported key plane but on no key is still the keyboard, not app content",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Keyboard",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 583, "width": 402, "height": 291 }
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 291
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "space",
           "parentIndex": 1,
-          "rect": { "x": 40, "y": 730, "width": 240, "height": 60 }
+          "rect": {
+            "x": 40,
+            "y": 730,
+            "width": 240,
+            "height": 60
+          }
         }
       ],
-      "target": { "point": { "x": 200, "y": 810 } },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 810
+        }
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "a bare coordinate below the reported key plane still lands on the keyboard",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 100, "y": 590, "width": 200, "height": 54 }
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "point": { "x": 200, "y": 830 } },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 830
+        }
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "an element whose center sits on a key is refused even though that coordinate alone would pass",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Promo",
           "parentIndex": 0,
-          "rect": { "x": 100, "y": 588, "width": 40, "height": 54 }
+          "rect": {
+            "x": 100,
+            "y": 588,
+            "width": 40,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 100, "y": 590, "width": 200, "height": 54 }
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "no keyboard in the tree means nothing to refuse",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "no-keyboard" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "no-keyboard"
+      }
     },
     {
-      "name": "an app-drawn keypad in the upper half is not the system keyboard's band",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "name": "an app-drawn keypad that stops short of the bottom edge is not the system keyboard's band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "7",
           "parentIndex": 0,
-          "rect": { "x": 20, "y": 120, "width": 60, "height": 60 }
+          "rect": {
+            "x": 20,
+            "y": 120,
+            "width": 60,
+            "height": 60
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "undetermined" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
     },
     {
       "name": "keyboard nodes with no usable rect leave the band unmeasurable, which fails open",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "Padding-Left",
           "parentIndex": 0,
-          "rect": { "x": 0, "y": 583, "width": 0, "height": 0 }
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 0,
+            "height": 0
+          }
         }
       ],
-      "target": { "index": 1 },
-      "expected": { "kind": "undetermined" }
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
     },
     {
       "name": "no viewport leaves the band's bottom edge unknowable, which fails open",
       "viewport": null,
       "nodes": [
-        { "index": 0, "type": "Application" },
+        {
+          "index": 0,
+          "type": "Application"
+        },
         {
           "index": 1,
           "type": "Key",
           "label": "Q",
           "parentIndex": 0,
-          "rect": { "x": 4, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         }
       ],
-      "target": { "point": { "x": 200, "y": 700 } },
-      "expected": { "kind": "undetermined" }
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 700
+        }
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
     },
     {
       "name": "the keyboard dock's own button is the keyboard, not app content waiting behind it",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "q",
           "parentIndex": 0,
-          "rect": { "x": 5, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 752, "width": 99, "height": 54 }
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         },
         {
           "index": 3,
@@ -557,41 +1133,75 @@
           "label": "Next keyboard",
           "value": "Polski",
           "parentIndex": 0,
-          "rect": { "x": 8, "y": 806, "width": 68, "height": 68 }
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
         },
         {
           "index": 4,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 3 },
-      "expected": { "kind": "clear" }
+      "target": {
+        "index": 3
+      },
+      "expected": {
+        "kind": "clear"
+      }
     },
     {
       "name": "an app control sharing the dock strip's band with the keyboard is still refused",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "q",
           "parentIndex": 0,
-          "rect": { "x": 5, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 752, "width": 99, "height": 54 }
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         },
         {
           "index": 3,
@@ -600,41 +1210,75 @@
           "label": "Next keyboard",
           "value": "Polski",
           "parentIndex": 0,
-          "rect": { "x": 8, "y": 806, "width": 68, "height": 68 }
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
         },
         {
           "index": 4,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         }
       ],
-      "target": { "index": 4 },
-      "expected": { "kind": "occluded" }
+      "target": {
+        "index": 4
+      },
+      "expected": {
+        "kind": "occluded"
+      }
     },
     {
       "name": "a bare coordinate landing on the keyboard dock's button is the keyboard the caller asked for",
-      "viewport": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
       "nodes": [
         {
           "index": 0,
           "type": "Application",
-          "rect": { "x": 0, "y": 0, "width": 402, "height": 874 }
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
         },
         {
           "index": 1,
           "type": "Key",
           "label": "q",
           "parentIndex": 0,
-          "rect": { "x": 5, "y": 590, "width": 39, "height": 54 }
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
         },
         {
           "index": 2,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
-          "rect": { "x": 300, "y": 752, "width": 99, "height": 54 }
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
         },
         {
           "index": 3,
@@ -643,18 +1287,455 @@
           "label": "Next keyboard",
           "value": "Polski",
           "parentIndex": 0,
-          "rect": { "x": 8, "y": 806, "width": 68, "height": 68 }
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
         },
         {
           "index": 4,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
-          "rect": { "x": 162, "y": 795, "width": 74, "height": 54 }
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
         }
       ],
-      "target": { "point": { "x": 40, "y": 840 } },
-      "expected": { "kind": "clear" }
+      "target": {
+        "point": {
+          "x": 40,
+          "y": 840
+        }
+      },
+      "expected": {
+        "kind": "clear"
+      }
+    },
+    {
+      "name": "a landscape iPhone keyboard fills most of the viewport height and is still the system keyboard",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 874,
+        "height": 402
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 874,
+            "height": 402
+          }
+        },
+        {
+          "index": 1,
+          "type": "TabBar",
+          "label": "Tab Bar",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 330,
+            "width": 874,
+            "height": 72
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 1,
+          "rect": {
+            "x": 390,
+            "y": 338,
+            "width": 94,
+            "height": 56
+          }
+        },
+        {
+          "index": 3,
+          "type": "Keyboard",
+          "label": "Padding-Left",
+          "parentIndex": 0,
+          "rect": {
+            "x": 2,
+            "y": 75,
+            "width": 162,
+            "height": 327
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 3,
+          "rect": {
+            "x": 124,
+            "y": 77,
+            "width": 35,
+            "height": 72
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 3,
+          "rect": {
+            "x": 700,
+            "y": 330,
+            "width": 150,
+            "height": 72
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 2,
+          "y": 75,
+          "width": 848,
+          "height": 327
+        }
+      }
+    },
+    {
+      "name": "the reported key plane stops above the home-indicator strip and the band still owns that strip",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "label": "Padding-Left",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 1,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 4
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      }
+    },
+    {
+      "name": "an iPad floating keyboard is not docked, so the band stays unmeasured and the tap fails open",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1194,
+        "height": 834
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1194,
+            "height": 834
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "label": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 380,
+            "y": 480,
+            "width": 434,
+            "height": 200
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 388,
+            "y": 486,
+            "width": 40,
+            "height": 60
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 1,
+          "rect": {
+            "x": 690,
+            "y": 620,
+            "width": 116,
+            "height": 60
+          }
+        },
+        {
+          "index": 4,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 520,
+            "y": 640,
+            "width": 120,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "index": 4
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "an iPad split keyboard is not docked either, and its two clusters keep the band unmeasured",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1194,
+        "height": 834
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1194,
+            "height": 834
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 180,
+            "y": 630,
+            "width": 50,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 960,
+            "y": 630,
+            "width": 50,
+            "height": 60
+          }
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 537,
+            "y": 630,
+            "width": 120,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "index": 3
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a bottom-anchored app keypad wearing the keyboard types owns its band, which is the rule accepted trade-off",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "0",
+          "parentIndex": 0,
+          "rect": {
+            "x": 20,
+            "y": 740,
+            "width": 362,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Send",
+          "parentIndex": 0,
+          "rect": {
+            "x": 150,
+            "y": 760,
+            "width": 80,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 20,
+          "y": 740,
+          "width": 362,
+          "height": 134
+        }
+      }
+    },
+    {
+      "name": "a zero-area viewport leaves the band bottom edge unknowable, which fails open",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
     }
   ]
 }
