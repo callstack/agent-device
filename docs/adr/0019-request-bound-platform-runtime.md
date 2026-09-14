@@ -391,7 +391,8 @@ cleanup is structured secondary diagnostic evidence; a cleanup-only failure surf
 > ownership fence on every destructive step, and the completed replay. It replaces the `reattach`
 > and `cleanup` facet operations with the backend's `stop(target, budget)` and `collect`, drops
 > `cleanup-pending` as a phase and the admission ledger for this kind, records the recorder
-> observation beside the committed export, and archives unsettled manifests by fence generation.
+> observation and the native-path disposition beside the committed export, and archives a
+> manifest by fence generation until both are settled.
 > For every durable kind, forced cleanup is no longer inferred from a failed finish once that
 > kind's failed-finish test states what its retry needs. App-log, audio-probe, and perf-capture
 > keep the contract below unchanged. Rationale, matrix, and tests live in ADR 0024.
