@@ -3,13 +3,22 @@ import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import {
+  createAppLogLiveHandleFromFinish,
+  createAppLogStartResult,
+  createDurableResourceEnvelope,
+} from '@agent-device/capture-kit';
+import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import { adoptStartedSessionAppLog } from '../app-log-session-resource.ts';
+import {
+  adoptStartedSessionAppLog,
+  finishSessionAppLog,
+} from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../session-state.ts';
@@ -251,6 +260,64 @@ test('lost durable record during failed adoption installs a same-device process 
     }),
   ).toThrow(/process-local/);
 });
+
+
+test('app-log disposes on a failed finish because its retry is that same finish and the log file survives it', async () => {
+  const directory = mkdtempForTestSync('app-log-failed-finish-');
+  const logPath = path.join(directory, 'app.log');
+  fs.writeFileSync(logPath, 'launch\n');
+  const context = makeContext();
+  const finishError = new Error('logcat stream stop could not be confirmed');
+  let finishAttempts = 0;
+  const handle = createAppLogLiveHandleFromFinish({
+    inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+    finish: async () => {
+      finishAttempts += 1;
+      if (finishAttempts === 1) throw finishError;
+      return {
+        status: 'completed',
+        result: { backend: 'android', outputPath: logPath, completedAt: 2 },
+      };
+    },
+  });
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'app-log',
+    sessionId: context.sessionName,
+    device: { id: context.device.id, family: context.device.platform, kind: context.device.kind },
+    owner: context.owner,
+    fence: context.fence,
+    lifecycle: 'open',
+    descriptor: { version: 1, body: { pid: 123 } },
+  });
+  await adoptStartedSessionAppLog({
+    ...context,
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope,
+    throwIfCanceled: () => {},
+  });
+
+  await expect(
+    finishSessionAppLog({
+      ...context,
+      session: context.sessionStore.get(context.sessionName) ?? context.session,
+    }),
+  ).rejects.toBe(finishError);
+
+  expect(finishAttempts).toBe(2);
+  expect(fs.readFileSync(logPath, 'utf8')).toBe('launch\n');
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed' },
+  });
+  expect(() =>
+    createNextAppLogFence({
+      ledger: context.admissionLedger,
+      resourcePath: context.resourcePath,
+      device: context.device,
+    }),
+  ).not.toThrow();
+});
+
 
 function makeContext(
   device: DeviceInfo = {
