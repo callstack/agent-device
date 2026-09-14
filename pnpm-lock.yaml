@@ -93,8 +93,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.24.5
-        version: 0.24.5(supports-color@7.2.0)
+        specifier: ^0.49.3
+        version: 0.49.3(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -439,8 +439,8 @@ importers:
         version: link:../kernel
     devDependencies:
       '@limrun/api':
-        specifier: ^0.24.5
-        version: 0.24.5(supports-color@7.2.0)
+        specifier: ^0.49.3
+        version: 0.49.3(supports-color@7.2.0)
 
   packages/provider-webdriver:
     dependencies:
@@ -1035,8 +1035,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.24.5':
-    resolution: {integrity: sha512-bgIs+KcP9xITj1v2gMe8wJrvqPakl1PlXtvxlO6Akci8ijU7V27RWQAq7JBaA89AzwUb5EvLc+nmAMMiKl/g1A==}
+  '@limrun/api@0.49.3':
+    resolution: {integrity: sha512-gkVhAutGRFnX5TAebXMvWlTHalODe5/KO3AI0pOb5c/xjO41c2GPjpt/pbMTknBxswo7KSI3KzOeK9ZDEuejGQ==}
+
+  '@limrun/xdelta3-wasm@0.2.0':
+    resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
 
   '@loaderkit/resolve@1.0.6':
     resolution: {integrity: sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg==}
@@ -1751,6 +1754,9 @@ packages:
 
   '@types/gensync@1.0.5':
     resolution: {integrity: sha512-MbsRCT7mTikHwKZ0X+LVUTLRrZZRLipTuXEO9qOYO+zmjMVk81axyClMROf6uoPD9MRVu46bx8zoR0Ad9q3NAg==}
+
+  '@types/har-format@1.2.16':
+    resolution: {integrity: sha512-fluxdy7ryD3MV6h8pTfTYpy/xQzCFC7m89nOH9y94cNqJ1mDIDPut7MnRHI3F6qRmh/cT2fUjG1MLdCNb4hE9A==}
 
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
@@ -2598,10 +2604,6 @@ packages:
 
   eventsource-client@1.2.0:
     resolution: {integrity: sha512-kDI75RSzO3TwyG/K9w1ap8XwqSPcwi6jaMkNulfVeZmSeUM49U8kUzk1s+vKNt0tGrXgK47i+620Yasn1ccFiw==}
-    engines: {node: '>=18.0.0'}
-
-  eventsource-parser@3.1.0:
-    resolution: {integrity: sha512-kJezFj9YFAMLeORyi7aCLxLbD5/qWMQnoMVlVPyHIll7lgRJCc3JVln9Vgl9nwQi0YkMnhdGTMNn7CkRRAptMg==}
     engines: {node: '>=18.0.0'}
 
   eventsource-parser@3.1.1:
@@ -4025,8 +4027,8 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
-  ws@8.21.0:
-    resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -4622,18 +4624,23 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.24.5(supports-color@7.2.0)':
+  '@limrun/api@0.49.3(supports-color@7.2.0)':
     dependencies:
+      '@limrun/xdelta3-wasm': 0.2.0
+      '@types/har-format': 1.2.16
       eventsource-client: 1.2.0
       https-proxy-agent: 7.0.6(supports-color@7.2.0)
       ignore: 7.0.6
       proxy-from-env: 2.1.0
       undici: 7.29.0
-      ws: 8.21.0
+      ws: 8.21.3
+      yauzl: 3.4.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  '@limrun/xdelta3-wasm@0.2.0': {}
 
   '@loaderkit/resolve@1.0.6':
     dependencies:
@@ -5217,6 +5224,8 @@ snapshots:
   '@types/estree@1.0.9': {}
 
   '@types/gensync@1.0.5': {}
+
+  '@types/har-format@1.2.16': {}
 
   '@types/hast@3.0.4':
     dependencies:
@@ -5918,9 +5927,7 @@ snapshots:
 
   eventsource-client@1.2.0:
     dependencies:
-      eventsource-parser: 3.1.0
-
-  eventsource-parser@3.1.0: {}
+      eventsource-parser: 3.1.1
 
   eventsource-parser@3.1.1: {}
 
@@ -7690,7 +7697,7 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  ws@8.21.0: {}
+  ws@8.21.3: {}
 
   y18n@5.0.8: {}
 

@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { defineConfig } from 'tsdown';
+import { defineConfig, type TsdownPluginOption } from 'tsdown';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
@@ -61,6 +61,37 @@ const publicSdkChunkGroups = [
   ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
 
+/**
+ * `deps.dts.neverBundle` keeps a dev-bundled package's declarations out of the published
+ * types, but the emitted chunk still records the package as a bare ambient import that a
+ * published install cannot resolve. Dropping the marker is safe only while the name appears
+ * nowhere else in the chunk, so a real type reference fails the build instead.
+ */
+function dropAmbientDeclarationImport(
+  fileName: string,
+  code: string,
+  packageName = '@limrun/api',
+): string | null {
+  const ambientImport = new RegExp(`^import ["']${packageName}["'];\\n`, 'm');
+  if (!ambientImport.test(code)) return null;
+  const declarationChunk = code.replace(ambientImport, '');
+  if (declarationChunk.includes(packageName)) {
+    throw new Error(
+      `${fileName} keeps a type reference to ${packageName}, which is dev-bundled and absent from a published install.`,
+    );
+  }
+  return declarationChunk;
+}
+
+const dropAmbientDeclarationImports: TsdownPluginOption = {
+  name: 'agent-device:drop-ambient-declaration-imports',
+  renderChunk(code, chunk) {
+    return chunk.fileName.endsWith('.d.ts')
+      ? dropAmbientDeclarationImport(chunk.fileName, code)
+      : null;
+  },
+};
+
 export default defineConfig({
   entry: {
     index: 'src/sdk/index.ts',
@@ -87,6 +118,7 @@ export default defineConfig({
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
       '@limrun/api',
+      '@limrun/xdelta3-wasm',
       'agent-base',
       'b4a',
       'debug',
@@ -112,6 +144,14 @@ export default defineConfig({
       'yaml',
       'yauzl',
     ],
+    // The Limrun SDK is dev-bundled: a published install has no `@limrun/api` to resolve, and the
+    // `agent-device/limrun` façade declares its own session and runtime types rather than the
+    // SDK's. Its declarations also carry `import('../node_modules/undici/...')` fallbacks that
+    // only resolve from inside a `node_modules` tree, so bundling them emits type imports no
+    // consumer can reach.
+    dts: {
+      neverBundle: ['@limrun/api'],
+    },
   },
   inputOptions: {
     // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the
@@ -148,6 +188,7 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
+  plugins: [dropAmbientDeclarationImports],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

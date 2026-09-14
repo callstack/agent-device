@@ -16,6 +16,6 @@
     }
   },
   "devDependencies": {
-    "@limrun/api": "^0.24.5"
+    "@limrun/api": "^0.49.3"
   }
 }

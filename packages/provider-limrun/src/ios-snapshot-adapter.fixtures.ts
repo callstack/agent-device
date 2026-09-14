@@ -59,8 +59,8 @@ export function createLimrunSnapshotSession(
   return {
     instanceId: 'limrun-snapshot-test-instance',
     client: {
-      elementTree: async () => JSON.stringify(tree),
+      elementTree: async () => tree,
       deviceInfo: { screenWidth: screen.width, screenHeight: screen.height },
     },
-  } as Pick<LimrunIosSession, 'client' | 'instanceId'>;
+  } as unknown as Pick<LimrunIosSession, 'client' | 'instanceId'>;
 }

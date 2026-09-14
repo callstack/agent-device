@@ -301,7 +301,7 @@
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
-    "@limrun/api": "^0.24.5",
+    "@limrun/api": "^0.49.3",
     "@nkzw/eslint-plugin": "^2.0.0",
     "@nkzw/oxlint-config": "^1.3.0",
     "@stryker-mutator/core": "10.0.0",

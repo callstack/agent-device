@@ -15,22 +15,20 @@ const limrunApiState = vi.hoisted(() => ({
   })),
   deleteInstance: vi.fn(async () => undefined),
   disconnect: vi.fn(),
-  elementTree: vi.fn(async () =>
-    JSON.stringify({
-      elementType: 'Application',
-      label: 'App',
-      frame: { x: 0, y: 0, width: 320, height: 240 },
-      children: [
-        {
-          elementType: 'Button',
-          label: 'Continue',
-          frame: { x: 24, y: 96, width: 160, height: 48 },
-          enabled: true,
-          hittable: true,
-        },
-      ],
-    }),
-  ),
+  elementTree: vi.fn(async () => ({
+    type: 'Application',
+    AXLabel: 'App',
+    frame: { x: 0, y: 0, width: 320, height: 240 },
+    children: [
+      {
+        type: 'Button',
+        AXLabel: 'Continue',
+        frame: { x: 24, y: 96, width: 160, height: 48 },
+        enabled: true,
+        hittable: true,
+      },
+    ],
+  })),
 }));
 
 vi.mock('@limrun/api', () => ({

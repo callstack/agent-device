@@ -116,15 +116,17 @@ export type TypeTextBackendResult = {
 };
 
 /**
- * What a cloud-WebDriver `fill` could establish about its target taking text
- * entry focus before it sent the keys (#1658). The local Apple runner owns this
- * discipline in Swift and reports it as a `textEntryRoute`; the cloud path has
- * no runner, only what the driver will tell it, so it names what it observed
- * instead of which channel it typed through. Listed strongest evidence first:
+ * What a cloud `fill` could establish about its target taking text entry focus
+ * before it sent the keys (#1658). The local Apple runner owns this discipline
+ * in Swift and reports it as a `textEntryRoute`; a cloud session has no runner,
+ * only what its provider will tell it, so it names what it observed instead of
+ * which channel it typed through. Listed strongest evidence first:
  *
- * - `focused-element`: the element holding text-entry focus after the tap
- *   contains the tapped point — positive evidence that THIS field, not merely
- *   some field, took focus.
+ * - `focused-element`: after the tap, the element holding text-entry focus is
+ *   not the one that held it before, or it contains the tapped point — positive
+ *   evidence that THIS field, not merely some field, took focus. Identity is
+ *   asked first because focusing a field can re-lay it out, so geometry alone
+ *   would refuse a fill that plainly worked.
  * - `keyboard-shown`: no active-element route, but the software keyboard went
  *   from hidden to shown after our tap. Witnesses that focus arrived somewhere,
  *   which only means our field when the keyboard was down beforehand.
@@ -141,9 +143,9 @@ export type TypeTextBackendResult = {
  *   wait could establish anything. `press` + `type` remains the deliberate way
  *   to enter text unwitnessed.
  *
- * Closed set: the cloud interactor is its only producer and the boundary that
- * narrows it (readFillBackendResult in the touch handler) drops a
- * value it cannot name.
+ * Closed set: the two cloud interactors are its only producers, each reading
+ * focus through its own provider's route, and the boundary that narrows it
+ * (readFillBackendResult in the touch handler) drops a value it cannot name.
  */
 export const CLOUD_TEXT_ENTRY_READINESS = ['focused-element', 'keyboard-shown'] as const;
 
@@ -165,11 +167,12 @@ export type FillUnconfirmedVerification = {
 };
 
 /**
- * What `Interactor.fill` reports back about the entry it performed. The
- * cloud-WebDriver interactor populates `textEntryReadiness`; Android may return
- * target-bound `verification: 'unconfirmed'` evidence when an app-owned field
- * changed but formatting prevented raw equality. The Apple runner carries its
- * own readiness equivalent in Swift.
+ * What `Interactor.fill` reports back about the entry it performed. The two
+ * cloud interactors (WebDriver and the Limrun iOS direct session) populate
+ * `textEntryReadiness`; Android may return target-bound
+ * `verification: 'unconfirmed'` evidence when an app-owned field changed but
+ * formatting prevented raw equality. The Apple runner carries its own readiness
+ * equivalent in Swift.
  */
 export type FillBackendResult =
   | {
