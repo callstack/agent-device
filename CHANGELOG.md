@@ -59,9 +59,11 @@
   retry could change. A stopped recorder is now an observation rather than a failure: the exit is
   disclosed on the completion and the file is collected, so those recordings export instead of erroring.
   Expect one trade: while a preserved recording is open, `record start` on that device is refused until
-  its session runs `record stop` or closes, and a file no retry can rescue — a recorder killed mid-write
-  — now says so with `recording-output-unplayable` and names session close as the way out. `perf stop`
-  no longer memoizes a refused finish, so its second attempt re-pulls the trace the first one preserved.
+  its session runs `record stop` or closes. A simulator recording no retry can rescue now names the
+  exit that made it unreadable — `simctl recordVideo exited with code 1`, `was killed by SIGKILL`, plus
+  the recorder's stderr — drops its retriable flag, and points at closing the session, while a recorder
+  still finalizing its file keeps the retry hint. `perf stop` no longer memoizes a refused finish, so its
+  second attempt re-pulls the trace the first one preserved.
 
 - Changed: `record stop` no longer carries a start-trim step no recorder could arm. The trim cut the
   interval between recorder start and target-app readiness, but the runner's `recordStart` answer has
