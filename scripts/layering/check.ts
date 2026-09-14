@@ -7,6 +7,9 @@
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
 // zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
+// `commands` and `cli-schema` share a rank, so the spine cannot order them; R2 declares the
+// direction instead — cli-schema renders the command facets and reads them, commands never
+// imports cli-schema (#2543).
 //
 // This gate enforces five things, across four scopes:
 //   - GLOBALLY, across every production source file: the remaining R2 move rule and

@@ -43,6 +43,11 @@ export type ZonePolicy = {
  * R1 kernel-sink retired 2026-07-30 (#1490 W0): the kernel moved to
  * packages/kernel, where package resolution and R11 package-boundaries enforce
  * the sink property physically — a package cannot import root src at all.
+ *
+ * The two rows share `R2 commands-floor`: both state that commands sits at a floor and is read
+ * from above. The first keeps `core`/`daemon` below it; the second places `cli-schema` above it,
+ * so commands may not import the schema layer that renders its facets (#2543 declared the
+ * direction after the shared schema grammar moved down to the command registry).
  */
 export const ZONE_POLICIES: readonly ZonePolicy[] = [
   {
@@ -52,6 +57,15 @@ export const ZONE_POLICIES: readonly ZonePolicy[] = [
     hint:
       'commands/ is the command surface, above these zones. Depend on shared kernel/contracts ' +
       'instead; if two zones need the same rule, put the rule below both of them.',
+  },
+  {
+    rule: 'R2 commands-floor',
+    from: ['commands'],
+    to: ['cli-schema'],
+    hint:
+      'cli-schema is the CLI/MCP schema layer that renders the command facets, so it sits above ' +
+      'commands and reads them; commands must not import it back. The shared CommandSchema type and ' +
+      'flag grammar live in @agent-device/command-registry, below both zones.',
   },
 ];
 

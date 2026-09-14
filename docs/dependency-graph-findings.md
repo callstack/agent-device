@@ -111,7 +111,7 @@ with `command`/`positionals` `Pick`ed from the wire so they cannot drift from it
 resolver already read only those three, in two spellings (the full type and a `Pick` of it); one
 narrow name replaced both.
 
-**The remaining 5 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
+**The remaining 4 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
 
 - **4 × `AgentDeviceClient`** (`commands/command-contract.ts`, `commands/command-surface.ts`,
   `commands/family/types.ts`, `mcp/command-tools.ts`). The zone-level type cycle this bullet used to
@@ -120,11 +120,13 @@ narrow name replaced both.
   facade above `commands/` is the remaining argument: a narrower port does not exist — 4 files
   *name* the facade, but 26 call sites use methods across 13 of its namespaces, so any port would
   re-declare it.
-- **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). The union lives in core so
-  descriptors can name a route without importing the daemon, and the handler table covers it with
-  `satisfies Record<DaemonCommandRoute, …>`. `command-explain.ts` still type-imports the re-export
-  from `daemon-command-registry.ts` to key an exhaustive owner-file map; that remaining inversion
-  is the commands-zone consumer, not a second source of truth for the union.
+
+Retired by #2543: the **1 × `DaemonCommandRoute`** inversion whose only commands-zone consumer was
+`command-explain.ts`. The union lives in core so descriptors can name a route without importing the
+daemon; the explainer only type-imported the `daemon-command-registry.ts` re-export to key an
+exhaustive owner-file map. #2543 relocated `command-explain.ts` to the `cli/` zone — above
+`daemon-server` — so that consumer's type import no longer outranks its target, and the
+`commands -> daemon-server` R6 pair fell to zero.
 
 All remaining inversions are argued here. R6 (`scripts/layering/type-inversion-ratchet.ts`) records
 no numbers of its own: its reference is the same count taken at the merge-base with `origin/main`,
