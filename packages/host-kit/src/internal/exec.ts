@@ -814,14 +814,14 @@ function normalizeTimeoutMs(value: number | undefined): number | undefined {
  * would wait forever. Whether the kill request or the child's exit arrives first is not
  * a question each caller should answer, so both report here and settlement happens once.
  */
-export type CommandKillSettlement = {
+type CommandKillSettlement = {
   /** Signals the command's process tree, then settles the command if its child is gone. */
   readonly requestKill: () => void;
   /** Records the child's exit, then settles the command if a kill was already requested. */
   readonly recordExit: (code: number | null) => void;
 };
 
-export function createCommandKillSettlement(input: {
+function createCommandKillSettlement(input: {
   readonly killProcessTree: () => void;
   readonly settle: (exitCode: number | null) => void;
 }): CommandKillSettlement {
