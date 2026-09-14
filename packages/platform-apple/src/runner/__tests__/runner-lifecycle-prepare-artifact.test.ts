@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { Deadline } from '../host.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
@@ -76,41 +77,47 @@ beforeEach(() => {
   });
 });
 
-// What a prepare deadline does to a restored artifact. The wipe that rebuilds a suspect artifact
-// comes from the rules that indict the artifact itself; a runner that never answers inside its
-// budget indicts the boot, not the derived data it was launched from, so the artifact stays and
-// the session goes. The error is the one `ensureRunnerAttemptCanStart` reports when the startup
-// attempt is already out of time: "Runner connection deadline exceeded" is what a real prepare
-// deadline looks like, and the word in it is exactly what the deleted message check matched.
+// What a spent prepare deadline does to a restored artifact. Prepare spends one `Deadline` across
+// boot and health check, so the failure this decision actually sees is the one
+// `readPreparePhaseTimeoutMs` raises when the boot ate the budget: "prepare ios-runner timed out"
+// with reason `prepare_deadline_expired`. That indicts the boot, not the derived data it was
+// launched from, so the artifact stays and prepare retries with a fresh session. The artifact is
+// only wiped by the rules that indict it, such as a runner that refused the connection.
 
-test('a restored artifact whose runner outlives the prepare deadline is kept while the session goes', async () => {
-  const restoredSession = makeRunnerSession({
-    port: 8100,
-    xctestrunPath: '/tmp/restored.xctestrun',
-    xctestrunArtifact: makeRunnerArtifact({ xctestrunPath: '/tmp/restored.xctestrun' }),
-  });
-
-  mockEnsureRunnerSession.mockResolvedValue(restoredSession);
-  mockExecuteRunnerCommandWithSession.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+test('a prepare deadline spent during boot keeps the restored artifact and retries', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000);
+    const restoredSession = makeRunnerSession({
       port: 8100,
-      timeoutMs: 45_000,
-    }),
-  );
+      xctestrunPath: '/tmp/restored.xctestrun',
+      xctestrunArtifact: makeRunnerArtifact({ xctestrunPath: '/tmp/restored.xctestrun' }),
+    });
+    const prepareDeadline = Deadline.fromTimeoutMs(45_000);
 
-  await assert.rejects(
-    () => prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000 }),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.message, 'Runner connection deadline exceeded');
-      return true;
-    },
-  );
+    mockEnsureRunnerSession.mockImplementation(async () => {
+      // The boot consumed the whole prepare budget, so no health phase time remains.
+      vi.setSystemTime(46_000);
+      return restoredSession;
+    });
 
-  assert.equal(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls.length, 0);
-  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
-  assert.deepEqual(mockInvalidateRunnerSession.mock.calls.at(-1), [
-    restoredSession,
-    'prepare_runner_health_failed',
-  ]);
+    await assert.rejects(
+      () => prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000, prepareDeadline }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'prepare ios-runner timed out');
+        assert.equal(error.details?.reason, 'prepare_deadline_expired');
+        assert.equal(error.details?.phase, 'runner_session');
+        return true;
+      },
+    );
+
+    assert.equal(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls.length, 0);
+    assert.deepEqual(mockInvalidateRunnerSession.mock.calls.at(-1), [
+      restoredSession,
+      'prepare_runner_health_retry',
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

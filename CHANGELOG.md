@@ -25,13 +25,12 @@
   ran out and says "Runner command deadline exceeded" — neither of the two message checks on the
   recovery paths looked for that phrasing, so the session was never restarted and the command was
   never replayed. The rule reads the preflight marker and the recorded deadline now, so the restart
-  happens whatever the message happens to say. The other half of this is what no longer happens: a
-  prepare deadline, a slow boot, or a busy device no longer wipes a restored `xcodebuild` artifact on
-  the way to a rebuild, because only a runner that refused a connection or never answered on any
-  route says the artifact itself is at fault. A restored artifact whose runner hangs past its
-  deadline on every attempt does not rebuild itself: the runner session is invalidated and the
-  deadline is reported, and a rebuild needs either a failure that indicts the artifact or the runner
-  cache cleared by hand.
+  happens whatever the message happens to say. The other half is what no longer happens: when a slow
+  boot spends the whole prepare budget, the health check reports "prepare ios-runner timed out", and
+  that no longer wipes a restored `xcodebuild` artifact on the way to a rebuild — the runner session
+  is invalidated and prepare retries with the artifact intact. Only a failure that indicts the
+  artifact rebuilds it, so a runner that refuses the connection or never answers on any route still
+  wipes it and rebuilds, which is what that rule is for.
 
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
