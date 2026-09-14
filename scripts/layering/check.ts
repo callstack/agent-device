@@ -110,6 +110,7 @@ import {
   checkDaemonPlatformRuntimeInventory,
   DAEMON_PLATFORM_RUNTIME_EDGES,
 } from './daemon-platform-runtime-inventory.ts';
+import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
   listTrackedPlatformZoneFiles,
@@ -456,6 +457,7 @@ export const LAYERING_RULE_IDS = [
   'provider-snapshot-presentation-ownership',
   'snapshot-assembly-presentation-neutrality',
   'daemon-platform-runtime-inventory',
+  'daemon-client-entry',
   'session-authority-overlay',
 ] as const;
 
@@ -515,6 +517,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     snapshotAssemblyPresentationViolations(context.sources, context.edges),
   'daemon-platform-runtime-inventory': (context) =>
     checkDaemonPlatformRuntimeInventory(context.edges),
+  'daemon-client-entry': (context) => checkDaemonClientEntry(context.edges),
   'session-authority-overlay': (context) =>
     checkSessionAuthorityOverlay(
       context.ratchets.sessionAuthority,

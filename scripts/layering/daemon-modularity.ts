@@ -17,18 +17,11 @@ import type { LayeringRatchets } from './ratchet-reference.ts';
 export const DAEMON_MODULARITY_BASELINE = {
   externalDaemonTypesImporters: [
     'src/client/client-normalizers.ts',
-    // #2342 relocated the daemon client to `src/daemon-client/`. These five edges are unchanged
-    // by that move — the client has always built `DaemonRequest` and read `DaemonResponse`, it
-    // simply sat inside `src/daemon/` and so fell under the prefix skip below. Naming the files
-    // is stronger than letting a folder prefix hide them: the set can only shrink, so a new
-    // `src/daemon-client/` module reaching `session-state.ts` or the daemon-private request half
-    // still fails this gate. Reducing these five means giving the client a neutral request
-    // contract, which is a type change, not a relocation.
-    'src/daemon-client/daemon-client-lifecycle.ts',
-    'src/daemon-client/daemon-client-progress.ts',
-    'src/daemon-client/daemon-client-rpc.ts',
-    'src/daemon-client/daemon-client-transport.ts',
-    'src/daemon-client/daemon-client.ts',
+    // #2559 drove the `src/daemon-client/**` half of this list to zero value edges and moved its
+    // residual wire-only type reads to R78 (`daemon-client-entry.ts`), which names each measured
+    // edge and forbids any runtime import. The daemon-client files are skipped below so the two
+    // gates never own the same edge; the importers left here are zones the client-entry rule
+    // does not cover.
     'src/remote/daemon-artifacts.ts',
   ],
 } as const;
@@ -251,6 +244,9 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
     if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('src/daemon/')) continue;
+    // #2559: the client's daemon-request/session-state reads are owned by the stricter
+    // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.
+    if (edge.file.startsWith('src/daemon-client/')) continue;
     importers.set(edge.file, edge);
   }
   const violations = [...importers]
