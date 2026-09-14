@@ -71,22 +71,12 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
-
-function makeIosDevice(id: string): DeviceInfo {
-  return {
-    platform: 'apple',
-    id,
-    name: `iPhone ${id}`,
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
-  };
-}
 
 function createOpenHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
@@ -101,23 +91,6 @@ function createOpenHandler(
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
-}
-
-function openRequest(
-  session: string,
-  flags: Record<string, unknown>,
-  requestId: string,
-  meta: Record<string, unknown> = {},
-  positionals: string[] = [],
-) {
-  return {
-    token: 'test-token',
-    session,
-    command: 'open',
-    positionals,
-    flags,
-    meta: { requestId, ...meta },
-  };
 }
 
 beforeEach(() => {
@@ -194,12 +167,6 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
   }
 });
-
-function storedClaimUpdatedAt(device: DeviceInfo): number {
-  const claim = inspectDeviceClaims({ udid: device.id })[0]?.claim;
-  expect(claim?.updatedAtMs).toBeTypeOf('number');
-  return claim?.updatedAtMs ?? 0;
-}
 
 // The production reopen path never re-acquires the claim, so renewal has to ride the successful
 // existing-session open itself: without it, an owner that came back after a reboot still carries a

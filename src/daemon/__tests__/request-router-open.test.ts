@@ -96,6 +96,12 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { resolveDaemonPaths } from '../config.ts';
 import { screenRecordingDurableResource } from '../screen-recording-session-resource.ts';
+import {
+  makeAndroidDevice,
+  makeIosDevice,
+  openRequest,
+  storedClaimUpdatedAt,
+} from './request-router-open-harness.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -103,28 +109,6 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 // serialization is observed at the fixture's emulator-discovery seam.
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
-
-function makeIosDevice(id: string): DeviceInfo {
-  return {
-    platform: 'apple',
-    id,
-    name: `iPhone ${id}`,
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
-  };
-}
-
-function makeAndroidDevice(id: string): DeviceInfo {
-  return {
-    platform: 'android',
-    id,
-    name: `Android ${id}`,
-    kind: 'emulator',
-    target: 'mobile',
-    booted: true,
-  };
-}
 
 function createOpenHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
@@ -139,23 +123,6 @@ function createOpenHandler(
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
-}
-
-function openRequest(
-  session: string,
-  flags: Record<string, unknown>,
-  requestId: string,
-  meta: Record<string, unknown> = {},
-  positionals: string[] = [],
-) {
-  return {
-    token: 'test-token',
-    session,
-    command: 'open',
-    positionals,
-    flags,
-    meta: { requestId, ...meta },
-  };
 }
 
 beforeEach(() => {
@@ -805,12 +772,6 @@ test('open reconciles a foreign dead owner through that owner state dir, never t
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
   }
 });
-
-function storedClaimUpdatedAt(device: DeviceInfo): number {
-  const claim = inspectDeviceClaims({ udid: device.id })[0]?.claim;
-  expect(claim?.updatedAtMs).toBeTypeOf('number');
-  return claim?.updatedAtMs ?? 0;
-}
 
 // Preparation can boot the device an open is returning to, and the claim has to cover that boot:
 // otherwise the boot an owner caused for itself is what takes the device away from it. The device
