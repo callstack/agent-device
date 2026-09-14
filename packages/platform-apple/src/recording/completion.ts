@@ -7,6 +7,7 @@ export async function completeAppleRecording(
   host: AppleScreenRecordingOperationHost,
   snapshot: ScreenRecordingLiveSnapshot,
   targetLabel: string,
+  recorderWarning?: string,
 ) {
   if (snapshot.invalidatedReason && !snapshot.showTouches) {
     throw new Error(`recording invalidated: ${snapshot.invalidatedReason}`);
@@ -23,8 +24,13 @@ export async function completeAppleRecording(
   } catch (error) {
     throw asAppError(error, 'COMMAND_FAILED');
   }
+  const warnings = [
+    ...(finalization.warning ? [finalization.warning] : []),
+    ...(recorderWarning ? [recorderWarning] : []),
+  ];
   return createScreenRecordingCompletion(snapshot, {
     ...finalization,
+    ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
     ...(snapshot.invalidatedReason
       ? { overlayWarning: `overlay unavailable: ${snapshot.invalidatedReason}` }
       : {}),

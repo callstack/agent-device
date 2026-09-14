@@ -1,6 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
@@ -119,10 +120,19 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
       await nativeProcess.terminate();
       const result = await nativeProcess.wait;
       host.screenRecording.ownedProcesses.clear({ kind: 'session', sessionId: input.sessionId });
-      if (result.exitCode !== 0) {
-        throw new Error(`simctl recordVideo exited with code ${result.exitCode}`);
-      }
-      return await completion(host, current, 'iOS recording');
+      // An exited recorder is an observation about the recorder, not about the export: simctl wrote
+      // whatever it wrote, and the finalizer is what answers whether that is a video (ADR 0024 2.2).
+      // Refusing here by exit code alone threw away a finalized recording and left a retry that could
+      // only re-read the same settled exit, so the exit is disclosed and collection proceeds.
+      const exited = describeSimulatorRecorderExit(result);
+      return await completion(
+        host,
+        current,
+        'iOS recording',
+        exited === undefined
+          ? undefined
+          : `simctl recordVideo ${exited} before record stop; the video covers only what the recorder wrote before it stopped.`,
+      );
     },
     cleanup: async () => {
       const result = await cleanupAppleSimulatorProcess(nativeProcess);
@@ -162,12 +172,19 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
     runnerAuthority: result.runnerAuthority,
   } as const;
   let runnerStop: Promise<void> | undefined;
-  const stopRunner = () =>
-    (runnerStop ??= runAppleRecordingOperation(() =>
+  // A stop the runner refused has to be asked again by the next `record stop`, exactly as the live
+  // handle re-drives a refused finish; only an in-flight or completed stop stays shared.
+  const stopRunner = () => {
+    runnerStop ??= runAppleRecordingOperation(() =>
       host.screenRecording.apple
         .runRunner(device, { kind: 'stop', appBundleId, ...runnerOwnership })
         .then(() => undefined),
-    ));
+    ).catch((error: unknown) => {
+      runnerStop = undefined;
+      throw error;
+    });
+    return runnerStop;
+  };
   if (!runnerDescriptorMatchesDevice(device, result.remotePath)) {
     await stopRunner().catch(() => {});
     throw new Error('Apple runner recording did not expose coherent durable media ownership');
@@ -218,6 +235,11 @@ async function runAppleRecordingOperation<T>(operation: () => Promise<T>): Promi
   } catch (error) {
     throw asAppError(error, 'COMMAND_FAILED');
   }
+}
+
+function describeSimulatorRecorderExit(result: HostCommandResult): string | undefined {
+  if (result.signal) return `was killed by ${result.signal}`;
+  return result.exitCode === 0 ? undefined : `exited with code ${result.exitCode}`;
 }
 
 function runnerDescriptorMatchesDevice(

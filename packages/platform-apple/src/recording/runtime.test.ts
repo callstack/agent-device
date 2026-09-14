@@ -162,7 +162,7 @@ test('uses simctl on simulators and retains the macOS runner path', async () => 
   expect(ownedProcesses.clear).toHaveBeenCalledWith({ kind: 'session', sessionId: 'sim' });
 });
 
-test('simulator cleanup waits for confirmed process exit and nonzero finish fails', async () => {
+test('simulator cleanup waits for confirmed process exit', async () => {
   let settleWait:
     | ((result: { stdout: string; stderr: string; exitCode: number }) => void)
     | undefined;
@@ -195,11 +195,93 @@ test('simulator cleanup waits for confirmed process exit and nonzero finish fail
   expect(settled).toBe(false);
   settleWait?.({ stdout: '', stderr: 'recording failed', exitCode: 1 });
   await expect(cleanup).resolves.toEqual({ status: 'cleaned' });
+});
 
-  const second = await operations.screenRecordingStart(input());
-  await expect(second.pendingHandle.transfer().finish()).rejects.toThrow(
-    'simctl recordVideo exited with code 1',
-  );
+test('a simulator recorder that exited early is collected and its exit is disclosed', async () => {
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({ stdout: '', stderr: 'recording failed', exitCode: 1 }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async () => ({ telemetryPath: '/tmp/capture.gesture-telemetry.json' }),
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const started = await operations.screenRecordingStart(input());
+
+  await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
+    status: 'completed',
+    result: {
+      warning:
+        'simctl recordVideo exited with code 1 before record stop; the video covers only what ' +
+        'the recorder wrote before it stopped.',
+    },
+  });
+});
+
+test('a refused simulator finish is re-driven by the next record stop', async () => {
+  let finalizeCalls = 0;
+  const finalize = async () => {
+    finalizeCalls += 1;
+    if (finalizeCalls === 1) {
+      throw new Error('recording was not finalized into a playable video');
+    }
+    return {};
+  };
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+          terminate: async () => {},
+        }),
+      },
+      complete: finalize,
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+
+  await expect(handle.finish()).rejects.toThrow('was not finalized into a playable video');
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(finalizeCalls).toBe(2);
+});
+
+test('a refused runner stop is asked again by the next record stop', async () => {
+  const calls: string[] = [];
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        runRunner: async (_device: DeviceInfo, request: AppleScreenRecordingRunnerRequest) => {
+          calls.push(request.kind);
+          if (request.kind === 'stop' && calls.filter((call) => call === 'stop').length === 1) {
+            throw new Error('macOS runner recordStop rejected');
+          }
+          return request.kind === 'start' ? coreDeviceRunnerStart : {};
+        },
+      },
+      complete: async () => ({}),
+    }),
+    device: coreDevice,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (
+    await operations.screenRecordingStart(input({ scope: 'app' }))
+  ).pendingHandle.transfer();
+
+  await expect(handle.finish()).rejects.toThrow('macOS runner recordStop rejected');
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(calls).toEqual(['start', 'stop', 'stop']);
 });
 
 test('runner cancellation after acquisition stops the recorder and preserves the exact reason', async () => {
