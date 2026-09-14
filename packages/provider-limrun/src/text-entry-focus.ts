@@ -4,28 +4,16 @@ import { type Rect } from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect, rectArea } from '@agent-device/kernel/rect';
 import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
 
-/**
- * The accessibility trait the Limrun iOS instance puts on the one element that
- * owns text entry. It is how this provider can answer "which element is editing"
- * per node, which its `typeText` focus scan cannot: an app that never reports a
- * global focused element (#2578's Flutter form) still marks its editing field
- * with this trait.
- */
+/** The trait a Limrun iOS instance puts on the element that owns text entry. */
 const LIMRUN_IOS_TEXT_ENTRY_TRAIT = 'IsEditing';
 
-/**
- * How long a tapped field gets to appear as the editing element. Longer than the
- * Apple runner's or the cloud-WebDriver budget because every sample here is a
- * round trip to the instance rather than a local read.
- */
+/** Each sample is a round trip to the instance, so this budget is longer than a local read's. */
 const TEXT_ENTRY_FOCUS_TIMEOUT_MS = 3_000;
 const TEXT_ENTRY_FOCUS_POLL_INTERVAL_MS = 150;
 
 /**
- * The element that owns text entry, as one tree read saw it. The rect is
- * required because it is what the witness is made of: an element that reports no
- * usable frame cannot be shown to be the one that was tapped, and so is not
- * offered as evidence at all.
+ * The element that owns text entry, as one tree read saw it. A rect is required:
+ * an element without a usable frame cannot be shown to be the one that was tapped.
  */
 export type LimrunTextEntryFocus = Readonly<{
   identity: string;
@@ -33,12 +21,10 @@ export type LimrunTextEntryFocus = Readonly<{
 }>;
 
 /**
- * Nothing took text-entry focus within the budget, so typing would go to
- * whatever else holds first responder — or nowhere. #1658 is precisely the report
- * of that being answered with "Filled N chars", so this fails instead of typing.
- * `editingElementObserved` separates a target that never exposes text entry from
- * one that exposed it somewhere other than where we tapped, which are different
- * next moves for the caller.
+ * Nothing took text-entry focus within the budget, so typing would go to whatever
+ * else holds first responder, or nowhere. `editingElementObserved` separates a
+ * target that never exposes text entry from one that exposed it away from the
+ * tapped point, which are different next moves for the caller.
  */
 function textEntryFocusNotObservedError(
   x: number,
@@ -56,9 +42,8 @@ function textEntryFocusNotObservedError(
 }
 
 /**
- * The editing element of one tree read. A field and its container can both carry
- * the trait, so the smallest one with a usable rect wins: it is the node whose
- * geometry can witness a point.
+ * The editing element of one tree read. A field and its container can both carry the
+ * trait, so the smallest rect wins.
  */
 export function readLimrunTextEntryFocus(
   tree: IosTreeNode | IosTreeNode[],
@@ -78,16 +63,10 @@ export function readLimrunTextEntryFocus(
 }
 
 /**
- * The elements this fill aimed at, read before the tap could move anything. An
- * editing element among them was under the finger even if focusing it re-laid it
- * out or a keyboard scrolled it away, which is what lets a fill vouch for a field
- * that moved while refusing one that was never there.
- *
- * An identity the tree reports more than once is left out rather than trusted. Two
- * fields that expose neither an identifier nor a label share every part this
- * identity is built from, so trusting it would let a fill replace whichever twin
- * holds focus. Geometry still witnesses such a field when the tap lands on it,
- * because only geometry can tell two twins apart.
+ * The elements under the point this fill aims at, read before the tap could move
+ * anything, so a field that focusing re-laid out is still recognized. An identity
+ * the tree reports more than once is left out: fields with no identifier or label
+ * share one identity, and geometry is the only thing that tells them apart.
  */
 export function readLimrunUnambiguousTapTargets(
   tree: IosTreeNode | IosTreeNode[],
@@ -113,16 +92,11 @@ export function readLimrunUnambiguousTapTargets(
 }
 
 /**
- * Wait for the tap to move text-entry focus, then hand back the evidence this
- * fill earned. Geometry is what the claim is made of: the editing element either
- * still covers the point we aimed at, or it was among the elements that did when
- * we read the screen before tapping. An editing element elsewhere on the screen
- * says nothing about this tap, and typing into it is the misdelivery #1658 was
- * reported as, so it is refused instead.
- *
- * Limrun exposes this one route and no keyboard-visibility route, so a field that
- * never takes the editing trait is indistinguishable from a tap that missed: the
- * fill is refused rather than answered with text typed into the dark.
+ * Wait for the tap to move text-entry focus onto the aimed-at point, and hand back
+ * the readiness this fill earned. An editing element elsewhere on the screen says
+ * nothing about this tap, so it is refused. Limrun reports no keyboard visibility,
+ * so a field that never takes the editing trait is indistinguishable from a missed
+ * tap.
  */
 export async function awaitLimrunTextEntryFocus(
   params: Readonly<{
@@ -176,11 +150,7 @@ function flattenIosNodes(tree: IosTreeNode | IosTreeNode[]): IosTreeNode[] {
   return nodes;
 }
 
-/**
- * What two reads of the same element agree on. Identity rather than a handle:
- * the provider hands out no element id, and the process plus the accessibility
- * identity and label a field exposes is stable across the reads a fill takes.
- */
+/** What two reads of the same element agree on. The provider hands out no element handle. */
 function limrunTextEntryIdentity(node: IosTreeNode): string {
   return [
     node.pid ?? '',

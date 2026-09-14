@@ -63,8 +63,7 @@ test('the smallest editing element wins when a field and its container both repo
   expect(focus?.rect).toEqual(FIELD_RECT);
 });
 
-// A frame is what the witness is measured with, so an element without one is
-// dropped rather than trusted: it cannot be shown to be the element we tapped.
+// An element without a frame cannot be shown to be the one we tapped.
 test('an editing element with no usable frame is not offered as evidence', () => {
   expect(readLimrunTextEntryFocus(tree(textField('Email', { editing: true, rect: null })))).toBe(
     null,
@@ -135,9 +134,7 @@ test('a tap that nothing answers is refused without typing, after the budget is 
   expect(sleep).not.toHaveBeenCalled();
 });
 
-// The refusal that matters most: the screen does hold an editing element, but it
-// was never under this point, so typing into it would put text in the wrong field
-// and call it a fill (#1658).
+// An editing element that was never under this point is the wrong field.
 test('an editing element that was never under the tapped point is refused', async () => {
   await expect(
     awaitLimrunTextEntryFocus({
@@ -152,9 +149,7 @@ test('an editing element that was never under the tapped point is refused', asyn
   });
 });
 
-// Two fields that expose neither an identifier nor a label share one identity, so
-// identity alone cannot say which was tapped. The twin that already holds focus is
-// the dangerous one: believing its identity would replace its text (#1658).
+// Fields with no identifier or label share one identity, so only geometry tells them apart.
 const TWIN_A_RECT: TreeRect = Object.freeze({ x: 24, y: 142, width: 354, height: 56 });
 const TWIN_B_RECT: TreeRect = Object.freeze({ x: 24, y: 262, width: 354, height: 56 });
 

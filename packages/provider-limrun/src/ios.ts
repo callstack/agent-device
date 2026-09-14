@@ -230,13 +230,10 @@ class LimrunIosInteractor implements Interactor {
   }
 
   async fill(x: number, y: number, text: string, delayMs?: number): Promise<FillBackendResult> {
-    // The witness is loaded on the fill path instead of at module evaluation, so this
-    // provider keeps the import-time closure budget it declares.
+    // Loaded on the fill path to keep this provider's declared import-time closure budget.
     const { awaitLimrunTextEntryFocus, readLimrunUnambiguousTapTargets, readLimrunTextEntryFocus } =
       await import('./text-entry-focus.ts');
-    // The screen is read before the tap so the witness can say what was under this
-    // point at all: an editing element that appears somewhere else proves nothing
-    // about this tap (#1658).
+    // Read before the tap: the witness needs to know what was under this point.
     const targetsAtPoint = readLimrunUnambiguousTapTargets(
       await this.session.client.elementTree(),
       x,
@@ -250,9 +247,8 @@ class LimrunIosInteractor implements Interactor {
       x,
       y,
     });
-    // Select what the field holds first: iOS replaces a selection on the next
-    // key, so this is what makes `fill` a replacement rather than an append, and
-    // `fill <target> ""` a clear rather than a no-op.
+    // Select first: iOS replaces a selection on the next key, so `fill` replaces and
+    // an empty fill clears.
     await this.session.client.pressKey('a', ['command']);
     if (text.length === 0) {
       await this.session.client.pressKey('delete');
@@ -263,14 +259,10 @@ class LimrunIosInteractor implements Interactor {
   }
 
   /**
-   * Types into whatever holds text-entry focus, character by character when a
-   * delay is asked for. `requireFocus: false` because the provider's own scan
-   * asks a question agent-device already answered: it looks for a globally
-   * reported focused element, which an app that exposes its fields without one
-   * (#2578's Flutter form) can never satisfy even with its field focused and
-   * taking keys. Focus targeting belongs to the caller here — `fill` witnesses it
-   * against the editing element, and `type` is agent-device's deliberate
-   * entry-into-the-current-field route on every other platform too.
+   * Types into whatever holds text-entry focus, character by character when a delay is
+   * asked for. Focus targeting belongs to the caller, so the provider's own scan for a
+   * globally focused element is skipped: an app can expose fields that take keys without
+   * ever reporting one.
    */
   private async enterText(text: string, delayMs?: number): Promise<void> {
     if (delayMs && delayMs > 0) {

@@ -62,10 +62,8 @@ const publicSdkChunkGroups = [
 ] as const;
 
 /**
- * `deps.dts.neverBundle` keeps a dev-bundled package's declarations out of the published
- * types, but the emitted chunk still records the package as a bare ambient import that a
- * published install cannot resolve. Dropping the marker is safe only while the name appears
- * nowhere else in the chunk, so a real type reference fails the build instead.
+ * Drops the ambient `import '...'` marker `deps.dts.neverBundle` leaves behind, which a
+ * published install cannot resolve. Safe only while the name appears nowhere else.
  */
 function dropAmbientDeclarationImport(
   fileName: string,
@@ -143,11 +141,8 @@ export default defineConfig({
       'yaml',
       'yauzl',
     ],
-    // The Limrun SDK is dev-bundled: a published install has no `@limrun/api` to resolve, and the
-    // `agent-device/limrun` façade declares its own session and runtime types rather than the
-    // SDK's. Its declarations also carry `import('../node_modules/undici/...')` fallbacks that
-    // only resolve from inside a `node_modules` tree, so bundling them emits type imports no
-    // consumer can reach.
+    // The Limrun SDK is dev-bundled, so a published install has no `@limrun/api` to resolve:
+    // the limrun facade declares the session and runtime types consumers may use.
     dts: {
       neverBundle: ['@limrun/api'],
     },
@@ -166,11 +161,10 @@ export default defineConfig({
       handler(level, log);
     },
   },
-  // Limrun loads `@limrun/xdelta3-wasm` lazily and only inside `client.syncApp`, the folder
-  // delta-sync entry point agent-device never calls. Bundling it would ship 52 kB of base64
-  // wasm in every install for a path nothing reaches, so the specifier resolves to a chunk that
-  // names the omission: reaching it fails loudly instead of loading a blob. Add the package to
-  // `deps.onlyBundle` and drop this alias to restore the feature.
+  // Limrun loads `@limrun/xdelta3-wasm` only inside `client.syncApp`, which agent-device never
+  // calls, so 52 kB of base64 wasm would ship for a path nothing reaches. The alias resolves the
+  // specifier to a chunk that names the omission. Add the package to `deps.onlyBundle` and drop
+  // this alias to restore that path.
   alias: {
     '@limrun/xdelta3-wasm': new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url)
       .pathname,
