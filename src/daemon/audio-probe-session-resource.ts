@@ -36,6 +36,7 @@ export const audioProbeDurableResource = createDurableCaptureResource<
     sampleCount: completion.sampleCount,
     heard: completion.heard,
   }),
+  failedFinishPolicy: 'dispose-on-failed-finish',
   messages: {
     noActive: 'no active audio probe',
     cleanupPendingHint:

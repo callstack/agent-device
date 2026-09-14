@@ -32,6 +32,7 @@ export const perfCaptureDurableResource = createDurableCaptureResource<
     mode: typeof completion.mode === 'string' ? completion.mode : 'unknown',
     ...(typeof completion.outPath === 'string' ? { outPath: completion.outPath } : {}),
   }),
+  failedFinishPolicy: 'dispose-on-failed-finish',
   messages: {
     noActive: 'no active native perf capture',
     cleanupPendingHint:

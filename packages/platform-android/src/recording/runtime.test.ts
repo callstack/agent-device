@@ -116,7 +116,7 @@ test('waits for a SIGINT-accepted recorder to exit before sizing or pulling its 
   }
 });
 
-test('retains native evidence when finalization fails, then cleans it through compensation', async () => {
+test('retains native evidence when finalization fails and cleans it only on requested disposal', async () => {
   const calls: string[] = [];
   const stopped = new Set<string>();
   let manifest = '';

@@ -41,6 +41,7 @@ export const appLogDurableResource = createDurableCaptureResource<
     outputPath: completion.outputPath,
     completedAt: completion.completedAt,
   }),
+  failedFinishPolicy: 'dispose-on-failed-finish',
   messages: {
     noActive: 'no app log stream active',
     cleanupPendingHint:

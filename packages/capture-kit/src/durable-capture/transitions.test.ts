@@ -111,3 +111,65 @@ test('an uncertain finish retains live evidence when compensating cleanup is unc
     },
   });
 });
+
+test('a preserved finish leaves the record open without disposing what its retry reads back', async () => {
+  const context = makeDurableCaptureContext();
+  const finishError = new Error('collect failed');
+  const definition = createTestCaptureDefinition(testCaptureStore, 'preserve-retry-material');
+  const start = makeDurableCaptureStartResult(context, { finishError });
+  await adoptStartedDurableCapture(
+    definition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const active = context.sessions.get(context.sessionName);
+  if (!active) throw new Error('Expected adopted test capture session');
+
+  await withDiagnosticsScope({ command: 'record' }, async () => {
+    await expect(
+      finishLiveDurableCapture(
+        definition,
+        { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+        context.resourcePath,
+      ),
+    ).rejects.toBe(finishError);
+    expect(countDiagnosticEventsByPhase(['test_capture_finish_evidence_preserved'])).toBe(1);
+  });
+  expect(start.forceCleanup).not.toHaveBeenCalled();
+  expect(context.sessions.get(context.sessionName)?.capture?.handle).toBe(start.handle);
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
+  });
+});
+
+test('a preserved finish that reports uncertainty still leaves the record retryable', async () => {
+  const context = makeDurableCaptureContext();
+  const definition = createTestCaptureDefinition(testCaptureStore, 'preserve-retry-material');
+  const start = makeDurableCaptureStartResult(context, {
+    finish: { status: 'cleanup-pending', reason: 'cleanup-unconfirmed' },
+  });
+  await adoptStartedDurableCapture(
+    definition,
+    { ...context, ...start, throwIfCanceled: () => {} },
+    context.resourcePath,
+  );
+  const active = context.sessions.get(context.sessionName);
+  if (!active) throw new Error('Expected adopted test capture session');
+
+  await expect(
+    finishLiveDurableCapture(
+      definition,
+      { session: active, sessionName: context.sessionName, sessionStore: context.sessionStore },
+      context.resourcePath,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'cleanup-unconfirmed' } });
+  expect(start.forceCleanup).not.toHaveBeenCalled();
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      metadata: { phase: 'cleanup-pending', cleanupPendingReason: 'cleanup-unconfirmed' },
+    },
+  });
+});

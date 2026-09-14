@@ -35,6 +35,7 @@ export function createTestCaptureResource(
       outputPath: completion.outputPath,
       completedAt: completion.completedAt,
     }),
+    failedFinishPolicy: 'dispose-on-failed-finish',
     messages: {
       noActive: 'no test capture active',
       cleanupPendingHint: 'Keep the test capture manifest for exact-owner recovery.',

@@ -95,6 +95,76 @@ test('screen recording persists durable truth before adopting only handle and en
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
+test('a failed recording finish keeps the record open and never disposes the recording', async () => {
+  const sessionStore = makeSessionStore('screen-recording-failed-finish-');
+  const sessionName = 'recording';
+  const session: SessionState = {
+    name: sessionName,
+    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    createdAt: 1,
+    actions: [],
+  };
+  sessionStore.set(sessionName, session);
+  const owner = localRuntimeOwner('android');
+  const fence = { token: 'recording-fence', generation: 1 } as const;
+  const finishError = new Error('failed to retrieve playable Android recording');
+  const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
+  const handle: ScreenRecordingLiveHandle = {
+    inspect: () => ({
+      backend: 'android',
+      outPath: '/tmp/recording.mp4',
+      startedAt: 1,
+      scope: 'app',
+      showTouches: true,
+      recordOnlySession: false,
+      gestureEvents: [],
+    }),
+    appendGestureEvents: () => {},
+    setTouchReferenceFrame: () => {},
+    setRunnerSessionId: () => {},
+    invalidate: () => {},
+    finish: async () => {
+      throw finishError;
+    },
+    forceCleanup,
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'screen-recording',
+    sessionId: sessionName,
+    device: { id: session.device.id, family: 'android', kind: 'emulator' },
+    owner,
+    fence,
+    lifecycle: 'open',
+    descriptor: { version: 1, body: { recordingId: 'recording-id' } },
+  });
+  await adoptStartedScreenRecording({
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    session,
+    sessionName,
+    sessionStore,
+    device: session.device,
+    owner,
+    fence,
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope,
+    throwIfCanceled: () => {},
+  });
+
+  const active = sessionStore.get(sessionName);
+  if (!active) throw new Error('Expected screen-recording session');
+  await expect(
+    finishLiveScreenRecording({ session: active, sessionName, sessionStore }),
+  ).rejects.toBe(finishError);
+
+  expect(forceCleanup).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.screenRecording?.handle).toBe(handle);
+  expect(screenRecordingResourceStore.read(resourcePath(sessionStore, sessionName))).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
+  });
+});
+
 function resourcePath(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
   return screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
 }

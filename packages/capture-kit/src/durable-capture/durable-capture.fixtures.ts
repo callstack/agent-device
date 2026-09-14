@@ -12,6 +12,7 @@ import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import type {
   DurableCaptureCleanupOutcome,
+  DurableCaptureFailedFinishPolicy,
   DurableCaptureResourceDefinition,
   DurableCaptureSessionResource,
   DurableCaptureSessionStore,
@@ -47,6 +48,7 @@ export const testCaptureStore = createDurableCaptureResourceStore({
 
 export function createTestCaptureDefinition(
   store: DurableCaptureResourceStore<typeof TEST_CAPTURE_KIND> = testCaptureStore,
+  failedFinishPolicy: DurableCaptureFailedFinishPolicy = 'dispose-on-failed-finish',
 ): DurableCaptureResourceDefinition<
   typeof TEST_CAPTURE_KIND,
   TestCaptureHandle,
@@ -57,6 +59,7 @@ export function createTestCaptureDefinition(
     resourceKind: TEST_CAPTURE_KIND,
     displayName: 'test capture',
     store,
+    failedFinishPolicy,
     sessionSlot: {
       read: (session) => session.capture,
       replace: (session, capture) => ({ ...session, capture }),

@@ -12,7 +12,7 @@ import type {
   DurableCaptureResourceDefinition,
   DurableCaptureSessionStore,
 } from './definition.ts';
-import { capitalizeDurableCaptureLabel } from './labels.ts';
+import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
 export async function finishLiveDurableCapture<
   K extends string,
@@ -65,7 +65,7 @@ export async function finishDurableCaptureHandle<
       try {
         finishOutcome = await params.handle.finish();
       } catch (finishError) {
-        await compensateFailedFinish(definition, lease, params, finishError);
+        await respondToFailedFinish(definition, lease, params, finishError);
         throw finishError;
       }
       if (finishOutcome.status === 'completed') {
@@ -74,18 +74,22 @@ export async function finishDurableCaptureHandle<
       }
       transitionFinishOutcome(definition, lease, finishOutcome);
       const finishError = cleanupPendingError(definition, finishOutcome);
-      await compensateFailedFinish(definition, lease, params, finishError);
+      await respondToFailedFinish(definition, lease, params, finishError);
       throw finishError;
     },
   });
 }
 
-async function compensateFailedFinish<K extends string, H extends LiveResourceHandle<C>, C>(
+async function respondToFailedFinish<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   lease: DurableCaptureResourceFenceLease<K>,
   params: { handle: H; resourcePath: string },
   finishError: unknown,
 ): Promise<void> {
+  if (definition.failedFinishPolicy === 'preserve-retry-material') {
+    emitFailedFinishPreservedDiagnostic(definition, params, finishError);
+    return;
+  }
   let cleanup: CleanupOutcome;
   try {
     cleanup = await params.handle.forceCleanup();
@@ -134,6 +138,22 @@ function persistCleanupPendingBestEffort<K extends string>(
   }
 }
 
+function emitFailedFinishPreservedDiagnostic<K extends string, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: { resourcePath: string },
+  finishError: unknown,
+): void {
+  emitDiagnostic({
+    level: 'error',
+    phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_finish_evidence_preserved`,
+    data: {
+      resourcePath: params.resourcePath,
+      finishError: errorMessage(finishError),
+      failedFinishPolicy: definition.failedFinishPolicy,
+    },
+  });
+}
+
 function emitFailedFinishCleanupDiagnostic<K extends string, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   params: { resourcePath: string },
@@ -143,7 +163,7 @@ function emitFailedFinishCleanupDiagnostic<K extends string, C>(
 ): void {
   emitDiagnostic({
     level: 'error',
-    phase: `${definition.resourceKind.replaceAll('-', '_')}_finish_cleanup_failed`,
+    phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_finish_cleanup_failed`,
     data: {
       resourcePath: params.resourcePath,
       finishError: errorMessage(finishError),

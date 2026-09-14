@@ -33,6 +33,9 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
     replace: (session, screenRecording) => ({ ...session, screenRecording }),
   },
   completionMetadata: encodeScreenRecordingCompletionMetadata,
+  // ADR 0024 rule 6: the next stop re-collects the native artifact a failed export left behind, and
+  // forced cleanup would delete exactly that. Disposal belongs to teardown and start rollback.
+  failedFinishPolicy: 'preserve-retry-material',
   messages: {
     noActive: 'no active recording',
     cleanupPendingHint:

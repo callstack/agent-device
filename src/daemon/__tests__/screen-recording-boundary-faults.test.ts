@@ -203,6 +203,7 @@ function createScreenRecordingTestResource(
       outputPath: completion.outPath,
       completedAt: completion.completedAt,
     }),
+    failedFinishPolicy: 'preserve-retry-material',
     messages: {
       noActive: 'no active recording',
       cleanupPendingHint: 'Keep the screen-recording recovery record for exact-owner cleanup.',

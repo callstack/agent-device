@@ -30,6 +30,23 @@ export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposabl
 }>;
 
 /**
+ * What a failed `finish` may do to a kind's material (ADR 0024 rule 6). Forced cleanup belongs to
+ * session teardown and failed-start rollback; a kind declares here whether a failed finish in the
+ * shared coordinator still earns one.
+ */
+export type DurableCaptureFailedFinishPolicy =
+  /**
+   * The retry needs material forced cleanup would destroy, so a failed finish keeps every artifact
+   * and leaves the record open for the next attempt.
+   */
+  | 'preserve-retry-material'
+  /**
+   * The retry needs nothing forced cleanup destroys, so a failed finish still disposes. A kind that
+   * wants this says so where its definition is built.
+   */
+  | 'dispose-on-failed-finish';
+
+/**
  * The session-free half of a definition. Recovery reattaches and terminalizes a persisted
  * record with no session in hand, so it names this and never the session type.
  */
@@ -38,6 +55,7 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   displayName: string;
   store: DurableCaptureResourceStore<K>;
   completionMetadata(result: C): JsonObject;
+  failedFinishPolicy: DurableCaptureFailedFinishPolicy;
   messages: Readonly<{
     noActive: string;
     cleanupPendingHint: string;
