@@ -13,6 +13,7 @@ import {
   xctestIosDevice,
 } from './runner-transport.fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { isCommandTimeoutError } from '../host.ts';
 import type { IosPhysicalDeviceRunnerControl } from '../host.ts';
 
 const { mockRunCmd, mockUsbmuxPostCommand } = vi.hoisted(() => ({
@@ -31,7 +32,7 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 });
 
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
-import { sendRunnerCommandOnce } from '../runner-transport.ts';
+import { fetchWithTimeout, sendRunnerCommandOnce } from '../runner-transport.ts';
 
 // The real `resolveIosPhysicalDeviceControl` resolves the CoreDevice tunnel IP
 // through root-level tooling this package cannot reach; a fake control backed
@@ -113,6 +114,28 @@ test('sendRunnerCommandOnce does not retry or simulator fallback after request f
 
   assert.equal(vi.mocked(fetch).mock.calls.length, 1);
   assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('fetchWithTimeout reports its own deadline as a typed command timeout', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    }),
+  );
+
+  await assert.rejects(
+    () => fetchWithTimeout('http://127.0.0.1:8100/command', { method: 'POST' }, 5),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.timeoutMs, 5);
+      assert.equal(isCommandTimeoutError(error), true);
+      return true;
+    },
+  );
 });
 
 test('sendRunnerCommandOnce routes xctest physical devices through usbmux', async () => {

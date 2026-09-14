@@ -367,14 +367,16 @@ test('mutating commands restart stale sessions when readiness preflight fails be
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
 });
 
-test('mutating commands restart stale sessions when readiness preflight times out before command send', async () => {
+test('mutating commands restart stale sessions when readiness preflight outlives its deadline', async () => {
   const staleSession = makeRunnerSession({ port: 8100, ready: true });
   const freshSession = makeRunnerSession({ port: 8101, ready: false });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(
-      new AppError('COMMAND_FAILED', 'Runner readiness timed out', {
+      new AppError('COMMAND_FAILED', 'xcrun timed out after 45000ms', {
+        cmd: 'xcrun',
+        timeoutMs: 45_000,
         runnerReadinessPreflightFailed: true,
       }),
     )
@@ -390,6 +392,47 @@ test('mutating commands restart stale sessions when readiness preflight times ou
   ]);
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 2);
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
+});
+
+test('a readiness preflight refusal that is neither transport-shaped nor deadline-shaped surfaces', async () => {
+  const staleSession = makeRunnerSession({ port: 8100, ready: true });
+
+  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession);
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'Runner readiness refused', {
+      runnerReadinessPreflightFailed: true,
+    }),
+  );
+
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Runner readiness refused');
+      return true;
+    },
+  );
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
+});
+
+test('a boot that exited early does not wipe a restored runner artifact', async () => {
+  const fixtures = makeBadCacheRecoveryFixtures();
+
+  mockEnsureRunnerSession.mockResolvedValueOnce(fixtures.restoredSession);
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'Runner did not accept connection (xcodebuild exited early)'),
+  );
+
+  await assert.rejects(
+    () => prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Runner did not accept connection (xcodebuild exited early)');
+      return true;
+    },
+  );
+  assert.equal(mockMarkRunnerXctestrunArtifactBadForRun.mock.calls.length, 0);
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
 });
 
 test('mutating commands emit readiness recovery diagnostics after failed preflight restart succeeds', async () => {

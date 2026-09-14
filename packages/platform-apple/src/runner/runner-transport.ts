@@ -87,5 +87,20 @@ export async function fetchWithTimeout(
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
-  return await fetch(url, { ...init, signal });
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (error) {
+    // `AbortSignal.timeout` rejects with a bare DOMException that no recovery rule can
+    // read. Only a rejection carrying that signal's own reason is our deadline: a
+    // refused connection or a canceled request keeps the error it actually failed with.
+    if (error === timeoutSignal.reason) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Runner command deadline exceeded',
+        { timeoutMs },
+        error,
+      );
+    }
+    throw error;
+  }
 }

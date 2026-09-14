@@ -17,10 +17,12 @@ import {
   assertRunnerRequestActive,
   isRetryableRunnerError,
   resolveRunnerRequestSignal,
+  shouldRebuildCachedRunnerArtifact,
+  shouldRestartRunnerAfterReadinessPreflight,
+  shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
   withRunnerCommandId,
   type RunnerCommand,
-  shouldRestartRunnerBeforeCommandSend,
 } from './runner-contract.ts';
 import type {
   AppleRunnerCommandOptions,
@@ -246,11 +248,7 @@ async function invalidateRunnerSessionBestEffort(
 
 function shouldRetryPrepareRunnerHealthFailure(error: AppError): boolean {
   if (isRequestCanceledError(error)) return false;
-  return (
-    isRetryableRunnerError(error) ||
-    shouldRetryRunnerConnectError(error) ||
-    isPrepareHealthTimeout(error)
-  );
+  return isRetryableRunnerError(error) || shouldRetryRunnerConnectError(error);
 }
 
 // fallow-ignore-next-line complexity
@@ -498,6 +496,11 @@ function readPreparePhaseTimeoutMs(
   return remainingMs;
 }
 
+/**
+ * A rebuild here is a clean `xcodebuild`, so the verdict comes from the rules that indict
+ * the artifact itself rather than from "anything the connect loop would tolerate".
+ * Whether the session even carries a cached artifact is this module's fact, not the table's.
+ */
 function shouldRecoverBadCachedRunnerArtifact(
   error: AppError,
   session: RunnerSession,
@@ -506,14 +509,7 @@ function shouldRecoverBadCachedRunnerArtifact(
 } {
   const artifact = session.xctestrunArtifact;
   if (!artifact || artifact.cache === 'miss') return false;
-  return shouldRetryPrepareRunnerHealthFailure(error);
-}
-
-function isPrepareHealthTimeout(error: AppError): boolean {
-  const message = error.message.toLowerCase();
-  return (
-    message.includes('timeout') || message.includes('timed out') || message.includes('deadline')
-  );
+  return shouldRebuildCachedRunnerArtifact(error);
 }
 
 function wrapPrepareHealthFailure(
@@ -611,11 +607,6 @@ function isRunnerReadinessPreflightError(error: AppError): boolean {
 function shouldRestartAfterReadinessPreflightError(error: AppError): boolean {
   return (
     isRunnerReadinessPreflightError(error) &&
-    (isRetryableRunnerError(error) || isRunnerReadinessPreflightTimeout(error))
+    (isRetryableRunnerError(error) || shouldRestartRunnerAfterReadinessPreflight(error))
   );
-}
-
-function isRunnerReadinessPreflightTimeout(error: AppError): boolean {
-  const message = error.message.toLowerCase();
-  return message.includes('timeout') || message.includes('timed out');
 }
