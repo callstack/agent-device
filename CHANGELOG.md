@@ -14,7 +14,8 @@
   (`unguarded-device-shell-argv`); build the argv with `deviceShellArgv` from
   `@agent-device/kernel/device-shell`, or call `runAndroidShell`, `runAdbShell`, or
   `runHarmonyShell`. `shellQuote` and `shellQuoteIfNeeded` moved from `@agent-device/host-kit/command` to
-  `@agent-device/kernel/device-shell`.
+  `@agent-device/kernel/device-shell`. SDK: `AndroidAdbExecutor` and `AndroidAdbProvider.exec` now
+  receive `readonly string[]`; a custom executor annotated `(args: string[])` must widen its parameter.
 - Fixed: BrowserStack sessions honour `--provider-project`, `--provider-build`, and
   `--provider-session-name`. The capability builder emitted the legacy JSON Wire keys `device`,
   `os_version`, and `app` at the top level next to the W3C `bstack:options` block; the hub treats a
