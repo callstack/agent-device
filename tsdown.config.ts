@@ -62,6 +62,7 @@ const publicSdkChunkGroups = [
 ] as const;
 
 export default defineConfig({
+  copy: [{ from: 'packages/host-kit/src/internal/macos-process.c', to: 'dist/src' }],
   entry: {
     index: 'src/sdk/index.ts',
     io: 'src/sdk/io.ts',
