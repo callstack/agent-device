@@ -83,4 +83,5 @@ test('the refusal reason belongs to the table, not this file', () => {
   assert.equal(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.reason, TAP_KEYBOARD_OCCLUDES_TARGET_REASON);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /keyboard enter/);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /dismiss key/);
+  assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /snapshot -i/);
 });

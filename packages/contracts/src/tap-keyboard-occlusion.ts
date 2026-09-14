@@ -28,13 +28,20 @@ export const TAP_KEYBOARD_OCCLUDES_TARGET_REASON = 'tap_keyboard_occludes_target
  * goal, come first. Nothing here dismisses the keyboard for the caller: dropping focus commits or
  * cancels edit state, which is the caller's decision rather than a side effect of a tap — the same
  * stance `scroll-gesture.ts` takes for the surface it refuses to swipe.
+ *
+ * The verdict is read from the tree the command measured against, and no owner re-probes the
+ * keyboard to confirm it: `keyboard status`/`get` are Android-only, and #1542's double-check
+ * confirms the target's own live rect, which a covering keyboard leaves intact. So the hint names
+ * the re-measurement instead of pretending the refusal already has it.
  */
 export const TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS = Object.freeze({
   reason: TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
   hint:
     'The visible keyboard covers this target, so the tap would land on a key instead of on it. ' +
     "End editing first: tap the app's own Done/Cancel/close control, or run `keyboard enter` when submitting is what you want " +
-    '(`keyboard dismiss` works only when the keyboard exposes its own dismiss key). Then retry.',
+    '(`keyboard dismiss` works only when the keyboard exposes its own dismiss key). ' +
+    'This reads the snapshot the command measured against, so if the keyboard closed since it was taken, ' +
+    'run `snapshot -i` and retry.',
 });
 
 const IOS_KEYBOARD_TYPE_NAMES: ReadonlySet<string> = new Set(['keyboard', 'key']);
