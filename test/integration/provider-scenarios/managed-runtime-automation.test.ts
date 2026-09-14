@@ -170,8 +170,8 @@ test.skipIf(process.platform === 'win32')(
       ).rejects.toThrow('valid PNG header');
       expect(sleep).toHaveBeenCalledOnce();
       const calls = native.calls();
-      expect(calls.at(-1)?.at(-1)).toBe(
-        'am broadcast -a com.android.systemui.demo -e command exit',
+      expect(calls.at(-1)?.slice(4).join(' ')).toBe(
+        'shell am broadcast -a com.android.systemui.demo -e command exit',
       );
       for (const args of calls)
         expect(args.slice(0, 4)).toEqual(['-P', '15037', '-s', 'emulator-15037']);

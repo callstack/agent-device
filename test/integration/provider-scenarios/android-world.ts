@@ -425,7 +425,7 @@ function androidDoctorProbeAdbResult(args: string[]): AndroidAdbResult | undefin
 }
 
 function androidScreenshotDemoAdbResult(args: string[]): AndroidAdbResult | undefined {
-  if (args.length === 2 && ANDROID_SCREENSHOT_DEMO_SHELL_COMMANDS.has(args[1] ?? '')) {
+  if (args[0] === 'shell' && ANDROID_SCREENSHOT_DEMO_SHELL_COMMANDS.has(args.slice(1).join(' '))) {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
   return undefined;
