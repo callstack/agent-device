@@ -128,9 +128,14 @@ export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promi
     description: `iOS runner lease for ${deviceId}`,
   });
   try {
-    return await task();
-  } finally {
+    const result = await task();
     await release();
+    return result;
+  } catch (error) {
+    // A task that failed is the reportable fact; an unverified release only says the
+    // lease lock is still standing, which the stale-clear path resolves on its own.
+    await release().catch(() => undefined);
+    throw error;
   }
 }
 

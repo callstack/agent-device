@@ -128,7 +128,9 @@ async function ensureSwiftExecutable(params: {
     fs.renameSync(tempExecutablePath, params.executablePath);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
-    await releaseLock();
+    // The build's own failure is the reportable fact; an unverified release leaves the
+    // lock to the stale-clear path rather than displacing it.
+    await releaseLock().catch(() => undefined);
   }
 }
 

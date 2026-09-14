@@ -6,6 +6,7 @@ import { publishFileSync } from './atomic-file.ts';
 import { classifyOwnerLiveness, ownerIdentityMatches } from './owner-identity.ts';
 import { sleep } from './timeouts.ts';
 
+const OWNER_FILE_NAME = 'owner.json';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LOCK_POLL_MS = 100;
 const DEFAULT_LOCK_OWNER_GRACE_MS = 5_000;
@@ -31,7 +32,7 @@ export async function acquireProcessLock(params: {
   description?: string;
 }): Promise<() => Promise<void>> {
   const { lockDirPath, owner } = params;
-  const ownerFilePath = path.join(lockDirPath, 'owner.json');
+  const ownerFilePath = path.join(lockDirPath, OWNER_FILE_NAME);
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   const ownerGraceMs = params.ownerGraceMs ?? DEFAULT_LOCK_OWNER_GRACE_MS;
@@ -124,7 +125,7 @@ function clearStaleProcessLock(
   // owner record, so its age is the only evidence available about it.
   if (!lockStats.isDirectory()) {
     return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-      ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath)
+      ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats)
       : false;
   }
 
@@ -133,7 +134,7 @@ function clearStaleProcessLock(
     if (isLiveProcessLockOwner(reading.owner)) {
       return false;
     }
-    return reclaimProcessLockDirectory(lockDirPath, ownerFilePath);
+    return reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats);
   }
   // A record we cannot read leaves an owner whose identity is unknown, which is not
   // evidence of death. Only a record that is genuinely absent lets the directory's
@@ -142,7 +143,7 @@ function clearStaleProcessLock(
     return false;
   }
   return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-    ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath)
+    ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats)
     : false;
 }
 
@@ -156,28 +157,73 @@ function reclaimWhenAbandoned(lockStats: fs.Stats, ownerGraceMs: number): boolea
  * the caller's side: the second succeeds silently on the path the first already
  * cleared, and both contenders continue as though they had freed the lock. `mkdir`'s
  * `EEXIST`, unchanged, stays the arbiter of the lock itself.
- *
- * A win32 directory with a handle open inside it refuses the rename and often the
- * removal too, which is why a forced removal remains as the fallback: stale-clear
- * atomicity is best effort there and exact elsewhere. The fallback re-reads the
- * record first, because a refused rename means time passed and a live contender may
- * have claimed the path in it.
  */
-function reclaimProcessLockDirectory(lockDirPath: string, ownerFilePath: string): boolean {
+function reclaimProcessLockDirectory(
+  lockDirPath: string,
+  ownerFilePath: string,
+  judged: fs.Stats,
+): boolean {
   const asidePath = reclaimedLockPath(lockDirPath);
   try {
     fs.renameSync(lockDirPath, asidePath);
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException | null)?.code;
-    if (code === 'ENOENT') return true;
-    if (code !== 'EPERM' && code !== 'EACCES' && code !== 'ENOTEMPTY') return false;
-    const reading = readProcessLockOwner(ownerFilePath);
-    if (reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner)) return false;
-    fs.rmSync(lockDirPath, { recursive: true, force: true });
-    return true;
+    return reclaimWithoutTheRename(lockDirPath, ownerFilePath, error);
+  }
+  if (!reclaimedLockIsTheOneJudged(asidePath, judged)) {
+    restoreReclaimedLockDirectory(asidePath, lockDirPath);
+    return false;
   }
   removeReclaimedLockDirectory(asidePath);
   return true;
+}
+
+/**
+ * A win32 directory with a handle open inside it refuses the rename and often the removal
+ * too, which is why a forced removal remains as the fallback: stale-clear atomicity is
+ * best effort there and exact elsewhere. The fallback re-reads the record first, because a
+ * refused rename means time passed and a live contender may have claimed the path in it.
+ */
+function reclaimWithoutTheRename(
+  lockDirPath: string,
+  ownerFilePath: string,
+  renameError: unknown,
+): boolean {
+  const code = (renameError as NodeJS.ErrnoException | null)?.code;
+  if (code === 'ENOENT') return true;
+  if (code !== 'EPERM' && code !== 'EACCES' && code !== 'ENOTEMPTY') return false;
+  const reading = readProcessLockOwner(ownerFilePath);
+  if (reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner)) return false;
+  fs.rmSync(lockDirPath, { recursive: true, force: true });
+  return true;
+}
+
+/**
+ * A rename addresses whatever stands at the path now, not the directory whose record was
+ * read. A contender that reclaimed first and published a live owner in the meantime has
+ * put a different directory there, so what arrived is compared against what was judged:
+ * the same inode, and no live owner inside.
+ */
+function reclaimedLockIsTheOneJudged(asidePath: string, judged: fs.Stats): boolean {
+  let moved: fs.Stats;
+  try {
+    moved = fs.statSync(asidePath);
+  } catch {
+    return false;
+  }
+  if (moved.ino !== judged.ino || moved.dev !== judged.dev) return false;
+  const reading = readProcessLockOwner(path.join(asidePath, OWNER_FILE_NAME));
+  return !(reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner));
+}
+
+/**
+ * Returns a directory that turned out to belong to someone else. Failure is not a
+ * licence to delete it: its holder's own release reports an unreadable owner rather than
+ * let this process clear a lock it does not own.
+ */
+function restoreReclaimedLockDirectory(asidePath: string, lockDirPath: string): void {
+  try {
+    fs.renameSync(asidePath, lockDirPath);
+  } catch {}
 }
 
 /** Janitorial work after the rename already achieved the exclusion. */

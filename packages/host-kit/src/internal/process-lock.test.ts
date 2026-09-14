@@ -411,6 +411,67 @@ test('a reclaim that cannot remove the directory it moved aside still holds the 
   }
 });
 
+test('a live owner published between the stale read and the rename keeps its lock', async () => {
+  const lockDirPath = path.join(tmpDir, 'stolen-race.lock');
+  const ownerFilePath = path.join(lockDirPath, 'owner.json');
+  fs.mkdirSync(lockDirPath);
+  fs.writeFileSync(
+    ownerFilePath,
+    JSON.stringify({ pid: 999_999_999, startTime: null, acquiredAtMs: Date.now() }),
+  );
+  stampDirectoryAbandoned(lockDirPath);
+
+  // The dead record is read, and before the rename lands another contender reclaims the
+  // path, publishes itself, and goes live. The rename then moves that live directory, and
+  // the only thing that can tell it apart from the one judged abandoned is the directory
+  // itself.
+  let republished = false;
+  const realRename = fs.renameSync;
+  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((
+    from: fs.PathLike,
+    to: fs.PathLike,
+  ) => {
+    if (!String(to).includes(RECLAIMED_MARK) || republished) return realRename(from, to);
+    republished = true;
+    fs.rmSync(String(from), { recursive: true, force: true });
+    fs.mkdirSync(String(from));
+    fs.writeFileSync(path.join(String(from), 'owner.json'), JSON.stringify(currentProcessOwner()));
+    return realRename(from, to);
+  }) as typeof fs.renameSync);
+
+  try {
+    await assert.rejects(
+      () =>
+        acquireProcessLock({
+          lockDirPath,
+          owner: { pid: 999_999_998, startTime: null, acquiredAtMs: Date.now() },
+          timeoutMs: 50,
+          pollMs: 1,
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.ownerLiveness, 'live');
+        assert.equal(error.details?.ownerPid, process.pid);
+        return true;
+      },
+    );
+    assert.equal(republished, true);
+    assert.equal(
+      (JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { pid: number }).pid,
+      process.pid,
+    );
+    assert.deepEqual(
+      fs
+        .readdirSync(tmpDir)
+        .filter((name) => name.includes(RECLAIMED_MARK))
+        .sort(),
+      [],
+    );
+  } finally {
+    renameSpy.mockRestore();
+  }
+});
+
 test('a reclaim whose directory another contender moved aside retries and acquires', async () => {
   const lockDirPath = path.join(tmpDir, 'lost-race.lock');
   fs.mkdirSync(lockDirPath);
