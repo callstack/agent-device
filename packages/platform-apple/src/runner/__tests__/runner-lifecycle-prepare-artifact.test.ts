@@ -76,12 +76,14 @@ beforeEach(() => {
   });
 });
 
-// What a prepare deadline does to a restored artifact. The wipe that rebuilds a suspect
-// artifact comes from the rules that indict the artifact itself; a runner that never
-// answers inside its budget indicts the boot, not the derived data it was launched from,
-// so the artifact stays and the session goes.
+// What a prepare deadline does to a restored artifact. The wipe that rebuilds a suspect artifact
+// comes from the rules that indict the artifact itself; a runner that never answers inside its
+// budget indicts the boot, not the derived data it was launched from, so the artifact stays and
+// the session goes. The error is the one `ensureRunnerAttemptCanStart` reports when the startup
+// attempt is already out of time: "Runner connection deadline exceeded" is what a real prepare
+// deadline looks like, and the word in it is exactly what the deleted message check matched.
 
-test('a restored artifact whose runner never answers past its deadline is kept while the session is dropped', async () => {
+test('a restored artifact whose runner outlives the prepare deadline is kept while the session goes', async () => {
   const restoredSession = makeRunnerSession({
     port: 8100,
     xctestrunPath: '/tmp/restored.xctestrun',
@@ -90,8 +92,8 @@ test('a restored artifact whose runner never answers past its deadline is kept w
 
   mockEnsureRunnerSession.mockResolvedValue(restoredSession);
   mockExecuteRunnerCommandWithSession.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'xcrun simctl spawn did not answer', {
-      cmd: 'xcrun',
+    new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+      port: 8100,
       timeoutMs: 45_000,
     }),
   );
@@ -100,7 +102,7 @@ test('a restored artifact whose runner never answers past its deadline is kept w
     () => prepareIosRunner(IOS_SIMULATOR, { healthTimeoutMs: 90_000 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
-      assert.equal(error.message, 'xcrun simctl spawn did not answer');
+      assert.equal(error.message, 'Runner connection deadline exceeded');
       return true;
     },
   );

@@ -21,17 +21,17 @@
   back to Appium 1.x, which predates the `mobile:` commands the interactor issues (`deepLink`,
   `pressButton`, `activateApp`).
 - Changed (iOS runner): what recovers a stuck runner is decided by the recorded error, not by its
-  wording. A command that ran out its connection deadline used to arrive as a bare
-  `AbortSignal.timeout` rejection whose message matched neither `timeout` nor `timed out`, so the
-  session was never restarted and the command failed for good. It now carries the budget it ran
-  out, and a readiness preflight that gave up on that budget restarts the runner and replays the
-  command whether or not the message mentions time. The other half of this is what no longer
-  happens: a prepare deadline, a slow boot, or a busy device no longer wipes a restored
-  `xcodebuild` artifact on the way to a rebuild, because only a runner that refused a connection or
-  never answered on any route says the artifact itself is at fault. A restored artifact whose runner
-  hangs past its deadline on every attempt does not rebuild itself: the runner session is
-  invalidated and the deadline is reported, and the rebuild needs either a failure that indicts the
-  artifact or the runner cache cleared by hand.
+  wording. A readiness preflight that runs out of time posting to the runner records the budget it
+  ran out and says "Runner command deadline exceeded" — neither of the two message checks on the
+  recovery paths looked for that phrasing, so the session was never restarted and the command was
+  never replayed. The rule reads the preflight marker and the recorded deadline now, so the restart
+  happens whatever the message happens to say. The other half of this is what no longer happens: a
+  prepare deadline, a slow boot, or a busy device no longer wipes a restored `xcodebuild` artifact on
+  the way to a rebuild, because only a runner that refused a connection or never answered on any
+  route says the artifact itself is at fault. A restored artifact whose runner hangs past its
+  deadline on every attempt does not rebuild itself: the runner session is invalidated and the
+  deadline is reported, and a rebuild needs either a failure that indicts the artifact or the runner
+  cache cleared by hand.
 
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An

@@ -133,19 +133,20 @@ test('mutating commands restart stale sessions when readiness preflight outlives
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
 });
 
-test('a readiness preflight deadline with no timeout wording still restarts the session', async () => {
+test('a readiness preflight that runs out a post deadline restarts the session and replays', async () => {
   const staleSession = makeRunnerSession({ port: 8100, ready: true });
   const freshSession = makeRunnerSession({ port: 8101, ready: false });
 
-  // The shape `fetchWithTimeout` reports its own expiry in: a recorded budget and the
-  // preflight marker, and a message that says nothing about time. A message check had
-  // been the only way to notice, and it would rethrow here without restarting a session
-  // whose runner never received the command.
+  // The real shape of a preflight that ran out of time on a direct post: the simulator and
+  // usbmux paths post to the runner themselves, and `fetchWithTimeout` reports its expiry as
+  // "Runner command deadline exceeded" with the budget it ran out. The preflight marker is
+  // added on the way past the preflight catch. Neither of the deleted message checks matched
+  // that wording, so the session was never restarted and the command was never replayed.
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(
-      new AppError('COMMAND_FAILED', 'xcrun simctl spawn did not answer', {
-        cmd: 'xcrun',
+      new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', {
+        port: 8100,
         timeoutMs: 45_000,
         runnerReadinessPreflightFailed: true,
       }),
