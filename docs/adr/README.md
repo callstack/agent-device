@@ -25,6 +25,7 @@
 | [0021 Host — Simlock-Backed Managed Device Allocation and the Host Supervisor](0021-host-simlock-managed-device-allocation.md) | local-first Simlock-managed execution, Host identity/admin boundaries, shape allocation, durable managed-device lease mapping, lifecycle ownership, and supervised maintenance |
 | [0022 Daemon — Platform Runtime Coupling Audit and Ownership Ratchets](0022-daemon-platform-runtime-coupling.md) | daemon imports of root `platform-runtime-*` modules, the R76 edge classification inventory, R75 session-authority ratchet, entry-to-platform hop routes and roles |
 | [0023 End-State Entry-to-Platform Hop Trace](0023-end-state-hop-trace.md) | the hop counting definition, the ordered `press`/Android and dual-arm `snapshot`/iOS chains, per-hop roles, and the deletion test behind the numbers ADR 0019 and ADR 0022 quote |
+| [0024 Screen Recording — One Coordinator, Two Facts (Proposed)](0024-screen-recording-provable-signal.md) | `record start`/`stop` lifecycle, the export-exists / recorder-stopped split, backend stop-and-collect contract, recovery through the coordinator, the ADR 0019 §5 amendment and the failed-finish cleanup fix |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
