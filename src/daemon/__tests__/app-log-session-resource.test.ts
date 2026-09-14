@@ -15,10 +15,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import {
-  adoptStartedSessionAppLog,
-  finishSessionAppLog,
-} from '../app-log-session-resource.ts';
+import { adoptStartedSessionAppLog, finishSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../session-state.ts';
@@ -261,7 +258,6 @@ test('lost durable record during failed adoption installs a same-device process 
   ).toThrow(/process-local/);
 });
 
-
 test('app-log disposes on a failed finish because its retry is that same finish and the log file survives it', async () => {
   const directory = mkdtempForTestSync('app-log-failed-finish-');
   const logPath = path.join(directory, 'app.log');
@@ -317,7 +313,6 @@ test('app-log disposes on a failed finish because its retry is that same finish 
     }),
   ).not.toThrow();
 });
-
 
 function makeContext(
   device: DeviceInfo = {
