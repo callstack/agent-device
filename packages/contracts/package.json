@@ -368,6 +368,14 @@
       "types": "./src/facades/recording.ts",
       "default": "./src/facades/recording.ts"
     },
+    "./recording-native-path": {
+      "types": "./src/recording-native-path.ts",
+      "default": "./src/recording-native-path.ts"
+    },
+    "./recording-stop-observation": {
+      "types": "./src/recording-stop-observation.ts",
+      "default": "./src/recording-stop-observation.ts"
+    },
     "./remote": {
       "types": "./src/facades/remote.ts",
       "default": "./src/facades/remote.ts"

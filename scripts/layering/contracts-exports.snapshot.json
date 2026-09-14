@@ -88,6 +88,8 @@
   "@agent-device/contracts/react-native-overlay",
   "@agent-device/contracts/record-runtime-execution",
   "@agent-device/contracts/recording",
+  "@agent-device/contracts/recording-native-path",
+  "@agent-device/contracts/recording-stop-observation",
   "@agent-device/contracts/remote",
   "@agent-device/contracts/replay",
   "@agent-device/contracts/runner-lease-context",
