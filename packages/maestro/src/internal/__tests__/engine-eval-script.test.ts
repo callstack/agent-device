@@ -54,6 +54,19 @@ describe('evaluateMaestroEvalScript', () => {
     );
   });
 
+  test('reads a replaced output binding instead of the stale seeded object', async () => {
+    assert.deepEqual(await evaluateMaestroEvalScript('${output = { x: 1 }}', {}), {
+      'output.x': '1',
+    });
+  });
+
+  test('emits leaves under both aliases of a shared object', async () => {
+    assert.deepEqual(
+      await evaluateMaestroEvalScript('${output.a = { x: 1 }; output.b = output.a}', {}),
+      { 'output.a.x': '1', 'output.b.x': '1' },
+    );
+  });
+
   test('rejects a failing expression with a wrapped error', async () => {
     await assert.rejects(
       () => evaluateMaestroEvalScript('${exploded.leaf()}', {}),

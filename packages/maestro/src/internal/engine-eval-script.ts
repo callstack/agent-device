@@ -17,15 +17,12 @@ export async function evaluateMaestroEvalScript(
   const expression = unwrapMaestroEvalScriptExpression(script);
   // ponytail: function-scoped import keeps node:vm out of the maestro eager closure.
   const { default: vm } = await import('node:vm');
+  const sandbox: Record<string, unknown> = { ...values, output };
   try {
-    vm.runInNewContext(
-      expression,
-      { ...values, output },
-      {
-        filename: 'evalScript',
-        timeout: MAESTRO_EVAL_SCRIPT_TIMEOUT_MS,
-      },
-    );
+    vm.runInNewContext(expression, sandbox, {
+      filename: 'evalScript',
+      timeout: MAESTRO_EVAL_SCRIPT_TIMEOUT_MS,
+    });
   } catch (error) {
     // A vm context throws its own realm's errors, which are not host `Error`
     // instances; read the message directly rather than through normalizeError.
@@ -36,7 +33,10 @@ export async function evaluateMaestroEvalScript(
       error instanceof Error ? error : undefined,
     );
   }
-  return flattenMaestroOutput(output);
+  // The script can replace the `output` binding (`output = { x: 1 }`), which
+  // leaves the seeded host object stale; read the binding back from the vm
+  // global instead of flattening the original reference.
+  return flattenMaestroOutput(sandbox['output']);
 }
 
 function unwrapMaestroEvalScriptExpression(script: string): string {
@@ -70,10 +70,10 @@ function writeNestedOutput(root: Record<string, unknown>, path: string, value: s
   node[segments.at(-1)!] = value;
 }
 
-function flattenMaestroOutput(output: Record<string, unknown>): Record<string, string> {
+function flattenMaestroOutput(output: unknown): Record<string, string> {
   const flat: Record<string, string> = {};
-  const visited = new Set<object>();
-  writeOutputLeaves(output, [], flat, visited);
+  const ancestors = new Set<object>();
+  writeOutputLeaves(output, [], flat, ancestors);
   return flat;
 }
 
@@ -81,7 +81,7 @@ function writeOutputLeaves(
   value: unknown,
   segments: readonly string[],
   flat: Record<string, string>,
-  visited: Set<object>,
+  ancestors: Set<object>,
 ): void {
   if (value === undefined) return;
   if (value === null || typeof value !== 'object') {
@@ -89,18 +89,25 @@ function writeOutputLeaves(
       stringifyOutputValue(value);
     return;
   }
-  if (visited.has(value)) return;
-  visited.add(value);
-  const children = Array.isArray(value)
-    ? [...value.keys(), 'length']
-    : Object.keys(value).filter(isSafeOutputSegment);
-  for (const segment of children) {
-    const key = String(segment);
-    const child =
-      Array.isArray(value) && key === 'length'
-        ? value.length
-        : (value as Record<string, unknown>)[key];
-    writeOutputLeaves(child, [...segments, key], flat, visited);
+  // Cycle guard is path-local: aliases (`output.b = output.a`) must emit
+  // leaves under both paths, while a self-reference still terminates because
+  // the ancestor is on the current traversal stack.
+  if (ancestors.has(value)) return;
+  ancestors.add(value);
+  try {
+    const children = Array.isArray(value)
+      ? [...value.keys(), 'length']
+      : Object.keys(value).filter(isSafeOutputSegment);
+    for (const segment of children) {
+      const key = String(segment);
+      const child =
+        Array.isArray(value) && key === 'length'
+          ? value.length
+          : (value as Record<string, unknown>)[key];
+      writeOutputLeaves(child, [...segments, key], flat, ancestors);
+    }
+  } finally {
+    ancestors.delete(value);
   }
 }
 

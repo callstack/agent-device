@@ -718,6 +718,47 @@ describe('executeMaestroProgram', () => {
     );
   });
 
+  test('evalScript replaced output binding is consumed by later steps', async () => {
+    const texts: string[] = [];
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind === 'inputText') texts.push(request.command.text);
+        request.invalidateObservation();
+        return {};
+      }),
+    });
+    const program = parseMaestroProgram(
+      ['---', "- evalScript: '${output = { x: 1 }}'", '- inputText: ${output.x}'].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port);
+
+    expect(texts).toEqual(['1']);
+  });
+
+  test('evalScript aliased objects resolve under both paths', async () => {
+    const texts: string[] = [];
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind === 'inputText') texts.push(request.command.text);
+        request.invalidateObservation();
+        return {};
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        "- evalScript: '${output.a = { x: 1 }; output.b = output.a}'",
+        '- inputText: ${output.a.x}',
+        '- inputText: ${output.b.x}',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port);
+
+    expect(texts).toEqual(['1', '1']);
+  });
+
   test('evalScript reports a failing expression with step source', async () => {
     const program = parseMaestroProgram(['---', '- evalScript: ${exploded.leaf()}'].join('\n'), {
       sourcePath: '/flows/eval.yaml',
