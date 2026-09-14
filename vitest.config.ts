@@ -11,7 +11,7 @@ const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove
   // that worktree identity does not strand the predecessor (#1545).
-  'src/daemon/__tests__/daemon-process-takeover.test.ts',
+  'src/__tests__/daemon-process-takeover.test.ts',
 ];
 
 // The fuzz corpus replay, which must not run under V8 coverage instrumentation.
