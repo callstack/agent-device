@@ -1,53 +1,33 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { Point, RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { keyboardCoveredTabBarSnapshot } from '../../../../test/integration/interaction-contract/fixtures.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 
 // #2589: the keyboard is its own system surface, so neither `occlusion` nor `offscreen` refuses a
 // tap whose point belongs to it. These cover the consequences the shared classifier cannot express:
-// which paths refuse, which disclose, and which stay silent.
+// which paths refuse, which disclose, and which stay silent. The tree itself is the contract
+// fixtures' #2589 shape, so the refusal and the disclosure are measured on the same geometry the
+// ADR 0011 cells claim.
 
-const TAB_BAR_RECT = { x: 148, y: 791, width: 104, height: 83 };
-const KEYBOARD_RECT = { x: 0, y: 583, width: 402, height: 291 };
-const SPACE_KEY_RECT = { x: 40, y: 730, width: 240, height: 60 };
+const TAB_BAR_RECT: Rect = { x: 148, y: 791, width: 104, height: 83 };
 
-function keyboardNode(overrides: Partial<RawSnapshotNode> = {}): RawSnapshotNode {
-  return {
-    index: 2,
-    depth: 1,
-    parentIndex: 0,
-    type: 'Keyboard',
-    rect: KEYBOARD_RECT,
-    hittable: false,
-    ...overrides,
-  };
-}
-
-function keyboardTree(params: { tabRect?: RawSnapshotNode['rect'] } = {}): SnapshotState {
-  return makeSnapshotState([
-    { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
-    {
-      index: 1,
-      depth: 2,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Form',
-      rect: params.tabRect ?? TAB_BAR_RECT,
-      hittable: true,
-    },
-    keyboardNode(),
-    {
-      index: 3,
-      depth: 2,
-      parentIndex: 2,
-      type: 'Key',
-      label: 'space',
-      rect: SPACE_KEY_RECT,
-      hittable: true,
-    },
-  ]);
+/** The contract fixture with its app-owned rects moved: the variants stay one tree, not copies. */
+function keyboardTree(params: { tabRect?: Rect; keyboardOwnedDy?: number } = {}): SnapshotState {
+  if (!params.tabRect && params.keyboardOwnedDy === undefined)
+    return keyboardCoveredTabBarSnapshot();
+  return makeSnapshotState(
+    keyboardCoveredTabBarSnapshot().nodes.map((node) => {
+      if (params.tabRect && node.index === 1) return { ...node, rect: params.tabRect };
+      const keyboardOwned = node.type === 'Keyboard' || node.type === 'Key';
+      if (params.keyboardOwnedDy !== undefined && keyboardOwned && node.rect) {
+        return { ...node, rect: { ...node.rect, y: node.rect.y + params.keyboardOwnedDy } };
+      }
+      return node;
+    }),
+  );
 }
 
 function tappedDevice(snapshot: SnapshotState, calls: Point[]) {
@@ -137,15 +117,9 @@ test('no keyboard in the tree means nothing to refuse', async () => {
   assert.deepEqual(calls, [{ x: 200, y: 833 }]);
 });
 
-test('an app-drawn keypad in the upper half is not the system keyboard', async () => {
+test('an app-drawn keypad that stops short of the bottom edge is not the system keyboard', async () => {
   const calls: Point[] = [];
-  const upperKeypad = makeSnapshotState([
-    ...keyboardTree().nodes.slice(0, 1),
-    keyboardTree().nodes[1]!,
-    keyboardNode({ rect: { x: 0, y: 60, width: 402, height: 220 } }),
-    keyboardTree().nodes[3]!,
-  ]);
-  const device = tappedDevice(upperKeypad, calls);
+  const device = tappedDevice(keyboardTree({ keyboardOwnedDy: -560 }), calls);
 
   await device.interactions.click(ref('@e2'), { session: 'default' });
 
@@ -166,6 +140,58 @@ test('a coordinate behind the keyboard taps anyway and discloses the reason', as
   assert.deepEqual(calls, [{ x: 200, y: 810 }]);
   assert.match(result.warning ?? '', /behind the visible keyboard/);
   assert.match(result.warning ?? '', /tap_keyboard_occludes_target/);
+});
+
+test('the guard reads the point the interaction dispatches, not the rect center', async () => {
+  const calls: Point[] = [];
+  // The Form button's own center sits 3 pt above the key plane, but its interactive child owns that
+  // upper region, so the aim point the tap dispatches is pushed down into the keyboard's band.
+  const aimShifted = makeSnapshotState([
+    ...keyboardCoveredTabBarSnapshot().nodes,
+    {
+      index: 5,
+      depth: 3,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Send',
+      rect: { x: 148, y: 500, width: 104, height: 83 },
+      hittable: true,
+    },
+  ]);
+  const shifted = aimShifted.nodes.map((node) =>
+    node.index === 1 ? { ...node, rect: { x: 148, y: 500, width: 104, height: 160 } } : node,
+  );
+  const device = tappedDevice(makeSnapshotState(shifted), calls);
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+
+  // The same tree with its keypad lifted off the bottom edge shows where that tap was aiming: below
+  // the key plane, which is what makes this the aim point's refusal rather than the center's.
+  const aimCalls: Point[] = [];
+  const clearDevice = tappedDevice(
+    makeSnapshotState(
+      shifted.map((node) =>
+        node.type === 'Keyboard' || node.type === 'Key'
+          ? { ...node, rect: { ...node.rect!, y: node.rect!.y - 560 } }
+          : node,
+      ),
+    ),
+    aimCalls,
+  );
+  await clearDevice.interactions.click(ref('@e2'), { session: 'default' });
+  assert.equal(aimCalls.length, 1);
+  assert.ok(
+    (aimCalls[0]?.y ?? 0) > 583,
+    `expected the dispatched aim below the key plane at 583, got ${aimCalls[0]?.y}`,
+  );
 });
 
 test('a coordinate on a reported key is the keyboard the caller asked for', async () => {

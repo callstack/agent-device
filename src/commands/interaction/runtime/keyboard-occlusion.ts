@@ -1,6 +1,5 @@
-import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Point, Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
   resolveKeyboardTapOcclusion,
@@ -31,11 +30,16 @@ export function assertTapTargetClearOfVisibleKeyboard(params: {
   action: InteractionAction;
   /** How the caller named the target, e.g. `Ref @e40` or `Selector text=Form`. */
   label: string;
+  /**
+   * Where this interaction aims: the point a point-dispatching path resolved through the same
+   * resolver it dispatches with, or the rect center for the native-ref fast path, which hands the
+   * element to the platform and lets it pick. Null when the node has no measurable aim.
+   */
+  tapPoint: Point | null;
 }): void {
   const targetRect = params.node.rect;
-  if (!targetRect) return;
-  const tapPoint = resolveRectCenter(targetRect);
-  if (!tapPoint) return;
+  const tapPoint = params.tapPoint;
+  if (!targetRect || !tapPoint) return;
   const occlusion = resolveKeyboardTapOcclusion({
     nodes: params.nodes,
     viewport: createSnapshotVisibility(params.nodes).resolveViewport(targetRect),
@@ -62,15 +66,12 @@ export function assertTapTargetClearOfVisibleKeyboard(params: {
 export function describeKeyboardOccludedPointWarning(params: {
   nodes: SnapshotState['nodes'];
   point: Point;
+  /** The caller's own viewport lookup for this point, shared with the viewport warning above it. */
+  viewport: Rect | null;
 }): string | undefined {
   const occlusion = resolveKeyboardTapOcclusion({
     nodes: params.nodes,
-    viewport: createSnapshotVisibility(params.nodes).resolveViewport({
-      x: params.point.x,
-      y: params.point.y,
-      width: 0,
-      height: 0,
-    }),
+    viewport: params.viewport,
     point: params.point,
   });
   if (occlusion.kind !== 'occluded') return undefined;

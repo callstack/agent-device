@@ -229,7 +229,7 @@ async function resolvePointTargetWarning(
   if (viewport && !containsPoint(viewport, point.x, point.y)) {
     return `Coordinates (${point.x}, ${point.y}) are outside the last-known viewport (${viewport.width}x${viewport.height}). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.`;
   }
-  return describeKeyboardOccludedPointWarning({ nodes, point });
+  return describeKeyboardOccludedPointWarning({ nodes, point, viewport });
 }
 
 async function resolvePointInteractionTarget(
@@ -331,7 +331,7 @@ async function resolveRefInteractionTarget(
     : await readRefResolution(runtime, options, target);
   const nodes = tree.nodes;
   // #1542: point/response read from the returned (possibly rescue-patched) node.
-  const visibleNode = await runInteractionPipelineStages({
+  const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
     policy: params.pipeline,
     nodes,
     node: resolved.node,
@@ -342,11 +342,12 @@ async function resolveRefInteractionTarget(
       offscreen: async (node, tree) =>
         await assertVisibleRefTarget(runtime, options, node, tree, target.ref, params),
     },
-  });
-  const point = resolveNodeTouchPoint(visibleNode, nodes, {
-    invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
-    blockedTargetLabel: `Ref ${target.ref}`,
-    blockedTargetDetails: { ref: `@${normalizeRef(target.ref) ?? visibleNode.ref}` },
+    resolveTapPoint: (node) =>
+      resolveNodeTouchPoint(node, nodes, {
+        invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
+        blockedTargetLabel: `Ref ${target.ref}`,
+        blockedTargetDetails: { ref: `@${normalizeRef(target.ref) ?? node.ref}` },
+      }),
   });
   return {
     kind: 'ref',
@@ -396,7 +397,7 @@ async function resolveSelectorInteractionTarget(
   }
   // #1542: see the ref-target twin above.
   const selected = resolved;
-  const visibleNode = await runInteractionPipelineStages({
+  const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
     policy: params.pipeline,
     nodes: capture.snapshot.nodes,
     node: selected.node,
@@ -407,11 +408,12 @@ async function resolveSelectorInteractionTarget(
       offscreen: async (node, tree) =>
         await assertVisibleSelectorTarget(runtime, options, node, tree, selected.selector, params),
     },
-  });
-  const point = resolveNodeTouchPoint(visibleNode, capture.snapshot.nodes, {
-    invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
-    blockedTargetLabel: `Selector ${selectorExpression}`,
-    blockedTargetDetails: { selector: selectorExpression },
+    resolveTapPoint: (node) =>
+      resolveNodeTouchPoint(node, capture.snapshot.nodes, {
+        invalidMessage: `Selector ${resolved.selector} resolved to invalid bounds`,
+        blockedTargetLabel: `Selector ${selectorExpression}`,
+        blockedTargetDetails: { selector: selectorExpression },
+      }),
   });
   return {
     kind: 'selector',
@@ -651,15 +653,31 @@ function describeNonHittableTarget(
  * interaction runtime owns. Which stages run is the row's decision; every acting path — selector,
  * ref, and the native-ref preflight — enters them here, which is what keeps the native-ref fast
  * path from succeeding on a target the shared rules would refuse.
+ *
+ * A path that dispatches a coordinate hands in its own aim resolver and gets the measured point
+ * back, so the keyboard guard reads the coordinate the interaction will actually send and the
+ * dispatch does not derive a second one. The native-ref fast path dispatches by ref and has no
+ * point to measure: its guard reads the rect center, which is the aim the platform picks.
  */
-async function runInteractionPipelineStages(params: {
+type InteractionStageParams = {
   policy: SelectorPipelinePolicy;
   nodes: SnapshotState['nodes'];
   node: SnapshotNode;
   action: InteractionAction;
   label: string;
   hooks: SelectorPipelineHooks;
-}): Promise<SnapshotNode> {
+};
+type InteractionStageOutcome = { node: SnapshotNode };
+
+async function runInteractionPipelineStages(
+  params: InteractionStageParams & { resolveTapPoint: (node: SnapshotNode) => Point },
+): Promise<InteractionStageOutcome & { tapPoint: Point }>;
+async function runInteractionPipelineStages(
+  params: InteractionStageParams & { resolveTapPoint?: undefined },
+): Promise<InteractionStageOutcome & { tapPoint: null }>;
+async function runInteractionPipelineStages(
+  params: InteractionStageParams & { resolveTapPoint?: (node: SnapshotNode) => Point },
+): Promise<InteractionStageOutcome & { tapPoint: Point | null }> {
   const target = await runNodePipelineStages(
     params.policy,
     params.nodes,
@@ -673,13 +691,17 @@ async function runInteractionPipelineStages(params: {
       action: params.action,
     });
   }
+  const tapPoint = params.resolveTapPoint
+    ? params.resolveTapPoint(target.node)
+    : (resolveRectCenter(target.node.rect) ?? null);
   assertTapTargetClearOfVisibleKeyboard({
     nodes: params.nodes,
     node: target.node,
     action: params.action,
     label: params.label,
+    tapPoint,
   });
-  return target.node;
+  return { node: target.node, tapPoint };
 }
 
 function buildCoveredInteractionError(params: {
@@ -1001,7 +1023,7 @@ export async function preflightNativeRefInteraction(
   const pipeline = SELECTOR_PIPELINE_POLICIES.resolvedTarget;
   // #1542: dispatches by REF, not coordinate, so no point to re-derive — but
   // evidence/annotation below still describes the returned (visible) node.
-  const visibleNode = await runInteractionPipelineStages({
+  const { node: visibleNode } = await runInteractionPipelineStages({
     policy: pipeline,
     nodes,
     node: resolved.node,
