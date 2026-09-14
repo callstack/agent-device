@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
@@ -13,6 +13,26 @@ import {
 function capture(fields: Partial<SnapshotResult>): SnapshotResult {
   return { backend: 'xctest', producer: 'runner', ...fields } as SnapshotResult;
 }
+
+/**
+ * Counts the visibility indexes a pass materializes. A verdict cannot tell one index from one per
+ * candidate — both answer the same — so the pass shape needs the count to be testable at all.
+ */
+const visibilityIndexes = vi.hoisted(() => ({ built: 0 }));
+
+vi.mock('@agent-device/contracts/snapshot', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/contracts/snapshot')>();
+  return {
+    ...actual,
+    createSnapshotVisibility: (
+      nodes: Parameters<typeof actual.createSnapshotVisibility>[0],
+      probe: Parameters<typeof actual.createSnapshotVisibility>[1],
+    ) => {
+      visibilityIndexes.built += 1;
+      return actual.createSnapshotVisibility(nodes, probe);
+    },
+  };
+});
 
 const VIEWPORT = { x: 0, y: 0, width: 400, height: 800 };
 const SPARSE = { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' } as const;
@@ -120,6 +140,17 @@ test('a visible row sharing its selector with a scrolled-out twin stops the loop
   });
   assert.equal(result.passes, 0);
   assert.equal(scrolls, 0);
+});
+
+/**
+ * One pass, two candidates, one index. The twin verdicts above stay green with an index rebuilt per
+ * candidate, so this count is what actually pins where the index is built.
+ */
+test('a pass materializes one visibility index for the candidates it asks', async () => {
+  visibilityIndexes.built = 0;
+  const result = await run({ captures: [capture({ nodes: twinTree(-400, 200) })] });
+  assert.equal(result.passes, 0);
+  assert.equal(visibilityIndexes.built, 1);
 });
 
 /** The closest negative: every row sharing the selector is scrolled out, so nothing has arrived. */
