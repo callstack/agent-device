@@ -61,6 +61,7 @@ import {
   readVersion,
   releaseDaemonLock,
   removeInfo,
+  resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
   writeInfo,
 } from './server-lifecycle.ts';
@@ -258,6 +259,7 @@ export async function startDaemonRuntime(
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
+  const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
@@ -458,6 +460,7 @@ export async function startDaemonRuntime(
       httpPort,
       token,
       version,
+      codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       processStartTime: daemonProcessStartTime,
     });

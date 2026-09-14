@@ -3,6 +3,8 @@ import { shellQuote } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon/daemon-process.ts';
 
+import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
+
 import { resolveDaemonPaths, type DaemonPaths, type DaemonServerMode } from '../daemon/config.ts';
 
 export type DaemonInfo = {
@@ -12,6 +14,7 @@ export type DaemonInfo = {
   token: string;
   pid: number;
   version?: string;
+  codeOrigin?: DaemonCodeOrigin;
   codeSignature?: string;
   processStartTime?: string;
   baseUrl?: string;
@@ -58,6 +61,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     transport: readDaemonInfoTransport(parsed.transport),
     pid: readPositiveInteger(parsed.pid) ?? 0,
     version: readOptionalString(parsed.version),
+    codeOrigin: readDaemonInfoCodeOrigin(parsed.codeOrigin),
     codeSignature: readOptionalString(parsed.codeSignature),
     processStartTime: readOptionalString(parsed.processStartTime),
   };
@@ -74,6 +78,10 @@ function readDaemonInfoPorts(
   const httpPort = readPositiveInteger(parsed.httpPort);
   if (port === undefined && httpPort === undefined) return null;
   return { port, httpPort };
+}
+
+function readDaemonInfoCodeOrigin(value: unknown): DaemonInfo['codeOrigin'] {
+  return value === 'installed' || value === 'checkout' ? value : undefined;
 }
 
 function readDaemonInfoTransport(value: unknown): DaemonInfo['transport'] {

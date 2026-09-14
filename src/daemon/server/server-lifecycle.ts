@@ -1,9 +1,14 @@
 import fs from 'node:fs';
+import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 
 export { readVersion } from '@agent-device/host-kit/version';
 export { readProcessStartTime } from '@agent-device/host-kit/process';
-export { resolveDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
+export {
+  type DaemonCodeOrigin,
+  resolveDaemonCodeOrigin,
+  resolveDaemonCodeSignature,
+} from '@agent-device/host-kit/code-signature';
 
 export type DaemonLockInfo = {
   pid: number;
@@ -21,6 +26,7 @@ export function writeInfo(
     httpPort?: number;
     token: string;
     version: string;
+    codeOrigin: DaemonCodeOrigin;
     codeSignature: string;
     processStartTime: string | undefined;
   },
@@ -38,6 +44,7 @@ export function writeInfo(
         token: opts.token,
         pid: process.pid,
         version: opts.version,
+        codeOrigin: opts.codeOrigin,
         codeSignature: opts.codeSignature,
         processStartTime: opts.processStartTime,
         stateDir: baseDir,

@@ -23,6 +23,7 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
       httpPort: 4310,
       token: 'provider-scenario-token',
       version: '0.0.0-provider-scenario',
+      codeOrigin: 'checkout',
       codeSignature: 'graph:1:abc',
       processStartTime: 'start-time',
     });
@@ -40,6 +41,7 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
       httpPort: 4311,
       token: 'http-only-token',
       version: '0.0.0-provider-scenario',
+      codeOrigin: 'checkout',
       codeSignature: 'graph:1:http',
       processStartTime: undefined,
     });
@@ -53,6 +55,7 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
       socketPort: 4211,
       token: 'socket-only-token',
       version: '0.0.0-provider-scenario',
+      codeOrigin: 'checkout',
       codeSignature: 'graph:1:socket',
       processStartTime: undefined,
     });

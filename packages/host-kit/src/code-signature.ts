@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { findProjectRoot } from './version.ts';
+import { findProjectRoot, isSourceCheckoutProjectRoot } from './version.ts';
 
 // Any quoted, relative-path-shaped string literal is treated as a module
 // specifier, rather than matching the `import`/`export`/`from` grammar
@@ -59,6 +59,23 @@ export function resolveDaemonCodeSignature(): string {
   const entryPath = process.argv[1];
   if (!entryPath) return 'unknown';
   return computeDaemonCodeSignature(entryPath);
+}
+
+/**
+ * Which tree a daemon's code came from, and so what could have changed it since the
+ * version it reports.
+ *
+ * A signature only means something against a tree that can be re-read, so this answers
+ * first: two installed trees of one version hold the same artifact and have nothing to
+ * compare (#2458), while a checkout's code moves under a version that does not move
+ * with it. A running daemon publishes its own answer beside its signature
+ * (`src/daemon/server/server-lifecycle.ts`) because the question is about the code that
+ * is RUNNING, not only about the client asking it.
+ */
+export type DaemonCodeOrigin = 'installed' | 'checkout';
+
+export function resolveDaemonCodeOrigin(root: string = findProjectRoot()): DaemonCodeOrigin {
+  return isSourceCheckoutProjectRoot(root) ? 'checkout' : 'installed';
 }
 
 export function computeDaemonCodeSignature(

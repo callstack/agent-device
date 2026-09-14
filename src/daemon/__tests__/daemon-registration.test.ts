@@ -28,6 +28,7 @@ test('reads back the identity a running daemon publishes for its state dir', () 
   writeInfo(stateDir, infoPathOf(stateDir), path.join(stateDir, 'daemon.log'), {
     socketPort: 1234,
     token: 'token',
+    codeOrigin: 'checkout',
     version: '0.0.0-test',
     codeSignature: 'signature',
     processStartTime: 'published-start',
