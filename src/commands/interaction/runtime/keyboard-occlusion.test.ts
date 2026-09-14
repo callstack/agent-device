@@ -14,19 +14,26 @@ import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 
 const TAB_BAR_RECT: Rect = { x: 148, y: 791, width: 104, height: 83 };
 
-/** The contract fixture with its app-owned rects moved: the variants stay one tree, not copies. */
-function keyboardTree(params: { tabRect?: Rect; keyboardOwnedDy?: number } = {}): SnapshotState {
-  if (!params.tabRect && params.keyboardOwnedDy === undefined)
-    return keyboardCoveredTabBarSnapshot();
+/** The contract fixture with its app-owned button moved, so the variants stay one tree, not copies. */
+function keyboardTree(params: { tabRect?: Rect } = {}): SnapshotState {
+  const tabRect = params.tabRect;
+  if (!tabRect) return keyboardCoveredTabBarSnapshot();
   return makeSnapshotState(
-    keyboardCoveredTabBarSnapshot().nodes.map((node) => {
-      if (params.tabRect && node.index === 1) return { ...node, rect: params.tabRect };
-      const keyboardOwned = node.type === 'Keyboard' || node.type === 'Key';
-      if (params.keyboardOwnedDy !== undefined && keyboardOwned && node.rect) {
-        return { ...node, rect: { ...node.rect, y: node.rect.y + params.keyboardOwnedDy } };
-      }
-      return node;
-    }),
+    keyboardCoveredTabBarSnapshot().nodes.map((node) =>
+      node.index === 1 ? { ...node, rect: tabRect } : node,
+    ),
+  );
+}
+
+/**
+ * Keyboard-owned rects hauled above the docking budget: the tree stops describing a keyboard the
+ * bottom of the screen belongs to, which is what the app-drawn-keypad and aim cases measure against.
+ */
+function liftKeyboardOffBottomEdge(nodes: SnapshotState['nodes']): SnapshotState['nodes'] {
+  return nodes.map((node) =>
+    node.rect && (node.type === 'Keyboard' || node.type === 'Key')
+      ? { ...node, rect: { ...node.rect, y: node.rect.y - 560 } }
+      : node,
   );
 }
 
@@ -119,7 +126,8 @@ test('no keyboard in the tree means nothing to refuse', async () => {
 
 test('an app-drawn keypad that stops short of the bottom edge is not the system keyboard', async () => {
   const calls: Point[] = [];
-  const device = tappedDevice(keyboardTree({ keyboardOwnedDy: -560 }), calls);
+  const appOwnedKeypad = makeSnapshotState(liftKeyboardOffBottomEdge(keyboardTree().nodes));
+  const device = tappedDevice(appOwnedKeypad, calls);
 
   await device.interactions.click(ref('@e2'), { session: 'default' });
 
@@ -143,9 +151,8 @@ test('a coordinate behind the keyboard taps anyway and discloses the reason', as
 });
 
 test('the guard reads the point the interaction dispatches, not the rect center', async () => {
-  const calls: Point[] = [];
-  // The Form button's own center sits 3 pt above the key plane, but its interactive child owns that
-  // upper region, so the aim point the tap dispatches is pushed down into the keyboard's band.
+  // The Form button's own center sits 3 pt above the key plane, and its interactive child owns that
+  // upper region, so the point the tap dispatches is pushed down into the keyboard's band.
   const aimShifted = makeSnapshotState([
     ...keyboardCoveredTabBarSnapshot().nodes,
     {
@@ -157,41 +164,29 @@ test('the guard reads the point the interaction dispatches, not the rect center'
       rect: { x: 148, y: 500, width: 104, height: 83 },
       hittable: true,
     },
-  ]);
-  const shifted = aimShifted.nodes.map((node) =>
+  ]).nodes.map((node) =>
     node.index === 1 ? { ...node, rect: { x: 148, y: 500, width: 104, height: 160 } } : node,
   );
-  const device = tappedDevice(makeSnapshotState(shifted), calls);
 
+  const calls: Point[] = [];
   await assert.rejects(
-    () => device.interactions.click(ref('@e2'), { session: 'default' }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
-      return true;
-    },
+    () =>
+      tappedDevice(makeSnapshotState(aimShifted), calls).interactions.click(ref('@e2'), {
+        session: 'default',
+      }),
+    /Ref @e2 is behind the visible keyboard/,
   );
   assert.deepEqual(calls, []);
 
-  // The same tree with its keypad lifted off the bottom edge shows where that tap was aiming: below
-  // the key plane, which is what makes this the aim point's refusal rather than the center's.
-  const aimCalls: Point[] = [];
-  const clearDevice = tappedDevice(
-    makeSnapshotState(
-      shifted.map((node) =>
-        node.type === 'Keyboard' || node.type === 'Key'
-          ? { ...node, rect: { ...node.rect!, y: node.rect!.y - 560 } }
-          : node,
-      ),
-    ),
-    aimCalls,
-  );
-  await clearDevice.interactions.click(ref('@e2'), { session: 'default' });
-  assert.equal(aimCalls.length, 1);
-  assert.ok(
-    (aimCalls[0]?.y ?? 0) > 583,
-    `expected the dispatched aim below the key plane at 583, got ${aimCalls[0]?.y}`,
-  );
+  // The same tree with its keyboard hauled off the bottom edge shows where that tap was aiming: below
+  // the key plane, which is what makes this the dispatched point's refusal rather than the center's.
+  const aim: Point[] = [];
+  await tappedDevice(
+    makeSnapshotState(liftKeyboardOffBottomEdge(aimShifted)),
+    aim,
+  ).interactions.click(ref('@e2'), { session: 'default' });
+  assert.equal(aim.length, 1);
+  assert.ok((aim[0]?.y ?? 0) > 583, `expected the dispatched point below 583, got ${aim[0]?.y}`);
 });
 
 test('a coordinate on a reported key is the keyboard the caller asked for', async () => {

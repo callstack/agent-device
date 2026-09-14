@@ -197,14 +197,6 @@ export async function resolveInteractionTarget(
   return await resolveSelectorInteractionTarget(runtime, options, options.target, params);
 }
 
-async function readLastKnownPointTree(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-): Promise<SnapshotState['nodes'] | undefined> {
-  const session = await runtime.sessions.get(options.session ?? 'default');
-  return session?.snapshot?.nodes;
-}
-
 /**
  * The one warning a raw-coordinate tap can earn from the last-known tree: the point is outside the
  * viewport that tree captured, or the keyboard it captured covers the point. Both are disclosures,
@@ -215,7 +207,8 @@ async function resolvePointTargetWarning(
   options: CommandContext,
   target: PointTarget,
 ): Promise<string | undefined> {
-  const nodes = await readLastKnownPointTree(runtime, options);
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  const nodes = session?.snapshot?.nodes;
   if (!nodes) return undefined;
   const point = { x: target.x, y: target.y };
 
@@ -654,30 +647,20 @@ function describeNonHittableTarget(
  * ref, and the native-ref preflight — enters them here, which is what keeps the native-ref fast
  * path from succeeding on a target the shared rules would refuse.
  *
- * A path that dispatches a coordinate hands in its own aim resolver and gets the measured point
- * back, so the keyboard guard reads the coordinate the interaction will actually send and the
- * dispatch does not derive a second one. The native-ref fast path dispatches by ref and has no
- * point to measure: its guard reads the rect center, which is the aim the platform picks.
+ * Each path hands in the resolver that produces the point it taps with, and taps the point that
+ * comes back, so the keyboard guard measures the coordinate the interaction is actually made of and no
+ * path derives a second one. A path whose point can fail to exist — the native-ref fast path taps by
+ * ref, reading the rect center the platform aims at — says so in its resolver's return type.
  */
-type InteractionStageParams = {
+async function runInteractionPipelineStages<TPoint extends Point | null>(params: {
   policy: SelectorPipelinePolicy;
   nodes: SnapshotState['nodes'];
   node: SnapshotNode;
   action: InteractionAction;
   label: string;
   hooks: SelectorPipelineHooks;
-};
-type InteractionStageOutcome = { node: SnapshotNode };
-
-async function runInteractionPipelineStages(
-  params: InteractionStageParams & { resolveTapPoint: (node: SnapshotNode) => Point },
-): Promise<InteractionStageOutcome & { tapPoint: Point }>;
-async function runInteractionPipelineStages(
-  params: InteractionStageParams & { resolveTapPoint?: undefined },
-): Promise<InteractionStageOutcome & { tapPoint: null }>;
-async function runInteractionPipelineStages(
-  params: InteractionStageParams & { resolveTapPoint?: (node: SnapshotNode) => Point },
-): Promise<InteractionStageOutcome & { tapPoint: Point | null }> {
+  resolveTapPoint: (node: SnapshotNode) => TPoint;
+}): Promise<{ node: SnapshotNode; tapPoint: TPoint }> {
   const target = await runNodePipelineStages(
     params.policy,
     params.nodes,
@@ -691,9 +674,7 @@ async function runInteractionPipelineStages(
       action: params.action,
     });
   }
-  const tapPoint = params.resolveTapPoint
-    ? params.resolveTapPoint(target.node)
-    : (resolveRectCenter(target.node.rect) ?? null);
+  const tapPoint = params.resolveTapPoint(target.node);
   assertTapTargetClearOfVisibleKeyboard({
     nodes: params.nodes,
     node: target.node,
@@ -1021,7 +1002,7 @@ export async function preflightNativeRefInteraction(
   // `resolvedTarget` whatever the command: its `none` promotion is what holds
   // ADR 0011's "the preflight never changes which element the backend acts on".
   const pipeline = SELECTOR_PIPELINE_POLICIES.resolvedTarget;
-  // #1542: dispatches by REF, not coordinate, so no point to re-derive — but
+  // #1542: dispatches by REF, not coordinate, so no point is re-derived for the dispatch — but
   // evidence/annotation below still describes the returned (visible) node.
   const { node: visibleNode } = await runInteractionPipelineStages({
     policy: pipeline,
@@ -1036,6 +1017,7 @@ export async function preflightNativeRefInteraction(
           pipeline,
         }),
     },
+    resolveTapPoint: (node) => resolveRectCenter(node.rect),
   });
   return {
     ...describeNonHittableTarget(visibleNode, action),
