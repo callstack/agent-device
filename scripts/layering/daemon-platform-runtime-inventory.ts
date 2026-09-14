@@ -45,8 +45,9 @@ export function isRootPlatformRuntimeTarget(target: string): boolean {
  * Every module outside the daemon zone through which a daemon import can reach the root
  * platform-runtime family: the family itself, plus anything that imports it, transitively, over
  * static and dynamic edges alike. Computed from the tree rather than patterned so a root hub that
- * carries platform mechanics without naming them gains no immunity from its filename, and so the
- * one dynamic edge out of the daemon zone is classified like the static ones (#2542).
+ * carries platform mechanics without naming them gains no immunity from its filename, and so a
+ * dynamic edge out of the daemon zone is caught like a static one instead of escaping the
+ * inventory (#2542).
  */
 export function computePlatformMechanicsHubs(
   edges: readonly ResolvedImportEdge[],
@@ -208,16 +209,16 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'only symbol this edge names.',
   },
   {
-    file: 'src/daemon/snapshot-interactor-capture.ts',
+    file: 'src/daemon/server/daemon-runtime.ts',
     target: 'src/core/interactors.ts',
     symbols: ['getInteractor'],
-    classification: 'leaked-platform-mechanics',
+    classification: 'composition-essential',
     rationale:
-      'the snapshot capture looks an interactor up through a dynamic import of the shared ' +
-      'interactor lookup, the one production edge that leaves the daemon zone dynamically and so ' +
-      'the one the ranked spine never sees; interactor resolution behind a capability bound at ' +
-      'root composition is the accepted deepening (#2555).',
-    deepenedBy: '#2555',
+      'process-root assembly of the neutral InteractorResolution capability the legacy snapshot ' +
+      'capture consumes (#2555): this site hands the shared interactor lookup to the daemon next ' +
+      "to the provider-device admission it shares a request scope with, and is the daemon zone's " +
+      'only edge into src/core/interactors.ts. The lookup it replaced was a dynamic import out of ' +
+      'the daemon zone, a direction the ranked spine cannot see.',
   },
   {
     file: 'src/daemon/server/daemon-runtime.ts',
@@ -272,7 +273,8 @@ function sorted(symbols: readonly string[]): string[] {
  *   at least named here (#2542).
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
  *   this table is that measurement, classified per ADR 0022, plus the 3 edges the hub widening and
- *   dynamic-edge pass made visible at #2541 (2 provider-runtime hubs, 1 dynamic interactor lookup).
+ *   dynamic-edge pass made visible at #2541 (2 provider-runtime hubs, 1 dynamic interactor lookup
+ *   that #2555 has since composed away into the daemon-runtime edge above).
  * Cost: attributed to the R76 rule registration in check.ts; not a standalone CI job.
  * Kill criterion: the daemon reaches the platform only through the gateway and declared
  *   contract capabilities (the inventory empty), or a maintainer decision retires the

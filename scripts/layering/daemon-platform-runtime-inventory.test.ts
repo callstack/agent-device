@@ -309,34 +309,32 @@ test('R76 catches a symbol added to the classified provider-runtime hub edge', (
   assert.match(found[0]!.message, /setProviderDevice/);
 });
 
-test('R76 classifies the dynamic interactor lookup instead of skipping it', () => {
+test('R76 classifies a dynamic interactor lookup on a classified pair instead of skipping it', () => {
   const sources = {
     'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
-    'src/provider-device-runtime.ts': PROVIDER_HUB_STUB,
     'src/core/interactors.ts':
-      "import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';\n" +
-      'void [getProviderDeviceInteractor, isActiveProviderDevice];\n' +
-      'export function getInteractor(device: unknown) {}\n',
-    'src/daemon/snapshot-interactor-capture.ts':
-      "const { getInteractor } = await import('../core/interactors.ts');\nvoid getInteractor;\n",
+      "import { gateway } from '../platform-runtime.ts';\n" +
+      'void gateway;\n' +
+      'export async function getInteractor(device: unknown) {}\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { getInteractor } = await import('../../core/interactors.ts');\nvoid getInteractor;\n",
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/snapshot-interactor-capture.ts'), []);
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts'), []);
 });
 
-test('R76 catches a binding added to the dynamic interactor lookup', () => {
+test('R76 catches a binding added to a dynamic interactor lookup', () => {
   const sources = {
     'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
-    'src/provider-device-runtime.ts': PROVIDER_HUB_STUB,
     'src/core/interactors.ts':
-      "import { isActiveProviderDevice } from '../provider-device-runtime.ts';\n" +
-      'void isActiveProviderDevice;\n' +
-      'export function getInteractor(device: unknown) {}\n' +
-      'export function getRetryInteractor(device: unknown) {}\n',
-    'src/daemon/snapshot-interactor-capture.ts':
-      "const { getInteractor, getRetryInteractor } = await import('../core/interactors.ts');\n" +
+      "import { gateway } from '../platform-runtime.ts';\n" +
+      'void gateway;\n' +
+      'export async function getInteractor(device: unknown) {}\n' +
+      'export async function getRetryInteractor(device: unknown) {}\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "const { getInteractor, getRetryInteractor } = await import('../../core/interactors.ts');\n" +
       'void [getInteractor, getRetryInteractor];\n',
   };
-  const found = edgeViolations(sources, 'src/daemon/snapshot-interactor-capture.ts');
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
