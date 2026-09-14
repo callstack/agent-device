@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: BrowserStack sessions honour `--provider-project`, `--provider-build`, and
+  `--provider-session-name`. The capability builder emitted the legacy JSON Wire keys `device`,
+  `os_version`, and `app` at the top level next to the W3C `bstack:options` block; the hub treats a
+  request carrying any legacy key as a legacy session, reads the labels from the legacy top-level
+  `project`/`build`/`name` (never set), and ignores `bstack:options`, so every session landed in
+  "Untitled Project" / "Untitled Build" with an empty name — even after #2495 carried the flags to
+  the provider (#2494). The builder now emits `appium:deviceName`, `appium:platformVersion`, and
+  `appium:app` and no legacy key, verified against live App Automate sessions.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
   implicit session was addressed by `cwd:<workspace>:default`, one slot per checkout, and it stayed

@@ -222,14 +222,23 @@ export function createBrowserStackUploadApp(
   };
 }
 
+/**
+ * Builds the W3C `alwaysMatch` capabilities for a BrowserStack App Automate session.
+ *
+ * Every key is either W3C-standard (`platformName`), `appium:`-prefixed, or inside
+ * `bstack:options`. The legacy JSON Wire keys (`device`, `os_version`, `app`, `project`, `build`,
+ * `name`) must not appear: when the hub sees any of them it treats the whole request as a legacy
+ * session and reads the labels from the legacy top-level keys instead of `bstack:options`, so the
+ * project/build/session names are silently dropped and the session lands in "Untitled Project".
+ */
 export function buildBrowserStackCapabilities(
   options: BrowserStackCapabilitiesOptions,
 ): Record<string, unknown> {
   const { 'bstack:options': configuredBstackOptions, ...configured } = options.configured ?? {};
   return {
-    device: options.deviceName,
-    os_version: options.osVersion,
-    ...(options.app ? { app: options.app } : {}),
+    'appium:deviceName': options.deviceName,
+    'appium:platformVersion': options.osVersion,
+    ...(options.app ? { 'appium:app': options.app } : {}),
     ...configured,
     // Merged per key, never assigned: `configured` carrying its own `bstack:options` used to
     // replace the whole object and silently drop the session/build labels below.
