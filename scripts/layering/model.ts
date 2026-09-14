@@ -93,6 +93,9 @@ export function zoneRank(zone: string): number | null {
 // exact-family/composition/laziness policy.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
+  // Stand-ins the bundler resolves in place of a dependency it deliberately omits. Nothing in
+  // the production graph imports them, so ranking them would claim an edge the alias replaces.
+  'vendor',
   // Private implementation submodules of the canonical root composition. R13 owns their exact
   // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
   'platform-runtime',
