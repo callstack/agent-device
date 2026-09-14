@@ -440,6 +440,10 @@
       "types": "./src/startup-recovery-fence.ts",
       "default": "./src/startup-recovery-fence.ts"
     },
+    "./tap-keyboard-occlusion": {
+      "types": "./src/tap-keyboard-occlusion.ts",
+      "default": "./src/tap-keyboard-occlusion.ts"
+    },
     "./touch-runtime": {
       "types": "./src/touch-runtime.ts",
       "default": "./src/touch-runtime.ts"
