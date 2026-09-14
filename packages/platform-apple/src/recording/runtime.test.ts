@@ -220,6 +220,8 @@ test('a simulator recorder that exited early is collected and its exit is disclo
   await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
     status: 'completed',
     result: {
+      // An exited recorder is a fact about the recorder even when its exit explains nothing.
+      stopObservation: { recorder: 'confirmed' },
       warning:
         'simctl recordVideo exited with code 1 before record stop; the video covers only what ' +
         'the recorder wrote before it stopped.',

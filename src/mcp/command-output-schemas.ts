@@ -3,6 +3,8 @@ import type { CommandResultMap } from '@agent-device/command-registry/command-re
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
+import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
+import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
 import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
@@ -844,6 +846,14 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
           activeSessionApp: looseObjectSchema(),
           durationMs: numberSchema(),
           capturedDurationMs: numberSchema(),
+          recorder: enumSchema(
+            RECORDER_OBSERVATION_VALUES,
+            'What the recorder was observed doing when the recording was stopped.',
+          ),
+          nativePathDisposition: enumSchema(
+            NATIVE_PATH_DISPOSITION_VALUES,
+            'What became of the artifact path the recorder writes to: pending, retirable, or retired.',
+          ),
           showTouches: booleanSchema(),
           warning: stringSchema(),
           overlayWarning: stringSchema(),

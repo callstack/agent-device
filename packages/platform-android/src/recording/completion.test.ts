@@ -13,6 +13,7 @@ async function capture(params: {
   chunks?: number;
   reachedLimit?: boolean;
   finalization?: Record<string, unknown>;
+  nativePathDisposition?: 'pending' | 'retirable' | 'retired';
 }) {
   vi.mocked(readMp4DurationMs).mockReturnValue(params.clipMs);
   return await completed({
@@ -26,6 +27,10 @@ async function capture(params: {
     reachedLimit: params.reachedLimit ?? false,
     startedAtMs: STARTED_AT_MS,
     stoppedAtMs: STARTED_AT_MS + params.windowMs,
+    stopObservation: { recorder: 'confirmed' },
+    ...(params.nativePathDisposition === undefined
+      ? {}
+      : { nativePathDisposition: params.nativePathDisposition }),
   });
 }
 
@@ -61,5 +66,15 @@ describe('completed', () => {
       warning.indexOf('encodes a frame only'),
     );
     expect(outcome.result.capturedDurationMs).toBe(360_000);
+  });
+
+  test('carries the recorder observation and the disposition the finalize step proved', async () => {
+    const outcome = await capture({
+      clipMs: 5_000,
+      windowMs: 5_000,
+      nativePathDisposition: 'retired',
+    });
+    expect(outcome.result.stopObservation).toEqual({ recorder: 'confirmed' });
+    expect(outcome.result.nativePathDisposition).toBe('retired');
   });
 });

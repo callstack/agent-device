@@ -1,14 +1,28 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
+import type {
+  ScreenRecordingCompletion,
+  ScreenRecordingLiveSnapshot,
+} from '@agent-device/contracts/screen-recording-runtime';
 import { createScreenRecordingCompletion } from '@agent-device/capture-kit';
 import type { AppleScreenRecordingOperationHost } from './recovery.ts';
 
-export async function completeAppleRecording(
-  host: AppleScreenRecordingOperationHost,
-  snapshot: ScreenRecordingLiveSnapshot,
-  targetLabel: string,
-  recorderWarning?: string,
-) {
+/** Finalizes what the recorder wrote and states what this stop proved about the recorder and its file. */
+export async function completeAppleRecording(params: {
+  host: AppleScreenRecordingOperationHost;
+  snapshot: ScreenRecordingLiveSnapshot;
+  targetLabel: string;
+  stopObservation: StopObservation;
+  recorderWarning?: string;
+  nativePathDisposition?: NativePathDisposition;
+}): Promise<Readonly<{ status: 'completed'; result: ScreenRecordingCompletion }>> {
+  const { host, snapshot, targetLabel, recorderWarning, nativePathDisposition } = params;
+  // An invalidated recording lost the session that held its recorder, so whatever signalled the
+  // writer proved nothing about this stop (ADR 0024 2.2).
+  const stopObservation: StopObservation = snapshot.invalidatedReason
+    ? { recorder: 'lost', why: 'owner-session-lost' }
+    : params.stopObservation;
   if (snapshot.invalidatedReason && !snapshot.showTouches) {
     throw new Error(`recording invalidated: ${snapshot.invalidatedReason}`);
   }
@@ -28,11 +42,18 @@ export async function completeAppleRecording(
     ...(finalization.warning ? [finalization.warning] : []),
     ...(recorderWarning ? [recorderWarning] : []),
   ];
-  return createScreenRecordingCompletion(snapshot, {
-    ...finalization,
-    ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
-    ...(snapshot.invalidatedReason
-      ? { overlayWarning: `overlay unavailable: ${snapshot.invalidatedReason}` }
-      : {}),
-  });
+  return createScreenRecordingCompletion(
+    snapshot,
+    {
+      ...finalization,
+      ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
+      ...(snapshot.invalidatedReason
+        ? { overlayWarning: `overlay unavailable: ${snapshot.invalidatedReason}` }
+        : {}),
+    },
+    {
+      stopObservation,
+      ...(nativePathDisposition === undefined ? {} : { nativePathDisposition }),
+    },
+  );
 }

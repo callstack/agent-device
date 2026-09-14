@@ -83,3 +83,30 @@ test('stop response separates the recording window from the clip that was captur
   expect(measured.data).toMatchObject({ durationMs: 16_000, capturedDurationMs: 7_000 });
   expect(unmeasured.data).not.toHaveProperty('capturedDurationMs');
 });
+
+test('stop response serves the recorder word and omits the reason behind it', () => {
+  const completion = {
+    backend: 'adb screenrecord',
+    outPath: '/daemon/capture.mp4',
+    startedAt: 1_000,
+    completedAt: 17_000,
+    scope: 'device',
+    showTouches: false,
+    recordOnlySession: false,
+  } as const;
+  const reported = buildRecordingStopResponse({
+    ...completion,
+    stopObservation: { recorder: 'unconfirmed', why: 'identity-unreadable' },
+    nativePathDisposition: 'retirable',
+  });
+  const unreported = buildRecordingStopResponse(completion);
+  if (!reported.ok || !unreported.ok) throw new Error('expected a successful recording stop');
+
+  expect(reported.data).toMatchObject({
+    recorder: 'unconfirmed',
+    nativePathDisposition: 'retirable',
+  });
+  expect(JSON.stringify(reported.data)).not.toContain('identity-unreadable');
+  expect(unreported.data).not.toHaveProperty('recorder');
+  expect(unreported.data).not.toHaveProperty('nativePathDisposition');
+});

@@ -127,14 +127,21 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
       // Refusing here by exit code alone threw away a finalized recording and left a retry that could
       // only re-read the same settled exit, so the exit is disclosed and collection proceeds.
       const exit = describeSimctlRecorderExit(result);
-      if (exit === undefined) return await completion(host, current, 'iOS recording');
-      try {
-        return await completion(
+      if (exit === undefined)
+        return await completion({
           host,
-          current,
-          'iOS recording',
-          `${exit} before record stop; the video covers only what the recorder wrote before it stopped.`,
-        );
+          snapshot: current,
+          targetLabel: 'iOS recording',
+          stopObservation: { recorder: 'confirmed' },
+        });
+      try {
+        return await completion({
+          host,
+          snapshot: current,
+          targetLabel: 'iOS recording',
+          stopObservation: { recorder: 'confirmed' },
+          recorderWarning: `${exit} before record stop; the video covers only what the recorder wrote before it stopped.`,
+        });
       } catch (exportError) {
         throw recorderExitEndedTheRecording(exportError, exit, result);
       }
@@ -221,11 +228,15 @@ async function startAppleRunnerRecording(params: AppleRecordingStartParams) {
           current.outPath,
         );
       }
-      return await completion(
+      return await completion({
         host,
-        current,
-        device.appleOs === 'macos' ? 'macOS recording' : 'iOS recording',
-      );
+        snapshot: current,
+        targetLabel: device.appleOs === 'macos' ? 'macOS recording' : 'iOS recording',
+        stopObservation: { recorder: 'confirmed' },
+        // The runner wrote its recording to the device and the stop RPC was acknowledged, so the
+        // retrieved file on the device is safe to retire; nothing removes it here (ADR 0024 2.3).
+        ...(result.remotePath === undefined ? {} : { nativePathDisposition: 'retirable' as const }),
+      });
     },
     cleanup: async () => {
       await stopRunner();

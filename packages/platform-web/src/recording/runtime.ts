@@ -129,7 +129,11 @@ async function startWebRecording(params: {
           gestureEvents: snapshot.gestureEvents,
           targetLabel: 'web recording',
         });
-        return createScreenRecordingCompletion(snapshot, finalization, false);
+        return createScreenRecordingCompletion(snapshot, finalization, {
+          // The provider stopped recording on the session's own browser and returned.
+          stopObservation: { recorder: 'confirmed' },
+          showTouches: false,
+        });
       },
       forceCleanup: async () => {
         try {

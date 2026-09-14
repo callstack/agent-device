@@ -1,3 +1,5 @@
+import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { isStopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
@@ -124,7 +126,17 @@ function isValidCompletion(value: unknown): value is ScreenRecordingCompletion {
   return (
     completionIdentityIsValid(candidate) &&
     completionRecordingIsValid(candidate) &&
+    completionFactsAreValid(candidate) &&
     (candidate.chunks === undefined || candidate.chunks.every(isValidCompletionChunk))
+  );
+}
+
+/** A marker written by an older daemon carries neither field; one with a word no backend reports is not a completion. */
+function completionFactsAreValid(candidate: Partial<ScreenRecordingCompletion>): boolean {
+  return (
+    (candidate.stopObservation === undefined || isStopObservation(candidate.stopObservation)) &&
+    (candidate.nativePathDisposition === undefined ||
+      isNativePathDisposition(candidate.nativePathDisposition))
   );
 }
 

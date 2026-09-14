@@ -178,7 +178,13 @@ async function finishHarmonyRecording(
         ...finalization,
         ...appendCompletionWarning(finalization.warning, cleanupWarning),
       },
-      false,
+      {
+        // One `aa start` toggle was acknowledged for this session's own recorder, and `mediatool`
+        // reported the finalized item it left behind.
+        stopObservation: { recorder: 'confirmed' },
+        nativePathDisposition: cleanupWarning === undefined ? 'retired' : 'retirable',
+        showTouches: false,
+      },
     );
   } catch (error) {
     await host.screenRecording.harmony.remove(device, descriptor.remotePath).catch(() => {});

@@ -12,6 +12,7 @@ import type {
   ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { RecordingAppIdentity } from '@agent-device/contracts/recording';
+import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
@@ -87,6 +88,12 @@ export function encodeScreenRecordingCompletionMetadata(
       ...(completion.capturedDurationMs === undefined
         ? {}
         : { capturedDurationMs: completion.capturedDurationMs }),
+      ...(completion.stopObservation === undefined
+        ? {}
+        : { stopObservation: encodeStopObservation(completion.stopObservation) }),
+      ...(completion.nativePathDisposition === undefined
+        ? {}
+        : { nativePathDisposition: completion.nativePathDisposition }),
       scope: completion.scope,
       showTouches: completion.showTouches,
       recordOnlySession: completion.recordOnlySession,
@@ -110,6 +117,12 @@ export function encodeScreenRecordingCompletionMetadata(
 
 function encodeAppIdentity(app: RecordingAppIdentity): JsonObject {
   return { bundleId: app.bundleId, ...(app.name === undefined ? {} : { name: app.name }) };
+}
+
+function encodeStopObservation(observation: StopObservation): JsonObject {
+  return observation.recorder === 'confirmed'
+    ? { recorder: observation.recorder }
+    : { recorder: observation.recorder, why: observation.why };
 }
 
 function encodeChunk(chunk: ScreenRecordingChunk): JsonObject {

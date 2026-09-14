@@ -60,6 +60,17 @@ test('does not report completion when the browser stop or finalizer fails', asyn
   await expect(second.pendingHandle.transfer().finish()).rejects.toThrow('finalizer failed');
 });
 
+test('reports the recorder the session browser acknowledged stopping', async () => {
+  const recording = await runtime({ start: async () => {}, stop: async () => {} });
+  const started = await recording.operations.screenRecordingStart?.(input());
+  if (!started) throw new Error('missing recording operation');
+  await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
+    status: 'completed',
+    // The browser writes the served WebM itself, so this backend has no second path to dispose of.
+    result: { stopObservation: { recorder: 'confirmed' } },
+  });
+});
+
 test('rolls back an acquired browser recorder when setup is cancelled', async () => {
   const controller = new AbortController();
   const reason = new Error('request cancelled');

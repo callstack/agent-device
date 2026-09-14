@@ -1,5 +1,7 @@
 import type { GestureReferenceFrame, ScrollDirection } from './scroll-gesture.ts';
 import type { RecordingAppIdentity } from './recording.ts';
+import type { StopObservation } from './recording-stop-observation.ts';
+import type { NativePathDisposition } from './recording-native-path.ts';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { RecordingScope } from './recording-scope.ts';
 import type { CleanupOutcome, LiveResourceHandle, ReattachOutcome } from './durable-resource.ts';
@@ -93,6 +95,17 @@ export type ScreenRecordingCompletion = Readonly<{
    * timelines, which excludes whatever a chunk handover cost.
    */
   capturedDurationMs?: number;
+  /**
+   * What the backend observed about its recorder when it was asked to stop (ADR 0024 2.2). The
+   * public response serves only its `recorder` word; the reason stays here, beside the export it
+   * explains, where recovery and diagnostics read it.
+   */
+  stopObservation?: StopObservation;
+  /**
+   * What became of the recorder's own artifact path (ADR 0024 2.3). Recorded at commit, and the
+   * manifest keeps its native path and recorder identity until this reaches `retired`.
+   */
+  nativePathDisposition?: NativePathDisposition;
   scope: RecordingScope;
   showTouches: boolean;
   recordOnlySession: boolean;

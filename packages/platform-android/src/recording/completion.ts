@@ -1,4 +1,6 @@
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   ScreenRecordingChunk,
@@ -43,8 +45,20 @@ export async function completed(params: {
   reachedLimit: boolean;
   startedAtMs: number;
   stoppedAtMs: number;
+  stopObservation: StopObservation;
+  nativePathDisposition?: NativePathDisposition;
 }): Promise<Readonly<{ status: 'completed'; result: ScreenRecordingCompletion }>> {
-  const { host, recording, chunks, targetLabel, reachedLimit, startedAtMs, stoppedAtMs } = params;
+  const {
+    host,
+    recording,
+    chunks,
+    targetLabel,
+    reachedLimit,
+    startedAtMs,
+    stoppedAtMs,
+    stopObservation,
+    nativePathDisposition,
+  } = params;
   const chunked = chunks.length > 1;
   const finalization = await host.screenRecording.finalize.complete({
     outputPath: recording.outPath,
@@ -73,6 +87,8 @@ export async function completed(params: {
       ...(recording.clientOutPath ? { clientOutPath: recording.clientOutPath } : {}),
       startedAt: recording.startedAt,
       completedAt,
+      stopObservation,
+      ...(nativePathDisposition === undefined ? {} : { nativePathDisposition }),
       scope: recording.scope,
       showTouches: recording.showTouches,
       recordOnlySession: recording.recordOnlySession,

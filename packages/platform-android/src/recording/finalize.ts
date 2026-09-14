@@ -44,6 +44,11 @@ export async function finalizeAndroidRecording(params: {
     reachedLimit,
     startedAtMs: params.startedAtMs,
     stoppedAtMs,
+    // `stopOwnedChunks` either observed each recorder gone or threw; reaching here is proof, not an
+    // assumption (ADR 0024 2.2).
+    stopObservation: { recorder: 'confirmed' },
+    // The recorders are gone and the remote chunks still sit on the device: owed a removal, safe to do.
+    nativePathDisposition: 'retirable',
   });
   await persistNativeManifest(
     params.transport,
@@ -51,5 +56,10 @@ export async function finalizeAndroidRecording(params: {
     createCompletedNativeManifest(params.evidence, outcome.result),
   );
   await cleanupChunks(params.transport, params.evidence.chunks);
-  return outcome;
+  // Every remote chunk reported removed, so this recording owes the device no further disposal
+  // (ADR 0024 2.3). A removal that was refused threw above and leaves the manifest open instead.
+  return {
+    status: 'completed',
+    result: { ...outcome.result, nativePathDisposition: 'retired' as const },
+  };
 }

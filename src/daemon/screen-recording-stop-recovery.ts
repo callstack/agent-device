@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { isRecordingScope, type RecordingAppIdentity } from '@agent-device/contracts/recording';
+import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { isStopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
@@ -110,7 +112,12 @@ function readStoredCompletion(
   metadata: JsonObject | undefined,
 ): ScreenRecordingCompletion | undefined {
   const stored = metadata?.[SCREEN_RECORDING_COMPLETION_METADATA_KEY];
-  if (!isRecord(stored) || !isServedCompletion(stored) || !isWholeOptionalResponse(stored)) {
+  if (
+    !isRecord(stored) ||
+    !isServedCompletion(stored) ||
+    !isWholeOptionalResponse(stored) ||
+    !isWholeStopFacts(stored)
+  ) {
     return undefined;
   }
   return stored as unknown as ScreenRecordingCompletion;
@@ -136,6 +143,19 @@ function isWholeOptionalResponse(stored: Record<string, unknown>): boolean {
     OPTIONAL_RESPONSE_FIELDS.every((field) => isOptionalText(stored[field])) &&
     isOptionalAppIdentity(stored.activeSessionApp) &&
     isOptionalChunks(stored.chunks)
+  );
+}
+
+/**
+ * The two ADR 0024 facts, when an older manifest has them at all. A word that no backend could have
+ * reported is not re-served: recovery has no way to reconstruct what the recorder did, and a made-up
+ * `confirmed` would disclose a termination nobody observed.
+ */
+function isWholeStopFacts(stored: Record<string, unknown>): boolean {
+  return (
+    (stored.stopObservation === undefined || isStopObservation(stored.stopObservation)) &&
+    (stored.nativePathDisposition === undefined ||
+      isNativePathDisposition(stored.nativePathDisposition))
   );
 }
 

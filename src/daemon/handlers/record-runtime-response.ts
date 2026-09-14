@@ -92,6 +92,14 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
       ...(completion.capturedDurationMs === undefined
         ? {}
         : { capturedDurationMs: completion.capturedDurationMs }),
+      // Only the word the recorder observation answers with goes on the wire; its reason stays in the
+      // manifest, where recovery and diagnostics read it.
+      ...(completion.stopObservation === undefined
+        ? {}
+        : { recorder: completion.stopObservation.recorder }),
+      ...(completion.nativePathDisposition === undefined
+        ? {}
+        : { nativePathDisposition: completion.nativePathDisposition }),
       showTouches: completion.showTouches,
       warning: completion.warning,
       overlayWarning: completion.overlayWarning,

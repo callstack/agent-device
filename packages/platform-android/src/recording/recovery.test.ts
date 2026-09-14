@@ -113,12 +113,17 @@ test('returns fenced native completion after a crash between native finalization
   const started = await runtime.screenRecordingStart(recordingInput());
   const result = await started.pendingHandle.transfer().finish();
   expect(result.status).toBe('completed');
-  expect(JSON.parse(manifest)).toMatchObject({ completion: { outPath: '/tmp/capture.mp4' } });
+  expect(JSON.parse(manifest)).toMatchObject({
+    completion: { outPath: '/tmp/capture.mp4', nativePathDisposition: 'retirable' },
+  });
   gcWouldFail = true;
   if (result.status === 'completed') {
+    expect(result.result.nativePathDisposition).toBe('retired');
     await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
       status: 'completed',
-      result: result.result,
+      // The marker froze the completion while the chunks still sat on the device, so a replay
+      // reports that disposal is owed rather than repeating a removal it never verified.
+      result: { ...result.result, nativePathDisposition: 'retirable' },
     });
   }
   expect(removals).toHaveLength(1);

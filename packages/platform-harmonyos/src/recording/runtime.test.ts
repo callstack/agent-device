@@ -195,6 +195,10 @@ test('reports unconfirmed completed-artifact cleanup without clobbering finalize
   await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
     status: 'completed',
     result: {
+      stopObservation: { recorder: 'confirmed' },
+      // The recorder confirmed, so the two artifacts the device refused to remove are owed a
+      // disposal rather than forbidden from one.
+      nativePathDisposition: 'retirable',
       warning:
         'finalizer warning. HarmonyOS recording completed, but cleanup was not confirmed for the staging artifact and media-library artifact.',
     },

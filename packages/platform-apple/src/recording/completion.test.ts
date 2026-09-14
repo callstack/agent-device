@@ -14,9 +14,17 @@ test('projects invalidated touch-overlay state without publishing a false overla
     invalidatedReason: 'runner restarted',
   };
   await expect(
-    completeAppleRecording(appleRecordingHost(), snapshot, 'iOS recording'),
+    completeAppleRecording({
+      host: appleRecordingHost(),
+      snapshot,
+      targetLabel: 'iOS recording',
+      stopObservation: { recorder: 'confirmed' },
+    }),
   ).resolves.toMatchObject({
     status: 'completed',
-    result: { overlayWarning: 'overlay unavailable: runner restarted' },
+    result: {
+      overlayWarning: 'overlay unavailable: runner restarted',
+      stopObservation: { recorder: 'lost', why: 'owner-session-lost' },
+    },
   });
 });
