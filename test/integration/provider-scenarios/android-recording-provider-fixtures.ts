@@ -80,7 +80,8 @@ function respondToCommand(
   const pull = respondToPull(args, params, state);
   if (pull) return pull;
   if (args.join(' ') === 'shell getprop sys.boot_completed') return ok('1\n');
-  const response = args[0] === 'shell' ? respondToShellCommand(args[1] ?? '', state) : undefined;
+  const response =
+    args[0] === 'shell' ? respondToShellCommand(args.slice(1).join(' '), state) : undefined;
   if (response) return response;
   throw new Error(`Unhandled Android recording provider command: ${args.join(' ')}`);
 }

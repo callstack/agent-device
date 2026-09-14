@@ -1,6 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 /**
  * Enriches the generic "Run open first" SESSION_NOT_FOUND hint with the exact

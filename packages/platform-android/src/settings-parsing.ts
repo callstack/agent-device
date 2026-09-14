@@ -18,7 +18,7 @@ export function parseSettingState(state: string): boolean {
 }
 
 export type CommandAttemptFailure = {
-  args: string[];
+  args: readonly string[];
   stdout: string;
   stderr: string;
   exitCode: number;

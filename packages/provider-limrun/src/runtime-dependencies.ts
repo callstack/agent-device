@@ -20,7 +20,7 @@ export type LimrunAdbCommandResult = {
 };
 
 export type LimrunAdbExecutor = (
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ) => Promise<LimrunAdbCommandResult>;
 
@@ -96,7 +96,10 @@ export type LimrunAndroidRuntimeAdapter = {
 };
 
 export type LimrunHostAdapter = {
-  runAdb(args: string[], options?: LimrunAdbCommandOptions): Promise<LimrunAdbCommandResult>;
+  runAdb(
+    args: readonly string[],
+    options?: LimrunAdbCommandOptions,
+  ): Promise<LimrunAdbCommandResult>;
   archiveDirectory(options: {
     sourceDirectory: string;
     entryName: string;

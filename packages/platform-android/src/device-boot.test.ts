@@ -15,7 +15,7 @@ const DEVICE: DeviceInfo = {
 const NOW_MS = 1_700_000_000_000;
 
 function answersUptime(stdout: string, exitCode = 0) {
-  let received: { serial: string; args: string[] } | undefined;
+  let received: { serial: string; args: readonly string[] } | undefined;
   bindAndroidAdbHostStub({
     execSerialAdb: async (serial, args) => {
       received = { serial, args };

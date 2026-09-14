@@ -6,6 +6,7 @@ import type {
 } from '@agent-device/contracts/android-observation';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 
 const FOCUSED_WINDOW_MARKER = 'mCurrentFocus=Window{';
@@ -15,14 +16,14 @@ const FOCUS_MARKERS = [
   'mResumedActivity:',
   'ResumedActivity:',
 ] as const;
-const WINDOW_DUMPS = [
-  ['shell', 'dumpsys', 'window', 'windows'],
-  ['shell', 'dumpsys', 'window'],
-] as const;
-const ACTIVITY_DUMPS = [
-  ['shell', 'dumpsys', 'activity', 'activities'],
-  ['shell', 'dumpsys', 'activity'],
-] as const;
+const WINDOW_DUMPS: readonly (readonly string[])[] = [
+  ['dumpsys', 'window', 'windows'],
+  ['dumpsys', 'window'],
+];
+const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
+  ['dumpsys', 'activity', 'activities'],
+  ['dumpsys', 'activity'],
+];
 const FOCUS_LINE = new RegExp(`(?:${FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`, 'gm');
 const ANR_TITLE = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
 const PACKAGE_NAME = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
@@ -34,7 +35,7 @@ const PERMISSION_PACKAGES = new Set([
 ]);
 
 type Question = 'foreground' | 'blockingDialog';
-type DumpReader = (args: readonly string[]) => Promise<string>;
+type DumpReader = (words: readonly string[]) => Promise<string>;
 const everAnswered = new Map<string, Map<string, boolean>>();
 
 export function createAndroidObservationAdapter(
@@ -55,13 +56,13 @@ export function createAndroidObservationAdapter(
     async tap(device, x, y) {
       return await host.runAdb(
         device,
-        ['shell', 'input', 'tap', String(Math.round(x)), String(Math.round(y))],
+        deviceShellArgv('shell', ['input', 'tap', String(Math.round(x)), String(Math.round(y))]),
         { allowFailure: true },
       );
     },
     openApp: async (device, appBundleId) => await host.openApp(device, appBundleId),
     async readScreenSize(device) {
-      const result = await host.runAdb(device, ['shell', 'wm', 'size']);
+      const result = await host.runAdb(device, deviceShellArgv('shell', ['wm', 'size']));
       const match = result.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
       if (!match) throw new AppError('COMMAND_FAILED', 'Unable to read screen size');
       return { width: Number(match[1]), height: Number(match[2]) };
@@ -74,14 +75,16 @@ export function createAndroidObservationAdapter(
 
 function createDumpReader(host: AndroidObservationHost, device: DeviceInfo): DumpReader {
   const dumps = new Map<string, Promise<string>>();
-  return (args) => {
-    const key = args.join(' ');
+  return (words) => {
+    const key = words.join(' ');
     const pending =
       dumps.get(key) ??
-      host.runAdb(device, args, { allowFailure: true }).then((result) => {
-        recordSections(device, key, result.stdout);
-        return result.stdout;
-      });
+      host
+        .runAdb(device, deviceShellArgv('shell', words), { allowFailure: true })
+        .then((result) => {
+          recordSections(device, key, result.stdout);
+          return result.stdout;
+        });
     dumps.set(key, pending);
     return pending;
   };

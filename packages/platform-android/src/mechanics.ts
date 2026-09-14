@@ -19,6 +19,8 @@ export {
   resolveAndroidTextInjector,
   resolveAndroidTouchProvider,
   resolveScopedAndroidAdbBackgroundTransport,
+  runAdbExecOut,
+  runAdbShell,
   runAndroidHostAdb,
   withAndroidAdbProvider,
   withAndroidHostAdbTransport,
@@ -35,7 +37,7 @@ export {
   androidAdbForwardsDeviceExitStatus,
   resetAndroidAdbShellProtocolProbes,
 } from './adb-shell-protocol.ts';
-export { isAndroidShellCommandUnsupported, runAndroidAdb, sleep } from './adb.ts';
+export { isAndroidShellCommandUnsupported, runAndroidAdb, runAndroidShell, sleep } from './adb.ts';
 export { handleAndroidAlert, type AndroidAlertResult } from './alert.ts';
 export {
   classifyAndroidAlertIdentifier,

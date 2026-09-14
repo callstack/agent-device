@@ -11,7 +11,7 @@ import type {
 
 export type AndroidAdbCommandExecutorOverride = (
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult> | undefined;
 
@@ -51,18 +51,18 @@ export type AndroidAdbHost = Readonly<{
    */
   execSerialAdb(
     serial: string,
-    args: string[],
+    args: readonly string[],
     options?: AndroidAdbExecutorOptions,
   ): Promise<AndroidAdbExecutorResult>;
   /** Device-scoped local adb background spawn for `serial`; the host owns stream wiring. */
   spawnSerialAdb(
     serial: string,
-    args: string[],
+    args: readonly string[],
     options?: AndroidAdbSpawnOptions,
   ): AndroidAdbProcess;
   /** Host-global adb execution (no serial), e.g. `adb devices`. */
   execHostAdb(
-    args: string[],
+    args: readonly string[],
     options?: AndroidAdbExecutorOptions,
   ): Promise<AndroidAdbExecutorResult>;
   /** Installs `override` as the host command-executor override for the duration of `fn`. */
@@ -111,7 +111,7 @@ let boundHost: AndroidAdbHost | undefined;
 
 /** Scoped override for host-global and explicitly serial-qualified adb argv. */
 export type AndroidAdbHostTransport = (
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult>;
 
@@ -138,9 +138,11 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
  * innermost-first and restore automatically.
  */
 export async function runAndroidHostAdb(
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
+  const { assertDeviceShellArgv } = await import('@agent-device/kernel/device-shell');
+  assertDeviceShellArgv(args, 'adb');
   const host = requireAndroidAdbHost();
   const transport = androidAdbHostTransportScope.getStore();
   const result = host.coerceAdbResult(

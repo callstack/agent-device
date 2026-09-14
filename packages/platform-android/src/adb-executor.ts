@@ -13,6 +13,8 @@ export {
   resolveAndroidTextInjector,
   resolveAndroidTouchProvider,
   resolveScopedAndroidAdbBackgroundTransport,
+  runAdbExecOut,
+  runAdbShell,
   withAndroidAdbProvider,
 } from './adb-provider-scope.ts';
 export { installAndroidAdbPackage, pullAndroidAdbFile } from './adb-transfer.ts';

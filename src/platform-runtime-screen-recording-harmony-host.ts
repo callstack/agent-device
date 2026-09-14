@@ -1,13 +1,13 @@
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 
 export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['harmony'] {
   return Object.freeze({
     start: async (device, fileName, signal) =>
-      await hdc(
+      await hdcShell(
         device,
         [
-          'shell',
           'aa',
           'start',
           '-b',
@@ -21,10 +21,9 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
         signal,
       ),
     stop: async (device, signal) =>
-      await hdc(
+      await hdcShell(
         device,
         [
-          'shell',
           'aa',
           'start',
           '-b',
@@ -35,14 +34,14 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
         signal,
       ),
     findMedia: async (device, fileName, signal) =>
-      (await hdc(device, ['shell', 'mediatool', 'query', fileName, '-u'], signal)).stdout.match(
+      (await hdcShell(device, ['mediatool', 'query', fileName, '-u'], signal)).stdout.match(
         /file:\/\/[^\s"']+/,
       )?.[0],
     stageMedia: async (device, input, signal) =>
-      (await hdc(device, ['shell', 'mediatool', 'recv', input.mediaUri, input.remotePath], signal))
+      (await hdcShell(device, ['mediatool', 'recv', input.mediaUri, input.remotePath], signal))
         .exitCode === 0,
     stagedFileSize: async (device, remotePath, signal) => {
-      const result = await hdc(device, ['shell', 'stat', '-c', '%s', remotePath], signal);
+      const result = await hdcShell(device, ['stat', '-c', '%s', remotePath], signal);
       if (result.exitCode !== 0) return undefined;
       const size = Number(result.stdout.trim());
       return Number.isSafeInteger(size) && size > 0 ? size : undefined;
@@ -50,13 +49,18 @@ export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['
     pull: async (device, input, signal) =>
       await hdc(device, ['file', 'recv', input.remotePath, input.outputPath], signal),
     remove: async (device, remotePath, signal) =>
-      (await hdc(device, ['shell', 'rm', '-f', remotePath], signal)).exitCode === 0,
+      (await hdcShell(device, ['rm', '-f', remotePath], signal)).exitCode === 0,
     removeMedia: async (device, mediaUri, signal) =>
-      (await hdc(device, ['shell', 'mediatool', 'delete', mediaUri], signal)).exitCode === 0,
+      (await hdcShell(device, ['mediatool', 'delete', mediaUri], signal)).exitCode === 0,
   });
 }
 
 async function hdc(device: DeviceInfo, args: string[], signal?: AbortSignal) {
   const { runHarmonyHdc } = await import('@agent-device/platform-harmonyos');
   return await runHarmonyHdc(device, args, { allowFailure: true, signal });
+}
+
+async function hdcShell(device: DeviceInfo, words: readonly ShellWord[], signal?: AbortSignal) {
+  const { runHarmonyShell } = await import('@agent-device/platform-harmonyos');
+  return await runHarmonyShell(device, words, { allowFailure: true, signal });
 }

@@ -60,7 +60,7 @@ export function createAndroidProviderShellState(): AndroidProviderShellState {
 /** Models the provider-side durable test-IME state used by lifecycle integration scenarios. */
 export function androidImeLifecycleAdbResult(
   key: string,
-  args: string[],
+  args: readonly string[],
   state: AndroidProviderShellState | undefined,
 ): AndroidImeAdbResult | undefined {
   if (
@@ -93,7 +93,7 @@ export function androidImeLifecycleAdbResult(
 
 /** Applies only durable IME-state mutations; the broader Android shell stays in android-world. */
 export function updateAndroidProviderImeShellState(
-  args: string[],
+  args: readonly string[],
   state: AndroidProviderShellState,
 ): boolean {
   if (argsStartWith(args, ['shell', 'settings', 'put', 'secure']) && args[4] && args[5]) {
@@ -124,16 +124,16 @@ export function updateAndroidProviderImeShellState(
   return false;
 }
 
-function argsStartWith(args: string[], prefix: string[]): boolean {
+function argsStartWith(args: readonly string[], prefix: string[]): boolean {
   return prefix.every((value, index) => args[index] === value);
 }
 
-function valueAfter(args: string[], flag: string): string | undefined {
+function valueAfter(args: readonly string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   return index >= 0 ? args[index + 1] : undefined;
 }
 
-function valueAfterPair(args: string[], flag: string, key: string): string | undefined {
+function valueAfterPair(args: readonly string[], flag: string, key: string): string | undefined {
   for (let index = 0; index < args.length - 2; index += 1) {
     if (args[index] === flag && args[index + 1] === key) return args[index + 2];
   }

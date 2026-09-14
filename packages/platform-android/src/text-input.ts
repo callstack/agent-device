@@ -7,7 +7,6 @@
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
@@ -16,7 +15,7 @@ import {
   resolveAndroidTextInjector,
   type AndroidTextInputAction,
 } from './adb-executor.ts';
-import { runAndroidAdb, sleep } from './adb.ts';
+import { runAndroidShell, sleep } from './adb.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
   buildAndroidFillUnconfirmedVerification,
@@ -233,7 +232,7 @@ async function typeAndroidImeHelper(
       }
     }
     if (partIndex + 1 < parts.length) {
-      await runAndroidAdb(device, ['shell', 'input', 'keyevent', 'ENTER']);
+      await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
     }
   }
   emitAndroidTextDiagnostic('type', 'test-ime', text);
@@ -279,7 +278,7 @@ async function typeAndroidShell(
       }
     }
     if (partIndex + 1 < parts.length) {
-      await runAndroidAdb(device, ['shell', 'input', 'keyevent', 'ENTER']);
+      await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
     }
   }
   emitAndroidTextDiagnostic(options.action, 'adb-shell', options.text);
@@ -288,12 +287,7 @@ async function typeAndroidShell(
 async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<void> {
   if (!text) return;
   try {
-    await runAndroidAdb(device, [
-      'shell',
-      'input',
-      'text',
-      shellQuoteIfNeeded(encodeAndroidInputText(text)),
-    ]);
+    await runAndroidShell(device, ['input', 'text', encodeAndroidInputText(text)]);
   } catch (error) {
     if (isAndroidInputTextUnsupported(error)) {
       throw unsupportedAndroidShellTextError(text, error);
@@ -304,19 +298,15 @@ async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<
 
 async function clearFocusedText(device: DeviceInfo, count: number): Promise<void> {
   const deletes = Math.max(0, count);
-  await runAndroidAdb(device, ['shell', 'input', 'keyevent', 'KEYCODE_MOVE_END'], {
+  await runAndroidShell(device, ['input', 'keyevent', 'KEYCODE_MOVE_END'], {
     allowFailure: true,
   });
   const batchSize = 24;
   for (let i = 0; i < deletes; i += batchSize) {
     const size = Math.min(batchSize, deletes - i);
-    await runAndroidAdb(
-      device,
-      ['shell', 'input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')],
-      {
-        allowFailure: true,
-      },
-    );
+    await runAndroidShell(device, ['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')], {
+      allowFailure: true,
+    });
   }
 }
 

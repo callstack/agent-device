@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { AndroidAdbProcess } from './adb-executor.ts';
+import { runAdbShell, type AndroidAdbProcess } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
 
 const RETIREMENT_RECOVERY_TIMEOUT_MS = 5_000;
@@ -48,7 +48,7 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
   const retirement = unconfirmedRetirements.get(params.deviceKey);
   if (!retirement) return;
   try {
-    const result = await params.adb(['shell', 'am', 'force-stop', retirement.packageName], {
+    const result = await runAdbShell(params.adb, ['am', 'force-stop', retirement.packageName], {
       allowFailure: true,
       timeoutMs: RETIREMENT_RECOVERY_TIMEOUT_MS,
       signal: params.signal,
@@ -222,7 +222,7 @@ async function forceStopAndroidSnapshotHelperRuntime(params: {
 }): Promise<boolean> {
   const signal = params.signal ?? AbortSignal.timeout(params.timeoutMs);
   try {
-    const result = await params.adb(['shell', 'am', 'force-stop', params.packageName], {
+    const result = await runAdbShell(params.adb, ['am', 'force-stop', params.packageName], {
       allowFailure: true,
       timeoutMs: params.timeoutMs,
       signal,

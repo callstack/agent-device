@@ -24,11 +24,11 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
     imeHelperArtifact: ANDROID_IME_HELPER_FIXTURE_ARTIFACT,
     exec: async (args) => {
       adbCalls.push([...args]);
-      updateAndroidProviderImeShellState(args, ime);
+      updateAndroidProviderImeShellState([...args], ime);
       if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'text') {
         ime.searchText = String(args[3] ?? '').replaceAll('%s', ' ');
       }
-      return androidFindAdbResult(args, ime.searchText, includeDuplicateAppsRow, ime);
+      return androidFindAdbResult([...args], ime.searchText, includeDuplicateAppsRow, ime);
     },
   };
   const daemon = await createProviderScenarioHarness({

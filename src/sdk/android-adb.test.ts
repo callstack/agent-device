@@ -4,7 +4,7 @@ import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanic
 import { getAndroidAppStateWithAdb } from './android-adb.ts';
 
 test('getAndroidAppStateWithAdb parses focus output from failed commands', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return {
@@ -21,7 +21,7 @@ test('getAndroidAppStateWithAdb parses focus output from failed commands', async
 });
 
 test('getAndroidAppStateWithAdb falls back to activity focus and settles empty', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { exitCode: 0, stdout: '', stderr: '' };

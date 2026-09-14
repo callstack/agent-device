@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createLocalAndroidAdbProvider,
@@ -70,17 +71,19 @@ test.skipIf(process.platform === 'win32')(
         { serverPort: 15_037 },
       );
       const adb = provider.exec;
-      const serial = JSON.parse((await adb(['shell', 'id'])).stdout) as {
+      const serial = JSON.parse((await adb(deviceShellArgv('shell', ['id']))).stdout) as {
         args: string[];
         port: string | null;
       };
-      const serialWithWrongPort = JSON.parse((await adb(['-P', '9999', 'shell', 'id'])).stdout) as {
+      const serialWithWrongPort = JSON.parse(
+        (await adb(deviceShellArgv('shell', ['id'], ['-P', '9999']))).stdout,
+      ) as {
         args: string[];
         port: string | null;
       };
       const serialWithWrongEnvironment = JSON.parse(
         (
-          await adb(['shell', 'id'], {
+          await adb(deviceShellArgv('shell', ['id']), {
             env: {
               ANDROID_ADB_SERVER_PORT: '9999',
               ANDROID_ADB_SERVER_ADDRESS: 'foreign.example',
@@ -115,7 +118,7 @@ test.skipIf(process.platform === 'win32')(
         ['wait-for-device', 'disconnect'],
         ['wait-for-any-device', 'pair', 'foreign.example', '123456'],
       ]) {
-        await assert.rejects(adb([...selector, 'shell', 'id']), {
+        await assert.rejects(adb(deviceShellArgv('shell', ['id'], selector)), {
           details: { reason: 'managed-device-transport-mismatch' },
         });
         assert.throws(() => provider.spawn?.([...selector, 'shell', 'id']), {
@@ -131,7 +134,9 @@ test.skipIf(process.platform === 'win32')(
       });
       assert.deepEqual(serialWithWrongPort, serial);
       assert.deepEqual(serialWithWrongEnvironment, serial);
-      const waited = JSON.parse((await adb(['wait-for-device', 'shell', 'id'])).stdout);
+      const waited = JSON.parse(
+        (await adb(deviceShellArgv('shell', ['id'], ['wait-for-device']))).stdout,
+      );
       assert.deepEqual(waited, {
         ...serial,
         args: ['-P', '15037', '-s', 'emulator-5554', 'wait-for-device', 'shell', 'id'],

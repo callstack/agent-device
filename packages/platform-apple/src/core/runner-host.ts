@@ -8,8 +8,8 @@ import {
   runCmdBackground,
   runCmdStreaming,
   runCmdSync,
-  shellQuote,
 } from '@agent-device/host-kit/command';
+import { shellQuote } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   isProcessAlive,

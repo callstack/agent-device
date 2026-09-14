@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { runHarmonyHdc } from './hdc.ts';
+import { runHarmonyShell } from './hdc.ts';
 
 export async function setHarmonySetting(
   device: DeviceInfo,
@@ -23,8 +23,8 @@ export async function setHarmonySetting(
     );
   }
 
-  await runHarmonyHdc(device, ['shell', 'aa', 'force-stop', appBundleId], { timeoutMs: 15_000 });
-  await runHarmonyHdc(device, ['shell', 'bm', 'clean', '-n', appBundleId, '-d', '-c'], {
+  await runHarmonyShell(device, ['aa', 'force-stop', appBundleId], { timeoutMs: 15_000 });
+  await runHarmonyShell(device, ['bm', 'clean', '-n', appBundleId, '-d', '-c'], {
     timeoutMs: 15_000,
   });
   return { bundleId: appBundleId, forceStopped: true, clearedData: true, clearedCache: true };

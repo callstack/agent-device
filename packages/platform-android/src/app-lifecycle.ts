@@ -1,13 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
-import { runAndroidAdb } from './adb.ts';
+import { runAndroidShell } from './adb.ts';
 import {
   androidAdbResultError,
   createAndroidPortReverseManager,
@@ -54,10 +53,9 @@ async function listAndroidLaunchablePackages(device: DeviceInfo): Promise<Set<st
   for (const category of resolveAndroidLaunchCategories(device, {
     includeFallbackWhenUnknown: true,
   })) {
-    const result = await runAndroidAdb(
+    const result = await runAndroidShell(
       device,
       [
-        'shell',
         'cmd',
         'package',
         'query-activities',
@@ -100,7 +98,7 @@ function resolveAndroidLaunchCategories(
 }
 
 async function listAndroidUserInstalledPackages(device: DeviceInfo): Promise<string[]> {
-  const result = await runAndroidAdb(device, ['shell', 'pm', 'list', 'packages', '-3']);
+  const result = await runAndroidShell(device, ['pm', 'list', 'packages', '-3']);
   return parseAndroidUserInstalledPackages(result.stdout);
 }
 
@@ -155,14 +153,8 @@ export type OpenAndroidAppOptions = {
   url?: string;
 };
 
-// `adb shell` joins its argv with spaces and feeds the result to a device
-// shell, which re-tokenises. The other `am start` arguments (action, category,
-// component, etc.) are well-known and never contain shell-significant
-// characters, so they round-trip untouched. URLs and launch arguments are
-// user-supplied and may contain JSON, spaces, `#`, or `&`; each is single-quoted
-// unless it consists entirely of safe shell characters.
 function androidLaunchArgs(options: OpenAndroidAppOptions): string[] {
-  return (options.launchArgs ?? []).map(shellQuoteIfNeeded);
+  return options.launchArgs ?? [];
 }
 
 export async function openAndroidApp(
@@ -209,15 +201,14 @@ async function openAndroidDeepLink(
     );
   }
   await ensureAndroidLocalhostReverse(device, target);
-  await runAndroidAdb(device, [
-    'shell',
+  await runAndroidShell(device, [
     'am',
     'start',
     '-W',
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    shellQuoteIfNeeded(target),
+    target,
     ...androidDeepLinkPackageArgs(options.appBundleId),
     ...androidLaunchArgs(options),
   ]);
@@ -240,15 +231,14 @@ async function openAndroidAppBoundDeepLink(
   }
   await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await requireAndroidPackageForOpen(device, app, 'app-bound open');
-  await runAndroidAdb(device, [
-    'shell',
+  await runAndroidShell(device, [
     'am',
     'start',
     '-W',
     '-a',
     'android.intent.action.VIEW',
     '-d',
-    shellQuoteIfNeeded(deepLinkUrl),
+    deepLinkUrl,
     '-p',
     resolved,
     ...androidLaunchArgs(options),
@@ -263,15 +253,7 @@ async function openAndroidIntent(
   if (options.activity) {
     throw new AppError('INVALID_ARGS', 'Activity override requires a package name, not an intent');
   }
-  await runAndroidAdb(device, [
-    'shell',
-    'am',
-    'start',
-    '-W',
-    '-a',
-    intent,
-    ...androidLaunchArgs(options),
-  ]);
+  await runAndroidShell(device, ['am', 'start', '-W', '-a', intent, ...androidLaunchArgs(options)]);
 }
 
 async function openAndroidPackageActivity(
@@ -285,7 +267,10 @@ async function openAndroidPackageActivity(
     ? activity
     : `${packageName}/${activity.startsWith('.') ? activity : `.${activity}`}`;
   try {
-    await runAndroidAdb(device, buildAndroidActivityLaunchArgs(component, launchCategory, options));
+    await runAndroidShell(
+      device,
+      buildAndroidActivityLaunchArgs(component, launchCategory, options),
+    );
   } catch (error) {
     await maybeRethrowAndroidMissingPackageError(device, packageName, error);
     throw error;
@@ -298,10 +283,9 @@ async function openAndroidPackage(
   launchCategory: string,
   options: OpenAndroidAppOptions,
 ): Promise<void> {
-  const primaryResult = await runAndroidAdb(
+  const primaryResult = await runAndroidShell(
     device,
     [
-      'shell',
       'am',
       'start',
       '-W',
@@ -327,7 +311,7 @@ async function openAndroidPackage(
     }
     throw androidAdbResultError(`Failed to launch ${packageName}`, primaryResult);
   }
-  await runAndroidAdb(device, buildAndroidActivityLaunchArgs(component, launchCategory, options));
+  await runAndroidShell(device, buildAndroidActivityLaunchArgs(component, launchCategory, options));
 }
 
 function buildAndroidActivityLaunchArgs(
@@ -336,7 +320,6 @@ function buildAndroidActivityLaunchArgs(
   options: OpenAndroidAppOptions,
 ): string[] {
   return [
-    'shell',
     'am',
     'start',
     '-W',
@@ -387,7 +370,7 @@ async function isAndroidPackageInstalled(
   device: DeviceInfo,
   packageName: string,
 ): Promise<boolean> {
-  const result = await runAndroidAdb(device, ['shell', 'pm', 'path', packageName], {
+  const result = await runAndroidShell(device, ['pm', 'path', packageName], {
     allowFailure: true,
   });
   const output = `${result.stdout}\n${result.stderr}`;
@@ -434,10 +417,9 @@ async function resolveAndroidLaunchComponent(
     new Set(resolveAndroidLaunchCategories(device, { includeFallbackWhenUnknown: true })),
   );
   for (const category of categories) {
-    const result = await runAndroidAdb(
+    const result = await runAndroidShell(
       device,
       [
-        'shell',
         'cmd',
         'package',
         'resolve-activity',
@@ -494,7 +476,7 @@ export async function openAndroidDevice(device: DeviceInfo): Promise<void> {
 export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<void> {
   const trimmed = app.trim();
   if (trimmed.toLowerCase() === 'settings') {
-    await runAndroidAdb(device, ['shell', 'am', 'force-stop', 'com.android.settings']);
+    await runAndroidShell(device, ['am', 'force-stop', 'com.android.settings']);
     await waitForAndroidPackageStopped(device, 'com.android.settings');
     return;
   }
@@ -502,7 +484,7 @@ export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<
   if (resolved.type === 'intent') {
     throw new AppError('INVALID_ARGS', 'Close requires a package name, not an intent');
   }
-  await runAndroidAdb(device, ['shell', 'am', 'force-stop', resolved.value]);
+  await runAndroidShell(device, ['am', 'force-stop', resolved.value]);
   await waitForAndroidPackageStopped(device, resolved.value);
 }
 
@@ -549,7 +531,7 @@ async function isAndroidPackageProcessRunning(
   device: DeviceInfo,
   packageName: string,
 ): Promise<boolean> {
-  const result = await runAndroidAdb(device, ['shell', 'pidof', packageName], {
+  const result = await runAndroidShell(device, ['pidof', packageName], {
     allowFailure: true,
   });
   return (result.stdout ?? '').trim().length > 0;

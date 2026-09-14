@@ -213,7 +213,7 @@ test('getAndroidKeyboardState treats stale input view as hidden when the IME win
 });
 
 test('writeAndroidClipboardWithAdb shell-quotes text containing metacharacters', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { stdout: '', stderr: '', exitCode: 0 };
@@ -225,7 +225,7 @@ test('writeAndroidClipboardWithAdb shell-quotes text containing metacharacters',
 });
 
 test('writeAndroidClipboardWithAdb leaves safe text unquoted', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { stdout: '', stderr: '', exitCode: 0 };

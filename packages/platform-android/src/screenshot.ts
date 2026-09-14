@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runAndroidAdb, sleep } from './adb.ts';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
+import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
@@ -36,22 +37,22 @@ export async function screenshotAndroid(
  * for consistent screenshots.
  */
 async function enableAndroidDemoMode(device: DeviceInfo): Promise<void> {
-  const shell = (cmd: string) => runAndroidAdb(device, ['shell', cmd], { allowFailure: true });
+  const shell = (words: ShellWord[]) => runAndroidShell(device, words, { allowFailure: true });
 
-  await shell('settings put global sysui_demo_allowed 1');
+  await shell(['settings', 'put', 'global', 'sysui_demo_allowed', '1']);
 
-  const broadcast = (extra: string) =>
-    shell(`am broadcast -a com.android.systemui.demo -e command ${extra}`);
+  const broadcast = (extra: ShellWord[]) =>
+    shell(['am', 'broadcast', '-a', 'com.android.systemui.demo', '-e', 'command', ...extra]);
 
-  await broadcast('clock -e hhmm 0941');
-  await broadcast('notifications -e visible false');
+  await broadcast(['clock', '-e', 'hhmm', '0941']);
+  await broadcast(['notifications', '-e', 'visible', 'false']);
 }
 
 /** Disable demo mode and restore the live status bar. */
 async function disableAndroidDemoMode(device: DeviceInfo): Promise<void> {
-  await runAndroidAdb(
+  await runAndroidShell(
     device,
-    ['shell', 'am broadcast -a com.android.systemui.demo -e command exit'],
+    ['am', 'broadcast', '-a', 'com.android.systemui.demo', '-e', 'command', 'exit'],
     {
       allowFailure: true,
     },
@@ -59,7 +60,7 @@ async function disableAndroidDemoMode(device: DeviceInfo): Promise<void> {
 }
 
 async function captureAndroidScreenshot(device: DeviceInfo, outPath: string): Promise<void> {
-  const result = await runAndroidAdb(device, ['exec-out', 'screencap', '-p'], {
+  const result = await runAndroidExecOut(device, ['screencap', '-p'], {
     binaryStdout: true,
   });
   if (!result.stdoutBuffer) {

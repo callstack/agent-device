@@ -9,7 +9,9 @@ import {
   type AndroidImeHelperArtifact,
   type AndroidImeHelperManifest,
 } from './helper-artifacts.ts';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { androidAdbResultError } from './adb-failure.ts';
+import { runAdbShell } from './adb-executor.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-transport.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 
@@ -167,12 +169,12 @@ async function sendAndroidImeHelperBroadcast(
   action: string,
   extras: Record<string, string>,
 ): Promise<void> {
-  const args = ['shell', 'am', 'broadcast', '-p', packageName, '-a', action];
-  args.push('--es', 'protocol', ANDROID_IME_HELPER_PROTOCOL);
+  const words: ShellWord[] = ['am', 'broadcast', '-p', packageName, '-a', action];
+  words.push('--es', 'protocol', ANDROID_IME_HELPER_PROTOCOL);
   for (const [key, value] of Object.entries(extras)) {
-    args.push('--es', key, value);
+    words.push('--es', key, value);
   }
-  const result = await adb(args, {
+  const result = await runAdbShell(adb, words, {
     allowFailure: true,
     timeoutMs: ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS,
   });

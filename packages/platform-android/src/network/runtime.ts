@@ -6,6 +6,7 @@ import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contract
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { mergeNetworkScans, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { assertAndroidLogPackageSafe } from '../logs/package-name.ts';
 
 type RecoveryContext = Readonly<{
@@ -153,7 +154,7 @@ async function resolveAndroidPid(
     host,
     {
       executable: 'adb',
-      args: ['-s', deviceId, 'shell', 'pidof', appBundleId],
+      args: deviceShellArgv('shell', ['pidof', appBundleId], ['-s', deviceId]),
       allowFailure: true,
     },
     signal,

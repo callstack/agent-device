@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 
 const { runCmdBackgroundMock } = vi.hoisted(() => ({
   runCmdBackgroundMock: vi.fn(() => ({
@@ -50,7 +51,9 @@ test('createDeviceAdbExecutor routes local commands through adb with the device 
     booted: true,
   });
 
-  const result = await adb(['shell', 'getprop', 'sys.boot_completed'], { timeoutMs: 1000 });
+  const result = await adb(deviceShellArgv('shell', ['getprop', 'sys.boot_completed']), {
+    timeoutMs: 1000,
+  });
 
   assert.deepEqual(result, { stdout: 'ok', stderr: '', exitCode: 0 });
   assert.deepEqual(mockRunCmd.mock.calls, [
@@ -64,7 +67,7 @@ test('createDeviceAdbExecutor routes local commands through adb with the device 
 
 test('createDeviceAdbExecutor remains a local adb executor inside provider scopes', async () => {
   mockRunCmd.mockClear();
-  const providerCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
   const adb = createDeviceAdbExecutor({
     platform: 'android',
     id: 'emulator-5554',
@@ -79,7 +82,7 @@ test('createDeviceAdbExecutor remains a local adb executor inside provider scope
       return { stdout: 'provider', stderr: '', exitCode: 0 };
     },
     { serial: 'emulator-5554' },
-    async () => await adb(['shell', 'echo', 'local']),
+    async () => await adb(deviceShellArgv('shell', ['echo', 'local'])),
   );
 
   assert.equal(result.stdout, 'ok');
@@ -91,7 +94,7 @@ test('createDeviceAdbExecutor remains a local adb executor inside provider scope
 
 test('scoped provider only resolves for the matching device serial', async () => {
   mockRunCmd.mockClear();
-  const providerCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
   const otherDevice = {
     platform: 'android',
     id: 'other-device',
@@ -109,8 +112,8 @@ test('scoped provider only resolves for the matching device serial', async () =>
     async () => {
       const adb = resolveAndroidAdbExecutor(otherDevice);
       const provider = resolveAndroidAdbProvider(otherDevice);
-      await provider.exec(['shell', 'echo', 'provider-fallback']);
-      return await adb(['shell', 'echo', 'executor-fallback']);
+      await provider.exec(deviceShellArgv('shell', ['echo', 'provider-fallback']));
+      return await adb(deviceShellArgv('shell', ['echo', 'executor-fallback']));
     },
   );
 
@@ -176,7 +179,7 @@ test('createLocalAndroidAdbProvider exposes exec, spawn, and reverse over local 
     booted: true,
   });
 
-  await provider.exec(['shell', 'echo', 'ok']);
+  await provider.exec(deviceShellArgv('shell', ['echo', 'ok']));
   provider.spawn?.(['logcat'], { stdio: ['ignore', 'pipe', 'pipe'] });
   await provider.reverse?.ensure({ local: 'tcp:8081', remote: 'tcp:8081', ownerId: 'session-a' });
   await provider.reverse?.removeAllOwned('session-a');
@@ -245,7 +248,7 @@ test('createLocalAndroidAdbProvider carries a private server port through every 
     { serverPort: 15_037 },
   );
 
-  await provider.exec(['shell', 'echo', 'ok']);
+  await provider.exec(deviceShellArgv('shell', ['echo', 'ok']));
   provider.spawn?.(['logcat']);
   await provider.reverse?.ensure({ local: 'tcp:8081', remote: 'tcp:8081' });
   await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4');
@@ -263,7 +266,7 @@ function readServerPort(options: unknown): number | undefined {
 }
 
 test('createAndroidPortReverseManager makes duplicate setup idempotent and cleans owner mappings', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const manager = createAndroidPortReverseManager(async (args) => {
     calls.push(args);
     return { stdout: '', stderr: '', exitCode: 0 };
@@ -375,7 +378,7 @@ test('explicit transfer helpers prefer provider capabilities over exec-shaped fa
 });
 
 test('explicit transfer helpers keep exec-shaped fallback for older providers', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   await withAndroidAdbProvider(
     async (args) => {
@@ -475,7 +478,7 @@ test('the local adb executor attaches classified hints to thrown command failure
     booted: true,
   });
 
-  const error = await adb(['shell', 'echo', 'hi']).then(
+  const error = await adb(deviceShellArgv('shell', ['echo', 'hi'])).then(
     () => assert.fail('expected the adb call to reject'),
     (error: unknown) => error,
   );
@@ -504,7 +507,7 @@ test('the local adb executor flags transient transport failures retriable', asyn
     booted: true,
   });
 
-  const error = await adb(['shell', 'echo', 'hi']).then(
+  const error = await adb(deviceShellArgv('shell', ['echo', 'hi'])).then(
     () => assert.fail('expected the adb call to reject'),
     (error: unknown) => error,
   );
@@ -733,7 +736,7 @@ test('provider-scoped adb failures get the same classified hints as local execut
     },
     { serial: 'emulator-5554' },
     async () =>
-      await resolveAndroidAdbExecutor(device)(['shell', 'echo', 'hi']).then(
+      await resolveAndroidAdbExecutor(device)(deviceShellArgv('shell', ['echo', 'hi'])).then(
         () => assert.fail('expected the provider-scoped call to reject'),
         (error: unknown) => error,
       ),

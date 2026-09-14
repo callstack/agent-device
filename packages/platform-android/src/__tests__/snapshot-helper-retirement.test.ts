@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 test('requires positive recovery evidence after uncertain runtime retirement', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let forceStopCount = 0;
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
@@ -61,7 +61,7 @@ test('requires positive recovery evidence after uncertain runtime retirement', a
 });
 
 test('session cleanup force-stops the runtime when release was not confirmed', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const cleanup = await settleAndroidSnapshotHelperSessionCleanup({
     adb: recordingAdb(calls),
     process: new StubAndroidProcess(),
@@ -79,7 +79,7 @@ test('session cleanup force-stops the runtime when release was not confirmed', a
 });
 
 test('session cleanup skips the force-stop round trip once release is confirmed', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const cleanup = await settleAndroidSnapshotHelperSessionCleanup({
     adb: recordingAdb(calls),
     process: new StubAndroidProcess(),
@@ -95,7 +95,7 @@ test('session cleanup skips the force-stop round trip once release is confirmed'
   assert.deepEqual(calls, [['forward', '--remove', 'tcp:41234']]);
 });
 
-function recordingAdb(calls: string[][]): AndroidAdbExecutor {
+function recordingAdb(calls: (readonly string[])[]): AndroidAdbExecutor {
   return async (args) => {
     calls.push(args);
     return { exitCode: 0, stdout: '', stderr: '' };

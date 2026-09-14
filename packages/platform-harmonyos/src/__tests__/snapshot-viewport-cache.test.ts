@@ -3,9 +3,12 @@ import fs from 'node:fs';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { runHarmonyHdc } = vi.hoisted(() => ({ runHarmonyHdc: vi.fn() }));
+const { runHarmonyHdc, runHarmonyShell } = vi.hoisted(() => ({
+  runHarmonyHdc: vi.fn(),
+  runHarmonyShell: vi.fn(),
+}));
 
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
+vi.mock('../hdc.ts', () => ({ runHarmonyHdc, runHarmonyShell }));
 
 import { invalidateHarmonyGestureViewport, readHarmonyGestureViewport } from '../snapshot.ts';
 
@@ -30,6 +33,8 @@ const WIDE_LAYOUT = {
 
 beforeEach(() => {
   runHarmonyHdc.mockReset();
+  runHarmonyShell.mockReset();
+  runHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   scriptHarmonyLayoutDump(TALL_LAYOUT);
 });
 
@@ -48,7 +53,7 @@ function scriptHarmonyLayoutDump(layout: unknown): void {
 }
 
 function dumpLayoutCallCount(): number {
-  return runHarmonyHdc.mock.calls.filter(([, args]) => args.includes('dumpLayout')).length;
+  return runHarmonyShell.mock.calls.filter(([, args]) => args.includes('dumpLayout')).length;
 }
 
 test('repeated viewport reads within the TTL trigger a single layout dump', async () => {

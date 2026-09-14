@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Changed (android, harmonyos): every `adb shell`, `adb exec-out`, and `hdc shell` command now goes
+  through one device-shell funnel that quotes each argument for the device's `sh` (#2026, #2611).
+  The device shell re-parses the joined argv, so an unquoted dynamic value was a command injection;
+  Android quoted a few sites by hand and HarmonyOS quoted nothing. Three things are visible:
+  HarmonyOS `type` and `fill` text with spaces or metacharacters now reaches `uitest uiInput text`
+  as one quoted argument instead of being split by the device shell; an empty argument renders as
+  `''` instead of vanishing from the command line; and an `sh -c` script body reaches `sh` as one
+  argument. Custom adb executors and providers (SDK, MCP, Limrun-style relays) that pass a raw
+  `['shell', …]` or `['exec-out', …]` argv are refused with `INVALID_ARGS`
+  (`unguarded-device-shell-argv`); build the argv with `deviceShellArgv` from
+  `@agent-device/kernel/device-shell`, or call `runAndroidShell`, `runAdbShell`, or
+  `runHarmonyShell`. `shellQuote` and `shellQuoteIfNeeded` moved from `@agent-device/host-kit/command` to
+  `@agent-device/kernel/device-shell`. SDK: `AndroidAdbExecutor` and `AndroidAdbProvider.exec` now
+  receive `readonly string[]`; a custom executor annotated `(args: string[])` must widen its parameter.
 - Fixed: BrowserStack sessions honour `--provider-project`, `--provider-build`, and
   `--provider-session-name`. The capability builder emitted the legacy JSON Wire keys `device`,
   `os_version`, and `app` at the top level next to the W3C `bstack:options` block; the hub treats a

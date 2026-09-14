@@ -117,7 +117,7 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   };
   const controller = new AbortController();
   let observedSignal: AbortSignal | undefined;
-  const adb = vi.fn(async (_args: string[], options?: { signal?: AbortSignal }) => {
+  const adb = vi.fn(async (_args: readonly string[], options?: { signal?: AbortSignal }) => {
     observedSignal = options?.signal;
     return await new Promise<never>((_resolve, reject) => {
       options?.signal?.addEventListener(
@@ -140,7 +140,7 @@ test('host.runAdb keeps its exported shape and routes through the host transport
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const { withAndroidHostAdbTransport } = await import('@agent-device/platform-android/mechanics');
   const dependencies = createLimrunRuntimeDependencies();
-  const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
+  const seen: Array<{ args: readonly string[]; options?: Record<string, unknown> }> = [];
 
   const result = await withAndroidHostAdbTransport(
     async (args, options) => {

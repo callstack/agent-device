@@ -94,10 +94,15 @@ export async function installLimrunAndroidApp(
   signal?.throwIfAborted();
   const packageName = normalizeOptionalString(options?.packageNameHint);
   if (options?.relaunch && packageName) {
-    await runLimrunAndroidAdb(session, ['shell', 'am', 'force-stop', packageName], {
-      allowFailure: true,
-      signal,
-    });
+    const { deviceShellArgv } = await loadDeviceShell();
+    await runLimrunAndroidAdb(
+      session,
+      deviceShellArgv('shell', ['am', 'force-stop', packageName]),
+      {
+        allowFailure: true,
+        signal,
+      },
+    );
   }
   const asset = await awaitLimrunDeploymentOperation(
     operationDrain,
@@ -170,9 +175,14 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
   ]);
 }
 
+// Loaded on demand so the provider entry keeps its merge-base eager closure.
+async function loadDeviceShell() {
+  return await import('@agent-device/kernel/device-shell');
+}
+
 async function runLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ): Promise<LimrunAdbCommandResult> {
   const { adbArgs, result } = await executeLimrunAndroidAdb(session, args, options);
@@ -186,11 +196,12 @@ async function runLimrunAndroidAdb(
 
 async function executeLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
-): Promise<{ adbArgs: string[]; result: LimrunAdbCommandResult }> {
+): Promise<{ adbArgs: readonly string[]; result: LimrunAdbCommandResult }> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
-  const adbArgs = ['-s', serial, ...args];
+  const { relayDeviceShellArgv } = await loadDeviceShell();
+  const adbArgs = relayDeviceShellArgv(args, ['-s', serial, ...args]);
   const result = await session.dependencies.host.runAdb(adbArgs, {
     allowFailure: options?.allowFailure,
     binaryStdout: options?.binaryStdout,
@@ -202,7 +213,7 @@ async function executeLimrunAndroidAdb(
 }
 
 async function requireSuccessfulLimrunAndroidAdb(
-  adbArgs: string[],
+  adbArgs: readonly string[],
   result: LimrunAdbCommandResult,
   allowFailure: boolean | undefined,
   dependencies: Pick<LimrunRuntimeDependencies, 'android'>,

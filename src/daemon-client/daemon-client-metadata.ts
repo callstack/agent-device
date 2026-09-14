@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { shellQuote } from '@agent-device/host-kit/command';
+import { shellQuote } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
 

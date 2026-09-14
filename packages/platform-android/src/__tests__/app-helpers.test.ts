@@ -25,7 +25,7 @@ async function withMockedAdbScript(script: string, run: () => Promise<void>): Pr
 }
 
 test('listAndroidAppsWithAdb uses an injected executor', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('query-activities')) {

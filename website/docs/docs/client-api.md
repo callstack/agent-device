@@ -206,7 +206,7 @@ import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/
 import type { AndroidAdbExecutorOptions } from 'agent-device/android-adb';
 
 const provider = {
-  exec: async (args: string[], options?: AndroidAdbExecutorOptions) =>
+  exec: async (args: readonly string[], options?: AndroidAdbExecutorOptions) =>
     await runAdbThroughRemoteTunnel(args, options),
 };
 

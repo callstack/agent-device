@@ -1,4 +1,4 @@
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -7,6 +7,7 @@ import { isAndroidShellCommandUnsupported, sleep } from './adb.ts';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,
+  runAdbShell,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import {
@@ -86,7 +87,7 @@ export async function getAndroidKeyboardState(device: DeviceInfo): Promise<Andro
 export async function getAndroidKeyboardStatusWithAdb(
   adb: AndroidAdbExecutor,
 ): Promise<AndroidKeyboardState> {
-  const result = await adb(['shell', 'dumpsys', 'input_method'], {
+  const result = await runAdbShell(adb, ['dumpsys', 'input_method'], {
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
@@ -109,7 +110,7 @@ export async function dismissAndroidKeyboardWithAdb(
   let attempts = 0;
 
   while (state.visible && attempts < ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS) {
-    await adb(['shell', 'input', 'keyevent', ANDROID_KEYCODE_ESCAPE]);
+    await runAdbShell(adb, ['input', 'keyevent', ANDROID_KEYCODE_ESCAPE]);
     attempts += 1;
     await sleep(ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS);
     state = await getAndroidKeyboardStatusWithAdb(adb);
@@ -294,7 +295,7 @@ export async function readAndroidClipboardText(device: DeviceInfo): Promise<stri
 export async function readAndroidClipboardWithAdb(adb: AndroidAdbExecutor): Promise<string> {
   const stdout = await runAndroidClipboardShellCommand(
     adb,
-    ['shell', 'cmd', 'clipboard', 'get', 'text'],
+    ['cmd', 'clipboard', 'get', 'text'],
     'read',
   );
   return normalizeAndroidClipboardText(stdout);
@@ -308,19 +309,15 @@ export async function writeAndroidClipboardWithAdb(
   adb: AndroidAdbExecutor,
   text: string,
 ): Promise<void> {
-  await runAndroidClipboardShellCommand(
-    adb,
-    ['shell', 'cmd', 'clipboard', 'set', 'text', shellQuoteIfNeeded(text)],
-    'write',
-  );
+  await runAndroidClipboardShellCommand(adb, ['cmd', 'clipboard', 'set', 'text', text], 'write');
 }
 
 async function runAndroidClipboardShellCommand(
   adb: AndroidAdbExecutor,
-  args: string[],
+  words: ShellWord[],
   operation: 'read' | 'write',
 ): Promise<string> {
-  const result = await adb(args, { allowFailure: true });
+  const result = await runAdbShell(adb, words, { allowFailure: true });
   // A clean exit settles it before the prose is consulted at all: on a successful read `stdout` is
   // the clipboard's contents, and a user who has copied one of the missing-shell phrases must not
   // have their own text mistaken for adb refusing the command.

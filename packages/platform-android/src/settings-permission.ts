@@ -2,7 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parsePermissionAction, parsePermissionTarget } from '@agent-device/contracts/settings';
 import type { SettingOptions } from '@agent-device/contracts/settings';
-import { runAndroidAdb } from './adb.ts';
+import { runAndroidShell } from './adb.ts';
 import {
   readAndroidCurrentUserId,
   readAndroidRuntimePermissionGrants,
@@ -102,7 +102,7 @@ async function grantAndroidPermission(
   } else if (target.type === 'photos') {
     await setAndroidPhotoPermission(device, appPackage, 'grant', userArgs);
   } else {
-    await runAndroidAdb(device, ['shell', 'pm', 'grant', ...userArgs, appPackage, target.value]);
+    await runAndroidShell(device, ['pm', 'grant', ...userArgs, appPackage, target.value]);
   }
 }
 
@@ -123,7 +123,7 @@ async function revokeAndroidPermission(
     permission = await setAndroidPhotoPermission(device, appPackage, 'revoke', userArgs);
   } else {
     permission = target.value;
-    await runAndroidAdb(device, ['shell', 'pm', 'revoke', ...userArgs, appPackage, permission]);
+    await runAndroidShell(device, ['pm', 'revoke', ...userArgs, appPackage, permission]);
   }
   if (action === 'reset') {
     await clearAndroidPermissionFlags(device, appPackage, permission, userArgs);
@@ -182,9 +182,9 @@ async function setAndroidPhotoPermission(
 
   const failures: Array<{ permission: string; stderr: string; exitCode: number }> = [];
   for (const permission of candidates) {
-    const result = await runAndroidAdb(
+    const result = await runAndroidShell(
       device,
-      ['shell', 'pm', pmAction, ...userArgs, appPackage, permission],
+      ['pm', pmAction, ...userArgs, appPackage, permission],
       { allowFailure: true },
     );
     if (result.exitCode === 0) return permission;
@@ -207,23 +207,18 @@ async function setAndroidNotificationPermission(
 ): Promise<void> {
   const appOpsMode = action === 'grant' ? 'allow' : action === 'deny' ? 'deny' : 'default';
   if (action === 'grant') {
-    await runAndroidAdb(
-      device,
-      ['shell', 'pm', 'grant', ...userArgs, appPackage, target.permission],
-      { allowFailure: true },
-    );
+    await runAndroidShell(device, ['pm', 'grant', ...userArgs, appPackage, target.permission], {
+      allowFailure: true,
+    });
   } else {
-    await runAndroidAdb(
-      device,
-      ['shell', 'pm', 'revoke', ...userArgs, appPackage, target.permission],
-      { allowFailure: true },
-    );
+    await runAndroidShell(device, ['pm', 'revoke', ...userArgs, appPackage, target.permission], {
+      allowFailure: true,
+    });
     if (action === 'reset') {
       await clearAndroidPermissionFlags(device, appPackage, target.permission, userArgs);
     }
   }
-  await runAndroidAdb(device, [
-    'shell',
+  await runAndroidShell(device, [
     'appops',
     'set',
     ...userArgs,
@@ -240,16 +235,16 @@ async function clearAndroidPermissionFlags(
   userArgs: AndroidUserArgs,
 ): Promise<void> {
   for (const flag of ['user-set', 'user-fixed']) {
-    await runAndroidAdb(
+    await runAndroidShell(
       device,
-      ['shell', 'pm', 'clear-permission-flags', ...userArgs, appPackage, permission, flag],
+      ['pm', 'clear-permission-flags', ...userArgs, appPackage, permission, flag],
       { allowFailure: true },
     );
   }
 }
 
 async function getAndroidSdkInt(device: DeviceInfo): Promise<number | null> {
-  const result = await runAndroidAdb(device, ['shell', 'getprop', 'ro.build.version.sdk'], {
+  const result = await runAndroidShell(device, ['getprop', 'ro.build.version.sdk'], {
     allowFailure: true,
   });
   if (result.exitCode !== 0) return null;

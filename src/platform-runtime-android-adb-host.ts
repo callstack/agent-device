@@ -1,5 +1,6 @@
 import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';
 import type { AndroidAdbExecutorOptions } from '@agent-device/platform-android/mechanics';
+import { relayDeviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -141,11 +142,13 @@ bindAndroidAdbHost({
 });
 
 function adbInvocation<Options extends AndroidAdbExecutorOptions>(
-  args: string[],
+  args: readonly string[],
   options?: Options,
 ): { args: string[]; options: Omit<Options, 'serverPort'> } {
   const { serverPort, ...withoutServerPort } = options ?? ({} as Options);
-  if (serverPort === undefined) return { args, options: withoutServerPort };
+  if (serverPort === undefined) {
+    return { args: relayDeviceShellArgv(args, [...args]), options: withoutServerPort };
+  }
   return {
     args: withServerPort(args, serverPort),
     options: {
@@ -161,7 +164,7 @@ function adbInvocation<Options extends AndroidAdbExecutorOptions>(
   };
 }
 
-function withServerPort(args: string[], serverPort: number): string[] {
+function withServerPort(args: readonly string[], serverPort: number): string[] {
   const normalized = ['-P', String(serverPort)];
   let index = 0;
   let serial: string | undefined;
@@ -183,10 +186,10 @@ function withServerPort(args: string[], serverPort: number): string[] {
   }
   const command = args.slice(index);
   assertManagedAdbCommand(command);
-  return [...normalized, ...command];
+  return relayDeviceShellArgv(args, [...normalized, ...command]);
 }
 
-function assertManagedAdbCommand(args: string[]): void {
+function assertManagedAdbCommand(args: readonly string[]): void {
   const command = args.find((argument) => !argument.startsWith('wait-for-'));
   if (
     [

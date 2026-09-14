@@ -1246,9 +1246,8 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
     3,
   );
   assert.equal(
-    adbCalls.filter((call) =>
-      arrayEqual(call, ['shell', 'settings put global sysui_demo_allowed 1']),
-    ).length,
+    adbCalls.filter((call) => call.join(' ') === 'shell settings put global sysui_demo_allowed 1')
+      .length,
     2,
   );
 }
