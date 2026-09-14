@@ -9,7 +9,7 @@ import {
   readRepairTombstoneFile,
   resolveRepairTombstonePath,
   type RepairSessionTombstone,
-} from './session-repair-tombstone.ts';
+} from '../session-repair-tombstone.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
 import { effectiveWriteForce } from './session-script-publication-capability.ts';
 import {

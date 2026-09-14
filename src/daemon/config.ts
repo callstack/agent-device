@@ -1,95 +1,16 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
-import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
-import { type EnvMap } from '@agent-device/kernel/source-value';
+import type { SessionIsolationMode } from '@agent-device/kernel/contracts';
 
-import type {
-  DaemonServerMode,
-  DaemonTransportPreference,
-  SessionIsolationMode,
-} from '@agent-device/kernel/contracts';
-export type { DaemonServerMode, DaemonTransportPreference, SessionIsolationMode };
+export type { SessionIsolationMode };
 
-export type DaemonPaths = {
-  baseDir: string;
-  infoPath: string;
-  lockPath: string;
-  logPath: string;
-  allocationsDir: string;
-  sessionsDir: string;
-};
-
-type ResolveDaemonPathsOptions = {
-  env?: EnvMap;
-  projectRoot?: string;
-};
-
-export function resolveDaemonPaths(
-  stateDir: string | undefined,
-  options: ResolveDaemonPathsOptions = {},
-): DaemonPaths {
-  const baseDir = resolveStateDir(stateDir, options);
-  return {
-    baseDir,
-    infoPath: path.join(baseDir, 'daemon.json'),
-    lockPath: path.join(baseDir, 'daemon.lock'),
-    logPath: path.join(baseDir, 'daemon.log'),
-    allocationsDir: path.join(baseDir, 'allocations'),
-    sessionsDir: path.join(baseDir, 'sessions'),
-  };
-}
-
-function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOptions): string {
-  const value = (raw ?? '').trim();
-  if (!value) {
-    return resolveDefaultDaemonStateDir(options);
-  }
-  return resolveUserPath(value, { env: options.env });
-}
-
-function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {
-  const globalStateDir = path.join(expandUserHomePath('~', { env: options.env }), '.agent-device');
-  const projectRoot = options.projectRoot ?? findProjectRoot();
-  if (!isSourceCheckoutProjectRoot(projectRoot)) {
-    return globalStateDir;
-  }
-  return path.join(globalStateDir, 'dev', buildSourceCheckoutStateDirName(projectRoot));
-}
-
-function buildSourceCheckoutStateDirName(projectRoot: string): string {
-  const resolvedRoot = resolveRealPath(projectRoot);
-  const slug = path.basename(resolvedRoot).replaceAll(/[^a-zA-Z0-9._-]+/g, '-');
-  const hash = crypto.createHash('sha1').update(resolvedRoot).digest('hex').slice(0, 12);
-  return `${slug || 'agent-device'}-${hash}`;
-}
-
-function resolveRealPath(filePath: string): string {
-  try {
-    return fs.realpathSync.native(filePath);
-  } catch {
-    return path.resolve(filePath);
-  }
-}
-
-export function resolveDaemonServerMode(raw: string | undefined): DaemonServerMode {
-  const normalized = (raw ?? '').trim().toLowerCase();
-  if (normalized === 'http') return 'http';
-  if (normalized === 'dual') return 'dual';
-  return 'socket';
-}
-
-export function resolveDaemonTransportPreference(
-  raw: string | undefined,
-): DaemonTransportPreference {
-  const normalized = (raw ?? '').trim().toLowerCase();
-  if (normalized === 'auto') return 'auto';
-  if (normalized === 'socket') return 'socket';
-  if (normalized === 'http') return 'http';
-  if (normalized === 'dual') return 'auto';
-  return 'auto';
-}
+// The state-dir resolution the client also needs lives at the process root, so reaching it does not
+// pull a client into daemon internals; this module composes back what the daemon's own importers
+// read from here, and adds the request-scoping rules only the daemon applies. The transport and
+// server-mode types stay at the root leaf for the client, which imports them directly.
+export {
+  resolveDaemonPaths,
+  resolveDaemonServerMode,
+  type DaemonPaths,
+} from '../daemon-resolution.ts';
 
 export function resolveSessionIsolationMode(raw: string | undefined): SessionIsolationMode {
   const normalized = (raw ?? '').trim().toLowerCase();

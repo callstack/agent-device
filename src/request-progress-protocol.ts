@@ -1,5 +1,8 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
-import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+// The client and the daemon share this framing, so it sits above both rather than under
+// `src/daemon/`. It takes the request/response vocabulary from the kernel contracts, which is
+// what lets a client read the stream without the module depending on daemon-private request state.
+import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type DaemonProgressEnvelope = {
   type: 'progress';

@@ -13,7 +13,7 @@ import {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
-import { findUnrecoveredRepairCommitFailure } from '../daemon/session-repair-tombstone.ts';
+import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -21,7 +21,7 @@ import {
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
-} from '../daemon/config.ts';
+} from '../daemon-resolution.ts';
 import { resolveDaemonLaunchSpec, resolveDaemonTakeoverReason } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 

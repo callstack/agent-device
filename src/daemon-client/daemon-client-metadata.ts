@@ -1,11 +1,15 @@
 import fs from 'node:fs';
 import { shellQuote } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon/daemon-process.ts';
+import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
 
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 
-import { resolveDaemonPaths, type DaemonPaths, type DaemonServerMode } from '../daemon/config.ts';
+import {
+  resolveDaemonPaths,
+  type DaemonPaths,
+  type DaemonServerMode,
+} from '../daemon-resolution.ts';
 
 export type DaemonInfo = {
   port?: number;

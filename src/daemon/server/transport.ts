@@ -17,7 +17,7 @@ import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,
   shouldStreamRequestProgress,
-} from '../request-progress-protocol.ts';
+} from '../../request-progress-protocol.ts';
 
 export type DaemonServer = (net.Server | HttpServer) & {
   destroyConnections?: () => void;

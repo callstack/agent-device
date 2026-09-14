@@ -57,9 +57,8 @@ export function readRepairTombstoneFile(tombstonePath: string): RepairSessionTom
  * An owned ephemeral state dir services exactly one repair transaction at a
  * time, so the first match found is returned.
  *
- * Lives below both the store and the client (#2342) so reading the artifact a
- * reaped transaction left on disk does not oblige either side to import the
- * other.
+ * Lives at the process root, reachable by the store and the client alike (#2342), so reading
+ * the artifact a reaped transaction left on disk does not oblige either side to import the other.
  */
 export function findUnrecoveredRepairCommitFailure(sessionsDir: string):
   | {

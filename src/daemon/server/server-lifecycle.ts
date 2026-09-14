@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
-import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
+import { isAgentDeviceDaemonProcess } from '../../daemon-process.ts';
 
 export { readVersion } from '@agent-device/host-kit/version';
 export { readProcessStartTime } from '@agent-device/host-kit/process';

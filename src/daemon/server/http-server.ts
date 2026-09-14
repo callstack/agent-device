@@ -32,7 +32,7 @@ import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,
   shouldStreamRequestProgress,
-} from '../request-progress-protocol.ts';
+} from '../../request-progress-protocol.ts';
 import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,

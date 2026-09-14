@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonPaths, DaemonTransportPreference } from '../daemon/config.ts';
+import type { DaemonPaths, DaemonTransportPreference } from '../daemon-resolution.ts';
 import {
   readDaemonHttpProgressResponse,
   readDaemonSocketProgressResponse,

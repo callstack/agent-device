@@ -19,7 +19,7 @@ import {
   stopProcessForTakeover,
   waitForDaemonExit,
   type DaemonProcessIdentity,
-} from '../../src/daemon/daemon-process.ts';
+} from '../../src/daemon-process.ts';
 import {
   expandProcessTree,
   isProcessAlive,

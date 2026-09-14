@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   waitForDaemonExit: vi.fn(),
 }));
 
-vi.mock('../daemon-process.ts', () => ({
+vi.mock('../../daemon-process.ts', () => ({
   isAgentDeviceDaemonProcess: mocks.isAgentDeviceDaemonProcess,
   trySignalProcess: mocks.trySignalProcess,
   waitForDaemonExit: mocks.waitForDaemonExit,
