@@ -25,6 +25,10 @@ import {
   type AndroidSnapshotHelperResolvedCaptureOptions,
 } from './snapshot-helper-capture.ts';
 import {
+  isAndroidSnapshotHelperRetryStateStanding,
+  type AndroidSnapshotHelperRetryState,
+} from './snapshot-helper-retry-state.ts';
+import {
   allocateAndroidSnapshotHelperSessionPort,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
   provesAndroidSnapshotHelperSessionUnavailable,
@@ -87,15 +91,8 @@ export type AndroidSnapshotHelperSessionAcquisition = {
 
 const sessions = new Map<string, AndroidSnapshotHelperSession>();
 
-type DisabledAndroidSnapshotHelperSession = {
-  identity: string;
-  /**
-   * When set, the start failed for a reason that says nothing about this identity — the device was
-   * slow, the transport was slow — so a later command tries again instead of paying one-shot
-   * instrumentation for the rest of the daemon's life.
-   */
-  retryAfterMs?: number;
-};
+/** A start that failed for this identity, standing until it is worth starting again. */
+type DisabledAndroidSnapshotHelperSession = AndroidSnapshotHelperRetryState<string>;
 
 const disabledSessionIdentities = new Map<string, DisabledAndroidSnapshotHelperSession>();
 
@@ -197,8 +194,8 @@ function disableAndroidSnapshotHelperSessionIdentity(
   // start that ran out of time or lost its transport says nothing, so the exclusion expires.
   const unavailable = provesAndroidSnapshotHelperSessionUnavailable(error);
   disabledSessionIdentities.set(deviceKey, {
-    identity,
-    ...(unavailable ? {} : { retryAfterMs: Date.now() + SESSION_START_RETRY_AFTER_MS }),
+    value: identity,
+    ...(unavailable ? {} : { retryAtMs: Date.now() + SESSION_START_RETRY_AFTER_MS }),
   });
   emitDiagnostic({
     level: 'warn',
@@ -213,9 +210,8 @@ function disableAndroidSnapshotHelperSessionIdentity(
 
 function isAndroidSnapshotHelperSessionIdentityDisabled(deviceKey: string, identity: string) {
   const disabled = disabledSessionIdentities.get(deviceKey);
-  if (!disabled || disabled.identity !== identity) return false;
-  if (disabled.retryAfterMs === undefined) return true;
-  if (Date.now() < disabled.retryAfterMs) return true;
+  if (!disabled || disabled.value !== identity) return false;
+  if (isAndroidSnapshotHelperRetryStateStanding(disabled)) return true;
   disabledSessionIdentities.delete(deviceKey);
   return false;
 }

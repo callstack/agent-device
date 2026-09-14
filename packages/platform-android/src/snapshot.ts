@@ -36,8 +36,6 @@ import {
   captureAndroidSnapshotWithHelperSession,
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
-  getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRuntimeOccupiedError,
   stopAndroidSnapshotHelperSession,
   type AndroidAdbExecutor,
   type AndroidSnapshotHelperArtifact,
@@ -45,6 +43,10 @@ import {
   type AndroidSnapshotHelperInstallResult,
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
+import {
+  getAndroidSnapshotHelperSessionDeviceKey,
+  isAndroidSnapshotHelperRuntimeOccupiedError,
+} from './snapshot-helper-retirement.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';

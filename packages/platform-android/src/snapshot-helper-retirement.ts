@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AndroidAdbProcess } from './adb-executor.ts';
+import type { AndroidSnapshotHelperRetryState } from './snapshot-helper-retry-state.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
 
 const RETIREMENT_RECOVERY_TIMEOUT_MS = 5_000;
@@ -19,11 +20,11 @@ const RUNTIME_OCCUPIED_REASON = 'android_snapshot_helper_runtime_occupied';
  */
 export type AndroidSnapshotHelperRuntimeRelease = 'released' | 'occupied' | 'unknown';
 
-/** A retirement whose release the last teardown could not prove; recovered at the next acquire. */
-type PendingRetirement = {
+/** A release the last teardown could not prove; settled by the next acquire that reads the device. */
+type PendingRetirement = AndroidSnapshotHelperRetryState<{
   packageName: string;
   cause: string;
-};
+}>;
 
 const pendingRetirements = new Map<string, PendingRetirement>();
 
@@ -68,20 +69,20 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
   if (!retirement) return;
   await stopAndroidSnapshotHelperRuntime({
     adb: params.adb,
-    packageName: retirement.packageName,
+    packageName: retirement.value.packageName,
     timeoutMs: RETIREMENT_RECOVERY_TIMEOUT_MS,
     ...(params.signal ? { signal: params.signal } : {}),
   });
   params.signal?.throwIfAborted();
   const release = await readAndroidSnapshotHelperRuntimeRelease({
     adb: params.adb,
-    packageName: retirement.packageName,
+    packageName: retirement.value.packageName,
   });
   if (release === 'occupied') {
     throw createAndroidSnapshotHelperRuntimeOccupiedError({
       deviceKey: params.deviceKey,
-      packageName: retirement.packageName,
-      cause: retirement.cause,
+      packageName: retirement.value.packageName,
+      cause: retirement.value.cause,
     });
   }
   // A device that could not be read leaves the retirement pending: the next acquire asks again, and
@@ -115,8 +116,7 @@ export async function recordAndroidSnapshotHelperRelease(params: {
   }
   const causeMessage = params.cause instanceof Error ? params.cause.message : String(params.cause);
   pendingRetirements.set(params.deviceKey, {
-    packageName: params.packageName,
-    cause: causeMessage,
+    value: { packageName: params.packageName, cause: causeMessage },
   });
   emitDiagnostic({
     level: 'warn',

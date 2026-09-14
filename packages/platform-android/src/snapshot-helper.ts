@@ -7,10 +7,6 @@ export {
   stopAndroidSnapshotHelperSessionForDevice,
 } from './snapshot-helper-session-lifecycle.ts';
 export {
-  getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRuntimeOccupiedError,
-} from './snapshot-helper-retirement.ts';
-export {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
 } from './snapshot-helper-install.ts';
