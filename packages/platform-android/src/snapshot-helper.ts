@@ -8,7 +8,7 @@ export {
 } from './snapshot-helper-session-lifecycle.ts';
 export {
   getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRetirementUnconfirmedError,
+  isAndroidSnapshotHelperRuntimeOccupiedError,
 } from './snapshot-helper-retirement.ts';
 export {
   ensureAndroidSnapshotHelper,

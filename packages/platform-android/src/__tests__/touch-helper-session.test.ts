@@ -20,7 +20,10 @@ import {
 } from '../adb-executor.ts';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
-import { getAndroidSnapshotHelperSessionDeviceKey } from '../snapshot-helper-retirement.ts';
+import {
+  getAndroidSnapshotHelperSessionDeviceKey,
+  isAndroidSnapshotHelperRuntimeOccupiedError,
+} from '../snapshot-helper-retirement.ts';
 import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
 import {
   executeAndroidTouchHelperPlan,
@@ -108,24 +111,48 @@ function snapshotSessionResponse(requestId: string): string {
     .join('\n')}\n\n${body}`;
 }
 
+function isTouchCleanupCommand(args: string[]): boolean {
+  return (
+    (args[0] === 'forward' && args[1] === '--remove') ||
+    (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop')
+  );
+}
+
+function neverResolvingAfterAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+}
+
+function readRuntimePidProbeResult(
+  args: string[],
+  runtimePid: string | undefined,
+): { exitCode: number; stdout: string; stderr: string } | undefined {
+  if (args[0] !== 'shell' || args[1] !== 'pidof') return undefined;
+  return runtimePid
+    ? { exitCode: 0, stdout: `${runtimePid}\n`, stderr: '' }
+    : { exitCode: 1, stdout: '', stderr: '' };
+}
+
 function createFakeTouchHelperSessionProvider(
   handleCommand: TouchSessionCommandHandler,
-  options: { stallCleanup?: boolean } = {},
+  options: { stallCleanup?: boolean; runtimePid?: string } = {},
 ): AndroidAdbProvider {
   return {
     exec: async (args, execOptions) => {
-      const cleanupCommand =
-        (args[0] === 'forward' && args[1] === '--remove') ||
-        (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop');
       const signal = execOptions?.signal;
-      if (options.stallCleanup && cleanupCommand && signal) {
-        return await new Promise<never>((_resolve, reject) => {
-          const onAbort = () => reject(signal.reason);
-          signal.addEventListener('abort', onAbort, { once: true });
-          if (signal.aborted) onAbort();
-        });
+      if (options.stallCleanup && signal && isTouchCleanupCommand(args)) {
+        return await neverResolvingAfterAbort(signal);
       }
-      return { exitCode: 0, stdout: '', stderr: '' };
+      return (
+        readRuntimePidProbeResult(args, options.runtimePid) ?? {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+        }
+      );
     },
     spawn: (args) => {
       const port = readSessionPort(args);
@@ -166,23 +193,21 @@ function createFakeTouchHelperSessionProvider(
   };
 }
 
-test('touch helper does not run one-shot while snapshot retirement is unconfirmed', async () => {
+test('touch helper does not run one-shot while the device still runs the helper', async () => {
   const device = makeIsolatedDevice();
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const provider = createFakeTouchHelperSessionProvider(() => 'malformed snapshot response', {
-    stallCleanup: true,
+    runtimePid: '4211',
   });
 
-  await assert.rejects(
-    captureAndroidSnapshotWithHelperSession({
-      adb: provider.exec,
-      adbProvider: provider,
-      deviceKey,
-    }),
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason ===
-      'android_snapshot_helper_retirement_unconfirmed',
-  );
+  // A malformed response retires the session; the device then answers that the helper process is
+  // still running, which is the only fact that may hold the next command.
+  const failed = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey,
+  });
+  assert.equal(failed, undefined);
 
   let oneShotCalled = false;
   await assert.rejects(
@@ -192,6 +217,9 @@ test('touch helper does not run one-shot while snapshot retirement is unconfirme
           if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
             return { exitCode: 1, stdout: '', stderr: 'runtime still busy' };
           }
+          if (args[0] === 'shell' && args[1] === 'pidof') {
+            return { exitCode: 0, stdout: '4211\n', stderr: '' };
+          }
           if (args.includes('instrument')) oneShotCalled = true;
           return { exitCode: 0, stdout: '', stderr: '' };
         }),
@@ -199,9 +227,7 @@ test('touch helper does not run one-shot while snapshot retirement is unconfirme
       { serial: device.id },
       async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
     ),
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason ===
-      'android_snapshot_helper_retirement_unconfirmed',
+    isAndroidSnapshotHelperRuntimeOccupiedError,
   );
 
   assert.equal(oneShotCalled, false);

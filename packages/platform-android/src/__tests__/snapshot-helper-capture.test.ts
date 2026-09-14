@@ -31,14 +31,17 @@ test('one-shot capture that resolves during cancellation retires before rejectin
         if (options?.signal?.aborted) onAbort();
       });
     }
+    if (args.join(' ').includes('pidof')) {
+      return { exitCode: 1, stdout: '', stderr: '' };
+    }
     assert.deepEqual(args, [
       'shell',
       'am',
       'force-stop',
       'com.callstack.agentdevice.snapshothelper',
     ]);
-    assert.notEqual(options?.signal, controller.signal);
-    assert.equal(options?.signal?.aborted, false);
+    // The retirement stop must not inherit the aborted command signal; it bounds itself.
+    assert.ok(!options?.signal?.aborted);
     events.push('retirement-started');
     await retirementCanFinish;
     events.push('retirement-finished');
@@ -70,22 +73,26 @@ test('one-shot capture that resolves during cancellation retires before rejectin
   ]);
 });
 
-test('uncertain one-shot retirement is quarantined until the next capture recovers it', async () => {
+test('canceled one-shot capture reports the cancellation and the next capture recovers the device', async () => {
   const controller = new AbortController();
+  const cancellation = new Error('wait deadline exceeded');
   const events: string[] = [];
-  let forceStopCount = 0;
+  let stopCount = 0;
   const adb: AndroidAdbExecutor = async (args, options) => {
     if (args.join(' ').includes('am force-stop')) {
-      forceStopCount += 1;
-      events.push(`force-stop-${forceStopCount}`);
-      return {
-        exitCode: forceStopCount === 1 ? 1 : 0,
-        stdout: '',
-        stderr: forceStopCount === 1 ? 'runtime still busy' : '',
-      };
+      stopCount += 1;
+      events.push(`force-stop-${stopCount}`);
+      return { exitCode: 0, stdout: '', stderr: '' };
     }
-    events.push(`instrument-${forceStopCount}`);
-    if (forceStopCount === 0) {
+    if (args.join(' ').includes('pidof')) {
+      // The first read happens while Android still runs the helper; the next says it is gone.
+      events.push('pidof');
+      return stopCount === 1
+        ? { exitCode: 0, stdout: '4211\n', stderr: '' }
+        : { exitCode: 1, stdout: '', stderr: '' };
+    }
+    events.push(`instrument-${stopCount}`);
+    if (stopCount === 0) {
       return await new Promise((_resolve, reject) => {
         const onAbort = () => reject(options?.signal?.reason);
         options?.signal?.addEventListener('abort', onAbort, { once: true });
@@ -103,21 +110,24 @@ test('uncertain one-shot retirement is quarantined until the next capture recove
     deviceKey: 'android:emulator-5554',
     signal: controller.signal,
   });
-  controller.abort(new Error('wait deadline exceeded'));
+  controller.abort(cancellation);
 
-  await assert.rejects(
-    canceledCapture,
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason ===
-      'android_snapshot_helper_retirement_unconfirmed',
-  );
+  // The ownership question never replaces the reason this command stopped.
+  await assert.rejects(canceledCapture, cancellation);
   const recovered = await captureAndroidSnapshotWithHelper({
     adb,
     deviceKey: 'android:emulator-5554',
   });
 
   assert.match(recovered.xml, /recovered/);
-  assert.deepEqual(events, ['instrument-0', 'force-stop-1', 'force-stop-2', 'instrument-2']);
+  assert.deepEqual(events, [
+    'instrument-0',
+    'force-stop-1',
+    'pidof',
+    'force-stop-2',
+    'pidof',
+    'instrument-2',
+  ]);
 });
 
 function helperOutput(xml: string): string {

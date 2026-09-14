@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { isAndroidSnapshotHelperRuntimeOccupiedError } from '../snapshot-helper-retirement.ts';
 import { resolveAndroidSnapshotHelperSessionRequestTimeoutMs } from '../snapshot-helper-session-protocol.ts';
 import {
   createSessionProvider,
@@ -124,16 +125,48 @@ test('canceled capture joins canceled external cleanup before returning', async 
   assert.equal(cleanupAborts.length, 2);
 });
 
-test('failed capture does not fall back when device runtime retirement is unconfirmed', async () => {
+test('release the transport could not confirm falls back instead of failing the capture', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
+  // An adb that cannot forward the device exit status, and a device that cannot be read back:
+  // neither says anything about who owns UiAutomation, so neither may answer for this capture.
   const provider = createSessionProvider({
     calls,
     processes,
     recoveryFailure: true,
     responseMode: 'malformed',
-    stalledCleanup: true,
+    shellProtocolV2: false,
+    runtimeRelease: 'unreadable',
   });
+
+  for (const attempt of [1, 2]) {
+    const output = await captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5554',
+    });
+    assert.equal(output, undefined, `attempt ${attempt}`);
+  }
+  assert.equal(processes.length, 2);
+});
+
+test('capture refuses a device the previous teardown found the helper still running', async () => {
+  const calls: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({
+    calls,
+    processes,
+    responseMode: 'malformed',
+    shellProtocolV2: false,
+    runtimeRelease: 'occupied',
+  });
+
+  const failed = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  assert.equal(failed, undefined);
 
   await assert.rejects(
     captureAndroidSnapshotWithHelperSession({
@@ -141,22 +174,8 @@ test('failed capture does not fall back when device runtime retirement is unconf
       adbProvider: provider,
       deviceKey: 'android:emulator-5554',
     }),
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason ===
-      'android_snapshot_helper_retirement_unconfirmed',
+    isAndroidSnapshotHelperRuntimeOccupiedError,
   );
-
-  await assert.rejects(
-    captureAndroidSnapshotWithHelperSession({
-      adb: provider.exec,
-      adbProvider: { exec: provider.exec },
-      deviceKey: 'android:emulator-5554',
-    }),
-    (error: unknown) =>
-      (error as { details?: { reason?: string } }).details?.reason ===
-      'android_snapshot_helper_retirement_unconfirmed',
-  );
-  assert.equal(processes.length, 1);
 });
 
 test('allows device retirement beyond host-process grace before falling back', async () => {

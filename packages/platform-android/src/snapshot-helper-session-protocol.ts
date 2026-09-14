@@ -108,6 +108,18 @@ export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
   );
 }
 
+const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';
+const SESSION_EXITED_BEFORE_READY_REASON = 'android_snapshot_helper_session_exited_before_ready';
+
+/**
+ * Whether a failed start proves this helper identity cannot serve this device at all. A helper that
+ * ran and ended before announcing readiness says so; a start that only ran out of time or lost its
+ * transport says nothing about the identity, and must not exclude it for the daemon's whole life.
+ */
+export function provesAndroidSnapshotHelperSessionUnavailable(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === SESSION_EXITED_BEFORE_READY_REASON;
+}
+
 export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
@@ -121,6 +133,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session did not become ready', {
           output,
           timeoutMs,
+          reason: SESSION_READY_TIMEOUT_REASON,
         }),
       );
     }, timeoutMs);
@@ -154,6 +167,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
           output,
           exitCode: code,
           signal: exitSignal,
+          reason: SESSION_EXITED_BEFORE_READY_REASON,
         }),
       );
     });

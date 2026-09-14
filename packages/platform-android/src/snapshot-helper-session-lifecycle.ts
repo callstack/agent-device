@@ -27,6 +27,7 @@ import {
 import {
   allocateAndroidSnapshotHelperSessionPort,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
+  provesAndroidSnapshotHelperSessionUnavailable,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
@@ -35,10 +36,9 @@ import {
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRetirementUnconfirmedError,
   observeAndroidSnapshotHelperProcessExit,
-  quarantineAndroidSnapshotHelperRetirement,
   recoverAndroidSnapshotHelperRetirement,
+  recordAndroidSnapshotHelperRelease,
   resetAndroidSnapshotHelperRetirements,
   settleAndroidSnapshotHelperSessionCleanup,
   stopAndroidSnapshotHelperHostProcess,
@@ -46,6 +46,8 @@ import {
 } from './snapshot-helper-retirement.ts';
 
 const SESSION_READY_TIMEOUT_MS = 10_000;
+// How long a device that merely started too slowly stays excluded from the persistent path.
+const SESSION_START_RETRY_AFTER_MS = 60_000;
 const SESSION_STOP_TIMEOUT_MS = 1_000;
 // SnapshotInstrumentation.finishSafely can spend up to 10 seconds waiting for Android to finish
 // connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
@@ -84,7 +86,18 @@ export type AndroidSnapshotHelperSessionAcquisition = {
 };
 
 const sessions = new Map<string, AndroidSnapshotHelperSession>();
-const disabledSessionIdentities = new Map<string, string>();
+
+type DisabledAndroidSnapshotHelperSession = {
+  identity: string;
+  /**
+   * When set, the start failed for a reason that says nothing about this identity — the device was
+   * slow, the transport was slow — so a later command tries again instead of paying one-shot
+   * instrumentation for the rest of the daemon's life.
+   */
+  retryAfterMs?: number;
+};
+
+const disabledSessionIdentities = new Map<string, DisabledAndroidSnapshotHelperSession>();
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
@@ -140,40 +153,71 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   const { deviceKey, identity, options, resolved } = params;
-  if (disabledSessionIdentities.get(deviceKey) === identity) {
-    return undefined;
-  }
   let session = sessions.get(deviceKey);
   if (session && session.identity !== identity) {
     await stopAndroidSnapshotHelperSession(deviceKey);
     session = undefined;
   }
-  if (!session) {
-    try {
-      session = await startAndroidSnapshotHelperSession({
-        deviceKey,
-        identity,
-        options,
-        resolved,
-      });
-    } catch (error) {
-      options.signal?.throwIfAborted();
-      disabledSessionIdentities.set(deviceKey, identity);
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'android_snapshot_helper_session_disabled',
-        data: {
-          deviceKey,
-          reason: error instanceof Error ? error.message : String(error),
-        },
-      });
-      if (isAndroidSnapshotHelperRetirementUnconfirmedError(error)) {
-        throw error;
-      }
-      return undefined;
-    }
+  if (!session && !isAndroidSnapshotHelperSessionIdentityDisabled(deviceKey, identity)) {
+    session = await startAndroidSnapshotHelperSessionOrDisable({
+      deviceKey,
+      identity,
+      options,
+      resolved,
+    });
   }
   return session;
+}
+
+/**
+ * A start that failed is not a command that failed: the caller answers with the one-shot transport.
+ * What it does decide is how soon this identity is worth starting again.
+ */
+async function startAndroidSnapshotHelperSessionOrDisable(params: {
+  deviceKey: string;
+  identity: string;
+  options: AndroidSnapshotHelperCaptureOptions;
+  resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+}): Promise<AndroidSnapshotHelperSession | undefined> {
+  try {
+    return await startAndroidSnapshotHelperSession(params);
+  } catch (error) {
+    params.options.signal?.throwIfAborted();
+    disableAndroidSnapshotHelperSessionIdentity(params.deviceKey, params.identity, error);
+    return undefined;
+  }
+}
+
+function disableAndroidSnapshotHelperSessionIdentity(
+  deviceKey: string,
+  identity: string,
+  error: unknown,
+): void {
+  // Only a helper that ran and exited before announcing readiness proves this identity unusable. A
+  // start that ran out of time or lost its transport says nothing, so the exclusion expires.
+  const unavailable = provesAndroidSnapshotHelperSessionUnavailable(error);
+  disabledSessionIdentities.set(deviceKey, {
+    identity,
+    ...(unavailable ? {} : { retryAfterMs: Date.now() + SESSION_START_RETRY_AFTER_MS }),
+  });
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_snapshot_helper_session_disabled',
+    data: {
+      deviceKey,
+      reason: error instanceof Error ? error.message : String(error),
+      ...(unavailable ? {} : { retryAfterMs: SESSION_START_RETRY_AFTER_MS }),
+    },
+  });
+}
+
+function isAndroidSnapshotHelperSessionIdentityDisabled(deviceKey: string, identity: string) {
+  const disabled = disabledSessionIdentities.get(deviceKey);
+  if (!disabled || disabled.identity !== identity) return false;
+  if (disabled.retryAfterMs === undefined) return true;
+  if (Date.now() < disabled.retryAfterMs) return true;
+  disabledSessionIdentities.delete(deviceKey);
+  return false;
 }
 
 async function startAndroidSnapshotHelperSession(params: {
@@ -225,6 +269,7 @@ async function startAndroidSnapshotHelperSession(params: {
       params.options.signal,
     );
     sessions.set(params.deviceKey, session);
+    disabledSessionIdentities.delete(params.deviceKey);
     emitDiagnostic({
       phase: 'android_snapshot_helper_session_ready',
       data: {
@@ -242,7 +287,7 @@ async function startAndroidSnapshotHelperSession(params: {
     } catch {
       // Best effort after startup failure.
     }
-    const [, cleanup] = await Promise.all([
+    await Promise.all([
       waitForAndroidSnapshotHelperProcessExit(
         processExit.ended,
         ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
@@ -258,13 +303,14 @@ async function startAndroidSnapshotHelperSession(params: {
         forceStopRuntime: true,
       }),
     ]);
-    if (!cleanup.runtimeForceStopped) {
-      quarantineAndroidSnapshotHelperRetirement({
-        deviceKey: params.deviceKey,
-        packageName: session.helper.packageName,
-        cause: error,
-      });
-    }
+    // What this command reports is the failed start, which the caller answers with the one-shot
+    // transport. Whether the device is still owned is a fact the next acquire reads.
+    await recordAndroidSnapshotHelperRelease({
+      deviceKey: params.deviceKey,
+      packageName: session.helper.packageName,
+      adb: session.adb,
+      cause: error,
+    });
     throw error;
   }
 }
@@ -335,7 +381,7 @@ export async function stopAndroidSnapshotHelperSession(
   // exit status adb forwarded from the device from one adb invented for a closed connection.
   // Anything less is not evidence, and the device-side stop runs.
   const deviceExitObserved = graceful.acknowledged && graceful.exited;
-  const runtimeReleaseConfirmed =
+  const releaseProvenByQuit =
     deviceExitObserved &&
     (await androidAdbForwardsDeviceExitStatus({
       adb: session.adb,
@@ -362,9 +408,18 @@ export async function stopAndroidSnapshotHelperSession(
       port: session.port,
       packageName: session.helper.packageName,
       timeoutMs: cleanupTimeoutMs,
-      forceStopRuntime: options.resetRuntime === true || !runtimeReleaseConfirmed,
+      forceStopRuntime: options.resetRuntime === true || !releaseProvenByQuit,
     }),
   ]);
+  // Teardown never decides what the command reports: what the device said about ownership is
+  // recorded for the next acquire, and a command that already answered stays answered.
+  const release = await recordAndroidSnapshotHelperRelease({
+    deviceKey,
+    packageName: session.helper.packageName,
+    adb: session.adb,
+    cause: options.cause,
+    ...(releaseProvenByQuit ? { release: 'released' as const } : {}),
+  });
   emitDiagnostic({
     phase: 'android_snapshot_helper_session_stop',
     data: {
@@ -373,24 +428,15 @@ export async function stopAndroidSnapshotHelperSession(
       capturedCount: session.capturedCount,
       lifetimeMs: Date.now() - session.startedAtMs,
       quitAcknowledged: graceful.acknowledged,
-      // With the exit observed but the release unconfirmed, the transport is what failed to prove it.
+      // With the exit observed but the release unproven, the transport is what failed to prove it.
       quitExitObserved: deviceExitObserved,
-      runtimeReleaseConfirmed,
+      releaseProvenByQuit,
+      release,
       forceKilled: !hostProcessEnded && processStopped,
       forced: force || options.signal?.aborted === true,
-      runtimeForceStopped: cleanup.runtimeForceStopped,
       externalCleanupTimedOut: cleanup.timedOut,
     },
   });
-  // Either the release was proven or the device-side stop confirmed it. An unproven quit whose
-  // stop also failed leaves ownership unknown, which is what quarantine exists to report.
-  if (!runtimeReleaseConfirmed && !cleanup.runtimeForceStopped) {
-    quarantineAndroidSnapshotHelperRetirement({
-      deviceKey,
-      packageName: session.helper.packageName,
-      cause: options.cause,
-    });
-  }
   return true;
 }
 
@@ -435,16 +481,12 @@ export async function stopAndroidSnapshotHelperSessionForDevice(
 }
 
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
-  const retirements = await Promise.allSettled(
-    [...sessions.keys()].map((deviceKey) => stopAndroidSnapshotHelperSession(deviceKey)),
+  await Promise.all(
+    [...sessions.keys()].map(async (deviceKey) => {
+      await stopAndroidSnapshotHelperSession(deviceKey);
+    }),
   );
   disabledSessionIdentities.clear();
-  const failures = retirements
-    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-    .map((result) => result.reason);
-  if (failures.length > 0) {
-    throw new AggregateError(failures, 'Failed to retire every Android snapshot helper session');
-  }
   resetAndroidSnapshotHelperRetirements();
   resetAndroidAdbShellProtocolProbes();
 }

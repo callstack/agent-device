@@ -661,29 +661,29 @@ test('snapshotAndroid falls back to one-shot capture after retiring a failed ses
   );
 });
 
-test('snapshotAndroid does not start one-shot capture when session retirement is unconfirmed', async () => {
+test('snapshotAndroid answers from one-shot capture when the session stop could not run', async () => {
   const adbCalls: string[][] = [];
   const oneShotAttempts: string[][] = [];
+  // The stop call failing says the transport is unhealthy, not that UiAutomation is still held.
+  // ADR 0002 keeps the one-shot transport as the fallback for a session failure either way.
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
     spawnArgs: [],
     processes: [],
     sessionResponseMode: 'malformed',
-    stalledSessionCleanup: true,
+    runtimeStopFailure: true,
     oneShotAttempts,
-    oneShotXml: '<hierarchy><node text="must not run" bounds="[0,0][10,10]" /></hierarchy>',
+    oneShotXml: '<hierarchy><node text="one-shot fallback" bounds="[0,0][10,10]" /></hierarchy>',
   });
 
-  await assert.rejects(
-    snapshotAndroid(device, {
-      helperAdb: provider,
-      helperArtifact,
-      helperSessionScope: 'daemon-session',
-    }),
-    /could not confirm release of device automation ownership/,
-  );
+  const result = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
 
-  assert.equal(oneShotAttempts.length, 0);
+  assert.equal(result.nodes[0]?.label, 'one-shot fallback');
+  assert.equal(oneShotAttempts.length, 1);
 });
 
 test('snapshotAndroid fails closed when the helper fails', async () => {

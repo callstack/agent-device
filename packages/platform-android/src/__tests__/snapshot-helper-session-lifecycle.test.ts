@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import {
   resetAndroidSnapshotHelperSessions,
@@ -82,6 +82,37 @@ test('disables repeated persistent session attempts after startup failure', asyn
   assert.equal(spawnArgs.length, 1);
   assert.equal(readSessionArgument(spawnArgs[0]!, 'timeoutMs'), '2000');
   assert.equal(calls.filter((args) => args[0] === 'forward').length, 2);
+});
+
+test('a start that failed for a transient reason is retried instead of ending the persistent path', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const calls: string[][] = [];
+    const spawnArgs: string[][] = [];
+    const provider = createSessionProvider({ calls, spawnArgs });
+    let transportHealthy = false;
+    const adb: AndroidAdbExecutor = async (args, options) => {
+      if (args[0] === 'forward' && !transportHealthy) throw new Error('adb server is restarting');
+      return await provider.exec!(args, options);
+    };
+    const capture = () =>
+      captureAndroidSnapshotWithHelperSession({
+        adb,
+        adbProvider: { ...provider, exec: adb },
+        deviceKey: 'android:emulator-5554',
+      });
+
+    assert.equal(await capture(), undefined);
+    assert.equal(await capture(), undefined);
+    assert.equal(spawnArgs.length, 0, 'the failed start is not retried inside its cooldown');
+
+    vi.advanceTimersByTime(61_000);
+    transportHealthy = true;
+    assert.match((await capture())?.xml ?? '', /snapshot 1/);
+    assert.equal(spawnArgs.length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('starts and reuses a persistent Android snapshot helper session', async () => {
@@ -273,11 +304,11 @@ test('probes the adb transport once per device instead of once per teardown', as
   assert.equal(calls.some(isHelperRuntimeForceStop), false);
 });
 
-test('failed whole-module reset preserves quarantine until recovery is confirmed', async () => {
+test('whole-module reset clears a release the last teardown left pending', async () => {
   const options: SessionProviderOptions = {
     calls: [],
     quitResponseMode: 'malformed',
-    recoveryFailure: true,
+    runtimeRelease: 'occupied',
   };
   const provider = createSessionProvider(options);
   const deviceKey = 'android:emulator-5554';
@@ -287,25 +318,21 @@ test('failed whole-module reset preserves quarantine until recovery is confirmed
     adbProvider: provider,
     deviceKey,
   });
-  await assert.rejects(
-    resetAndroidSnapshotHelperSessions(),
-    /Failed to retire every Android snapshot helper session/,
-  );
-  const forceStopsBeforeRecovery = options.calls.filter((args) =>
-    args.join(' ').includes('am force-stop'),
-  ).length;
+  await resetAndroidSnapshotHelperSessions();
+  const forceStopsAfterReset = countForceStops(options);
 
-  options.recoveryFailure = false;
   await recoverAndroidSnapshotHelperRetirement({
     deviceKey,
     adb: provider.exec,
   });
 
-  assert.equal(
-    options.calls.filter((args) => args.join(' ').includes('am force-stop')).length,
-    forceStopsBeforeRecovery + 1,
-  );
+  assert.ok(forceStopsAfterReset > 0, 'the teardown stopped the runtime');
+  assert.equal(countForceStops(options), forceStopsAfterReset);
 });
+
+function countForceStops(options: SessionProviderOptions): number {
+  return options.calls.filter((args) => isHelperRuntimeForceStop(args)).length;
+}
 
 function isHelperRuntimeForceStop(args: string[]): boolean {
   return args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper';

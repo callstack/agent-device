@@ -54,6 +54,8 @@ export type PersistentSnapshotHelperProviderOptions = {
   stalledSessionCleanup?: boolean;
   oneShotAttempts?: string[][];
   oneShotXml?: string;
+  /** Make the device-side stop fail the way an unhealthy transport answers. */
+  runtimeStopFailure?: boolean;
 };
 
 export function createPersistentSnapshotHelperProvider(
@@ -153,6 +155,8 @@ export type SessionProviderOptions = {
   shellProtocolV2?: boolean;
   /** Make the `adb features` probe fail the way an adb too old to know the command does. */
   featureProbeFailure?: boolean;
+  /** What the device answers when the teardown reads back whether the helper still runs. */
+  runtimeRelease?: 'released' | 'occupied' | 'unreadable';
 };
 
 export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
@@ -262,6 +266,7 @@ function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor 
   return async (args, execOptions) => {
     options.calls.push(args);
     if (args[0] === 'features') return adbFeaturesResult(options);
+    if (isAndroidHelperRuntimeProbe(args)) return adbRuntimeProbeResult(options);
     const forceStopsRuntime = args.join(' ').includes('am force-stop');
     await stallSessionCleanupIfConfigured(options, args, execOptions?.signal, forceStopsRuntime);
     if (options.recoveryFailure && forceStopsRuntime) {
@@ -270,6 +275,21 @@ function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor 
     await delayForceStopIfConfigured(options, execOptions?.signal, forceStopsRuntime);
     return { exitCode: 0, stdout: '', stderr: '' };
   };
+}
+
+function isAndroidHelperRuntimeProbe(args: readonly string[]): boolean {
+  return args[0] === 'shell' && args[1] === 'pidof';
+}
+
+function adbRuntimeProbeResult(options: SessionProviderOptions): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  if (options.runtimeRelease === 'unreadable') throw new Error('device offline');
+  return options.runtimeRelease === 'occupied'
+    ? { exitCode: 0, stdout: '4211\n', stderr: '' }
+    : { exitCode: 1, stdout: '', stderr: '' };
 }
 
 function adbFeaturesResult(options: SessionProviderOptions): {
@@ -405,8 +425,18 @@ function persistentSnapshotExecResult(
   if (args[0] === 'features') {
     return Promise.resolve({ exitCode: 0, stdout: 'cmd\nstat_v2\nshell_v2\n', stderr: '' });
   }
-  if (args[0] === 'forward' || isAndroidHelperRuntimeForceStop(args)) {
+  if (isAndroidHelperRuntimeForceStop(args)) {
+    return Promise.resolve(
+      options.runtimeStopFailure
+        ? { exitCode: 1, stdout: '', stderr: 'error: device offline' }
+        : { exitCode: 0, stdout: '', stderr: '' },
+    );
+  }
+  if (args[0] === 'forward') {
     return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+  }
+  if (isAndroidHelperRuntimeProbe(args)) {
+    return Promise.resolve({ exitCode: 1, stdout: '', stderr: '' });
   }
   if (args.includes('instrument')) {
     options.oneShotAttempts?.push(args);

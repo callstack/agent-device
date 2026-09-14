@@ -37,7 +37,7 @@ import {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
   getAndroidSnapshotHelperSessionDeviceKey,
-  isAndroidSnapshotHelperRetirementUnconfirmedError,
+  isAndroidSnapshotHelperRuntimeOccupiedError,
   stopAndroidSnapshotHelperSession,
   type AndroidAdbExecutor,
   type AndroidSnapshotHelperArtifact,
@@ -377,7 +377,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     if (sessionCapture) return sessionCapture;
   } catch (error) {
     signal?.throwIfAborted();
-    if (isAndroidSnapshotHelperRetirementUnconfirmedError(error)) {
+    if (isAndroidSnapshotHelperRuntimeOccupiedError(error)) {
       throw error;
     }
     emitDiagnostic({
