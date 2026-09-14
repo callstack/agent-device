@@ -6,6 +6,7 @@ import {
   emitDiagnostic,
   publishFileSync,
   acquireProcessLock,
+  withProcessLock,
   hasDeviceClaimAuthority,
   isProcessAlive,
   readProcessCommand,
@@ -115,28 +116,22 @@ export function buildRunnerLease(params: {
 }
 
 export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promise<T>): Promise<T> {
-  const release = await acquireProcessLock({
-    lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
-    owner: {
-      pid: RUNNER_OWNER_PID,
-      startTime: runnerOwnerStartTime(),
-      acquiredAtMs: Date.now(),
-    },
-    timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
-    pollMs: RUNNER_LEASE_LOCK_POLL_MS,
-    ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
-    description: `iOS runner lease for ${deviceId}`,
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
+        owner: {
+          pid: RUNNER_OWNER_PID,
+          startTime: runnerOwnerStartTime(),
+          acquiredAtMs: Date.now(),
+        },
+        timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
+        pollMs: RUNNER_LEASE_LOCK_POLL_MS,
+        ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
+        description: `iOS runner lease for ${deviceId}`,
+      }),
+    task,
   });
-  try {
-    const result = await task();
-    await release();
-    return result;
-  } catch (error) {
-    // A task that failed is the reportable fact; an unverified release only says the
-    // lease lock is still standing, which the stale-clear path resolves on its own.
-    await release().catch(() => undefined);
-    throw error;
-  }
 }
 
 function readRunnerLease(deviceId: string): RunnerLease | null {

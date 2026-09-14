@@ -8,6 +8,7 @@ import {
   emitDiagnostic,
   readProcessStartTime,
   acquireProcessLock,
+  withProcessLock,
   type ProcessLockOwner,
 } from './host.ts';
 
@@ -18,7 +19,7 @@ const XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS = 30_000;
 const XCTEST_DEVICE_SET_LOCK_POLL_MS = 100;
 const XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS = 5_000;
 
-type XcodebuildSimulatorSetRedirectHandle = {
+export type XcodebuildSimulatorSetRedirectHandle = {
   release: () => Promise<void>;
 };
 
@@ -43,6 +44,37 @@ function resolveXcodebuildSimulatorDeviceSetBackupPath(
   xctestDeviceSetPath: string = resolveXcodebuildSimulatorDeviceSetPath(),
 ): string {
   return `${xctestDeviceSetPath}${XCTEST_DEVICE_SET_BACKUP_SUFFIX}`;
+}
+
+/**
+ * Runs `task` with the XCTest device set redirected at this simulator's device set, and gives the
+ * redirect back on every path out. The task is what owns the redirect's lifetime here, so a build
+ * that failed keeps its own error and the lock it could not hand back goes to the stale-clear path
+ * instead of becoming the reportable failure.
+ */
+export async function withXcodebuildSimulatorSetRedirect<Task>(
+  device: DeviceInfo,
+  task: () => Promise<Task>,
+  options: XcodebuildSimulatorSetRedirectOptions = {},
+): Promise<Task> {
+  const redirect = await acquireXcodebuildSimulatorSetRedirect(device, options);
+  if (!redirect) return await task();
+  return await withProcessLock({ acquire: async () => redirect.release, task });
+}
+
+/**
+ * Gives a redirect back from a site that outlives a single task — a launch that already failed, a
+ * teardown that already ran — and so has nothing left to displace. A release that cannot verify
+ * ownership leaves the lock standing for the stale-clear path, which is the smaller loss.
+ */
+export async function releaseXcodebuildSimulatorSetRedirectBestEffort(
+  redirect: XcodebuildSimulatorSetRedirectHandle | null | undefined,
+): Promise<void> {
+  try {
+    await redirect?.release();
+  } catch {
+    // The lock stays where it is; nobody but the stale-clear path may take it from here.
+  }
 }
 
 export async function acquireXcodebuildSimulatorSetRedirect(

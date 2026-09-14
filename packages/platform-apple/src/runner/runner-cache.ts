@@ -5,6 +5,7 @@ import {
   emitDiagnostic,
   readProcessStartTime,
   acquireProcessLock,
+  withProcessLock,
   type ProcessLockOwner,
   isEnvTruthy,
   findProjectRoot,
@@ -101,18 +102,18 @@ export async function markRunnerXctestrunArtifactBadForRun(
   }
 
   badRunnerArtifactsForRun.add(artifact.derived);
-  const releaseCacheLock = await acquireRunnerXctestrunCacheLock(artifact.derived);
-  try {
-    emitRunnerXctestrunDecision('clean', 'bad_artifact', {
-      derived: artifact.derived,
-      xctestrunPath: artifact.xctestrunPath,
-      reason,
-    });
-    assertSafeDerivedCleanup(artifact.derived);
-    cleanRunnerDerivedArtifacts(artifact.derived);
-  } finally {
-    await releaseCacheLock();
-  }
+  await withProcessLock({
+    acquire: () => acquireRunnerXctestrunCacheLock(artifact.derived),
+    task: async () => {
+      emitRunnerXctestrunDecision('clean', 'bad_artifact', {
+        derived: artifact.derived,
+        xctestrunPath: artifact.xctestrunPath,
+        reason,
+      });
+      assertSafeDerivedCleanup(artifact.derived);
+      cleanRunnerDerivedArtifacts(artifact.derived);
+    },
+  });
 }
 
 export async function acquireRunnerXctestrunCacheLock(

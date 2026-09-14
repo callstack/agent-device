@@ -7,13 +7,14 @@ import {
   runCmdStreaming,
   type ExecBackgroundResult,
   withKeyedLock,
+  withProcessLock,
   emitRequestProgress,
   findProjectRoot,
 } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
 import { logChunk } from './runner-io.ts';
-import { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
+import { withXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   assertSafeDerivedCleanup,
@@ -100,19 +101,18 @@ export async function ensureXctestrunArtifact(
   );
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
   return await withKeyedLock(runnerXctestrunBuildLocks, derived, async () => {
-    const releaseCacheLock = await acquireRunnerXctestrunCacheLock(derived);
-    try {
-      return await ensureXctestrunUnderCacheLock({
-        device,
-        options,
-        projectRoot,
-        expectedCacheMetadata,
-        derived,
-        forceRebuild: options.forceRunnerXctestrunRebuild === true,
-      });
-    } finally {
-      await releaseCacheLock();
-    }
+    return await withProcessLock({
+      acquire: () => acquireRunnerXctestrunCacheLock(derived),
+      task: () =>
+        ensureXctestrunUnderCacheLock({
+          device,
+          options,
+          projectRoot,
+          expectedCacheMetadata,
+          derived,
+          forceRebuild: options.forceRunnerXctestrunRebuild === true,
+        }),
+    });
   });
 }
 
@@ -471,60 +471,59 @@ async function buildRunnerXctestrun(
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
-  const simulatorSetRedirect = await acquireXcodebuildSimulatorSetRedirect(device);
-  try {
-    await runCmdStreaming(
-      'xcodebuild',
-      [
-        'build-for-testing',
-        '-project',
-        projectPath,
-        '-scheme',
-        'AgentDeviceRunner',
-        '-parallel-testing-enabled',
-        'NO',
-        resolveRunnerMaxConcurrentDestinationsFlag(device),
-        '1',
-        '-destination',
-        resolveRunnerBuildDestination(device),
-        '-derivedDataPath',
-        derived,
-        ...performanceBuildSettings,
-        ...sandboxBuildArgs,
-        ...runnerBundleBuildSettings,
-        ...provisioningArgs,
-        ...signingBuildSettings,
-      ],
-      {
-        detached: true,
-        timeoutMs: buildTimeoutMs,
-        signal: options.budget?.signal,
-        onSpawn: (child) => {
-          runnerPrepProcesses.add(child);
-          child.on('close', () => {
-            runnerPrepProcesses.delete(child);
-          });
+  await withXcodebuildSimulatorSetRedirect(device, async () => {
+    try {
+      await runCmdStreaming(
+        'xcodebuild',
+        [
+          'build-for-testing',
+          '-project',
+          projectPath,
+          '-scheme',
+          'AgentDeviceRunner',
+          '-parallel-testing-enabled',
+          'NO',
+          resolveRunnerMaxConcurrentDestinationsFlag(device),
+          '1',
+          '-destination',
+          resolveRunnerBuildDestination(device),
+          '-derivedDataPath',
+          derived,
+          ...performanceBuildSettings,
+          ...sandboxBuildArgs,
+          ...runnerBundleBuildSettings,
+          ...provisioningArgs,
+          ...signingBuildSettings,
+        ],
+        {
+          detached: true,
+          timeoutMs: buildTimeoutMs,
+          signal: options.budget?.signal,
+          onSpawn: (child) => {
+            runnerPrepProcesses.add(child);
+            child.on('close', () => {
+              runnerPrepProcesses.delete(child);
+            });
+          },
+          onStdoutChunk: (chunk) => {
+            logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+          },
+          onStderrChunk: (chunk) => {
+            logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+          },
         },
-        onStdoutChunk: (chunk) => {
-          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-        },
-        onStderrChunk: (chunk) => {
-          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-        },
-      },
-    );
-  } catch (error) {
-    if (isRequestCanceledError(error)) throw error;
-    const appErr =
-      error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-    const hint = resolveRunnerBuildFailureHint(appErr);
-    throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
-      error: appErr.message,
-      details: appErr.details,
-      logPath: options.logPath,
-      hint,
-    });
-  } finally {
-    await simulatorSetRedirect?.release();
-  }
+      );
+    } catch (error) {
+      if (isRequestCanceledError(error)) throw error;
+      const appErr =
+        error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+      const hint = resolveRunnerBuildFailureHint(appErr);
+      throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
+        error: appErr.message,
+        details: appErr.details,
+        logPath: options.logPath,
+        hint,
+      });
+    }
+  });
 }

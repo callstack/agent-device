@@ -12,4 +12,9 @@ export {
   openVerifiedFileForTruncate,
 } from './internal/verified-file.ts';
 export { expandUserHomePath, resolveUserPath } from './internal/path-resolution.ts';
-export { acquireProcessLock, type ProcessLockOwner } from './internal/process-lock.ts';
+export {
+  acquireProcessLock,
+  withProcessLock,
+  type ProcessLockOwner,
+  type ProcessLockRelease,
+} from './internal/process-lock.ts';

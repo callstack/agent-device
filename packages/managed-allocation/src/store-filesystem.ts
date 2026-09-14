@@ -114,8 +114,8 @@ function readDirectory(directory: string): DirectoryRead {
 }
 
 function listLanePaths(allocationsDir: string, lane: fs.Dirent): AllocationOperationPath[] {
-  // Lane and operation locks sit beside the records, and a stale reclaim renames one
-  // aside under its own name; none of those directories holds an operation record.
+  // Lane and operation locks sit beside the records, including the `.reclaim` mutex a stale
+  // reclaim holds while it decides; none of those directories holds an operation record.
   if (lane.name.endsWith('.lock')) return [];
   const lanePath = path.join(allocationsDir, lane.name);
   if (!lane.isDirectory()) {
