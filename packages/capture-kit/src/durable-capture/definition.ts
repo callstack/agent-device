@@ -49,7 +49,8 @@ export type DurableCaptureFailedFinishPolicy =
 /**
  * Why a finish is asked for. A `capture` finish tries to produce the resource's export and may keep
  * retry material under a preserving kind's policy; a `disposal` finish hands the resource back for
- * good — session teardown is the only such caller — and disposes whatever a failed finish left.
+ * good — session teardown, or a start that replaces the resource — and disposes whatever a failed
+ * finish left, because whatever follows expects the record settled rather than waiting for a retry.
  */
 export type DurableCaptureFinishIntent = 'capture' | 'disposal';
 
