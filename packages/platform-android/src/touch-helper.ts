@@ -7,6 +7,7 @@ import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diag
 
 import {
   resolveAndroidAdbProvider,
+  runAdbShell,
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
 } from './adb-executor.ts';
@@ -268,8 +269,9 @@ async function runOneShotTouchHelper<Result>(options: {
   timeoutMs: number;
   readResult: (record: Record<string, string>) => Result;
 }): Promise<Result> {
-  const result = await options.adb(
-    ['shell', 'am', 'instrument', '-w', ...options.extraArgs, options.runner],
+  const result = await runAdbShell(
+    options.adb,
+    ['am', 'instrument', '-w', ...options.extraArgs, options.runner],
     { allowFailure: true, timeoutMs: options.timeoutMs },
   );
   let finalRecord: Record<string, string>;

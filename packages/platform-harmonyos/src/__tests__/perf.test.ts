@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 
-const { runHarmonyHdc } = vi.hoisted(() => ({ runHarmonyHdc: vi.fn() }));
+const { runHarmonyShell } = vi.hoisted(() => ({ runHarmonyShell: vi.fn() }));
 
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
+vi.mock('../hdc.ts', () => ({ runHarmonyShell }));
 
 import { parseHarmonyPid, parseHarmonyProcStatusMemory, sampleHarmonyMemoryPerf } from '../perf.ts';
 
@@ -17,7 +17,7 @@ const DEVICE = {
 };
 
 beforeEach(() => {
-  runHarmonyHdc.mockReset();
+  runHarmonyShell.mockReset();
 });
 
 test('HarmonyOS perf parsers read process-scoped memory samples', () => {
@@ -34,7 +34,7 @@ test('HarmonyOS perf parsers reject incomplete process output', () => {
 });
 
 test('HarmonyOS perf samples resolve a process before collecting memory', async () => {
-  runHarmonyHdc
+  runHarmonyShell
     .mockResolvedValueOnce({ exitCode: 0, stdout: '42\n', stderr: '' })
     .mockResolvedValueOnce({
       exitCode: 0,
@@ -47,22 +47,22 @@ test('HarmonyOS perf samples resolve a process before collecting memory', async 
   assert.deepEqual(memory.totalRssKb, 256);
   assert.equal(memory.peakRssKb, 512);
   assert.deepEqual(
-    runHarmonyHdc.mock.calls.map(([, args]) => args),
+    runHarmonyShell.mock.calls.map(([, args]) => args),
     [
-      ['shell', 'pidof', 'com.example.application'],
-      ['shell', 'cat', '/proc/42/status'],
+      ['pidof', 'com.example.application'],
+      ['cat', '/proc/42/status'],
     ],
   );
 });
 
 test('HarmonyOS perf reports missing processes and incomplete samples', async () => {
-  runHarmonyHdc.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'not found' });
+  runHarmonyShell.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'not found' });
   await assert.rejects(
     () => sampleHarmonyMemoryPerf(DEVICE, 'com.example.application'),
     /running process/,
   );
 
-  runHarmonyHdc
+  runHarmonyShell
     .mockResolvedValueOnce({ exitCode: 0, stdout: '42\n', stderr: '' })
     .mockResolvedValueOnce({ exitCode: 0, stdout: 'VmSize:\t  1 kB\n', stderr: '' });
   await assert.rejects(

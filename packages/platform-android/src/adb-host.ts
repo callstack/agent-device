@@ -141,6 +141,8 @@ export async function runAndroidHostAdb(
   args: string[],
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
+  const { assertDeviceShellArgv } = await import('@agent-device/kernel/device-shell');
+  assertDeviceShellArgv(args, 'adb');
   const host = requireAndroidAdbHost();
   const transport = androidAdbHostTransportScope.getStore();
   const result = host.coerceAdbResult(

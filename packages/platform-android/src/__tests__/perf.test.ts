@@ -342,7 +342,7 @@ test('startAndroidSimpleperfProfile resolves pid and starts a bounded simpleperf
     if (args.join('\0') === ['shell', 'pidof', 'com.example.app'].join('\0')) {
       return { exitCode: 0, stdout: '1234\n', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('command -v simpleperf')) {
+    if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
       return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
     }
     if (args[0] === 'shell' && args[1]?.includes('simpleperf')) {
@@ -392,7 +392,7 @@ test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compac
       await fsPromises.writeFile(args[2]!, 'profile');
       return { exitCode: 0, stdout: '', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('rm -f')) {
+    if (args[0] === 'shell' && args[1] === 'rm' && args[2] === '-f') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     throw new Error(`Unexpected adb call: ${args.join(' ')}`);
@@ -468,7 +468,7 @@ test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact
     if (args[0] === 'shell' && args[1]?.includes('stat -c %s')) {
       return { exitCode: 0, stdout: '5\n', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('rm -f')) {
+    if (args[0] === 'shell' && args[1] === 'rm' && args[2] === '-f') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     if (args[0] === 'pull') {
@@ -534,7 +534,7 @@ test('writeAndroidSimpleperfReport writes full artifact rows and returns bounded
     state: 'stopped',
   };
   const adb: AndroidAdbExecutor = async (args) => {
-    if (args[0] === 'shell' && args[1]?.includes('command -v simpleperf')) {
+    if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
       return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
     }
     if (args[0] === 'shell' && args[1] === 'simpleperf') {
@@ -583,7 +583,7 @@ test('startAndroidSimpleperfProfile fails with an actionable missing-process hin
 });
 
 function findCallIndex(calls: string[][], pattern: string): number {
-  return calls.findIndex((args) => args.some((arg) => arg.includes(pattern)));
+  return calls.findIndex((args) => args.join(' ').includes(pattern));
 }
 
 function findExactCallIndex(calls: string[][], ...expected: string[]): number {
@@ -597,7 +597,7 @@ function findCallPrefixIndex(calls: string[][], ...expected: string[]): number {
 function makePerfettoTraceAdbExecutor(outPath: string, calls: string[][]): AndroidAdbExecutor {
   const responders = [
     staticAdbResponse(exactAdbArgs('shell', 'pidof', 'com.example.app'), '1234\n'),
-    staticAdbResponse(containsAdbArg('command -v perfetto'), '/system/bin/perfetto\n'),
+    staticAdbResponse(containsAdbArg("command -v 'perfetto'"), '/system/bin/perfetto\n'),
     staticAdbResponse(exactAdbArgs('shell', 'dumpsys', 'gfxinfo', 'com.example.app', 'reset')),
     staticAdbResponse(adbArgsPrefix('shell', 'perfetto'), '8765\n'),
     staticAdbResponse(containsAdbArg('kill -INT')),
@@ -615,7 +615,7 @@ function makePerfettoTraceAdbExecutor(outPath: string, calls: string[][]): Andro
         'Number Frame deadline missed: 2',
       ].join('\n'),
     ),
-    staticAdbResponse(containsAdbArg('rm -f')),
+    staticAdbResponse(adbArgsPrefix('shell', 'rm', '-f')),
   ];
   return async (args) => dispatchAdbResponse(args, calls, responders);
 }

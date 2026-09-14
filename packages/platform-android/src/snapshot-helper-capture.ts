@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import {
   androidCaptureFailureReasonDetail,
   androidCaptureFailureReasonFromExitCode,
@@ -27,7 +28,7 @@ import type {
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
-import type { AndroidAdbProvider } from './adb-executor.ts';
+import { runAdbShell, type AndroidAdbProvider } from './adb-executor.ts';
 import {
   recoverAndroidSnapshotHelperRetirement,
   retireCanceledAndroidSnapshotHelperCapture,
@@ -176,8 +177,7 @@ function withDefault<T>(value: T | undefined, fallback: T): T {
 export function buildAndroidSnapshotHelperArgs(
   options: AndroidSnapshotHelperResolvedCaptureOptions,
 ): string[] {
-  return [
-    'shell',
+  return deviceShellArgv('shell', [
     'am',
     'instrument',
     '-w',
@@ -201,7 +201,7 @@ export function buildAndroidSnapshotHelperArgs(
     ...(options.outputPath ? ['-e', 'outputPath', options.outputPath] : []),
     ...(options.emitChunks !== undefined ? ['-e', 'emitChunks', String(options.emitChunks)] : []),
     options.runner,
-  ];
+  ]);
 }
 
 async function readAndroidSnapshotHelperOutput(
@@ -283,7 +283,7 @@ async function readHelperOutputFile(
 ): Promise<AndroidSnapshotHelperOutput | undefined> {
   let result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>;
   try {
-    result = await adb(buildReadAndRemoveHelperOutputArgs(outputPath), {
+    result = await runAdbShell(adb, buildReadAndRemoveHelperOutputArgs(outputPath), {
       allowFailure: true,
       timeoutMs: 5_000,
     });
@@ -301,7 +301,6 @@ async function readHelperOutputFile(
 
 function buildReadAndRemoveHelperOutputArgs(outputPath: string): string[] {
   return [
-    'shell',
     'sh',
     '-c',
     'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
@@ -326,7 +325,7 @@ async function removeHelperOutputFile(
   outputPath: string,
 ): Promise<void> {
   try {
-    await adb(['shell', 'rm', '-f', outputPath], {
+    await runAdbShell(adb, ['rm', '-f', outputPath], {
       allowFailure: true,
       timeoutMs: 5_000,
     });

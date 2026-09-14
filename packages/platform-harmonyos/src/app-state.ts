@@ -7,8 +7,8 @@ export async function readHarmonyAppState(
   signal: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
   signal.throwIfAborted();
-  const { runHarmonyHdc } = await import('./hdc.ts');
-  const result = await runHarmonyHdc(device, ['shell', 'aa', 'dump', '-l'], {
+  const { runHarmonyShell } = await import('./hdc.ts');
+  const result = await runHarmonyShell(device, ['aa', 'dump', '-l'], {
     timeoutMs: 15_000,
     signal,
   });

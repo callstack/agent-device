@@ -2,11 +2,11 @@ import { describe, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidToolHost } from '../platform-runtime-android-tool-host.ts';
 
-const runAndroidAdb = vi.hoisted(() => vi.fn());
+const runAndroidShell = vi.hoisted(() => vi.fn());
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-android/mechanics')>()),
-  runAndroidAdb,
+  runAndroidShell,
 }));
 
 const device: DeviceInfo = {
@@ -32,17 +32,17 @@ async function probe() {
 // build may not have until the daemon restarts.
 describe('android clipboard shell probe: what each adb result is allowed to prove', () => {
   test('a clean exit is the only thing that proves support', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, 'clipboard contents'));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, 'clipboard contents'));
     await expect(probe()).resolves.toBe('supported');
   });
 
   test('an empty clipboard on a clean exit still proves support', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, ''));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, ''));
     await expect(probe()).resolves.toBe('supported');
   });
 
   test('the missing-shell prose proves the build ships no clipboard command', async () => {
-    runAndroidAdb.mockResolvedValueOnce(
+    runAndroidShell.mockResolvedValueOnce(
       adbResult(255, '', 'Error: no shell command implementation.'),
     );
     await expect(probe()).resolves.toBe('unsupported');
@@ -56,12 +56,12 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['a bridge that never found the device', "error: device '(null)' not found"],
     ['a generic adb failure', 'error: closed'],
   ])('%s refuses rather than admitting support', async (_case, stderr) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, '', stderr));
+    runAndroidShell.mockResolvedValueOnce(adbResult(1, '', stderr));
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
   test('a transport throw refuses rather than admitting support', async () => {
-    runAndroidAdb.mockRejectedValueOnce(new Error('spawn adb ENOENT'));
+    runAndroidShell.mockRejectedValueOnce(new Error('spawn adb ENOENT'));
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
@@ -71,7 +71,7 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['stderr', '', 'Unknown command: clipboard'],
     ['stdout', 'No shell command implementation.', ''],
   ])('missing-shell prose on %s of a non-zero exit reads as unsupported', async (_c, out, err) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, out, err));
+    runAndroidShell.mockResolvedValueOnce(adbResult(1, out, err));
     await expect(probe()).resolves.toBe('unsupported');
   });
 
@@ -84,7 +84,7 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['adb said: Unknown command: clipboard'],
     ['No shell command implementation.'],
   ])('a clipboard holding %j is still supported', async (contents) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, contents));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, contents));
     await expect(probe()).resolves.toBe('supported');
   });
 });

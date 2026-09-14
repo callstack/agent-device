@@ -7,6 +7,7 @@ export type AndroidReadinessHost = Pick<
   'clock' | 'commands' | 'deviceReadiness' | 'toolchains'
 >;
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
 
@@ -116,7 +117,7 @@ async function waitForBoot(
     const result = await host.commands.run(
       {
         executable: 'adb',
-        args: ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'],
+        args: deviceShellArgv('shell', ['getprop', 'sys.boot_completed'], ['-s', serial]),
         allowFailure: true,
         timeoutMs: Math.min(10_000, Math.max(1_000, deadline - host.clock.now())),
       },

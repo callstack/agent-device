@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
 import type {
   DeviceInventoryHostFor,
@@ -145,7 +146,7 @@ test.skipIf(process.platform === 'win32')(
         const host = await runAndroidHostAdb(['devices']);
         const hostWithWrongPort = await runAndroidHostAdb(['-P', '9999', 'devices']);
         const provider = resolveAndroidAdbProvider(reachability.device);
-        const serial = await provider.exec(['shell', 'id']);
+        const serial = await provider.exec(deviceShellArgv('shell', ['id']));
         return {
           inventory,
           host: JSON.parse(host.stdout),

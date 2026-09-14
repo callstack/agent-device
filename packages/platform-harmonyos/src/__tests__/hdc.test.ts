@@ -7,7 +7,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { DEFAULT_HARMONY_HDC_TIMEOUT_MS, runHarmonyHdc } from '../hdc.ts';
+import { DEFAULT_HARMONY_HDC_TIMEOUT_MS, runHarmonyHdc, runHarmonyShell } from '../hdc.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const device = { id: '127.0.0.1:5555' };
@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 test('runHarmonyHdc bounds ordinary HDC commands by a default timeout', async () => {
-  await runHarmonyHdc(device, ['shell', 'uitest', 'uiInput', 'click', '10', '20']);
+  await runHarmonyShell(device, ['uitest', 'uiInput', 'click', '10', '20']);
 
   assert.deepEqual(mockRunCmd.mock.calls[0], [
     'hdc',

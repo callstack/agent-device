@@ -1,4 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  assertDeviceShellArgv,
+  deviceShellArgv,
+  type ShellWord,
+} from '@agent-device/kernel/device-shell';
 import path from 'node:path';
 import {
   isExecutablePath,
@@ -15,16 +20,29 @@ export type HarmonyHdcOptions = Pick<
 
 export const DEFAULT_HARMONY_HDC_TIMEOUT_MS = 15_000;
 
-/** Runs an HDC command scoped to exactly one discovered HarmonyOS target. */
+/**
+ * Runs a non-shell HDC command scoped to exactly one discovered HarmonyOS target. A `shell`
+ * argv is refused here; it belongs to {@link runHarmonyShell}.
+ */
 export async function runHarmonyHdc(
   device: Pick<DeviceInfo, 'id'>,
   args: string[],
   options?: HarmonyHdcOptions,
 ): Promise<ExecResult> {
+  assertDeviceShellArgv(args, 'hdc');
   return await runCmd('hdc', ['-t', device.id, ...args], {
     timeoutMs: DEFAULT_HARMONY_HDC_TIMEOUT_MS,
     ...options,
   });
+}
+
+/** Runs `hdc shell <words>` for the target; every word is quoted for the device shell. */
+export async function runHarmonyShell(
+  device: Pick<DeviceInfo, 'id'>,
+  words: readonly ShellWord[],
+  options?: HarmonyHdcOptions,
+): Promise<ExecResult> {
+  return await runHarmonyHdc(device, deviceShellArgv('shell', words), options);
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   readHostTextFile,
   removeHostDirectory,
 } from '@agent-device/host-kit/host-file';
-import { runHarmonyHdc } from './hdc.ts';
+import { runHarmonyHdc, runHarmonyShell } from './hdc.ts';
 
 const MAX_NODES = 5_000;
 
@@ -48,16 +48,14 @@ export async function snapshotHarmony(
   const localDirectory = await makeHostTemporaryDirectory('agent-device-harmony-layout-');
   const localPath = path.join(localDirectory, 'layout.json');
   try {
-    await runHarmonyHdc(device, ['shell', 'uitest', 'dumpLayout', '-p', remotePath], {
+    await runHarmonyShell(device, ['uitest', 'dumpLayout', '-p', remotePath], {
       timeoutMs: 30_000,
     });
     await runHarmonyHdc(device, ['file', 'recv', remotePath, localPath], { timeoutMs: 15_000 });
     const raw = await readHostTextFile(localPath);
     return buildHarmonySnapshot(parseHarmonyLayout(raw), options);
   } finally {
-    await runHarmonyHdc(device, ['shell', 'rm', '-f', remotePath], { allowFailure: true }).catch(
-      () => {},
-    );
+    await runHarmonyShell(device, ['rm', '-f', remotePath], { allowFailure: true }).catch(() => {});
     await removeHostDirectory(localDirectory);
   }
 }

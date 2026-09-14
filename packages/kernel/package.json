@@ -21,6 +21,10 @@
       "types": "./src/device.ts",
       "default": "./src/device.ts"
     },
+    "./device-shell": {
+      "types": "./src/device-shell.ts",
+      "default": "./src/device-shell.ts"
+    },
     "./device-isolation": {
       "types": "./src/device-isolation.ts",
       "default": "./src/device-isolation.ts"

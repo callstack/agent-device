@@ -94,10 +94,15 @@ export async function installLimrunAndroidApp(
   signal?.throwIfAborted();
   const packageName = normalizeOptionalString(options?.packageNameHint);
   if (options?.relaunch && packageName) {
-    await runLimrunAndroidAdb(session, ['shell', 'am', 'force-stop', packageName], {
-      allowFailure: true,
-      signal,
-    });
+    const { deviceShellArgv } = await loadDeviceShell();
+    await runLimrunAndroidAdb(
+      session,
+      deviceShellArgv('shell', ['am', 'force-stop', packageName]),
+      {
+        allowFailure: true,
+        signal,
+      },
+    );
   }
   const asset = await awaitLimrunDeploymentOperation(
     operationDrain,
@@ -168,6 +173,11 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
     ...[...owners].map(async (ownerId) => await reverse.removeAllOwned(ownerId)),
     ...unownedLocals.map(async (local) => await reverse.remove(local)),
   ]);
+}
+
+// Loaded on demand so the provider entry keeps its merge-base eager closure.
+async function loadDeviceShell() {
+  return await import('@agent-device/kernel/device-shell');
 }
 
 async function runLimrunAndroidAdb(

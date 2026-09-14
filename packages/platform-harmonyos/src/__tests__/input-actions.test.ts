@@ -3,15 +3,15 @@ import { beforeEach, test, vi } from 'vitest';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { runHarmonyHdc, sleep, readHarmonyGestureViewport, invalidateHarmonyGestureViewport } =
+const { runHarmonyShell, sleep, readHarmonyGestureViewport, invalidateHarmonyGestureViewport } =
   vi.hoisted(() => ({
-    runHarmonyHdc: vi.fn(),
+    runHarmonyShell: vi.fn(),
     sleep: vi.fn(),
     readHarmonyGestureViewport: vi.fn(),
     invalidateHarmonyGestureViewport: vi.fn(),
   }));
 
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
+vi.mock('../hdc.ts', () => ({ runHarmonyShell }));
 vi.mock('@agent-device/host-kit/retry', () => ({ sleep }));
 vi.mock('../snapshot.ts', () => ({
   readHarmonyGestureViewport,
@@ -43,7 +43,7 @@ const DEVICE: DeviceInfo = {
 };
 
 beforeEach(() => {
-  runHarmonyHdc.mockReset();
+  runHarmonyShell.mockReset();
   sleep.mockReset();
   readHarmonyGestureViewport.mockReset();
   invalidateHarmonyGestureViewport.mockReset();
@@ -61,17 +61,17 @@ test('HarmonyOS input primitives use the documented uiInput command names', asyn
   await pressHarmonyKeyboardKey(DEVICE, 'Enter');
 
   assert.deepEqual(
-    runHarmonyHdc.mock.calls.map(([, args]) => args),
+    runHarmonyShell.mock.calls.map(([, args]) => args),
     [
-      ['shell', 'uitest', 'uiInput', 'click', '10', '20'],
-      ['shell', 'uitest', 'uiInput', 'doubleClick', '11', '21'],
-      ['shell', 'uitest', 'uiInput', 'longClick', '12', '22'],
-      ['shell', 'uitest', 'uiInput', 'text', 'hello'],
-      ['shell', 'uitest', 'uiInput', 'inputText', '13', '23', 'world'],
-      ['shell', 'uitest', 'uiInput', 'keyEvent', 'Back'],
-      ['shell', 'uitest', 'uiInput', 'keyEvent', 'Home'],
-      ['shell', 'uitest', 'uiInput', 'keyEvent', 'Recent'],
-      ['shell', 'uitest', 'uiInput', 'keyEvent', 'Enter'],
+      ['uitest', 'uiInput', 'click', 10, 20],
+      ['uitest', 'uiInput', 'doubleClick', 11, 21],
+      ['uitest', 'uiInput', 'longClick', 12, 22],
+      ['uitest', 'uiInput', 'text', 'hello'],
+      ['uitest', 'uiInput', 'inputText', 13, 23, 'world'],
+      ['uitest', 'uiInput', 'keyEvent', 'Back'],
+      ['uitest', 'uiInput', 'keyEvent', 'Home'],
+      ['uitest', 'uiInput', 'keyEvent', 'Recent'],
+      ['uitest', 'uiInput', 'keyEvent', 'Enter'],
     ],
   );
   assert.deepEqual(sleep.mock.calls, [[25], [50]]);
@@ -84,16 +84,15 @@ test('HarmonyOS scroll derives a viewport-aware swipe plan', async () => {
   const plan = await scrollHarmony(DEVICE, 'down', { amount: 0.5, durationMs: 456 });
 
   assert.equal(plan.direction, 'down');
-  assert.deepEqual(runHarmonyHdc.mock.calls[0]?.[1], [
-    'shell',
+  assert.deepEqual(runHarmonyShell.mock.calls[0]?.[1], [
     'uitest',
     'uiInput',
     'swipe',
-    String(plan.x1),
-    String(plan.y1),
-    String(plan.x2),
-    String(plan.y2),
-    '456',
+    plan.x1,
+    plan.y1,
+    plan.x2,
+    plan.y2,
+    456,
   ]);
 });
 
@@ -123,16 +122,15 @@ test('HarmonyOS gestures lower a single trajectory and reject multi-touch', asyn
     velocity: 256,
     viewport: singlePlan.viewport,
   });
-  assert.deepEqual(runHarmonyHdc.mock.calls[0]?.[1], [
-    'shell',
+  assert.deepEqual(runHarmonyShell.mock.calls[0]?.[1], [
     'uitest',
     'uiInput',
     'fling',
-    '10',
-    '20',
-    '90',
-    '120',
-    '256',
+    10,
+    20,
+    90,
+    120,
+    256,
   ]);
   await assert.rejects(
     () =>

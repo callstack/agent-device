@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { shellQuote } from '@agent-device/host-kit/command';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import { shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
+import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   buildAndroidNativeRemotePath,
   cleanupAndroidRemotePath,
@@ -130,9 +130,13 @@ async function startAndroidSimpleperfBackgroundTool(
   packageName: string,
 ): Promise<string> {
   try {
-    const result = await adb(['shell', buildSimpleperfStartCommand(appPid, remotePath)], {
-      timeoutMs: ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
-    });
+    const result = await runAdbShell(
+      adb,
+      [shellFragment(buildSimpleperfStartCommand(appPid, remotePath))],
+      {
+        timeoutMs: ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
+      },
+    );
     const pid = findPidToken(result.stdout);
     if (pid) return pid;
     throw new AppError('COMMAND_FAILED', 'Android simpleperf did not return a profiler pid', {
@@ -182,17 +186,9 @@ async function runAndroidSimpleperfReport(
   session: AndroidNativePerfSession,
 ): Promise<{ stdout: string }> {
   try {
-    return await adb(
-      [
-        'shell',
-        'simpleperf',
-        'report',
-        '-i',
-        session.remotePath,
-        '--stdio',
-        '--sort',
-        'comm,dso,symbol',
-      ],
+    return await runAdbShell(
+      adb,
+      ['simpleperf', 'report', '-i', session.remotePath, '--stdio', '--sort', 'comm,dso,symbol'],
       {
         timeoutMs: ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
       },

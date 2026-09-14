@@ -1,11 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isAndroidShellCommandUnsupported, runAndroidAdb } from './adb.ts';
+import { isAndroidShellCommandUnsupported, runAndroidShell } from './adb.ts';
 import { androidAdbResultError, type AndroidAdbExecutorResult } from './adb-executor.ts';
 
 export type AndroidAirplaneMode = 'enabled' | 'disabled';
 
-const AIRPLANE_MODE_ARGS = ['shell', 'cmd', 'connectivity', 'airplane-mode'] as const;
+const AIRPLANE_MODE_WORDS = ['cmd', 'connectivity', 'airplane-mode'] as const;
 
 /**
  * Android's connectivity service owns airplane mode: it reports the state and it drives the radios
@@ -23,7 +23,7 @@ export async function setAndroidAirplaneMode(
 ): Promise<{ airplaneMode: AndroidAirplaneMode }> {
   const requested: AndroidAirplaneMode = enabled ? 'enabled' : 'disabled';
   await requireAndroidAirplaneModeSupport(device);
-  await runAndroidAdb(device, [...AIRPLANE_MODE_ARGS, enabled ? 'enable' : 'disable']);
+  await runAndroidShell(device, [...AIRPLANE_MODE_WORDS, enabled ? 'enable' : 'disable']);
   const airplaneMode = await readAndroidAirplaneMode(device);
   if (airplaneMode !== requested) {
     throw new AppError(
@@ -68,7 +68,7 @@ async function probeAndroidAirplaneMode(device: DeviceInfo): Promise<{
   state: AndroidAirplaneMode | undefined;
   result: AndroidAdbExecutorResult;
 }> {
-  const result = await runAndroidAdb(device, [...AIRPLANE_MODE_ARGS], { allowFailure: true });
+  const result = await runAndroidShell(device, [...AIRPLANE_MODE_WORDS], { allowFailure: true });
   return {
     state: result.exitCode === 0 ? parseAndroidAirplaneMode(result.stdout) : undefined,
     result,

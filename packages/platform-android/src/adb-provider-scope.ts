@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  assertDeviceShellArgv,
+  deviceShellArgv,
+  type ShellWord,
+} from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   requireAndroidAdbHost,
@@ -15,6 +20,7 @@ import {
   normalizeAndroidAdbInstallOptions,
   type AndroidAdbExecutor,
   type AndroidAdbExecutorOptions,
+  type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
   type AndroidAdbProviderScopeOptions,
   type AndroidAdbSpawner,
@@ -39,7 +45,7 @@ export function createDeviceAdbExecutor(
   device: DeviceInfo,
   options: Readonly<{ serverPort?: number }> = {},
 ): AndroidAdbExecutor {
-  return createSerialAdbExecutor(device.id, options.serverPort);
+  return guardDeviceShell(createSerialAdbExecutor(device.id, options.serverPort));
 }
 
 function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAdbExecutor {
@@ -87,8 +93,8 @@ export function resolveAndroidAdbExecutor(
   executor?: AndroidAdbExecutor,
 ): AndroidAdbExecutor {
   const scoped = scopeForDevice(device);
-  if (executor) return executor;
-  if (scoped?.serial === device.id) return scoped.provider.exec;
+  if (executor) return guardDeviceShell(executor);
+  if (scoped?.serial === device.id) return guardDeviceShell(scoped.provider.exec);
   return createDeviceAdbExecutor(device);
 }
 
@@ -97,9 +103,9 @@ export function resolveAndroidAdbProvider(
   provider?: AndroidAdbProvider | AndroidAdbExecutor,
 ): AndroidAdbProvider {
   const scoped = scopeForDevice(device);
-  if (provider) return normalizeAndroidAdbProvider(provider);
+  if (provider) return guardProviderDeviceShell(normalizeAndroidAdbProvider(provider));
   return scoped?.serial === device.id
-    ? normalizeAndroidAdbProvider(scoped.provider)
+    ? guardProviderDeviceShell(normalizeAndroidAdbProvider(scoped.provider))
     : createLocalAndroidAdbProvider(device);
 }
 
@@ -134,10 +140,10 @@ export function resolveAndroidAdbTransferProvider(
   device: DeviceInfo | undefined,
   provider: AndroidAdbProvider | AndroidAdbExecutor | undefined,
 ): AndroidAdbProvider | undefined {
-  if (provider) return normalizeAndroidAdbProvider(provider);
+  if (provider) return guardProviderDeviceShell(normalizeAndroidAdbProvider(provider));
   if (device) return resolveAndroidAdbProvider(device);
   const scoped = androidAdbProviderScope.getStore();
-  if (scoped) return normalizeAndroidAdbProvider(scoped.provider);
+  if (scoped) return guardProviderDeviceShell(normalizeAndroidAdbProvider(scoped.provider));
   return undefined;
 }
 
@@ -275,4 +281,39 @@ function stripAdbSerialArgs(args: string[], expectedSerial: string): string[] | 
   const serialIndex = findAdbSerialIndex(args);
   if (serialIndex === undefined || args[serialIndex + 1] !== expectedSerial) return undefined;
   return [...args.slice(0, serialIndex), ...args.slice(serialIndex + 2)];
+}
+
+// The device-shell boundary for an adb executor. `runAdbShell`/`runAdbExecOut` are the only
+// producers of a `shell`/`exec-out` argv; `guardDeviceShell` wraps every executor the cluster
+// hands out so a raw one is refused at the value, whichever path built it.
+
+/** Runs `adb shell <words>` through an executor; every word is quoted for the device shell. */
+export async function runAdbShell(
+  adb: AndroidAdbExecutor,
+  words: readonly ShellWord[],
+  options?: AndroidAdbExecutorOptions,
+): Promise<AndroidAdbExecutorResult> {
+  return await adb(deviceShellArgv('shell', words), options);
+}
+
+/** Runs `adb exec-out <words>` (raw stdout) through an executor. */
+export async function runAdbExecOut(
+  adb: AndroidAdbExecutor,
+  words: readonly ShellWord[],
+  options?: AndroidAdbExecutorOptions,
+): Promise<AndroidAdbExecutorResult> {
+  return await adb(deviceShellArgv('exec-out', words), options);
+}
+
+function guardDeviceShell(executor: AndroidAdbExecutor): AndroidAdbExecutor {
+  return async (args, options) => {
+    assertDeviceShellArgv(args, 'adb');
+    return await executor(args, options);
+  };
+}
+
+function guardProviderDeviceShell<Provider extends AndroidAdbProvider>(
+  provider: Provider,
+): Provider {
+  return { ...provider, exec: guardDeviceShell(provider.exec) };
 }

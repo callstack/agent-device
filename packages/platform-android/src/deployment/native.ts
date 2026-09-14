@@ -1,6 +1,7 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { PushNotificationInput } from '@agent-device/contracts/app-deployment-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import path from 'node:path';
 import { currentManagedDeviceScope } from '@agent-device/provision-kit/managed-device-scope';
@@ -68,9 +69,9 @@ export async function pushAndroidNotification(
     typeof payload.action === 'string' && payload.action.trim()
       ? payload.action.trim()
       : `${input.appId}.TEST_PUSH`;
-  const args = ['shell', 'am', 'broadcast', '-a', action, '-p', input.appId];
+  const words: ShellWord[] = ['am', 'broadcast', '-a', action, '-p', input.appId];
   if (typeof payload.receiver === 'string' && payload.receiver.trim()) {
-    args.push('-n', payload.receiver.trim());
+    words.push('-n', payload.receiver.trim());
   }
   const extras = payload.extras ?? {};
   if (typeof extras !== 'object' || extras === null || Array.isArray(extras)) {
@@ -79,10 +80,10 @@ export async function pushAndroidNotification(
   let extrasCount = 0;
   for (const [key, value] of Object.entries(extras)) {
     if (!key) continue;
-    appendBroadcastExtra(args, key, value);
+    appendBroadcastExtra(words, key, value);
     extrasCount += 1;
   }
-  const result = await runAdb(host, device, args, signal);
+  const result = await runAdb(host, device, deviceShellArgv('shell', words), signal);
   assertCommandSuccess(result, 'adb push broadcast failed');
   return { action, extrasCount };
 }
@@ -170,7 +171,12 @@ async function listInstalledPackages(
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<Set<string>> {
-  const result = await runAdb(host, device, ['shell', 'pm', 'list', 'packages'], signal);
+  const result = await runAdb(
+    host,
+    device,
+    deviceShellArgv('shell', ['pm', 'list', 'packages']),
+    signal,
+  );
   assertCommandSuccess(result, 'adb package inventory failed');
   return new Set(
     result.stdout
@@ -180,7 +186,7 @@ async function listInstalledPackages(
   );
 }
 
-function appendBroadcastExtra(args: string[], key: string, value: unknown): void {
+function appendBroadcastExtra(args: ShellWord[], key: string, value: unknown): void {
   if (typeof value === 'string') args.push('--es', key, value);
   else if (typeof value === 'boolean') args.push('--ez', key, String(value));
   else if (typeof value === 'number' && Number.isFinite(value)) {

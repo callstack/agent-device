@@ -1,4 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -174,7 +175,7 @@ async function readAndroidDevPrefs(
 ): Promise<string> {
   const result = await runRuntimeHintsAndroidAdb(
     device,
-    ['shell', 'run-as', packageName, 'cat', prefsPath],
+    deviceShellArgv('shell', ['run-as', packageName, 'cat', prefsPath]),
     { allowFailure: true },
   );
   if (result.exitCode !== 0) return DEFAULT_ANDROID_PREFS_XML;
@@ -198,7 +199,7 @@ async function assertAndroidAppSandboxAccessible(
   device: DeviceInfo,
   packageName: string,
 ): Promise<void> {
-  const probeArgs = ['shell', 'run-as', packageName, 'id'];
+  const probeArgs = deviceShellArgv('shell', ['run-as', packageName, 'id']);
   const probeResult = await runRuntimeHintsAndroidAdb(device, probeArgs, { allowFailure: true });
   if (probeResult.exitCode === 0) return;
   throw androidRuntimeHintsProbeError(probeResult, packageName, probeArgs);
@@ -229,18 +230,16 @@ async function writeAndroidDevPrefsFiles(
   packageName: string,
   files: Array<{ path: string; xml: string }>,
 ): Promise<void> {
-  await runRuntimeHintsAndroidAdb(device, [
-    'shell',
-    'run-as',
-    packageName,
-    'mkdir',
-    '-p',
-    'shared_prefs',
-  ]);
+  await runRuntimeHintsAndroidAdb(
+    device,
+    deviceShellArgv('shell', ['run-as', packageName, 'mkdir', '-p', 'shared_prefs']),
+  );
   for (const file of files) {
-    await runRuntimeHintsAndroidAdb(device, ['shell', 'run-as', packageName, 'tee', file.path], {
-      stdin: file.xml.trimEnd(),
-    });
+    await runRuntimeHintsAndroidAdb(
+      device,
+      deviceShellArgv('shell', ['run-as', packageName, 'tee', file.path]),
+      { stdin: file.xml.trimEnd() },
+    );
   }
 }
 

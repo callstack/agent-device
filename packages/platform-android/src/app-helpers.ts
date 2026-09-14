@@ -1,5 +1,5 @@
 import { resolveAppsFilter, type AppsFilter } from '@agent-device/contracts/device';
-import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
+import { androidAdbResultError, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
@@ -39,7 +39,7 @@ async function listAndroidLaunchablePackagesWithAdb(
   const discoveredPackages = (
     await Promise.all(
       resolveAndroidLaunchCategoriesForAdb(target).map(async (category) => {
-        const result = await adb(buildAndroidQueryActivitiesArgs(category), {
+        const result = await runAdbShell(adb, buildAndroidQueryActivitiesArgs(category), {
           allowFailure: true,
         });
         return result.exitCode === 0 ? parseAndroidLaunchablePackageOutput(result.stdout) : [];
@@ -62,7 +62,6 @@ function resolveAndroidLaunchCategoriesForAdb(target: AndroidAppListTarget): str
 
 function buildAndroidQueryActivitiesArgs(category: string): string[] {
   return [
-    'shell',
     'cmd',
     'package',
     'query-activities',
@@ -79,7 +78,7 @@ function parseAndroidLaunchablePackageOutput(stdout: string): string[] {
 }
 
 async function listAndroidUserInstalledPackagesWithAdb(adb: AndroidAdbExecutor): Promise<string[]> {
-  const result = await adb(['shell', 'pm', 'list', 'packages', '-3'], { allowFailure: true });
+  const result = await runAdbShell(adb, ['pm', 'list', 'packages', '-3'], { allowFailure: true });
   if (result.exitCode !== 0) {
     throw androidAdbResultError('Failed to list Android user-installed apps', result);
   }

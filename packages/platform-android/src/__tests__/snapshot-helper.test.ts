@@ -835,7 +835,7 @@ test('captureAndroidSnapshotWithHelper can read output file when chunks are disa
     'shell',
     'sh',
     '-c',
-    'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
+    `'cat "$1"; status=$?; rm -f "$1"; exit "$status"'`,
     'agent-device-snapshot-helper-output',
     outputPath,
   ]);
@@ -925,7 +925,7 @@ test('captureAndroidSnapshotWithHelper reads helper output file when instrumenta
     'shell',
     'sh',
     '-c',
-    'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
+    `'cat "$1"; status=$?; rm -f "$1"; exit "$status"'`,
     'agent-device-snapshot-helper-output',
     '/sdcard/Android/data/com.callstack.agentdevice.snapshothelper/files/test.xml',
   ]);

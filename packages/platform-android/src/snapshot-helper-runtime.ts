@@ -1,7 +1,7 @@
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from './adb.ts';
-import type { AndroidAdbExecutor } from './adb-executor.ts';
+import { runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import { stopAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
 
 const HELPER_RUNTIME_RESET_DELAY_MS = 150;
@@ -34,7 +34,7 @@ export async function resetAndroidSnapshotHelperRuntime(
   packageName: string,
 ): Promise<void> {
   try {
-    await adb(['shell', 'am', 'force-stop', packageName], {
+    await runAdbShell(adb, ['am', 'force-stop', packageName], {
       allowFailure: true,
       timeoutMs: HELPER_RUNTIME_RESET_TIMEOUT_MS,
     });

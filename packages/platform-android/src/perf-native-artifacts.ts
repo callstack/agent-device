@@ -1,9 +1,9 @@
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { shellQuote } from '@agent-device/host-kit/command';
+import { shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
 import { sleep } from '@agent-device/host-kit/retry';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import { annotateAndroidNativePerfError } from './perf-native-errors.ts';
 import { buildAndroidNativePerfStopSummary } from './perf-native-summary.ts';
 import {
@@ -85,7 +85,7 @@ export async function cleanupAndroidRemotePath(
   remotePath: string,
 ): Promise<void> {
   try {
-    await adb(['shell', `rm -f ${shellQuote(remotePath)}`], {
+    await runAdbShell(adb, ['rm', '-f', remotePath], {
       allowFailure: true,
       timeoutMs: ANDROID_PERF_TIMEOUT_MS,
     });
@@ -127,7 +127,7 @@ async function stopAndroidBackgroundTool(
   session: AndroidNativePerfSession,
 ): Promise<void> {
   try {
-    await adb(['shell', buildStopProfilerCommand(session.profilerPid)], {
+    await runAdbShell(adb, [shellFragment(buildStopProfilerCommand(session.profilerPid))], {
       timeoutMs: ANDROID_NATIVE_PROFILE_TIMEOUT_MS,
     });
   } catch (error) {
@@ -199,10 +199,12 @@ async function readAndroidRemoteFileSize(
   remotePath: string,
 ): Promise<number | undefined> {
   const quotedPath = shellQuote(remotePath);
-  const result = await adb(
+  const result = await runAdbShell(
+    adb,
     [
-      'shell',
-      `if [ -f ${quotedPath} ]; then stat -c %s ${quotedPath} 2>/dev/null || wc -c < ${quotedPath}; fi`,
+      shellFragment(
+        `if [ -f ${quotedPath} ]; then stat -c %s ${quotedPath} 2>/dev/null || wc -c < ${quotedPath}; fi`,
+      ),
     ],
     {
       allowFailure: true,

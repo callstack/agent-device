@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { readHostBinaryFile } from '@agent-device/host-kit/host-file';
-import { runHarmonyHdc } from './hdc.ts';
+import { runHarmonyHdc, runHarmonyShell } from './hdc.ts';
 
 export async function screenshotHarmony(device: DeviceInfo, outPath: string): Promise<void> {
   const remotePath = `/data/local/tmp/agent-device-screen-${randomUUID()}.jpeg`;
   try {
-    await runHarmonyHdc(device, ['shell', 'snapshot_display', '-f', remotePath], {
+    await runHarmonyShell(device, ['snapshot_display', '-f', remotePath], {
       timeoutMs: 15_000,
     });
     await runHarmonyHdc(device, ['file', 'recv', remotePath, outPath], { timeoutMs: 15_000 });
@@ -16,8 +16,6 @@ export async function screenshotHarmony(device: DeviceInfo, outPath: string): Pr
       throw new AppError('COMMAND_FAILED', 'HarmonyOS screenshot is not a JPEG file');
     }
   } finally {
-    await runHarmonyHdc(device, ['shell', 'rm', '-f', remotePath], { allowFailure: true }).catch(
-      () => {},
-    );
+    await runHarmonyShell(device, ['rm', '-f', remotePath], { allowFailure: true }).catch(() => {});
   }
 }

@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runAndroidAdb } from './adb.ts';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
+import { runAndroidShell } from './adb.ts';
 
 type AndroidBroadcastPayload = {
   action?: string;
@@ -18,10 +19,10 @@ export async function pushAndroidNotification(
     typeof payload.action === 'string' && payload.action.trim()
       ? payload.action.trim()
       : `${packageName}.TEST_PUSH`;
-  const args = ['shell', 'am', 'broadcast', '-a', action, '-p', packageName];
+  const words: ShellWord[] = ['am', 'broadcast', '-a', action, '-p', packageName];
   const receiver = typeof payload.receiver === 'string' ? payload.receiver.trim() : '';
   if (receiver) {
-    args.push('-n', receiver);
+    words.push('-n', receiver);
   }
   const rawExtras = payload.extras;
   if (
@@ -34,14 +35,14 @@ export async function pushAndroidNotification(
   let extrasCount = 0;
   for (const [key, rawValue] of Object.entries(extras)) {
     if (!key) continue;
-    appendBroadcastExtra(args, key, rawValue);
+    appendBroadcastExtra(words, key, rawValue);
     extrasCount += 1;
   }
-  await runAndroidAdb(device, args, { signal: options.signal });
+  await runAndroidShell(device, words, { signal: options.signal });
   return { action, extrasCount };
 }
 
-function appendBroadcastExtra(args: string[], key: string, value: unknown): void {
+function appendBroadcastExtra(args: ShellWord[], key: string, value: unknown): void {
   if (typeof value === 'string') {
     args.push('--es', key, value);
     return;
