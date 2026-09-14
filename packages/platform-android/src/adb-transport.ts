@@ -30,7 +30,13 @@ export type AndroidAdbExecutorResult = {
 /** Structural mirror of node's StdioOptions; R13 bars the child_process import that names it. */
 type AndroidAdbStdioOption = 'overlapped' | 'pipe' | 'ignore' | 'inherit';
 
-export type AndroidAdbSpawnOptions = AndroidAdbExecutorOptions & {
+/**
+ * A spawned adb process is long-lived — the snapshot helper session rides it for
+ * the whole session — so `timeoutMs` is not part of its options: background
+ * spawns arm no deadline, and a field that looked like one invited callers to
+ * kill their own helper.
+ */
+export type AndroidAdbSpawnOptions = Omit<AndroidAdbExecutorOptions, 'timeoutMs'> & {
   cwd?: string;
   detached?: boolean;
   /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */

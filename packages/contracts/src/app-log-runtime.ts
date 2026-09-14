@@ -116,7 +116,7 @@ export type AppLogProcessCommand =
       kind: 'android-adb';
       serial: string;
       args: readonly string[];
-      options?: Pick<HostCommandRequest, 'allowFailure' | 'cwd' | 'env' | 'timeoutMs'>;
+      options?: Pick<HostCommandRequest, 'allowFailure' | 'cwd' | 'env'>;
     }>;
 
 export type AppLogBackgroundProcessRequest = Readonly<{

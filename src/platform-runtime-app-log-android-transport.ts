@@ -29,7 +29,6 @@ export async function resolveAndroidAppLogProcessTransport(
         allowFailure: adb.options?.allowFailure,
         cwd: adb.options?.cwd,
         env: adb.options?.env ? { ...process.env, ...adb.options.env } : undefined,
-        timeoutMs: adb.options?.timeoutMs,
         captureOutput: false,
         signal,
       });

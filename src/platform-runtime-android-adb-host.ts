@@ -104,7 +104,13 @@ bindAndroidAdbHost({
   },
   execHostAdb: async (args, options) => {
     const invocation = adbInvocation(args, options);
-    return await runCmd('adb', invocation.args, invocation.options);
+    return await runCmd('adb', invocation.args, {
+      ...invocation.options,
+      // adb's fork-server is a grandchild: without its own process group a
+      // deadline can only signal `adb` itself, and the server keeps the stdio
+      // pipes open behind it.
+      detached: process.platform !== 'win32',
+    });
   },
   withAdbCommandExecutorOverride: withCommandExecutorOverride,
   withoutAdbCommandExecutorOverride: withoutCommandExecutorOverride,

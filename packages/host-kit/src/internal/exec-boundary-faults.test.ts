@@ -3,6 +3,10 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   runCmd,
+  runCmdBackground,
+  runCmdDetached,
+  runCmdStreaming,
+  runCmdSync,
   withCommandExecutorOverride,
   type CommandExecutorOverride,
 } from '@agent-device/host-kit/command';
@@ -27,4 +31,28 @@ test('fail-Nth executor drives one deterministic command failure without hiding 
   });
 
   assert.deepEqual(calls, [['first'], ['second'], ['third']]);
+});
+
+test('the override seam covers the foreground commands and no other spawn path', async () => {
+  const consulted: string[] = [];
+
+  await withCommandExecutorOverride(
+    (command) => {
+      consulted.push(command);
+      return undefined;
+    },
+    async () => {
+      runCmdSync(process.execPath, ['-e', 'process.stdout.write("sync")']);
+      const background = runCmdBackground(process.execPath, [
+        '-e',
+        'process.stdout.write("background")',
+      ]);
+      await background.wait;
+      runCmdDetached(process.execPath, ['-e', 'process.exit(0)']);
+      await runCmdStreaming(process.execPath, ['-e', 'process.stdout.write("streaming")']);
+      await runCmd(process.execPath, ['-e', 'process.stdout.write("foreground")']);
+    },
+  );
+
+  assert.deepEqual(consulted, [process.execPath, process.execPath]);
 });

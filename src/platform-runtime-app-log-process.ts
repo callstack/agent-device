@@ -174,7 +174,6 @@ function launchLocalAppLogCommand(
     allowFailure: request.allowFailure,
     cwd: request.cwd,
     env: request.env ? { ...process.env, ...request.env } : undefined,
-    timeoutMs: request.timeoutMs,
     captureOutput: false,
     signal,
   });

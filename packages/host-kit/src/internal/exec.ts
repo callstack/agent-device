@@ -56,7 +56,15 @@ export type ExecDetachedProcess = {
   exited: Promise<ExecDetachedExit>;
 };
 
-export type ExecBackgroundOptions = ExecOptions & {
+/**
+ * Background runs have no `timeoutMs`: the callers are long-lived sessions (the
+ * Android snapshot helper, the keep-hot xcodebuild runner, app-log capture), and
+ * a deadline field the spawn path never armed was one plumbing change away from
+ * killing them. A background deadline belongs to its caller, which cancels it with
+ * `signal`; a caller that kills the child directly still waits for the streams to
+ * drain, exactly as before.
+ */
+export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
   /**
    * Capture stdout/stderr into the wait result when the child has piped stdio.
    * Set false when the caller owns, ignores, or forwards the streams.
@@ -159,44 +167,26 @@ function runSpawnedCommand(
         }, timeoutMs)
       : null;
     const abort = watchCommandAbort(child, options);
-
-    if (!options.binaryStdout) child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-
-    void writeChildStdin(child, options.stdin).catch((error: unknown) => {
-      if (abort.didAbort || didTimeout) return;
-      if (isEpipeError(error)) return;
-      reject(createStdinError(executable, cmd, args, error));
-      killProcessTree(child, options.detached);
-    });
-
-    child.stdout.on('data', (chunk) => {
-      if (options.binaryStdout) {
-        stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        return;
-      }
-      const text = String(chunk);
-      stdout += text;
-      options.onStdoutChunk?.(text);
-    });
-
-    child.stderr.on('data', (chunk) => {
-      const text = String(chunk);
-      stderr += text;
-      options.onStderrChunk?.(text);
-    });
-
-    child.on('error', (err) => {
+    // One settlement, whichever termination reaches it first. `close` waits for the
+    // stdio pipes to drain, and a descendant that inherited them keeps them open
+    // after the direct child is gone, which would wedge the request and the device
+    // lock it holds. Once this module asked for the kill there is nothing left to
+    // drain: the command has already failed on our deadline or the request's
+    // cancellation.
+    let settled = false;
+    const finish = (): boolean => {
+      if (settled) return false;
+      settled = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
       execTrace.emitForegroundCompletion(cmd, args);
-      reject(spawnRejectionError(abort, executable, cmd, args, err));
-    });
-
-    child.on('close', (code) => {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
-      abort.dispose();
-      execTrace.emitForegroundCompletion(cmd, args);
+      return true;
+    };
+    const fail = (error: AppError): void => {
+      if (finish()) reject(error);
+    };
+    const settle = (code: number | null): void => {
+      if (!finish()) return;
       const exitCode = code ?? 1;
       if (!abort.didAbort && didTimeout && timeoutMs) {
         reject(createTimeoutError(executable, cmd, args, timeoutMs, exitCode, stdout, stderr));
@@ -222,7 +212,42 @@ function runSpawnedCommand(
         exitCode,
         stdoutBuffer: stdoutChunks ? Buffer.concat(stdoutChunks) : undefined,
       });
+    };
+
+    if (!options.binaryStdout) child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    void writeChildStdin(child, options.stdin).catch((error: unknown) => {
+      if (abort.didAbort || didTimeout) return;
+      if (isEpipeError(error)) return;
+      fail(createStdinError(executable, cmd, args, error));
+      killProcessTree(child, options.detached);
     });
+
+    child.stdout.on('data', (chunk) => {
+      if (options.binaryStdout) {
+        stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        return;
+      }
+      const text = String(chunk);
+      stdout += text;
+      options.onStdoutChunk?.(text);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      const text = String(chunk);
+      stderr += text;
+      options.onStderrChunk?.(text);
+    });
+
+    child.on('error', (err) => {
+      fail(spawnRejectionError(abort, executable, cmd, args, err));
+    });
+
+    child.once('exit', (code) => {
+      if (didTimeout || abort.didAbort) settle(code);
+    });
+    child.once('close', settle);
   });
 }
 
@@ -412,12 +437,13 @@ export function runCmdBackground(
   }
 
   const wait = new Promise<ExecResult>((resolve, reject) => {
-    child.on('error', (err) => {
-      abort.dispose();
-      execTrace.emitBackgroundCompletion(cmd, args, 'error');
-      reject(spawnRejectionError(abort, executable, cmd, args, err));
-    });
-    child.on('close', (code) => {
+    let settled = false;
+    // Same rule as the foreground: a kill this module issued ends the wait on
+    // `exit`, because a descendant that inherited the pipes can hold `close`
+    // open indefinitely and the cancellation would never reach its caller.
+    const settle = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
       abort.dispose();
       execTrace.emitBackgroundCompletion(cmd, args, 'exit');
       const exitCode = code ?? 1;
@@ -436,7 +462,18 @@ export function runCmdBackground(
         return;
       }
       resolve({ stdout, stderr, exitCode });
+    };
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      abort.dispose();
+      execTrace.emitBackgroundCompletion(cmd, args, 'error');
+      reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
+    child.once('exit', (code) => {
+      if (abort.didAbort) settle(code);
+    });
+    child.once('close', settle);
   });
 
   return { child, wait };
@@ -794,6 +831,11 @@ function watchCommandAbort(
 }
 
 function killProcessTree(child: ChildProcess, detached: boolean | undefined): void {
+  // A child Node already reaped leaves its pid — and therefore its process-group id
+  // — free for the kernel to hand to an unrelated process, so a late group signal
+  // from a stale deadline could strike a stranger. Nothing waits for a kill of a
+  // child that is already gone: the settlement happens on `exit`.
+  if (child.exitCode !== null || child.signalCode !== null) return;
   if (detached && child.pid && process.platform !== 'win32') {
     try {
       process.kill(-child.pid, 'SIGKILL');

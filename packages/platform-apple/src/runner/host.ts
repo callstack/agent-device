@@ -63,7 +63,8 @@ export type ExecBackgroundResult = {
   wait: Promise<ExecResult>;
 };
 
-export type ExecBackgroundOptions = ExecOptions;
+/** Mirrors host-kit: a background runner process is never on a spawn deadline. */
+export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'>;
 
 export type Deadline = {
   remainingMs(nowMs?: number): number;
