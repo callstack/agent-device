@@ -17,20 +17,38 @@ function capture(fields: Partial<SnapshotResult>): SnapshotResult {
 const VIEWPORT = { x: 0, y: 0, width: 400, height: 800 };
 const SPARSE = { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' } as const;
 
-/** A scrollable whose single row sits at `rowY`; below 800 is off-screen with content beneath. */
-function tree(rowY: number, label = 'Email'): SnapshotNode[] {
+/** The Application + ScrollView scaffold every tree here hangs its rows off. */
+function scrollable(...rows: SnapshotNode[]): SnapshotNode[] {
   return [
     { index: 0, ref: 'e1', type: 'Application', rect: VIEWPORT } as SnapshotNode,
     { index: 1, parentIndex: 0, ref: 'e2', type: 'ScrollView', rect: VIEWPORT } as SnapshotNode,
-    {
-      index: 2,
-      parentIndex: 1,
-      ref: 'e3',
-      type: 'TextField',
-      label,
-      rect: { x: 0, y: rowY, width: 400, height: 40 },
-    } as SnapshotNode,
+    ...rows,
   ];
+}
+
+/** One row of the scrollable, at `y`. */
+function row(index: number, y: number, label = 'Email'): SnapshotNode {
+  return {
+    index,
+    parentIndex: 1,
+    ref: `e${index + 1}`,
+    type: 'TextField',
+    label,
+    rect: { x: 0, y, width: 400, height: 40 },
+  } as SnapshotNode;
+}
+
+/** A scrollable whose single row sits at `rowY`; below 800 is off-screen with content beneath. */
+function tree(rowY: number, label = 'Email'): SnapshotNode[] {
+  return scrollable(row(2, rowY, label));
+}
+
+/**
+ * Two rows sharing one label, the document-order head at `firstY`. A loop that stops on the head and
+ * one that asks every candidate are distinguishable here.
+ */
+function twinTree(firstY: number, secondY: number): SnapshotNode[] {
+  return scrollable(row(2, firstY), row(3, secondY));
 }
 
 async function run(params: {
@@ -82,6 +100,32 @@ test('passes repeat until the selector is on screen, and the last gesture is rep
 test('a present but scrolled-out target does not end the loop', async () => {
   await assert.rejects(
     () => run({ captures: [capture({ nodes: tree(2400) })], passLimit: 1 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_until_pass_limit');
+      return true;
+    },
+  );
+});
+
+/**
+ * Rows sharing a selector are measured as a set, each against this capture's own visibility index:
+ * the head is scrolled out above the fold while a later row is on screen, and the loop stops.
+ */
+test('a visible row sharing its selector with a scrolled-out twin stops the loop', async () => {
+  let scrolls = 0;
+  const result = await run({
+    captures: [capture({ nodes: twinTree(-400, 200) })],
+    onScroll: () => (scrolls += 1),
+  });
+  assert.equal(result.passes, 0);
+  assert.equal(scrolls, 0);
+});
+
+/** The closest negative: every row sharing the selector is scrolled out, so nothing has arrived. */
+test('rows that are all scrolled out keep the loop scrolling', async () => {
+  await assert.rejects(
+    () => run({ captures: [capture({ nodes: twinTree(2400, 2800) })], passLimit: 1 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'scroll_until_pass_limit');

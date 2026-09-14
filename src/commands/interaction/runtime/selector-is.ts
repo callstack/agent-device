@@ -10,6 +10,7 @@ import {
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { SelectorTarget } from '@agent-device/contracts/interaction';
@@ -164,7 +165,7 @@ async function resolveAssertedPredicate(
   const result = evaluateIsPredicate({
     predicate,
     node: outcome.node,
-    nodes: capture.snapshot.nodes,
+    visibility: createSnapshotVisibility(capture.snapshot.nodes),
     expectedText: options.expectedText,
     platform: runtime.backend.platform,
   });

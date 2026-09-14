@@ -5,7 +5,6 @@ import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
-  createSnapshotVisibility,
   extractNodeText,
   isUsefulVisibilityAnchor,
   type SnapshotVisibility,
@@ -62,19 +61,22 @@ export function normalizeIsPositionals(positionals: string[]): string[] {
 export function evaluateIsPredicate(params: {
   predicate: Exclude<IsPredicate, 'exists' | 'absent'>;
   node: SnapshotState['nodes'][number];
-  nodes: SnapshotState['nodes'];
+  /**
+   * The capture's visibility index, built from the same node array `node` came from. A caller that
+   * asks about several nodes of one capture passes the SAME index to every call, so the tree is
+   * indexed once instead of once per candidate (#1970).
+   */
+  visibility: SnapshotVisibility;
   expectedText?: string;
   platform: Platform | PublicPlatform;
 }): { pass: boolean; actualText: string; details: string } {
-  const { predicate, node, nodes, expectedText, platform } = params;
+  const { predicate, node, visibility, expectedText, platform } = params;
   const actualText = extractNodeText(node);
   const editable = isNodeEditable(node, platform);
   const selected = node.selected === true;
   const focused = node.focused === true;
   const visible =
-    predicate === 'text'
-      ? isNodeVisible(node)
-      : isAssertionVisible(node, createSnapshotVisibility(nodes), platform);
+    predicate === 'text' ? isNodeVisible(node) : isAssertionVisible(node, visibility, platform);
   let pass = false;
   switch (predicate) {
     case 'visible':

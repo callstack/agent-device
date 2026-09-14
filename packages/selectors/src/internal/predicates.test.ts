@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { evaluateIsPredicate, normalizeIsPositionals } from './predicates.ts';
 
@@ -57,7 +58,7 @@ test('focused predicate reads snapshot focus state', () => {
   const result = evaluateIsPredicate({
     predicate: 'focused',
     node,
-    nodes: [node],
+    visibility: createSnapshotVisibility([node]),
     platform: 'android',
   });
 
@@ -88,7 +89,7 @@ test('visible predicate treats zero-height hittable Android nodes as hidden', ()
   const result = evaluateIsPredicate({
     predicate: 'visible',
     node: nodes[1]!,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'android',
   });
 
@@ -115,7 +116,7 @@ test('visible predicate treats rectless hittable Android nodes as hidden', () =>
   const result = evaluateIsPredicate({
     predicate: 'visible',
     node: nodes[1]!,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'android',
   });
 
@@ -152,7 +153,7 @@ test('visible predicate uses visible Android ancestor geometry for rectless text
   const result = evaluateIsPredicate({
     predicate: 'visible',
     node: nodes[2]!,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'android',
   });
 
@@ -175,7 +176,7 @@ test('visible predicate treats Android nodes hidden from users as hidden', () =>
   const result = evaluateIsPredicate({
     predicate: 'visible',
     node: nodes[0]!,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'android',
   });
 
@@ -219,9 +220,81 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
   const result = evaluateIsPredicate({
     predicate: 'visible',
     node: nodes[3]!,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'android',
   });
 
   assert.equal(result.pass, false);
+});
+
+/** One capture whose two rows share a label: one on screen, one below the fold. */
+const SHARED_CAPTURE: SnapshotNode[] = [
+  { index: 0, ref: 'e0', type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+  {
+    index: 1,
+    parentIndex: 0,
+    ref: 'e1',
+    type: 'TextField',
+    label: 'Email',
+    rect: { x: 0, y: 200, width: 400, height: 40 },
+  },
+  {
+    index: 2,
+    parentIndex: 0,
+    ref: 'e2',
+    type: 'TextField',
+    label: 'Email',
+    rect: { x: 0, y: 2400, width: 400, height: 40 },
+  },
+];
+
+/**
+ * Candidates from ONE capture share the caller's visibility index: two `visible` evaluations against
+ * one index materialize the tree once, not once per candidate (#1970).
+ */
+test('visible predicates are answered by the index they are given, not a per-candidate rebuild', () => {
+  const materialized = { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 };
+  const visibility = createSnapshotVisibility(SHARED_CAPTURE, {
+    onNodeMapBuilt: () => (materialized.nodeMaps += 1),
+    onViewportRectsCollected: () => (materialized.viewportRects += 1),
+    onContainingRectFallback: () => (materialized.containingRectFallbacks += 1),
+  });
+
+  const onScreen = evaluateIsPredicate({
+    predicate: 'visible',
+    node: SHARED_CAPTURE[1]!,
+    visibility,
+    platform: 'ios',
+  });
+  const scrolledOut = evaluateIsPredicate({
+    predicate: 'visible',
+    node: SHARED_CAPTURE[2]!,
+    visibility,
+    platform: 'ios',
+  });
+
+  assert.equal(onScreen.pass, true);
+  assert.equal(scrolledOut.pass, false);
+  assert.deepEqual(materialized, { nodeMaps: 1, viewportRects: 1, containingRectFallbacks: 0 });
+});
+
+/** The closest negative: `text` answers from the node alone and materializes none of the index. */
+test('the text predicate materializes none of the visibility index', () => {
+  const materialized = { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 };
+  const visibility = createSnapshotVisibility(SHARED_CAPTURE, {
+    onNodeMapBuilt: () => (materialized.nodeMaps += 1),
+    onViewportRectsCollected: () => (materialized.viewportRects += 1),
+    onContainingRectFallback: () => (materialized.containingRectFallbacks += 1),
+  });
+
+  const match = evaluateIsPredicate({
+    predicate: 'text',
+    node: SHARED_CAPTURE[1]!,
+    visibility,
+    expectedText: 'Email',
+    platform: 'ios',
+  });
+
+  assert.equal(match.pass, true);
+  assert.deepEqual(materialized, { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 });
 });

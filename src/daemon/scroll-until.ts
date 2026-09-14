@@ -3,6 +3,7 @@ import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { evaluateIsPredicate } from '@agent-device/selectors';
 import { sparseCaptureQuality } from '@agent-device/selectors/absence-observation';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
@@ -166,8 +167,12 @@ async function isSelectorVisible(
       : outcome.kind === 'occluded'
         ? [outcome.node]
         : [];
+  if (matched.length === 0) return false;
+  // One index for every candidate from this capture, so the rows a shared selector matched do not
+  // each rebuild the node map and viewport rects of the same tree (#1970).
+  const visibility = createSnapshotVisibility(nodes);
   return matched.some(
-    (node) => evaluateIsPredicate({ predicate: 'visible', node, nodes, platform }).pass,
+    (node) => evaluateIsPredicate({ predicate: 'visible', node, visibility, platform }).pass,
   );
 }
 
