@@ -16,6 +16,7 @@ import {
 import {
   assertRunnerRequestActive,
   isRetryableRunnerError,
+  isRunnerReadinessPreflightFailure,
   resolveRunnerRequestSignal,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
@@ -600,13 +601,9 @@ function emitPrepareDiagnostic(
   });
 }
 
-function isRunnerReadinessPreflightError(error: AppError): boolean {
-  return error.details?.runnerReadinessPreflightFailed === true;
-}
-
 function shouldRestartAfterReadinessPreflightError(error: AppError): boolean {
   return (
-    isRunnerReadinessPreflightError(error) &&
+    isRunnerReadinessPreflightFailure(error) &&
     (isRetryableRunnerError(error) || shouldRestartRunnerAfterReadinessPreflight(error))
   );
 }

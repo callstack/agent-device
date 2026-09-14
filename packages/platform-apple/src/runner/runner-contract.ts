@@ -352,6 +352,16 @@ export function shouldRetryRunnerConnectError(error: unknown): boolean {
 }
 
 /**
+ * The readiness preflight gave up before the command was written. The marker is the only
+ * evidence for that: an error carrying it arrives in whatever shape the preflight failed
+ * in, so no message check can be the test.
+ */
+export function isRunnerReadinessPreflightFailure(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  return hasReadinessPreflightFailure((error.details ?? {}) as AppErrorDetails);
+}
+
+/**
  * The readiness preflight ran out of its own deadline, so the runner never saw the
  * command: restarting the session and replaying is both safe and the only way out.
  */

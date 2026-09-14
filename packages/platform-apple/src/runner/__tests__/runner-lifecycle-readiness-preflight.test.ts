@@ -133,6 +133,32 @@ test('mutating commands restart stale sessions when readiness preflight outlives
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
 });
 
+test('a readiness preflight deadline with no timeout wording still restarts the session', async () => {
+  const staleSession = makeRunnerSession({ port: 8100, ready: true });
+  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+
+  // The shape `fetchWithTimeout` reports its own expiry in: a recorded budget and the
+  // preflight marker, and a message that says nothing about time. A message check had
+  // been the only way to notice, and it would rethrow here without restarting a session
+  // whose runner never received the command.
+  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'xcrun simctl spawn did not answer', {
+        cmd: 'xcrun',
+        timeoutMs: 45_000,
+        runnerReadinessPreflightFailed: true,
+      }),
+    )
+    .mockResolvedValueOnce({ message: 'tapped' });
+
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+
+  assert.deepEqual(result, { message: 'tapped' });
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
+  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
+});
+
 test('a readiness preflight refusal that is neither transport-shaped nor deadline-shaped surfaces', async () => {
   const staleSession = makeRunnerSession({ port: 8100, ready: true });
 
