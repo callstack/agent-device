@@ -10,6 +10,10 @@
   "Untitled Project" / "Untitled Build" with an empty name — even after #2495 carried the flags to
   the provider (#2494). The builder now emits `appium:deviceName`, `appium:platformVersion`, and
   `appium:app` and no legacy key, verified against live App Automate sessions.
+- Added: `--provider-appium-version <version>` (alias `--appium-version`) pins the Appium server
+  BrowserStack runs for the session, as `bstack:options.appiumVersion`. Unset, BrowserStack falls
+  back to Appium 1.x, which predates the `mobile:` commands the interactor issues (`deepLink`,
+  `pressButton`, `activateApp`).
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
   implicit session was addressed by `cwd:<workspace>:default`, one slot per checkout, and it stayed

@@ -83,6 +83,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'providerDeviceOrientation',
       'providerGeoLocation',
       'providerTimezone',
+      'providerAppiumVersion',
       'providerLanguage',
       'providerLocale',
       'providerNetworkProfile',

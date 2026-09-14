@@ -82,6 +82,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'providerDeviceOrientation',
   'providerGeoLocation',
   'providerTimezone',
+  'providerAppiumVersion',
   'providerLanguage',
   'providerLocale',
   'providerNetworkProfile',

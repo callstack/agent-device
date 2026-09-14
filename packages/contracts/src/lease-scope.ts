@@ -219,6 +219,7 @@ const LEASE_ALLOCATE_PROVIDER_FLAG_KEYS = [
   'providerDeviceOrientation',
   'providerGeoLocation',
   'providerTimezone',
+  'providerAppiumVersion',
   'providerLanguage',
   'providerLocale',
   'providerNetworkProfile',

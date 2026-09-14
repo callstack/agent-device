@@ -259,6 +259,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'providerDeviceOrientation',
         'providerGeoLocation',
         'providerTimezone',
+        'providerAppiumVersion',
         'providerLanguage',
         'providerLocale',
         'providerNetworkProfile',

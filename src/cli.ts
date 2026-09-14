@@ -462,6 +462,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     providerDeviceOrientation: currentFlags.providerDeviceOrientation,
     providerGeoLocation: currentFlags.providerGeoLocation,
     providerTimezone: currentFlags.providerTimezone,
+    providerAppiumVersion: currentFlags.providerAppiumVersion,
     providerLanguage: currentFlags.providerLanguage,
     providerLocale: currentFlags.providerLocale,
     providerNetworkProfile: currentFlags.providerNetworkProfile,

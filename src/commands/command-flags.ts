@@ -35,6 +35,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     providerDeviceOrientation: options.providerDeviceOrientation,
     providerGeoLocation: options.providerGeoLocation,
     providerTimezone: options.providerTimezone,
+    providerAppiumVersion: options.providerAppiumVersion,
     providerLanguage: options.providerLanguage,
     providerLocale: options.providerLocale,
     providerNetworkProfile: options.providerNetworkProfile,

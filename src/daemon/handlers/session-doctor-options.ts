@@ -26,6 +26,7 @@ const REMOTE_PROVIDER_FLAG_KEYS = [
   'providerDeviceOrientation',
   'providerGeoLocation',
   'providerTimezone',
+  'providerAppiumVersion',
   'providerLanguage',
   'providerLocale',
   'providerNetworkProfile',

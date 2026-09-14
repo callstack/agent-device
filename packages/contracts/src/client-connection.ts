@@ -69,6 +69,7 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'providerDeviceOrientation'
   | 'providerGeoLocation'
   | 'providerTimezone'
+  | 'providerAppiumVersion'
   | 'providerLanguage'
   | 'providerLocale'
   | 'providerNetworkProfile'

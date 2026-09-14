@@ -88,6 +88,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   },
   { key: 'providerGeoLocation', type: 'string' },
   { key: 'providerTimezone', type: 'string' },
+  { key: 'providerAppiumVersion', type: 'string' },
   { key: 'providerLanguage', type: 'string' },
   { key: 'providerLocale', type: 'string' },
   { key: 'providerNetworkProfile', type: 'string' },
