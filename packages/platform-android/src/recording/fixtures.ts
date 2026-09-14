@@ -75,11 +75,16 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     },
     removeManifest: async (manifestPath: string) =>
       legacy.removeManifest ? await legacy.removeManifest(manifestPath) : true,
-    findRunning: async (remotePath: string) => {
+    probeRunningWriters: async (remotePath: string) => {
       const found = await (legacy.findRunning?.(remotePath) ?? ['42', '43', '66']);
-      return found.map((entry: string | { pid: string; remotePath: string; startTime: string }) =>
-        typeof entry === 'string' ? { pid: entry, remotePath, startTime: '1' } : entry,
+      if (!Array.isArray(found)) return found;
+      const writers = found.map(
+        (entry: string | { pid: string; remotePath: string; startTime: string }) =>
+          typeof entry === 'string' ? { pid: entry, remotePath, startTime: '1' } : entry,
       );
+      return writers.length > 0
+        ? ({ status: 'found' as const, writers } as const)
+        : ({ status: 'clear' as const } as const);
     },
   };
   return {

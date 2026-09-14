@@ -346,6 +346,53 @@ test('refuses a stranded interrupted launch whose artifact a recorder is still w
   expect(calls).toEqual([]);
 });
 
+test('refuses a stranded interrupted launch whose writers cannot be read', async () => {
+  const marker = JSON.stringify({
+    ...createNativeManifest(
+      androidRecordingDevice,
+      recordingInput(),
+      1,
+      [],
+      '/sdcard/agent-device-recording-9.mp4',
+      'local',
+    ),
+    deviceId: 'emulator-5556',
+  });
+  const calls: string[] = [];
+  const runtime = await start({
+    readManifest: async (path: string) =>
+      path.startsWith('/sdcard')
+        ? { status: 'read' as const, contents: marker }
+        : { status: 'missing' as const },
+    findRunning: async () => ({ status: 'uncertain' as const }),
+    remove: async () => {
+      calls.push('artifact');
+      return true;
+    },
+    removeManifest: async () => {
+      calls.push('manifest');
+      return true;
+    },
+    outputs: {
+      prepare: async () => {
+        calls.push('prepare');
+      },
+    },
+    start: async () => {
+      calls.push('launch');
+      return recordingProcess('77');
+    },
+  });
+  await expect(runtime.screenRecordingStart(newInput())).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'native_recording_recorder_unproven',
+      remotePath: '/sdcard/agent-device-recording-9.mp4',
+    },
+  });
+  expect(calls).toEqual([]);
+});
+
 test('retires stranded evidence parked in the fallback directory', async () => {
   let marker = JSON.stringify({
     ...openEvidence(),

@@ -83,9 +83,9 @@ async function retireEvidence(
 }
 
 /**
- * Refuse while any artifact the marker names still has a recorder writing it. A committed chunk
- * answers with its own identity; an interrupted launch committed none, so the device is asked which
- * recorders write that path.
+ * Refuse while any artifact the marker names still has a recorder writing it, or while the device
+ * cannot prove that none is. A committed chunk answers with its own identity; an interrupted launch
+ * committed none, so the device is asked which recorders write that path.
  */
 async function proveArtifactsReleased(
   transport: Transport,
@@ -105,8 +105,10 @@ async function proveArtifactsReleased(
     );
   }
   const pendingPath = evidence.pendingRemotePath;
-  if (pendingPath !== undefined && (await transport.findRunning(pendingPath)).length > 0)
-    throw artifactClaimed(pendingPath, 'other-recorder');
+  if (pendingPath === undefined) return;
+  const writers = await transport.probeRunningWriters(pendingPath);
+  if (writers.status === 'found') throw artifactClaimed(pendingPath, 'other-recorder');
+  if (writers.status === 'uncertain') throw unprovenRecorder(pendingPath);
 }
 
 async function removePendingArtifact(

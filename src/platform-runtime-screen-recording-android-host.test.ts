@@ -97,10 +97,57 @@ test('finds only exact screenrecord processes for the canonical remote path', as
     { serial: android.id },
     async () => {
       const transport = await createAndroidScreenRecordingTransport(android);
-      await expect(transport.findRunning(remotePath)).resolves.toEqual([
-        { pid: '41', remotePath, startTime: '41' },
-        { pid: '44', remotePath, startTime: '44' },
-      ]);
+      await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
+        status: 'found',
+        writers: [
+          { pid: '41', remotePath, startTime: '41' },
+          { pid: '44', remotePath, startTime: '44' },
+        ],
+      });
+    },
+  );
+});
+
+test('reports an inconclusive writer search when a candidate process cannot be read', async () => {
+  const remotePath = '/sdcard/agent-device-recording-123.mp4';
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args[1] ?? '';
+        if (command === 'ps -A -o pid=') return result('41\n42\n');
+        if (/^test -d \/proc\/\d+$/.test(command)) return result();
+        if (command.endsWith('/stat')) {
+          return command.includes('/proc/42/')
+            ? result('', 'cat: /proc/42/stat: Permission denied', 1)
+            : result(procStat(41, '41'));
+        }
+        if (command.endsWith('/cmdline')) {
+          return result(['/system/bin/sh', '-c', 'screenrecord', remotePath, ''].join('\0'));
+        }
+        return result('', 'unexpected command', 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
+        status: 'uncertain',
+      });
+    },
+  );
+});
+
+test('reports an inconclusive writer search when the process table cannot be read', async () => {
+  await withAndroidAdbProvider(
+    {
+      exec: async () => result('', 'adb: device offline', 1),
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      await expect(
+        transport.probeRunningWriters('/sdcard/agent-device-recording-123.mp4'),
+      ).resolves.toEqual({ status: 'uncertain' });
     },
   );
 });

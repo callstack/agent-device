@@ -2,7 +2,7 @@ import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
 import { pending } from './completion.ts';
-import type { NativeManifest } from './manifest.ts';
+import type { NativeChunk, NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -15,16 +15,10 @@ export async function cleanupVerifiedAndroidEvidence(
 ): Promise<CleanupOutcome> {
   try {
     const pendingPath = evidence.pendingRemotePath;
-    const pendingChunks =
-      pendingPath === undefined
-        ? []
-        : (await transport.findRunning(pendingPath)).map((processIdentity) => ({
-            index: evidence.chunks.length + 1,
-            remotePath: pendingPath,
-            remotePid: processIdentity.pid,
-            remoteStartTime: processIdentity.startTime,
-          }));
-    await stopOwnedChunks(transport, [...evidence.chunks, ...pendingChunks]);
+    await stopOwnedChunks(transport, [
+      ...evidence.chunks,
+      ...(await pendingWriterChunks(transport, evidence)),
+    ]);
     await cleanupChunks(transport, evidence.chunks);
     if (pendingPath !== undefined && !(await transport.remove(pendingPath)))
       throw new Error(`failed to remove Android recording artifact: ${pendingPath}`);
@@ -33,4 +27,26 @@ export async function cleanupVerifiedAndroidEvidence(
   } catch (error) {
     return pending(error);
   }
+}
+
+/**
+ * Recorders writing an artifact the evidence never committed. An inconclusive search is retained
+ * like any other uncertainty: an unreadable process table cannot prove the artifact is free.
+ */
+async function pendingWriterChunks(
+  transport: Transport,
+  evidence: NativeManifest,
+): Promise<readonly NativeChunk[]> {
+  const pendingPath = evidence.pendingRemotePath;
+  if (pendingPath === undefined) return [];
+  const writers = await transport.probeRunningWriters(pendingPath);
+  if (writers.status === 'uncertain')
+    throw new Error(`cannot prove no recorder writes Android artifact: ${pendingPath}`);
+  if (writers.status === 'clear') return [];
+  return writers.writers.map((writer, offset) => ({
+    index: evidence.chunks.length + 1 + offset,
+    remotePath: pendingPath,
+    remotePid: writer.pid,
+    remoteStartTime: writer.startTime,
+  }));
 }

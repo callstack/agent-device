@@ -131,6 +131,38 @@ test('cleans verified dead evidence so a later start is admitted', async () => {
   expect(starts).toBe(2);
 });
 
+test('retains evidence when a pending artifact writer cannot be identified', async () => {
+  let manifest = '';
+  const removed: string[] = [];
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    removeManifest: async () => {
+      manifest = '';
+      return true;
+    },
+    remove: async (path: string) => {
+      removed.push(path);
+      return true;
+    },
+    findRunning: async () => ({ status: 'uncertain' as const }),
+    isRunning: async () => false,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  manifest = JSON.stringify({
+    ...JSON.parse(manifest),
+    pendingRemotePath: '/sdcard/agent-device-recording-9.mp4',
+  });
+  await expect(
+    runtime.screenRecordingCleanup({ envelope: started.envelope }),
+  ).resolves.toMatchObject({ status: 'cleanup-pending' });
+  expect(removed).not.toContain('/sdcard/agent-device-recording-9.mp4');
+  expect(manifest).not.toBe('');
+});
+
 test('retains evidence when the recorder presence probe is uncertain', async () => {
   vi.useFakeTimers();
   try {

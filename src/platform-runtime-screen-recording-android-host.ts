@@ -67,11 +67,9 @@ export async function createAndroidScreenRecordingTransport(
       const size = Number(result.stdout.trim());
       return Number.isSafeInteger(size) && size >= 0 ? size : 'uncertain';
     },
-    findRunning: async (remotePath, signal) => {
+    probeRunningWriters: async (remotePath, signal) => {
       const result = await shell('ps -A -o pid=', signal);
-      if (result.exitCode !== 0) {
-        throw new Error('failed to enumerate Android screenrecord processes');
-      }
+      if (result.exitCode !== 0) return { status: 'uncertain' as const };
       const pids = result.stdout.split(/\s+/).filter((pid) => /^\d+$/.test(pid));
       const inspected = await Promise.all(
         pids.map(
@@ -83,9 +81,13 @@ export async function createAndroidScreenRecordingTransport(
             ),
         ),
       );
-      return inspected.flatMap((outcome) =>
+      const writers = inspected.flatMap((outcome) =>
         outcome.status === 'owned-alive' && outcome.process ? [outcome.process] : [],
       );
+      if (writers.length > 0) return { status: 'found' as const, writers };
+      return inspected.some((outcome) => outcome.status === 'uncertain')
+        ? ({ status: 'uncertain' } as const)
+        : ({ status: 'clear' } as const);
     },
     pullPlayable: async ({ remotePath, outputPath }, signal) => {
       const result = await adb(['pull', remotePath, outputPath], {
