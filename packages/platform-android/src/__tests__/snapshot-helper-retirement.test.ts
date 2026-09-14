@@ -12,6 +12,10 @@ import {
 } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbProcess } from '../adb-executor.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
+import {
+  androidHelperRuntimeProbeResult,
+  isAndroidHelperRuntimeProbe,
+} from './snapshot-helper-session.fixtures.ts';
 
 const PACKAGE_NAME = 'com.callstack.agentdevice.snapshothelper';
 const DEVICE_KEY = 'android:emulator-5554';
@@ -48,10 +52,8 @@ test('canceled capture answers for the device, not for the force-stop call that 
 test('unproven release stays pending until an acquire reads the device', async () => {
   let helperAlive = true;
   const adb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('pidof')) {
-      return helperAlive
-        ? { exitCode: 0, stdout: '4211\n', stderr: '' }
-        : { exitCode: 1, stdout: '', stderr: '' };
+    if (isAndroidHelperRuntimeProbe(args)) {
+      return androidHelperRuntimeProbeResult(helperAlive ? 'occupied' : 'released');
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   };
@@ -75,7 +77,7 @@ test('unproven release stays pending until an acquire reads the device', async (
 
 test('a device that cannot be read leaves the retirement pending without failing the command', async () => {
   const adb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('pidof')) throw new Error('device offline');
+    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult('unreadable');
     return { exitCode: 0, stdout: '', stderr: '' };
   };
 

@@ -18,6 +18,11 @@ import {
   type AndroidAdbProcess,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
+import {
+  androidHelperRuntimeProbeResult,
+  isAndroidHelperRuntimeProbe,
+  type FakeAndroidHelperRuntimeRelease,
+} from './snapshot-helper-session.fixtures.ts';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import {
@@ -126,19 +131,9 @@ function neverResolvingAfterAbort(signal: AbortSignal): Promise<never> {
   });
 }
 
-function readRuntimePidProbeResult(
-  args: string[],
-  runtimePid: string | undefined,
-): { exitCode: number; stdout: string; stderr: string } | undefined {
-  if (args[0] !== 'shell' || args[1] !== 'pidof') return undefined;
-  return runtimePid
-    ? { exitCode: 0, stdout: `${runtimePid}\n`, stderr: '' }
-    : { exitCode: 1, stdout: '', stderr: '' };
-}
-
 function createFakeTouchHelperSessionProvider(
   handleCommand: TouchSessionCommandHandler,
-  options: { stallCleanup?: boolean; runtimePid?: string } = {},
+  options: { stallCleanup?: boolean; runtimeRelease?: FakeAndroidHelperRuntimeRelease } = {},
 ): AndroidAdbProvider {
   return {
     exec: async (args, execOptions) => {
@@ -146,13 +141,10 @@ function createFakeTouchHelperSessionProvider(
       if (options.stallCleanup && signal && isTouchCleanupCommand(args)) {
         return await neverResolvingAfterAbort(signal);
       }
-      return (
-        readRuntimePidProbeResult(args, options.runtimePid) ?? {
-          exitCode: 0,
-          stdout: '',
-          stderr: '',
-        }
-      );
+      if (isAndroidHelperRuntimeProbe(args)) {
+        return androidHelperRuntimeProbeResult(options.runtimeRelease);
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
     },
     spawn: (args) => {
       const port = readSessionPort(args);
@@ -197,7 +189,7 @@ test('touch helper does not run one-shot while the device still runs the helper'
   const device = makeIsolatedDevice();
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const provider = createFakeTouchHelperSessionProvider(() => 'malformed snapshot response', {
-    runtimePid: '4211',
+    runtimeRelease: 'occupied',
   });
 
   // A malformed response retires the session; the device then answers that the helper process is

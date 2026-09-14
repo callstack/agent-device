@@ -44,11 +44,7 @@ export async function retireCanceledAndroidSnapshotHelperCapture(params: {
   adb: AndroidAdbExecutor;
   cause: unknown;
 }): Promise<void> {
-  await forceStopAndroidSnapshotHelperRuntime({
-    adb: params.adb,
-    packageName: params.packageName,
-    timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
-  });
+  await stopAndroidSnapshotHelperRuntime({ adb: params.adb, packageName: params.packageName });
   await recordAndroidSnapshotHelperRelease({
     deviceKey: params.deviceKey,
     packageName: params.packageName,
@@ -70,7 +66,7 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
 }): Promise<void> {
   const retirement = pendingRetirements.get(params.deviceKey);
   if (!retirement) return;
-  await forceStopAndroidSnapshotHelperRuntime({
+  await stopAndroidSnapshotHelperRuntime({
     adb: params.adb,
     packageName: retirement.packageName,
     timeoutMs: RETIREMENT_RECOVERY_TIMEOUT_MS,
@@ -167,7 +163,7 @@ async function readAndroidSnapshotHelperRuntimeRelease(params: {
       timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
     });
     // `pidof` exits non-zero and prints nothing when no process matches.
-    if (result.exitCode !== 0 || !/\d/.test(result.stdout)) return 'released';
+    if (result.exitCode !== 0 || !/\b\d+\b/.test(result.stdout)) return 'released';
     return 'occupied';
   } catch {
     return 'unknown';
@@ -193,7 +189,7 @@ export async function settleAndroidSnapshotHelperSessionCleanup(params: {
   await Promise.all([
     ...(params.forceStopRuntime
       ? [
-          forceStopAndroidSnapshotHelperRuntime({
+          stopAndroidSnapshotHelperRuntime({
             adb: params.adb,
             packageName: params.packageName,
             timeoutMs: params.timeoutMs,
@@ -295,16 +291,16 @@ export function resetAndroidSnapshotHelperRetirements(): void {
  * Best-effort device-side stop. Its outcome is never release evidence: whoever needs that reads the
  * device with `readAndroidSnapshotHelperRuntimeRelease`.
  */
-async function forceStopAndroidSnapshotHelperRuntime(params: {
+export async function stopAndroidSnapshotHelperRuntime(params: {
   adb: AndroidAdbExecutor;
   packageName: string;
-  timeoutMs: number;
+  timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<void> {
   await params
     .adb(['shell', 'am', 'force-stop', params.packageName], {
       allowFailure: true,
-      timeoutMs: params.timeoutMs,
+      timeoutMs: params.timeoutMs ?? ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
       ...(params.signal ? { signal: params.signal } : {}),
     })
     .catch(() => {});

@@ -11,7 +11,12 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
-import type { AndroidAdbProcess, AndroidAdbProvider } from '../adb-executor.ts';
+import type {
+  AndroidAdbExecutorResult,
+  AndroidAdbProcess,
+  AndroidAdbProvider,
+} from '../adb-executor.ts';
+import type { AndroidSnapshotHelperRuntimeRelease } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import { bindAndroidAdbTestHost } from './test-utils/android-host-test-setup.ts';
 
@@ -156,8 +161,13 @@ export type SessionProviderOptions = {
   /** Make the `adb features` probe fail the way an adb too old to know the command does. */
   featureProbeFailure?: boolean;
   /** What the device answers when the teardown reads back whether the helper still runs. */
-  runtimeRelease?: 'released' | 'occupied' | 'unreadable';
+  runtimeRelease?: FakeAndroidHelperRuntimeRelease;
 };
+
+/** What a fake device says about the helper process, including a device that cannot be read. */
+export type FakeAndroidHelperRuntimeRelease =
+  | Exclude<AndroidSnapshotHelperRuntimeRelease, 'unknown'>
+  | 'unreadable';
 
 export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
   bindAndroidAdbTestHost();
@@ -266,7 +276,8 @@ function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor 
   return async (args, execOptions) => {
     options.calls.push(args);
     if (args[0] === 'features') return adbFeaturesResult(options);
-    if (isAndroidHelperRuntimeProbe(args)) return adbRuntimeProbeResult(options);
+    if (isAndroidHelperRuntimeProbe(args))
+      return androidHelperRuntimeProbeResult(options.runtimeRelease);
     const forceStopsRuntime = args.join(' ').includes('am force-stop');
     await stallSessionCleanupIfConfigured(options, args, execOptions?.signal, forceStopsRuntime);
     if (options.recoveryFailure && forceStopsRuntime) {
@@ -277,17 +288,16 @@ function createSessionExec(options: SessionProviderOptions): AndroidAdbExecutor 
   };
 }
 
-function isAndroidHelperRuntimeProbe(args: readonly string[]): boolean {
+/** Whether an adb call is the helper-process read that decides device automation ownership. */
+export function isAndroidHelperRuntimeProbe(args: readonly string[]): boolean {
   return args[0] === 'shell' && args[1] === 'pidof';
 }
 
-function adbRuntimeProbeResult(options: SessionProviderOptions): {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-} {
-  if (options.runtimeRelease === 'unreadable') throw new Error('device offline');
-  return options.runtimeRelease === 'occupied'
+export function androidHelperRuntimeProbeResult(
+  release: FakeAndroidHelperRuntimeRelease = 'released',
+): AndroidAdbExecutorResult {
+  if (release === 'unreadable') throw new Error('device offline');
+  return release === 'occupied'
     ? { exitCode: 0, stdout: '4211\n', stderr: '' }
     : { exitCode: 1, stdout: '', stderr: '' };
 }

@@ -3,6 +3,10 @@ import { beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelper } from '../snapshot-helper-capture.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
+import {
+  androidHelperRuntimeProbeResult,
+  isAndroidHelperRuntimeProbe,
+} from './snapshot-helper-session.fixtures.ts';
 
 beforeEach(() => {
   resetAndroidSnapshotHelperRetirements();
@@ -31,9 +35,7 @@ test('one-shot capture that resolves during cancellation retires before rejectin
         if (options?.signal?.aborted) onAbort();
       });
     }
-    if (args.join(' ').includes('pidof')) {
-      return { exitCode: 1, stdout: '', stderr: '' };
-    }
+    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
     assert.deepEqual(args, [
       'shell',
       'am',
@@ -84,12 +86,10 @@ test('canceled one-shot capture reports the cancellation and the next capture re
       events.push(`force-stop-${stopCount}`);
       return { exitCode: 0, stdout: '', stderr: '' };
     }
-    if (args.join(' ').includes('pidof')) {
+    if (isAndroidHelperRuntimeProbe(args)) {
       // The first read happens while Android still runs the helper; the next says it is gone.
       events.push('pidof');
-      return stopCount === 1
-        ? { exitCode: 0, stdout: '4211\n', stderr: '' }
-        : { exitCode: 1, stdout: '', stderr: '' };
+      return androidHelperRuntimeProbeResult(stopCount === 1 ? 'occupied' : 'released');
     }
     events.push(`instrument-${stopCount}`);
     if (stopCount === 0) {
