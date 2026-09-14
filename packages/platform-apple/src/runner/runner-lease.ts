@@ -12,6 +12,7 @@ import {
   readProcessStartTime,
   classifyOwnerLiveness,
   leaseOwnerStateDir,
+  shellQuote,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -287,10 +288,6 @@ function buildBusyRunnerLeaseCleanupHint(lease: RunnerLease): string {
 
 function formatEnvAssignment(name: string, value: string): string {
   return `${name}=${shellQuote(value)}`;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 // A lease whose owner process is gone but whose runner may still be running:

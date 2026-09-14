@@ -8,6 +8,7 @@ import {
   runCmdBackground,
   runCmdStreaming,
   runCmdSync,
+  shellQuote,
 } from '@agent-device/host-kit/command';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
@@ -57,6 +58,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   runCmdBackground,
   requireExecSuccess,
   isCommandTimeoutError,
+  shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,
   retryWithPolicy,

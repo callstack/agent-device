@@ -1,11 +1,11 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { shellQuote } from '@agent-device/host-kit/command';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   buildAndroidNativeRemotePath,
   cleanupAndroidRemotePath,
   readFileSize,
-  shellQuote,
   stopAndroidNativePerfSession,
   writeJsonArtifact,
 } from './perf-native-artifacts.ts';

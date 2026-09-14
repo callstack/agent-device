@@ -167,6 +167,8 @@ export type AppleRunnerHost = {
   ): ExecResult;
   /** True only for the error the exec layer raises when it killed a command at `timeoutMs`. */
   isCommandTimeoutError(error: unknown): boolean;
+  /** Single-quote one value for a POSIX shell fragment (hints and remote commands). */
+  shellQuote(value: string): string;
   // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
@@ -297,6 +299,7 @@ export const requireExecSuccess: AppleRunnerHost['requireExecSuccess'] = (result
   requireHost().requireExecSuccess(result, message, extra);
 export const isCommandTimeoutError: AppleRunnerHost['isCommandTimeoutError'] = (error) =>
   requireHost().isCommandTimeoutError(error);
+export const shellQuote: AppleRunnerHost['shellQuote'] = (value) => requireHost().shellQuote(value);
 export const emitDiagnostic: AppleRunnerHost['emitDiagnostic'] = (event) =>
   requireHost().emitDiagnostic(event);
 export const withDiagnosticTimer = <T>(
