@@ -229,6 +229,16 @@ extension Response {
     payload.currentUptimeMs = value
     return Response(ok: ok, data: payload, error: error)
   }
+
+  // The daemon reads this occupancy flag to decide whether a healthy response proves the runner
+  // drained its watchdog-abandoned main-thread work. Only successful responses carry it; a refusal
+  // is itself the busy signal and needs no stamp.
+  func stampingCurrentMainThreadBusy(_ value: Bool) -> Response {
+    guard ok else { return self }
+    var payload = data ?? DataPayload()
+    payload.runnerMainThreadBusy = value
+    return Response(ok: ok, data: payload, error: error)
+  }
 }
 
 struct DataPayload: Codable {
@@ -276,6 +286,11 @@ struct DataPayload: Codable {
   var textEntryRoute: String?
   var runnerFatal: Bool?
   var runnerFatalReason: String?
+  /// Whether main-thread XCTest work past the execution watchdog is still draining when this
+  /// response is written. A private-AX snapshot can be served successfully while an abandoned tree
+  /// crawl still grinds, so the healthy response must carry the live occupancy rather than let the
+  /// daemon read `ok` as proof the runner drained (#2552).
+  var runnerMainThreadBusy: Bool?
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?

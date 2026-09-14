@@ -278,6 +278,15 @@ export function isRetryableRunnerError(err: unknown): boolean {
 }
 
 /**
+ * True when the runner refused a command because main-thread XCTest work past its execution
+ * watchdog is still draining (`RUNNER_BUSY`). The refusal is diagnostic-only on the wire
+ * (`COMMAND_FAILED` + retriable), so family policy reads this typed detail rather than the message.
+ */
+export function isRunnerBusyReportedError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.runnerErrorCode === RUNNER_BUSY_RUNNER_CODE;
+}
+
+/**
  * True when usbmuxd answered and the device is simply not attached by cable.
  * A CoreDevice-backed device falls back to its network tunnel; an XCTest-backed
  * device has no second route, so this verdict is terminal rather than retryable.

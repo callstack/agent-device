@@ -32,6 +32,17 @@ export type RunnerSession = {
   // the session object so it dies with every invalidation/restart (#702).
   lastHealthyMutation?: { atMs: number; appBundleId?: string };
   /**
+   * Whether the runner reported main-thread XCTest work past its execution watchdog still
+   * draining, as of the most recent runner response. The runner stamps its live main-thread
+   * occupancy onto every successful response and answers new commands with `RUNNER_BUSY` while
+   * that work is outstanding, so this mirrors the runner's own state at the last exchange rather
+   * than reconstructing it. A stuck runner refuses every command until it drains or escalates to
+   * `RUNNER_WEDGED`, so retaining one after `close` hands the same stalled runner back to the next
+   * `open` and `close` recovers nothing (#2552). Lives only on the session so it dies with
+   * invalidation/restart.
+   */
+  runnerMainThreadBusy?: boolean;
+  /**
    * Started by a prewarm and not yet used by any command. A proven observation-only plan may
    * release it; the first real command clears the mark and the session stays under idle-stop.
    */

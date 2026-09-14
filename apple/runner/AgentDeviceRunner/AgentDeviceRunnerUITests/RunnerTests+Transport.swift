@@ -274,7 +274,9 @@ extension RunnerTests {
     // rather than pairing a stale uptime with a much-later receipt time.
     let stamped =
       response.ok
-      ? response.stampingCurrentUptimeMs(ProcessInfo.processInfo.systemUptime * 1000)
+      ? response
+        .stampingCurrentUptimeMs(ProcessInfo.processInfo.systemUptime * 1000)
+        .stampingCurrentMainThreadBusy(currentMainThreadBusyState().reportsMainThreadBusy)
       : response
     let encoder = JSONEncoder()
     let body = (try? encoder.encode(stamped)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"

@@ -33,6 +33,7 @@ import {
   withRunnerCommandId,
   type RunnerCommand,
   resolveRunnerFatalErrorReason,
+  isRunnerBusyReportedError,
 } from './runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
@@ -495,9 +496,33 @@ async function stopRunnerSessionInternal(
 // behavior).
 export function scheduleIosRunnerIdleStop(deviceId: string): void {
   cancelIosRunnerIdleStop(deviceId);
+  const session = runnerSessions.get(deviceId);
+  if (!session) return;
+  // Retaining a runner only pays off if the next request can use it. A runner still finishing
+  // watchdog-abandoned main-thread work refuses every command until it drains or escalates to
+  // `RUNNER_WEDGED`, so pooling it across close->open hands the same stalled runner back and
+  // close recovers nothing (#2552). Dispose it instead: killing the process is the only way to
+  // abort uncancellable XCTest work, and the next open boots a clean runner.
+  if (session.runnerMainThreadBusy) {
+    emitDiagnostic({
+      level: 'info',
+      phase: 'ios_runner_retain_skipped_busy',
+      data: { deviceId, sessionId: session.sessionId },
+    });
+    invalidateRunnerSession(session, 'close_runner_main_thread_busy').catch((error: unknown) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'ios_runner_retain_busy_dispose_failed',
+        data: {
+          deviceId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
+    return;
+  }
   const idleMs = resolveRunnerIdleStopMs();
   if (idleMs <= 0) return;
-  if (!runnerSessions.has(deviceId)) return;
   const timer = setTimeout(() => {
     runnerIdleStopTimers.delete(deviceId);
     emitDiagnostic({
@@ -739,6 +764,15 @@ export async function executeRunnerCommandWithSession(
   }
   try {
     const data = await parseRunnerResponse(response, session, logPath);
+    // Mirror the runner's own main-thread occupancy stamped on this response: a runner that
+    // served a read off the XCTest channel (e.g. a private-AX capture) while a tree crawl it
+    // abandoned still grinds reports busy, so the healthy response must not be read as drained.
+    // Only a present stamp carries information; a recovered or journal-replayed response is
+    // written unstamped by design, and its absence must leave a prior busy report intact.
+    const stampedMainThreadBusy = readRunnerMainThreadBusy(data);
+    if (stampedMainThreadBusy !== undefined) {
+      session.runnerMainThreadBusy = stampedMainThreadBusy;
+    }
     const runnerFatalReason = resolveRunnerFatalReason(data);
     if (runnerFatalReason) {
       session.lastHealthyMutation = undefined;
@@ -751,6 +785,11 @@ export async function executeRunnerCommandWithSession(
     }
     return data;
   } catch (error) {
+    // A `RUNNER_BUSY` refusal is the runner reporting its watchdog-abandoned main-thread work is
+    // still draining; record it so a retained session is not pooled back out to the next request.
+    if (isRunnerBusyReportedError(error)) {
+      session.runnerMainThreadBusy = true;
+    }
     const runnerFatalReason = resolveRunnerFatalErrorReason(error);
     if (runnerFatalReason) {
       session.lastHealthyMutation = undefined;
@@ -764,6 +803,10 @@ export async function executeRunnerCommandWithSession(
     if (isStructuredRunnerFailure(error)) throw error;
     throw markSkippedPreflightTransportError(error, session, preflightDecision);
   }
+}
+
+function readRunnerMainThreadBusy(data: Record<string, unknown>): boolean | undefined {
+  return typeof data.runnerMainThreadBusy === 'boolean' ? data.runnerMainThreadBusy : undefined;
 }
 
 function isStructuredRunnerFailure(error: unknown): boolean {

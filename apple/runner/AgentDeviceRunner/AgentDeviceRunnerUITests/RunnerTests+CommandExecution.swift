@@ -999,6 +999,14 @@ extension RunnerTests {
     case idle
     case busy(abandonedForSeconds: TimeInterval)
     case wedged(abandonedForSeconds: TimeInterval)
+
+    /// Whether the main thread is occupied by watchdog-abandoned work, for the occupancy stamp that
+    /// every successful response carries. Wedged is still occupied: it only differs in that a
+    /// restart, not waiting, is the cure.
+    var reportsMainThreadBusy: Bool {
+      if case .idle = self { return false }
+      return true
+    }
   }
 
   func currentMainThreadBusyState() -> MainThreadBusyState {

@@ -183,6 +183,31 @@ extension RunnerTests {
     XCTAssertEqual(stamped.error?.message, "boom")
   }
 
+  func testStampingCurrentMainThreadBusyPreservesPayload() {
+    let stamped = Response(ok: true, data: DataPayload(nodes: [], truncated: false))
+      .stampingCurrentMainThreadBusy(true)
+
+    XCTAssertEqual(stamped.ok, true)
+    XCTAssertEqual(stamped.data?.runnerMainThreadBusy, true)
+  }
+
+  func testStampingCurrentMainThreadBusySkipsErrorResponses() {
+    let response = Response(ok: false, error: ErrorPayload(code: "RUNNER_BUSY", message: "busy"))
+    let stamped = response.stampingCurrentMainThreadBusy(true)
+
+    XCTAssertEqual(stamped.ok, false)
+    XCTAssertNil(stamped.data)
+    XCTAssertEqual(stamped.error?.code, "RUNNER_BUSY")
+  }
+
+  func testMainThreadBusyStateReportsOccupancy() {
+    XCTAssertFalse(MainThreadBusyState.idle.reportsMainThreadBusy)
+    XCTAssertTrue(MainThreadBusyState.busy(abandonedForSeconds: 5).reportsMainThreadBusy)
+    XCTAssertTrue(MainThreadBusyState.wedged(abandonedForSeconds: 200).reportsMainThreadBusy)
+    XCTAssertEqual(
+      Response(ok: true).stampingCurrentMainThreadBusy(false).data?.runnerMainThreadBusy, false)
+  }
+
   func testJournalStoredResponseStaysUnstamped() throws {
     let journal = RunnerCommandJournal()
     let recordStart = runnerJournalCommand("recordStart", id: "record-start-anchor")
