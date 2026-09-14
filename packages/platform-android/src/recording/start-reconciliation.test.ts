@@ -341,7 +341,7 @@ function evidenceRig(marker: string, directory = '/sdcard') {
     clear: () => {
       contents = '';
     },
-    bind: async (overrides: Record<string, unknown>) =>
+    bind: async (overrides: Record<string, unknown> = {}) =>
       await bindAndroidScreenRecordingRuntime({
         host: recordingHost({ ...transport, ...overrides }),
         device: androidRecordingDevice,
