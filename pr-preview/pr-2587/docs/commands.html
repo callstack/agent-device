@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2587/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2587/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2587/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2587/static/js/index.f64bd156f5.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2587/static/js/index.020aa8b806.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -861,6 +861,7 @@ On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li
 <li>On Linux or other non-macOS hosts, <code>record stop</code> still succeeds and returns the raw video plus telemetry sidecar, and includes <code>overlayWarning</code> when burn-in overlays were skipped.</li>
 <li>On iOS simulators, a busy CoreSimulator host recording slot makes <code>record start</code> return non-retriable <code>DEVICE_IN_USE</code> with <code>details.reason: apple_simulator_recording_busy</code>. Use <code>record stop</code> in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.</li>
 <li>Android uses <code>adb shell screenrecord</code>, which has a 180s platform limit. <code>record start</code> publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, <code>record stop</code> recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.</li>
+<li>Android <code>screenrecord</code> encodes a frame only when the screen changes, so a clip ends at the last frame the recorder encoded instead of at <code>record stop</code>: a window that ends on an unchanged screen yields a shorter video, while every on-screen change inside the window stays at its real offset in it. <code>record stop</code> reports <code>durationMs</code> as host wall clock from <code>record start</code> until the export finished, and when the video can be measured it also reports <code>capturedDurationMs</code> and warns with how much of the window that video covers.</li>
 <li><code>record stop</code> is safe to repeat. When its request window ends while the daemon is still exporting — typical for a long touch-overlay burn-in on a remote daemon — the export keeps running there, and a second <code>record stop</code> in the same session returns that completed recording, including the caller-side output path, without starting another recording. A finished recording whose video file is already gone reports <code>no active recording</code>.</li>
 </ul>
 <p><strong>Session app logs (token-efficient debugging):</strong> Logging is off by default in normal flows. Enable it on demand for debugging. Logs are written to a file so agents can grep instead of loading full output into context.</p>
