@@ -111,7 +111,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
 }, 30_000);
 
 function androidRepairAdbResult(
-  args: string[],
+  args: readonly string[],
   shellState: ReturnType<typeof createAndroidProviderShellState>,
 ): {
   stdout: string;

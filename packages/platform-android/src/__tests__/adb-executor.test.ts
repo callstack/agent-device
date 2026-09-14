@@ -67,7 +67,7 @@ test('createDeviceAdbExecutor routes local commands through adb with the device 
 
 test('createDeviceAdbExecutor remains a local adb executor inside provider scopes', async () => {
   mockRunCmd.mockClear();
-  const providerCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
   const adb = createDeviceAdbExecutor({
     platform: 'android',
     id: 'emulator-5554',
@@ -94,7 +94,7 @@ test('createDeviceAdbExecutor remains a local adb executor inside provider scope
 
 test('scoped provider only resolves for the matching device serial', async () => {
   mockRunCmd.mockClear();
-  const providerCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
   const otherDevice = {
     platform: 'android',
     id: 'other-device',
@@ -266,7 +266,7 @@ function readServerPort(options: unknown): number | undefined {
 }
 
 test('createAndroidPortReverseManager makes duplicate setup idempotent and cleans owner mappings', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const manager = createAndroidPortReverseManager(async (args) => {
     calls.push(args);
     return { stdout: '', stderr: '', exitCode: 0 };
@@ -378,7 +378,7 @@ test('explicit transfer helpers prefer provider capabilities over exec-shaped fa
 });
 
 test('explicit transfer helpers keep exec-shaped fallback for older providers', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   await withAndroidAdbProvider(
     async (args) => {

@@ -160,7 +160,7 @@ const SIMULATOR_HOST_OPEN_COMMANDS = new Set([
   '-g -a Simulator',
 ]);
 
-function isSimulatorHostOpenCommand(cmd: string, args: string[]): boolean {
+function isSimulatorHostOpenCommand(cmd: string, args: readonly string[]): boolean {
   return cmd === 'open' && SIMULATOR_HOST_OPEN_COMMANDS.has(args.join(' '));
 }
 

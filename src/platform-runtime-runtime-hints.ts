@@ -161,7 +161,7 @@ async function clearAndroidRuntimeHints(device: DeviceInfo, packageName: string)
 /** Android mechanics stay implementation-lazy until an admitted Android hint operation runs. */
 async function runRuntimeHintsAndroidAdb(
   device: DeviceInfo,
-  args: string[],
+  args: readonly string[],
   options?: Readonly<{ allowFailure?: boolean; stdin?: string }>,
 ): Promise<ExecResult> {
   const { runAndroidAdb } = await loadAndroidMechanics();
@@ -208,7 +208,7 @@ async function assertAndroidAppSandboxAccessible(
 function androidRuntimeHintsProbeError(
   result: ExecResult,
   packageName: string,
-  args: string[],
+  args: readonly string[],
 ): AppError {
   const runAsDenied = isAndroidRunAsDeniedOutput(result.stdout, result.stderr);
   return new AppError(

@@ -16,7 +16,7 @@ export { sleep } from '@agent-device/host-kit/retry';
  */
 export async function runAndroidAdb(
   device: DeviceInfo,
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
   return await resolveAndroidAdbExecutor(device)(args, options);

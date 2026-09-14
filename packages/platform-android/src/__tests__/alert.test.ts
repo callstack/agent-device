@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { button, node, text } from './alert-fixtures.ts';
 
-const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: string[]) => ({
+const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
   exitCode: 0,
   stdout: '',
   stderr: '',

@@ -23,7 +23,7 @@ import {
 } from './snapshot-helper-session.fixtures.ts';
 
 test('fillAndroid reports when the IME captures input instead of the app field', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let imeText = '';
   let snapshotCount = 0;
   await withFillAdb(
@@ -68,7 +68,7 @@ test('fillAndroid reports when the IME captures input instead of the app field',
 });
 
 test('fillAndroid detects unknown active IME package during verification', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let imeText = '';
   let snapshotCount = 0;
   await withFillAdb(
@@ -110,7 +110,7 @@ test('fillAndroid detects unknown active IME package during verification', async
 // has been read and turned out not to be the helper — never before that read.
 
 test('typeAndroid rejects unicode text once a third-party IME puts it on the shell path', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withFillAdb(
     async (args) => {
       calls.push(args);
@@ -137,7 +137,7 @@ test('typeAndroid rejects unicode text once a third-party IME puts it on the she
 });
 
 test('fillAndroid rejects unicode text once a third-party IME puts it on the shell path', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withFillAdb(
     async (args) => {
       calls.push(args);
@@ -170,7 +170,7 @@ test('fillAndroid rejects unicode text once a third-party IME puts it on the she
 });
 
 test('typeAndroid refuses shell fallback when the IME owns input focus', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withFillAdb(
     async (args) => {
       calls.push(args);
@@ -200,7 +200,7 @@ test('typeAndroid refuses shell fallback when the IME owns input focus', async (
 });
 
 test('fillAndroid refuses shell fallback after focus when the IME owns input focus', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withFillAdb(
     async (args) => {
       calls.push(args);
@@ -593,8 +593,8 @@ test('readAndroidTextAtPointInHierarchy reads the EditText under the requested p
 });
 
 test('fillAndroid runs the whole attempt on one warm daemon-session helper', async () => {
-  const calls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   let typed = '';
   let captureCount = 0;
@@ -669,11 +669,11 @@ function adbResult(stdout: string) {
   return { stdout, stderr: '', exitCode: 0 };
 }
 
-function isTextInput(args: string[]): boolean {
+function isTextInput(args: readonly string[]): boolean {
   return args[0] === 'shell' && args[1] === 'input' && args[2] === 'text';
 }
 
-function isDeleteKey(args: string[]): boolean {
+function isDeleteKey(args: readonly string[]): boolean {
   return args.join('\n') === 'shell\ninput\nkeyevent\nKEYCODE_DEL';
 }
 

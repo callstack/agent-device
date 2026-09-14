@@ -19,6 +19,8 @@ export {
   resolveAndroidTextInjector,
   resolveAndroidTouchProvider,
   resolveScopedAndroidAdbBackgroundTransport,
+  runAdbExecOut,
+  runAdbShell,
   runAndroidHostAdb,
   withAndroidAdbProvider,
   withAndroidHostAdbTransport,

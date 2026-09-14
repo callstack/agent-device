@@ -31,7 +31,7 @@ test('closeAndroidApp waits until package is no longer foreground', async () => 
     kind: 'emulator',
     booted: true,
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let focusPolls = 0;
 
   await withAndroidAdbProvider(
@@ -78,7 +78,7 @@ test('closeAndroidApp returns after force-stop when package is already not foreg
     kind: 'emulator',
     booted: true,
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   await withAndroidAdbProvider(
     {
@@ -119,7 +119,7 @@ test('closeAndroidApp waits until package process exits after force-stop', async
     kind: 'emulator',
     booted: true,
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let processPolls = 0;
 
   await withAndroidAdbProvider(
@@ -171,7 +171,7 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
     booted: true,
   };
   const calls: Array<
-    { kind: 'exec'; args: string[] } | { kind: 'reverse'; local: string; remote: string }
+    { kind: 'exec'; args: readonly string[] } | { kind: 'reverse'; local: string; remote: string }
   > = [];
 
   await withAndroidAdbProvider(
@@ -219,7 +219,7 @@ test('openAndroidApp ensures Android reverse before localhost app-bound deep lin
     booted: true,
   };
   const calls: Array<
-    { kind: 'exec'; args: string[] } | { kind: 'reverse'; local: string; remote: string }
+    { kind: 'exec'; args: readonly string[] } | { kind: 'reverse'; local: string; remote: string }
   > = [];
 
   await withAndroidAdbProvider(
@@ -274,7 +274,7 @@ test('openAndroidApp ensures Android reverse before IPv6 localhost deep link lau
     booted: true,
   };
   const calls: Array<
-    { kind: 'exec'; args: string[] } | { kind: 'reverse'; local: string; remote: string }
+    { kind: 'exec'; args: readonly string[] } | { kind: 'reverse'; local: string; remote: string }
   > = [];
 
   await withAndroidAdbProvider(
@@ -321,7 +321,7 @@ test('openAndroidApp leaves localhost deep links without a port unchanged', asyn
     kind: 'emulator',
     booted: true,
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   await withAndroidAdbProvider(
     {
@@ -363,7 +363,7 @@ test('openAndroidApp leaves non-localhost deep links unchanged', async () => {
     kind: 'emulator',
     booted: true,
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   await withAndroidAdbProvider(
     {
@@ -770,7 +770,7 @@ test('openAndroidApp fallback resolve-activity includes MAIN/LAUNCHER flags', as
 // In-process replacement for the old PATH-stub default adb script: any
 // `am start` succeeds with the "Status: ok" marker (so the primary launch
 // never falls back to resolve-activity), everything else is empty success.
-function androidOpenFakeAdb(args: string[]): FakeAdbResponse | undefined {
+function androidOpenFakeAdb(args: readonly string[]): FakeAdbResponse | undefined {
   if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start') return 'Status: ok';
   return undefined;
 }

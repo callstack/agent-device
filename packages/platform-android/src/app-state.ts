@@ -11,7 +11,7 @@ const ACTIVITY_COMMANDS = [
   ['dumpsys', 'activity'],
 ] as const;
 export type AndroidCommandExecutor = (
-  args: string[],
+  args: readonly string[],
   options: { allowFailure: boolean },
 ) => Promise<{ exitCode: number; stdout?: string; stderr?: string }>;
 

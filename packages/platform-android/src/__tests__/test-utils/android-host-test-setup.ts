@@ -31,7 +31,7 @@ export function bindAndroidAdbTestHost() {
       void background.wait.catch(() => {});
       return background.child;
     },
-    execHostAdb: async (args, options) => await runCmd('adb', args, options),
+    execHostAdb: async (args, options) => await runCmd('adb', [...args], options),
     withAdbCommandExecutorOverride: withCommandExecutorOverride,
     withoutAdbCommandExecutorOverride: withoutCommandExecutorOverride,
     coerceAdbResult: coerceExecResult,

@@ -18,7 +18,7 @@ beforeEach(() => {
 
 test('content failure retirement makes the session stop reset the runtime instead of layering a second one', async () => {
   stopSession.mockResolvedValueOnce(true);
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { exitCode: 0, stdout: '', stderr: '' };
@@ -41,7 +41,7 @@ test('content failure retirement makes the session stop reset the runtime instea
 
 test('content failure resets a one-shot helper when no persistent session exists', async () => {
   stopSession.mockResolvedValueOnce(false);
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { exitCode: 0, stdout: '', stderr: '' };

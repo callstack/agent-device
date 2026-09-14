@@ -5,12 +5,7 @@ import type {
   AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  deviceShellArgv,
-  shellFragment,
-  shellQuote,
-  type ShellWord,
-} from '@agent-device/kernel/device-shell';
+import { type ShellWord, shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
 import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
@@ -21,16 +16,12 @@ const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 export async function createAndroidScreenRecordingTransport(
   device: DeviceInfo,
 ): Promise<AndroidScreenRecordingTransport> {
-  const { resolveAndroidAdbExecutor, resolveScopedAndroidAdbBackgroundTransport } =
+  const { resolveAndroidAdbExecutor, resolveScopedAndroidAdbBackgroundTransport, runAdbShell } =
     await loadAndroidMechanics();
   const adb = resolveAndroidAdbExecutor(device);
   const scoped = resolveScopedAndroidAdbBackgroundTransport(device);
   const shell = async (words: readonly ShellWord[], signal?: AbortSignal) =>
-    await adb(deviceShellArgv('shell', words), {
-      allowFailure: true,
-      timeoutMs: ADB_TIMEOUT_MS,
-      signal,
-    });
+    await runAdbShell(adb, words, { allowFailure: true, timeoutMs: ADB_TIMEOUT_MS, signal });
   return Object.freeze({
     mode: scoped.mode,
     start: async ({ remotePath, quality = 'medium' }, signal) => {

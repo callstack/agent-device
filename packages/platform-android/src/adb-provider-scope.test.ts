@@ -51,7 +51,7 @@ test('resolution answers from the installed scope for the matching serial only',
 });
 
 test('outside any scope, resolution falls back to host adb for the device serial', async () => {
-  const serialCalls: Array<[string, string[]]> = [];
+  const serialCalls: Array<[string, readonly string[]]> = [];
   bindAndroidAdbHostStub({
     execSerialAdb: async (serial, args) => {
       serialCalls.push([serial, args]);
@@ -71,7 +71,7 @@ test('outside any scope, resolution falls back to host adb for the device serial
 
 test('the installed override routes only normalized device-scoped adb calls to the provider', async () => {
   bindAndroidAdbHostStub();
-  const providerCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
   const provider: AndroidAdbProvider = {
     exec: async (args) => {
       providerCalls.push(args);
@@ -81,7 +81,7 @@ test('the installed override routes only normalized device-scoped adb calls to t
 
   // An override-capturing host observes the scope's routing decisions directly.
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     withAdbCommandExecutorOverride: async (override, fn) => {
@@ -99,7 +99,7 @@ test('the installed override routes only normalized device-scoped adb calls to t
 });
 
 test('a managed port scope rejects foreign serials before host adb execution', async () => {
-  const hostCalls: Array<{ args: string[]; serverPort?: number }> = [];
+  const hostCalls: Array<{ args: readonly string[]; serverPort?: number }> = [];
   bindAndroidAdbHostStub({
     execHostAdb: async (args, options) => {
       hostCalls.push({ args, serverPort: options?.serverPort });
@@ -134,10 +134,10 @@ test('a managed port scope rejects foreign serials before host adb execution', a
 });
 
 test('a managed port scope classifies absolute adb commands and preserves the default boundary', async () => {
-  const providerCalls: string[][] = [];
-  const hostCalls: string[][] = [];
+  const providerCalls: (readonly string[])[] = [];
+  const hostCalls: (readonly string[])[] = [];
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     execHostAdb: async (args) => {
@@ -240,9 +240,9 @@ test('private-port execution contains local transports constructed before enteri
 });
 
 test('a managed port scope keeps shell -s arguments on the private transport', async () => {
-  const hostCalls: Array<{ args: string[]; serverPort?: number }> = [];
+  const hostCalls: Array<{ args: readonly string[]; serverPort?: number }> = [];
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     execHostAdb: async (args, options) => {
@@ -297,7 +297,7 @@ test('a managed port scope restores the default transport after task failure', a
 });
 
 test('a managed port scope carries its server through the local background transport', async () => {
-  const spawnCalls: Array<{ serial: string; args: string[]; serverPort?: number }> = [];
+  const spawnCalls: Array<{ serial: string; args: readonly string[]; serverPort?: number }> = [];
   bindAndroidAdbHostStub({
     spawnSerialAdb: (serial, args, options) => {
       spawnCalls.push({ serial, args, serverPort: options?.serverPort });

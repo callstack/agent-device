@@ -1,9 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   assertDeviceShellArgv,
   deviceShellArgv,
+  deviceShellExecutableOf,
+  relayDeviceShellArgv,
   type ShellWord,
 } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
@@ -74,7 +75,7 @@ export function createLocalAndroidAdbProvider(
   device: DeviceInfo,
   options: Readonly<{ serverPort?: number }> = {},
 ): AndroidAdbProvider {
-  const exec = createDeviceAdbExecutor(device, options);
+  const exec = createSerialAdbExecutor(device.id, options.serverPort);
   return {
     exec,
     spawn: createSerialAdbSpawner(device.id, options.serverPort),
@@ -104,9 +105,11 @@ export function resolveAndroidAdbProvider(
 ): AndroidAdbProvider {
   const scoped = scopeForDevice(device);
   if (provider) return guardProviderDeviceShell(normalizeAndroidAdbProvider(provider));
-  return scoped?.serial === device.id
-    ? guardProviderDeviceShell(normalizeAndroidAdbProvider(scoped.provider))
-    : createLocalAndroidAdbProvider(device);
+  return guardProviderDeviceShell(
+    scoped?.serial === device.id
+      ? normalizeAndroidAdbProvider(scoped.provider)
+      : createLocalAndroidAdbProvider(device),
+  );
 }
 
 /**
@@ -201,7 +204,7 @@ function createAndroidCommandExecutorOverride(
 }
 
 function createScopedHostTransport(scope: AndroidAdbProviderScope): AndroidAdbHostTransport {
-  return async (args: string[], options?: AndroidAdbExecutorOptions) => {
+  return async (args: readonly string[], options?: AndroidAdbExecutorOptions) => {
     const serial = readAdbSerial(args);
     requireScopedSerial(scope, serial);
     const host = requireAndroidAdbHost();
@@ -246,8 +249,7 @@ function scopedServerPort(serial: string, requested: number | undefined): number
 }
 
 function isAdbCommand(command: string): boolean {
-  const executable = path.basename(command).replace(/\.(?:com|exe|bat|cmd)$/i, '');
-  return executable === 'adb';
+  return deviceShellExecutableOf(command) === 'adb';
 }
 
 function readAdbSerial(args: readonly string[]): string | undefined {
@@ -273,14 +275,20 @@ function findAdbSerialIndex(args: readonly string[]): number | undefined {
   return undefined;
 }
 
-function stripAdbSerialArgs(args: string[], expectedSerial: string): string[] | undefined {
+function stripAdbSerialArgs(
+  args: readonly string[],
+  expectedSerial: string,
+): readonly string[] | undefined {
   // The provider scope only owns normalized device-scoped adb calls:
   // adb -s <serial> <command...>. Global commands
   // such as adb devices/version, calls for another serial, and host-preconfigured
   // invocations stay local.
   const serialIndex = findAdbSerialIndex(args);
   if (serialIndex === undefined || args[serialIndex + 1] !== expectedSerial) return undefined;
-  return [...args.slice(0, serialIndex), ...args.slice(serialIndex + 2)];
+  return relayDeviceShellArgv(args, [
+    ...args.slice(0, serialIndex),
+    ...args.slice(serialIndex + 2),
+  ]);
 }
 
 // The device-shell boundary for an adb executor. `runAdbShell`/`runAdbExecOut` are the only

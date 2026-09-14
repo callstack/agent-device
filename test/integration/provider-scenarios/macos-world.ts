@@ -66,7 +66,7 @@ export async function createMacOsDesktopWorld(
   };
 }
 
-function runScriptedMacOsHelper(args: string[]): {
+function runScriptedMacOsHelper(args: readonly string[]): {
   stdout: string;
   stderr: string;
   exitCode: number;

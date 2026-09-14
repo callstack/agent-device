@@ -176,7 +176,8 @@ function withDefault<T>(value: T | undefined, fallback: T): T {
 
 export function buildAndroidSnapshotHelperArgs(
   options: AndroidSnapshotHelperResolvedCaptureOptions,
-): string[] {
+  session: Readonly<{ sessionPort?: number }> = {},
+): readonly string[] {
   return deviceShellArgv('shell', [
     'am',
     'instrument',
@@ -200,6 +201,7 @@ export function buildAndroidSnapshotHelperArgs(
     // fallback/testing transport for devices where status output cannot carry the payload.
     ...(options.outputPath ? ['-e', 'outputPath', options.outputPath] : []),
     ...(options.emitChunks !== undefined ? ['-e', 'emitChunks', String(options.emitChunks)] : []),
+    ...(session.sessionPort === undefined ? [] : ['-e', 'sessionPort', session.sessionPort]),
     options.runner,
   ]);
 }

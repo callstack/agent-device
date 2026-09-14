@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 test('sendAndroidImeHelperText package-scopes the broadcast and base64-encodes UTF-8', async () => {
-  let capturedArgs: string[] | undefined;
+  let capturedArgs: readonly string[] | undefined;
   await sendAndroidImeHelperText(
     async (args) => {
       capturedArgs = args;
@@ -54,7 +54,7 @@ test('sendAndroidImeHelperText package-scopes the broadcast and base64-encodes U
 });
 
 test('clearAndroidImeHelperText broadcasts ACTION_CLEAR_TEXT without a text extra', async () => {
-  let capturedArgs: string[] | undefined;
+  let capturedArgs: readonly string[] | undefined;
   await clearAndroidImeHelperText(async (args) => {
     capturedArgs = args;
     return { exitCode: 0, stdout: '', stderr: '' };

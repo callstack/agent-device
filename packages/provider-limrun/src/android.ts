@@ -182,7 +182,7 @@ async function loadDeviceShell() {
 
 async function runLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ): Promise<LimrunAdbCommandResult> {
   const { adbArgs, result } = await executeLimrunAndroidAdb(session, args, options);
@@ -196,11 +196,12 @@ async function runLimrunAndroidAdb(
 
 async function executeLimrunAndroidAdb(
   session: LimrunAndroidAdbSession,
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
-): Promise<{ adbArgs: string[]; result: LimrunAdbCommandResult }> {
+): Promise<{ adbArgs: readonly string[]; result: LimrunAdbCommandResult }> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
-  const adbArgs = ['-s', serial, ...args];
+  const { relayDeviceShellArgv } = await loadDeviceShell();
+  const adbArgs = relayDeviceShellArgv(args, ['-s', serial, ...args]);
   const result = await session.dependencies.host.runAdb(adbArgs, {
     allowFailure: options?.allowFailure,
     binaryStdout: options?.binaryStdout,
@@ -212,7 +213,7 @@ async function executeLimrunAndroidAdb(
 }
 
 async function requireSuccessfulLimrunAndroidAdb(
-  adbArgs: string[],
+  adbArgs: readonly string[],
   result: LimrunAdbCommandResult,
   allowFailure: boolean | undefined,
   dependencies: Pick<LimrunRuntimeDependencies, 'android'>,

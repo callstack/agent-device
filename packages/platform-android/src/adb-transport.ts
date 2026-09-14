@@ -70,12 +70,12 @@ export type AndroidAdbProcess = {
  * Implementations must be safe to call concurrently for one request.
  */
 export type AndroidAdbExecutor = (
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult>;
 
 export type AndroidAdbSpawner = (
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbSpawnOptions,
 ) => AndroidAdbProcess;
 

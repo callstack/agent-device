@@ -199,7 +199,7 @@ function healedLines(script: string, command: string): string[] {
 }
 
 function androidRepairAdbResult(
-  args: string[],
+  args: readonly string[],
   shellState: ReturnType<typeof createAndroidProviderShellState>,
 ): {
   stdout: string;

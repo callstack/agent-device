@@ -33,7 +33,7 @@ export function createAndroidToolHost(): AndroidToolHost {
     },
     runAdb: async (device, args, options, signal) => {
       const { runAndroidAdb } = await loadAndroidMechanics();
-      const result = await runAndroidAdb(device, args as string[], {
+      const result = await runAndroidAdb(device, args, {
         allowFailure: options.allowFailure,
         timeoutMs: options.timeoutMs,
         signal,

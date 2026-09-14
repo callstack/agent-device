@@ -81,7 +81,7 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
 
 type TouchSessionCommandHandler = (command: string, requestId: string) => string;
 
-function readSessionPort(args: string[]): number {
+function readSessionPort(args: readonly string[]): number {
   const index = args.indexOf('sessionPort');
   assert.notEqual(index, -1);
   return Number(args[index + 1]);
@@ -242,7 +242,7 @@ test('a daemon-session viewport read starts the session so the gesture reuses it
     });
   });
 
-  const oneShotArgs: string[][] = [];
+  const oneShotArgs: (readonly string[])[] = [];
   const result = await withAndroidAdbProvider(
     {
       ...provider,
@@ -283,7 +283,7 @@ test('a command-scoped viewport read stays one-shot and starts no session', asyn
     });
   });
 
-  let oneShotArgs: string[] | undefined;
+  let oneShotArgs: readonly string[] | undefined;
   const viewport = await withAndroidAdbProvider(
     {
       ...provider,
@@ -403,7 +403,7 @@ test('an APK replacement stops the stale session and the gesture runs one-shot',
     });
   });
 
-  let oneShotArgs: string[] | undefined;
+  let oneShotArgs: readonly string[] | undefined;
   const result = await withAndroidAdbProvider(
     {
       // The install probe reports an outdated helper, so prepareAndroidTouchHelper replaces the
@@ -660,7 +660,7 @@ test('viewport falls back to one-shot instrumentation after a session error', as
     });
   });
 
-  let oneShotArgs: string[] | undefined;
+  let oneShotArgs: readonly string[] | undefined;
   const viewportResult = await withAndroidAdbProvider(
     {
       exec: currentVersionAdb(async (args) => {
@@ -703,7 +703,7 @@ test('a structured ok=false viewport response stops the session before the one-s
     });
   });
 
-  let oneShotArgs: string[] | undefined;
+  let oneShotArgs: readonly string[] | undefined;
   const viewportResult = await withAndroidAdbProvider(
     {
       exec: currentVersionAdb(async (args) => {

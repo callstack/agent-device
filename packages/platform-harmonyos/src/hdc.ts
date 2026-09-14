@@ -26,7 +26,7 @@ export const DEFAULT_HARMONY_HDC_TIMEOUT_MS = 15_000;
  */
 export async function runHarmonyHdc(
   device: Pick<DeviceInfo, 'id'>,
-  args: string[],
+  args: readonly string[],
   options?: HarmonyHdcOptions,
 ): Promise<ExecResult> {
   assertDeviceShellArgv(args, 'hdc');

@@ -321,7 +321,7 @@ function assertNoDoctorCheck(data: { checks: Array<{ id: string }> }, id: string
 }
 
 function androidDoctorAdbResult(
-  args: string[],
+  args: readonly string[],
   metroPort: number,
 ): {
   stdout: string;

@@ -16,6 +16,7 @@ import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { assertHostDeviceShellRequest } from './platform-runtime-host-device-shell.ts';
+import { relayDeviceShellArgv } from '@agent-device/kernel/device-shell';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
 import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
@@ -59,13 +60,17 @@ export function createPlatformRuntimeHost(options: {
     which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
       assertHostDeviceShellRequest(request);
-      const result = await runCmd(request.executable, [...request.args], {
-        allowFailure: request.allowFailure,
-        cwd: request.cwd,
-        env: request.env ? { ...process.env, ...request.env } : undefined,
-        signal,
-        timeoutMs: request.timeoutMs,
-      });
+      const result = await runCmd(
+        request.executable,
+        relayDeviceShellArgv(request.args, [...request.args]),
+        {
+          allowFailure: request.allowFailure,
+          cwd: request.cwd,
+          env: request.env ? { ...process.env, ...request.env } : undefined,
+          signal,
+          timeoutMs: request.timeoutMs,
+        },
+      );
       return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
     },
   });

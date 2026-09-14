@@ -25,7 +25,7 @@ afterEach(async () => {
 
 test('returns undefined when persistent sessions are disabled', async () => {
   process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION = '0';
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls });
 
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -38,7 +38,7 @@ test('returns undefined when persistent sessions are disabled', async () => {
 });
 
 test('returns undefined when the adb provider cannot spawn a helper process', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     return { exitCode: 0, stdout: '', stderr: '' };
@@ -51,8 +51,8 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
 });
 
 test('disables repeated persistent session attempts after startup failure', async () => {
-  const calls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const provider: AndroidAdbProvider = {
     exec: async (args) => {
       calls.push(args);
@@ -85,8 +85,8 @@ test('disables repeated persistent session attempts after startup failure', asyn
 });
 
 test('starts and reuses a persistent Android snapshot helper session', async () => {
-  const calls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs });
 
   const first = await captureAndroidSnapshotWithHelperSession({
@@ -119,8 +119,8 @@ test('starts and reuses a persistent Android snapshot helper session', async () 
 });
 
 test('restarts the helper session when capture options change', async () => {
-  const calls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs });
 
   await captureAndroidSnapshotWithHelperSession({
@@ -145,7 +145,7 @@ test('restarts the helper session when capture options change', async () => {
 });
 
 test('a quit acknowledged and followed by process exit skips the force-stop round trip', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, quitExitDelayMs: 25 });
 
@@ -164,7 +164,7 @@ test('a quit acknowledged and followed by process exit skips the force-stop roun
 });
 
 test('a quit acknowledged by a helper the host then killed still force-stops the runtime', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({
     calls,
@@ -186,7 +186,7 @@ test('a quit acknowledged by a helper the host then killed still force-stops the
 });
 
 test('a quit acknowledged after the host process already died still force-stops the runtime', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes });
 
@@ -204,7 +204,7 @@ test('a quit acknowledged after the host process already died still force-stops 
 });
 
 test('force terminates the helper when quit is not acknowledged', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, quitResponseMode: 'malformed' });
 
@@ -222,7 +222,7 @@ test('force terminates the helper when quit is not acknowledged', async () => {
 });
 
 test('keeps the device-side stop when the transport cannot prove the device exit status', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, shellProtocolV2: false });
 
@@ -240,7 +240,7 @@ test('keeps the device-side stop when the transport cannot prove the device exit
 });
 
 test('keeps the device-side stop when the transport capability is unknown', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, featureProbeFailure: true });
 
@@ -256,7 +256,7 @@ test('keeps the device-side stop when the transport capability is unknown', asyn
 });
 
 test('probes the adb transport once per device instead of once per teardown', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls });
   const deviceKey = 'android:emulator-5554';
 
@@ -307,11 +307,11 @@ test('failed whole-module reset preserves quarantine until recovery is confirmed
   );
 });
 
-function isHelperRuntimeForceStop(args: string[]): boolean {
+function isHelperRuntimeForceStop(args: readonly string[]): boolean {
   return args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper';
 }
 
-function readSessionArgument(args: string[], name: string): string | undefined {
+function readSessionArgument(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name);
   return index < 0 ? undefined : args[index + 1];
 }

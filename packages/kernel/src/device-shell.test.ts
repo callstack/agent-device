@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from './errors.ts';
 import {
   assertDeviceShellArgv,
   deviceShellArgv,
+  deviceShellExecutableOf,
+  relayDeviceShellArgv,
   shellFragment,
-  shellQuote,
-  shellQuoteIfNeeded,
 } from './device-shell.ts';
+
+const UNGUARDED = expect.objectContaining({
+  code: 'INVALID_ARGS',
+  details: expect.objectContaining({ reason: 'unguarded-device-shell-argv' }),
+});
 
 describe('deviceShellArgv', () => {
   it('renders safe words byte-identical and quotes injection vectors', () => {
@@ -16,11 +20,11 @@ describe('deviceShellArgv', () => {
       'force-stop',
       'com.example.app',
     ]);
-    expect(deviceShellArgv('shell', ['input', 'text', "hi; rm -rf /'"])).toEqual([
+    expect(deviceShellArgv('shell', ['input', 'text', 'hi; rm -rf / "$(id)"'])).toEqual([
       'shell',
       'input',
       'text',
-      String.raw`'hi; rm -rf /'\'''`,
+      `'hi; rm -rf / "$(id)"'`,
     ]);
   });
 
@@ -55,39 +59,41 @@ describe('assertDeviceShellArgv', () => {
     ).not.toThrow();
   });
 
-  it('accepts a relayed copy of a minted argv, prefixed or stripped of transport options', () => {
-    const minted = deviceShellArgv('shell', ['input', 'text', 'a b'], ['-s', 'serial']);
-    expect(() => assertDeviceShellArgv([...minted], 'test')).not.toThrow();
-    expect(() => assertDeviceShellArgv(minted.slice(2), 'test')).not.toThrow();
-    expect(() => assertDeviceShellArgv(['-P', '5037', ...minted], 'test')).not.toThrow();
-  });
-
-  it('keeps a long-lived minted argv accepted after the relay window has moved on', () => {
-    const constant = deviceShellArgv('shell', ['dumpsys', 'window', 'windows']);
-    for (let index = 0; index < 2_000; index += 1)
-      deviceShellArgv('shell', ['input', 'tap', index]);
-    expect(() => assertDeviceShellArgv(constant, 'test')).not.toThrow();
-    expect(() => assertDeviceShellArgv([...constant], 'test')).toThrow(AppError);
-  });
-
-  it('refuses a literal or variable-built device-shell argv', () => {
+  it('refuses a literal, variable-built, or plainly copied device-shell argv', () => {
     const subcommand = 'shell';
     const variableBuilt = [subcommand, 'input', 'text', 'x; reboot'];
-    for (const args of [
-      ['shell', 'whoami'],
-      ['exec-out', 'screencap', '-p', '/never/minted'],
-      variableBuilt,
-    ]) {
-      expect(() => assertDeviceShellArgv(args, 'test')).toThrow(AppError);
+    const copied = [...deviceShellArgv('shell', ['id'])];
+    for (const args of [['shell', 'id'], ['exec-out', 'screencap', '-p'], variableBuilt, copied]) {
+      expect(() => assertDeviceShellArgv(args, 'test')).toThrow(UNGUARDED);
       expect(() => assertDeviceShellArgv(args, 'test')).toThrow(/deviceShellArgv/);
     }
   });
+
+  it('keeps a module-level constant accepted through relays after any number of other mints', () => {
+    const constant = deviceShellArgv('shell', ['dumpsys', 'window', 'windows']);
+    for (let index = 0; index < 5_000; index += 1)
+      deviceShellArgv('shell', ['input', 'tap', index]);
+    const prefixed = relayDeviceShellArgv(constant, ['-s', 'serial', ...constant]);
+    const stripped = relayDeviceShellArgv(prefixed, prefixed.slice(2));
+    expect(() => assertDeviceShellArgv(constant, 'test')).not.toThrow();
+    expect(() => assertDeviceShellArgv(prefixed, 'test')).not.toThrow();
+    expect(() => assertDeviceShellArgv(stripped, 'test')).not.toThrow();
+  });
+
+  it('does not let a relay launder a raw argv', () => {
+    const raw = ['shell', 'id'];
+    expect(() =>
+      assertDeviceShellArgv(relayDeviceShellArgv(raw, ['-s', 'serial', ...raw]), 'test'),
+    ).toThrow(UNGUARDED);
+  });
 });
 
-describe('shellQuote', () => {
-  it('wraps in single quotes and escapes embedded single quotes', () => {
-    expect(shellQuote("it's")).toBe(String.raw`'it'\''s'`);
-    expect(shellQuoteIfNeeded('safe_word.1')).toBe('safe_word.1');
-    expect(shellQuoteIfNeeded('has space')).toBe("'has space'");
+describe('deviceShellExecutableOf', () => {
+  it('names adb and hdc by basename, ignoring path and Windows extensions', () => {
+    expect(deviceShellExecutableOf('adb')).toBe('adb');
+    expect(deviceShellExecutableOf('/opt/sdk/platform-tools/adb.exe')).toBe('adb');
+    expect(deviceShellExecutableOf(String.raw`C:\sdk\hdc.EXE`)).toBe('hdc');
+    expect(deviceShellExecutableOf('xcrun')).toBeUndefined();
+    expect(deviceShellExecutableOf('/usr/bin/adbx')).toBeUndefined();
   });
 });

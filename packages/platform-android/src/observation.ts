@@ -16,13 +16,13 @@ const FOCUS_MARKERS = [
   'mResumedActivity:',
   'ResumedActivity:',
 ] as const;
-const WINDOW_DUMPS = [
-  deviceShellArgv('shell', ['dumpsys', 'window', 'windows']),
-  deviceShellArgv('shell', ['dumpsys', 'window']),
+const WINDOW_DUMPS: readonly (readonly string[])[] = [
+  ['dumpsys', 'window', 'windows'],
+  ['dumpsys', 'window'],
 ];
-const ACTIVITY_DUMPS = [
-  deviceShellArgv('shell', ['dumpsys', 'activity', 'activities']),
-  deviceShellArgv('shell', ['dumpsys', 'activity']),
+const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
+  ['dumpsys', 'activity', 'activities'],
+  ['dumpsys', 'activity'],
 ];
 const FOCUS_LINE = new RegExp(`(?:${FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`, 'gm');
 const ANR_TITLE = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
@@ -35,7 +35,7 @@ const PERMISSION_PACKAGES = new Set([
 ]);
 
 type Question = 'foreground' | 'blockingDialog';
-type DumpReader = (args: string[]) => Promise<string>;
+type DumpReader = (words: readonly string[]) => Promise<string>;
 const everAnswered = new Map<string, Map<string, boolean>>();
 
 export function createAndroidObservationAdapter(
@@ -75,14 +75,16 @@ export function createAndroidObservationAdapter(
 
 function createDumpReader(host: AndroidObservationHost, device: DeviceInfo): DumpReader {
   const dumps = new Map<string, Promise<string>>();
-  return (args) => {
-    const key = args.join(' ');
+  return (words) => {
+    const key = words.join(' ');
     const pending =
       dumps.get(key) ??
-      host.runAdb(device, args, { allowFailure: true }).then((result) => {
-        recordSections(device, key, result.stdout);
-        return result.stdout;
-      });
+      host
+        .runAdb(device, deviceShellArgv('shell', words), { allowFailure: true })
+        .then((result) => {
+          recordSections(device, key, result.stdout);
+          return result.stdout;
+        });
     dumps.set(key, pending);
     return pending;
   };
@@ -113,12 +115,13 @@ async function readBlockingDialog(
   return { status: 'unknown' };
 }
 
-function orderedDumps(device: DeviceInfo, question: Question): readonly string[][] {
+function orderedDumps(device: DeviceInfo, question: Question): readonly (readonly string[])[] {
   const tiers = question === 'foreground' ? [WINDOW_DUMPS, ACTIVITY_DUMPS] : [WINDOW_DUMPS];
   const memo = everAnswered.get(device.id);
   return tiers.flatMap((tier) => {
     if (!memo) return tier;
-    const demoted = (args: string[]) => memo.get(`${question} ${args.join(' ')}`) === false;
+    const demoted = (args: readonly string[]) =>
+      memo.get(`${question} ${args.join(' ')}`) === false;
     const promoted = tier.filter((args) => !demoted(args));
     return promoted.length === 0 || promoted.length === tier.length
       ? tier

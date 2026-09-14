@@ -42,7 +42,7 @@ test('every handed-out executor refuses a raw device-shell argv, literal or vari
 });
 
 test('a scoped provider executor is guarded the same as the local one', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
@@ -62,8 +62,8 @@ test('a scoped provider executor is guarded the same as the local one', async ()
 });
 
 test('the funnels mint the argv the guard accepts and quote every word', async () => {
-  const serialCalls: string[][] = [];
-  const hostCalls: string[][] = [];
+  const serialCalls: (readonly string[])[] = [];
+  const hostCalls: (readonly string[])[] = [];
   bindAndroidAdbHostStub({
     execSerialAdb: async (_serial, args) => {
       serialCalls.push(args);

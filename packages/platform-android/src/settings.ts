@@ -183,9 +183,9 @@ async function runAndroidFingerprintCommand(
 function androidFingerprintCommandAttempts(
   device: DeviceInfo,
   action: AndroidFingerprintAction,
-): string[][] {
+): (readonly string[])[] {
   const fingerprintId = action === 'match' ? '1' : '9999';
-  const attempts: string[][] = [
+  const attempts: (readonly string[])[] = [
     deviceShellArgv('shell', ['cmd', 'fingerprint', 'touch', fingerprintId]),
     deviceShellArgv('shell', ['cmd', 'fingerprint', 'finger', fingerprintId]),
   ];

@@ -29,10 +29,10 @@ const android = {
 };
 
 test('uses the request-scoped Android ADB executor rather than a host fallback', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     {
-      exec: async (args: string[]) => {
+      exec: async (args: readonly string[]) => {
         calls.push(args);
         const command = args.slice(1).join(' ');
         if (command.includes('screenrecord --bit-rate')) return result('42\n');
@@ -362,7 +362,7 @@ test('retains unavailable manifest reads and confirms manifest deletion', async 
   const commands: string[] = [];
   await withAndroidAdbProvider(
     {
-      exec: async (args: string[]) => {
+      exec: async (args: readonly string[]) => {
         const command = args.slice(1).join(' ');
         commands.push(command);
         if (command.startsWith('test -e')) {

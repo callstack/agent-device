@@ -11,7 +11,7 @@ beforeEach(() => {
 });
 
 test('reads the negotiated feature set as proof that adb forwards device exit status', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb = featuresAdb(calls, {
     exitCode: 0,
     stdout: 'sendrecv_v2\nstat_v2\nshell_v2\ncmd\n',
@@ -35,7 +35,7 @@ test('treats a transport without shell protocol v2 as unable to prove a device e
 });
 
 test('treats an unanswered probe as unknown rather than caching it as unsupported', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let answered = false;
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
@@ -91,7 +91,7 @@ test('answers each device from its own negotiated feature set', async () => {
 });
 
 function featuresAdb(
-  calls: string[][],
+  calls: (readonly string[])[],
   result: { exitCode: number; stdout: string; stderr: string },
 ): AndroidAdbExecutor {
   return async (args) => {

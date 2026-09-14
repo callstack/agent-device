@@ -1,6 +1,6 @@
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
+import type { ShellWord } from '@agent-device/kernel/device-shell';
 
 export function createHarmonyScreenRecordingHost(): ScreenRecordingRuntimeHost['harmony'] {
   return Object.freeze({
@@ -61,9 +61,6 @@ async function hdc(device: DeviceInfo, args: string[], signal?: AbortSignal) {
 }
 
 async function hdcShell(device: DeviceInfo, words: readonly ShellWord[], signal?: AbortSignal) {
-  const { runHarmonyHdc } = await import('@agent-device/platform-harmonyos');
-  return await runHarmonyHdc(device, deviceShellArgv('shell', words), {
-    allowFailure: true,
-    signal,
-  });
+  const { runHarmonyShell } = await import('@agent-device/platform-harmonyos');
+  return await runHarmonyShell(device, words, { allowFailure: true, signal });
 }
