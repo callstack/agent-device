@@ -34,6 +34,9 @@ export const INTERACTION_GUARANTEES = [
   'disambiguation',
   // Targets covered by another visible element are refused.
   'occlusion',
+  // Targets whose tap point sits behind the visible software keyboard are refused. The keyboard is
+  // its own system surface, so `occlusion` cannot see it and `offscreen` passes it (#2589).
+  'keyboardOcclusion',
   // Element-targeted coordinate paths keep the resolved parent identity while
   // choosing a point outside independently interactive descendants. A parent
   // whose safe region is fully tiled fails closed instead of activating a child.
@@ -161,6 +164,15 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     kind: 'runtime',
     via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
   },
+  // #2589: one guard for every acting node path, run at the shared pipeline door
+  // (`runInteractionPipelineStages`), so the native-ref fast path cannot succeed on a target the
+  // shared rule refuses. Its band is derived from the tree the path already holds: the keyboard is
+  // never a covering sibling of app content and never leaves the app window rect, so neither
+  // `occlusion` nor `offscreen` can reach it.
+  keyboardOcclusion: {
+    kind: 'runtime',
+    via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+  },
   // #1542: the base decision is the contracts-owned snapshot visibility resolver (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
   // enforcement point — on iOS (local, non-provider sessions only) a would-be
@@ -269,6 +281,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
       },
+      keyboardOcclusion: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+      },
       offscreen: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
@@ -276,7 +292,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       nonHittable: {
         kind: 'inapplicable',
         reason:
-          'Drag endpoints name contact coordinates and intentionally need not be independently tappable controls; covered and off-screen endpoints are still refused.',
+          'Drag endpoints name contact coordinates and intentionally need not be independently tappable controls; covered, keyboard-occluded, and off-screen endpoints are still refused.',
       },
       responseConstruction: {
         kind: 'runtime',
@@ -322,6 +338,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       occlusion: {
         kind: 'runtime',
         via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
+      },
+      // Same door as the runtime tree paths: the preflight IS `runInteractionPipelineStages`, so
+      // the keyboard guard runs before the backend call even though `occlusion` above is served by
+      // the snapshot annotation the pipeline reads.
+      keyboardOcclusion: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',
@@ -388,6 +411,15 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason: 'Coordinates name the exact point to activate; no parent element is resolved.',
       },
+      // The classifier runs, and the refusal reason reaches the response as a warning instead of an
+      // error: coordinates are the escape hatch that still reaches a keyboard's own control, and
+      // this path never captures the tree the band is measured against, so a refusal would trust an
+      // arbitrarily stale snapshot. See `describeKeyboardOccludedPointWarning`.
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: a raw point carries no element identity to excuse a deliberate keyboard tap, and the point is checked against the last-known tree rather than one captured for this action. The shared decision still runs and publishes `tap_keyboard_occludes_target` in the response warning.',
+      },
       offscreen: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
@@ -434,6 +466,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'Intentional: the direct element-tap outcome relies on XCTest hittability instead of the daemon snapshot occlusion classifier.',
+      },
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: the fused runner element tap never sees a daemon tree, so no band can be derived; the daemon-resolved sibling paths refuse the same target.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',
@@ -490,6 +527,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       occlusion: {
         kind: 'waived',
         reason: 'Intentional: Maestro taps resolved bounds regardless of overlay state.',
+      },
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: shares the occlusion waiver above — Maestro taps resolved bounds regardless of what overlays them.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',

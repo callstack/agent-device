@@ -110,7 +110,7 @@ Targets:
 Recovery:
   Network/typeahead result missing: wait text "Expected result" or wait <selector>.
   A target that should be gone/disappear: use wait absent <selector>; wait exists ... is rejected in favor of the plain selector wait.
-  Keyboard visible over the next target: the on-screen keyboard usually does not block presses, so press the target directly instead of dismissing. If the press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
+  Keyboard visible over the next target: an element whose center sits behind the keyboard is refused with tap_keyboard_occludes_target, because the touch would activate a key instead of the target. End editing first -- the app's own Done/Cancel control, or keyboard enter when submission is wanted -- then retry. A target whose center stays above the keys still presses; a raw coordinate behind the keyboard taps anyway and reports the reason in warning.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
   Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.
 
@@ -162,7 +162,7 @@ Text entry:
   fill replaces; type appends to an already-focused field: fill 'id="field-email"' "qa@example.com"; type "Handle with care" --delay-ms 80
   fill <target> "" clears the field (replace with nothing); the empty argument must be present -- fill <target> alone is a missing argument.
   Plain fill/type first; if an iOS debounced/search-as-you-type field drops characters, retry with --delay-ms before clipboard paste.
-  The keyboard usually does not block interactions -- press the next target directly. keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION. Android: try dismiss before back. iOS: when both fail, do not tap a static text/heading hoping it is safe; prefer type "\\n" to submit.
+  Element presses behind the keyboard are refused with tap_keyboard_occludes_target. keyboard dismiss taps its own dismiss key when one exists, else UNSUPPORTED_OPERATION. Android: try dismiss before back. iOS: when both fail, do not tap a static text/heading hoping it is safe; prefer type "\\n" to submit.
   iOS paste-prompt limits and Android IME/handwriting capture quirks: help debugging.
 
 Session ordering:

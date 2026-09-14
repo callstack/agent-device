@@ -510,9 +510,9 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
   );
 });
 
-test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next target directly', async () => {
+test('parseRunnerResponse surfaces the keyboard-dismiss hint naming the occlusion reason', async () => {
   const hint =
-    'The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted.';
+    "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted.";
   const response = new Response(
     JSON.stringify({
       ok: false,
@@ -531,12 +531,8 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next t
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
       assert.equal(error.details?.hint, hint);
-      assert.match(
-        String(error.details?.hint),
-        /usually does not block agent-device interactions/i,
-      );
-      assert.match(String(error.details?.hint), /press the next target directly/i);
-      assert.match(String(error.details?.hint), /scroll the target into view/i);
+      assert.match(String(error.details?.hint), /tap_keyboard_occludes_target/);
+      assert.match(String(error.details?.hint), /center stays above the keys/i);
       assert.match(String(error.details?.hint), /keyboard enter/i);
       return true;
     },

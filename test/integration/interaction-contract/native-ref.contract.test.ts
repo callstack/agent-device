@@ -11,6 +11,7 @@ import {
   continueButtonSnapshot,
   settledWelcomeSnapshot,
   coveredButtonSnapshot,
+  keyboardCoveredTabBarSnapshot,
   nonHittableCellSnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
@@ -51,6 +52,24 @@ test(scenario('occlusion'), async () => {
       assert.match(error.message, /Ref @e2 is covered by another visible element/);
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.interactionBlocked, 'covered');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  const calls: string[] = [];
+  const device = createNativeRefDevice(keyboardCoveredTabBarSnapshot(), calls);
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      assert.equal(details?.ref, '@e2');
       return true;
     },
   );

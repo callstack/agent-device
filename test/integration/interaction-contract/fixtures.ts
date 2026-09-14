@@ -483,3 +483,74 @@ export const RUNNER_NON_HITTABLE_TEXT_INPUT_NODES = [
     rect: { x: 20, y: 40, width: 160, height: 40 },
   },
 ] as const;
+
+// #2589 shape, recorded from the iOS repro: the bottom tab bar sits behind the system keyboard.
+// The keyboard is its own system surface, so it is never a covering sibling of app content here
+// (`occlusion` stays silent) and the tab bar is still inside the app's own window rect
+// (`offscreen` passes) — the tap used to report success while the key ate the touch.
+// The key rects are the bottom row measured on iPhone 17 Pro (26.2): a keyboard the guard will
+// measure has to report one unbroken run of columns, so a reduced layout cannot stop at two keys.
+export function keyboardCoveredTabBarSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Form',
+      rect: { x: 148, y: 791, width: 104, height: 83 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Keyboard',
+      rect: { x: 0, y: 583, width: 402, height: 291 },
+      hittable: false,
+    },
+    {
+      index: 3,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'globe',
+      rect: { x: 4.67, y: 752, width: 49.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: '.?123',
+      rect: { x: 54, y: 752, width: 49.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 5,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'space',
+      rect: { x: 103.33, y: 752, width: 197.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 6,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'return',
+      rect: { x: 300.67, y: 752, width: 99, height: 54 },
+      hittable: true,
+    },
+  ]);
+}

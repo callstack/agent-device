@@ -12,6 +12,7 @@ import {
   continueButtonSnapshot,
   coveredButtonSnapshot,
   fullyTiledParentSnapshot,
+  keyboardCoveredTabBarSnapshot,
   nonHittableCellSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
@@ -58,6 +59,29 @@ test(scenario('parentOwnedTouchPoint'), async () => {
       assert.equal(details?.reason, 'covered_by_interactive_descendants');
       assert.equal(details?.ref, '@e2');
       assert.equal(details?.selector, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(keyboardCoveredTabBarSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      assert.equal(details?.ref, '@e2');
+      assert.ok(typeof details?.hint === 'string');
       return true;
     },
   );

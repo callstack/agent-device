@@ -11,6 +11,7 @@ import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
   coveredButtonSnapshot,
+  keyboardCoveredTabBarSnapshot,
   drawerWithVisibleTwinSnapshot,
   equivalentWrapperChainSnapshot,
   edgeGrazingDrawerSnapshot,
@@ -124,6 +125,29 @@ test(scenario('occlusion'), async () => {
   await assert.rejects(
     () => device.interactions.click(selector('label="Save draft"'), { session: 'default' }),
     /covered by another visible element/,
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(keyboardCoveredTabBarSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(selector('label="Form"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      assert.ok(typeof details?.hint === 'string');
+      assert.deepEqual(details?.keyboardFrame, { x: 0, y: 583, width: 402, height: 291 });
+      return true;
+    },
   );
   assert.deepEqual(taps, []);
 });

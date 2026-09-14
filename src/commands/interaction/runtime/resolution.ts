@@ -65,6 +65,11 @@ import {
   type ReplayTargetGuardDenotation,
 } from '@agent-device/contracts/replay';
 import { resolveActionSelector } from './selector-action-resolution.ts';
+import {
+  assertTapTargetClearOfVisibleKeyboard,
+  describeKeyboardOccludedPointWarning,
+} from './keyboard-occlusion.ts';
+import { interactionVerb } from './interaction-verb.ts';
 
 export type { InteractionTarget, ResolvedInteractionTarget };
 
@@ -192,24 +197,39 @@ export async function resolveInteractionTarget(
   return await resolveSelectorInteractionTarget(runtime, options, options.target, params);
 }
 
-async function tryResolveOutOfBoundsPointWarning(
+async function readLastKnownPointTree(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+): Promise<SnapshotState['nodes'] | undefined> {
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  return session?.snapshot?.nodes;
+}
+
+/**
+ * The one warning a raw-coordinate tap can earn from the last-known tree: the point is outside the
+ * viewport that tree captured, or the keyboard it captured covers the point. Both are disclosures,
+ * not refusals — see `describeKeyboardOccludedPointWarning`.
+ */
+async function resolvePointTargetWarning(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: PointTarget,
 ): Promise<string | undefined> {
-  const sessionName = options.session ?? 'default';
-  const session = await runtime.sessions.get(sessionName);
-  if (!session?.snapshot) return undefined;
-
-  // Create a synthetic rect from the point for viewport lookup
-  const pointRect = { x: target.x, y: target.y, width: 0, height: 0 };
-  const viewport = createSnapshotVisibility(session.snapshot.nodes).resolveViewport(pointRect);
-  if (!viewport) return undefined;
-
+  const nodes = await readLastKnownPointTree(runtime, options);
+  if (!nodes) return undefined;
   const point = { x: target.x, y: target.y };
-  if (containsPoint(viewport, point.x, point.y)) return undefined;
 
-  return `Coordinates (${point.x}, ${point.y}) are outside the last-known viewport (${viewport.width}x${viewport.height}). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.`;
+  // The point carries no extent, so the zero-area rect only keys the viewport lookup off it.
+  const viewport = createSnapshotVisibility(nodes).resolveViewport({
+    x: point.x,
+    y: point.y,
+    width: 0,
+    height: 0,
+  });
+  if (viewport && !containsPoint(viewport, point.x, point.y)) {
+    return `Coordinates (${point.x}, ${point.y}) are outside the last-known viewport (${viewport.width}x${viewport.height}). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.`;
+  }
+  return describeKeyboardOccludedPointWarning({ nodes, point });
 }
 
 async function resolvePointInteractionTarget(
@@ -218,7 +238,7 @@ async function resolvePointInteractionTarget(
   target: PointTarget,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const warning = await tryResolveOutOfBoundsPointWarning(runtime, options, target);
+  const warning = await resolvePointTargetWarning(runtime, options, target);
   if (!params.captureEvidenceBaseline) {
     return {
       kind: 'point',
@@ -627,9 +647,10 @@ function describeNonHittableTarget(
 }
 
 /**
- * Every node stage this action's row declares, plus the covered refusal the
- * interaction runtime owns. Which stages run is the row's decision; every
- * acting path — selector, ref, and the native-ref preflight — enters them here.
+ * Every node stage this action's row declares, plus the covered and keyboard refusals the
+ * interaction runtime owns. Which stages run is the row's decision; every acting path — selector,
+ * ref, and the native-ref preflight — enters them here, which is what keeps the native-ref fast
+ * path from succeeding on a target the shared rules would refuse.
  */
 async function runInteractionPipelineStages(params: {
   policy: SelectorPipelinePolicy;
@@ -652,6 +673,12 @@ async function runInteractionPipelineStages(params: {
       action: params.action,
     });
   }
+  assertTapTargetClearOfVisibleKeyboard({
+    nodes: params.nodes,
+    node: target.node,
+    action: params.action,
+    label: params.label,
+  });
   return target.node;
 }
 
@@ -671,21 +698,6 @@ function buildCoveredInteractionError(params: {
       interactionBlocked: params.node.interactionBlocked,
     },
   );
-}
-
-function interactionVerb(action: InteractionAction): string {
-  switch (action) {
-    case 'fill':
-      return 'be filled';
-    case 'focus':
-      return 'be focused';
-    case 'longPress':
-      return 'be long-pressed';
-    case 'hover':
-      return 'be hovered';
-    default:
-      return 'be tapped';
-  }
 }
 
 export async function captureInteractionSnapshot(

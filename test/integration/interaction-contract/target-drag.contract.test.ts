@@ -11,6 +11,7 @@ import {
   coveredButtonSnapshot,
   dragEndpointsSnapshot,
   fullyTiledParentSnapshot,
+  keyboardCoveredTabBarSnapshot,
   runnerPresentedDragEndpointsNodes,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
@@ -99,6 +100,42 @@ test(scenario('parentOwnedTouchPoint'), async () => {
         gesture: { intent: 'drag', source: 'id="source"', destination: 'label=Card' },
       }),
     /Selector label=Card has no parent-owned touch point/,
+  );
+  assert.equal(dispatches, 0);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  let dispatches = 0;
+  const keyboard = keyboardCoveredTabBarSnapshot();
+  const source = {
+    index: 5,
+    depth: 1,
+    parentIndex: 0,
+    type: 'Button',
+    identifier: 'source',
+    rect: { x: 20, y: 100, width: 100, height: 44 },
+    hittable: true,
+  };
+  const device = createContractDevice(makeSnapshotState([...keyboard.nodes, source]), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
+    performGesture: async () => {
+      dispatches += 1;
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.gesture({
+        session: 'default',
+        gesture: { intent: 'drag', source: 'id="source"', destination: 'label="Form"' },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      return true;
+    },
   );
   assert.equal(dispatches, 0);
 });
