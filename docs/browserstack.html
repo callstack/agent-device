@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.d3d08f075c.js"></script>
+<script defer src="/agent-device/static/js/index.a05803c319.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -43,6 +43,7 @@
 <div class="rp-codeblock language-bash"><div class="rp-codeblock__content"><div class="rp-codeblock__content__scroll-container rp-scrollbar rp-scrollbar--always"><pre class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)" tabindex="0" data-lang="bash"><code><span class="line"><span style="color:var(--shiki-token-function)">--provider-device-orientation</span><span style="color:var(--shiki-token-string)"> portrait</span><span style="color:var(--shiki-token-comment)">   # or landscape        (alias --device-orientation)</span></span>
 <span class="line"><span style="color:var(--shiki-token-function)">--provider-geo-location</span><span style="color:var(--shiki-token-string)"> US</span><span style="color:var(--shiki-token-comment)">                                   # (alias --geo-location)</span></span>
 <span class="line"><span style="color:var(--shiki-token-function)">--provider-timezone</span><span style="color:var(--shiki-token-string)"> New_York</span><span style="color:var(--shiki-token-comment)">                                 # (alias --timezone)</span></span>
+<span class="line"><span style="color:var(--shiki-token-function)">--provider-appium-version</span><span style="color:var(--shiki-token-constant)"> 3.2.0</span><span style="color:var(--shiki-token-comment)">                              # (alias --appium-version)</span></span>
 <span class="line"><span style="color:var(--shiki-token-function)">--provider-language</span><span style="color:var(--shiki-token-string)"> Fr</span><span style="color:var(--shiki-token-comment)">                                       # (alias --language)</span></span>
 <span class="line"><span style="color:var(--shiki-token-function)">--provider-locale</span><span style="color:var(--shiki-token-string)"> Fr</span><span style="color:var(--shiki-token-comment)">                                         # (alias --locale)</span></span>
 <span class="line"><span style="color:var(--shiki-token-function)">--provider-network-profile</span><span style="color:var(--shiki-token-string)"> 4g-lte-advanced-good</span><span style="color:var(--shiki-token-comment)">              # (alias --network-profile)</span></span>
@@ -51,6 +52,7 @@
 <p>BrowserStack receives these values in <code>bstack:options</code> when it creates the hosted session.</p>
 <ul>
 <li>The orientation applies when the session starts. An activity without a fixed orientation, such as a Chrome Custom Tab hosting OAuth, can still open in landscape. Run <code>agent-device orientation portrait</code> after launching it when needed.</li>
+<li><code>--provider-appium-version</code> pins the Appium server BrowserStack runs for the session. Unset, BrowserStack falls back to its default Appium 1.x; <code>mobile:</code> commands such as <code>deepLink</code> and <code>pressButton</code> need a 2.x or newer server.</li>
 <li><code>--provider-network-profile</code> and <code>--provider-custom-network</code> are mutually exclusive.</li>
 <li><code>--provider-no-resign-app</code> applies to iOS only. BrowserStack re-signs uploaded iOS apps with its provisioning profile, which strips entitlements; opt out when testing entitlement-dependent features such as push notifications.</li>
 </ul>
