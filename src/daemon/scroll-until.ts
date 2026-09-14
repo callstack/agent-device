@@ -167,7 +167,6 @@ async function isSelectorVisible(
       : outcome.kind === 'occluded'
         ? [outcome.node]
         : [];
-  if (matched.length === 0) return false;
   // One index for every candidate from this capture, so the rows a shared selector matched do not
   // each rebuild the node map and viewport rects of the same tree (#1970).
   const visibility = createSnapshotVisibility(nodes);

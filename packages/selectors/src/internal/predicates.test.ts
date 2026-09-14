@@ -249,15 +249,15 @@ const SHARED_CAPTURE: SnapshotNode[] = [
 ];
 
 /**
- * Candidates from ONE capture share the caller's visibility index: two `visible` evaluations against
- * one index materialize the tree once, not once per candidate (#1970).
+ * `visible` answers from the index it is handed: two candidates of one capture read the one index the
+ * caller built, and a predicate that built its own would leave these counters at zero. That an index
+ * serves many nodes is `snapshot-visibility.test.ts`'s claim; this is the predicate's half of #1970.
  */
-test('visible predicates are answered by the index they are given, not a per-candidate rebuild', () => {
-  const materialized = { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 };
+test('the visible predicate answers from the visibility index its caller built', () => {
+  const materialized = { nodeMap: 0, viewportRects: 0 };
   const visibility = createSnapshotVisibility(SHARED_CAPTURE, {
-    onNodeMapBuilt: () => (materialized.nodeMaps += 1),
+    onNodeMapBuilt: () => (materialized.nodeMap += 1),
     onViewportRectsCollected: () => (materialized.viewportRects += 1),
-    onContainingRectFallback: () => (materialized.containingRectFallbacks += 1),
   });
 
   const onScreen = evaluateIsPredicate({
@@ -275,16 +275,15 @@ test('visible predicates are answered by the index they are given, not a per-can
 
   assert.equal(onScreen.pass, true);
   assert.equal(scrolledOut.pass, false);
-  assert.deepEqual(materialized, { nodeMaps: 1, viewportRects: 1, containingRectFallbacks: 0 });
+  assert.deepEqual(materialized, { nodeMap: 1, viewportRects: 1 });
 });
 
-/** The closest negative: `text` answers from the node alone and materializes none of the index. */
-test('the text predicate materializes none of the visibility index', () => {
-  const materialized = { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 };
+/** The closest negative: `text` answers from the node alone and never consults the index. */
+test('the text predicate never consults the visibility index', () => {
+  const materialized = { nodeMap: 0, viewportRects: 0 };
   const visibility = createSnapshotVisibility(SHARED_CAPTURE, {
-    onNodeMapBuilt: () => (materialized.nodeMaps += 1),
+    onNodeMapBuilt: () => (materialized.nodeMap += 1),
     onViewportRectsCollected: () => (materialized.viewportRects += 1),
-    onContainingRectFallback: () => (materialized.containingRectFallbacks += 1),
   });
 
   const match = evaluateIsPredicate({
@@ -296,5 +295,5 @@ test('the text predicate materializes none of the visibility index', () => {
   });
 
   assert.equal(match.pass, true);
-  assert.deepEqual(materialized, { nodeMaps: 0, viewportRects: 0, containingRectFallbacks: 0 });
+  assert.deepEqual(materialized, { nodeMap: 0, viewportRects: 0 });
 });

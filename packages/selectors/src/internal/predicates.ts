@@ -62,9 +62,10 @@ export function evaluateIsPredicate(params: {
   predicate: Exclude<IsPredicate, 'exists' | 'absent'>;
   node: SnapshotState['nodes'][number];
   /**
-   * The capture's visibility index, built from the same node array `node` came from. A caller that
-   * asks about several nodes of one capture passes the SAME index to every call, so the tree is
-   * indexed once instead of once per candidate (#1970).
+   * The visibility index of the tree `node` belongs to — same `index`/`parentIndex` space, so the
+   * ancestor walk and viewport roots it resolves against are that tree's. A caller that asks about
+   * several nodes of one capture passes the SAME index to every call, so the tree is indexed once
+   * instead of once per candidate (#1970).
    */
   visibility: SnapshotVisibility;
   expectedText?: string;

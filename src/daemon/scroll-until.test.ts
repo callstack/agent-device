@@ -109,8 +109,8 @@ test('a present but scrolled-out target does not end the loop', async () => {
 });
 
 /**
- * Rows sharing a selector are measured as a set, each against this capture's own visibility index:
- * the head is scrolled out above the fold while a later row is on screen, and the loop stops.
+ * The loop stops on a visible row that is NOT the document-order head, which is what asking every
+ * candidate rather than the resolved target buys.
  */
 test('a visible row sharing its selector with a scrolled-out twin stops the loop', async () => {
   let scrolls = 0;
