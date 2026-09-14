@@ -21,6 +21,24 @@ func runnerCGImage(from image: RunnerImage) -> CGImage? {
 #endif
 }
 
+/// Which of XCTest's two waits around one synthesized event a caller gives up.
+///
+/// The two waits answer to different callers. The pre-event wait is what #2546 bounds: the runner
+/// has already decided the interaction may be synthesized, and XCTest's default wait for the app to
+/// idle outlives a bounded command, so the event lands after the caller was told it failed. The
+/// post-event wait is the settle margin before the runner reads the app back, and a caller whose
+/// verdict is that next read cannot give it up.
+enum RunnerInteractionIdleWaits {
+  /// Neither wait, for a caller whose next step is its own poll rather than a verdict read off this
+  /// event: a scroll re-checks its own content, a text field was already located, a swipe has
+  /// nothing to verify.
+  case bothSkipped
+  /// Pre-event wait dropped, post-event quiescence kept under the same bound, for a caller whose
+  /// verdict is the state this event produced. Alert verification reads the alert the tap replaced,
+  /// and a read taken mid-transition finds no alert and reports a dismissal nothing proved.
+  case preEventSkipped
+}
+
 extension RunnerTests {
   // MARK: - Recording
 
@@ -209,8 +227,14 @@ extension RunnerTests {
     return target
   }
 
-  func withTemporaryScrollIdleTimeoutIfSupported(
+  /// Bounds what XCTest waits around one synthesized event instead of letting it spend a command's
+  /// whole deadline, keeping whichever settle the caller named in `waits`. Callers gate the
+  /// interaction themselves first (a scroll needs no extra wait, a text field is located, an alert
+  /// button is read as hittable), which is what the dropped pre-event wait replaces rather than a
+  /// check the runner skips (#2546).
+  func withBoundedInteractionIdleTimeoutIfSupported(
     _ target: XCUIApplication,
+    waits: RunnerInteractionIdleWaits,
     operation: () -> Void
   ) {
     let setter = NSSelectorFromString("setWaitForIdleTimeout:")
@@ -219,19 +243,20 @@ extension RunnerTests {
       ? (target.value(forKey: "waitForIdleTimeout") as? NSNumber)
       : nil
     if supportsWaitForIdleTimeout {
-      target.setValue(scrollInteractionIdleTimeoutDefault, forKey: "waitForIdleTimeout")
+      target.setValue(interactionIdleTimeoutDefault, forKey: "waitForIdleTimeout")
     }
     defer {
       if let previous {
         target.setValue(previous.doubleValue, forKey: "waitForIdleTimeout")
       }
     }
-    performWithQuiescenceSkippedIfSupported(target, operation: operation)
+    performWithQuiescenceSkippedIfSupported(target, waits: waits, operation: operation)
   }
 
   // Some apps never report post-gesture quiescence, even after XCTest has synthesized the event.
   private func performWithQuiescenceSkippedIfSupported(
     _ target: XCUIApplication,
+    waits: RunnerInteractionIdleWaits,
     operation: () -> Void
   ) {
     let selector = NSSelectorFromString("_performWithInteractionOptions:block:")
@@ -252,12 +277,19 @@ extension RunnerTests {
     )
     let skipPreEventQuiescence = UInt(1)
     let skipPostEventQuiescence = UInt(2)
+    let options: UInt
+    switch waits {
+    case .bothSkipped:
+      options = skipPreEventQuiescence | skipPostEventQuiescence
+    case .preEventSkipped:
+      options = skipPreEventQuiescence
+    }
     withoutActuallyEscaping(operation) { escapableOperation in
       let block: @convention(block) () -> Void = escapableOperation
       performWithOptions(
         target,
         selector,
-        skipPreEventQuiescence | skipPostEventQuiescence,
+        options,
         block
       )
     }

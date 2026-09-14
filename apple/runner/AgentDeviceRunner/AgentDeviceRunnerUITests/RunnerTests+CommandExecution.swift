@@ -97,7 +97,9 @@ extension RunnerTests {
     var outcome = RunnerInteractionOutcome.performed
     let timing = measureGesture {
       if idleTimeout {
-        withTemporaryScrollIdleTimeoutIfSupported(app) { outcome = action() }
+        withBoundedInteractionIdleTimeoutIfSupported(app, waits: .bothSkipped) {
+          outcome = action()
+        }
       } else {
         outcome = action()
       }
@@ -1975,7 +1977,7 @@ extension RunnerTests {
       return Response(ok: true, data: DataPayload(message: "remote pressed"))
     case .type:
       var response: Response?
-      withTemporaryScrollIdleTimeoutIfSupported(activeApp) {
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
         response = executeTypeCommand(activeApp: activeApp, command: command)
       }
       return response ?? Response(ok: false, error: ErrorPayload(message: "type produced no response"))
@@ -1987,7 +1989,7 @@ extension RunnerTests {
       // keeps raw measureGesture and only routes the success payload through gestureResponse.
       var executedFrame: DragVisualizationFrame?
       let timing = measureGesture {
-        withTemporaryScrollIdleTimeoutIfSupported(activeApp) {
+        withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
           executedFrame = swipe(app: activeApp, direction: direction)
         }
       }

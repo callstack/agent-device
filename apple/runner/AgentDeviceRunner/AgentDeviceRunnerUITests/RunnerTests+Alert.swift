@@ -68,7 +68,16 @@ extension RunnerTests {
       guard waitUntilAlertButtonHittable(button, deadline: deadline) else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
-      let outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
+      // The hittable read above is this activation's readiness gate, so XCTest's pre-synthesis wait
+      // adds nothing and can cost more than the command has: the tap would land after the deadline
+      // expired and the alert would be answered by a button the caller was told nothing about
+      // (#2546). The post-tap settle stays, because the verification below reads the alert this tap
+      // replaces; an alert that dismisses and presents an identical replacement passes through a
+      // window with no alert, and a first read landing there reports a dismissal nothing proved.
+      var outcome = RunnerInteractionOutcome.performed
+      withBoundedInteractionIdleTimeoutIfSupported(alert.ownerApp, waits: .preEventSkipped) {
+        outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
+      }
       if let response = unsupportedResponse(for: outcome) {
         return response
       }

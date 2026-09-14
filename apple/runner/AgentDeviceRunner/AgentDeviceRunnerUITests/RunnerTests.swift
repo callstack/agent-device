@@ -66,7 +66,7 @@ final class RunnerTests: XCTestCase {
   let retryCooldown: TimeInterval = 0.2
   let postSnapshotInteractionDelay: TimeInterval = 0.2
   let firstInteractionAfterActivateDelay: TimeInterval = 0.25
-  let scrollInteractionIdleTimeoutDefault: TimeInterval = 1.0
+  let interactionIdleTimeoutDefault: TimeInterval = 1.0
   let tvRemoteDoublePressDelayDefault: TimeInterval = 0.0
   // Keep a periodic XCTest liveness marker in runner.log without flooding long-lived sessions.
   let xctestIdleKeepaliveInterval: TimeInterval = 60.0
