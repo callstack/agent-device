@@ -57,6 +57,9 @@ export function readSerializedSnapshotCaptureAnnotations(
   data: Record<string, unknown>,
 ): PublicSnapshotCaptureAnnotations {
   const androidSnapshot = readObject(data.androidSnapshot);
+  // Declared exception to kernel's shared `readResponseWarnings` (see its doc): this facade
+  // pins its eager module closure, and absent-or-non-array keeps the serialized tri-state.
+  // `snapshot-capture-annotations.test.ts` cross-checks this filter against the shared parser.
   const warnings = Array.isArray(data.warnings)
     ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
     : undefined;

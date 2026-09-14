@@ -72,6 +72,7 @@ import {
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
 import { isRecord } from '@agent-device/kernel/record';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 
@@ -266,9 +267,7 @@ export function createAgentDeviceClient(
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
-        const warnings = Array.isArray(data.warnings)
-          ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
-          : [];
+        const warnings = readResponseWarnings(data);
         return {
           session,
           ...(warnings.length > 0 ? { warnings } : {}),

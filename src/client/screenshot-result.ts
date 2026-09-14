@@ -1,6 +1,7 @@
 import type { ScreenshotResultData } from '@agent-device/contracts/capture';
 import type { CaptureScreenshotResult } from '@agent-device/contracts/client';
 import { isRecord, parsePoint, parseRect, readRequiredString } from '@agent-device/kernel/record';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 
 export function pickScreenshotResultData(value: ScreenshotResultData): ScreenshotResultData {
@@ -45,7 +46,7 @@ type ScreenshotOverlayRefData = {
 
 function readScreenshotResultData(value: unknown): ScreenshotResultData | undefined {
   if (!isRecord(value)) return undefined;
-  const warnings = readScreenshotWarnings(value.warnings);
+  const warnings = readScreenshotWarnings(value);
   return pickScreenshotResultData({
     path: readStringField(value, 'path'),
     width: readNumberField(value, 'width'),
@@ -76,9 +77,11 @@ function readScreenshotOverlayRefs(value: unknown): ScreenshotOverlayRef[] | und
   });
 }
 
-function readScreenshotWarnings(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  return value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0);
+function readScreenshotWarnings(data: Record<string, unknown>): string[] | undefined {
+  // An absent or non-array field is "no warnings channel on this result";
+  // the field contract itself is the shared parser's.
+  if (!Array.isArray(data.warnings)) return undefined;
+  return readResponseWarnings(data).filter((warning) => warning.length > 0);
 }
 
 function readScreenshotOverlayRef(

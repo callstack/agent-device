@@ -165,6 +165,23 @@ test('sessionless responses pass through unchanged', () => {
   ).toBe(data);
 });
 
+test('the recovered warning rides the shared warnings channel and foreign entries are dropped', () => {
+  const session = makeIosSession('default', { appBundleId: 'com.example.app' });
+
+  const out = applyRecoveredWarningLatch({
+    session,
+    data: { warnings: ['a note', 42, { nested: true }] },
+    verdict: deferredVerdict(),
+    internalObservation: false,
+  });
+
+  const warnings = out.warnings as string[];
+  expect(warnings).toHaveLength(2);
+  expect(typeof warnings[0]).toBe('string');
+  expect(warnings[0]).not.toBe('a note');
+  expect(warnings[1]).toBe('a note');
+});
+
 function scenario() {
   const root = path.join(os.tmpdir(), `agent-device-quality-latch-${crypto.randomUUID()}`);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

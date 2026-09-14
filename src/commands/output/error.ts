@@ -5,6 +5,7 @@ import {
   type ErrorCandidateView,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { collapseWarningText } from '../output-common.ts';
 
@@ -52,13 +53,6 @@ export function printHumanError(
   if (options.showDetails && normalized.details) {
     process.stderr.write(`${JSON.stringify(normalized.details, null, 2)}\n`);
   }
-}
-
-export function readResponseWarnings(details: Record<string, unknown> | undefined): string[] {
-  const warnings = details?.warnings;
-  return Array.isArray(warnings)
-    ? warnings.filter((warning): warning is string => typeof warning === 'string')
-    : [];
 }
 
 export function formatErrorCandidateViews(views: ErrorCandidateView[]): string[] {

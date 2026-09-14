@@ -1,4 +1,4 @@
-import { readCommandMessage } from '@agent-device/kernel/success-text';
+import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { CommandProgressState } from './command-progress.ts';
 import type { CliOutput } from './command-contract.ts';
 
@@ -37,9 +37,7 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
  */
 export function messageWithWarningsText(result: Record<string, unknown>): string | null {
   const message = readCommandMessage(result);
-  const warnings = Array.isArray(result.warnings)
-    ? result.warnings.filter((warning): warning is string => typeof warning === 'string')
-    : [];
+  const warnings = readResponseWarnings(result);
   if (warnings.length === 0) return message;
   return [message, ...warnings.map((warning) => `Warning: ${collapseWarningText(warning)}`)]
     .filter(Boolean)

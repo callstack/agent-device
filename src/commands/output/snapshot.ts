@@ -14,6 +14,7 @@ import {
   type SnapshotUnchanged,
   type SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 
 type SnapshotTextOptions = {
@@ -281,13 +282,8 @@ function formatSparseSnapshotHint(
 }
 
 export function readSnapshotWarnings(data: Record<string, unknown>): string[] {
-  const rawWarnings = data.warnings;
-  if (!Array.isArray(rawWarnings)) {
-    return [];
-  }
-  return rawWarnings.filter(
-    (entry): entry is string => typeof entry === 'string' && entry.length > 0,
-  );
+  // Snapshot text additionally drops empty notes; the field contract is the shared parser's.
+  return readResponseWarnings(data).filter((warning) => warning.length > 0);
 }
 
 type SnapshotDisplayLine = ReturnType<typeof buildSnapshotDisplayLines>[number];

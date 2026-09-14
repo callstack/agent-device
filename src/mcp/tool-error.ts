@@ -4,7 +4,8 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { formatErrorCandidateViews, readResponseWarnings } from '../commands/output/error.ts';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { formatErrorCandidateViews } from '../commands/output/error.ts';
 import { collapseWarningText } from '../commands/output-common.ts';
 
 export function normalizeToolError(error: unknown): NormalizedError {
