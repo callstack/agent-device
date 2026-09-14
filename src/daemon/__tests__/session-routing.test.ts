@@ -298,6 +298,47 @@ test('refuses a platform-less request when the workspace holds several implicit 
   );
 });
 
+test('routes a platform-less request to a sole default-leaf session', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  const openedWithoutPlatform = `cwd:${scopeId}:default`;
+  store.set(openedWithoutPlatform, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+
+  const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
+    attachesToSession: true,
+  });
+
+  assert.equal(resolved, openedWithoutPlatform);
+});
+
+test('refuses a platform-less request when a default-leaf session shares the workspace with a platform session', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  // The #2580 shape: iOS was opened without `--platform`, so it owns the `default` leaf, and
+  // Android then took its own platform leaf. Preferring `default` here would run a bare `press`
+  // on the iOS device the caller is no longer addressing.
+  store.set(`cwd:${scopeId}:default`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.set(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
+
+  assert.throws(
+    () =>
+      resolveEffectiveSessionName(implicitRequest(cwd, {}, 'close'), store, {
+        attachesToSession: true,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'AMBIGUOUS_MATCH');
+      const sessions = (error.details?.sessions as string[] | undefined) ?? [];
+      assert.deepEqual(sessions.slice().sort(), [
+        `cwd:${scopeId}:android`,
+        `cwd:${scopeId}:default`,
+      ]);
+      assert.match(String(error.details?.hint), /--platform/);
+      return true;
+    },
+  );
+});
+
 test('keeps inventory commands routable across implicit session ambiguity', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
@@ -465,6 +506,25 @@ test('routes a session-lock platform into the implicit session key', (t) => {
   const resolved = resolveEffectiveSessionName(
     { ...request, meta: { ...request.meta, lockPolicy: 'reject', lockPlatform: 'android' } },
     store,
+  );
+
+  assert.equal(resolved, `cwd:${scopeId}:android`);
+});
+
+test('routes a session-lock platform past a workspace session bound to another platform', (t) => {
+  const { cwd, scopeId } = makeWorkspaceCwd(t);
+  const store = makeStore(t);
+  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+
+  // Candidate matching that reads only `flags` sees no platform here, so the iOS session appears
+  // to agree and the request runs on it; the lock policy then leaves the platform unset because a
+  // session is already bound, so nothing downstream corrects the choice.
+  const request = implicitRequest(cwd, {}, 'press');
+
+  const resolved = resolveEffectiveSessionName(
+    { ...request, meta: { ...request.meta, lockPolicy: 'reject', lockPlatform: 'android' } },
+    store,
+    { attachesToSession: true },
   );
 
   assert.equal(resolved, `cwd:${scopeId}:android`);

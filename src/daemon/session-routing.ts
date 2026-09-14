@@ -128,7 +128,7 @@ function resolveImplicitWorkspaceSession(
   const platform = resolveImplicitPlatformSelector(req);
   return platform
     ? resolvePlatformSessionAddress(req, sessionStore, scopeId, platform, candidates, options)
-    : resolveUnselectedSessionAddress(sessionStore, scopeId, candidates, options);
+    : resolveUnselectedSessionAddress(scopeId, candidates, options);
 }
 
 type PlatformSessionMismatch = {
@@ -152,9 +152,10 @@ function resolvePlatformSessionAddress(
 ): string {
   const platformAddress = formatScopedSessionName(scopeId, platform);
   if (sessionStore.get(platformAddress)) return platformAddress;
+  const claimedFlags = withImplicitPlatform(req.flags, platform);
   const mismatches = candidates.map((ref) => ({
     ref,
-    conflicts: listSessionSelectorConflicts(ref.session, req.flags),
+    conflicts: listSessionSelectorConflicts(ref.session, claimedFlags),
   }));
   const agreeing = mismatches.filter((candidate) => candidate.conflicts.length === 0);
   const [soleAgreeing] = agreeing;
@@ -199,22 +200,34 @@ function disagreesOnPlatform(conflicts: SessionSelectorConflict[]): boolean {
 }
 
 /**
+ * The selectors this request claims, with the platform it named filled in. A `--session-lock`
+ * platform reaches `flags` only after the key is chosen, so matching on `flags` alone would let an
+ * Android lock join this workspace's iPhone session — and the lock policy leaves the platform unset
+ * once a session is bound, so nothing downstream corrects the choice.
+ */
+function withImplicitPlatform(
+  flags: CommandFlags | undefined,
+  platform: PlatformSelector,
+): CommandFlags {
+  return { ...flags, platform };
+}
+
+/**
  * A request that names no platform has nothing to disambiguate with, so it joins the workspace's
  * only implicit session — what every single-platform caller does today — and refuses when the
- * workspace holds several.
+ * workspace holds several. The `default` leaf is not preferred: opening iOS without `--platform`
+ * leaves it owning that leaf beside a platform-keyed session, and a caller who stopped naming a
+ * platform has expressed no preference for either.
  */
 function resolveUnselectedSessionAddress(
-  sessionStore: SessionStore,
   scopeId: string,
   candidates: SessionRef[],
   options: ImplicitSessionRoutingOptions,
 ): string {
-  const defaultAddress = formatScopedSessionName(scopeId, DEFAULT_SESSION_NAME);
-  if (sessionStore.get(defaultAddress)) return defaultAddress;
   const [soleCandidate] = candidates;
   if (soleCandidate && candidates.length === 1) return soleCandidate.address;
   throwIfAmbiguousWorkspaceSession(options, candidates);
-  return defaultAddress;
+  return formatScopedSessionName(scopeId, DEFAULT_SESSION_NAME);
 }
 
 /**
