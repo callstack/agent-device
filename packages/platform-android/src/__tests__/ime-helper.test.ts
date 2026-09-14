@@ -84,7 +84,6 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
   const installCalls: Array<{
     apkPath: string;
     replace?: boolean;
-    allowTestPackages?: boolean;
   }> = [];
   const adb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {
@@ -98,7 +97,6 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
       installCalls.push({
         apkPath: installApkPath,
         replace: options?.replace,
-        allowTestPackages: options?.allowTestPackages,
       });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -113,7 +111,7 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
 
   assert.equal(result.installed, true);
   assert.equal(result.reason, 'missing');
-  assert.deepEqual(installCalls, [{ apkPath, replace: true, allowTestPackages: true }]);
+  assert.deepEqual(installCalls, [{ apkPath, replace: true }]);
 });
 
 test('ensureAndroidImeHelper skips install when a newer version is already present', async () => {
