@@ -118,7 +118,6 @@ export default defineConfig({
     alwaysBundle: [/^@agent-device\//],
     onlyBundle: [
       '@limrun/api',
-      '@limrun/xdelta3-wasm',
       'agent-base',
       'b4a',
       'debug',
@@ -166,6 +165,15 @@ export default defineConfig({
       }
       handler(level, log);
     },
+  },
+  // Limrun loads `@limrun/xdelta3-wasm` lazily and only inside `client.syncApp`, the folder
+  // delta-sync entry point agent-device never calls. Bundling it would ship 52 kB of base64
+  // wasm in every install for a path nothing reaches, so the specifier resolves to a chunk that
+  // names the omission: reaching it fails loudly instead of loading a blob. Add the package to
+  // `deps.onlyBundle` and drop this alias to restore the feature.
+  alias: {
+    '@limrun/xdelta3-wasm': new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url)
+      .pathname,
   },
   format: 'esm',
   platform: 'node',
