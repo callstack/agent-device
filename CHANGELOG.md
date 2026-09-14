@@ -52,9 +52,16 @@
   `dispose-on-failed-finish` themselves, because their retries re-read a log file and a status file that
   cleanup never touches. A finish also states why it was asked for: `capture` may preserve, while
   `disposal` — session teardown, the one caller that owns forced cleanup — disposes whatever a failed
-  finish left. Expect one trade: while a preserved recording is open, `record start` on that device is
-  refused until its session runs `record stop` or closes. `perf stop` no longer memoizes a refused
-  finish, so its second attempt re-pulls the trace the first one preserved.
+  finish left. Two Apple paths had to become genuinely retryable for that to be true: the runner path
+  memoized its refused stop and handed the same rejection to every later `record stop` without asking
+  the runner again, and the simulator path rejected a recording purely because `simctl recordVideo` had
+  exited non-zero — discarding a video the recorder had already written and leaving an exit code no
+  retry could change. A stopped recorder is now an observation rather than a failure: the exit is
+  disclosed on the completion and the file is collected, so those recordings export instead of erroring.
+  Expect one trade: while a preserved recording is open, `record start` on that device is refused until
+  its session runs `record stop` or closes, and a file no retry can rescue — a recorder killed mid-write
+  — now says so with `recording-output-unplayable` and names session close as the way out. `perf stop`
+  no longer memoizes a refused finish, so its second attempt re-pulls the trace the first one preserved.
 
 - Changed: `record stop` no longer carries a start-trim step no recorder could arm. The trim cut the
   interval between recorder start and target-app readiness, but the runner's `recordStart` answer has
