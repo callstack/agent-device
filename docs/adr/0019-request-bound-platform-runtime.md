@@ -12,6 +12,10 @@ a narrow neutral typed service, not diagnostics alone. Host diagnostics, daemon-
 cleanup, and managed host tooling share the execution category because none binds a request-scoped
 device runtime; their domain services remain separate rather than forming a generic host grab bag.
 
+Amendment proposed 2026-09-14 by [ADR 0024](./0024-screen-recording-provable-signal.md) for the
+`screen-recording` kind only; see the note at the head of section 5. It takes effect when ADR 0024
+is accepted.
+
 Completed 2026-08-27 through #2070–#2072. Every descriptor now declares `none`, `host`,
 `inventory`, or `device-runtime`; capability buckets and the legacy execution shape are gone.
 Production `src/daemon/**` has zero dependencies on concrete platform implementations, enforced by
@@ -380,6 +384,17 @@ recorded success. If the operation and cleanup both fail, the operation error re
 cleanup is structured secondary diagnostic evidence; a cleanup-only failure surfaces normally.
 
 ### 5. Durable resources are reattachable by the same owner
+
+> **Proposed amendment (ADR 0024, 2026-09-14), `screen-recording` only.** Screen recording is a
+> *stop-and-collect* resource: its artifact is a file the native recorder finalizes on signal, and
+> its identity can only be re-proved at signal time. It keeps the persisted manifest, the
+> ownership fence on every destructive step, and the completed replay. It replaces the `reattach`
+> and `cleanup` facet operations with the backend's `stop(target, budget)` and `collect`, drops
+> `cleanup-pending` as a phase and the admission ledger for this kind, records the recorder
+> observation beside the committed export, and archives unsettled manifests by fence generation.
+> For every durable kind, forced cleanup is no longer inferred from a failed finish once that
+> kind's failed-finish test states what its retry needs. App-log, audio-probe, and perf-capture
+> keep the contract below unchanged. Rationale, matrix, and tests live in ADR 0024.
 
 App-log streams, screen recordings, and native profiler captures may outlive one request. Starting
 durable work returns:
