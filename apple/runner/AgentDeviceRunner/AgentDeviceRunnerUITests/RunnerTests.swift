@@ -28,6 +28,13 @@ final class RunnerTests: XCTestCase {
     static let objcException = 1
   }
 
+  /// String codes the daemon keys behavior on. `RUNNER_BUSY` and `RUNNER_WEDGED` come from the busy
+  /// gate; `MAIN_THREAD_TIMEOUT` is emitted by the transport when a command trips the execution
+  /// watchdog, so the daemon can tell "the main thread is now occupied" from a generic failure.
+  enum RunnerWireErrorCode {
+    static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
+  }
+
   static let springboardBundleId = "com.apple.springboard"
   // SpringBoard hosts blocking system modals on iOS/visionOS; tvOS (PineBoard/HeadBoard)
   // and macOS have no such host, so there is nothing to probe there.

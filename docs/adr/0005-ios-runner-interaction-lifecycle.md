@@ -57,15 +57,20 @@ Dead cached runner processes are invalidated without graceful `shutdown`. A proc
 stopped cannot answer the shutdown request, so graceful cleanup only adds stale-listener delay.
 
 The runner stamps its live main-thread occupancy (`runnerMainThreadBusy`) onto every successful
-response, and the daemon mirrors it on the `RunnerSession`. A `RUNNER_BUSY` refusal also sets it. This
-occupancy is a per-response fact, not a health inference: a private-AX snapshot served successfully
-while a watchdog-abandoned tree crawl still grinds on the XCTest main thread reports busy, so a healthy
-`ok` is never read as proof the runner drained (#2552). A close that would retain a runner for reuse
-instead disposes it when that occupancy is set, because a runner still finishing watchdog-abandoned
-work refuses every command until it drains or escalates to `RUNNER_WEDGED`; pooling it back to the next
-`open` hands the same stalled runner to the caller and `close` recovers nothing. Killing the process is
-the only way to abort uncancellable XCTest work. This is the `RUNNER_WEDGED` restart from #1105 applied
-at the close boundary rather than after the wedge threshold elapses.
+response and tags the execution-watchdog timeout with the typed `MAIN_THREAD_TIMEOUT` code, so the
+daemon learns the main thread is occupied from the stalling command itself, not only from a later
+`RUNNER_BUSY` refusal. The daemon mirrors that occupancy on the `RunnerSession`: set on `RUNNER_BUSY`
+or `MAIN_THREAD_TIMEOUT`, cleared by any other served runner reply (which reached the main thread and
+therefore drained), and left intact by a transport failure or an unstamped recovered response. A
+healthy `ok` is never read as proof of drain because a private-AX snapshot can be served while an
+abandoned tree crawl still grinds on the XCTest main thread (#2552).
+
+Close that would retain a runner for reuse first stops it when that occupancy is set, awaiting the
+stop so the lease is released before the next request, because a runner still finishing
+watchdog-abandoned work refuses every command until it drains or escalates to `RUNNER_WEDGED`; pooling
+it back to the next `open` hands the same stalled runner to the caller and `close` recovers nothing.
+Killing the process is the only way to abort uncancellable XCTest work. This is the `RUNNER_WEDGED`
+restart from #1105 applied at the close boundary rather than after the wedge threshold elapses.
 
 When XCTest reports a root accessibility snapshot failure such as `kAXErrorIllegalArgument`, the
 runner treats the cached app target as suspect. Interactive snapshots fail closed to a truncated

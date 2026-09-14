@@ -22,6 +22,7 @@ import {
   scheduleIosRunnerIdleStop,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
+  stopIosRunnerSessionIfBusy,
 } from './runner-session.ts';
 import { hasCachedAppleRunnerArtifact, resolveRunnerAppBundleId } from './runner-xctestrun.ts';
 
@@ -46,6 +47,7 @@ export type AppleRunnerClient = {
   getRunnerSessionSnapshot: typeof getRunnerSessionSnapshot;
   scheduleIosRunnerIdleStop: typeof scheduleIosRunnerIdleStop;
   stopIosRunnerSession: typeof stopIosRunnerSession;
+  stopIosRunnerSessionIfBusy: typeof stopIosRunnerSessionIfBusy;
   stopAllIosRunnerSessions: typeof stopAllIosRunnerSessions;
   runApplePressSeries: typeof runApplePressSeries;
   cleanupRunnerLeasesForOwner: typeof cleanupRunnerLeasesForOwner;
@@ -77,6 +79,7 @@ export function createAppleRunnerClient(host: AppleRunnerHost): AppleRunnerClien
     getRunnerSessionSnapshot,
     scheduleIosRunnerIdleStop,
     stopIosRunnerSession,
+    stopIosRunnerSessionIfBusy,
     stopAllIosRunnerSessions,
     runApplePressSeries,
     cleanupRunnerLeasesForOwner,

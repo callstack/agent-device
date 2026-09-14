@@ -152,14 +152,7 @@ extension RunnerTests {
           self.deliverCommandResult(
             command: command,
             result: (
-              self.jsonResponse(
-                status: 500,
-                response: self.errorResponse(
-                  code: "COMMAND_FAILED",
-                  message: error.localizedDescription,
-                  hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
-                )
-              ),
+              self.jsonResponse(status: 500, response: self.commandFailedResponse(from: error)),
               false
             ),
             completion: completion
@@ -285,6 +278,32 @@ extension RunnerTests {
 
   private func errorResponse(code: String, message: String, hint: String? = nil) -> Response {
     Response(ok: false, error: ErrorPayload(code: code, message: message, hint: hint))
+  }
+
+  /// Turns a thrown command error into its wire response. The execution-watchdog timeout keeps its
+  /// own typed code so the daemon records the runner as main-thread-occupied from the stalling
+  /// command itself, not only from a later `RUNNER_BUSY` refusal (#2552); every other throw stays the
+  /// generic `COMMAND_FAILED`.
+  func commandFailedResponse(from error: Error) -> Response {
+    let nsError = error as NSError
+    if nsError.domain == RunnerErrorDomain.general,
+      nsError.code == RunnerErrorCode.mainThreadExecutionTimedOut
+    {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: RunnerWireErrorCode.mainThreadTimeout,
+          message: nsError.localizedDescription,
+          hint:
+            "The runner abandoned this command's main-thread work past its execution watchdog and it is still draining. Wait and retry, or use a screenshot and interact by coordinates."
+        )
+      )
+    }
+    return errorResponse(
+      code: "COMMAND_FAILED",
+      message: error.localizedDescription,
+      hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
+    )
   }
 
   private func httpResponse(status: Int, body: String) -> Data {

@@ -244,6 +244,87 @@ test('discards a retained physical iOS runner when relaunch fails and preserves 
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
 });
 
+test('close finalization stops a busy retained runner instead of pooling it back (#2552)', async () => {
+  const signal = new AbortController().signal;
+  const baseHost = platformRuntimeHostFixture();
+  const stopRunnerSessionIfBusy = vi.fn(async () => true);
+  const stopRunnerSession = vi.fn(async () => {});
+  const scheduleRunnerIdleStop = vi.fn();
+  const host = {
+    ...baseHost,
+    appleApplications: {
+      ...baseHost.appleApplications,
+      stopRunnerSessionIfBusy,
+      stopRunnerSession,
+      scheduleRunnerIdleStop,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.finalizeApplicationClose({
+    surface: 'app',
+    retainRunner: true,
+    stateDir: '/tmp',
+  });
+
+  expect(stopRunnerSessionIfBusy).toHaveBeenCalledWith(device.id);
+  expect(scheduleRunnerIdleStop).not.toHaveBeenCalled();
+  expect(stopRunnerSession).not.toHaveBeenCalled();
+});
+
+test('close finalization retains an idle runner and schedules its idle stop', async () => {
+  const signal = new AbortController().signal;
+  const baseHost = platformRuntimeHostFixture();
+  const stopRunnerSessionIfBusy = vi.fn(async () => false);
+  const stopRunnerSession = vi.fn(async () => {});
+  const scheduleRunnerIdleStop = vi.fn();
+  const host = {
+    ...baseHost,
+    appleApplications: {
+      ...baseHost.appleApplications,
+      stopRunnerSessionIfBusy,
+      stopRunnerSession,
+      scheduleRunnerIdleStop,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.finalizeApplicationClose({
+    surface: 'app',
+    retainRunner: true,
+    stateDir: '/tmp',
+  });
+
+  expect(stopRunnerSessionIfBusy).toHaveBeenCalledWith(device.id);
+  expect(scheduleRunnerIdleStop).toHaveBeenCalledWith(device.id);
+  expect(stopRunnerSession).not.toHaveBeenCalled();
+});
+
+test('close finalization stops a non-retained runner without the busy probe', async () => {
+  const signal = new AbortController().signal;
+  const baseHost = platformRuntimeHostFixture();
+  const stopRunnerSessionIfBusy = vi.fn(async () => true);
+  const stopRunnerSession = vi.fn(async () => {});
+  const host = {
+    ...baseHost,
+    appleApplications: {
+      ...baseHost.appleApplications,
+      stopRunnerSessionIfBusy,
+      stopRunnerSession,
+    },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await lifecycle.finalizeApplicationClose({
+    surface: 'app',
+    retainRunner: false,
+    stateDir: '/tmp',
+  });
+
+  expect(stopRunnerSessionIfBusy).not.toHaveBeenCalled();
+  expect(stopRunnerSession).toHaveBeenCalledWith(device.id);
+});
+
 test('prepare shares one startup budget across the Simulator boot and the runner preparation', async () => {
   vi.useFakeTimers();
   try {

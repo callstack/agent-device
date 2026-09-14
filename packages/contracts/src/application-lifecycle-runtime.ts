@@ -315,6 +315,12 @@ export type AppleApplicationTools = Readonly<{
     device: DeviceInfo,
     execution: Readonly<{ requestId?: string }>,
   ): Promise<boolean>;
+  /**
+   * Stops this device's runner only if its last exchange reported main-thread work still draining,
+   * and returns whether it did. `close` calls it before deciding to retain a runner, so a stalled
+   * runner is never pooled back out to the next `open` (#2552).
+   */
+  stopRunnerSessionIfBusy(deviceId: string): Promise<boolean>;
   scheduleRunnerIdleStop(deviceId: string): void;
   prepareRunner(
     device: DeviceInfo,

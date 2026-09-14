@@ -103,11 +103,10 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import {
   abortAllIosRunnerSessions,
-  cancelIosRunnerIdleStop,
   ensureRunnerSession,
-  scheduleIosRunnerIdleStop,
   executeRunnerCommandWithSession,
   getRunnerSessionSnapshot,
+  stopIosRunnerSessionIfBusy,
 } from '../runner-session.ts';
 
 // Test-only stand-in for the daemon's runtime lease-owner-state-dir setter (root-only; the package
@@ -164,15 +163,6 @@ beforeEach(async () => {
   );
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
 });
-
-async function waitForRunnerSessionGone(deviceId: string): Promise<boolean> {
-  const deadline = Date.now() + 1000;
-  while (Date.now() < deadline) {
-    if (getRunnerSessionSnapshot(deviceId) === null) return true;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  return getRunnerSessionSnapshot(deviceId) === null;
-}
 
 test('a RUNNER_BUSY refusal records the runner as still draining main-thread work', async () => {
   const session = makeRunnerSession({ ready: true });
@@ -245,39 +235,69 @@ test('an unstamped healthy response leaves a busy main-thread report intact', as
   assert.equal(session.runnerMainThreadBusy, true);
 });
 
-test('close disposes a runner still draining main-thread work instead of pooling it for reopen (#2552)', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-close-busy-sim' };
-  const previousIdleMs = process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-  // A long idle window proves the teardown below is the busy-dispose branch, not the idle timer.
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '300000';
-  try {
-    const session = await ensureRunnerSession(device, {});
-    session.runnerMainThreadBusy = true;
+test("the stalling command's MAIN_THREAD_TIMEOUT error records the runner as busy", async () => {
+  // The direct #2552 repro: the command that stalls answers with the watchdog timeout, not
+  // RUNNER_BUSY, so this is the only occupancy signal available before any refusal.
+  const session = makeRunnerSession({ ready: true });
+  // A read-only snapshot on a ready session answers over the startup transport (uptime preflight,
+  // then the command), both via waitForRunner.
+  mockWaitForRunner
+    .mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }))
+    .mockResolvedValueOnce(
+      runnerError({ code: 'MAIN_THREAD_TIMEOUT', message: 'main thread execution timed out' }),
+    );
 
-    scheduleIosRunnerIdleStop(device.id);
+  await assert.rejects(() =>
+    executeRunnerCommandWithSession(
+      IOS_SIMULATOR,
+      session,
+      { command: 'snapshot', appBundleId: 'com.example.demo' },
+      '/tmp/runner.log',
+      30_000,
+    ),
+  );
 
-    assert.ok(await waitForRunnerSessionGone(device.id));
-  } finally {
-    cancelIosRunnerIdleStop(device.id);
-    if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-    else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
-  }
+  assert.equal(session.runnerMainThreadBusy, true);
 });
 
-test('close retains an idle runner that never reported busy main-thread work', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-close-idle-sim' };
-  const previousIdleMs = process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '300000';
-  try {
-    await ensureRunnerSession(device, {});
+test('a served non-busy error clears a stale busy report so close keeps a drained runner', async () => {
+  // After the abandoned work drains, a later failure that reached the main thread (element not
+  // found) proves it drained; leaving the flag set would make close kill a healthy runner (#2552).
+  const session = makeRunnerSession({ ready: true, runnerMainThreadBusy: true });
+  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
+  mockSendRunnerCommandOnce.mockResolvedValueOnce(
+    runnerError({ code: 'ELEMENT_NOT_FOUND', message: 'element not found' }),
+  );
 
-    scheduleIosRunnerIdleStop(device.id);
+  await assert.rejects(() =>
+    executeRunnerCommandWithSession(
+      IOS_SIMULATOR,
+      session,
+      {
+        command: 'tap',
+        selectorKey: 'label',
+        selectorValue: 'Gone',
+        appBundleId: 'com.example.demo',
+      },
+      '/tmp/runner.log',
+      30_000,
+    ),
+  );
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.ok(getRunnerSessionSnapshot(device.id));
-  } finally {
-    cancelIosRunnerIdleStop(device.id);
-    if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-    else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
-  }
+  assert.equal(session.runnerMainThreadBusy, false);
+});
+
+test('stopIosRunnerSessionIfBusy leaves an idle runner and stops a busy one so the next open boots fresh (#2552)', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-stop-if-busy-sim' };
+  const session = await ensureRunnerSession(device, {});
+
+  assert.equal(await stopIosRunnerSessionIfBusy(device.id), false);
+  assert.ok(getRunnerSessionSnapshot(device.id));
+
+  session.runnerMainThreadBusy = true;
+  assert.equal(await stopIosRunnerSessionIfBusy(device.id), true);
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
+
+  const reopened = await ensureRunnerSession(device, {});
+  assert.notEqual(reopened.sessionId, session.sessionId);
 });

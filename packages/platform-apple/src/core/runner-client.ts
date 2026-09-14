@@ -41,6 +41,8 @@ export const scheduleIosRunnerIdleStop: AppleRunnerClient['scheduleIosRunnerIdle
   client.scheduleIosRunnerIdleStop;
 export const stopIosRunnerSession: AppleRunnerClient['stopIosRunnerSession'] =
   client.stopIosRunnerSession;
+export const stopIosRunnerSessionIfBusy: AppleRunnerClient['stopIosRunnerSessionIfBusy'] =
+  client.stopIosRunnerSessionIfBusy;
 export const stopAllIosRunnerSessions: AppleRunnerClient['stopAllIosRunnerSessions'] =
   client.stopAllIosRunnerSessions;
 export const runApplePressSeries: AppleRunnerClient['runApplePressSeries'] =

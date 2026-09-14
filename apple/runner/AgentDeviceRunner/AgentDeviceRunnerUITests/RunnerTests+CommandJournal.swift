@@ -208,6 +208,27 @@ extension RunnerTests {
       Response(ok: true).stampingCurrentMainThreadBusy(false).data?.runnerMainThreadBusy, false)
   }
 
+  func testCommandFailedResponseTagsMainThreadTimeoutWithTypedCode() {
+    let timeout = NSError(
+      domain: RunnerErrorDomain.general,
+      code: RunnerErrorCode.mainThreadExecutionTimedOut,
+      userInfo: [NSLocalizedDescriptionKey: "main thread execution timed out"]
+    )
+
+    let response = commandFailedResponse(from: timeout)
+
+    XCTAssertEqual(response.ok, false)
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.mainThreadTimeout)
+  }
+
+  func testCommandFailedResponseKeepsGenericCodeForOtherErrors() {
+    let other = NSError(domain: "SomeOtherDomain", code: 99, userInfo: nil)
+
+    let response = commandFailedResponse(from: other)
+
+    XCTAssertEqual(response.error?.code, "COMMAND_FAILED")
+  }
+
   func testJournalStoredResponseStaysUnstamped() throws {
     let journal = RunnerCommandJournal()
     let recordStart = runnerJournalCommand("recordStart", id: "record-start-anchor")

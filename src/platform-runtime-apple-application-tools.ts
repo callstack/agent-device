@@ -91,6 +91,10 @@ export function createAppleApplicationTools(): AppleApplicationTools {
         scheduleIosRunnerIdleStop(deviceId),
       );
     },
+    stopRunnerSessionIfBusy: async (deviceId) => {
+      const { stopIosRunnerSessionIfBusy } = await loadRunnerOperations();
+      return await stopIosRunnerSessionIfBusy(deviceId);
+    },
     prepareRunner: async (device, input, signal) => {
       const { Deadline } = await loadRetry();
       const { prepareIosRunner } = await loadRunnerOperations();

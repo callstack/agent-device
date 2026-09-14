@@ -328,11 +328,19 @@ async function finalizeAppleApplicationClose(
 ) {
   if (input.daemonShutdown) {
     await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
-  } else if (input.retainRunner) {
-    host.appleApplications.scheduleRunnerIdleStop(device.id);
-    await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
   } else {
-    await host.appleApplications.stopRunnerSession(device.id);
+    // A runner whose last exchange reported main-thread work still draining refuses every command
+    // until it drains or wedges, so retaining it would hand the same stalled process to the next
+    // `open` (#2552). Stop it now, awaited and lease-released, before the retain-vs-stop decision.
+    const stoppedStalledRunner =
+      input.retainRunner && (await host.appleApplications.stopRunnerSessionIfBusy(device.id));
+    if (!stoppedStalledRunner) {
+      if (input.retainRunner) {
+        host.appleApplications.scheduleRunnerIdleStop(device.id);
+      } else {
+        await host.appleApplications.stopRunnerSession(device.id);
+      }
+    }
     await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
   }
   const shutdown =

@@ -96,7 +96,8 @@
         "detachIosSimulatorRunnerSessionsForShutdown",
         "hasLiveIosRunnerSession",
         "releaseSpeculativeIosRunnerSessionFor",
-        "stopAllIosRunnerSessions"
+        "stopAllIosRunnerSessions",
+        "stopIosRunnerSessionIfBusy"
       ]
     },
     {

@@ -33,7 +33,7 @@ import {
   withRunnerCommandId,
   type RunnerCommand,
   resolveRunnerFatalErrorReason,
-  isRunnerBusyReportedError,
+  isRunnerMainThreadOccupiedError,
 } from './runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
@@ -496,33 +496,9 @@ async function stopRunnerSessionInternal(
 // behavior).
 export function scheduleIosRunnerIdleStop(deviceId: string): void {
   cancelIosRunnerIdleStop(deviceId);
-  const session = runnerSessions.get(deviceId);
-  if (!session) return;
-  // Retaining a runner only pays off if the next request can use it. A runner still finishing
-  // watchdog-abandoned main-thread work refuses every command until it drains or escalates to
-  // `RUNNER_WEDGED`, so pooling it across close->open hands the same stalled runner back and
-  // close recovers nothing (#2552). Dispose it instead: killing the process is the only way to
-  // abort uncancellable XCTest work, and the next open boots a clean runner.
-  if (session.runnerMainThreadBusy) {
-    emitDiagnostic({
-      level: 'info',
-      phase: 'ios_runner_retain_skipped_busy',
-      data: { deviceId, sessionId: session.sessionId },
-    });
-    invalidateRunnerSession(session, 'close_runner_main_thread_busy').catch((error: unknown) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_retain_busy_dispose_failed',
-        data: {
-          deviceId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    });
-    return;
-  }
   const idleMs = resolveRunnerIdleStopMs();
   if (idleMs <= 0) return;
+  if (!runnerSessions.has(deviceId)) return;
   const timer = setTimeout(() => {
     runnerIdleStopTimers.delete(deviceId);
     emitDiagnostic({
@@ -602,6 +578,23 @@ export async function stopIosRunnerSession(deviceId: string): Promise<void> {
       await cleanupOwnedIosRunnerLease(deviceId);
     });
   });
+}
+
+/**
+ * Stops a retained runner whose last exchange reported main-thread work still draining, and reports
+ * whether it did. Retaining such a runner only hands the same stalled process to the next `open`, so
+ * `close` stops it instead of scheduling an idle stop (#2552). Returns false without touching the
+ * runner when it is idle, so the caller's retain-vs-stop decision stays atomic (no re-check window).
+ */
+export async function stopIosRunnerSessionIfBusy(deviceId: string): Promise<boolean> {
+  if (runnerSessions.get(deviceId)?.runnerMainThreadBusy !== true) return false;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'ios_runner_retain_skipped_busy',
+    data: { deviceId },
+  });
+  await stopIosRunnerSession(deviceId);
+  return true;
 }
 
 export async function abortAllIosRunnerSessions(): Promise<void> {
@@ -785,10 +778,14 @@ export async function executeRunnerCommandWithSession(
     }
     return data;
   } catch (error) {
-    // A `RUNNER_BUSY` refusal is the runner reporting its watchdog-abandoned main-thread work is
-    // still draining; record it so a retained session is not pooled back out to the next request.
-    if (isRunnerBusyReportedError(error)) {
+    // A main-thread occupancy report (`RUNNER_BUSY`, or the `MAIN_THREAD_TIMEOUT` the stalling
+    // command itself returns) marks the runner still draining. Any OTHER structured runner reply was
+    // served off that abandoned work, so it has drained; a transport-shaped error answered nothing
+    // and leaves the report intact (#2552).
+    if (isRunnerMainThreadOccupiedError(error)) {
       session.runnerMainThreadBusy = true;
+    } else if (isStructuredRunnerFailure(error)) {
+      session.runnerMainThreadBusy = false;
     }
     const runnerFatalReason = resolveRunnerFatalErrorReason(error);
     if (runnerFatalReason) {
