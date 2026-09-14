@@ -44,6 +44,8 @@ import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { isActiveProviderDevice } from '../../../src/provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../../../src/daemon/provider-device-admission.ts';
+import { installInteractorResolution } from '../../../src/daemon/interactor-resolution.ts';
+import { getInteractor } from '../../../src/core/interactors.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
@@ -51,6 +53,7 @@ import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 // Match daemon composition (src/daemon/server/daemon-runtime.ts): the daemon decides on provider
 // ownership through its own admission seam, which root composition installs.
 installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
+installInteractorResolution({ resolve: getInteractor });
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {

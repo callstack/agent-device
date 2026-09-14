@@ -10,6 +10,8 @@ import {
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+import { getInteractor } from '../../core/interactors.ts';
+import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
   androidObservation,
   createPlatformRuntimeGateway,
@@ -284,6 +286,7 @@ export async function startDaemonRuntime(
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
   installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
+  installInteractorResolution({ resolve: getInteractor });
   const requestPlatformProviders = createRequestPlatformProviders({
     providers: {
       appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,

@@ -6,10 +6,11 @@ import type {
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/interactor-types';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { installInteractorResolution } from '../interactor-resolution.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
-const getInteractor = vi.hoisted(() => vi.fn());
-vi.mock('../../core/interactors.ts', () => ({ getInteractor }));
+const resolve = vi.fn();
+installInteractorResolution({ resolve });
 
 const presentIosSnapshotAcquisition = vi.hoisted(() => vi.fn());
 vi.mock('@agent-device/capture-kit/ios-snapshot-runtime', () => ({
@@ -35,9 +36,9 @@ function interactorReturning(result: SnapshotResult | SnapshotRuntimeAcquiredRes
 }
 
 test('a presented snapshot passes through without the acquisition presenter', async () => {
-  getInteractor.mockReset();
+  resolve.mockReset();
   presentIosSnapshotAcquisition.mockReset();
-  getInteractor.mockResolvedValue(interactorReturning(presented));
+  resolve.mockResolvedValue(interactorReturning(presented));
 
   const options: SnapshotOptions = { interactiveOnly: true };
   await expect(
@@ -52,9 +53,9 @@ test('a presented snapshot passes through without the acquisition presenter', as
 });
 
 test('an acquired snapshot is presented through the capture-kit runtime', async () => {
-  getInteractor.mockReset();
+  resolve.mockReset();
   presentIosSnapshotAcquisition.mockReset();
-  getInteractor.mockResolvedValue(interactorReturning(acquired));
+  resolve.mockResolvedValue(interactorReturning(acquired));
   const rePresented: SnapshotResult = {
     backend: 'xctest',
     producer: 'simulator-ax-bridge',

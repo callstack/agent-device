@@ -6,6 +6,12 @@ import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { contextFromFlags as buildDaemonContext } from '../../../context.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
+import { getInteractor } from '../../../../core/interactors.ts';
+import { installInteractorResolution } from '../../../interactor-resolution.ts';
+
+// Root composition hands the daemon its interactor resolution; this test drives the real
+// settle capture, so it composes the real lookup the way the process root does.
+installInteractorResolution({ resolve: getInteractor });
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
