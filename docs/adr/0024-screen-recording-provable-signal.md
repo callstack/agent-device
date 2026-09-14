@@ -23,7 +23,7 @@ The shared contract is six situations. Everything platform-specific stays in the
 | Stop produces a playable export | Commit it and return it with the recorder observation |
 | Stop cannot produce an export | Preserve recoverable evidence, return the actual error, leave the manifest `open` |
 | An export was already committed | Replay it, under the same session and device guards, without repeating stop work |
-| The recorder remains unresolved after a committed export | Retain its identity in the manifest; authorized recovery may retry termination |
+| The recorder or native-path disposition remains unresolved after a committed export | Retain the native path and identity in the manifest; authorized recovery may settle termination and disposition |
 | Artifact cleanup is considered | Require ownership and proof that no recoverable output is destroyed |
 
 Six rules make the table operational:
@@ -46,7 +46,7 @@ Six rules make the table operational:
    exists (incomplete starts, chunk launches); they are not a second lifecycle database.
 5. **Recovery selects work; the coordinator does it.** The coordinator serves two requests. A
    user stop **ensures an export**. Authorized recovery **settles the recorder**: it stops an
-   unresolved recorder and updates only the termination observation, preserving a committed export
+   unresolved recorder and completes safe native-path disposition, preserving a committed export
    untouched. Recovery enumerates abandoned or unsettled manifests and asks for one of the two
    under the ownership guard; it never kills processes or deletes files on its own.
 6. **Export failure is not disposal.** A collection, validation, or commit failure preserves the
@@ -186,10 +186,12 @@ recorder identity are retained after commit until the backend proves cleanup saf
 later settle. A `lost` observation alone never permits deleting the native path: a pid identity
 that no longer matches says nothing about who writes there now. HarmonyOS and web, which cannot
 prove a writer gone, retain the native item until an explicit, fenced disposal (rule 6). Only the
-collected copy may be finalized, and only the collected copy is removed after commit.
+collected copy may be finalized, and only the collected copy is removed after commit. Native-path
+disposition is complete only after fenced retirement succeeds or the backend verifies the native
+artifact is absent. A path marked retirable still needs its manifest until retirement completes.
 
 **Checkpoints mark durable, valid artifacts; they never mark attempts.** `collected` is recorded
-only after the raw capture passes the playability sniff (`ftyp` + `moov`, the existing check in
+only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing check in
 `video.ts`), so a pull of a not-yet-finalized MP4 leaves no checkpoint. `finalized` is recorded
 after the export is written. Step 1 records its observation but is **re-attempted on every retry
 while the observation is `unconfirmed` and no export is committed**: an Android `/proc` that was
@@ -208,18 +210,19 @@ Failures at 1, 2, 3, or 4 leave the manifest `open` with the recorded observatio
 and every artifact in place; the next stop re-drives as above (step 1 re-drive is what #2565
 proves for the simulator today). No forced cleanup runs on that path (rule 6).
 
-When step 4 commits with `recorder: 'unconfirmed' | 'lost'`, the descriptor keeps the identity
-and the manifest keeps the observation. The next `record stop` replays. Termination is retried
-only by authorized recovery asking to **settle the recorder** (2.5), never by a second stop.
+After step 4 commits, the manifest retains the native path, identity, recorder observation and
+native-path disposition. The next `record stop` replays. Authorized recovery settles any unresolved
+recorder or pending native-path disposition (2.5); a second stop never repeats that work.
 
 ```
 settle recorder  (request: recovery only)
-  0. guard: fence taken over; manifest completed with recorder !== 'confirmed',
-            or open and abandoned
-  1. backend.stop(descriptor, budget)                → observation
-  2. completed manifest: rewrite metadata.recorder only; the export is not touched;
-     if the backend now proves the writer gone, record the native-path disposition as
-     retirable (the retirement itself is a fenced disposal, rule 6)
+  0. guard: fence taken over; manifest open and abandoned, or completed with an
+            unresolved recorder or pending native-path disposition
+  1. unresolved recorder: backend.stop(descriptor, budget) → observation
+     confirmed/lost recorder: do not repeat stop; inspect only pending artifact disposition
+  2. completed manifest: persist recorder observation and native-path disposition;
+     authorized retirement runs through the backend under the fence only when proven safe;
+     a failed retirement leaves disposition pending; the committed export is not touched
      open manifest: continue as ensure export from the recorded phase
 ```
 
@@ -236,7 +239,8 @@ settle recorder  (request: recovery only)
    old session's manifest; it never deletes what it cannot prove abandoned.
 4. Ask the backend's admission fact. A foreign live writer is `DEVICE_IN_USE` naming the writer.
 5. If the session's current manifest is still unsettled after recovery (`open`, or `completed`
-   with `recorder !== 'confirmed'`), **archive it under its fence generation** before adoption:
+   with an unresolved recorder or pending native-path disposition), **archive it under its fence
+   generation** before adoption:
    `screen-recording.resource.json` → `screen-recording.<generation>.resource.json`, an atomic
    rename in the same session directory. The store lists both shapes (`store.list` already walks
    session directories; it gains the glob), and the next fence generation is the maximum over
@@ -248,20 +252,24 @@ A completed manifest, a manifest naming another serial, a reused pid, or an unre
 table no longer refuses a start. They are recovery inputs, not admission inputs. Adoption never
 overwrites a manifest that recovery could still need: the one-file-per-session layout stays for
 the *current* recording, and unsettled predecessors remain durably enumerable by generation. An
-archived manifest is removed only when it is settled: `completed` with `recorder: 'confirmed'`,
-or `completed` with `recorder: 'lost'` (nothing left to signal). `record stop` and replay read
-only the current manifest; archived ones belong to recovery.
+archived manifest is removed only after its export is committed and its native-path disposition
+is complete. Neither `confirmed` nor `lost` alone retires that recovery record: a stopped writer
+can leave an artifact awaiting disposal, and a lost identity does not prove disposal safe.
+`record stop` and replay read only the current manifest; archived ones belong to recovery.
 
 ### 2.5 Recovery
 
 Recovery has two entry points and one body. At daemon start, and at step 3 of admission, it
 enumerates manifests (`store.list`, already present; current and archived generations) that are
-`open` and not actively owned, or `completed` with `recorder !== 'confirmed'`. For each, it acquires the ownership guard (the
-existing fence takeover; a stale fence is left alone with a diagnostic) and asks the coordinator
-to **settle the recorder** (2.3). For a completed manifest that runs the backend stop and rewrites
-only the termination observation; the committed export is never re-collected, re-finalized, or
-replayed. For an open abandoned manifest it continues as ensure-export from the recorded phase.
-That is the whole algorithm.
+`open` and not actively owned, or `completed` with an unresolved recorder or pending native-path
+disposition. For each, it acquires the ownership guard (the existing fence takeover; a stale fence
+is left alone with a diagnostic) and asks the coordinator to **settle the recorder** (2.3). A
+confirmed or lost recorder with pending disposition still participates: the backend inspects
+artifact disposition without signalling again. The coordinator persists disposition after
+authorized, fenced retirement succeeds or the backend verifies the artifact is absent. Until
+then, the manifest remains enumerable for retry or explicit teardown. The committed export is
+never re-collected, re-finalized, or replayed. An open abandoned manifest continues as
+ensure-export from the recorded phase.
 
 Recovery therefore never decides signals or deletions itself. An `open` manifest whose backend
 answers `lost` and whose artifact is playable is committed as an export with `recorder: 'lost'`;
@@ -367,6 +375,12 @@ completion with `recorder`, or an error that leaves evidence in place.
   is archived under its generation, the new manifest gets generation + 1, `store.list` returns
   both, and recovery later settles the archived one and removes it. Adoption never overwrites
   unresolved evidence.
+- Completed export with a `lost` recorder and native disposition still pending → start archives
+  the manifest, recovery retains its path and identity, and no native deletion is authorized by
+  `lost` alone. The archive is retired only after backend proof and fenced disposition complete.
+- Confirmed recorder with a failed native-artifact retirement → start archives the manifest,
+  recovery still enumerates it and retries only disposition; a failed retry retains the manifest,
+  a successful retry permits archive removal, and the committed export is unchanged throughout.
 - HarmonyOS live stop issues exactly one toggle; recovery issues none.
 - Start over an actively owned open manifest → refused; over an abandoned one → recovery runs
   first, old artifact retained unless committed, start proceeds under a new path.
