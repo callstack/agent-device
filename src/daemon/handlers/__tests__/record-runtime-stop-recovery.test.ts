@@ -25,7 +25,7 @@ test('record stop with a live handle binds no runtime and terminalizes the durab
   expect(harness.sessionStore.get(harness.sessionName)?.screenRecording).toBeUndefined();
 });
 
-test('record stop preserves a finish failure after confirmed compensating cleanup', async () => {
+test('record stop keeps a finish failure primary and preserves the recording for its retry', async () => {
   const harness = makeRecordRuntimeHarness('record-runtime-failed-live-stop-', {
     runtime: { finishError: new Error('final copy failed') },
   });
@@ -38,14 +38,22 @@ test('record stop preserves a finish failure after confirmed compensating cleanu
     error: { code: 'UNKNOWN', message: 'final copy failed' },
   });
   expect(harness.runtime.finish).toHaveBeenCalledOnce();
-  expect(harness.runtime.forceCleanup).toHaveBeenCalledOnce();
-  expect(harness.sessionStore.get(harness.sessionName)?.screenRecording).toBeUndefined();
-  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
-
-  await expect(harness.run(['start', 'replacement.mp4'])).resolves.toMatchObject({
-    ok: true,
-    data: { recording: 'started' },
+  expect(harness.runtime.forceCleanup).not.toHaveBeenCalled();
+  expect(harness.sessionStore.get(harness.sessionName)?.screenRecording).toBeDefined();
+  expect(
+    screenRecordingResourceStore.read(
+      recordingResourcePath(harness.sessionStore, harness.sessionName),
+    ),
+  ).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
   });
+
+  await expect(harness.run(['stop'])).resolves.toMatchObject({
+    ok: false,
+    error: { message: 'final copy failed' },
+  });
+  expect(harness.runtime.finish).toHaveBeenCalledTimes(2);
 });
 
 test('record stop after daemon-state loss reattaches only through the persisted exact owner', async () => {

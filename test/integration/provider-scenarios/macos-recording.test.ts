@@ -58,7 +58,7 @@ test('Provider-backed integration macOS recording uses focused exact runner auth
   );
 });
 
-test('Provider-backed integration macOS recording rejects runner-stop failure and retains cleanup state', async () => {
+test('Provider-backed integration macOS recording keeps a runner-stop failure’s evidence for the next record stop', async () => {
   const recordingPath = createProviderScenarioTempPath(
     'agent-device-provider-scenario-macos-stop-failure',
     'mp4',
@@ -94,15 +94,14 @@ test('Provider-backed integration macOS recording rejects runner-stop failure an
       assert.equal(resource.status, 'decoded');
       if (resource.status === 'decoded') {
         assert.equal(resource.envelope.lifecycle, 'open');
-        assert.equal(resource.envelope.metadata?.phase, 'cleanup-pending');
-        assert.equal(resource.envelope.metadata?.cleanupStatus, 'cleanup-pending');
+        assert.equal(resource.envelope.metadata?.phase, 'completing');
       }
       runnerTranscript.assertComplete();
     },
   );
 });
 
-test('Provider-backed integration macOS recording rejects an invalid MP4 before artifact publication', async () => {
+test('Provider-backed integration macOS recording keeps an unplayable recording for its retry instead of publishing it', async () => {
   const recordingPath = createProviderScenarioTempPath(
     'agent-device-provider-scenario-macos-invalid-video',
     'mp4',
@@ -130,16 +129,18 @@ test('Provider-backed integration macOS recording rejects an invalid MP4 before 
       const recordStop = await daemon.callCommand('record', ['stop']);
       assertRpcError(recordStop, 'COMMAND_FAILED', /was not finalized into a playable video/);
       assert.equal(recordStop.json?.result, undefined);
-      assert.equal(daemon.session()?.screenRecording, undefined);
+      assert.ok(
+        daemon.session()?.screenRecording,
+        'an unplayable recording must stay attached so the next record stop can retry it',
+      );
 
       const resource = screenRecordingResourceStore.read(
         screenRecordingResourceStore.resolvePath(daemon.sessionDir()),
       );
       assert.equal(resource.status, 'decoded');
       if (resource.status === 'decoded') {
-        assert.equal(resource.envelope.lifecycle, 'completed');
-        assert.equal(resource.envelope.metadata?.phase, 'completed');
-        assert.equal(resource.envelope.metadata?.cleanupStatus, 'cleaned');
+        assert.equal(resource.envelope.lifecycle, 'open');
+        assert.equal(resource.envelope.metadata?.phase, 'completing');
       }
       runnerTranscript.assertComplete();
     },
