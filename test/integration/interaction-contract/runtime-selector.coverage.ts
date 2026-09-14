@@ -6,6 +6,8 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector disambiguation: distinct subtrees reject without a geometry winner',
   ],
   occlusion: 'runtime-selector occlusion: covered button is refused',
+  keyboardOcclusion:
+    'runtime-selector keyboardOcclusion: a selector behind the visible keyboard is refused with tap_keyboard_occludes_target',
   parentOwnedTouchPoint:
     'runtime-selector parentOwnedTouchPoint: a fully tiled parent selector preserves selector context and refuses before dispatch',
   offscreen: [
