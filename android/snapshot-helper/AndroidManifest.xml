@@ -7,7 +7,6 @@
     <application
         android:debuggable="false"
         android:label="Agent Device Snapshot Helper"
-        android:testOnly="true"
         android:theme="@android:style/Theme.NoDisplay" />
 
     <instrumentation

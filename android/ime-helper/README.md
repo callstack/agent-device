@@ -34,7 +34,7 @@ PACKAGE="com.callstack.agentdevice.imehelper"
 SERVICE="$PACKAGE/.TestInputMethodService"
 VERSION="$(node -p 'require("./package.json").version')"
 
-adb install -r -t ".tmp/android-ime-helper/agent-device-android-ime-helper-$VERSION.apk"
+adb install -r ".tmp/android-ime-helper/agent-device-android-ime-helper-$VERSION.apk"
 
 # Record the current default IME before switching, so it can be restored exactly.
 PREVIOUS_IME="$(adb shell settings get secure default_input_method)"

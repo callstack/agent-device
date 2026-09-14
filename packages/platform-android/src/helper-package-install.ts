@@ -76,7 +76,6 @@ async function ensureAndroidHelperPackageInstalled(options: {
   const result = await installAndroidAdbPackage(apkPath, {
     provider: adbProvider,
     replace: true,
-    allowTestPackages: true,
     allowFailure: true,
     timeoutMs: installTimeoutMs,
   });

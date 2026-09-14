@@ -103,7 +103,7 @@ case "$HELPER" in
       printf '  "targetSdk": %s,\n' "$TARGET_SDK"
       printf '  "outputFormat": "uiautomator-xml",\n'
       printf '  "statusProtocol": "android-snapshot-helper-v1",\n'
-      printf '  "installArgs": ["install", "-r", "-t"]\n'
+      printf '  "installArgs": ["install", "-r"]\n'
       printf '}\n'
     } > "$MANIFEST_PATH"
     ;;

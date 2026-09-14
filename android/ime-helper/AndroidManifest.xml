@@ -6,7 +6,6 @@
     <application
         android:debuggable="false"
         android:label="Agent Device Test IME"
-        android:testOnly="true"
         android:theme="@android:style/Theme.NoDisplay">
 
         <service

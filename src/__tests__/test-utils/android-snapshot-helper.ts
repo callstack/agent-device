@@ -22,7 +22,7 @@ export const ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT: AndroidSnapshotHelperArti
     targetSdk: 36,
     outputFormat: 'uiautomator-xml',
     statusProtocol: 'android-snapshot-helper-v1',
-    installArgs: ['install', '-r', '-t'],
+    installArgs: ['install', '-r'],
   },
 };
 

@@ -16,7 +16,7 @@ export const ANDROID_TOUCH_HELPER_MANIFEST = {
   versionCode: 17000,
   instrumentationRunner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
   statusProtocol: 'android-snapshot-helper-v1' as const,
-  installArgs: ['install', '-r', '-t'],
+  installArgs: ['install', '-r'],
 };
 
 export function androidTouchHelperResultRecord(values: Record<string, string>): string {

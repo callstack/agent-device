@@ -35,7 +35,7 @@ const manifest: AndroidSnapshotHelperManifest = {
   targetSdk: 36,
   outputFormat: 'uiautomator-xml',
   statusProtocol: 'android-snapshot-helper-v1',
-  installArgs: ['install', '-r', '-t'],
+  installArgs: ['install', '-r'],
 };
 
 beforeEach(() => {
@@ -192,7 +192,7 @@ test('ensureAndroidSnapshotHelper installs when missing and skips a newer versio
 
   assert.equal(installed.installed, true);
   assert.equal(installed.reason, 'missing');
-  assert.deepEqual(calls[1], ['install', '-r', '-t', apkPath]);
+  assert.deepEqual(calls[1], ['install', '-r', apkPath]);
 
   const skipped = await ensureAndroidSnapshotHelper({
     adb: async () => ({
@@ -438,7 +438,7 @@ test('ensureAndroidSnapshotHelper caches successful install checks per device an
       '--show-versioncode',
       localManifest.packageName,
     ],
-    ['install', '-r', '-t', apkPath],
+    ['install', '-r', apkPath],
   ]);
 
   await fs.writeFile(apkPath, 'helper-apk');
@@ -518,7 +518,7 @@ test('ensureAndroidSnapshotHelper always policy bypasses cached install result',
       '--show-versioncode',
       localManifest.packageName,
     ],
-    ['install', '-r', '-t', apkPath],
+    ['install', '-r', apkPath],
   ]);
 });
 
@@ -587,9 +587,9 @@ test('ensureAndroidSnapshotHelper uninstalls and retries when signatures differ'
 
   assert.equal(result.installed, true);
   assert.equal(result.reason, 'outdated');
-  assert.deepEqual(calls[1], ['install', '-r', '-t', apkPath]);
+  assert.deepEqual(calls[1], ['install', '-r', apkPath]);
   assert.deepEqual(calls[2], ['uninstall', 'com.callstack.agentdevice.snapshothelper']);
-  assert.deepEqual(calls[3], ['install', '-r', '-t', apkPath]);
+  assert.deepEqual(calls[3], ['install', '-r', apkPath]);
 });
 
 test('ensureAndroidSnapshotHelper uses provider install capability and semantic install options', async () => {
