@@ -2,17 +2,16 @@
 
 ## Status
 
-Proposed (2026-09-14; third revision after two reviews and one design challenge). Amends ADR 0019
+Proposed (2026-09-14). Amends ADR 0019
 section 5 for the `screen-recording` resource kind only; ADR 0019 receives a short pointer
 paragraph (2.7), the relationship ADR 0022 and 0023 have to it. App-log, audio-probe, and
 perf-capture keep the ADR 0019 contract unchanged; rule 6's shared mechanism reaches each of them
 only through that kind's own failed-finish test.
 
-Earlier drafts tried to make one lifecycle answer two questions. The design challenge that produced
-this revision named them: **whether a playable export exists** and **whether the recorder has
-stopped** are independent facts. A playable export can exist while termination is unconfirmed; a
-recorder can be stopped while its video still needs collecting. Both combinations are legitimate,
-and removing their names does not remove the work.
+Two facts drive the design and are kept independent: **whether a playable export exists** and
+**whether the recorder has stopped**. A playable export can exist while termination is
+unconfirmed; a recorder can be stopped while its video still needs collecting. Both combinations
+are legitimate, and one lifecycle cannot answer both questions.
 
 ## Rules at a glance
 
@@ -363,12 +362,11 @@ completion with `recorder`, or an error that leaves evidence in place.
   `/proc` naming another process → no `kill`, `lost`.
 - Android stop with `/proc` unreadable and the pull returning a `moov`-less file → no `collected`
   checkpoint, manifest `open`; `/proc` readable on the retry → `kill -2` sent, exit observed,
-  re-pull passes the sniff, completion `confirmed`. (Finding: a recorded attempt must not imply
-  termination.)
+  re-pull passes the sniff, completion `confirmed`. A recorded attempt never implies termination.
 - Start over a session whose manifest is `completed` with `recorder: 'unconfirmed'` → the manifest
   is archived under its generation, the new manifest gets generation + 1, `store.list` returns
-  both, and recovery later settles the archived one and removes it. (Finding: adoption must not
-  overwrite unresolved evidence.)
+  both, and recovery later settles the archived one and removes it. Adoption never overwrites
+  unresolved evidence.
 - HarmonyOS live stop issues exactly one toggle; recovery issues none.
 - Start over an actively owned open manifest → refused; over an abandoned one → recovery runs
   first, old artifact retained unless committed, start proceeds under a new path.
@@ -385,9 +383,8 @@ platform packages, Android completed-evidence refusal tests.
   #2565). Each patch is correct and adds a state; the next branch arrives within weeks.
 - **Delete the daemon manifest for recording.** The replay needs a durable home and the fence is
   what keeps a stale owner from mutating a resource it no longer holds.
-- **A public `probe` + `stop(level)` backend interface.** Rejected by the design challenge: it
-  exposes sequencing the coordinator must not own, and it invited the live-handle bypass an earlier
-  review caught.
+- **A public `probe` + `stop(level)` backend interface.** Rejected: it exposes signal sequencing
+  the coordinator must not own, and a live handle could bypass the identity check.
 - **`owned-processes.json` as the sweep list.** Rejected: a second lifecycle database beside the
   manifest. It keeps its incomplete-start job only.
 - **Recovery that signals and deletes on its own.** Rejected: it duplicates the coordinator under
@@ -439,10 +436,9 @@ collect-failure retry, and the stale-caller refusal.
 | `record stop` paths | 2 (live; recovery that throws on 4 backends) | 1 | 1 |
 | Files on an Android stop path | 9 | ~7 | ~6 |
 
-The numbers are smaller than the previous draft's promise because the device marker stays, the
-root host files stay, and rotation stays below API 34. What this design buys is not a third of the
-code; it is one path, one store, three enums, and no refusal that a silent host or a reused pid
-can produce. A later, separate ADR may fold the nine root host files into per-platform transports
+The reduction is modest because the device marker stays, the root host files stay, and rotation
+stays below API 34. What this design buys is one path, one store, three enums, and no refusal that
+a silent host or a reused pid can produce. A later, separate ADR may fold the nine root host files into per-platform transports
 once the layering gates (R16) are re-cut; that is shape, not policy, and it is not needed for any
 row of section 1's table.
 
