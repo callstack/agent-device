@@ -99,7 +99,9 @@ export async function acquireXcodebuildSimulatorSetRedirect(
       xctestDeviceSetPath,
       backupPath,
     });
-    await releaseLock();
+    // The redirect failure is the reportable fact; an unverified release leaves the lock
+    // to the stale-clear path rather than displacing it.
+    await releaseLock().catch(() => undefined);
     throw new AppError('COMMAND_FAILED', 'Failed to redirect XCTest device set path', {
       requestedSetPath,
       xctestDeviceSetPath,

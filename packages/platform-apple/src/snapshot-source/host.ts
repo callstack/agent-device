@@ -195,11 +195,16 @@ async function acquireSnapshotSourceLock(
   try {
     return await Promise.race([pending, aborted]);
   } catch (error) {
-    if (canceled)
+    if (canceled) {
+      // The task is abandoned, so its lock is released best effort. A release that
+      // cannot prove ownership leaves the lock to the stale-clear path, which is the
+      // outcome this branch already accepts; it must not arrive as an unhandled
+      // rejection on a promise nobody is awaiting any more.
       void pending.then(
-        (release) => release(),
+        (release) => release().catch(() => undefined),
         () => undefined,
       );
+    }
     if (
       deadline.clock.isExpired() &&
       !(error instanceof SnapshotSourceError && error.failureKind === 'cancelled')

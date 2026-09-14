@@ -32,8 +32,13 @@ export async function withDeviceClaimLock<T>(
     description: `device claim for ${deviceKey}`,
   });
   try {
-    return await task();
-  } finally {
+    const result = await task();
     await release();
+    return result;
+  } catch (error) {
+    // A task that failed is the reportable fact; an unverified release only says the
+    // lock is still standing, which the stale-clear path resolves on its own.
+    await release().catch(() => undefined);
+    throw error;
   }
 }

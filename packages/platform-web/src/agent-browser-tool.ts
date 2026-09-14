@@ -101,9 +101,14 @@ export async function setupManagedAgentBrowser(options: {
       packageName: AGENT_BROWSER,
       version: MANAGED_AGENT_BROWSER_VERSION,
     });
-    return getManagedAgentBrowserStatus(options);
-  } finally {
+    const status = await getManagedAgentBrowserStatus(options);
     await release();
+    return status;
+  } catch (error) {
+    // A failed install is the reportable fact; an unverified release leaves the lock to
+    // the stale-clear path.
+    await release().catch(() => undefined);
+    throw error;
   }
 }
 
