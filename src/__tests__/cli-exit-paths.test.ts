@@ -12,7 +12,7 @@ vi.mock('../cli/commands/web.ts', async (importOriginal) => {
 import { runCli } from '../cli.ts';
 import { runWebCommand } from '../cli/commands/web.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { resolveDaemonPaths } from '../daemon/config.ts';
+import { resolveDaemonPaths } from '../daemon-resolution.ts';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
 
 afterEach(() => {

@@ -25,7 +25,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep: mocks.sleep,
 }));
 
-import { resolveDaemonPaths } from '../config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { stopDaemon } from '../daemon-stop.ts';
 
 afterEach(() => {

@@ -1,5 +1,5 @@
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
-import { resolveDaemonPaths } from '../../daemon/config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';

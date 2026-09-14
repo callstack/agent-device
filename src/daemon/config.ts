@@ -2,15 +2,11 @@ import type { SessionIsolationMode } from '@agent-device/kernel/contracts';
 
 export type { SessionIsolationMode };
 
-// The state-dir resolution the client also needs lives at the process root, so reaching it does not
-// pull a client into daemon internals; this module composes back what the daemon's own importers
-// read from here, and adds the request-scoping rules only the daemon applies. The transport and
-// server-mode types stay at the root leaf for the client, which imports them directly.
-export {
-  resolveDaemonPaths,
-  resolveDaemonServerMode,
-  type DaemonPaths,
-} from '../daemon-resolution.ts';
+// The request-scoping rules only the daemon applies. What the client shares with it — state-dir,
+// server-mode, and transport resolution — lives at the process root in `src/daemon-resolution.ts`,
+// which both sides import directly. Composing those helpers back in here would cost every importer
+// that only needs a state dir one extra evaluated module, which ADR 0019's eager-closure probe
+// caught at `src/cli.ts`.
 
 export function resolveSessionIsolationMode(raw: string | undefined): SessionIsolationMode {
   const normalized = (raw ?? '').trim().toLowerCase();

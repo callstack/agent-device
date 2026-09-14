@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
-import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
+import { resolveDaemonPaths, resolveDaemonServerMode } from '../../daemon-resolution.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import {

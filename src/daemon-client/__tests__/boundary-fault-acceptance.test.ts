@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from '../../__tests__/test-utils/app-error.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonPaths } from '../../daemon/config.ts';
+import type { DaemonPaths } from '../../daemon-resolution.ts';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 

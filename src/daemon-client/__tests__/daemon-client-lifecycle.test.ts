@@ -18,7 +18,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }));
 
-import { resolveDaemonPaths, type DaemonPaths } from '../../daemon/config.ts';
+import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
 import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';

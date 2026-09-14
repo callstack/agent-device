@@ -42,7 +42,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
-import type { DaemonPaths } from '../../daemon/config.ts';
+import type { DaemonPaths } from '../../daemon-resolution.ts';
 
 const TIMEOUT_MS = 120;
 

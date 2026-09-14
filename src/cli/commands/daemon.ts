@@ -1,4 +1,4 @@
-import { resolveDaemonPaths } from '../../daemon/config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import {
   readDaemonStopIdentity,
   stopDaemon,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
-import { resolveDaemonPaths } from '../config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 

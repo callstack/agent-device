@@ -28,7 +28,7 @@ import {
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { shouldResetDaemonAfterRequestTimeout } from '../daemon-client-timeout.ts';
-import { resolveDaemonPaths } from '../../daemon/config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { stopProcessForTakeover } from '../../daemon-process.ts';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';

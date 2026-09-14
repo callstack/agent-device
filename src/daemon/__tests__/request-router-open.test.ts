@@ -94,7 +94,7 @@ import {
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { resolveDaemonPaths } from '../config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { screenRecordingDurableResource } from '../screen-recording-session-resource.ts';
 import {
   makeAndroidDevice,

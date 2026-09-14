@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
-import { resolveDaemonPaths } from '../daemon/config.ts';
+import { resolveDaemonPaths } from '../daemon-resolution.ts';
 import { startDaemonRuntime } from '../daemon/server/daemon-runtime.ts';
 import {
   cleanupDownloadableArtifact,

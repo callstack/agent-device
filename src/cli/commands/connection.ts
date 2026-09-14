@@ -2,7 +2,7 @@ import type {
   CloudArtifact,
   CloudProviderSessionResult,
 } from '@agent-device/contracts/observability';
-import { resolveDaemonPaths } from '../../daemon/config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
   readActiveConnectionState,

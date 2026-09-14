@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { ownerIdentityDiffers, type OwnerIdentity } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from './config.ts';
+import { resolveDaemonPaths } from '../daemon-resolution.ts';
 
 /**
  * The daemon identity published in a state dir's `daemon.json`. It is the only

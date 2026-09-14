@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
+import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import {
   createLiveDeviceContext,
