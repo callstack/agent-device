@@ -98,11 +98,11 @@ test('finds only exact screenrecord processes for the canonical remote path', as
     async () => {
       const transport = await createAndroidScreenRecordingTransport(android);
       await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
-        status: 'found',
         writers: [
           { pid: '41', remotePath, startTime: '41' },
           { pid: '44', remotePath, startTime: '44' },
         ],
+        conclusive: true,
       });
     },
   );
@@ -131,7 +131,40 @@ test('reports an inconclusive writer search when a candidate process cannot be r
     async () => {
       const transport = await createAndroidScreenRecordingTransport(android);
       await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
-        status: 'uncertain',
+        writers: [],
+        conclusive: false,
+      });
+    },
+  );
+});
+
+test('keeps a mixed scan inconclusive when one candidate cannot be read', async () => {
+  const remotePath = '/sdcard/agent-device-recording-123.mp4';
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        const command = args[1] ?? '';
+        if (command === 'ps -A -o pid=') return result('41\n42\n');
+        if (/^test -d \/proc\/\d+$/.test(command)) return result();
+        if (command.endsWith('/stat')) {
+          return command.includes('/proc/42/')
+            ? result('', 'cat: /proc/42/stat: Permission denied', 1)
+            : result(procStat(41, '41'));
+        }
+        if (command.endsWith('/cmdline')) {
+          return result(
+            ['/system/bin/screenrecord', '--bit-rate', '8000000', remotePath, ''].join('\0'),
+          );
+        }
+        return result('', 'unexpected command', 1);
+      },
+    },
+    { serial: android.id },
+    async () => {
+      const transport = await createAndroidScreenRecordingTransport(android);
+      await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
+        writers: [{ pid: '41', remotePath, startTime: '41' }],
+        conclusive: false,
       });
     },
   );
@@ -147,7 +180,7 @@ test('reports an inconclusive writer search when the process table cannot be rea
       const transport = await createAndroidScreenRecordingTransport(android);
       await expect(
         transport.probeRunningWriters('/sdcard/agent-device-recording-123.mp4'),
-      ).resolves.toEqual({ status: 'uncertain' });
+      ).resolves.toEqual({ writers: [], conclusive: false });
     },
   );
 });

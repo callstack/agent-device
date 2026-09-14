@@ -53,9 +53,10 @@
   artifact is checked against the recorders running on the device first. A recorder that is still
   writing is left alone: `record start` refuses with `DEVICE_IN_USE` and `details.writer` naming whether
   the marker's own recorder or another one holds the path, and only the unmanaged one ends on its own at
-  Android's 180 second limit. A device that cannot answer that question — an unreadable process table, or
-  a candidate process whose identity cannot be read — is refused rather than assumed free, so an artifact
-  is never removed under a recorder the probe failed to see. What still refuses — unreadable or undecodable evidence, a marker the other
+  Android's 180 second limit. A device that cannot answer that question — an unreadable process table,
+  or a candidate process whose identity cannot be read — is refused rather than assumed free, even when
+  other recorders writing that path were identified, so an artifact is never removed under a recorder
+  the probe failed to see. What still refuses — unreadable or undecodable evidence, a marker the other
   transport mode wrote, and an open recording this device identity still owns — is now a typed error
   naming the marker path and the command that clears it, `record stop --session <name>` or removing the
   marker once no session owns it, instead of `UNKNOWN` (#2550).

@@ -106,9 +106,9 @@ async function proveArtifactsReleased(
   }
   const pendingPath = evidence.pendingRemotePath;
   if (pendingPath === undefined) return;
-  const writers = await transport.probeRunningWriters(pendingPath);
-  if (writers.status === 'found') throw artifactClaimed(pendingPath, 'other-recorder');
-  if (writers.status === 'uncertain') throw unprovenRecorder(pendingPath);
+  const scan = await transport.probeRunningWriters(pendingPath);
+  if (scan.writers.length > 0) throw artifactClaimed(pendingPath, 'other-recorder');
+  if (!scan.conclusive) throw unprovenRecorder(pendingPath);
 }
 
 async function removePendingArtifact(

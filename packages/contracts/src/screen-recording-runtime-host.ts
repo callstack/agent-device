@@ -95,14 +95,14 @@ export type AndroidScreenRecordingProcessIdentity = Readonly<{
 }>;
 
 /**
- * Result of asking the device which recorders write a path that no committed identity names.
- * `uncertain` means some candidate process could not be read, which is not proof that the path is
- * free — only `clear` is.
+ * Which recorders write a path that no committed identity names, and whether the scan can prove that
+ * list is the whole story. `conclusive` means every candidate process was read; an unreadable one
+ * clears neither, so only a conclusive scan with no writers proves the path is free.
  */
-export type AndroidScreenRecordingWriterSearch =
-  | Readonly<{ status: 'clear' }>
-  | Readonly<{ status: 'found'; writers: readonly AndroidScreenRecordingProcessIdentity[] }>
-  | Readonly<{ status: 'uncertain' }>;
+export type AndroidScreenRecordingWriterSearch = Readonly<{
+  writers: readonly AndroidScreenRecordingProcessIdentity[];
+  conclusive: boolean;
+}>;
 
 /**
  * `ownership-lost`: the pid is present, yet the identity readable there names something else — a

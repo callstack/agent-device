@@ -30,8 +30,9 @@ export async function cleanupVerifiedAndroidEvidence(
 }
 
 /**
- * Recorders writing an artifact the evidence never committed. An inconclusive search is retained
- * like any other uncertainty: an unreadable process table cannot prove the artifact is free.
+ * Recorders writing an artifact the evidence never committed. An inconclusive scan is retained like
+ * any other uncertainty: one identified recorder does not prove the others are gone, and stopping
+ * only some of them before deleting would delete under the rest.
  */
 async function pendingWriterChunks(
   transport: Transport,
@@ -40,9 +41,8 @@ async function pendingWriterChunks(
   const pendingPath = evidence.pendingRemotePath;
   if (pendingPath === undefined) return [];
   const writers = await transport.probeRunningWriters(pendingPath);
-  if (writers.status === 'uncertain')
-    throw new Error(`cannot prove no recorder writes Android artifact: ${pendingPath}`);
-  if (writers.status === 'clear') return [];
+  if (!writers.conclusive)
+    throw new Error(`cannot list every recorder writing Android artifact: ${pendingPath}`);
   return writers.writers.map((writer, offset) => ({
     index: evidence.chunks.length + 1 + offset,
     remotePath: pendingPath,

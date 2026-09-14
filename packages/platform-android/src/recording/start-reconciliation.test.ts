@@ -364,7 +364,7 @@ test('refuses a stranded interrupted launch whose writers cannot be read', async
       path.startsWith('/sdcard')
         ? { status: 'read' as const, contents: marker }
         : { status: 'missing' as const },
-    findRunning: async () => ({ status: 'uncertain' as const }),
+    findRunning: async () => ({ writers: [], conclusive: false }),
     remove: async () => {
       calls.push('artifact');
       return true;
