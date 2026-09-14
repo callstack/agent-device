@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
+import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 import { resolveDeviceClaimPath } from './device-claim-paths.ts';
@@ -25,20 +25,14 @@ export async function withDeviceClaimLock<T>(
   task: () => Promise<T>,
 ): Promise<T> {
   const owner = readCurrentOwnerIdentity();
-  const release = await acquireProcessLock({
-    lockDirPath: `${resolveDeviceClaimPath(deviceKey)}.lock`,
-    owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
-    timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
-    description: `device claim for ${deviceKey}`,
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: `${resolveDeviceClaimPath(deviceKey)}.lock`,
+        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+        timeoutMs: DEVICE_CLAIM_LOCK_TIMEOUT_MS,
+        description: `device claim for ${deviceKey}`,
+      }),
+    task,
   });
-  try {
-    const result = await task();
-    await release();
-    return result;
-  } catch (error) {
-    // A task that failed is the reportable fact; an unverified release only says the
-    // lock is still standing, which the stale-clear path resolves on its own.
-    await release().catch(() => undefined);
-    throw error;
-  }
 }

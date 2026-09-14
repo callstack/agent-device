@@ -240,6 +240,41 @@ test('managed agent-browser setup reports an install that produced no entry', as
   }
 });
 
+test('managed agent-browser setup gives the install lock back on every path out', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-setup-lock-');
+  vi.stubEnv('npm_execpath', writeFakeNpmCliScript(stateDir));
+  try {
+    await withNodeRuntime({ version: '24.13.0' }, async () => {
+      await withCommandExecutorOverride(
+        async (_cmd: string, args: string[]) => {
+          if (args.includes('install') && args.includes('--prefix')) {
+            writeFakeManagedAgentBrowserPackage(stateDir);
+          }
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+        async () => {
+          await setupManagedAgentBrowser({ stateDir });
+          // The package exists by now, so this second call returns from *inside* the lock
+          // rather than running to the end of it.
+          await setupManagedAgentBrowser({ stateDir });
+        },
+      );
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    assert.deepEqual(lockPathsUnder(stateDir), []);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+function lockPathsUnder(directory: string): string[] {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    if (!entry.isDirectory()) return [];
+    return [...(entry.name.endsWith('.lock') ? [entryPath] : []), ...lockPathsUnder(entryPath)];
+  });
+}
+
 function expectedMissingInstallHint(): string {
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
   if (nodeMajor < 24) {

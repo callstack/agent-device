@@ -11,6 +11,7 @@ const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LOCK_POLL_MS = 100;
 const DEFAULT_LOCK_OWNER_GRACE_MS = 5_000;
 const LOCK_DIRECTORY_SUFFIX = '.lock';
+const RECLAIM_MUTEX_SUFFIX = '.reclaim';
 
 export type ProcessLockOwner = {
   pid: number;
@@ -27,6 +28,33 @@ export type ProcessLockOwnerRecord = ProcessLockOwner & {
   claimToken: string | null;
 };
 
+/** Gives a lock back. Rejects when the lock is standing and this process cannot prove it owns it. */
+export type ProcessLockRelease = () => Promise<void>;
+
+/**
+ * Runs `task` while the lock that `acquire` returns is held, and settles the question every
+ * caller otherwise answers by hand: which of two failures to report.
+ *
+ * A task that failed is the reportable fact, and an unverified release afterwards only says the
+ * lock is still standing, which the stale-clear path resolves on its own. On the success path
+ * the release is not best effort: a lock this process could not give back is not a completed
+ * task, and swallowing it would report success while the next contender waits.
+ */
+export async function withProcessLock<Task>(params: {
+  acquire: () => Promise<ProcessLockRelease>;
+  task: () => Promise<Task>;
+}): Promise<Task> {
+  const release = await params.acquire();
+  try {
+    const result = await params.task();
+    await release();
+    return result;
+  } catch (error) {
+    await release().catch(() => undefined);
+    throw error;
+  }
+}
+
 type ProcessLockOwnerReading =
   | { kind: 'owner'; owner: ProcessLockOwnerRecord }
   | { kind: 'unwritten' }
@@ -39,7 +67,7 @@ export async function acquireProcessLock(params: {
   pollMs?: number;
   ownerGraceMs?: number;
   description?: string;
-}): Promise<() => Promise<void>> {
+}): Promise<ProcessLockRelease> {
   const { lockDirPath, owner } = params;
   const ownerFilePath = path.join(lockDirPath, OWNER_FILE_NAME);
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
@@ -115,11 +143,30 @@ function releaseProcessLock(
   if (reading.kind === 'unreadable') return 'unverified';
   if (reading.kind === 'unwritten' || !ownerIdentityMatches(reading.owner, claim))
     return 'not-owner';
-  // The same process can hold this path twice in sequence, and a reclaim that moved our
-  // directory aside leaves a record behind that names us as though nothing had happened.
+  // The same process can hold this path twice in sequence, so the token is what tells this
+  // acquisition's record from an earlier one that names the very same process.
   if (reading.owner.claimToken !== claim.claimToken) return 'not-owner';
-  fs.rmSync(lockDirPath, { recursive: true, force: true });
-  return 'removed';
+  return clearLockDirectory(lockDirPath, ownerFilePath);
+}
+
+/**
+ * A lock directory is written by this module and holds one file: its record. So it is emptied
+ * and removed rather than removed with everything inside, and a directory that turns out to
+ * hold something else is left standing. That distinction is the difference between clearing a
+ * lock and destroying whoever put their thing in that path.
+ */
+function clearLockDirectory(lockDirPath: string, ownerFilePath: string): 'removed' | 'unverified' {
+  try {
+    fs.unlinkSync(ownerFilePath);
+  } catch (error) {
+    if (errorCode(error) !== 'ENOENT') return 'unverified';
+  }
+  try {
+    fs.rmdirSync(lockDirPath);
+    return 'removed';
+  } catch (error) {
+    return errorCode(error) === 'ENOENT' ? 'removed' : 'unverified';
+  }
 }
 
 function clearStaleProcessLock(
@@ -137,23 +184,23 @@ function clearStaleProcessLock(
   // A lock path held by anything that is not a directory cannot carry a readable
   // owner record, so its age is the only evidence available about it.
   if (!lockStats.isDirectory()) {
-    return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-      ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
-          stats: lockStats,
-          claimToken: null,
-        })
-      : false;
+    return (
+      reclaimWhenAbandoned(lockStats, ownerGraceMs) &&
+      reclaimLockUnderMutex(lockDirPath, ownerFilePath, ownerGraceMs, { kind: 'stray' })
+    );
   }
 
   const reading = readProcessLockOwner(ownerFilePath);
   if (reading.kind === 'owner') {
-    if (isLiveProcessLockOwner(reading.owner)) {
-      return false;
-    }
-    return reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
-      stats: lockStats,
-      claimToken: reading.owner.claimToken,
-    });
+    // A record identifies the acquisition that wrote it, so the directory around a claim judged
+    // dead is that claim's property.
+    return (
+      !isLiveProcessLockOwner(reading.owner) &&
+      reclaimLockUnderMutex(lockDirPath, ownerFilePath, ownerGraceMs, {
+        kind: 'dead-claim',
+        claimToken: reading.owner.claimToken,
+      })
+    );
   }
   // A record we cannot read leaves an owner whose identity is unknown, which is not
   // evidence of death. Only a record that is genuinely absent lets the directory's
@@ -161,12 +208,10 @@ function clearStaleProcessLock(
   if (reading.kind === 'unreadable') {
     return false;
   }
-  return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-    ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
-        stats: lockStats,
-        claimToken: null,
-      })
-    : false;
+  return (
+    reclaimWhenAbandoned(lockStats, ownerGraceMs) &&
+    reclaimLockUnderMutex(lockDirPath, ownerFilePath, ownerGraceMs, { kind: 'empty' })
+  );
 }
 
 function reclaimWhenAbandoned(lockStats: fs.Stats, ownerGraceMs: number): boolean {
@@ -174,100 +219,151 @@ function reclaimWhenAbandoned(lockStats: fs.Stats, ownerGraceMs: number): boolea
 }
 
 /**
- * Moves the abandoned directory aside under a unique name before removing it, so
- * exactly one contender can reclaim one lock. Two plain removals look different from
- * the caller's side: the second succeeds silently on the path the first already
- * cleared, and both contenders continue as though they had freed the lock. `mkdir`'s
- * `EEXIST`, unchanged, stays the arbiter of the lock itself.
+ * What the judgement outside the mutex found, in the one form the removal decision needs: a claim
+ * whose owner is dead, a directory that has never held a record, or a path that is not one.
  */
-function reclaimProcessLockDirectory(
+type JudgedLock =
+  | { kind: 'dead-claim'; claimToken: ProcessLockOwnerRecord['claimToken'] }
+  | { kind: 'empty' }
+  | { kind: 'stray' };
+
+/**
+ * An abandoned lock is the one directory this module destroys without having created it, and
+ * two contenders that both remove it independently both walk away believing they freed the
+ * path. So the decision is taken again inside a mutex of its own, aged by the same grace as the
+ * lock it guards, and everyone who cannot hold it keeps polling.
+ *
+ * Nothing is moved out of the way first: an absent lock path is an invitation, and a lock parked
+ * under another name would return to a path somebody else already wrote a record on. Each branch
+ * re-decides from what is on disk now and removes in place, and a path that has already gone is
+ * left untouched so the caller's next `mkdir` simply wins it.
+ */
+function reclaimLockUnderMutex(
   lockDirPath: string,
   ownerFilePath: string,
+  ownerGraceMs: number,
   judged: JudgedLock,
 ): boolean {
-  const asidePath = reclaimedLockPath(lockDirPath);
+  if (!holdReclaimMutex(lockDirPath, ownerGraceMs)) return false;
   try {
-    fs.renameSync(lockDirPath, asidePath);
-  } catch (error) {
-    return reclaimWithoutTheRename(lockDirPath, ownerFilePath, error);
+    switch (judged.kind) {
+      case 'dead-claim':
+        return removeDeadClaimLock(lockDirPath, ownerFilePath, judged.claimToken);
+      case 'empty':
+        return removeAbandonedEmptyLock(lockDirPath, ownerGraceMs);
+      case 'stray':
+        return removeStrayLockPath(lockDirPath);
+    }
+  } finally {
+    releaseReclaimMutex(lockDirPath);
   }
-  if (!reclaimedLockIsTheOneJudged(asidePath, judged)) {
-    restoreReclaimedLockDirectory(asidePath, lockDirPath);
-    return false;
-  }
-  removeReclaimedLockDirectory(asidePath);
-  return true;
 }
 
 /**
- * A win32 directory with a handle open inside it refuses the rename and often the removal
- * too, which is why a forced removal remains as the fallback: stale-clear atomicity is
- * best effort there and exact elsewhere. The fallback re-reads the record first, because a
- * refused rename means time passed and a live contender may have claimed the path in it.
+ * The mutex says no other contender is reclaiming. It says nothing about the lock's owner, who
+ * may have released the path and handed it to someone new while this process took the mutex, so
+ * the record decides: a claim token is a random id no later acquisition can repeat, and a
+ * directory whose record carries any other token, or no record at all, belongs to somebody else.
  */
-function reclaimWithoutTheRename(
+function removeDeadClaimLock(
   lockDirPath: string,
   ownerFilePath: string,
-  renameError: unknown,
+  claimToken: ProcessLockOwnerRecord['claimToken'],
 ): boolean {
-  const code = (renameError as NodeJS.ErrnoException | null)?.code;
-  if (code === 'ENOENT') return true;
-  if (code !== 'EPERM' && code !== 'EACCES' && code !== 'ENOTEMPTY') return false;
   const reading = readProcessLockOwner(ownerFilePath);
-  if (reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner)) return false;
-  fs.rmSync(lockDirPath, { recursive: true, force: true });
-  return true;
-}
-
-/**
- * A rename addresses whatever stands at the path now, not the directory whose record was
- * read. A contender that reclaimed first and claimed the path again has put a different
- * directory there, so what arrived is compared against what was judged: the same inode,
- * no live owner inside, and the claim token that was read before the rename.
- */
-function reclaimedLockIsTheOneJudged(asidePath: string, judged: JudgedLock): boolean {
-  let moved: fs.Stats;
+  if (reading.kind !== 'owner' || reading.owner.claimToken !== claimToken) return false;
   try {
-    moved = fs.statSync(asidePath);
+    fs.rmSync(lockDirPath, { recursive: true, force: true });
+    return true;
   } catch {
     return false;
   }
-  if (moved.ino !== judged.stats.ino || moved.dev !== judged.stats.dev) return false;
-  const reading = readProcessLockOwner(path.join(asidePath, OWNER_FILE_NAME));
-  if (reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner)) return false;
-  return readClaimToken(reading) === judged.claimToken;
 }
-
-type JudgedLock = {
-  stats: fs.Stats;
-  claimToken: string | null;
-};
 
 /**
- * Returns a directory that turned out to belong to someone else. Failure is not a
- * licence to delete it: its holder's own release reports an unreadable owner rather than
- * let this process clear a lock it does not own.
+ * A directory that has never held a record has no claim to attribute its contents to, so `rmdir`
+ * is the only call made on it: it cannot destroy what a new owner published between the judgement
+ * and here, and `ENOTEMPTY` is that publication saying so. Age re-speaks for the same reason — a
+ * directory created a moment ago is an acquisition that has not published yet, not an abandoned one.
  */
-function restoreReclaimedLockDirectory(asidePath: string, lockDirPath: string): void {
+function removeAbandonedEmptyLock(lockDirPath: string, ownerGraceMs: number): boolean {
+  let current: fs.Stats;
   try {
-    fs.renameSync(asidePath, lockDirPath);
-  } catch {}
+    current = fs.statSync(lockDirPath);
+  } catch {
+    return false;
+  }
+  if (!current.isDirectory() || !reclaimWhenAbandoned(current, ownerGraceMs)) return false;
+  try {
+    fs.rmdirSync(lockDirPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-/** Janitorial work after the rename already achieved the exclusion. */
-function removeReclaimedLockDirectory(asidePath: string): void {
+/**
+ * `unlink` answers `EISDIR` for a directory, which is a claim this process never held, so the
+ * system call itself refuses the one case this branch must not touch.
+ */
+function removeStrayLockPath(lockDirPath: string): boolean {
   try {
-    fs.rmSync(asidePath, { recursive: true, force: true });
-  } catch {}
+    fs.unlinkSync(lockDirPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Keeps the `.lock` suffix so a sibling scanner still reads the name as a lock. */
-function reclaimedLockPath(lockDirPath: string): string {
-  const token = `${process.pid}-${crypto.randomUUID()}`;
+function reclaimMutexPath(lockDirPath: string): string {
   const stem = lockDirPath.endsWith(LOCK_DIRECTORY_SUFFIX)
     ? lockDirPath.slice(0, -LOCK_DIRECTORY_SUFFIX.length)
     : lockDirPath;
-  return `${stem}.reclaimed-${token}${LOCK_DIRECTORY_SUFFIX}`;
+  return `${stem}${RECLAIM_MUTEX_SUFFIX}${LOCK_DIRECTORY_SUFFIX}`;
+}
+
+function holdReclaimMutex(lockDirPath: string, abandonedAfterMs: number): boolean {
+  const mutexPath = reclaimMutexPath(lockDirPath);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.mkdirSync(mutexPath);
+      return true;
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') throw error;
+      if (!clearAbandonedReclaimMutex(mutexPath, abandonedAfterMs)) return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * A mutex left behind by a process that died mid-reclaim is cleared by age, the same evidence
+ * an abandoned lock is judged by. Two contenders may both decide to clear it; the `mkdir` that
+ * follows still admits one of them.
+ */
+function clearAbandonedReclaimMutex(mutexPath: string, abandonedAfterMs: number): boolean {
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(mutexPath);
+  } catch {
+    return true;
+  }
+  if (Date.now() - stats.mtimeMs < abandonedAfterMs) return false;
+  try {
+    fs.rmdirSync(mutexPath);
+  } catch {}
+  return true;
+}
+
+function releaseReclaimMutex(lockDirPath: string): void {
+  try {
+    fs.rmdirSync(reclaimMutexPath(lockDirPath));
+  } catch {}
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as NodeJS.ErrnoException | null)?.code;
 }
 
 /**
@@ -285,10 +381,6 @@ function readProcessLockOwner(ownerFilePath: string): ProcessLockOwnerReading {
   }
   const owner = parseProcessLockOwner(contents);
   return owner ? { kind: 'owner', owner } : { kind: 'unreadable' };
-}
-
-function readClaimToken(reading: ProcessLockOwnerReading): string | null {
-  return reading.kind === 'owner' ? reading.owner.claimToken : null;
 }
 
 function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null {

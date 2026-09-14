@@ -34,10 +34,13 @@ test('the process lock publishes its owner record without publishing files by ha
   assert.doesNotMatch(source, /fs\.writeFileSync\s*\(/);
 });
 
-test('the process lock renames only between the lock path and its reclaimed name', () => {
+// A reclaim that parked the judged directory under another name put the lock path in the state
+// a polling contender reads as free, so nothing here may rename it. What it does instead is
+// empty and remove the path, which cannot address anything but the directory judged stale.
+test('the process lock reclaims in place instead of renaming the lock path', () => {
   const source = fs.readFileSync(PROCESS_LOCK_SOURCE, 'utf8');
-  const renamed = [...source.matchAll(/fs\.renameSync\(([^)]*)\)/g)].map((match) => match[1]);
-  assert.deepEqual(renamed.sort(), ['asidePath, lockDirPath', 'lockDirPath, asidePath']);
+  assert.doesNotMatch(source, /renameSync|asidePath|\.reclaimed-/);
+  assert.match(source, /fs\.rmdirSync/);
 });
 
 test('durable publishers share the host-kit durable publication owner', () => {
