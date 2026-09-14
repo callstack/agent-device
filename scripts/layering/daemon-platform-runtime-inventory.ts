@@ -187,6 +187,16 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'evidence; inventory selection and provider exclusions remain local policy.',
   },
   {
+    file: 'src/daemon/session-lifecycle/internal/session-open-execution.ts',
+    target: 'src/platform-runtime-device-boot.ts',
+    symbols: ['deviceBootObservation'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned claim reconciliation asks the device when it last booted to decide whether a ' +
+      'foreign claim can still describe live ownership; the per-family probe mechanics stay in the ' +
+      'Apple and Android packages behind the neutral observation contract (#2538).',
+  },
+  {
     file: 'src/daemon/handlers/session-selector-dispatch.ts',
     target: 'src/platform-runtime-open-target.ts',
     symbols: ['resolveSessionAppBundleIdForTarget'],
