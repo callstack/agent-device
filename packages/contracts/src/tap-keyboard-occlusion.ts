@@ -14,8 +14,9 @@ import { normalizeType } from './snapshot-text.ts';
  * while the touch activated a key (#2589).
  *
  * The band is derived from the captured tree every acting path already holds, so the guard costs no
- * round trip. Derivation and the center rule are proven against
- * `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change the rule only through that table.
+ * round trip. Derivation, the two rules that decide whether reported geometry may be measured at all,
+ * and the verdict on a point are proven against
+ * `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule only through that table.
  */
 
 /** The one reason a tap refuses because the visible keyboard owns its tap point. */
@@ -184,20 +185,18 @@ function resolveVisibleKeyboardSurface(
   const reportedRects = usableRects(surfaceNodes);
   if (reportedRects.length === 0) return null;
   const minY = Math.min(...anchorRects.map((rect) => rect.y));
+  const minX = Math.min(...anchorRects.map((rect) => rect.x));
+  const maxRight = Math.max(...anchorRects.map((rect) => rect.x + rect.width));
   const bottomEdge = viewport.y + viewport.height;
   const reportedBottom = Math.max(...reportedRects.map((rect) => rect.y + rect.height));
   if (reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
-  // Reported geometry that arrives taller than it is wide is not in the app's orientation space. iOS
-  // gives up the landscape iPhone keyboard's rects in the keyboard's own rotated space: measured on
-  // iPhone 17 Pro, its key plane is 162 x 327 and its dock button reports y 8 of a 402 pt viewport,
-  // while the screenshot shows the keyboard full width across the bottom 327 pt. A band from that
-  // would refuse app content the keyboard is nowhere near while missing the keyboard itself, which is
-  // worse than not measuring — see the landscape cases in the golden table.
-  const reportedLeft = Math.min(...reportedRects.map((rect) => rect.x));
-  const reportedRight = Math.max(...reportedRects.map((rect) => rect.x + rect.width));
-  if (reportedRight - reportedLeft <= reportedBottom - minY) return null;
-  const minX = Math.min(...anchorRects.map((rect) => rect.x));
-  const maxRight = Math.max(...anchorRects.map((rect) => rect.x + rect.width));
+  // Geometry that arrives taller than it is wide is not in the app's orientation space. iOS gives up
+  // the landscape iPhone keyboard's rects in the keyboard's own rotated space: measured on iPhone 17
+  // Pro, its key plane is 162 x 327 and its dock button reports y 8 of a 402 pt viewport, while the
+  // screenshot shows the keyboard full width across the bottom 327 pt. A band from that would refuse
+  // app content the keyboard is nowhere near while missing the keyboard itself, which is worse than
+  // not measuring — see the landscape cases in the golden table.
+  if (maxRight - minX <= reportedBottom - minY) return null;
   const planes = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   return {
     frame: { x: minX, y: minY, width: maxRight - minX, height: bottomEdge - minY },
