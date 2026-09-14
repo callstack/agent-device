@@ -187,9 +187,15 @@ function createCaptureHandle(
       outPath = value;
     },
     finish: async () =>
-      (finish ??= steps
-        .finish(outPath)
-        .then((result) => ({ status: 'completed', result }) as const)),
+      // Only a collected capture stays memoized. A stop the profiler refused has to be re-driven by
+      // the next `perf stop`, which re-pulls the artifact ADR 0024 rule 6 leaves on the device.
+      (finish ??= steps.finish(outPath).then(
+        (result) => ({ status: 'completed', result }) as const,
+        (error: unknown) => {
+          finish = undefined;
+          throw error;
+        },
+      )),
     forceCleanup: async () => (cleanup ??= clean()),
     [Symbol.asyncDispose]: async () => {
       const outcome = await (cleanup ??= clean());
