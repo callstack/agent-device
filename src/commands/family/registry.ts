@@ -12,7 +12,7 @@ import { reactNativeCommandFamily } from '../react-native/index.ts';
 import { recordingCommandFamily } from '../recording/index.ts';
 import { replayCommandFamily } from '../replay/index.ts';
 import { systemCommandFamily } from '../system/index.ts';
-import type { CommandSchema } from '../../cli-schema/types.ts';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import { type CommandFamilyFacet } from './types.ts';
 
 type CommandFamilyRecordMap = {

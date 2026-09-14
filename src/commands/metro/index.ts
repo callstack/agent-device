@@ -5,7 +5,7 @@ import type {
   MetroReloadResult,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import {
   booleanField,
   enumField,

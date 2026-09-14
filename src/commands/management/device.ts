@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { booleanField } from '../command-input.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';

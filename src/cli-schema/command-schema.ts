@@ -1,11 +1,10 @@
 import type { CliCommandName } from '@agent-device/command-registry/catalog';
 import { listCommandMetadata } from '../commands/command-metadata.ts';
-import type { CommandSchema } from './types.ts';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import { getCliCommandOverride, getSchemaOnlyCliCommandSchema } from './command-overrides.ts';
 import {
   getFlagDefinition,
   getFlagDefinitions,
-  projectConfigFlagKeys,
 } from '@agent-device/command-registry/flag-registry';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
@@ -17,13 +16,7 @@ import { AppError } from '@agent-device/kernel/errors';
 
 export type { FlagDefinition, FlagKey };
 export type { CommandSchema };
-export {
-  DEVICE_SELECTION_FLAG_KEYS,
-  getFlagDefinition,
-  getFlagDefinitions,
-  GLOBAL_FLAG_KEYS,
-  projectConfigFlagKeys,
-};
+export { DEVICE_SELECTION_FLAG_KEYS, getFlagDefinition, getFlagDefinitions, GLOBAL_FLAG_KEYS };
 
 // Bases hold only the flags every command supports; prose arrives with the facet's schema,
 // which always carries a complete `text`.

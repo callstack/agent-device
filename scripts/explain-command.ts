@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { explainCommand, formatCommandExplanation } from '../src/commands/command-explain.ts';
+import { explainCommand, formatCommandExplanation } from '../src/cli/command-explain.ts';
 import { getDaemonRouteOwnerFiles } from '../src/daemon/route-owner-files.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

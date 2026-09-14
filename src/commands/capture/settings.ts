@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';

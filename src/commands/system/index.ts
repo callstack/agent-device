@@ -8,7 +8,7 @@ import {
   tvRemoteDurationMode,
 } from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import {
   commonInputFromFlags,
   direct,

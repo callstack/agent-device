@@ -1,7 +1,7 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DaemonInstallSource } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseGitHubActionsArtifactInstallSourceSpec } from '@agent-device/provision-kit/install-source-config';
 import {

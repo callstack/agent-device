@@ -16,7 +16,7 @@ import {
   type FlagDefinition,
   type FlagKey,
 } from '../cli-schema/command-schema.ts';
-import { commandFamilies, type CommandFamilyMetadata } from './family/registry.ts';
+import { commandFamilies, type CommandFamilyMetadata } from '../commands/family/registry.ts';
 
 export type CommandFlagExplanation = {
   key: FlagKey;

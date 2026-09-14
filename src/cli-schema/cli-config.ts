@@ -4,7 +4,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '@agent-device/command-registry/flag-types';
-import { projectConfigFlagKeys } from './command-schema.ts';
+import { projectConfigFlagKeys } from '@agent-device/command-registry/flag-registry';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import {
   getConfigurableOptionSpecs,

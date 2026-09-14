@@ -1,7 +1,7 @@
 import type { CommandName } from '../commands/command-metadata.ts';
 import { listCommandFamilyCliSchemas } from '../commands/family/registry.ts';
 import type { LocalCliCommandName } from '@agent-device/command-registry/catalog';
-import type { CommandSchema } from './types.ts';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   METRO_PREPARE_FLAGS,

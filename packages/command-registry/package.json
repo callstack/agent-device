@@ -87,6 +87,10 @@
       "types": "./src/command-text.ts",
       "default": "./src/command-text.ts"
     },
+    "./command-schema": {
+      "types": "./src/command-schema.ts",
+      "default": "./src/command-schema.ts"
+    },
     "./cli-command-aliases": {
       "types": "./src/cli-command-aliases.ts",
       "default": "./src/cli-command-aliases.ts"

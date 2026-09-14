@@ -19,7 +19,7 @@ import type {
   TransformGestureOptions,
   TypeTextOptions,
 } from '@agent-device/contracts/client';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import {
   REPEATED_TOUCH_FLAGS,
   SELECTOR_SNAPSHOT_FLAGS,

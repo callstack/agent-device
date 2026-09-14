@@ -1,5 +1,5 @@
-import type { FlagKey } from '@agent-device/command-registry/flag-types';
-import type { CommandText } from '@agent-device/command-registry/command-text';
+import type { FlagKey } from './flag-types.ts';
+import type { CommandText } from './command-text.ts';
 
 /**
  * Command grammar plus its resolved text. Prose lives entirely in `text`; everything else here

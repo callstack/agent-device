@@ -21,7 +21,7 @@ import {
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
 import { helpBody, mcpBody } from '@agent-device/command-registry/command-text';
-import { explainCommand } from '../command-explain.ts';
+import { explainCommand } from '../../cli/command-explain.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
