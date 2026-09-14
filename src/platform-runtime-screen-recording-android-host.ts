@@ -11,9 +11,6 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 const ANDROID_MANIFEST_NAME = 'agent-device-recording-active.json';
 const ADB_TIMEOUT_MS = 5_000;
-// Budget for the optional elapsed-uptime read that precedes starting and stopping a recording:
-// short enough that it cannot eat the request window of the recording it describes.
-const UPTIME_PROBE_TIMEOUT_MS = 1_500;
 const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 
 export async function createAndroidScreenRecordingTransport(
@@ -23,10 +20,10 @@ export async function createAndroidScreenRecordingTransport(
     await loadAndroidMechanics();
   const adb = resolveAndroidAdbExecutor(device);
   const scoped = resolveScopedAndroidAdbBackgroundTransport(device);
-  const shell = async (command: string, signal?: AbortSignal, timeoutMs = ADB_TIMEOUT_MS) =>
+  const shell = async (command: string, signal?: AbortSignal) =>
     await adb(['shell', command], {
       allowFailure: true,
-      timeoutMs,
+      timeoutMs: ADB_TIMEOUT_MS,
       signal,
     });
   return Object.freeze({
@@ -69,13 +66,6 @@ export async function createAndroidScreenRecordingTransport(
       if (result.exitCode !== 0) return 'uncertain';
       const size = Number(result.stdout.trim());
       return Number.isSafeInteger(size) && size >= 0 ? size : 'uncertain';
-    },
-    elapsedUptimeMs: async (signal) => {
-      const result = await shell('cat /proc/uptime', signal, UPTIME_PROBE_TIMEOUT_MS);
-      if (result.exitCode !== 0) return undefined;
-      const [seconds] = result.stdout.trim().split(/\s+/);
-      if (!seconds || !/^\d+(?:\.\d+)?$/.test(seconds)) return undefined;
-      return Math.round(Number(seconds) * 1000);
     },
     probeRunningWriters: async (remotePath, signal) => {
       const result = await shell('ps -A -o pid=', signal);

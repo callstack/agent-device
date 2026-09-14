@@ -5,15 +5,17 @@ import { measureCapturedWindow } from './captured-window.ts';
 vi.mock('@agent-device/capture-kit/recording-mp4-duration', () => ({ readMp4DurationMs: vi.fn() }));
 
 const measured = vi.mocked(readMp4DurationMs);
+const STARTED_AT_MS = 1_789_000_000_000;
 
-function capture(durations: readonly (number | undefined)[], windowMs: number | undefined) {
+function capture(durations: readonly (number | undefined)[], windowMs: number) {
   let index = 0;
   measured.mockImplementation(() => durations[index++]);
   return measureCapturedWindow({
     chunkPaths: durations.map((_, offset) =>
       offset === 0 ? '/tmp/capture.mp4' : `/tmp/capture.part-${offset + 1}.mp4`,
     ),
-    windowMs,
+    startedAtMs: STARTED_AT_MS,
+    stoppedAtMs: STARTED_AT_MS + windowMs,
   });
 }
 
@@ -40,16 +42,16 @@ describe('measureCapturedWindow', () => {
     expect(capture([6_998], 7_000)).toEqual({ capturedDurationMs: 6_998 });
   });
 
-  test('reports the clip length without a window measured on the recorder clock', () => {
-    expect(capture([7_000], undefined)).toEqual({ capturedDurationMs: 7_000 });
-  });
-
   test('sums the video of a chunked capture', () => {
     expect(capture([170_000, 9_000], 180_500)).toEqual({ capturedDurationMs: 179_000 });
   });
 
   test('leaves a capture longer than its window unexplained rather than inventing a tail', () => {
     expect(capture([180_000], 60_000)).toEqual({ capturedDurationMs: 180_000 });
+  });
+
+  test('reports the clip length when the host clock moved the window backwards', () => {
+    expect(capture([7_000], -1_000)).toEqual({ capturedDurationMs: 7_000 });
   });
 
   test('stays silent when a chunk cannot answer with a duration', () => {

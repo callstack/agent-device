@@ -4,22 +4,24 @@ import { readMp4DurationMs } from '@agent-device/capture-kit/recording-mp4-durat
 const IDLE_TAIL_WARNING_MS = 2_000;
 
 /**
- * Measures how much video really reached the pulled chunks. Android's `screenrecord` encodes a
- * frame only when the screen changes, so a clip ends at the frame it encoded last rather than at
- * `record stop`, and the caller needs to know which of the two lengths they are holding.
+ * Measures how much video really reached the pulled chunks and how much of the recording window it
+ * covers. Android's `screenrecord` encodes a frame only when the screen changes, so a clip ends at
+ * the frame it encoded last rather than at `record stop`, and the caller needs to know which of the
+ * two lengths they are holding.
  *
- * `windowMs` has to be elapsed device time, the span a clip's media timeline is measured from; a
- * host wall-clock window drifts against it and invents a tail that never happened. An unreadable
- * chunk or window costs the caller the measurement, never the recording.
+ * The window is host elapsed time between launching the recorder and sending the stop signal, the
+ * span this tool itself bracketed; its own export latency belongs to neither. A host that slept
+ * mid-recording reports a window shorter than the device saw, which costs the warning rather than
+ * inventing one. An unreadable chunk costs the measurement, never the recording.
  */
 export function measureCapturedWindow(params: {
   chunkPaths: readonly string[];
-  windowMs: number | undefined;
+  startedAtMs: number;
+  stoppedAtMs: number;
 }): Readonly<{ capturedDurationMs?: number; idleTailWarning?: string }> {
   const capturedDurationMs = sumCapturedDurationMs(params.chunkPaths);
   if (capturedDurationMs === undefined) return {};
-  const windowMs = params.windowMs;
-  if (windowMs === undefined) return { capturedDurationMs };
+  const windowMs = params.stoppedAtMs - params.startedAtMs;
   const idleTailMs = windowMs - capturedDurationMs;
   if (idleTailMs < IDLE_TAIL_WARNING_MS) return { capturedDurationMs };
   return {

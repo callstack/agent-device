@@ -7,7 +7,6 @@ import {
   rollbackChunks,
   startChunkAt,
 } from './chunks.ts';
-import { readElapsedUptimeMs } from './device-clock.ts';
 import { createNativeManifest, type NativeChunk } from './manifest.ts';
 import { persistNativeManifest, removeNativeManifest } from './manifest-store.ts';
 import { reconcileStartEvidence } from './start-reconciliation.ts';
@@ -21,9 +20,7 @@ export async function startInitialTransaction(params: {
   startedAt: number;
   signal: AbortSignal;
   prepareOutput: () => Promise<void>;
-}): Promise<
-  Readonly<{ chunk: NativeChunk; manifestPath: string; startedUptimeMs: number | undefined }>
-> {
+}): Promise<Readonly<{ chunk: NativeChunk; manifestPath: string; startedAtMs: number }>> {
   const { transport, device, input, startedAt, signal, prepareOutput } = params;
   await reconcileStartEvidence(transport, device);
   await prepareOutput();
@@ -37,11 +34,11 @@ export async function startInitialTransaction(params: {
       signal,
     );
     let chunk: NativeChunk;
-    let startedUptimeMs: number | undefined;
+    let startedAtMs: number;
     try {
-      // Read the recorder clock before launching so the window covers the recording's own startup,
-      // the way the stop-side read covers the stop signal.
-      startedUptimeMs = await readElapsedUptimeMs(transport, signal);
+      // Timestamp immediately before launching, the way the stop signal is timestamped, so the
+      // window a short clip is measured against holds only the recording.
+      startedAtMs = Date.now();
       chunk = await startChunkAt(transport, remotePath, input, signal);
     } catch (error) {
       if (signal.aborted) {
@@ -63,7 +60,7 @@ export async function startInitialTransaction(params: {
       await rollbackPublishedChunk(transport, manifestPath, chunk);
       throw error;
     }
-    return { chunk, manifestPath, startedUptimeMs };
+    return { chunk, manifestPath, startedAtMs };
   }
   throw last ?? new Error('Android screenrecord did not begin producing frames');
 }

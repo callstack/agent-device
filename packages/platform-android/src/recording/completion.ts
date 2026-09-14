@@ -41,9 +41,10 @@ export async function completed(params: {
   chunks: readonly ScreenRecordingChunk[];
   targetLabel: string;
   reachedLimit: boolean;
-  windowMs: number | undefined;
+  startedAtMs: number;
+  stoppedAtMs: number;
 }): Promise<Readonly<{ status: 'completed'; result: ScreenRecordingCompletion }>> {
-  const { host, recording, chunks, targetLabel, reachedLimit, windowMs } = params;
+  const { host, recording, chunks, targetLabel, reachedLimit, startedAtMs, stoppedAtMs } = params;
   const chunked = chunks.length > 1;
   const finalization = await host.screenRecording.finalize.complete({
     outputPath: recording.outPath,
@@ -54,7 +55,8 @@ export async function completed(params: {
   });
   const captured = measureCapturedWindow({
     chunkPaths: chunks.map((chunk) => chunk.path),
-    windowMs,
+    startedAtMs,
+    stoppedAtMs,
   });
   const warnings = [
     ...(finalization.warning ? [finalization.warning] : []),

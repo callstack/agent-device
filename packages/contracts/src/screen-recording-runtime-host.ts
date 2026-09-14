@@ -178,13 +178,6 @@ export type AndroidScreenRecordingTransport = Readonly<{
   ): Promise<AndroidScreenRecordingStopOutcome>;
   exists(remotePath: string, signal?: AbortSignal): Promise<boolean | 'uncertain'>;
   size(remotePath: string, signal?: AbortSignal): Promise<number | undefined | 'uncertain'>;
-  /**
-   * Milliseconds the device has been running, counting any time it spent suspended. A clip's media
-   * timeline is measured from the moment its recorder started, so a recording window has to be
-   * measured against the same elapsed-device-time clock rather than a host wall clock, which drifts
-   * against it. Reads may fail; `undefined` costs the caller its duration claim, not the recording.
-   */
-  elapsedUptimeMs(signal?: AbortSignal): Promise<number | undefined>;
   probeRunningWriters(
     remotePath: string,
     signal?: AbortSignal,

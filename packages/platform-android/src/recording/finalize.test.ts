@@ -43,19 +43,16 @@ test('writes terminal coordinates before removing a fenced Android artifact', as
       evidence,
       manifestPath: '/sdcard/agent-device-recording-active.json',
       recording: snapshot(input, 1),
+      startedAtMs: 1,
     }),
   ).resolves.toMatchObject({ status: 'completed' });
   expect(calls).toEqual(['completed', 'remove:/sdcard/agent-device-recording-1.mp4']);
 });
 
-test('measures the window on the recorder clock it reads before stopping the recorder', async () => {
+test('measures a pulled MP4 against the window the host bracketed around the recorder', async () => {
   const directory = mkdtempForTestSync('agent-device-android-finalize-');
   const calls: string[] = [];
   const host = recordingHost({
-    elapsedUptimeMs: async () => {
-      calls.push('uptime');
-      return 26_000;
-    },
     stop: async () => {
       calls.push('stop');
       return 'stopped' as const;
@@ -98,10 +95,10 @@ test('measures the window on the recorder clock it reads before stopping the rec
     ),
     manifestPath: '/sdcard/agent-device-recording-active.json',
     recording: snapshot(input, 1),
-    startedUptimeMs: 10_000,
+    startedAtMs: Date.now() - 16_000,
   });
 
-  expect(calls.slice(0, 2)).toEqual(['uptime', 'stop']);
+  expect(calls).toEqual(['stop', 'pull']);
   expect(outcome.result.capturedDurationMs).toBe(7_000);
-  expect(outcome.result.warning).toContain('it covers 7.0s of the 16.0s recording window.');
+  expect(outcome.result.warning).toMatch(/it covers 7\.0s of the 16\.\ds recording window\./);
 });

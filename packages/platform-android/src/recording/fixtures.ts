@@ -36,8 +36,6 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     },
     exists: async (remotePath: string) => (legacy.exists ? await legacy.exists(remotePath) : true),
     size: async (remotePath: string) => (legacy.size ? await legacy.size(remotePath) : 1),
-    elapsedUptimeMs: async () =>
-      legacy.elapsedUptimeMs ? await legacy.elapsedUptimeMs() : undefined,
     inspect: async (processIdentity: { pid: string }) =>
       legacy.inspect
         ? await legacy.inspect(processIdentity)

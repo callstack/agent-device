@@ -1,7 +1,6 @@
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { cleanupChunks, pullChunks, stopOwnedChunks, waitForStableArtifacts } from './chunks.ts';
-import { readElapsedUptimeMs, recordingWindowMs } from './device-clock.ts';
 import { completed } from './completion.ts';
 import { createCompletedNativeManifest, type NativeManifest } from './manifest.ts';
 import { persistNativeManifest } from './manifest-store.ts';
@@ -15,8 +14,8 @@ export async function finalizeAndroidRecording(params: {
   evidence: NativeManifest;
   manifestPath: string;
   recording: ScreenRecordingLiveSnapshot;
-  /** Recorder clock at launch. Without it the clip length is still measured, just never compared. */
-  startedUptimeMs?: number;
+  /** Host instant the recorder was launched, which is where a clip's timeline begins. */
+  startedAtMs: number;
   reachedLimit?: boolean;
 }): Promise<
   Readonly<{
@@ -24,9 +23,9 @@ export async function finalizeAndroidRecording(params: {
     result: import('@agent-device/contracts/screen-recording-runtime').ScreenRecordingCompletion;
   }>
 > {
-  // Read the recorder's clock before the signal below: everything after that signal is this
-  // tool's own export latency rather than time the screen sat unchanged.
-  const stoppedUptimeMs = await readElapsedUptimeMs(params.transport);
+  // Read the clock before the signal below: everything after that signal is this tool's own export
+  // latency rather than time the screen sat unchanged.
+  const stoppedAtMs = Date.now();
   const reachedLimit =
     (await stopOwnedChunks(params.transport, params.evidence.chunks)) ||
     params.reachedLimit === true;
@@ -43,10 +42,8 @@ export async function finalizeAndroidRecording(params: {
     chunks: outputChunks,
     targetLabel: 'Android recording',
     reachedLimit,
-    windowMs: recordingWindowMs({
-      stoppedUptimeMs,
-      startedUptimeMs: params.startedUptimeMs,
-    }),
+    startedAtMs: params.startedAtMs,
+    stoppedAtMs,
   });
   await persistNativeManifest(
     params.transport,

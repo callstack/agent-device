@@ -5,9 +5,11 @@ import { recordingHost, recordingInput } from './fixtures.ts';
 
 vi.mock('@agent-device/capture-kit/recording-mp4-duration', () => ({ readMp4DurationMs: vi.fn() }));
 
+const STARTED_AT_MS = 1_789_000_000_000;
+
 async function capture(params: {
   clipMs: number;
-  windowMs: number | undefined;
+  windowMs: number;
   chunks?: number;
   reachedLimit?: boolean;
   finalization?: Record<string, unknown>;
@@ -22,7 +24,8 @@ async function capture(params: {
     })),
     targetLabel: 'Android recording',
     reachedLimit: params.reachedLimit ?? false,
-    windowMs: params.windowMs,
+    startedAtMs: STARTED_AT_MS,
+    stoppedAtMs: STARTED_AT_MS + params.windowMs,
   });
 }
 
