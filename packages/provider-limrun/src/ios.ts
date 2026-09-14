@@ -232,12 +232,12 @@ class LimrunIosInteractor implements Interactor {
   async fill(x: number, y: number, text: string, delayMs?: number): Promise<FillBackendResult> {
     // The witness is loaded on the fill path instead of at module evaluation, so this
     // provider keeps the import-time closure budget it declares.
-    const { awaitLimrunTextEntryFocus, readLimrunTapTargetIdentities, readLimrunTextEntryFocus } =
+    const { awaitLimrunTextEntryFocus, readLimrunUnambiguousTapTargets, readLimrunTextEntryFocus } =
       await import('./text-entry-focus.ts');
     // The screen is read before the tap so the witness can say what was under this
     // point at all: an editing element that appears somewhere else proves nothing
     // about this tap (#1658).
-    const targetsAtPoint = readLimrunTapTargetIdentities(
+    const targetsAtPoint = readLimrunUnambiguousTapTargets(
       await this.session.client.elementTree(),
       x,
       y,

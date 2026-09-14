@@ -82,20 +82,34 @@ export function readLimrunTextEntryFocus(
  * editing element among them was under the finger even if focusing it re-laid it
  * out or a keyboard scrolled it away, which is what lets a fill vouch for a field
  * that moved while refusing one that was never there.
+ *
+ * An identity the tree reports more than once is left out rather than trusted. Two
+ * fields that expose neither an identifier nor a label share every part this
+ * identity is built from, so trusting it would let a fill replace whichever twin
+ * holds focus. Geometry still witnesses such a field when the tap lands on it,
+ * because only geometry can tell two twins apart.
  */
-export function readLimrunTapTargetIdentities(
+export function readLimrunUnambiguousTapTargets(
   tree: IosTreeNode | IosTreeNode[],
   x: number,
   y: number,
 ): ReadonlySet<string> {
-  const identities = new Set<string>();
+  const framed: Array<Readonly<{ identity: string; rect: Rect }>> = [];
   for (const node of flattenIosNodes(tree)) {
     const rect = readIosNodeRect(node);
-    if (isPositiveFiniteRect(rect) && containsPoint(rect, x, y)) {
-      identities.add(limrunTextEntryIdentity(node));
+    if (isPositiveFiniteRect(rect)) framed.push({ identity: limrunTextEntryIdentity(node), rect });
+  }
+  const sightings = new Map<string, number>();
+  for (const node of framed) {
+    sightings.set(node.identity, (sightings.get(node.identity) ?? 0) + 1);
+  }
+  const targets = new Set<string>();
+  for (const node of framed) {
+    if (sightings.get(node.identity) === 1 && containsPoint(node.rect, x, y)) {
+      targets.add(node.identity);
     }
   }
-  return identities;
+  return targets;
 }
 
 /**

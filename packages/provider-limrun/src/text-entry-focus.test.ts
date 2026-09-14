@@ -1,8 +1,8 @@
 import { expect, test, vi } from 'vitest';
 import {
   awaitLimrunTextEntryFocus,
-  readLimrunTapTargetIdentities,
   readLimrunTextEntryFocus,
+  readLimrunUnambiguousTapTargets,
 } from './text-entry-focus.ts';
 import type { IosTreeNode } from './snapshot.ts';
 
@@ -41,7 +41,7 @@ function tree(...children: IosTreeNode[]): IosTreeNode {
 }
 
 function targetsAt(point: Readonly<{ x: number; y: number }>, ...before: IosTreeNode[]) {
-  return readLimrunTapTargetIdentities(tree(...before), point.x, point.y);
+  return readLimrunUnambiguousTapTargets(tree(...before), point.x, point.y);
 }
 
 const noSleep = async () => {};
@@ -150,6 +150,58 @@ test('an editing element that was never under the tapped point is refused', asyn
   ).rejects.toMatchObject({
     details: { reason: 'text_entry_focus_not_observed', editingElementObserved: true },
   });
+});
+
+// Two fields that expose neither an identifier nor a label share one identity, so
+// identity alone cannot say which was tapped. The twin that already holds focus is
+// the dangerous one: believing its identity would replace its text (#1658).
+const TWIN_A_RECT: TreeRect = Object.freeze({ x: 24, y: 142, width: 354, height: 56 });
+const TWIN_B_RECT: TreeRect = Object.freeze({ x: 24, y: 262, width: 354, height: 56 });
+
+test('a shared identity does not witness the twin that was not tapped', async () => {
+  await expect(
+    awaitLimrunTextEntryFocus({
+      targetsAtPoint: targetsAt(
+        { x: 200, y: 170 },
+        textField('', { rect: TWIN_A_RECT }),
+        textField('', { rect: TWIN_B_RECT }),
+      ),
+      readFocus: async () =>
+        readLimrunTextEntryFocus(
+          tree(
+            textField('', { rect: TWIN_A_RECT }),
+            textField('', { rect: TWIN_B_RECT, editing: true }),
+          ),
+        ),
+      sleep: noSleep,
+      x: 200,
+      y: 170,
+      timeoutMs: 0,
+    }),
+  ).rejects.toMatchObject({
+    details: { reason: 'text_entry_focus_not_observed', editingElementObserved: true },
+  });
+});
+
+test('geometry still witnesses the twin that was tapped', async () => {
+  const readiness = await awaitLimrunTextEntryFocus({
+    targetsAtPoint: targetsAt(
+      { x: 200, y: 170 },
+      textField('', { rect: TWIN_A_RECT }),
+      textField('', { rect: TWIN_B_RECT }),
+    ),
+    readFocus: async () =>
+      readLimrunTextEntryFocus(
+        tree(
+          textField('', { rect: TWIN_A_RECT, editing: true }),
+          textField('', { rect: TWIN_B_RECT }),
+        ),
+      ),
+    sleep: noSleep,
+    x: 200,
+    y: 170,
+  });
+  expect(readiness).toBe('focused-element');
 });
 
 test('focus that arrives late is waited for instead of typed past', async () => {
