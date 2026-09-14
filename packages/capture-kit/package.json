@@ -26,9 +26,9 @@
       "types": "./src/durable-json.ts",
       "default": "./src/durable-json.ts"
     },
-    "./screen-recording-stop": {
-      "types": "./src/screen-recording-stop-sequence.ts",
-      "default": "./src/screen-recording-stop-sequence.ts"
+    "./recording-stop-sequence": {
+      "types": "./src/recording/stop-sequence.ts",
+      "default": "./src/recording/stop-sequence.ts"
     },
     "./ios-snapshot-acquisition": {
       "types": "./src/ios-snapshot-acquisition.ts",

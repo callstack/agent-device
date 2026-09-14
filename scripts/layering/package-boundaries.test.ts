@@ -413,6 +413,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/recording-mp4-fixtures',
     '@agent-device/capture-kit/recording-output-path',
     '@agent-device/capture-kit/recording-overlay',
+    '@agent-device/capture-kit/recording-stop-sequence',
     '@agent-device/capture-kit/recording-telemetry',
     '@agent-device/capture-kit/recording-video',
     '@agent-device/capture-kit/repeated-nav-subtree',

@@ -5,9 +5,9 @@ import type {
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
-import { createScreenRecordingCompletion } from './screen-recording-completion.ts';
-import { collectedRecordingPath } from './recording/artifact-paths.ts';
-import { readStopCheckpoints, writeStopCheckpoint } from './recording/stop-checkpoints.ts';
+import { createScreenRecordingCompletion } from '../screen-recording-completion.ts';
+import { collectedRecordingPath } from './artifact-paths.ts';
+import { readStopCheckpoints, writeStopCheckpoint } from './stop-checkpoints.ts';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 
 /** What a backend learned while asking its recorder to stop (ADR 0024 2.2). */

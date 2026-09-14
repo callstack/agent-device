@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
-import {
-  type RecorderStop,
-  stopAndExportScreenRecording,
-} from './screen-recording-stop-sequence.ts';
+import { type RecorderStop, stopAndExportScreenRecording } from './stop-sequence.ts';
 
 test('signals the recorder, collects a sibling copy, and finalizes that copy into the export', async () => {
   const manifest = stopManifest();
