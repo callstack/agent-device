@@ -18,8 +18,17 @@ export type ProcessLockOwner = {
   acquiredAtMs: number;
 };
 
+/**
+ * One acquisition of a lock. The token says which: two records can name the same process
+ * and still be different claims on the same path, which is what a release and a reclaim
+ * have to tell apart.
+ */
+export type ProcessLockOwnerRecord = ProcessLockOwner & {
+  claimToken: string | null;
+};
+
 type ProcessLockOwnerReading =
-  | { kind: 'owner'; owner: ProcessLockOwner }
+  | { kind: 'owner'; owner: ProcessLockOwnerRecord }
   | { kind: 'unwritten' }
   | { kind: 'unreadable' };
 
@@ -39,15 +48,16 @@ export async function acquireProcessLock(params: {
   const description = params.description ?? 'process lock';
 
   fs.mkdirSync(path.dirname(lockDirPath), { recursive: true });
+  const claim: ProcessLockOwnerRecord = { ...owner, claimToken: crypto.randomUUID() };
 
   while (Date.now() < deadline) {
     try {
       fs.mkdirSync(lockDirPath);
-      writeProcessLockOwner(ownerFilePath, owner);
+      writeProcessLockOwner(ownerFilePath, claim);
       let released = false;
       return async () => {
         if (released) return;
-        const outcome = releaseProcessLock(lockDirPath, ownerFilePath, owner);
+        const outcome = releaseProcessLock(lockDirPath, ownerFilePath, claim);
         if (outcome !== 'unverified') {
           released = true;
           return;
@@ -84,7 +94,7 @@ function staleLockHint(lockDirPath: string): string {
   return `Remove ${lockDirPath} once you have confirmed no live process holds it, then retry.`;
 }
 
-function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwner): void {
+function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwnerRecord): void {
   publishFileSync({
     destination: ownerFilePath,
     contents: JSON.stringify(owner),
@@ -99,12 +109,15 @@ function writeProcessLockOwner(ownerFilePath: string, owner: ProcessLockOwner): 
 function releaseProcessLock(
   lockDirPath: string,
   ownerFilePath: string,
-  owner: ProcessLockOwner,
+  claim: ProcessLockOwnerRecord,
 ): 'removed' | 'not-owner' | 'unverified' {
   const reading = readProcessLockOwner(ownerFilePath);
   if (reading.kind === 'unreadable') return 'unverified';
-  if (reading.kind === 'unwritten' || !ownerIdentityMatches(reading.owner, owner))
+  if (reading.kind === 'unwritten' || !ownerIdentityMatches(reading.owner, claim))
     return 'not-owner';
+  // The same process can hold this path twice in sequence, and a reclaim that moved our
+  // directory aside leaves a record behind that names us as though nothing had happened.
+  if (reading.owner.claimToken !== claim.claimToken) return 'not-owner';
   fs.rmSync(lockDirPath, { recursive: true, force: true });
   return 'removed';
 }
@@ -125,7 +138,10 @@ function clearStaleProcessLock(
   // owner record, so its age is the only evidence available about it.
   if (!lockStats.isDirectory()) {
     return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-      ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats)
+      ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
+          stats: lockStats,
+          claimToken: null,
+        })
       : false;
   }
 
@@ -134,7 +150,10 @@ function clearStaleProcessLock(
     if (isLiveProcessLockOwner(reading.owner)) {
       return false;
     }
-    return reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats);
+    return reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
+      stats: lockStats,
+      claimToken: reading.owner.claimToken,
+    });
   }
   // A record we cannot read leaves an owner whose identity is unknown, which is not
   // evidence of death. Only a record that is genuinely absent lets the directory's
@@ -143,7 +162,10 @@ function clearStaleProcessLock(
     return false;
   }
   return reclaimWhenAbandoned(lockStats, ownerGraceMs)
-    ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, lockStats)
+    ? reclaimProcessLockDirectory(lockDirPath, ownerFilePath, {
+        stats: lockStats,
+        claimToken: null,
+      })
     : false;
 }
 
@@ -161,7 +183,7 @@ function reclaimWhenAbandoned(lockStats: fs.Stats, ownerGraceMs: number): boolea
 function reclaimProcessLockDirectory(
   lockDirPath: string,
   ownerFilePath: string,
-  judged: fs.Stats,
+  judged: JudgedLock,
 ): boolean {
   const asidePath = reclaimedLockPath(lockDirPath);
   try {
@@ -199,21 +221,27 @@ function reclaimWithoutTheRename(
 
 /**
  * A rename addresses whatever stands at the path now, not the directory whose record was
- * read. A contender that reclaimed first and published a live owner in the meantime has
- * put a different directory there, so what arrived is compared against what was judged:
- * the same inode, and no live owner inside.
+ * read. A contender that reclaimed first and claimed the path again has put a different
+ * directory there, so what arrived is compared against what was judged: the same inode,
+ * no live owner inside, and the claim token that was read before the rename.
  */
-function reclaimedLockIsTheOneJudged(asidePath: string, judged: fs.Stats): boolean {
+function reclaimedLockIsTheOneJudged(asidePath: string, judged: JudgedLock): boolean {
   let moved: fs.Stats;
   try {
     moved = fs.statSync(asidePath);
   } catch {
     return false;
   }
-  if (moved.ino !== judged.ino || moved.dev !== judged.dev) return false;
+  if (moved.ino !== judged.stats.ino || moved.dev !== judged.stats.dev) return false;
   const reading = readProcessLockOwner(path.join(asidePath, OWNER_FILE_NAME));
-  return !(reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner));
+  if (reading.kind === 'owner' && isLiveProcessLockOwner(reading.owner)) return false;
+  return readClaimToken(reading) === judged.claimToken;
 }
+
+type JudgedLock = {
+  stats: fs.Stats;
+  claimToken: string | null;
+};
 
 /**
  * Returns a directory that turned out to belong to someone else. Failure is not a
@@ -259,7 +287,11 @@ function readProcessLockOwner(ownerFilePath: string): ProcessLockOwnerReading {
   return owner ? { kind: 'owner', owner } : { kind: 'unreadable' };
 }
 
-function parseProcessLockOwner(contents: string): ProcessLockOwner | null {
+function readClaimToken(reading: ProcessLockOwnerReading): string | null {
+  return reading.kind === 'owner' ? reading.owner.claimToken : null;
+}
+
+function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(contents);
@@ -275,6 +307,9 @@ function parseProcessLockOwner(contents: string): ProcessLockOwner | null {
     pid: record.pid as number,
     startTime: typeof record.startTime === 'string' ? record.startTime : null,
     acquiredAtMs: record.acquiredAtMs as number,
+    // A record written before claims were tokenized names a process without saying which
+    // acquisition it was, which no release can match and no reclaim can be blamed for.
+    claimToken: typeof record.claimToken === 'string' ? record.claimToken : null,
   };
 }
 

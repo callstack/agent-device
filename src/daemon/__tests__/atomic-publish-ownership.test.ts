@@ -11,8 +11,12 @@ const SIMPLE_PUBLISHERS = [
   new URL('../session-script-writer.ts', import.meta.url),
   new URL('../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
   new URL('../../remote/remote-connection-state.ts', import.meta.url),
-  new URL('../../../packages/host-kit/src/internal/process-lock.ts', import.meta.url),
 ] as const;
+
+const PROCESS_LOCK_SOURCE = new URL(
+  '../../../packages/host-kit/src/internal/process-lock.ts',
+  import.meta.url,
+);
 
 test('simple same-directory publishers use the shared atomic publish owner', () => {
   for (const sourcePath of SIMPLE_PUBLISHERS) {
@@ -20,6 +24,20 @@ test('simple same-directory publishers use the shared atomic publish owner', () 
     assert.match(source, /publishFileSync/);
     assert.doesNotMatch(source, /fs\.(?:writeFileSync|renameSync)\s*\(/);
   }
+});
+
+// The process lock publishes a file and reclaims a directory, which are two different
+// claims of ownership: only the first belongs to the publication owners above.
+test('the process lock publishes its owner record without publishing files by hand', () => {
+  const source = fs.readFileSync(PROCESS_LOCK_SOURCE, 'utf8');
+  assert.match(source, /publishFileSync/);
+  assert.doesNotMatch(source, /fs\.writeFileSync\s*\(/);
+});
+
+test('the process lock renames only between the lock path and its reclaimed name', () => {
+  const source = fs.readFileSync(PROCESS_LOCK_SOURCE, 'utf8');
+  const renamed = [...source.matchAll(/fs\.renameSync\(([^)]*)\)/g)].map((match) => match[1]);
+  assert.deepEqual(renamed.sort(), ['asidePath, lockDirPath', 'lockDirPath, asidePath']);
 });
 
 test('durable publishers share the host-kit durable publication owner', () => {
