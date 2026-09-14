@@ -9,6 +9,8 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import {
   findNodeByRef,
   normalizeRef,
+  SNAPSHOT_CAPTURE_OPTION_KEYS,
+  snapshotOptionsFromFlags,
   type RawSnapshotNode,
   type SnapshotCaptureProvenance,
   type SnapshotState,
@@ -115,14 +117,8 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
     options: {
       appBundleId: context.appBundleId,
       signal: params.signal,
-      interactiveOnly: context.snapshotInteractiveOnly,
-      preferredBackend: context.snapshotPreferredBackend,
-      depth: context.snapshotDepth,
-      scope: context.snapshotScope,
-      raw: context.snapshotRaw,
-      customActions: context.snapshotCustomActions,
+      ...snapshotOptionsFromFlags(context, SNAPSHOT_CAPTURE_OPTION_KEYS),
       includeRects: params.includeRects,
-      includeHiddenContentHints: context.snapshotIncludeHiddenContentHints,
       surface: session?.surface,
     },
   });

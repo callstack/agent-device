@@ -1,5 +1,5 @@
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -41,14 +41,32 @@ export type ClipboardRuntimeOperationFacts = Readonly<{
 }>;
 
 /**
- * Read and write are separate cells because an owner can genuinely have one without the other —
- * a WebDriver provider whose Appium clipboard extension exposes only a getter is the real case —
- * and `clipboard read` must not be refused because the write half is missing.
+ * What an owner declares about the clipboard. Read and write stay separate cells because an owner
+ * can genuinely have one without the other — a WebDriver provider whose Appium clipboard extension
+ * exposes only a getter is the real case — and `clipboard read` must not be refused because the
+ * write half is missing.
+ *
+ * Both halves ride one shell command set on every other owner, so an owner with neither names
+ * `unsupported` once and a half it never names reports that denial verbatim: omission is a
+ * classified refusal, never an unclassified half and never an implied success. An owner states a
+ * half only to say something the family denial does not.
  */
+export type ClipboardRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  read?: RuntimeOperationFact;
+  write?: RuntimeOperationFact;
+}>;
+
+/** Builds the exhaustive owner claims for the two clipboard operations. */
 export function clipboardRuntimeOperationFacts(
-  input: Readonly<{ read: RuntimeOperationFact; write: RuntimeOperationFact }>,
+  input: ClipboardRuntimeOperationFactsInput,
 ): ClipboardRuntimeOperationFacts {
-  return Object.freeze({ readClipboard: input.read, writeClipboard: input.write });
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
+  return Object.freeze({
+    readClipboard: declared(input.read),
+    writeClipboard: declared(input.write),
+  });
 }
 
 /**

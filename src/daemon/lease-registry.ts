@@ -27,6 +27,11 @@ import {
 } from './lease-registry-scope.ts';
 import { DeviceMutationDrain } from './device-mutation-drain.ts';
 import {
+  type LeaseWorkPass,
+  type LeaseWorkWanted,
+  LeaseInFlightWorkRegistry,
+} from './lease-in-flight-work.ts';
+import {
   type HumanControlAuthority,
   type HumanControlHoldInput,
   normalizeHumanControlHoldId,
@@ -42,6 +47,7 @@ type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 export class LeaseRegistry {
   private readonly holdsByDevice = new Map<string, Map<string, OwnedHumanControlHold>>();
   private readonly mutations = new DeviceMutationDrain();
+  private readonly inFlightWork = new LeaseInFlightWorkRegistry();
   private readonly leases = new Map<string, DeviceLease>();
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
@@ -111,6 +117,27 @@ export class LeaseRegistry {
     return this.refreshLease(lease, leaseTtlMs);
   }
 
+  /**
+   * Protects a lease while an admitted request works on its device. A lease renews
+   * when a request is admitted and never again while that request runs, so without
+   * this the slowest command in a session expired the lease that was paying for
+   * the device and tore the session down under the client still waiting for it
+   * (#2509). Releasing a still-wanted pass renews the lease the way releasing a
+   * human-control hold does; a pass whose request was cancelled protects nothing.
+   * `wanted` is how the caller reports that its client is still waiting.
+   */
+  retainLeaseWork(lease: Pick<DeviceLease, 'leaseId'>, wanted: LeaseWorkWanted): LeaseWorkPass {
+    const pass = this.inFlightWork.retain(lease.leaseId, wanted);
+    return {
+      leaseId: pass.leaseId,
+      release: () => {
+        const renewed = pass.release();
+        if (renewed) this.refreshProtectedLease(lease.leaseId, this.now());
+        return renewed;
+      },
+    };
+  }
+
   releaseLease(request: ReleaseLeaseRequest): { released: boolean; lease?: DeviceLease } {
     const lease = this.getLease(request);
     if (!lease) {
@@ -118,6 +145,7 @@ export class LeaseRegistry {
     }
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease);
+    this.inFlightWork.forget(lease.leaseId);
     return { released: true, lease };
   }
 
@@ -359,6 +387,18 @@ export class LeaseRegistry {
     return key !== undefined && this.holdsByDevice.has(key);
   }
 
+  /**
+   * What keeps a past-due lease alive: a human holding the device, or an admitted
+   * request still working on it while its client still wants the result.
+   */
+  private isLeaseProtected(lease: DeviceLease, now: number): boolean {
+    return (
+      lease.expiresAt > now ||
+      this.hasHumanControl(lease) ||
+      this.inFlightWork.isDeferred(lease.leaseId)
+    );
+  }
+
   private expireHumanControlHolds(): void {
     const now = this.now();
     for (const [key, holds] of this.holdsByDevice) {
@@ -376,7 +416,15 @@ export class LeaseRegistry {
   }
 
   private refreshHeldLease(key: string, at: number): void {
-    const leaseId = this.deviceBindings.get(key);
+    this.refreshProtectedLease(this.deviceBindings.get(key), at);
+  }
+
+  /**
+   * The one rule for a device resource that stops holding a lease: the lease is
+   * renewed for its own TTL from the instant the resource let go, never from a
+   * later sweep, so work nobody waited for cannot revive an abandoned lease.
+   */
+  private refreshProtectedLease(leaseId: string | undefined, at: number): void {
     const lease = leaseId ? this.leases.get(leaseId) : undefined;
     if (lease) {
       this.refreshLease(
@@ -392,7 +440,7 @@ export class LeaseRegistry {
     const now = this.now();
     const expired: DeviceLease[] = [];
     for (const lease of this.leases.values()) {
-      if (lease.expiresAt > now || this.hasHumanControl(lease)) continue;
+      if (this.isLeaseProtected(lease, now)) continue;
       this.leases.delete(lease.leaseId);
       this.unbindLease(lease, lease.expiresAt);
       const expiredLease = { ...lease };
@@ -407,7 +455,7 @@ export class LeaseRegistry {
     const normalizedLeaseId = normalizeLeaseId(leaseId);
     if (!normalizedLeaseId) return undefined;
     const lease = this.leases.get(normalizedLeaseId);
-    if (!lease || lease.expiresAt > this.now() || this.hasHumanControl(lease)) {
+    if (!lease || this.isLeaseProtected(lease, this.now())) {
       return undefined;
     }
     this.leases.delete(lease.leaseId);

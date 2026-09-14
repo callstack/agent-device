@@ -377,7 +377,7 @@ function acquisition(
     truncated: false,
     viewport: { kind: 'reported', rect: viewport },
     lineage: { targetId: 'simulator-1', generation: 'generation-1' },
-    residue: [{ kind: 'truncated', dimension: 'payload', limit: 2000 }],
+    residue: [{ kind: 'truncated' }],
   };
 }
 
@@ -391,7 +391,7 @@ function validationFacts(request: IosSnapshotRequest): IosSnapshotValidationFact
     viewport: { kind: 'reported', rect: viewport },
     hittability: { kind: 'available' },
     lineage: { targetId: 'simulator-1', generation: 'generation-1' },
-    residue: [{ kind: 'truncated', dimension: 'payload', limit: 2000 }],
+    residue: [{ kind: 'truncated' }],
   };
 }
 

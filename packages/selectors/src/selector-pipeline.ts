@@ -8,6 +8,7 @@ import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snap
 import {
   isRootInteractionContainer,
   resolveActionableTouchResolution,
+  resolveUnverifiedWrapperControl,
 } from './interaction-targeting.ts';
 import type {
   CandidateSetPipelinePolicy,
@@ -98,27 +99,75 @@ export async function resolveSelectorPipeline(
     match,
   );
   if (outcome.kind === 'none') return { kind: 'none' };
-  if (outcome.kind === 'ambiguous') {
-    return {
-      kind: 'ambiguous',
-      selector: outcome.selector,
-      selectorIndex: outcome.selectorIndex,
-      matchedNodes: outcome.matchedNodes,
-    };
+  if (outcome.kind === 'resolved') {
+    return await stageResolvedRow(
+      policy,
+      nodes,
+      {
+        node: outcome.resolution.node,
+        selector: outcome.resolution.selector,
+        selectorIndex: outcome.resolution.selectorIndex,
+        matches: outcome.resolution.matches,
+        matchedNodes: outcome.matchedNodes,
+      },
+      hooks,
+    );
   }
-  const resolution = outcome.resolution;
-  const staged = await runNodePipelineStages(policy, nodes, resolution.node, hooks);
-  if (staged.kind === 'occluded') {
-    return { kind: 'occluded', node: staged.node, selector: resolution.selector };
-  }
+  const equivalent = resolveEquivalentControlTarget(nodes, outcome);
+  return equivalent ? await stageResolvedRow(policy, nodes, equivalent, hooks) : outcome;
+}
+
+/**
+ * A resolved target plus the candidate set the engine reported with it: the
+ * first alternative that matched anything, which a uniqueness row can resolve
+ * past (`AstSelectorResolution`'s contract), so pair `selector` with
+ * `matchedNodes` before reading them as one set.
+ */
+type ResolvedRowTarget = {
+  node: SnapshotNode;
+  selector: string;
+  selectorIndex: number;
+  matches: number;
+  matchedNodes: SnapshotNode[];
+};
+
+/**
+ * Several matches refused where the candidate set is one control reported
+ * through its own accessibility wrapper: there is nothing to choose among, and
+ * `is <predicate>`/`get attrs`/`screenshot --crop-on` answer about the control
+ * instead of reporting no match for a control on screen. A row that ranks or
+ * takes the document-order head resolves on its own and never reaches here —
+ * a wrapper chain has distinct depths, which is what its tiebreak decides on —
+ * and an acting row collapses inside `classifyActionableTouchCandidates`, which
+ * additionally has to settle a touch point.
+ */
+function resolveEquivalentControlTarget(
+  nodes: SnapshotNode[],
+  refused: { selector: string; selectorIndex: number; matchedNodes: SnapshotNode[] },
+): ResolvedRowTarget | null {
+  const control = resolveUnverifiedWrapperControl(nodes, refused.matchedNodes);
+  if (!control) return null;
   return {
-    kind: 'target',
-    node: staged.node,
-    selector: resolution.selector,
-    selectorIndex: resolution.selectorIndex,
-    matches: resolution.matches,
-    matchedNodes: outcome.matchedNodes,
+    node: control,
+    selector: refused.selector,
+    selectorIndex: refused.selectorIndex,
+    matches: refused.matchedNodes.length,
+    matchedNodes: refused.matchedNodes,
   };
+}
+
+/** Every node stage this row declares, applied to a resolved target. */
+async function stageResolvedRow(
+  policy: SingleTargetPipelinePolicy,
+  nodes: SnapshotNode[],
+  resolved: ResolvedRowTarget,
+  hooks: SelectorPipelineHooks,
+): Promise<SelectorPipelineOutcome> {
+  const staged = await runNodePipelineStages(policy, nodes, resolved.node, hooks);
+  if (staged.kind === 'occluded') {
+    return { kind: 'occluded', node: staged.node, selector: resolved.selector };
+  }
+  return { ...resolved, kind: 'target', node: staged.node };
 }
 
 /**

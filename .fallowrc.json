@@ -19,7 +19,6 @@
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
-    "scripts/runner-request-count/run.ts",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
@@ -31,7 +30,6 @@
     "examples/sdk/contracts-result.ts",
     "examples/sdk/batch-orchestration.ts",
     "examples/sdk/ai-sdk-tools.ts",
-    "test/scripts/metro-prepare-packaged-smoke.mjs",
     "test/integration/*.test.ts",
     "website/docs/404.mdx",
     "website/rspress.config.ts"
@@ -506,6 +504,11 @@
         "summarizeAgentBrowserProcesses",
         "summarizeManagedAgentBrowserProcesses"
       ]
+    },
+    {
+      "comment": "src/runtime.ts keeps its published type surface while its implementation moves to src/runtime-factory.ts (#2540). These two re-exports have no in-repo consumer; they stay so the module's exported shape is unchanged.",
+      "file": "src/runtime.ts",
+      "exports": ["CommandPolicy", "CommandSessionRecord"]
     }
   ],
   "usedClassMembers": [

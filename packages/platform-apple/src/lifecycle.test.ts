@@ -419,7 +419,7 @@ test('a Simulator open whose plan is observation-only starts no runner, releases
 
   const outcome = await lifecycle.openApplication({
     ...openInput(),
-    execution: { plannedOperations: ['captureSnapshot', 'findText', 'captureScreenshot'] },
+    execution: { plannedOperations: ['captureSnapshot', 'captureScreenshot'] },
   });
 
   expect(outcome.timing.runnerDemand).toBe('none');
@@ -428,7 +428,7 @@ test('a Simulator open whose plan is observation-only starts no runner, releases
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
   // The release goes to the runner owner before the app opens and is never awaited by the open.
   expect(releaseSpeculativeRunner).toHaveBeenCalledExactlyOnceWith(simulator, {
-    plannedOperations: ['captureSnapshot', 'findText', 'captureScreenshot'],
+    plannedOperations: ['captureSnapshot', 'captureScreenshot'],
   });
   expect(events).toEqual(['release', 'open']);
 });

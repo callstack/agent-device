@@ -1,12 +1,15 @@
 import { isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 
-// The classified inventory of every production daemon import of a root platform-runtime
-// composition module (#2278, ADR 0022). R65 already bans daemon imports of concrete platform
-// packages and the retired src/platforms zone; the root src/platform-runtime*.ts family is the
-// one composition layer the daemon may still touch, and this table is the classification of
-// every edge that does. An edge is unclassifiable until it is recorded here with a rationale,
-// and a recorded edge that no longer exists is stale — both fail, so the inventory and the
+// The classified inventory of every production daemon import that reaches the root platform-runtime
+// composition modules (#2278, ADR 0022, #2542). R65 already bans daemon imports of concrete platform
+// packages and the retired src/platforms zone; the composition layer is the one place the daemon may
+// still touch, and this table is the classification of every edge that reaches it — either directly
+// into the src/platform-runtime*.ts family, or into any module outside the daemon zone that imports
+// that family itself, statically or dynamically. A root hub such as src/provider-device-runtime.ts is
+// named by neither file pattern nor zone, so a daemon import of it used to be invisible here while
+// carrying the same platform mechanics. An edge is unclassifiable until it is recorded here with a
+// rationale, and a recorded edge that no longer exists is stale — both fail, so the inventory and the
 // tree cannot drift apart in either direction.
 
 export const DAEMON_PLATFORM_RUNTIME_RULE = 'R76 daemon-platform-runtime-inventory';
@@ -36,6 +39,41 @@ export type DaemonPlatformRuntimeEdge = Readonly<{
 /** The root platform-runtime composition family: src/platform-runtime.ts and src/platform-runtime-*.ts. */
 export function isRootPlatformRuntimeTarget(target: string): boolean {
   return /^src\/platform-runtime(?:\.ts|-[a-z0-9-]+\.ts)$/.test(target);
+}
+
+/**
+ * Every module outside the daemon zone through which a daemon import can reach the root
+ * platform-runtime family: the family itself, plus anything that imports it, transitively, over
+ * static and dynamic edges alike. Computed from the tree rather than patterned so a root hub that
+ * carries platform mechanics without naming them gains no immunity from its filename, and so the
+ * one dynamic edge out of the daemon zone is classified like the static ones (#2542).
+ */
+export function computePlatformMechanicsHubs(
+  edges: readonly ResolvedImportEdge[],
+): ReadonlySet<string> {
+  const importersByTarget = new Map<string, string[]>();
+  const roots: string[] = [];
+  for (const edge of edges) {
+    const importers = importersByTarget.get(edge.target);
+    if (importers === undefined) importersByTarget.set(edge.target, [edge.file]);
+    else importers.push(edge.file);
+    if (isRootPlatformRuntimeTarget(edge.target) && !roots.includes(edge.target)) {
+      roots.push(edge.target);
+    }
+  }
+
+  const hubs = new Set<string>(roots);
+  const seen = new Set<string>(roots);
+  const frontier = [...roots];
+  while (frontier.length > 0) {
+    for (const importer of importersByTarget.get(frontier.pop()!) ?? []) {
+      if (seen.has(importer)) continue;
+      seen.add(importer);
+      frontier.push(importer);
+      if (!importer.startsWith('src/daemon/')) hubs.add(importer);
+    }
+  }
+  return hubs;
 }
 
 /**
@@ -160,6 +198,39 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'only symbol this edge names.',
   },
   {
+    file: 'src/daemon/snapshot-interactor-capture.ts',
+    target: 'src/core/interactors.ts',
+    symbols: ['getInteractor'],
+    classification: 'leaked-platform-mechanics',
+    rationale:
+      'the snapshot capture looks an interactor up through a dynamic import of the shared ' +
+      'interactor lookup, the one production edge that leaves the daemon zone dynamically and so ' +
+      'the one the ranked spine never sees; interactor resolution behind a capability bound at ' +
+      'root composition is the accepted deepening (#2555).',
+    deepenedBy: '#2555',
+  },
+  {
+    file: 'src/daemon/server/daemon-runtime.ts',
+    target: 'src/provider-device-runtimes.ts',
+    symbols: ['createDefaultProviderRuntimeComposition', 'DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS'],
+    classification: 'composition-essential',
+    rationale:
+      'process-root assembly of the default provider runtime composition and the ids whose runtime ' +
+      'must be present for a request, which is what makes a cloud or remote lease holder visible to ' +
+      'the daemon at all; the daemon holds no provider mechanics at this site.',
+  },
+  {
+    file: 'src/daemon/server/daemon-runtime.ts',
+    target: 'src/provider-device-runtime.ts',
+    symbols: ['createProviderDeviceRuntimeRequestProviders', 'isActiveProviderDevice'],
+    classification: 'composition-essential',
+    rationale:
+      'process-root assembly of the request-scoped provider runtime providers, and the one site that ' +
+      'hands the resulting device-ownership fact to the daemon through its own typed admission seam ' +
+      '(#2541); the ten leaf call sites that used to name this hub now read ' +
+      'src/daemon/provider-device-admission.ts, so this edge is the composition and nothing else.',
+  },
+  {
     file: 'src/daemon/session-lifecycle/internal/session-open-prepare.ts',
     target: 'src/platform-runtime-open-target.ts',
     symbols: ['resolveRequestedOpenSurface', 'validateOpenRelaunchTarget'],
@@ -181,13 +252,17 @@ function sorted(symbols: readonly string[]): string[] {
 }
 
 /**
- * Catches: unclassified daemon-to-root platform-runtime coupling regrowing — a new edge (or a
+ * Catches: unclassified daemon-to-platform-mechanics coupling regrowing — a new edge (or a
  *   new symbol on an existing edge) that the #2278 audit never classified, the mirror failure, a
  *   classified edge that no longer exists and would silently admit its return, and dynamic
  *   imports whose binding set the inventory cannot name: a rest or computed destructure binding,
  *   or a namespace/side-effect import() call exposed alongside (or instead of) the named ones.
+ *   Reaching the platform through a root hub is caught the same way as reaching it directly, and a
+ *   dynamic edge is classified rather than skipped, so the direction the ranked spine cannot see is
+ *   at least named here (#2542).
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
- *   this table is that measurement, classified per ADR 0022.
+ *   this table is that measurement, classified per ADR 0022, plus the 3 edges the hub widening and
+ *   dynamic-edge pass made visible at #2541 (2 provider-runtime hubs, 1 dynamic interactor lookup).
  * Cost: attributed to the R76 rule registration in check.ts; not a standalone CI job.
  * Kill criterion: the daemon reaches the platform only through the gateway and declared
  *   contract capabilities (the inventory empty), or a maintainer decision retires the
@@ -196,6 +271,7 @@ function sorted(symbols: readonly string[]): string[] {
 export function checkDaemonPlatformRuntimeInventory(
   edges: readonly ResolvedImportEdge[],
 ): LayeringViolation[] {
+  const hubs = computePlatformMechanicsHubs(edges);
   const actual = new Map<
     string,
     { line: number; symbols: Set<string>; residue: boolean; openEnded: boolean }
@@ -203,7 +279,7 @@ export function checkDaemonPlatformRuntimeInventory(
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon/')) continue;
     if (!isProductionSourceFile(edge.file)) continue;
-    if (!isRootPlatformRuntimeTarget(edge.target)) continue;
+    if (!hubs.has(edge.target)) continue;
     const key = keyOf(edge.file, edge.target);
     const entry = actual.get(key) ?? {
       line: edge.line,
@@ -234,7 +310,7 @@ export function checkDaemonPlatformRuntimeInventory(
         file: key.split(' -> ')[0]!,
         line: entry.line,
         message:
-          `unclassified daemon-to-root platform-runtime coupling: ${key}. Classify it in ` +
+          `unclassified daemon coupling to platform mechanics: ${key}. Classify it in ` +
           `DAEMON_PLATFORM_RUNTIME_EDGES (${DAEMON_PLATFORM_RUNTIME_RULE}) with its rationale, ` +
           `or remove the coupling.`,
       });

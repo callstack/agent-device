@@ -1,6 +1,4 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,
@@ -8,6 +6,7 @@ import type {
   SettleParams,
 } from '@agent-device/contracts/interaction';
 import { captureInteractionSnapshot } from './resolution.ts';
+import { summarizePostActionEvidence, surfaceScopedNodes } from './post-action-surface.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 
 type ObservedResult<T extends object> = T & {
@@ -82,10 +81,7 @@ async function observeAfterInteraction(
       resolved,
     });
     const evidence = params.verify
-      ? settleEvidence(
-          outcome.settledNodes,
-          'preActionNodes' in resolved ? resolved.preActionNodes : undefined,
-        )
+      ? settleEvidence(outcome.settledCapture, resolved.preAction)
       : undefined;
     return { settle: outcome.observation, ...(evidence ? { evidence } : {}) };
   }
@@ -98,23 +94,17 @@ async function observeAfterInteraction(
  * Post-action side of `--verify` (#1047): one interactive-only capture through
  * the same capture helper the resolution path already uses, digested and then
  * discarded. The node tree itself is never attached to the result, only the
- * cheap summary.
+ * cheap summary. A missing baseline still yields `changedFromBefore: false` —
+ * no baseline, no claim.
  */
 async function captureVerifyEvidence(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   resolved: ResolvedInteractionTarget,
 ): Promise<InteractionEvidence | undefined> {
-  const preActionNodes: SnapshotNode[] | undefined =
-    'preActionNodes' in resolved ? resolved.preActionNodes : undefined;
   try {
     const capture = await captureInteractionSnapshot(runtime, options, true);
-    const after = summarizeAxEvidence(capture.snapshot.nodes);
-    // No pre-action baseline means we cannot claim a change happened; default
-    // to false rather than asserting a change we did not actually observe.
-    const changedFromBefore =
-      preActionNodes !== undefined && after.digest !== summarizeAxEvidence(preActionNodes).digest;
-    return { ...after, changedFromBefore };
+    return summarizePostActionEvidence(surfaceScopedNodes(capture.snapshot), resolved.preAction);
   } catch {
     return undefined;
   }
@@ -150,6 +140,9 @@ function hasMaterialPostActionChange(view: {
   settle?: SettleObservation;
 }): boolean {
   if (view.evidence?.changedFromBefore === true) return true;
+  // A surface replacement (#2438) carries no settled diff by design, and it is the most material
+  // post-action change there is: the screen is now a different surface.
+  if (view.settle?.surfaceChange !== undefined) return true;
   const summary = view.settle?.diff?.summary;
   return !!summary && (summary.additions > 0 || summary.removals > 0);
 }

@@ -851,3 +851,28 @@ function createAudioProbeScriptPage(): AudioProbeScriptPage {
     },
   };
 }
+
+/**
+ * #2432: `amount` is a fraction of the viewport axis everywhere else, and the browser scrolls by
+ * CSS pixels. Passing it through raw made `scroll down 0.5` travel half a pixel.
+ */
+test('a relative scroll amount reaches agent-browser as pixels, not as the fraction itself', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.scroll('down', { amount: 0.6 });
+      await provider.scroll('down', { amount: 1.2 });
+      await provider.scroll('down', undefined);
+    });
+
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [
+        ['scroll', 'down', '300', '--json', '--session', 'web-session'],
+        ['scroll', 'down', '600', '--json', '--session', 'web-session'],
+        ['scroll', 'down', '--json', '--session', 'web-session'],
+      ],
+    );
+  });
+});

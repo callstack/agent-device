@@ -8,6 +8,74 @@ import {
 } from '../../index.ts';
 import { createMaestroRuntimePort, makeOperations } from './runtime-port-fixtures.ts';
 
+test.each(['tel:+15551234567', 'mailto:agent@example.test'])(
+  'exports standalone deep link %s without an app config',
+  (link) => {
+    const result = exportReplayActionsToMaestro([action('open', [link])], {
+      resolveSelector: () => null,
+    });
+
+    expect(result.yaml).toBe(`- openLink: ${link}\n`);
+    expect(result.warnings).toEqual([]);
+  },
+);
+
+test.each([
+  ['android', 'tel:+15551234567'],
+  ['android', 'mailto:agent@example.test'],
+  ['ios', 'tel:+15551234567'],
+  ['ios', 'mailto:agent@example.test'],
+] as const)('exports and executes %s deep link %s in both open forms', async (platform, link) => {
+  const result = exportReplayActionsToMaestro(
+    [
+      action('open', [link]),
+      {
+        ...action('open', ['com.example.app', link]),
+        flags: { relaunch: true, clearAppState: true, launchArgs: ['--fixture'] },
+      },
+    ],
+    { resolveSelector: () => null },
+  );
+  const launchApp = {
+    appId: 'com.example.app',
+    stopApp: true,
+    clearState: true,
+    launchArguments: ['--fixture'],
+  };
+
+  expect(parseYamlDocs(result.yaml)).toEqual([
+    { appId: 'com.example.app' },
+    [{ openLink: link }, { launchApp }, { openLink: link }],
+  ]);
+  expect(result.warnings).toEqual([]);
+
+  const calls: unknown[] = [];
+  const port = createMaestroRuntimePort(
+    makeOperations({
+      platform,
+      launchApp: async (input) => {
+        calls.push({ launchApp: input });
+      },
+      openLink: async (input) => {
+        calls.push({ openLink: input });
+      },
+    }),
+  );
+  const outcome = await executeMaestroFlow(inspectMaestroFlow(result.yaml, 'links.yaml'), port, {
+    platform,
+    readSource: () => {
+      throw new Error('unexpected flow include');
+    },
+  });
+
+  expect(outcome).toMatchObject({ ok: true, replayed: 3 });
+  expect(calls).toEqual([
+    { openLink: { link } },
+    { launchApp: { ...launchApp, launchArguments: { kind: 'list', values: ['--fixture'] } } },
+    { openLink: { link } },
+  ]);
+});
+
 test.each(['android', 'ios'] as const)(
   'exports an app-to-home-to-app journey that executes in order on %s',
   async (platform) => {
@@ -146,6 +214,11 @@ test.each([
     positionals: ['com.example.app', 'another-app'],
     message: 'open with a non-URL second argument is unsupported',
   },
+  ...['tel:', 'mailto:', 'http:/x', 'example://path with spaces'].map((target) => ({
+    command: 'open',
+    positionals: ['com.example.app', target],
+    message: 'open with a non-URL second argument is unsupported',
+  })),
 ])('rejects unsupported navigation: $command $positionals', ({ command, positionals, message }) => {
   expect(() =>
     exportReplayActionsToMaestro([action(command, positionals)], {

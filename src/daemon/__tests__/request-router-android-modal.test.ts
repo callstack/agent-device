@@ -16,7 +16,15 @@ import {
 import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  isActiveProviderDevice,
+} from '../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+
+// Root composition installs the daemon's provider-device admission; this test composes the
+// request providers the same way, so it installs the fact the same way.
+installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { androidObservation } from '../../platform-runtime.ts';

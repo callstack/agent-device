@@ -92,3 +92,40 @@ test('a Maestro replay against a remote daemon sends its runFlow includes too', 
     [path.join(cwd, 'flows/shared/login.yaml')]: included,
   });
 });
+
+test.each(['native', 'maestro'])(
+  'test globs send %s sources from a literal cwd',
+  async (backend) => {
+    const maestro = backend === 'maestro';
+    const name = maestro ? 'flow.yaml' : 'flow.ad';
+    const source = maestro ? 'appId: demo\n---\n- runFlow: shared/child.yaml\n' : 'open "Demo"\n';
+    const child = '---\n- back\n';
+    const root = makeFlowsCheckout({
+      [`[workspace]/${name}`]: source,
+      '[workspace]/shared/child.yaml': child,
+    });
+    const cwd = path.join(root, '[workspace]');
+
+    const result = await runCliCapture(
+      ['test', maestro ? './*.yaml' : './*.ad', '--json', ...(maestro ? ['--maestro'] : [])],
+      {
+        cwd,
+        env: REMOTE_DAEMON_ENV,
+        defaultResponse: { ok: true, data: { tests: [], total: 0, passed: 0, failed: 0 } },
+      },
+    );
+
+    assert.equal(result.calls.length, 1);
+    assert.equal(result.calls[0]?.command, 'test');
+    const entry = path.join(cwd, name);
+    assert.deepEqual(result.calls[0]?.flags?.replayScriptSources, [
+      {
+        entry,
+        files: {
+          [entry]: source,
+          ...(maestro ? { [path.join(cwd, 'shared/child.yaml')]: child } : {}),
+        },
+      },
+    ]);
+  },
+);

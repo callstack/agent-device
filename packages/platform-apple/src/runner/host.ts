@@ -17,6 +17,22 @@ import type { XmlNode } from '@agent-device/xml';
  * runner uses; the composition-root assignment is the conformance check, so a
  * root signature drifting incompatibly fails typecheck there rather than at
  * runtime.
+ *
+ * A host-kit symbol the runner needs is added HERE, on {@link AppleRunnerHost}, and bound to the
+ * real implementation in `core/runner-host.ts` -- never imported directly from a `runner/*`
+ * module. The reason: `packages/platform-apple/src/runner/` sits in the eager import closure of
+ * seven Apple facade entries (`app-lifecycle-facade.ts`, `app-resolution-facade.ts`,
+ * `doctor-facade.ts`, `perf-facade.ts`, `physical-device-facade.ts`, `runner-operations-facade.ts`,
+ * `runner/index.ts`) that `scripts/__tests__/eager-closure-budgets.ts` holds at a fixed size (no
+ * growth against the merge-base); a static `@agent-device/host-kit/*` value import from a runner
+ * module adds every module on its own import path to all seven closures at once (#2423 measured
+ * one candidate import adding 5 modules to `runner/index.ts`'s closure, 13 -> 18, after two review
+ * rounds spent rediscovering this). `scripts/layering/` enforces the port at the import-graph
+ * level (R77 apple-runner-host-port): a `runner/**` file may hold a type-only
+ * `@agent-device/host-kit/*` import, which evaluates nothing, but never a value one. A pure
+ * constant that both the runner and another package need is not a host-kit exception to this -- it
+ * belongs in a runner module already inside every facade closure (e.g.
+ * `runner/apple-runner-platform.ts`), imported directly from there.
  */
 
 export type ExecResult = {
@@ -149,6 +165,8 @@ export type AppleRunnerHost = {
     message: string,
     extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
   ): ExecResult;
+  /** True only for the error the exec layer raises when it killed a command at `timeoutMs`. */
+  isCommandTimeoutError(error: unknown): boolean;
   // Diagnostics (@agent-device/host-kit/diagnostics)
   emitDiagnostic(event: DiagnosticEventInput): void;
   withDiagnosticTimer<T>(
@@ -277,6 +295,8 @@ export const runCmdBackground: AppleRunnerHost['runCmdBackground'] = (cmd, args,
   requireHost().runCmdBackground(cmd, args, options);
 export const requireExecSuccess: AppleRunnerHost['requireExecSuccess'] = (result, message, extra) =>
   requireHost().requireExecSuccess(result, message, extra);
+export const isCommandTimeoutError: AppleRunnerHost['isCommandTimeoutError'] = (error) =>
+  requireHost().isCommandTimeoutError(error);
 export const emitDiagnostic: AppleRunnerHost['emitDiagnostic'] = (event) =>
   requireHost().emitDiagnostic(event);
 export const withDiagnosticTimer = <T>(

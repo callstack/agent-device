@@ -1,5 +1,9 @@
 import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/android-system-chrome';
 import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
+import {
+  SNAPSHOT_COMMAND_OPTION_KEYS,
+  snapshotOptionsFromFlags,
+} from '@agent-device/kernel/snapshot';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
@@ -20,12 +24,9 @@ export async function dispatchSnapshotViaRuntime(
     }) => {
       const result = await agentRuntime.capture.snapshot({
         session: resolvedSessionName,
-        interactiveOnly: request.flags?.snapshotInteractiveOnly,
-        depth: request.flags?.snapshotDepth,
+        ...snapshotOptionsFromFlags(request.flags, SNAPSHOT_COMMAND_OPTION_KEYS),
+        // The session-resolved scope wins over the raw flag.
         scope: snapshotScope,
-        raw: request.flags?.snapshotRaw,
-        customActions: request.flags?.snapshotCustomActions,
-        forceFull: request.flags?.snapshotForceFull,
       });
       const refsGeneration = publishedSnapshotGeneration(
         request,

@@ -4,37 +4,48 @@ import path from 'node:path';
 import { beforeAll, describe, test } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
+import { BUILD_TIMEOUT_MS } from './cache.ts';
+import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
+
+// The host bridge compile is budgeted from a deadline sized to production's build ceiling, not a
+// stricter warm-host constant, so a cold runner's first `xcrun` (signature-scan stall plus clang)
+// is not tripped before the compile finishes (#2439). The hook budget leaves headroom beyond that.
+const COMPILE_HOOK_TIMEOUT_MS = BUILD_TIMEOUT_MS + 30_000;
+
+async function compileSnapshotBridgeFixture(clangArgs: readonly string[]): Promise<void> {
+  const deadline = createSnapshotSourceDeadline(BUILD_TIMEOUT_MS, undefined);
+  const compiled = await runCmd('xcrun', [...clangArgs], {
+    allowFailure: true,
+    timeoutMs: remainingSnapshotSourceMs(deadline, 'native-build-deadline'),
+  });
+  assert.equal(compiled.exitCode, 0, compiled.stderr);
+}
 
 describe.skipIf(process.platform !== 'darwin')('native snapshot capture', () => {
   let binary: string;
   beforeAll(async () => {
     binary = path.join(await mkdtempForTest('snapshot-foreground-'), 'foreground-owner');
     const nativeRoot = path.resolve(import.meta.dirname, '../../../../apple/snapshot-bridge');
-    const compiled = await runCmd(
-      'xcrun',
-      [
-        '--sdk',
-        'macosx',
-        'clang',
-        '-fobjc-arc',
-        '-Ddlopen=fixtureDlopen',
-        '-Ddlsym=fixtureDlsym',
-        '-framework',
-        'Foundation',
-        '-framework',
-        'CoreGraphics',
-        '-I',
-        nativeRoot,
-        path.join(nativeRoot, 'SnapshotBridgeRuntime.m'),
-        path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
-        path.join(import.meta.dirname, 'fixtures/foreground-owner.m'),
-        '-o',
-        binary,
-      ],
-      { allowFailure: true, timeoutMs: 45_000 },
-    );
-    assert.equal(compiled.exitCode, 0, compiled.stderr);
-  }, 60_000);
+    await compileSnapshotBridgeFixture([
+      '--sdk',
+      'macosx',
+      'clang',
+      '-fobjc-arc',
+      '-Ddlopen=fixtureDlopen',
+      '-Ddlsym=fixtureDlsym',
+      '-framework',
+      'Foundation',
+      '-framework',
+      'CoreGraphics',
+      '-I',
+      nativeRoot,
+      path.join(nativeRoot, 'SnapshotBridgeRuntime.m'),
+      path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
+      path.join(import.meta.dirname, 'fixtures/foreground-owner.m'),
+      '-o',
+      binary,
+    ]);
+  }, COMPILE_HOOK_TIMEOUT_MS);
 
   test.each([
     'stable',
@@ -90,26 +101,21 @@ describe.skipIf(process.platform !== 'darwin')(
     beforeAll(async () => {
       binary = path.join(await mkdtempForTest('snapshot-recovery-'), 'recovery-conformance');
       const nativeRoot = path.resolve(import.meta.dirname, '../../../../apple/snapshot-bridge');
-      const compiled = await runCmd(
-        'xcrun',
-        [
-          '--sdk',
-          'macosx',
-          'clang',
-          '-fobjc-arc',
-          '-framework',
-          'Foundation',
-          '-I',
-          nativeRoot,
-          path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
-          path.join(import.meta.dirname, 'fixtures/recovery-conformance.m'),
-          '-o',
-          binary,
-        ],
-        { allowFailure: true, timeoutMs: 45_000 },
-      );
-      assert.equal(compiled.exitCode, 0, compiled.stderr);
-    }, 60_000);
+      await compileSnapshotBridgeFixture([
+        '--sdk',
+        'macosx',
+        'clang',
+        '-fobjc-arc',
+        '-framework',
+        'Foundation',
+        '-I',
+        nativeRoot,
+        path.join(nativeRoot, 'SnapshotBridgeCapture.m'),
+        path.join(import.meta.dirname, 'fixtures/recovery-conformance.m'),
+        '-o',
+        binary,
+      ]);
+    }, COMPILE_HOOK_TIMEOUT_MS);
 
     assert.equal(recoveryFixture.version, 1);
     test.each(recoveryFixture.recoveryCases.map((recoveryCase) => recoveryCase.name))(

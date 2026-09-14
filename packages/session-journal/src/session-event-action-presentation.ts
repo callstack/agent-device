@@ -174,7 +174,13 @@ function buildBackActionSummary(result: Record<string, unknown>): string {
 
 function buildOrientationActionSummary(result: Record<string, unknown>): string {
   const orientation = readEnum(result.orientation, DEVICE_ROTATIONS);
-  return orientation ? `Rotated to ${orientation}` : 'Changed orientation';
+  if (!orientation) return 'Changed orientation';
+  // An unconfirmed rotation is not a rotation: the daemon keeps the requested
+  // value for compatibility, so the recorded action must disclose it instead of
+  // asserting that the device rotated.
+  return readBoolean(result.confirmed) === false
+    ? `Requested ${orientation} (unconfirmed)`
+    : `Rotated to ${orientation}`;
 }
 
 function buildViewportActionSummary(result: Record<string, unknown>): string {

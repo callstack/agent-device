@@ -23,6 +23,10 @@ import {
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
 import { snapshotRuntimeFixture } from '../../../__tests__/snapshot-runtime-fixture.ts';
+import {
+  appCaptureComparisonKey,
+  systemSurfaceCaptureComparisonKey,
+} from '../../../__tests__/ios-comparison-key-fixture.ts';
 import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import {
   getRuntimeBindings,
@@ -301,6 +305,38 @@ test('a producer or generation switch cannot corroborate a failed tap', async ()
   sessionStore.set(sessionName, session);
   const after = snapshot(imageViewerNodes);
   after.comparisonKey = 'apple-runner:launch-a';
+
+  await expect(
+    corroborateIosTapFailure({
+      error: new AppError('XCTEST_RECORDED_FAILURE', 'tap failed'),
+      command: 'click',
+      requestId: undefined,
+      flags: {},
+      session,
+      sessionStore,
+      contextFromFlags,
+      captureSnapshotForSession: async () => after,
+    }),
+  ).resolves.toBeUndefined();
+});
+
+// An app baseline and an in-place system-surface capture (a web sign-in sheet) describe different
+// surfaces, so neither may corroborate a tap taken against the other. The route lineages a surface
+// capture to its host, so the refusal is the ordinary comparison-key mismatch above (#2438) — this
+// pins that it still holds for the surface pair specifically.
+test('a capture of a system surface cannot corroborate a tap taken against the app', async () => {
+  const sessionName = 'ios-system-surface-mismatch';
+  const sessionStore = makeSessionStore();
+  const baseline = snapshot(profileNodes);
+  baseline.comparisonKey = appCaptureComparisonKey(IOS_SIMULATOR.id, 'com.example.app');
+  const session = makeIosSession(sessionName, {
+    appBundleId: 'com.example.app',
+    snapshot: baseline,
+  });
+  sessionStore.set(sessionName, session);
+  const after = snapshot(imageViewerNodes);
+  after.comparisonKey = systemSurfaceCaptureComparisonKey(IOS_SIMULATOR.id);
+  after.iosSystemSurfaceBundleId = 'com.apple.SafariViewService';
 
   await expect(
     corroborateIosTapFailure({

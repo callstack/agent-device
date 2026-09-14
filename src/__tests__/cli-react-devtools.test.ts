@@ -43,12 +43,12 @@ afterEach(() => {
 });
 
 test('react-devtools passthrough pins agent-react-devtools package version', () => {
-  assert.equal(AGENT_REACT_DEVTOOLS_PACKAGE, 'agent-react-devtools@0.4.0');
+  assert.equal(AGENT_REACT_DEVTOOLS_PACKAGE, 'agent-react-devtools@0.5.0');
   assert.deepEqual(buildReactDevtoolsNpmExecArgs(['get', 'tree', '--depth', '3']), [
     'exec',
     '--yes',
     '--package',
-    'agent-react-devtools@0.4.0',
+    'agent-react-devtools@0.5.0',
     '--',
     'agent-react-devtools',
     'get',
@@ -221,7 +221,7 @@ test('react-devtools stop cleans up remote companion', async () => {
     'exec',
     '--yes',
     '--package',
-    'agent-react-devtools@0.4.0',
+    'agent-react-devtools@0.5.0',
     '--',
     'agent-react-devtools',
     'stop',

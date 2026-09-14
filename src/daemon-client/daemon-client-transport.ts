@@ -336,15 +336,11 @@ async function sendSocketRequest(
             settled = true;
             socket.destroy();
             reject(
-              handleRequestTimeout(
+              handleRequestTimeout({
                 info,
                 statePaths,
-                req.meta?.requestId,
-                req.command,
-                false,
-                timeoutMs,
-                req.flags?.platform,
-              ),
+                ...timeoutRequestContext(req, false, timeoutMs),
+              }),
             );
           }, timeoutMs)
         : undefined;
@@ -377,6 +373,26 @@ async function sendSocketRequest(
       );
     });
   });
+}
+
+// The fields a timed-out request is described by, read once so a socket and an HTTP timeout cannot
+// describe the same request differently.
+type TimeoutRequestFields = Omit<Parameters<typeof handleRequestTimeout>[0], 'info' | 'statePaths'>;
+
+function timeoutRequestContext(
+  req: DaemonRequest,
+  remote: boolean,
+  timeoutMs: number,
+): TimeoutRequestFields {
+  return {
+    remote,
+    timeoutMs,
+    requestId: req.meta?.requestId,
+    command: req.command,
+    platform: req.flags?.platform,
+    session: req.session,
+    action: req.positionals?.[0],
+  };
 }
 
 async function sendHttpRequest(
@@ -463,15 +479,11 @@ async function sendHttpRequest(
         ? setTimeout(() => {
             request.destroy();
             reject(
-              handleRequestTimeout(
+              handleRequestTimeout({
                 info,
                 statePaths,
-                req.meta?.requestId,
-                req.command,
-                remote,
-                timeoutMs,
-                req.flags?.platform,
-              ),
+                ...timeoutRequestContext(req, remote, timeoutMs),
+              }),
             );
           }, timeoutMs)
         : undefined;

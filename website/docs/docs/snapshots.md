@@ -48,6 +48,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 
 - iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.
 - Default to `snapshot -i` for agent loops.
+- Repeated unfiltered Android snapshots with unchanged presented content and bounds return a compact acknowledgement. `-i`, `-d`, `-s`, `--json`, and `--raw` retain full output. Use `--force-full` to re-emit the tree explicitly.
 - Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It is visible-first and may collapse helper/accessibility noise; use `--raw` or `--json` when you need the full provider tree.
 - Off-screen interactive content is collapsed into discovery summaries such as `[off-screen below] 3 interactive items: "Privacy", "Battery", "About"`.
 - If a target only appears in an off-screen summary, use `scroll <direction>` and re-snapshot until the target becomes visible.
@@ -59,6 +60,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 - Re-snapshot after any UI mutation before reusing refs.
 - On Android after navigation or submit, snapshot capture retries suspicious trees for a short post-action deadline and `@ref` interactions refresh while that freshness window is active. If `snapshot -i` still disagrees with the visible screen, trust `screenshot`, wait briefly, then take one fresh snapshot instead of looping stale snapshots.
 - For automation runs affected by Android animation churn, use `settings animations off` as an opt-in stabilizer and restore with `settings animations on` after the run.
+- On a device cloud the tree is read by the provider's driver, so a screen that never goes still — a looping video, a live ticker, continuous animation — gives that read no quiet moment and it can run out of its budget while `screenshot` still returns. The read is cancelled with the request that asked for it, so agent-device stops waiting on it and stops holding the session open for it; the driver's own walk can continue on the provider, where it may still occupy that session's queue. Two dead ends: the read carries its own budget, so a larger `--timeout` cannot lengthen it, and `settings animations` is not implemented on hosted WebDriver sessions.
 - Use `diff snapshot` between mutations to validate structural changes with lower output volume.
 - Use `snapshot --diff` when you discover the feature from snapshot help, but keep `diff snapshot` as the default exploration command.
 - Keep `--raw` for troubleshooting only when you need the full tree instead of visible-first output.
@@ -112,13 +114,18 @@ the strategy owns which tiers it may use.
 - Private-accessibility recovery and `--actions` reads are simulator-specific. Physical iOS devices
   have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.
 
-## Android field metadata
+## Android node metadata
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts whenever the
-accessibility tree reports them. Explicit `false` and `0` are kept; an absent field means the fact
-was unavailable, not false. `hintShowing` needs Android API 26 or later.
+`selected`, `editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts
+whenever the accessibility tree reports them. Explicit `false` and `0` are kept; an absent field
+means the fact was unavailable, not false. `hintShowing` needs Android API 26 or later.
 
+- `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
+  segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
+  `false`; an older helper APK omits the field, which means the answer is unavailable rather than
+  unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
+  selector, and a Maestro `selected:` qualifier all match on it.
 - `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
   reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
   before reading `value` as the entered contents.

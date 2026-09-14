@@ -34,6 +34,7 @@ export type AndroidUiNodeMetadata = {
   drawingOrder?: number;
   focusable?: boolean;
   focused?: boolean;
+  selected?: boolean;
   password?: boolean;
   editable?: boolean;
   selectionStart?: number;
@@ -155,6 +156,7 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalNumberAttr('selectionEnd', 'selection-end'),
     ...optionalBoolAttr('hintShowing', 'hint-showing'),
     ...optionalBoolAttr('visibleToUser', 'visible-to-user'),
+    ...optionalBoolAttr('selected', 'selected'),
     ...optionalNumberAttr('drawingOrder', 'drawing-order'),
     ...optionalBoolAttr('scrollable', 'scrollable'),
     ...optionalBoolAttr('canScrollForward', 'can-scroll-forward'),
@@ -306,6 +308,7 @@ function normalizeAndroidUiHierarchyNode(
       rect: attrs.rect,
       enabled: attrs.enabled,
       focused: attrs.focused,
+      selected: attrs.selected,
       editable: attrs.editable,
       password: attrs.password,
       hintShowing: attrs.hintShowing,

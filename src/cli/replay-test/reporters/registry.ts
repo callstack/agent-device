@@ -1,5 +1,6 @@
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
+import { AppError } from '@agent-device/kernel/errors';
 import { createCustomReplayTestReporter } from './custom.ts';
 import { createDefaultReplayTestReporter } from './default.ts';
 import { getReplayTestExitCode } from './format.ts';
@@ -99,7 +100,14 @@ export function getReplayTestReporterExitCode(
   let exitCode = getReplayTestExitCode(suite);
   for (const reporter of reporters) {
     const reporterExitCode = reporter.getExitCode?.(suite);
-    if (reporterExitCode !== undefined) exitCode = Math.max(exitCode, reporterExitCode);
+    if (reporterExitCode === undefined) continue;
+    if (!Number.isInteger(reporterExitCode) || reporterExitCode < 0 || reporterExitCode > 255) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Test reporter ${reporter.name} getExitCode must return an integer from 0 to 255 or undefined.`,
+      );
+    }
+    exitCode = Math.max(exitCode, reporterExitCode);
   }
   return exitCode;
 }

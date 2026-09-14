@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
-import { test, vi } from 'vitest';
-import {
-  captureWebDriverIosSnapshot,
-  acquireWebDriverIosSnapshot,
-} from './webdriver-ios-snapshot.ts';
+import { test } from 'vitest';
+import { acquireWebDriverIosSnapshot } from './webdriver-ios-snapshot.ts';
 
 const SOURCE = `<AppiumAUT>
   <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Example" label="Example" enabled="true" visible="true" x="0" y="0" width="390" height="844">
@@ -13,9 +10,8 @@ const SOURCE = `<AppiumAUT>
   </XCUIElementTypeApplication>
 </AppiumAUT>`;
 
-test('Appium iOS adapter returns provider facts with explicit unavailable residue', async () => {
-  const source = vi.fn(async () => SOURCE);
-  const result = await captureWebDriverIosSnapshot({ source }, 'cloud-ios-1');
+test('Appium iOS adapter returns provider facts with explicit unavailable residue', () => {
+  const result = acquireWebDriverIosSnapshot(SOURCE, 'cloud-ios-1');
 
   assert.equal(result.stage, 'acquired');
   assert.equal(result.acquisition.producer, 'appium-source');
@@ -34,7 +30,6 @@ test('Appium iOS adapter returns provider facts with explicit unavailable residu
     { kind: 'unavailable-fact', fact: 'acquisition-depth' },
     { kind: 'unavailable-fact', fact: 'truncation' },
   ]);
-  assert.equal(source.mock.calls.length, 1);
 });
 
 test('Appium iOS adapter preserves provider-reported node facts for the host presenter', () => {

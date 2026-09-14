@@ -189,7 +189,6 @@ export function limrunAppLogFacts(
       // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's.
       ...selectorObservationRuntimeOperationFacts({
         findText: customSnapshotUnavailable,
-        findSelector: customSnapshotUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       // Focus rides the same provider interactor the captures do, and a live-session Limrun
@@ -255,7 +254,6 @@ export function limrunAppLogRecoveryFacts(
       ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
       ...selectorObservationRuntimeOperationFacts({
         findText: liveSessionUnavailable,
-        findSelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ...limrunInteractionOperationFacts(device, liveSessionUnavailable),

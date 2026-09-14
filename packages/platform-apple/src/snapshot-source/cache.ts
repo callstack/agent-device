@@ -29,7 +29,13 @@ type SnapshotBridgeCacheManifest = Readonly<{
 const CACHE_SCHEMA_VERSION = 1 as const;
 const BRIDGE_FILENAME = 'snapshot-bridge';
 const MANIFEST_FILENAME = 'manifest.json';
-const BUILD_TIMEOUT_MS = 120_000;
+
+/**
+ * @internal Upper bound on a single snapshot-bridge clang invocation, exposed for the host bridge
+ * tests so they budget their own compile from the same ceiling instead of a stricter constant. The
+ * live build also stays under the caller's snapshot-source deadline, which can bind tighter.
+ */
+export const BUILD_TIMEOUT_MS = 120_000;
 
 export async function ensureSnapshotBridgeBinary(
   input: Readonly<{

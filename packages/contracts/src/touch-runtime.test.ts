@@ -16,14 +16,12 @@ const device = {
 const available = { available: true } as const;
 const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
 const facts = touchRuntimeOperationFacts({
+  unsupported: unavailable,
   tap: available,
   tapRef: available,
   longPress: available,
-  hover: unavailable,
-  hoverRef: unavailable,
   fill: available,
   fillRef: available,
-  tapElementSelector: unavailable,
 });
 
 test('builds exact touch facts and carries the hover refusal hint', () => {
@@ -36,6 +34,32 @@ test('builds exact touch facts and carries the hover refusal hint', () => {
     fillPoint: available,
     fillRef: available,
     tapElementSelector: unavailable,
+  });
+});
+
+test("an operation the owner never names reports the owner's own denial verbatim", () => {
+  const denial = {
+    available: false,
+    reason: 'unsupported-device-kind',
+    hint: 'focus is supported on Android emulators and physical devices.',
+  } as const;
+
+  expect(
+    touchRuntimeOperationFacts({
+      unsupported: denial,
+      tap: available,
+      longPress: available,
+      fill: available,
+    }),
+  ).toEqual({
+    tapPoint: available,
+    tapRef: denial,
+    longPressPoint: available,
+    hoverPoint: denial,
+    hoverRef: denial,
+    fillPoint: available,
+    fillRef: denial,
+    tapElementSelector: denial,
   });
 });
 

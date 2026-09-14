@@ -11,12 +11,14 @@ minimumReleaseAgeExclude:
 # @limrun/api pins undici to an exact vulnerable version (7.24.7) even in its
 # latest release, so a direct bump can't clear the Dependabot alerts. Override
 # the transitive resolution instead; scoped to major 7 so any future undici 8
-# elsewhere in the tree is untouched.
+# elsewhere in the tree is untouched. Exact, matching the direct pin in
+# package.json: tsdown bundles undici into the published build, so a caret here
+# would let lockFileMaintenance move the shipped bytes under an unchanged pin.
 overrides:
-  undici@7: '^7.29.0'
+  undici@7: 7.29.0
   brace-expansion@5: '^5.0.9'
   fast-uri: 3.1.6
   postcss: 8.5.23
-  qs: 6.15.2
+  qs@6: ^6.16.0
   react-router: 7.18.2
   react-router-dom: 7.18.2

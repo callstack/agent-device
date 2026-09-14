@@ -1,6 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';

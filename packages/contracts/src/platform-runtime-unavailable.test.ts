@@ -47,11 +47,8 @@ const UNAVAILABLE_FACTS: UnavailablePlatformRuntimeFacts = {
   home: { available: false, reason: 'unsupported-provider-mode' },
   orientation: { available: false, reason: 'unsupported-provider-mode' },
   tvRemote: { available: false, reason: 'unsupported-provider-mode' },
-  keyboardStatus: { available: false, reason: 'unsupported-provider-mode' },
-  keyboardDismiss: { available: false, reason: 'unsupported-provider-mode' },
-  keyboardEnter: { available: false, reason: 'unsupported-provider-mode' },
-  readClipboard: { available: false, reason: 'unsupported-provider-mode' },
-  writeClipboard: { available: false, reason: 'unsupported-provider-mode' },
+  keyboard: { available: false, reason: 'unsupported-provider-mode' },
+  clipboard: { available: false, reason: 'unsupported-provider-mode' },
   appSwitcher: { available: false, reason: 'unsupported-provider-mode' },
   triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
   setSetting: { available: false, reason: 'unsupported-provider-mode' },
@@ -92,6 +89,18 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
     available: false,
     reason: 'unsupported-provider-mode',
   });
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    assert.deepEqual(binding.facts.operations[operation], {
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
+  for (const operation of ['readClipboard', 'writeClipboard'] as const) {
+    assert.deepEqual(binding.facts.operations[operation], {
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
   // `apps` is left unclassified above (an optional cell): it inherits the network gap's reason.
   assert.deepEqual(binding.facts.operations.listApps, {
     available: false,

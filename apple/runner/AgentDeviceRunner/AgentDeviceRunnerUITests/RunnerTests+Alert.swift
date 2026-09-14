@@ -65,6 +65,9 @@ extension RunnerTests {
       guard Date() < deadline else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
+      guard waitUntilAlertButtonHittable(button, deadline: deadline) else {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
+      }
       let outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
       if let response = unsupportedResponse(for: outcome) {
         return response
@@ -220,6 +223,37 @@ extension RunnerTests {
       enabled = element.exists && element.isEnabled
     })
     return enabled
+  }
+
+  // A snapshot can expose an alert's button a beat before the owning app has made it
+  // hittable, and a starved host delays the app's layout and hit-testing further. This
+  // activation is not repeated, so a tap issued into that window is dropped, the
+  // presentation never changes, and the whole budget rides an unchanged alert to
+  // `ALERT_DEADLINE_EXCEEDED` with no button ever activated. Spend the deadline waiting
+  // for a fresh hittable read instead of spending it on a dropped tap. The hittable read
+  // is itself a synchronous query a starved host can complete past the deadline, so a read
+  // that lands late forfeits rather than buys back the one activation.
+  private func waitUntilAlertButtonHittable(_ button: XCUIElement, deadline: Date) -> Bool {
+    while Date() < deadline {
+      if probeAlertButtonHittable(button, deadline: deadline) {
+        return Date() < deadline
+      }
+      sleepFor(min(0.1, max(0, deadline.timeIntervalSinceNow)))
+    }
+    return false
+  }
+
+  private func probeAlertButtonHittable(_ button: XCUIElement, deadline: Date) -> Bool {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    if let override = alertButtonHittabilityProbeOverrideForTesting {
+      return override(deadline)
+    }
+#endif
+    var hittable = false
+    _ = RunnerObjCExceptionCatcher.catchException({
+      hittable = button.exists && button.isHittable
+    })
+    return hittable
   }
 
   private func isDismissPopupMarker(_ label: String) -> Bool {

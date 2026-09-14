@@ -23,6 +23,12 @@ import type { ScreenshotRequestFlags } from './screenshot.ts';
 import type { RecordingScope } from './recording-scope.ts';
 import type { ReplayRequestFields } from './replay-request-fields.ts';
 
+// This is the flag KEY vocabulary, not where an option is described: an
+// option's prose belongs to its one declaration (its `FlagDefinition`, which
+// carries both the `--help` and the tool/SDK audience), so a doc comment
+// repeated here would be a second copy that drifts. Comments below state only
+// facts this type alone knows — that a key has no CLI token, or how two keys
+// interact.
 export type CliFlags = CloudProviderProfileFields &
   RemoteConfigMetroOptions &
   ScreenshotRequestFlags &
@@ -103,6 +109,8 @@ export type CliFlags = CloudProviderProfileFields &
     holdMs?: number;
     jitterPx?: number;
     pixels?: number;
+    /** Scroll: repeat passes until this selector is visible on screen. */
+    until?: string;
     doubleTap?: boolean;
     verify?: boolean;
     settle?: boolean;
@@ -120,11 +128,6 @@ export type CliFlags = CloudProviderProfileFields &
     saveScript?: boolean | string;
     shutdown?: boolean;
     relaunch?: boolean;
-    /**
-     * Include the initial interactive snapshot in a fresh open response. With
-     * no app argument, iOS can discover the sole running app on the sole booted
-     * simulator and fails closed when that environment is ambiguous.
-     */
     foreground?: boolean;
     surface?: SessionSurface;
     headless?: boolean;

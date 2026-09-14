@@ -29,7 +29,6 @@ import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtim
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
-import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
@@ -425,7 +424,7 @@ function bindWebDriverPlatformRuntime(
     ...webDriverInteractionOperations(options, device, signal, facts),
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-      const dump = readRecentNetworkTrafficFromText(recent.text, {
+      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
         ...input,
         path: recent.path,
         exists: recent.exists,
@@ -519,11 +518,8 @@ function webDriverFacts(
       home: inactiveSession,
       orientation: inactiveSession,
       tvRemote: inactiveSession,
-      keyboardStatus: inactiveSession,
-      keyboardDismiss: inactiveSession,
-      keyboardEnter: inactiveSession,
-      readClipboard: inactiveSession,
-      writeClipboard: inactiveSession,
+      keyboard: inactiveSession,
+      clipboard: inactiveSession,
       appSwitcher: inactiveSession,
       triggerAppEvent: inactiveSession,
       setSetting: inactiveSession,
@@ -565,11 +561,8 @@ function webDriverFacts(
     home: homeUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
-    keyboardStatus: keyboardUnavailable,
-    keyboardDismiss: keyboardUnavailable,
-    keyboardEnter: keyboardUnavailable,
-    readClipboard: clipboardUnavailable,
-    writeClipboard: clipboardUnavailable,
+    keyboard: keyboardUnavailable,
+    clipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
@@ -621,20 +614,19 @@ function webDriverFacts(
       ...focusRuntimeOperationFacts({ focus: interactorCell(reachable, focusUnavailable) }),
       ...typeTextRuntimeOperationFacts({ type: declared('type', typeUnavailable) }),
       ...touchRuntimeOperationFacts({
+        unsupported: focusUnavailable,
         tap: declared('tap', focusUnavailable),
-        tapRef: focusUnavailable,
         longPress: declared('longPress', focusUnavailable),
-        hover: focusUnavailable,
-        hoverRef: focusUnavailable,
         fill: declared('fill', typeUnavailable),
+        // Text entry, not focus, is what this provider lacks for the ref-addressed fill.
         fillRef: typeUnavailable,
-        tapElementSelector: focusUnavailable,
       }),
       // Gestures and scrolling ride the same provider interactor the captures do, so they need the
       // same reachability. The one extra gate is the retired multi-touch policy: this provider only
       // ever owns physical devices, and two-finger synthesis on a physical iOS device was refused
       // before this migration exactly as it is refused here.
       ...gestureRuntimeOperationFacts({
+        unsupported: gestureUnavailable,
         plan: interactorCell(reachable, gestureUnavailable),
         directionalFling: interactorCell(reachable, gestureUnavailable),
         multiTouch: webDriverMultiTouchCell(device, reachable),
@@ -650,11 +642,6 @@ function webDriverFacts(
         orientation: declared('orientation', orientationUnavailable),
       }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
-      ...keyboardRuntimeOperationFacts({
-        status: keyboardUnavailable,
-        dismiss: keyboardUnavailable,
-        enter: keyboardUnavailable,
-      }),
       // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability
       // gate stays inside the interactor, where it already lives.
       //
@@ -664,6 +651,7 @@ function webDriverFacts(
       // Appium — which does expose the clipboard extension. The refusal moves to where it can be
       // true: the interactor, per session.
       ...clipboardRuntimeOperationFacts({
+        unsupported: clipboardUnavailable,
         read: declared('clipboard.read', clipboardUnavailable),
         write: declared('clipboard.write', clipboardUnavailable),
       }),

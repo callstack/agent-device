@@ -126,6 +126,18 @@ test('a session that reaches RUNNING is handed on and not stopped', async () => 
   assert.deepEqual(client.stopped, []);
 });
 
+test('an Android session defers app launch until the open command', async () => {
+  const client = fakeClient({
+    status: 'RUNNING',
+    endpoints: { appium: 'https://appium.example/wd/hub' },
+  });
+  const prepare = createAwsDeviceFarmPrepareSession(baseOptions(client));
+
+  const prepared = await prepare({ lease: makeLease(), base: baseSession() });
+
+  assert.equal(prepared.webdriverCapabilities['appium:autoLaunch'], false);
+});
+
 function fakeClient(
   session: Partial<AwsDeviceFarmRemoteAccessSession>,
   onPoll?: () => void,

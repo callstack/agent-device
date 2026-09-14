@@ -34,6 +34,29 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  func testAlertHittableProbeCompletingAfterDeadlineLeavesTheOriginalUntouched() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      alertButtonHittabilityProbeOverrideForTesting = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    let alert = try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(10)))
+    alertButtonHittabilityProbeOverrideForTesting = { probeDeadline in
+      while Date() < probeDeadline {
+        Thread.sleep(forTimeInterval: min(0.02, max(0, probeDeadline.timeIntervalSinceNow)))
+      }
+      return true
+    }
+    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(1))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "ALERT_DEADLINE_EXCEEDED")
+    XCTAssertTrue(app.alerts.firstMatch.exists)
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
   private func assertReplacementAlertUntouched(action: String, arguments: [String], confirmed: Bool) throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"] + arguments
     app.launch()

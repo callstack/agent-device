@@ -1,7 +1,5 @@
-import { test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { GESTURE_SAMPLE_INTERVAL_MS } from '@agent-device/contracts/gesture-plan';
-import { GESTURE_DURATION_MAX_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
   backAndroid,
   homeAndroid,
@@ -15,9 +13,146 @@ import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { AndroidTouchInjector } from '../adb-executor.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
+import {
+  ANDROID_TOUCH_HELPER_MANIFEST as HELPER_MANIFEST,
+  androidTouchHelperResultRecord as helperRecord,
+} from './touch-helper.fixtures.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
+
+// The keyboard-aware viewport read goes through the snapshot helper rather than a touch provider,
+// so the scroll tests below resolve the fixture APK instead of a bundled one.
+vi.mock('../helper-package-install.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../helper-package-install.ts')>();
+  return {
+    ...actual,
+    resolveAndroidHelperArtifact: async () => ({
+      apkPath: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.apkPath,
+      manifest: {
+        ...HELPER_MANIFEST,
+        sha256: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.sha256,
+      },
+    }),
+  };
+});
+
+beforeEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+afterEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+/**
+ * Answers one helper session: the version probe says "current" so no install is faked, the viewport
+ * read reports `window` plus an optional IME window, and the gesture accepts whatever it is given.
+ */
+function helperRouteAdb(window: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  keyboard?: { x: number; y: number; width: number; height: number };
+}) {
+  return (args: string[]) => {
+    if (args.includes('--show-versioncode')) {
+      return {
+        stdout: `package:${HELPER_MANIFEST.packageName} versionCode:999999`,
+        stderr: '',
+      };
+    }
+    if (args.includes('viewport')) {
+      const { keyboard, ...app } = window;
+      return {
+        stdout: [
+          helperRecord({
+            ok: 'true',
+            x: String(app.x),
+            y: String(app.y),
+            width: String(app.width),
+            height: String(app.height),
+            ...(keyboard
+              ? {
+                  keyboardX: String(keyboard.x),
+                  keyboardY: String(keyboard.y),
+                  keyboardWidth: String(keyboard.width),
+                  keyboardHeight: String(keyboard.height),
+                }
+              : {}),
+          }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    if (args[0] === 'shell' && args[1] === 'am') {
+      return {
+        stdout: [
+          helperRecord({ ok: 'true', kind: 'pan', injectedEvents: '18', elapsedMs: '320' }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      };
+    }
+    return undefined;
+  };
+}
+
+const PORTRAIT_WINDOW = { x: 0, y: 0, width: 1080, height: 2280 };
+const LOWER_HALF_KEYBOARD = { x: 0, y: 1600, width: 1080, height: 680 };
+
+test('scrollAndroid keeps the swipe above the IME window and names the clipped band', async () => {
+  // The full window would place a center-symmetric swipe at y 1140..~1500 — on the keys. Clipping
+  // first means the injected path and the reported reference height both stop above the keyboard
+  // by the accessory allowance, so a focused field no longer swallows the gesture (#2500).
+  await withFakeAdb(
+    helperRouteAdb({ ...PORTRAIT_WINDOW, keyboard: LOWER_HALF_KEYBOARD }),
+    async ({ device }) => {
+      const result = await scrollAndroid(device, 'down', { pixels: 600 });
+      const lowest = Math.max(Number(result.y1), Number(result.y2));
+      assert.equal(result.keyboardAvoided, true);
+      assert.equal(result.keyboardMinY, 1600);
+      assert.equal(result.referenceHeight, 1588, 'clipped axis is the band above the allowance');
+      assert.equal(result.pixels, 600, 'requested travel fits the clipped band');
+      assert.ok(lowest <= 1588, `swipe endpoint ${lowest} landed under the keyboard`);
+    },
+  );
+});
+
+test('scrollAndroid swipes the whole window when no IME window is on screen', async () => {
+  await withFakeAdb(helperRouteAdb({ ...PORTRAIT_WINDOW }), async ({ device }) => {
+    const result = await scrollAndroid(device, 'down', { pixels: 600 });
+    assert.equal('keyboardAvoided' in result, false);
+    assert.equal(result.referenceHeight, 2280);
+  });
+});
+
+test('scrollAndroid refuses rather than flinging into a keyboard that owns the window', async () => {
+  // A landscape IME leaves 40px of a 900px window: a swipe there reads as a stuck surface, so the
+  // command refuses with its own typed reason instead of the generic no-progress stop.
+  await withFakeAdb(
+    helperRouteAdb({
+      ...PORTRAIT_WINDOW,
+      keyboard: { x: 0, y: 120, width: 1080, height: 2160 },
+    }),
+    async ({ device }) => {
+      await assert.rejects(scrollAndroid(device, 'down', { pixels: 600 }), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(
+          (error as { details?: { reason?: string } }).details?.reason,
+          'scroll_keyboard_occludes_surface',
+        );
+        return true;
+      });
+    },
+  );
+});
 
 test('scrollAndroid plans explicit pixel travel through semantic touch injection', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
@@ -81,14 +216,7 @@ test('scrollAndroid accepts sub-frame public durations at the Android planner mi
     async () => {
       const outputs: Record<string, unknown>[] = [];
       for (const durationMs of [0, 15]) {
-        // 'inertial' keeps the injected plan's durationMs equal to the honored move time, so the
-        // flooring this test targets is not conflated with the 'controlled' release tail below.
-        outputs.push(
-          await scrollAndroid(ANDROID_EMULATOR, 'down', {
-            durationMs,
-            releaseBehavior: 'inertial',
-          }),
-        );
+        outputs.push(await scrollAndroid(ANDROID_EMULATOR, 'down', { durationMs }));
       }
       return outputs;
     },
@@ -104,198 +232,63 @@ test('scrollAndroid accepts sub-frame public durations at the Android planner mi
   );
 });
 
-test('scrollAndroid defaults to a controlled release: a quivering tail past the pan endpoint', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
+test.each([undefined, 'inertial'] as const)(
+  'scrollAndroid preserves path and duration with %s release',
+  async (releaseBehavior) => {
+    const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+    await withAndroidAdbProvider(
+      {
+        exec: async () => {
+          throw new Error('adb must not run');
+        },
+        gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
+        touch: async (request) => {
+          touchCalls.push(request);
+        },
       },
-      gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-        return { injected: true };
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        for (const direction of ['up', 'down', 'left', 'right'] as const) {
+          for (const durationMs of [16, 120, 300, 9841, 10000]) {
+            await scrollAndroid(ANDROID_EMULATOR, direction, {
+              pixels: 240,
+              durationMs,
+              releaseBehavior,
+            });
+          }
+        }
       },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await scrollAndroid(ANDROID_EMULATOR, 'down', { pixels: 240, durationMs: 120 }),
-  );
-
-  assert.equal(touchCalls.length, 1);
-  const [touch] = touchCalls;
-  const samples = touch!.pointers[0]!.samples;
-  const endpoint = samples.find((sample) => sample.offsetMs === 120)!;
-  const tail = samples.filter((sample) => sample.offsetMs > 120);
-
-  // The plan carries a >=100ms tail past the honored 120ms move; the CLI-facing `durationMs` in
-  // the command result (asserted below) stays at the honored move time.
-  assert.equal(touch!.durationMs, 280);
-  assert.ok(tail.length >= 100 / GESTURE_SAMPLE_INTERVAL_MS);
-  for (const sample of tail) assert.equal(sample.point.y, endpoint.point.y);
-  const allPastEndpoint = [endpoint, ...tail];
-  for (let index = 1; index < allPastEndpoint.length; index += 1) {
-    assert.notEqual(allPastEndpoint[index]!.point.x, allPastEndpoint[index - 1]!.point.x);
-  }
-});
-
-test('scrollAndroid composes the duration floor with the default controlled-release tail', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await scrollAndroid(ANDROID_EMULATOR, 'down', { durationMs: 0 }),
-  );
-
-  // The move floors to the Android planner minimum (16ms) before the tail is appended, not after.
-  assert.equal(touchCalls[0]!.durationMs, GESTURE_SAMPLE_INTERVAL_MS + 160);
-});
-
-test('scrollAndroid runs the full controlled-release tail at the largest duration that still leaves it room', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  const maxControlledMoveMs = GESTURE_DURATION_MAX_MS - 160;
-  const result = await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () =>
-      await scrollAndroid(ANDROID_EMULATOR, 'down', {
-        pixels: 1800,
-        durationMs: maxControlledMoveMs,
-      }),
-  );
-
-  // The requested move is honored in full, and the tail always runs at its full length — the
-  // dispatched plan lands exactly at GESTURE_DURATION_MAX_MS, never past it.
-  assert.equal(result.durationMs, maxControlledMoveMs);
-  const [touch] = touchCalls;
-  assert.equal(touch!.durationMs, GESTURE_DURATION_MAX_MS);
-  assert.equal(touch!.pointers[0]!.samples.at(-1)!.offsetMs, GESTURE_DURATION_MAX_MS);
-});
-
-test('scrollAndroid rejects a controlled-release durationMs that would leave the release tail no room, without shortening the move', async () => {
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
-      touch: async () => {
-        throw new Error('touch must not run for a rejected request');
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => {
-      await assert.rejects(
-        scrollAndroid(ANDROID_EMULATOR, 'down', {
-          pixels: 1800,
-          durationMs: GESTURE_DURATION_MAX_MS - 159,
-        }),
-        /scroll durationMs must be at most 9840 for a controlled release/,
+    );
+    for (const touch of touchCalls) {
+      const samples = touch.pointers[0]!.samples;
+      const start = samples[0]!;
+      const end = samples.at(-1)!;
+      assert.equal(start.offsetMs, 0);
+      assert.equal(end.offsetMs, touch.durationMs);
+      const distance = (a: typeof start, b: typeof start) =>
+        Math.hypot(b.point.x - a.point.x, b.point.y - a.point.y);
+      assert.equal(distance(start, end), 240);
+      const velocities = samples
+        .slice(1)
+        .map(
+          (sample, index) =>
+            distance(samples[index]!, sample) / (sample.offsetMs - samples[index]!.offsetMs),
+        );
+      if (releaseBehavior === 'inertial') {
+        for (const velocity of velocities) assert.ok(Math.abs(velocity - velocities[0]!) < 1e-8);
+        continue;
+      }
+      const firstMove = samples[1]!;
+      assert.ok(
+        distance(start, firstMove) <= ((240 * firstMove.offsetMs) / touch.durationMs) * 1.1,
       );
-    },
-  );
-});
-
-test("scrollAndroid accepts the full GESTURE_DURATION_MAX_MS for an 'inertial' release, which needs no tail", async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () =>
-      await scrollAndroid(ANDROID_EMULATOR, 'down', {
-        pixels: 1800,
-        durationMs: GESTURE_DURATION_MAX_MS,
-        releaseBehavior: 'inertial',
-      }),
-  );
-
-  const [touch] = touchCalls;
-  assert.equal(touch!.durationMs, GESTURE_DURATION_MAX_MS);
-});
-
-test('scrollAndroid jitters the axis orthogonal to a horizontal scroll, holding the scroll axis fixed', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-        return { injected: true };
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await scrollAndroid(ANDROID_EMULATOR, 'left', { pixels: 240, durationMs: 120 }),
-  );
-
-  assert.equal(touchCalls.length, 1);
-  const [touch] = touchCalls;
-  const samples = touch!.pointers[0]!.samples;
-  const endpoint = samples.find((sample) => sample.offsetMs === 120)!;
-  const tail = samples.filter((sample) => sample.offsetMs > 120);
-
-  assert.ok(tail.length >= 100 / GESTURE_SAMPLE_INTERVAL_MS);
-  // The scroll axis (x, for a horizontal scroll) stays exactly at the endpoint — zero velocity
-  // there by construction; only the orthogonal axis (y) jitters to dodge the resampling quirk.
-  for (const sample of tail) assert.equal(sample.point.x, endpoint.point.x);
-  const allPastEndpoint = [endpoint, ...tail];
-  for (let index = 1; index < allPastEndpoint.length; index += 1) {
-    assert.notEqual(allPastEndpoint[index]!.point.y, allPastEndpoint[index - 1]!.point.y);
-  }
-});
-
-test('scrollAndroid honors an inertial release (scroll top/bottom): lifts at the pan endpoint', async () => {
-  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
-      touch: async (request) => {
-        touchCalls.push(request);
-        return { injected: true };
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () =>
-      await scrollAndroid(ANDROID_EMULATOR, 'down', {
-        pixels: 240,
-        durationMs: 120,
-        releaseBehavior: 'inertial',
-      }),
-  );
-
-  assert.equal(touchCalls.length, 1);
-  const [touch] = touchCalls;
-  assert.equal(touch!.durationMs, 120);
-  assert.equal(touch!.pointers[0]!.samples.at(-1)!.offsetMs, 120);
-});
+      assert.ok(velocities.at(-1)! < Math.max(...velocities) / 2);
+      for (let i = Math.ceil(velocities.length / 2); i < velocities.length; i += 1) {
+        assert.ok(velocities[i]! <= velocities[i - 1]! + 1e-8);
+      }
+    }
+  },
+);
 
 test('longPressAndroid sends a stationary semantic touch plan', async () => {
   const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];

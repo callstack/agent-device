@@ -5,11 +5,11 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  undici@7: ^7.29.0
+  undici@7: 7.29.0
   brace-expansion@5: ^5.0.9
   fast-uri: 3.1.6
   postcss: 8.5.23
-  qs: 6.15.2
+  qs@6: ^6.16.0
   react-router: 7.18.2
   react-router-dom: 7.18.2
 
@@ -168,7 +168,7 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       undici:
-        specifier: ^7.29.0
+        specifier: 7.29.0
         version: 7.29.0
       vite:
         specifier: ^8.2.1
@@ -473,7 +473,7 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       undici:
-        specifier: ^7.29.0
+        specifier: 7.29.0
         version: 7.29.0
 
   packages/replay-test:
@@ -3442,8 +3442,8 @@ packages:
   pure-rand@8.4.2:
     resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
-  qs@6.15.2:
-    resolution: {integrity: sha512-Rzq0KEyX/w/tEybncDgdkZrJgVUsUMk3xjh3t5bv3S1HTAtg+uOYt72+ZfwiQwKdysThkTBdL/rTi6HDmX9Ddw==}
+  qs@6.16.0:
+    resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
 
   quansync@1.0.0:
@@ -7067,8 +7067,9 @@ snapshots:
 
   pure-rand@8.4.2: {}
 
-  qs@6.15.2:
+  qs@6.16.0:
     dependencies:
+      es-define-property: 1.0.1
       side-channel: 1.1.1
 
   quansync@1.0.0: {}
@@ -7500,7 +7501,7 @@ snapshots:
     dependencies:
       des.js: 1.1.0
       js-md4: 0.3.2
-      qs: 6.15.2
+      qs: 6.16.0
       tunnel: 0.0.6
       underscore: 1.13.8
 

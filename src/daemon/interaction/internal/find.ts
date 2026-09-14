@@ -55,6 +55,8 @@ type ResolvedMatch = {
   resolvedNode: SnapshotState['nodes'][number];
   ref: string;
   nodes: SnapshotState['nodes'];
+  /** The in-place iOS system surface the target capture described (#2438), if any. */
+  iosSystemSurfaceBundleId?: string;
   actionFlags: Record<string, unknown>;
   /**
    * Set when find's row refuses this match as covered. Only the focus/type
@@ -172,6 +174,9 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     resolvedNode,
     ref,
     nodes,
+    ...(snapshotResult.iosSystemSurfaceBundleId
+      ? { iosSystemSurfaceBundleId: snapshotResult.iosSystemSurfaceBundleId }
+      : {}),
     actionFlags,
     ...(target.kind === 'occluded' ? { occludedNode: target.node } : {}),
   };
@@ -217,7 +222,16 @@ async function dispatchFindAction(
  * (occlusion, promotion, off-screen) still run on this node.
  */
 function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
-  return { ref: match.ref, node: match.resolvedNode, nodes: match.nodes };
+  return {
+    ref: match.ref,
+    node: match.resolvedNode,
+    nodes: match.nodes,
+    // #2438: the leaf's post-action verify/settle compares against this tree, so it must know
+    // whether the tree describes the app or an in-place system surface served over it.
+    ...(match.iosSystemSurfaceBundleId
+      ? { iosSystemSurfaceBundleId: match.iosSystemSurfaceBundleId }
+      : {}),
+  };
 }
 
 async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {

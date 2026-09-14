@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../backend.ts';
+import type { AgentDeviceBackend } from '../../../backend.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
@@ -11,83 +11,16 @@ import {
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
+import {
+  buttonSnapshot,
+  createFakeClock,
+  createSettleDevice,
+  welcomeSnapshot,
+} from './__tests__/settle-device-fixtures.ts';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.
-
-function createFakeClock(stepMs = 300): {
-  now: () => number;
-  sleep: (ms: number) => Promise<void>;
-  advance: (ms: number) => void;
-} {
-  let elapsed = 0;
-  return {
-    now: () => elapsed,
-    sleep: async (ms: number) => {
-      elapsed += ms > 0 ? ms : stepMs;
-    },
-    advance: (ms: number) => {
-      elapsed += ms;
-    },
-  };
-}
-
-function buttonSnapshot(): SnapshotState {
-  return makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Button',
-      label: 'Continue',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-  ]);
-}
-
-// Five nodes so a settled capture clears the tiny-tree readiness heuristic.
-function welcomeSnapshot(): SnapshotState {
-  return makeSnapshotState(
-    ['Welcome!', 'Next', 'Back', 'Home', 'Menu'].map((label, index) => ({
-      index,
-      depth: index === 0 ? 0 : 1,
-      ...(index === 0 ? {} : { parentIndex: 0 }),
-      type: index === 0 ? 'StaticText' : 'Button',
-      label,
-      rect: { x: 10, y: 20 + index * 60, width: 100, height: 40 },
-      hittable: true,
-    })),
-  );
-}
-
-function createSettleDevice(params: {
-  stored: SnapshotState;
-  captureSnapshot: () => Promise<BackendSnapshotResult> | BackendSnapshotResult;
-  tap?: () => Promise<Record<string, unknown>>;
-  clock?: ReturnType<typeof createFakeClock>;
-  appBundleId?: string;
-}): ReturnType<typeof createAgentDevice> {
-  return createAgentDevice({
-    backend: {
-      platform: 'ios',
-      captureSnapshot: async () => await params.captureSnapshot(),
-      tap: async () => (params.tap ? await params.tap() : { ok: true }),
-      fill: async () => ({ ok: true }),
-      longPress: async () => ({ ok: true }),
-    } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
-    sessions: createMemorySessionStore([
-      {
-        name: 'default',
-        snapshot: params.stored,
-        ...(params.appBundleId ? { appBundleId: params.appBundleId } : {}),
-      },
-    ]),
-    policy: localCommandPolicy(),
-    clock: params.clock ?? createFakeClock(),
-  });
-}
 
 test('press --settle returns the settled diff and stores the settled tree', async () => {
   const before = buttonSnapshot();

@@ -7,6 +7,7 @@ import {
   type ExecResult,
 } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import { withRunnerCommandId } from './runner-contract.ts';
 import {
@@ -17,8 +18,10 @@ import {
   type RunnerLease,
 } from './runner-lease.ts';
 import {
+  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
+  type RunnerPhaseBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
@@ -49,7 +52,14 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): 
 // lock, like the rest of session startup.
 export async function tryAdoptRunnerSessionFromLease(
   device: DeviceInfo,
-  options: { startupTimeoutMs?: number; expectedRunnerSessionId?: string },
+  options: {
+    /**
+     * The startup phase's one budget: the fingerprint check below spends from it, its
+     * cancellation reaches those probes, and the adopted session inherits the rest (#2422).
+     */
+    budget?: RunnerPhaseBudget;
+    expectedRunnerSessionId?: string;
+  },
 ): Promise<RunnerSession | null> {
   if (device.kind !== 'simulator' || !isIosRunnerDetachEnabled()) return null;
   // Custom simulator sets run behind the XCTestDevices redirect, whose
@@ -86,7 +96,7 @@ export async function tryAdoptRunnerSessionFromLease(
   if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) {
     return skip('runner_pid_recycled');
   }
-  const expectedDerived = resolveExpectedDerivedPath(device);
+  const expectedDerived = resolveExpectedDerivedPath(device, options.budget);
   if (!expectedDerived) return skip('expected_derived_unresolved');
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
     return skip('artifact_fingerprint_mismatch');
@@ -134,10 +144,18 @@ async function probeRunnerAnswersUptime(device: DeviceInfo, port: number): Promi
   }
 }
 
-function resolveExpectedDerivedPath(device: DeviceInfo): string | null {
+function resolveExpectedDerivedPath(
+  device: DeviceInfo,
+  budget: RunnerPhaseBudget | undefined,
+): string | null {
   try {
-    return resolveRunnerDerivedPath(device, resolveExpectedRunnerCacheMetadata(device));
-  } catch {
+    return resolveRunnerDerivedPath(
+      device,
+      resolveExpectedRunnerCacheMetadata(device, undefined, budget),
+    );
+  } catch (error) {
+    // An unresolvable fingerprint is a miss the caller starts fresh from; a cancel is not.
+    if (isRequestCanceledError(error)) throw error;
     return null;
   }
 }
@@ -147,7 +165,7 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { startupTimeoutMs?: number },
+  options: { budget?: RunnerPhaseBudget },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
@@ -172,7 +190,9 @@ function buildAdoptedRunnerSession(
     child,
     // The probe already proved the runner answers commands.
     ready: true,
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs),
+    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
+      requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
+    ),
     lease: buildRunnerLease({
       deviceId: device.id,
       sessionId,

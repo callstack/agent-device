@@ -196,11 +196,17 @@ test('a boot confirmed only after the deadline is a boot_timeout, and the confir
 });
 
 test('without a startup deadline the boot wait keeps its default budget', async () => {
-  const { host, calls } = coldSimulatorHost({});
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000_000);
+    const { host, calls } = coldSimulatorHost({});
 
-  await ensureAppleReady(host, simulator(), new AbortController().signal);
+    await ensureAppleReady(host, simulator(), new AbortController().signal);
 
-  expect(calls.find((call) => call.args.includes('bootstatus'))?.timeoutMs).toBe(120_000);
+    expect(calls.find((call) => call.args.includes('bootstatus'))?.timeoutMs).toBe(120_000);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('physical readiness forwards the request signal to the focused host port', async () => {

@@ -126,11 +126,7 @@ function residueIdentity(residue: IosAcquisitionResidue): string {
     case 'missing-viewport':
       return JSON.stringify({ kind: residue.kind, reason: residue.reason });
     case 'truncated':
-      return JSON.stringify({
-        kind: residue.kind,
-        dimension: residue.dimension,
-        limit: residue.limit,
-      });
+      return JSON.stringify({ kind: residue.kind });
     case 'stale-generation':
       return JSON.stringify({
         kind: residue.kind,

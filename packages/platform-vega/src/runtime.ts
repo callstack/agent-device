@@ -191,8 +191,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     home: homeUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
-    readClipboard: clipboardUnavailable,
-    writeClipboard: clipboardUnavailable,
+    clipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
@@ -200,9 +199,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     awaitAlert: alertUnavailable,
     acceptAlert: alertUnavailable,
     dismissAlert: alertUnavailable,
-    keyboardStatus: keyboardUnavailable,
-    keyboardDismiss: keyboardUnavailable,
-    keyboardEnter: keyboardUnavailable,
+    keyboard: keyboardUnavailable,
     audioProbeCapture: audioProbeUnavailable,
     audioProbeQuery: audioProbeUnavailable,
     perf: unsupportedPlatformLeaf,
@@ -234,11 +231,9 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       // one; the rest had no retired closure and now refuse at admission rather than inside the
       // Vega interactor.
       ...gestureRuntimeOperationFacts({
-        plan: gestureUnavailable,
-        directionalFling: gestureUnavailable,
+        unsupported: gestureUnavailable,
         multiTouch: multiTouchUnavailable,
         targetAuthoredDrag: targetAuthoredDragUnavailable,
-        viewport: gestureUnavailable,
       }),
     },
   });

@@ -66,6 +66,32 @@ export function scrollSnapshot(hiddenContentBelow: boolean): SnapshotNode[] {
   ];
 }
 
+/**
+ * A scrolled container whose one visible cell keeps a stable identifier and slot while only its text
+ * varies — the recycled-cell shape where identity alone would hide real progress.
+ */
+export function recycledCellSnapshot(label: string): SnapshotNode[] {
+  return [
+    {
+      index: 1,
+      ref: 'e1',
+      type: 'ScrollView',
+      label: 'Feed',
+      hiddenContentBelow: true,
+      rect: { x: 0, y: 100, width: 400, height: 600 },
+    },
+    {
+      index: 2,
+      ref: 'e2',
+      parentIndex: 1,
+      type: 'StaticText',
+      identifier: 'cell-0',
+      label,
+      rect: { x: 0, y: 640, width: 400, height: 56 },
+    },
+  ];
+}
+
 export async function captureThrows(scope: string | undefined): Promise<AppError> {
   try {
     await captureScrollEdgeState({

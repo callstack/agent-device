@@ -1,7 +1,9 @@
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
@@ -42,35 +44,24 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...unavailableShutdownOperationFacts,
   ...screenshotRuntimeOperationFacts({ capture: unavailable }),
   findText: unavailable,
-  findSelector: unavailable,
   setViewport: unavailable,
   focusPoint: unavailable,
   typeText: unavailable,
   ...touchRuntimeOperationFacts({
+    unsupported: unavailable,
     tap: unavailable,
     longPress: unavailable,
-    hover: unavailable,
     fill: unavailable,
-    tapElementSelector: unavailable,
   }),
-  ...gestureRuntimeOperationFacts({
-    plan: unavailable,
-    directionalFling: unavailable,
-    multiTouch: unavailable,
-    targetAuthoredDrag: unavailable,
-    viewport: unavailable,
-  }),
+  ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
   ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
   home: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,
-  keyboardStatus: unavailable,
-  keyboardDismiss: unavailable,
-  keyboardEnter: unavailable,
-  readClipboard: unavailable,
-  writeClipboard: unavailable,
+  ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
+  ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
   appSwitcher: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
@@ -127,11 +118,8 @@ export function createUnavailableRuntimeFactsForTest(
     home: fact,
     orientation: fact,
     tvRemote: fact,
-    keyboardStatus: fact,
-    keyboardDismiss: fact,
-    keyboardEnter: fact,
-    readClipboard: fact,
-    writeClipboard: fact,
+    keyboard: fact,
+    clipboard: fact,
     appSwitcher: fact,
     triggerAppEvent: fact,
     setSetting: fact,

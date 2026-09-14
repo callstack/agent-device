@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type {
   AndroidScreenRecordingProcessIdentity,
+  AndroidScreenRecordingProcessOwnership,
   AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -49,6 +50,7 @@ export async function createAndroidScreenRecordingTransport(
     stop: async (process, options, signal) => {
       const inspected = await inspectAndroidScreenRecordingProcess(shell, process, signal);
       if (inspected.status === 'missing') return 'already-missing';
+      if (inspected.status === 'foreign-writer') return 'ownership-lost';
       if (inspected.status !== 'owned-alive') return inspected.status;
       const stopped = await shell(`kill ${options?.force ? '-9 ' : '-2 '}${process.pid}`, signal);
       return stopped.exitCode === 0 ? 'stopped' : 'uncertain';
@@ -140,7 +142,7 @@ async function inspectAndroidScreenRecordingProcess(
   signal?: AbortSignal,
 ): Promise<
   Readonly<{
-    status: 'missing' | 'owned-alive' | 'ownership-lost' | 'uncertain';
+    status: AndroidScreenRecordingProcessOwnership;
     process?: AndroidScreenRecordingProcessIdentity;
   }>
 > {
@@ -156,7 +158,7 @@ async function inspectAndroidScreenRecordingProcess(
     return { status: 'ownership-lost' };
   }
   if (expected.startTime.length > 0 && expected.startTime !== startTime) {
-    return { status: 'ownership-lost' };
+    return { status: 'foreign-writer' };
   }
   return {
     status: 'owned-alive',

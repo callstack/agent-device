@@ -148,10 +148,10 @@ Bootstrap:
 
 Snapshots and refs:
   snapshot reads visible state; snapshot -i gets current interactive refs only -- fast path before interaction. Default text is token-efficient; --raw/--json for full provider tree.
-  Legend: @e12 [button] label="Add to cart" enabled hittable -> press @e12. [off-screen below] -> scroll down (a hint, not a ref).
+  Legend: @e12 [button] label="Add to cart" enabled hittable -> press @e12. [off-screen below] -> scroll down --until (a hint, not a ref).
   Refs stay valid until you press/click/fill/type/scroll/back/wait-for-async-UI, or otherwise change app state; open/--relaunch clears the stored snapshot outright.
   Prefer --settle and its diff when it shows next target; refresh with snapshot -i only when you did not settle, it reported not settled, or output lacks what you need. A known selector/label after a mutation is often enough, since interaction commands refresh state internally.
-  Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing list target: scroll down/up then snapshot -i. TV/D-pad focus: help tv.
+  Truncated preview: snapshot -s @e12 (the current concrete ref), not get text. Missing target: scroll <dir> --until <selector>. TV/D-pad focus: help tv.
 
 Selectors:
   id="field-email", label="Allow", role=button label="Search" -- not bare role keys (button="Search"); no CSS selectors/--selector/--text/raw x-y when refs/selectors exist.
@@ -237,7 +237,7 @@ Batch:
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 
 Recording:
-  record start/stop. Default scope is app (needs an active open session); use --scope device/system for whole-screen capture spanning multiple apps/home/settings. --quality medium|high on Android and Apple targets. stop burns touch overlays into the video by default; --hide-touches skips that for the fastest raw recording, and is recommended for gesture-heavy iOS simulator proof videos since overlay timing depends on a stable runner session. Android adb screenrecord has a 180s limit, so long Android recordings return as multiple MP4 chunks while the daemon stays alive; after a daemon restart, record stop recovers only manifest-owned chunks.
+  record start/stop. Default scope is app (needs an active open session); use --scope device/system for whole-screen capture spanning multiple apps/home/settings. --quality medium|high on Android and Apple targets. stop burns touch overlays into the video by default; --hide-touches skips that for the fastest raw recording, and is recommended for gesture-heavy iOS simulator proof videos since overlay timing depends on a stable runner session. Android adb screenrecord has a 180s limit, so long Android recordings return as multiple MP4 chunks while the daemon stays alive; after a daemon restart, record stop recovers only manifest-owned chunks. record stop is safe to repeat: if its request window ended while the daemon was still exporting, running it again in that session returns the completed recording instead of starting a second one.
   Tracing: trace start ./trace.log, trace stop ./trace.log (path is positional, not --path).`,
   },
   gestures: {
@@ -252,10 +252,12 @@ Shapes:
   agent-device swipe 320 500 40 500 --count 8 --pause-ms 30 --pattern ping-pong
   agent-device gesture pan 200 420 0 -80 500
   agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
+  agent-device scroll down --until 'id=submit'
   agent-device gesture fling right 200 420 180
   agent-device gesture pinch 0.5 200 400
   agent-device gesture rotate 35 200 420
   agent-device gesture transform 200 420 80 -40 2 35 700
+  scroll <dir> --until <selector> repeats scroll-and-check passes until that element is on screen, then stops: one request instead of a scroll-then-snapshot loop, and it stops on the target rather than overshooting it. It reports the passes it spent, fails when the content runs out first, and is refused on top/bottom, which already stop themselves.
   longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
   For repeated iOS smoke checks: press <x> <y> --count <n> --jitter-px <n> for tap series, swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
 
@@ -502,6 +504,8 @@ Rules:
   For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
   Remote Android and iOS bridge runs normally through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Expo support depends on the SDK's bundled React Native runtime.
   Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup. If the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
+  React Native 0.87+ needs agent-react-devtools installed as a dev dependency of the app project, then a one-time npx agent-react-devtools init there and a rebundle, before wait --connected can succeed. The npm exec package this wrapper runs is temporary and does not install it into the app. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
+  Verify an attached app with status or wait --connected before trusting any result. With 0 connected apps, count, errors, and get tree return empty results that look like a clean pass.
 
 Example:
   agent-device react-devtools status
@@ -990,7 +994,7 @@ Rules:
   Findings must come from observed runtime behavior, not source reads.
   After each mutation, use the --settle diff as evidence when available; otherwise re-snapshot.
   Wait timeouts are integer milliseconds in the trailing positional: agent-device wait 'role=tab' 10000. Do not write duration suffixes such as 10s.
-  scroll takes a selector-less direction+amount form: agent-device scroll down 3. Use --settle to wait for the UI to go quiet and get the settled diff.
+  scroll takes a selector-less direction+amount form: agent-device scroll down 0.8. One gesture cannot travel further than 0.8 of the viewport axis, so a larger amount saturates rather than covering more ground; to cross several screens use agent-device scroll down --until <selector> or scroll bottom. Use --settle to wait for the UI to go quiet and get the settled diff.
   Keep commands in the report reproducible; use selectors or refs from fresh snapshots, not guessed coordinates.
   Prefer refs for exploration and selectors for deterministic replay.
   Use logs, network, screenshot --overlay-refs, trace, perf frames, perf memory, native profiles, or react-devtools only when they add evidence to a specific issue.

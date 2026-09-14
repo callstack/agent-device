@@ -21,6 +21,24 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
     PUBLIC_COMMANDS.wait,
   );
 
+export type LiveSnapshotNode = {
+  depth?: unknown;
+  identifier?: unknown;
+  index?: unknown;
+  label?: unknown;
+  parentIndex?: unknown;
+  type?: unknown;
+};
+
+export function snapshotNodes(result: { json?: any }): LiveSnapshotNode[] {
+  const nodes = result.json?.data?.nodes;
+  assert.ok(
+    Array.isArray(nodes),
+    `snapshot response did not contain nodes: ${JSON.stringify(result)}`,
+  );
+  return nodes as LiveSnapshotNode[];
+}
+
 const SCROLL_SEARCH_ATTEMPTS = 4;
 // A stalled capture says nothing about where the element is, so it must not consume the scroll
 // budget outright; a couple of retries absorb a slow runner without masking a real absence.

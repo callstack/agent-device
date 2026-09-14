@@ -5,7 +5,11 @@ import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  isActiveProviderDevice,
+} from '../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
 import {
   androidObservation,
   createPlatformRuntimeGateway,
@@ -83,6 +87,10 @@ import { createScreenRecordingAdmissionLedger } from '../screen-recording-admiss
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
+// An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
+// finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
+// (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
+const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
 
 type WritableOutput = {
   write: (chunk: string) => unknown;
@@ -273,6 +281,7 @@ export async function startDaemonRuntime(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
+  installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
   const requestPlatformProviders = createRequestPlatformProviders({
     providers: {
       appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
@@ -515,6 +524,7 @@ export async function startDaemonRuntime(
     await reapOwnedProcessRecordsAtStartup(ownedProcessRecords, {
       openWebSessionNames: openWebSessionNames(sessionStore),
       purposes: ['simctl-screen-recording'],
+      termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
     });
     await cleanupWebBrowserOrphansForDaemonStartup({
       stateDir: baseDir,

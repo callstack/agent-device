@@ -4,7 +4,7 @@ import type {
   BackendSnapshotResult,
 } from '../backend.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { createAgentDevice } from '../runtime.ts';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { noActiveSessionError } from './response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -67,7 +67,7 @@ type ResolvedSelectorDevice =
   | { ok: false; response: DaemonResponse };
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
-  return createAgentDevice({
+  return createCommandSurfaceAgentDevice({
     backend: createSelectorBackend(params),
     ...createDaemonRuntimePolicy('selector commands', { plural: true }),
     sessions: createDaemonRuntimeSessionStore({

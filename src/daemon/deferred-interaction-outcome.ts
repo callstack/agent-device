@@ -363,6 +363,12 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   return outcome;
 }
 
+/**
+ * What makes two captures comparable at all. The iOS comparison key already carries the whole
+ * presentation identity, including the surface the capture described — an in-place system surface (a
+ * web sign-in sheet) is captured under its own host lineage (#2438) — so a sheet appearing or
+ * dismissing mid-poll reads as incomparable rather than as a stable surface.
+ */
 function snapshotComparisonKey(snapshot: SnapshotState | undefined): string | undefined {
   return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
 }

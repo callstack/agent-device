@@ -99,6 +99,8 @@ agent-device replay export ./workflows/checkout.ad --out ./maestro/checkout.yaml
 
 Each `open <appId>` exports with an explicit `launchApp.appId`, so a flow can switch between apps and return to the original app. The first app remains the flow's default `appId`; relaunch options and app-specific deep links stay attached to their authored targets.
 
+Deep links, including schemes without `//` such as `tel:` and `mailto:`, export as `openLink`. A standalone `open tel:+15551234567` emits only the link command; `open com.example.app mailto:agent@example.test` emits the app launch followed by the link.
+
 The exporter is intentionally strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, home, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. `home` exports as `pressKey: Home`, so flows that visit the home screen and reopen the app can be exported. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching.
 
 ## Run a lightweight `.ad` suite
@@ -112,14 +114,17 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 ```
 
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
+- Quote relative globs to expand them on the caller from its working directory, including when the directory name contains glob characters such as `[` or `{`. A missing file input without glob characters reports an error.
 - `context platform=...` inside each `.ad` file is the target source of truth for suite execution.
 - `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present.
 - `context timeout=...` and `context retries=...` can be declared per script; CLI flags override metadata. Retries are capped at `3`, and duplicate keys in the context header fail fast instead of silently overriding each other.
 - By default, suite artifacts are written under `.agent-device/test-artifacts/<run-id>/...`. Each attempt writes `replay.ad`, `result.txt`, and `replay-timing.ndjson`. Failed attempts also keep copied logs and artifact files when the replay produced them.
+- Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. `result.txt` lists the retained names in `copiedArtifacts`.
 - `replay-timing.ndjson` records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.
 - Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.
 - The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use `--verbose` to include step traces in completed-test progress output.
 - `--reporter` is repeatable. Built-ins are `default` for the console summary and `junit:<path>` for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include `--reporter default` when you also want terminal output. `--report-junit <path>` remains a compatibility alias for `--reporter junit:<path>`.
+- JUnit reports preserve legal Unicode and whitespace, and replace characters forbidden by XML 1.0 (such as terminal ESC or NUL) with `U+FFFD` (`�`) so CI parsers can read the report. JSON and other reporters retain the original suite values.
 - When `--fail-fast` and retries are both set, the current test still consumes its retries before the suite stops.
 
 ### Custom test reporters
@@ -206,7 +211,7 @@ export default createReporter;
 
 The CLI loads reporter modules with Node dynamic `import()`. Use `.mjs` or `.js` files at runtime; for TypeScript, compile the reporter to JavaScript before passing it to `--reporter`. Loading `.ts` files directly depends on Node's type-stripping behavior and is not part of the supported reporter contract.
 
-Live reporter hooks are semantic: `onSuiteStart`, `onTestStart`, `onTestStep`, and `onTestResult` run while the daemon request is active; generic command progress frames are not exposed to test reporters. These live hooks are synchronous — they run from the progress stream as events arrive and are not awaited, so keep their work synchronous and defer anything async to `onSuiteEnd`, which the CLI awaits before exiting. `onSuiteEnd` receives the final suite result. `getExitCode` can only raise the suite exit code, never lower it: the highest reporter-provided code wins and failed tests still exit with `1` when no reporter raises it further, so a reporter cannot mask a failing suite.
+Live reporter hooks are semantic: `onSuiteStart`, `onTestStart`, `onTestStep`, and `onTestResult` run while the daemon request is active; generic command progress frames are not exposed to test reporters. These live hooks are synchronous — they run from the progress stream as events arrive and are not awaited, so keep their work synchronous and defer anything async to `onSuiteEnd`, which the CLI awaits before exiting. `onSuiteEnd` receives the final suite result. `getExitCode` can only raise the suite exit code, never lower it: the highest reporter-provided code wins and failed tests still exit with `1` when no reporter raises it further, so a reporter cannot mask a failing suite. Return an integer from `0` to `255`, or `undefined` to leave the exit code unchanged. Other values fail with `INVALID_ARGS`; in particular, codes such as `256` are rejected before they can wrap to a successful process exit.
 
 ## Parametrise `.ad` scripts
 

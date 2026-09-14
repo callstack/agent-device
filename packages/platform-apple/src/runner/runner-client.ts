@@ -21,7 +21,7 @@ import {
   type AppleRunnerPrewarmOptions,
   type AppleRunnerProvider,
 } from './runner-provider.ts';
-import { ensureXctestrunArtifact } from './runner-xctestrun.ts';
+import { createRunnerPhaseBudget, ensureXctestrunArtifact } from './runner-xctestrun.ts';
 import {
   executeRunnerCommand,
   prepareLocalIosRunner,
@@ -91,7 +91,12 @@ export function prewarmAppleRunnerCache(
     options,
     failurePhase: 'ios_runner_cache_prewarm_failed',
     task: async (runnerOptions) => {
-      await ensureXctestrunArtifact(device, runnerOptions);
+      // A cache prewarm owns the build phase it starts: one budget for the cache
+      // decision's toolchain probes and the `xcodebuild` that may follow them.
+      await ensureXctestrunArtifact(device, {
+        ...runnerOptions,
+        budget: createRunnerPhaseBudget(runnerOptions.buildTimeoutMs, runnerOptions.signal),
+      });
     },
   });
 }

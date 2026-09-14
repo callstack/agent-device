@@ -17,7 +17,8 @@ const artifactsCommandMetadata = defineFieldCommandMetadata(
 );
 
 const artifactsCliSchema = {
-  usageOverride: 'artifacts [provider-session-id] [--provider <name>]',
+  usageOverride: 'artifacts [provider-session-id]',
+  usageFlags: ['provider'],
   positionalArgs: ['provider-session-id?'],
   allowedFlags: ['provider', 'providerSessionId'],
 } as const satisfies CommandSchemaOverride;

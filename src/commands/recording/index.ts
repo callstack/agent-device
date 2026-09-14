@@ -58,6 +58,7 @@ export const traceCommandMetadata = defineFieldCommandMetadata(
 const recordCliSchema = {
   usageOverride:
     'record start [path] [--scope <app|device|system>] [--fps <n>] [--quality <medium|high>] [--hide-touches] | record stop',
+  usageFlags: [],
   listUsageOverride: 'record start [path] | record stop',
   positionalArgs: ['start|stop', 'path?'],
   allowedFlags: ['recordingScope', 'fps', 'quality', 'hideTouches'],
@@ -103,7 +104,7 @@ export const recordCommandFacet = defineCommandFacet({
   text: {
     summary: 'Start or stop screen recording',
     cliDetail:
-      'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. HarmonyOS supports whole-screen recording on physical devices only: use --scope device/system; --fps, --quality, and --hide-touches are unsupported. Use --quality to choose medium or high export quality on supported backends.',
+      'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. HarmonyOS supports whole-screen recording on physical devices only: use --scope device/system; --fps, --quality, and --hide-touches are unsupported. Use --quality to choose medium or high export quality on supported backends. An iOS simulator host recording lock returns non-retriable DEVICE_IN_USE with reason apple_simulator_recording_busy. Stop the recording in its owning session; if a dead recorder left the host locked, ask the host operator to restart the CoreSimulator stream service.',
   },
   metadata: recordCommandMetadata,
   run: (client, input) => client.recording.record(input as RecordOptions),

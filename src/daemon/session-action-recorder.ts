@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
+import { recordedFlagKeys } from '../cli-schema/command-schema.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
@@ -357,49 +357,18 @@ function isExcludedRepairSegmentObservation(
   return entry.flags?.record !== true;
 }
 
-const SANITIZED_FLAG_KEYS = [
-  'platform',
-  'device',
-  'udid',
-  'serial',
-  'out',
-  'verbose',
-  'metroHost',
-  'metroPort',
-  'bundleUrl',
-  'launchUrl',
-  'snapshotInteractiveOnly',
-  'snapshotDepth',
-  'snapshotScope',
-  'snapshotRaw',
-  'snapshotCustomActions',
-  ...SCREENSHOT_ACTION_FLAG_KEYS,
-  'relaunch',
-  'saveScript',
-  'force',
-  'noRecord',
-  'record',
-  'fps',
-  'quality',
-  'hideTouches',
-  'count',
-  'pointerCount',
-  'intervalMs',
-  'delayMs',
-  'holdMs',
-  'jitterPx',
-  'doubleTap',
-  'clickButton',
-  'pauseMs',
-  'pattern',
-] as const satisfies readonly (keyof CommandFlags)[];
+// The keys a recorded action carries derive from each flag declaration's `recorded`
+// field, never from a list maintained here; opting a flag into recording edits the
+// declaration, not this file.
+const RECORDED_FLAG_KEYS = recordedFlagKeys();
 
 function sanitizeFlags(flags: CommandFlags | undefined): SessionAction['flags'] {
   if (!flags) return {};
   const result: Record<string, unknown> = {};
-  for (const key of SANITIZED_FLAG_KEYS) {
-    if (flags[key] !== undefined) {
-      result[key] = flags[key];
+  for (const key of RECORDED_FLAG_KEYS) {
+    const value = flags[key];
+    if (value !== undefined) {
+      result[key] = value;
     }
   }
   return result as SessionAction['flags'];

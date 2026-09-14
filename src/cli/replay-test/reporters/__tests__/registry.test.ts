@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import {
   getReplayTestReporterExitCode,
@@ -252,3 +253,30 @@ test('reporter exit codes can raise but never lower the suite exit code', () => 
     1,
   );
 });
+
+test.each([0, 1, 3, 255, undefined])('preserves valid reporter exit code %s', (code) => {
+  const reporters: ReplayTestReporter[] = [{ name: 'valid', getExitCode: () => code }];
+  assert.equal(getReplayTestReporterExitCode(reporters, suite()), code ?? 0);
+  assert.equal(getReplayTestReporterExitCode(reporters, suite(1)), Math.max(1, code ?? 0));
+});
+
+test.each([-1, 0.5, 256, 512, Number.NaN, Infinity, -Infinity, '3', null])(
+  'rejects invalid reporter exit code %s instead of coercing or wrapping it',
+  (code) => {
+    const reporters: ReplayTestReporter[] = [
+      { name: 'valid', getExitCode: () => 3 },
+      { name: 'invalid', getExitCode: () => code as number },
+    ];
+    for (const value of [suite(), suite(1)]) {
+      assert.throws(
+        () => getReplayTestReporterExitCode(reporters, value),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          error.message.includes('invalid') &&
+          error.message.includes('getExitCode') &&
+          error.message.includes('0 to 255'),
+      );
+    }
+  },
+);

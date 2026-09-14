@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { isMaestroYamlPath, maestroBackendRequiredMessage } from '@agent-device/ad-script';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
@@ -63,14 +63,11 @@ function expandReplayInput(
     return { paths: [], source: 'file' };
   }
 
-  if (!looksLikeGlob(input) && !looksLikeGlob(expandedInput)) {
+  if (!looksLikeGlob(input)) {
     throw new AppError('INVALID_ARGS', `test input not found: ${input}`);
   }
 
-  const pattern = path.isAbsolute(expandedInput) ? expandedInput : input;
-  const matches = fs.globSync(pattern, {
-    cwd: path.isAbsolute(expandedInput) ? undefined : cwd,
-  });
+  const matches = fs.globSync(expandUserHomePath(input), { cwd });
   return {
     source: 'glob',
     paths: matches

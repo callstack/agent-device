@@ -38,11 +38,12 @@ export async function renderReplayTestResponse(options: {
     options.reporterRuntime ??
     (await createReplayTestReporterRuntime({ debug, verbose, reporter, reportJunit, json }));
   await runReplayTestReporters(runtime.reporters, suite, runtime.context);
+  const exitCode = getReplayTestReporterExitCode(runtime.reporters, suite);
   if (json) {
     const { printJson } = await import('../../commands/output/json.ts');
     printJson({ success: true, data: suite });
   }
-  return getReplayTestReporterExitCode(runtime.reporters, suite);
+  return exitCode;
 }
 
 export async function createReplayTestReporterRuntime(options: {

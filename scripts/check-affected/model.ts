@@ -73,6 +73,7 @@ export type CheckId =
   | 'command-docs'
   | 'agent-guidance'
   | 'xctest-selection'
+  | 'packaged-runner-swift'
   // Gates that drive their own runner — declared nowhere, registered here.
   | 'maestro-conformance'
   | 'maestro-differential'
@@ -138,6 +139,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'command-docs',
   'agent-guidance',
   'xctest-selection',
+  'packaged-runner-swift',
   'maestro-conformance',
   'maestro-differential',
   'maestro-regenerate',
@@ -475,6 +477,19 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:xctest-selection',
     detail: 'runner test methods must stay selected in CI and stripped from the npm source bundle',
     owns: (file) => file.startsWith('apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/'),
+  },
+  // The packager rewrites every runner Swift file on its way into the npm package, and nothing in
+  // this repo reads the result — the first consumer is a user's `xcodebuild`. Both the source and
+  // the two rewriting scripts own the check that the rewrite keeps the file parseable and keeps its
+  // line numbering.
+  {
+    check: 'packaged-runner-swift',
+    rule: 'own:packaged-runner-swift',
+    detail: 'packaged runner Swift must still parse and keep the checkout line numbering',
+    owns: (file) =>
+      file.startsWith('apple/runner/') ||
+      file === 'scripts/package-apple-runner-source.mjs' ||
+      file === 'scripts/strip-swift-comments.mjs',
   },
   {
     check: 'android-helpers',

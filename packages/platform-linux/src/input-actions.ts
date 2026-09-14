@@ -2,6 +2,7 @@ import { ensureInputTool } from './linux-env.ts';
 import { resolveLinuxToolProvider, type LinuxPointerButton } from './tool-provider.ts';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 // ── Low-level wrappers ─────────────────────────────────────────────────
 
@@ -227,8 +228,11 @@ export async function scrollLinux(
         ? Math.max(1, Math.round(options.pixels / 15))
         : Math.max(1, Math.round(options.pixels / 40));
   } else if (options?.amount != null) {
-    // amount is a fraction (0–1+) of the viewport; scale relative to default
-    scrollCount = Math.max(1, Math.round(DEFAULT_SCROLL_CLICKS * (options.amount / 0.6)));
+    // amount is a fraction (0–1+) of the viewport; scale relative to the shared default
+    scrollCount = Math.max(
+      1,
+      Math.round(DEFAULT_SCROLL_CLICKS * (options.amount / DEFAULT_SCROLL_AMOUNT)),
+    );
   }
 
   // xdotool: button 4=up, 5=down, 6=left, 7=right

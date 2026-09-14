@@ -343,6 +343,49 @@ test('threshold controls sensitivity: small differences ignored at default thres
   assert.equal(strict.differentPixels, 25);
 });
 
+test.each([
+  [
+    { r: 0, g: 0, b: 0 },
+    { r: 255, g: 255, b: 255 },
+  ],
+  [
+    { r: 255, g: 0, b: 0 },
+    { r: 0, g: 255, b: 255 },
+  ],
+  [
+    { r: 0, g: 255, b: 0 },
+    { r: 255, g: 0, b: 255 },
+  ],
+  [
+    { r: 0, g: 0, b: 255 },
+    { r: 255, g: 255, b: 0 },
+  ],
+])('threshold 1 includes the maximum RGB distance from %j to %j', async (before, after) => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  const outputPath = path.join(dir, 'diff.png');
+  writeSolidPng(baseline, 2, 2, before);
+  writeSolidPng(current, 2, 2, after);
+
+  const belowMaximum = await compareScreenshots(baseline, current, {
+    threshold: 1 - Number.EPSILON / 2,
+    outputPath,
+  });
+  assert.equal(belowMaximum.match, false);
+  assert.equal(belowMaximum.differentPixels, 4);
+  assert.equal(fs.existsSync(outputPath), true);
+
+  const maximum = await compareScreenshots(baseline, current, { threshold: 1, outputPath });
+  assert.equal(maximum.match, true);
+  assert.equal(maximum.differentPixels, 0);
+  assert.equal(maximum.mismatchPercentage, 0);
+  assert.equal(maximum.totalPixels, 4);
+  assert.equal(maximum.regions, undefined);
+  assert.equal(maximum.diffPath, undefined);
+  assert.equal(fs.existsSync(outputPath), false);
+});
+
 test('throws INVALID_ARGS when baseline file does not exist', async () => {
   const dir = tmpDir();
   const current = path.join(dir, 'current.png');

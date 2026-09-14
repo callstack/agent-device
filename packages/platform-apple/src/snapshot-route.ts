@@ -32,8 +32,22 @@ import {
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
+import {
+  createSystemSurfacePresenceProbe,
+  type SystemSurfacePresenceProbe,
+} from './system-surface-presence.ts';
 
 type SnapshotFallback = (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
+
+/** Why this capture left the bridge: a system surface the bridge cannot see was on screen. */
+const SYSTEM_SURFACE_PRESENTED = 'system-surface-presented';
+
+/**
+ * The same decision, against the host-side probe's one documented false positive: the surface host
+ * process outlives the dismissal of its sheet (see `system-surface-presence.ts`), so the bridge was
+ * skipped for a surface the runner then did not serve.
+ */
+const SYSTEM_SURFACE_HOST_LINGERING = 'system-surface-host-lingering';
 
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
@@ -51,10 +65,12 @@ export function createAppleSnapshotRoute(
   options: Readonly<{
     source?: SimulatorSnapshotSource;
     resolveTarget?: SimulatorSnapshotTargetResolver;
+    systemSurfacePresent?: SystemSurfacePresenceProbe;
   }> = {},
 ): AppleSnapshotRoute {
   const source = options.source ?? createSimulatorSnapshotSource();
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
+  const systemSurfacePresent = options.systemSurfacePresent ?? createSystemSurfacePresenceProbe();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
   /**
@@ -78,7 +94,32 @@ export function createAppleSnapshotRoute(
     awaitObservable: observation.awaitObservable,
     shutdown: async () => await source.close(),
     capture: async (device, input, signal, fallback) => {
-      if (!isEligible(device, input)) return await fallback(input);
+      if (!isEligible(device, input)) return await captureOffRoute(device, input, fallback);
+      // A system surface (e.g. the web sign-in sheet) presented over the app is invisible to the
+      // host AX bridge — the app is still the AX primaryApp, so the bridge would serve the occluded
+      // app tree as if healthy (#2438). The XCTest runner can see and drive the surface, so route
+      // this capture to it. The runner serves the surface only while it is genuinely foreground and
+      // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
+      // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
+      // capture that would answer confidently from the occluded app tree.
+      const surfacePresence = await systemSurfacePresent(device, signal);
+      if (surfacePresence === 'unknown') {
+        // The probe could not answer. Take the runner rather than a bridge capture that would
+        // answer confidently from the occluded app tree — but say so: silently losing the bridge
+        // fast path, with no warning and a comparable identity, would be its own defect.
+        return await runFallback(
+          device.id,
+          input,
+          fallback,
+          appLineage(device.id, input),
+          requestFor(input),
+          'system-surface-probe-unavailable',
+          [unknownGenerationResidue()],
+        );
+      }
+      if (surfacePresence !== 'absent') {
+        return await runSurfaceFallback(device, input, fallback, surfacePresence.host.bundleId);
+      }
       let target: SimulatorSnapshotTarget;
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
@@ -86,16 +127,24 @@ export function createAppleSnapshotRoute(
         signal.throwIfAborted();
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
         return await runFallback(
+          device.id,
           input,
           fallback,
-          { targetId: `${device.id}:${input.options!.appBundleId!}` },
+          appLineage(device.id, input),
           requestFor(input),
           'target-resolution-failed',
           [unknownGenerationResidue()],
         );
       }
       if (isBridgeDisabled(target)) {
-        return await runFallback(input, fallback, target, requestFor(input), 'circuit-disabled');
+        return await runFallback(
+          device.id,
+          input,
+          fallback,
+          target,
+          requestFor(input),
+          'circuit-disabled',
+        );
       }
 
       const request = requestFor(input);
@@ -218,6 +267,7 @@ async function fallbackAfterFailure(
     failure.details,
   );
   return await runFallback(
+    failedTarget.udid,
     input,
     fallback,
     identity.lineage,
@@ -228,6 +278,7 @@ async function fallbackAfterFailure(
 }
 
 async function runFallback(
+  deviceId: string,
   input: CaptureSnapshotInput,
   fallback: SnapshotFallback,
   lineage: IosSnapshotLineage,
@@ -235,8 +286,109 @@ async function runFallback(
   reason: string,
   residue: readonly IosAcquisitionResidue[] = [],
 ): Promise<SnapshotResult> {
+  return stampFallback(deviceId, await fallback(input), lineage, request, reason, residue);
+}
+
+/**
+ * The `present` path's capture. The probe answers about a host PROCESS and stays positive while a
+ * dismissed host lingers, while the runner answers about the screen — so only the reason is decided
+ * here, from what the runner served. The identity comes from the shared stamping point, which reads
+ * the same stamp: if the probe decided identity instead, an app capture taken in the lingering
+ * window would be lineaged to the host and compare EQUAL to the sheet capture before the dismissal,
+ * which is exactly the transition a post-gesture poll must not miss (#2438).
+ *
+ * `detectedHost` is therefore evidence, not identity: it names the host the probe matched so a
+ * lingering window is legible in the daemon log instead of looking like a missing bridge capture.
+ */
+async function runSurfaceFallback(
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  fallback: SnapshotFallback,
+  detectedHost: string,
+): Promise<SnapshotResult> {
   const result = await fallback(input);
-  const comparisonIdentity: IosSnapshotComparisonIdentity = Object.freeze({
+  const reason = result.systemSurface ? SYSTEM_SURFACE_PRESENTED : SYSTEM_SURFACE_HOST_LINGERING;
+  if (!result.systemSurface) {
+    emitRouteDiagnostic(reason, device, undefined, undefined, { detectedHost });
+  }
+  return stampFallback(device.id, result, appLineage(device.id, input), requestFor(input), reason);
+}
+
+/**
+ * A capture the route cannot plan — a pinned backend or a custom-actions read, see
+ * {@link isEligible} — still reaches the XCTest runner, and the runner serves a presented system
+ * surface on those paths too. Such a capture describes the surface rather than the app, so it is
+ * identified like any other surface capture: without an identity it would fall back to legacy
+ * presentation matching, where a sheet and the app read as the same presentation and could
+ * corroborate a tap across the two (#2438). An app capture off the route carries no identity, as
+ * before: the route planned nothing about it.
+ */
+async function captureOffRoute(
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  fallback: SnapshotFallback,
+): Promise<SnapshotResult> {
+  const result = await fallback(input);
+  const served = result.systemSurface;
+  if (!served) return result;
+  return {
+    ...result,
+    comparisonIdentity: runnerComparisonIdentity(
+      surfaceLineage(device.id, served.bundleId),
+      requestFor(input),
+      [],
+    ),
+  };
+}
+
+/**
+ * The one place a runner fallback's identity is decided. The runner stamps the surface it actually
+ * served onto its result, and that stamp is the authority over the app lineage the route planned:
+ * a capture OF a system surface is identified by that surface whatever reason sent the route here.
+ * Deriving this per call site is what let `circuit-disabled` stamp app lineage onto a sheet capture,
+ * so a sheet and the app could compare equal and corroborate a tap across the two (#2438).
+ *
+ * `reason` survives either way — why the bridge was skipped is independent of what the runner found.
+ * App-generation evidence leaves with the app lineage it describes: a surface is not an app
+ * generation, and a per-capture residue id would make two captures of the same sheet incomparable
+ * with each other too.
+ */
+function stampFallback(
+  deviceId: string,
+  result: SnapshotResult,
+  lineage: IosSnapshotLineage,
+  request: ReturnType<typeof createIosSnapshotRequest>,
+  reason: string,
+  residue: readonly IosAcquisitionResidue[] = [],
+): SnapshotResult {
+  const served = result.systemSurface;
+  return {
+    ...result,
+    comparisonIdentity: runnerComparisonIdentity(
+      served ? surfaceLineage(deviceId, served.bundleId) : lineage,
+      request,
+      [...(served ? [] : residue), { kind: 'fallback-source', producer: 'apple-runner' }],
+    ),
+    warnings: [...(result.warnings ?? []), fallbackWarning(reason, lineage, served !== undefined)],
+  };
+}
+
+/** The app generation the route planned this capture against. */
+function appLineage(deviceId: string, input: CaptureSnapshotInput): IosSnapshotLineage {
+  return { targetId: `${deviceId}:${input.options!.appBundleId!}` };
+}
+
+/** A served system surface, which is identified by the surface host and by no app generation. */
+function surfaceLineage(deviceId: string, bundleId: string): IosSnapshotLineage {
+  return { targetId: `${deviceId}:${bundleId}` };
+}
+
+function runnerComparisonIdentity(
+  lineage: IosSnapshotLineage,
+  request: ReturnType<typeof createIosSnapshotRequest>,
+  residue: readonly IosAcquisitionResidue[],
+): IosSnapshotComparisonIdentity {
+  return Object.freeze({
     producer: 'apple-runner',
     intent: request.acquisitionIntent,
     lineage: Object.freeze({
@@ -244,18 +396,32 @@ async function runFallback(
       ...(lineage.generation ? { generation: lineage.generation } : {}),
     }),
     presentationKey: buildIosSnapshotPresentationKey(request),
-    residue: Object.freeze([
-      ...residue,
-      { kind: 'fallback-source', producer: 'apple-runner' } as const,
-    ]),
+    residue: Object.freeze([...residue]),
   });
+}
+
+/**
+ * A presented system surface is not a bridge failure: the bridge is healthy and simply cannot see
+ * the surface, so it is inapplicable here rather than unavailable — and the capture belongs to that
+ * surface, not to an app generation. A lingering host is the same decision over a surface the runner
+ * did not serve, so that sentence says what the capture holds instead. Every other reason keeps the
+ * unavailable sentence.
+ */
+function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: boolean): string {
+  if (reason === SYSTEM_SURFACE_PRESENTED) {
+    return `Simulator AX snapshot inapplicable (${reason}); used XCTest to read the system surface presented over the app.`;
+  }
+  if (reason === SYSTEM_SURFACE_HOST_LINGERING) {
+    return `Simulator AX snapshot inapplicable (${reason}); used XCTest, which read app content: the system surface host process was still running but no longer presenting.`;
+  }
+  // The bridge was skipped for its own reason and the runner then found a surface over the app. The
+  // app-generation sentence would describe a capture this is not, so the reason keeps its wording
+  // and the content sentence says what arrived.
+  if (served) {
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest, which read the system surface presented over the app.`;
+  }
   const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
-  const warning = `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
-  return {
-    ...result,
-    comparisonIdentity,
-    warnings: [...(result.warnings ?? []), warning],
-  };
+  return `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;
 }
 
 type FallbackIdentity = Readonly<{

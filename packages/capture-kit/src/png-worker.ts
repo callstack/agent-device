@@ -1,5 +1,6 @@
 import { parentPort } from 'node:worker_threads';
 import { normalizeError } from '@agent-device/kernel/errors';
+import { cropPngBytes } from './png-crop-bytes.ts';
 import { decodePng, PNG } from './png.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
 import { computePngRgbDifference } from './png-rgb-difference.ts';
@@ -26,6 +27,12 @@ function runJob(request: PngWorkerRequest): PngWorkerJobResult {
       const png = new PNG({ width: request.width, height: request.height });
       png.data = toBuffer(request.data);
       return { kind: 'encode', png: PNG.sync.write(png) };
+    }
+    case 'crop': {
+      return {
+        kind: 'crop',
+        png: cropPngBytes(toBuffer(request.png), request.box, request.label),
+      };
     }
     case 'rgb-difference': {
       const first = decodePng(toBuffer(request.firstPng), request.label);
@@ -68,6 +75,8 @@ function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
       return [result.data];
     case 'encode':
       return [result.png];
+    case 'crop':
+      return result.png === null ? [] : [result.png];
     case 'rgb-difference':
       return [];
     case 'diff-pixels':

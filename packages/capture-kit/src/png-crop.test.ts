@@ -2,9 +2,11 @@ import { afterAll, test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Rect } from '@agent-device/kernel/snapshot';
 import { PNG } from './png.ts';
 import { cropPngFile } from './png-crop.ts';
 import { terminatePngWorker } from './png-worker-client.ts';
+import { encodeFixturePng, rampPixels, readPngForTest } from './png-codec.fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 afterAll(async () => {
@@ -63,6 +65,63 @@ test('non-integer or non-positive boxes refuse', async () => {
     );
   }
 });
+
+test('a crop of an opaque capture is written as truecolor without an alpha channel', async () => {
+  const filePath = writeFixturePng(opaqueFixture(9, 6));
+
+  await cropPngFile(filePath, { x: 3, y: 2, width: 4, height: 3 });
+
+  const written = readPngForTest(fs.readFileSync(filePath));
+  assert.equal(written.colorType, 2);
+  assert.deepEqual([written.width, written.height], [4, 3]);
+  assertCropMatchesSource(written, opaqueFixture(9, 6), { x: 3, y: 2, width: 4, height: 3 });
+});
+
+test('a file that is not a PNG keeps the canonical decode failure', async () => {
+  const filePath = path.join(mkdtempForTestSync('agent-device-png-junk-'), 'image.png');
+  fs.writeFileSync(filePath, Buffer.from('not a png at all'));
+
+  await assert.rejects(
+    () => cropPngFile(filePath, { x: 0, y: 0, width: 2, height: 2 }),
+    /Failed to decode screenshot as PNG/,
+  );
+});
+
+function opaqueFixture(width: number, height: number) {
+  return {
+    pixels: rampPixels(width, height, 4, () => 255),
+    width,
+    height,
+    channels: 4,
+    colorType: 6,
+  };
+}
+
+function writeFixturePng(fixture: Parameters<typeof encodeFixturePng>[0]): string {
+  const filePath = path.join(mkdtempForTestSync('agent-device-png-fixture-'), 'image.png');
+  fs.writeFileSync(filePath, encodeFixturePng(fixture));
+  return filePath;
+}
+
+function assertCropMatchesSource(
+  written: ReturnType<typeof readPngForTest>,
+  fixture: Readonly<{ pixels: Uint8Array; width: number; channels: number }>,
+  box: Rect,
+): void {
+  for (let row = 0; row < box.height; row += 1) {
+    for (let column = 0; column < box.width; column += 1) {
+      const from = ((row + box.y) * fixture.width + column + box.x) * fixture.channels;
+      const to = (row * box.width + column) * 4;
+      for (let channel = 0; channel < 3; channel += 1) {
+        assert.equal(
+          written.rgba[to + channel]!,
+          fixture.pixels[from + channel]!,
+          `pixel ${column},${row} channel ${channel}`,
+        );
+      }
+    }
+  }
+}
 
 // A 6x4 grid whose pixel (x, y) carries (x*10, y*10) so a wrong source offset
 // is caught by the value, not just the size.

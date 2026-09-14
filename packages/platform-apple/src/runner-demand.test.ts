@@ -11,8 +11,6 @@ test('a plan served entirely by simctl and the AX bridge needs no runner', () =>
       'captureSnapshot',
       'captureSnapshotWithoutActiveApp',
       'captureScreenshot',
-      'findText',
-      'findSelector',
       'closeApplication',
       'finalizeApplicationClose',
     ]),
@@ -22,6 +20,7 @@ test('a plan served entirely by simctl and the AX bridge needs no runner', () =>
 test.each([
   ['a touch', 'tapPoint'],
   ['a text read', 'readTextAtPoint'],
+  ['a native text observation', 'findText'],
   ['custom actions', 'captureSnapshotWithCustomActions'],
   ['an alert', 'readAlert'],
   ['runner preparation', 'prepareAppleRunner'],

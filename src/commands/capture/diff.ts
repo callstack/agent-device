@@ -30,6 +30,7 @@ const diffCommandMetadata = defineFieldCommandMetadata(DIFF_COMMAND_NAME, diffCo
 const diffCliSchema = {
   usageOverride:
     'diff snapshot | diff screenshot --baseline <path> [current.png] [--out <diff.png>] [--threshold <0-1>] [--overlay-refs]',
+  usageFlags: [],
   positionalArgs: ['kind', 'current?'],
   allowedFlags: [...SNAPSHOT_FLAGS, 'baseline', 'threshold', 'out', 'overlayRefs'],
 } as const;
@@ -58,7 +59,7 @@ export const diffCommandFacet = defineCommandFacet({
   text: {
     summary: 'Diff snapshot or screenshot',
     cliDetail:
-      'Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
+      'Screenshot --threshold is a per-pixel RGB tolerance: 0 requires exact colors and 1 ignores color differences; image dimensions must still match. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },
   metadata: diffCommandMetadata,
   run: (client, input) => client.capture.diff(input),

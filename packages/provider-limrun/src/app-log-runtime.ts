@@ -108,11 +108,8 @@ export function createLimrunPlatformRuntimeOwner(
             home: liveSessionUnavailable,
             orientation: liveSessionUnavailable,
             tvRemote: liveSessionUnavailable,
-            keyboardStatus: liveSessionUnavailable,
-            keyboardDismiss: liveSessionUnavailable,
-            keyboardEnter: liveSessionUnavailable,
-            readClipboard: liveSessionUnavailable,
-            writeClipboard: liveSessionUnavailable,
+            keyboard: liveSessionUnavailable,
+            clipboard: liveSessionUnavailable,
             appSwitcher: liveSessionUnavailable,
             triggerAppEvent: liveSessionUnavailable,
             setSetting: liveSessionUnavailable,
@@ -255,7 +252,7 @@ function bindLimrunAppLogs(
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const backend = backendForDevice(device);
-      const dump = readRecentNetworkTrafficFromText(recent.text, {
+      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
         ...input,
         path: recent.path,
         exists: recent.exists,

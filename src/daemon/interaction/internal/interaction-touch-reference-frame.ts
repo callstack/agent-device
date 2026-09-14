@@ -6,7 +6,7 @@ import type { SessionStore } from '../../session-store.ts';
 import { getSnapshotReferenceFrame } from '../../touch-reference-frame.ts';
 import type { SessionState } from '../../session-state.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
-import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
+import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {
   session: SessionState;

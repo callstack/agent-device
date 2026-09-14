@@ -96,6 +96,7 @@ export const testCommandMetadata = defineFieldCommandMetadata(
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
+  usageFlags: [],
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
   allowedFlags: [
@@ -121,6 +122,7 @@ const replayCliSchema = {
 
 const testCliSchema = {
   usageOverride: 'test <path-or-glob>...',
+  usageFlags: [],
   listUsageOverride: 'test <path-or-glob>...',
   positionalArgs: ['pathOrGlob'],
   allowsExtraPositionals: true,
@@ -230,7 +232,7 @@ export const replayCommandFacet = defineCommandFacet({
   text: {
     summary: 'Replay a recorded session or Maestro flow',
     cliDetail:
-      'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively. replay export <file.ad> converts compatible actions to Maestro YAML locally, including app switches with explicit launchApp.appId targets and home as pressKey: Home.',
+      'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively. replay export <file.ad> converts compatible actions to Maestro YAML locally, including app switches with explicit launchApp.appId targets, deep links (including tel: and mailto:) as openLink, and home as pressKey: Home.',
   },
   metadata: replayCommandMetadata,
   run: (client, input) => client.replay.run(withCommandRuntimeHints(input)),
@@ -243,6 +245,8 @@ export const testCommandFacet = defineCommandFacet({
   name: TEST_COMMAND_NAME,
   text: {
     summary: 'Run replay test suites',
+    cliDetail:
+      "Relative globs are expanded on the caller from its working directory, whose name is treated literally. Quote glob inputs to defer expansion to test. Copied diagnostic artifacts receive numbered filenames when needed to preserve other artifacts, replay sources, timing traces, and attempt manifests. JUnit reports (--reporter junit:<path>) replace characters forbidden by XML 1.0 with U+FFFD and preserve legal Unicode and whitespace. JSON and other reporters retain the original suite values. Custom reporter getExitCode hooks must return an integer from 0 to 255 or undefined; the highest valid code wins and cannot lower a failing suite's exit code.",
   },
   metadata: testCommandMetadata,
   run: (client, input) => client.replay.test(withCommandRuntimeHints(input)),

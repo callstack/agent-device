@@ -24,7 +24,6 @@ import {
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
-import { dispatchConditionalWaitSelector } from './wait-conditional-selector.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import {
@@ -52,14 +51,6 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   const normalized = normalizeWaitPositionals(parsed, session);
   if ('ok' in normalized) return normalized;
   const { waitParsed, staleRefsWarning } = normalized;
-  const conditionalResponse = await dispatchConditionalWaitIfNeeded(
-    params,
-    waitParsed,
-    session,
-    waitOperations,
-    recordedLandmark,
-  );
-  if (conditionalResponse) return conditionalResponse;
   // Wait builds its runtime directly (no createBoundSelectorRuntime), so the consumed-snapshot slot
   // must be initialized here too or sessionless waits have nowhere to report the capture from.
   params.consumedSnapshot ??= {};
@@ -150,27 +141,6 @@ function normalizeWaitPositionals(
       mintedGeneration: versionedRef.generation,
     }),
   };
-}
-
-async function dispatchConditionalWaitIfNeeded(
-  params: DispatchWaitParams,
-  parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
-  session: SessionState | undefined,
-  waitOperations: BoundSelectorOperations | undefined,
-  recordedLandmark: TargetAnnotationV1 | undefined,
-): Promise<DaemonResponse | null> {
-  if (parsed.kind !== 'selector') return null;
-  return await dispatchConditionalWaitSelector({
-    selectorExpression: parsed.selectorExpression,
-    operation: waitOperations?.findSelector,
-    recordedLandmark,
-    req: params.req,
-    session,
-    sessionName: params.sessionName,
-    sessionStore: params.sessionStore,
-    logPath: params.logPath,
-    signal: params.signal,
-  });
 }
 
 async function executeWaitRequest(

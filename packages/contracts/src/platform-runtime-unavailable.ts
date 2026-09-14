@@ -37,6 +37,9 @@ import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
  * the selected package/provider must classify every lifecycle operation for its exact cell.
+ *
+ * A family is one cell where all of its operations share one reason, and one cell per operation
+ * only where the reasons genuinely differ per operation.
  */
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
@@ -58,11 +61,8 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   home: RuntimeOperationUnavailability;
   orientation: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
-  keyboardStatus: RuntimeOperationUnavailability;
-  keyboardDismiss: RuntimeOperationUnavailability;
-  keyboardEnter: RuntimeOperationUnavailability;
-  readClipboard: RuntimeOperationUnavailability;
-  writeClipboard: RuntimeOperationUnavailability;
+  keyboard: RuntimeOperationUnavailability;
+  clipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
   setSetting: RuntimeOperationUnavailability;
@@ -116,11 +116,8 @@ const UNAVAILABLE_CELLS = {
   home: true,
   orientation: true,
   tvRemote: true,
-  keyboardStatus: true,
-  keyboardDismiss: true,
-  keyboardEnter: true,
-  readClipboard: true,
-  writeClipboard: true,
+  keyboard: true,
+  clipboard: true,
   appSwitcher: true,
   triggerAppEvent: true,
   setSetting: true,
@@ -222,43 +219,25 @@ export function createUnavailablePlatformRuntimeFacts(
       // sends every text wait to the canonical tree.
       ...selectorObservationRuntimeOperationFacts({
         findText: frozen.snapshot,
-        findSelector: frozen.snapshot,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
       ...focusRuntimeOperationFacts({ focus: frozen.focus }),
-      ...gestureRuntimeOperationFacts({
-        plan: frozen.gesture,
-        directionalFling: frozen.gesture,
-        multiTouch: frozen.gesture,
-        targetAuthoredDrag: frozen.gesture,
-        viewport: frozen.gesture,
-      }),
+      ...gestureRuntimeOperationFacts({ unsupported: frozen.gesture }),
       ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
       ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
       ...touchRuntimeOperationFacts({
+        unsupported: frozen.touch,
         tap: frozen.touch,
-        tapRef: frozen.touch,
         longPress: frozen.touch,
-        hover: frozen.touch,
-        hoverRef: frozen.touch,
         fill: frozen.touch,
-        fillRef: frozen.touch,
-        tapElementSelector: frozen.touch,
       }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
       ...backRuntimeOperationFacts({ back: frozen.back }),
       ...homeRuntimeOperationFacts({ home: frozen.home }),
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
-      ...keyboardRuntimeOperationFacts({
-        status: frozen.keyboardStatus,
-        dismiss: frozen.keyboardDismiss,
-        enter: frozen.keyboardEnter,
-      }),
-      ...clipboardRuntimeOperationFacts({
-        read: frozen.readClipboard,
-        write: frozen.writeClipboard,
-      }),
+      ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
+      ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: frozen.appSwitcher }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),

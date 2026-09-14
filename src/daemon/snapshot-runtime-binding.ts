@@ -36,7 +36,6 @@ import {
   selectFindMutatingOperations,
   selectWaitObservationOperations,
   type BoundElementRead,
-  type BoundNativeSelectorRead,
   type BoundNativeTextRead,
 } from './selector-operation-binding.ts';
 
@@ -78,7 +77,6 @@ export type AdmittedSnapshotCapture =
       /** A fact-conditional native text observation, present when the owner advertises it. */
       findText?: BoundNativeTextRead;
       /** A fact-conditional one-sided simple-selector observation. */
-      findSelector?: BoundNativeSelectorRead;
       /** find's directly-executed mutating legs, present for the find-focus / find-type plans. */
       focusPoint?: (
         input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
@@ -126,7 +124,6 @@ export async function admitAndBindSnapshotCapture(
     capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
-    ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
     ...(bound.typeText ? { typeText: bound.typeText } : {}),
   });
@@ -186,7 +183,6 @@ async function bindSnapshotCaptureRuntime(
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
     readTextAtPoint?: BoundElementRead;
     findText?: BoundNativeTextRead;
-    findSelector?: BoundNativeSelectorRead;
     focusPoint?: (
       input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
     ) => Promise<void>;

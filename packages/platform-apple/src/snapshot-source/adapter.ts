@@ -1,5 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { CaptureHint, IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
+import type {
+  CaptureHint,
+  IosSnapshotAcquisition,
+  IosViewportEvidence,
+} from '@agent-device/contracts/ios-snapshot';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
 import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 import { AcceptedDepthHints, type DepthHintDecision } from './depth-hints.ts';
@@ -94,13 +98,7 @@ export function createSimulatorSnapshotSource(
             deadline,
           });
           remainingSnapshotSourceMs(deadline, 'snapshot-decode-deadline');
-          const acquisition = createAcquisition(
-            request.hint,
-            request.target,
-            envelope,
-            limits,
-            maxDepth,
-          );
+          const acquisition = createAcquisition(request.hint, request.target, envelope, limits);
           recordRecovery(
             host,
             depthHints,
@@ -216,7 +214,6 @@ function createAcquisition(
   target: SnapshotSourceRequest['target'],
   envelope: SnapshotBridgeEnvelope,
   limits: SnapshotSourceLimits,
-  maxDepth: number,
 ): IosSnapshotAcquisition {
   if (envelope.automationEnabled !== true) {
     throw snapshotSourceError('unsupported', 'automation-mode-unavailable');
@@ -231,17 +228,19 @@ function createAcquisition(
   if (typeof generation !== 'string' || !generation) {
     throw snapshotSourceError('malformed-tree', 'generation-invalid');
   }
+  // A tree that ends at a web view's out-of-process page would present the screen without the
+  // page, and refs issued from it would target the host views around it rather than the page.
+  // The source refuses it as a screen it cannot describe, like a missing automation mode, so the
+  // route serves the XCTest runner, which resolves remote elements (#2484).
+  if (decoded.opaqueRemoteElements > 0) {
+    throw snapshotSourceError('unsupported', 'remote-content-boundary', {
+      remoteElements: decoded.opaqueRemoteElements,
+    });
+  }
   const nodes = Object.freeze(
     decoded.nodes.map((node) => Object.freeze({ ...node, pid: target.pid })),
   );
-  const residue = createAcquisitionResidue(
-    hint,
-    truncated,
-    decoded,
-    limits,
-    maxDepth,
-    nodes.length,
-  );
+  const residue = createAcquisitionResidue(hint, truncated, decoded.viewport);
   const lineage = Object.freeze({
     ...(target.targetId ? { targetId: target.targetId } : {}),
     generation,
@@ -267,36 +266,16 @@ function createAcquisition(
 function createAcquisitionResidue(
   hint: CaptureHint,
   truncated: boolean,
-  decoded: ReturnType<typeof decodeSnapshotBridgeTree>,
-  limits: SnapshotSourceLimits,
-  maxDepth: number,
-  nodeCount: number,
+  viewport: IosViewportEvidence,
 ) {
   return Object.freeze([
     { kind: 'unavailable-fact', fact: 'hittability' } as const,
     ...(hint.interactiveOnly
       ? ([{ kind: 'unavailable-fact', fact: 'interactive-query' }] as const)
       : []),
-    ...(truncated
-      ? [truncationResidue(decoded.maxTraversalDepth, nodeCount, limits, maxDepth)]
-      : []),
-    ...(decoded.viewport.kind === 'missing'
-      ? ([{ kind: 'missing-viewport', reason: decoded.viewport.reason }] as const)
+    ...(truncated ? ([{ kind: 'truncated' }] as const) : []),
+    ...(viewport.kind === 'missing'
+      ? ([{ kind: 'missing-viewport', reason: viewport.reason }] as const)
       : []),
   ]);
-}
-
-function truncationResidue(
-  maxTraversalDepth: number,
-  nodeCount: number,
-  limits: SnapshotSourceLimits,
-  maxDepth: number,
-): { kind: 'truncated'; dimension: 'nodes' | 'depth' | 'payload'; limit?: number } {
-  if (nodeCount >= limits.maxNodes) {
-    return { kind: 'truncated', dimension: 'nodes', limit: limits.maxNodes };
-  }
-  if (maxTraversalDepth >= maxDepth) {
-    return { kind: 'truncated', dimension: 'depth', limit: maxDepth };
-  }
-  return { kind: 'truncated', dimension: 'payload', limit: limits.maxResponseBytes };
 }

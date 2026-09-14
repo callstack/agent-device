@@ -2,6 +2,109 @@
 
 ## Unreleased
 
+- Changed: a capture that a backend cut at one of its limits now says so in the snapshot's
+  warnings, on every platform, instead of only setting `truncated: true` in JSON. The text path
+  had no disclosure at all, so an agent read a screen missing its footer, tab bar, or the items
+  after a long list as complete — the backends walk the tree in document order, so what falls
+  off is what comes last, on screen or not. One shared warning renders from the shared flag; the
+  limit and dimension stay backend-side. The depth-cap warning no longer suggests `--scope` as a
+  way to read deeper: on iOS, scope narrows the presented view and acquisition stays scope-blind.
+- Changed: the iOS Simulator AX bridge caps a capture at 5000 nodes, up from 1500, the Android
+  helper's bound. Measured on a synthetic 600-row screen, acquisition time did not move with the
+  cap (the native read fetches the whole tree; the cap only stops conversion) while the 1500 cut
+  dropped the screen's on-screen footer.
+- Fixed: Android snapshots carry the accessibility `selected` state an app sets on a control, so
+  `is selected`, a `selected=true` selector, and a Maestro `selected:` qualifier work on Android
+  (#2462). The helper never serialized the attribute, and the host reads only the helper's XML, so
+  no later layer could recover it: `get attrs` had no `selected` field, no snapshot
+  node was marked selected, and the same assertion that passed on iOS failed on Android with
+  "Maestro visible condition did not match" for an element that is visible — while `selected: false`
+  matched every Android node. The helper now emits both answers, like `enabled` and `password`, so
+  an unselected control answers `false` and a helper older than the attribute answers nothing; the
+  host parser, the Android hierarchy node, and the published snapshot node carry it through to
+  `get attrs` and the `[selected]` marker in snapshot text. Snapshot lines now render that marker
+  whenever selection is rendered, not only when text surfaces are summarized: `--settle` and `diff`
+  already compared selection, and a line that compares a fact it cannot display turns a tab tap
+  into a changed pair whose two lines look identical.
+- Fixed: Replay test artifacts with colliding filenames retain distinct copies without overwriting
+  other diagnostics, replay sources, timing traces, or attempt manifests.
+- Fixed: Custom test reporters reject invalid exit codes, including values such as `256` that
+  could wrap to success and hide a failing suite. `getExitCode` accepts integers from `0` to `255`
+  or `undefined`; JSON output reports an invalid code as one `INVALID_ARGS` error.
+- Fixed: Android `record start` no longer refuses to begin after a reused emulator reassigned the
+  previous recorder's pid. A completed recording's native marker is retired only once its recorder is
+  proven gone, but only an absent pid counted as proof — a pid that now names an unrelated process,
+  or a recorder that exited and waits to be reaped, did not. `record start` then failed every later
+  attempt with `Android screenrecord completed evidence cannot be safely retired`, and `record stop`
+  could not return an already-finalized recording. Proven termination now retires the marker and
+  returns the stored completion; a live or unreadable recorder still blocks, and the unrelated
+  process is never signalled. A reused pid that runs a replacement `screenrecord` on the same
+  remote path proves the old recorder gone but not that the path is free, so that marker and
+  artifact are retained until the replacement ends, and neither is signalled (#2476).
+- Fixed: a polling `wait` no longer surrenders its whole budget the first time the iOS runner
+  answers `RUNNER_BUSY`. That code means an earlier command exceeded the runner's execution
+  watchdog and its abandoned main-thread work is still draining, which clears on its own, so a
+  `wait text ... 20000` could fail in under a second with a failure the runner itself asked the
+  caller to retry. A poll refused with a failure its producer marked retriable is now ridden out
+  like an unreadable capture: the wait keeps polling to its deadline, records the poll as
+  `retriable` in its timeout evidence, and surfaces the refusal only if no readable capture ever
+  completed. That surfaced refusal keeps the producer's code, message and retry details and now
+  also carries the wait's own `captures`, `readableCaptures`, `waitedMs` and `polls`, so a budget
+  spent entirely on refusals is distinguishable from one immediate refusal. A wedged runner
+  (`RUNNER_WEDGED`) is not retriable and still ends the wait at once.
+- Fixed: a runner failure recovered from the lifecycle journal after its transport response was
+  lost is now classified exactly like the same failure on a live response. `RUNNER_BUSY` reached
+  callers as a bare `RUNNER_BUSY` wire code without the `retriable` flag on that path, while the
+  live path published it as `COMMAND_FAILED` with `details.runnerErrorCode` and `retriable: true`;
+  both paths now read the runner's code through one classifier.
+- Fixed: iOS Simulator snapshots of Safari and of apps with a `WKWebView` stopped showing the
+  page in 0.21.0 — chrome plus empty `[webview]` nodes, no links, text, or form fields, so no ref
+  could reach the page (#2484). The host AX bridge that 0.21.0 made the Simulator's snapshot source
+  reads one process, and WebKit content lives in another; the bridge delivered the boundary as
+  an `AXRemoteElement` leaf and the tree was published as if that were the screen. The source now
+  refuses a tree whose on-screen web view ends at that leaf (`remote-content-boundary`) and the
+  route serves XCTest, which resolves remote elements, for the rest of that app generation — the
+  same path 0.20.x used. The snapshot discloses the switch through its warning, and a relaunch
+  re-enables the bridge.
+- Fixed: `test` expands relative globs from the caller's literal working directory, so directory
+  names containing glob characters no longer cause missing suites or select a different directory.
+  Missing non-glob inputs also retain their not-found error in these directories.
+- Fixed: JUnit reports remain readable when replay results contain characters forbidden by XML 1.0,
+  replacing them with U+FFFD while preserving legal Unicode and whitespace. Original suite values
+  remain available in JSON and other reporters.
+- Fixed: `replay export` preserves deep links without `//`, including `tel:` and `mailto:`, as
+  Maestro `openLink` commands in both standalone and app-plus-link `open` actions.
+- Changed: a command whose synopsis is generated names each option with the label its declaration
+  carries, so `snapshot` now shows `--depth, -d <depth>` and `--scope, -s <scope>` where it used to
+  show the short aliases, and `--record` is documented under `Command flags:` instead of inside the
+  `snapshot` and `is` synopsis lines. `snapshot`, `proxy`, `daemon`, `device`, `doctor`, `prepare`
+  and `tv-remote` no longer restate their option list in a hand-written usage string, so adding an
+  option to those commands updates `--help` on its own (#2444).
+- Fixed: iOS `--depth` on `snapshot`, `is`, `wait`, `get`, and `find` no longer fails with
+  `regular iOS snapshot presentation requires a valid viewport` when the runner plan is pinned or
+  deferred to the private AX backend (custom actions, a private AX verdict on the session, or the
+  XCTest channel penalty). The runner refused a regular depth-capped request on every backend but
+  the recursive tree, fell through to its synthetic sparse root, and the daemon rejected that root
+  as a missing viewport. Presentation applies the presented-depth cut to whatever hierarchy a
+  backend acquired, so every backend serves the request; the private AX declaration is now
+  `regular-depth=presentation-cut` and an acquisition that stopped short of the cut keeps
+  disclosing that through `truncated`/`effectiveDepth` as it does unscoped.
+- Fixed: repeated unfiltered Android snapshots stay compact when identical element bounds arrive
+  with a different property order. Changes to the bounds still re-emit the tree.
+- Fixed: iOS `network dump` no longer omits requests that reused a keep-alive connection.
+  CFNetwork logs a request URL only on the line that opens a connection, so a second request to
+  the same host produced no `url:` line and was dropped from the dump entirely — an "this endpoint
+  was called" check read as a definite fail. Such a request is now reported against the origin its
+  connection was opened for, with `pathUnavailable` set, its status, and its timing. A reused
+  request whose connection was opened before the scanned window cannot be named at all; those are
+  counted in the dump's `unnamedRequests`, so an empty result still reports that traffic was
+  observed. The identities behind that count reconcile the app-log and recovery windows internally
+  — so overlapping traffic is not double-counted and disjoint traffic is not under-reported — but
+  the response carries only the count, which stays bounded however large the scan window was. The notes say absence of an endpoint does not prove it was not called.
+- Fixed: a URL logged as a delimited `url: <value>,` field no longer keeps the separator the log
+  format put after it, so an entry's `url` compares equal to the endpoint under test. A bare URL
+  elsewhere is left alone, since nothing there establishes that trailing punctuation is not part of
+  the path.
 - Added: `replay export` supports flows that switch apps and return, preserving each
   `open <appId>` target as an explicit Maestro `launchApp.appId`.
 - Added: `replay export` converts recorded `home` actions to Maestro `pressKey: Home`, allowing
@@ -151,7 +254,7 @@
 - iOS regular snapshots now apply one backend-neutral eligibility rule after every capture backend: a node survives when its accessibility type is interactive or it carries a non-empty label, identifier, or value. This removes the tree backend's extra "hittable non-Other" membership path and drops unlabeled decorative nodes consistently; labeled images, identifier-only nodes, and value-only nodes still survive. Raw snapshot membership is unchanged.
 - iOS regular snapshots now run one shared clip fold inside presentation for every capture backend (#1797). Backends serialize reported facts -- every traversed node, at raw traversal depth -- and presentation alone decides what the viewport and scroll clips hide, books the scroll hints, and collapses depth; no backend carries its own copy of that interpretation anymore (the copies are what produced the scroll-overflow leak class, #1784). Three intentional edge deltas ride along, all in the direction of one backend-neutral rule: sub-pixel content-free decorations are now dropped by every backend (previously private-AX only); labeled offscreen Application/Window carriers now survive on every backend (previously tree only), still never hittable; and a query-sweep recovery snapshot without `-i` no longer lists offscreen elements. Nothing outside its clip, and nothing without geometry, is ever `hittable` in a regular snapshot, whatever the backend reported.
 - iOS `snapshot --raw` is now the acquired accessibility tree on every backend that can serve it (#1797). A raw request that recovered onto the private-AX backend — the route an app whose XCTest tree capture fails takes — returned the *regular* projection's viewport-pruned nodes labeled raw: everything scrolled out of the viewport, and every sub-pixel decoration, was missing from the one view whose purpose is showing what the pruned view hid. Raw now keeps every node the backend serialized, at traversal depth, and `--depth` still narrows it (for raw, presented depth *is* traversal depth). Two structural rules replace the hand-synchronized ones: the raw capture plan is derived from each backend's declared ability to serve raw, so the interactive query sweep — which has no hierarchy to return — cannot be planned for a raw request; and presentation refuses an acquisition captured for the other projection instead of relabeling it, dropping that tier with a structured failure. Breaking in the same direction: `snapshot --raw -i` now returns the acquired tree instead of an interactive-filtered one — `-i` narrows the regular projection, and the pair used to produce a third membership rule that differed per backend. Regular and `-i` output is unchanged. Backends now read one derived capture hint rather than the request itself, so what a capture is allowed to skip is stated once, next to the proof that skipping it keeps the projection complete.
-- Android `snapshot --raw` is now the acquired accessibility tree (#1832 C3): the regular-projection classifiers for nodes Android marks invisible and stale application windows no longer run at parse time, so `--raw` keeps everything the helper serialized (normalization only). Covered same-window surfaces are publication annotations rather than membership pruning. Also: Android blocking-dialog recovery now reads the same daemon presentation an agent's `snapshot` sees instead of a hand-rolled subset, and acts on its occlusion result — a stale "App isn't responding" surface left under the foreground one no longer triggers recovery, and a covered "Close app" is never tapped ahead of the visible one; the Android freshness route signature no longer keys on `role`/`selected`, fields the Android backend never carries; and the Android helper's declared fidelity residues (no `checked`/`checkable`/`selected`/`long-clickable`, 5000-node cap before scoping, API-level cache-reset divergence) are recorded in `CONTEXT.md`.
+- Android `snapshot --raw` is now the acquired accessibility tree (#1832 C3): the regular-projection classifiers for nodes Android marks invisible and stale application windows no longer run at parse time, so `--raw` keeps everything the helper serialized (normalization only). Covered same-window surfaces are publication annotations rather than membership pruning. Also: Android blocking-dialog recovery now reads the same daemon presentation an agent's `snapshot` sees instead of a hand-rolled subset, and acts on its occlusion result — a stale "App isn't responding" surface left under the foreground one no longer triggers recovery, and a covered "Close app" is never tapped ahead of the visible one; the Android freshness route signature no longer keys on `role`, a field the Android backend never carries; and the Android helper's declared fidelity residues (no `checked`/`checkable`/`long-clickable`, 5000-node cap before scoping, API-level cache-reset divergence) are recorded in `CONTEXT.md`.
 - `agent-device mcp` now carries its own usage guidance, so MCP-only clients (Codex CLI, Cursor, custom agents) no longer depend on a separately installed skill (#1833). The handshake `instructions` — returned by both `server/discover` and, newly, the legacy `initialize` — is a compact (< 2 KB, the Claude Code truncation limit) workflow card: start with `open {app, foreground: true}` instead of probing, act with `settle: true` and continue from the diff, verify with `wait`/`is`/`get`/`find`, copy `@refs` byte-for-byte, recover from sparse/AX-unavailable, follow error hints, `close`. A new MCP-only `help` tool serves the full guides on demand: no `topic` returns the CLI's decision card; `topic` returns `agent-device help <topic|command>` verbatim (workflow, gestures, scripting, tv, macos, web, remote, debugging, …, or any tool name for its complete flag reference), prefixed with the one-line CLI→tool-property mapping. `help` is router-owned rather than a command descriptor, so it appears in `tools/list` only — not in the CLI, Node client, or `batch` — and its description tells the model it is not a startup step. Legacy `initialize` gains the optional `instructions` field; no other legacy field changes.
 - Android `snapshot --scope` (and every selector command's `--scope`, e.g. `press "Save" --scope Panel`) now resolves scope exactly once, inside the Android projection, under the shared scope specification: the scope root is the first node **in document order** whose label, value, or identifier contains the scope text (case-insensitive) **and whose subtree still has content in the projection you asked for**, the result is that subtree re-rooted at depth 0, and no match returns an empty snapshot (#1832). That second clause is what makes `snapshot -i --scope panel` return the button inside a structural container `-i` drops, and stops a decorative heading that happens to match from emptying the snapshot. Before, Android ran two passes with contradictory rules — a breadth-first platform match that fell back to the full tree on a miss, then the daemon's document-order pass — so a shallower later container could win over an earlier match, and an interaction capture whose scope reached only the daemon layer was silently unscoped. `--depth` under `--scope` counts from the scope root, filtering the depths the response prints (a node shown at depth 0 is never hidden by `--depth 0`), and ancestor context above the scope root (a clickable row, a list) still shapes `-i` membership inside it. The rule is pinned by `contracts/fixtures/snapshot-scope-policy.json`, the same golden table the iOS runner consumes (#1797).
 - New `hover <x y|@ref|selector>` command for `--platform web` (#1783). It moves the pointer over the target without pressing, so hover-gated UI — a message row's `...` toolbar, a menu that opens on pointer enter — becomes reachable through agent-device the way it already was through the underlying `agent-browser` backend (`mouse move`). It is a member of the targeted-touch family: same `@ref`/selector/coordinate targeting, occlusion and off-screen guards, and `--settle` (the settled diff carries the revealed controls with fresh refs, e.g. `+ @e4 [button] "Delete"`), but no `--verify`, since hover reveals rather than activates. `hover @ref` publishes as a portable selector line in recorded scripts, and the Node client exposes `interactions.hover`. Hover is a pointer state that touch platforms do not have, so `capabilities` advertises it on web only and iOS/Android/Linux reject it during admission with `UNSUPPORTED_OPERATION` and a hint naming `--platform web`; `longpress` remains the mobile hold-gesture verb.

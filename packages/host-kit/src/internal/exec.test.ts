@@ -5,6 +5,7 @@ import path from 'node:path';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from './diagnostics.ts';
 import {
   coerceExecResult,
+  isCommandTimeoutError,
   requireExecSuccess,
   runCmd,
   runCmdBackground,
@@ -423,4 +424,38 @@ test('coerceExecResult repairs loosely-typed provider results and keeps typed on
     exitCode: undefined,
   } as unknown as ExecResult);
   assert.deepEqual(loose, { stdout: '', stderr: '42', exitCode: 1 });
+});
+
+test('isCommandTimeoutError reads the structured timeout, not the message text', async () => {
+  const killedAtTimeout = await runCmd(process.execPath, ['-e', 'setTimeout(() => {}, 10_000)'], {
+    timeoutMs: 50,
+  }).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  assert.ok(isCommandTimeoutError(killedAtTimeout));
+
+  assert.ok(
+    isCommandTimeoutError(
+      (() => {
+        try {
+          runCmdSync(process.execPath, ['-e', 'setTimeout(() => {}, 10_000)'], { timeoutMs: 50 });
+          return null;
+        } catch (error) {
+          return error;
+        }
+      })(),
+    ),
+  );
+
+  // A tool that failed on its own and said "timed out" in its output: same
+  // code, same wording, no timeout we imposed.
+  assert.equal(
+    isCommandTimeoutError(
+      new AppError('COMMAND_FAILED', 'xcodebuild timed out after 10ms', { cmd: 'xcodebuild' }),
+    ),
+    false,
+  );
+  assert.equal(isCommandTimeoutError(new Error('timed out after 10ms')), false);
+  assert.equal(isCommandTimeoutError(undefined), false);
 });

@@ -72,6 +72,29 @@ test('reattaches an ended pid with an artifact as finishable recovery and report
     });
 });
 
+test('discloses truncation when recovery proved the recorder gone before record stop', async () => {
+  let manifest = '';
+  const observations = ['ownership-lost', 'missing'] as const;
+  let observation = 0;
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    inspect: async () => observations[Math.min(observation++, observations.length - 1)],
+    stop: async () => 'uncertain' as const,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const reattached = await runtime.screenRecordingReattach({ envelope: started.envelope });
+  expect(reattached.status).toBe('active');
+  if (reattached.status === 'active')
+    await expect(reattached.handle.finish()).resolves.toMatchObject({
+      status: 'completed',
+      result: { warning: expect.stringContaining('likely after reaching the 180s platform limit') },
+    });
+});
+
 test('returns fenced native completion after a crash between native finalization and daemon terminalization', async () => {
   let manifest = '';
   const removals: string[] = [];
@@ -134,6 +157,62 @@ test('retains completed evidence while an exact persisted recorder identity rema
   });
   expect(JSON.parse(manifest)).toHaveProperty('completion');
 });
+
+test.each([
+  ['reassigned to an unrelated process', 'ownership-lost'],
+  ['reused by a replacement recorder on the same path', 'foreign-writer'],
+] as const)(
+  'terminalizes completed evidence whose recorder pid was %s, touching nothing',
+  async (_name, ownership) => {
+    let manifest = '';
+    const removals: string[] = [];
+    const runtime = await start({
+      writeManifest: async ({ contents }: { contents: string }) => {
+        manifest = contents;
+      },
+      readManifest: async () =>
+        manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+      inspect: async () => ownership,
+      remove: async (remotePath: string) => {
+        removals.push(`artifact:${remotePath}`);
+        return true;
+      },
+      removeManifest: async (manifestPath: string) => {
+        removals.push(`marker:${manifestPath}`);
+        return true;
+      },
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const native = JSON.parse(manifest);
+    manifest = JSON.stringify({
+      ...native,
+      completion: {
+        backend: 'adb screenrecord',
+        outPath: native.outputPath,
+        startedAt: native.startedAt,
+        completedAt: native.startedAt + 1,
+        scope: native.scope,
+        showTouches: native.showTouches,
+        recordOnlySession: native.recordOnlySession,
+      },
+    });
+
+    await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
+      status: 'completed',
+      result: {
+        backend: 'adb screenrecord',
+        outPath: native.outputPath,
+        startedAt: native.startedAt,
+        completedAt: native.startedAt + 1,
+        scope: native.scope,
+        showTouches: native.showTouches,
+        recordOnlySession: native.recordOnlySession,
+      },
+    });
+    expect(removals).toEqual([]);
+    expect(JSON.parse(manifest)).toHaveProperty('completion');
+  },
+);
 
 test('makes matching pending evidence cleanup-eligible and stops discovered exact recorder pids', async () => {
   let manifest = '';

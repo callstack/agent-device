@@ -1,0 +1,11 @@
+{
+  "description": "iOS out-of-process system surfaces that agent-device observes and drives IN PLACE, never by activation. Activating or relaunching such a host destroys what it presents: com.apple.SafariViewService hosts ASWebAuthenticationSession / SFSafariViewController, and any XCUIApplication.activate() or simctl launch cancels the auth session (issue #2438). Source of truth shared by the TypeScript registry (packages/contracts/src/ios-system-surface.ts) and the Swift runner registry (RunnerSystemSurfaceHostPolicy.swift); a change here must keep both parity tests green. `processExecutable` is the simulator app-binary path fragment the TypeScript host-side presence probe matches with `pgrep -f`, confirming device scope from the matched process's environment; the Swift runner detects the host by bundle id via XCUIApplication.state and ignores it.",
+  "hosts": [
+    {
+      "bundleId": "com.apple.SafariViewService",
+      "kind": "web-auth",
+      "processExecutable": "SafariViewService.app/SafariViewService",
+      "note": "Hosts ASWebAuthenticationSession and SFSafariViewController out of the app's process. Presented over a still-foreground app; read and driven in place via the XCTest runner (the host AX bridge cannot see it: the app remains the AX primaryApp)."
+    }
+  ]
+}

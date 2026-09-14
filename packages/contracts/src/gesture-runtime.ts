@@ -8,7 +8,7 @@ import {
   type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import { invalidRuntimeContract } from './runtime-contract-error.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
@@ -70,22 +70,38 @@ export type GestureRuntimeOperationFacts = Readonly<{
   gestureViewport: RuntimeOperationFact;
 }>;
 
+/**
+ * What an owner declares about the gesture family. Every tier is a per-owner claim — no tier is
+ * one every owner serves, and several owners serve none — so every tier is optional and
+ * `unsupported` names the denial an omitted tier reports. The tiers split exactly where an owner's
+ * mechanics split, so an owner states a tier only to say something the family denial does not.
+ *
+ * Omission is a classified denial, never an unclassified tier and never an implied success: the
+ * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
+ * `unsupported` must refuse the family rather than one tier of it, because whatever the owner
+ * leaves unnamed reports that cell verbatim.
+ */
+export type GestureRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  plan?: RuntimeOperationFact;
+  directionalFling?: RuntimeOperationFact;
+  multiTouch?: RuntimeOperationFact;
+  targetAuthoredDrag?: RuntimeOperationFact;
+  viewport?: RuntimeOperationFact;
+}>;
+
 /** Builds the exhaustive owner claims for the five gesture requirements. */
 export function gestureRuntimeOperationFacts(
-  input: Readonly<{
-    plan: RuntimeOperationFact;
-    directionalFling: RuntimeOperationFact;
-    multiTouch: RuntimeOperationFact;
-    targetAuthoredDrag: RuntimeOperationFact;
-    viewport: RuntimeOperationFact;
-  }>,
+  input: GestureRuntimeOperationFactsInput,
 ): GestureRuntimeOperationFacts {
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
   return Object.freeze({
-    performGesturePlan: input.plan,
-    performDirectionalFlingPlan: input.directionalFling,
-    performMultiTouchGesturePlan: input.multiTouch,
-    performTargetAuthoredDrag: input.targetAuthoredDrag,
-    gestureViewport: input.viewport,
+    performGesturePlan: declared(input.plan),
+    performDirectionalFlingPlan: declared(input.directionalFling),
+    performMultiTouchGesturePlan: declared(input.multiTouch),
+    performTargetAuthoredDrag: declared(input.targetAuthoredDrag),
+    gestureViewport: declared(input.viewport),
   });
 }
 

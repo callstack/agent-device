@@ -117,7 +117,7 @@ test('comparison identity rejects every identity axis and residue mismatch', () 
     { ...base, intent: 'surface-observation' },
     { ...base, lineage: { targetId: 'simulator-1', generation: 'generation-2' } },
     { ...base, presentationKey: { ...base.presentationKey, depth: 1 } },
-    { ...base, residue: [{ kind: 'truncated', dimension: 'nodes' }] },
+    { ...base, residue: [{ kind: 'truncated' }] },
   ];
   assert.equal(areIosSnapshotComparisonIdentitiesEqual(base, { ...base }), true);
   assert.equal(

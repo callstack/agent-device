@@ -146,4 +146,6 @@ export type ScrollOptions = DeviceCommandBaseOptions &
     amount?: number;
     pixels?: number;
     durationMs?: number;
+    /** Repeat scroll passes until this selector is visible on screen, then stop. */
+    until?: string;
   };

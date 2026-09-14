@@ -415,22 +415,6 @@ extension RunnerTests {
   ) throws -> SnapshotBackendAttempt {
     let hint = SnapshotPresentation.captureHint(for: options)
     var timer = SnapshotPhaseTimer()
-    // Scoped depth is relative to a presentation-selected root, so its hint stays broad and the
-    // backend capability gate applies only to an unscoped regular frontier.
-    let requestedRegularDepth = options.raw || SnapshotScopePolicy.isActive(options.scope)
-      ? nil
-      : options.depth
-    guard kind.canServeRegularPresentedDepth(requestedRegularDepth) else {
-      NSLog(
-        "AGENT_DEVICE_RUNNER_SNAPSHOT_BACKEND_DEPTH_UNSUPPORTED backend=%@ depth=%ld",
-        kind.rawValue,
-        requestedRegularDepth ?? -1
-      )
-      return SnapshotBackendAttempt(
-        outcome: .noCapture,
-        timing: timer.timing
-      )
-    }
     let acquisition: SnapshotAcquisition?
     do {
       acquisition = try timer.measure(.acquisition) {
@@ -1192,5 +1176,52 @@ extension RunnerTests {
       )
     )
   }
+
+#if os(iOS)
+  /// #2403: a plan pinned to private AX serves a regular `--depth` request through acquisition
+  /// and presentation. With a backend depth gate in `captureWithBackend`, private AX returns no
+  /// capture, the plan falls through to the synthetic sparse root, and the daemon rejects that
+  /// zero-rect root as a missing viewport.
+  func testPrivateAXPinnedRegularDepthReachesAcquisitionAndPresentation() throws {
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    app.launch()
+    currentApp = app
+    currentBundleId = nil
+    defer {
+      currentApp = nil
+      clearPrivateAXAcceptedDepth(reason: "test-cleanup")
+      app.terminate()
+    }
+    func capture(depth: Int?) throws -> DataPayload {
+      try runSnapshotCapturePlan(
+        Self.regularVisiblePlan,
+        app: app,
+        options: PresentationOptions(
+          interactiveOnly: false,
+          depth: depth,
+          scope: nil,
+          raw: false,
+          preferredBackend: SnapshotBackendKind.privateAX.rawValue
+        ),
+        terminal: .sparseWithFatalOnAXFailure
+      )
+    }
+
+    let capped = try capture(depth: 1)
+
+    let quality = try XCTUnwrap(capped.snapshotQuality)
+    XCTAssertEqual(quality.backend, SnapshotBackendKind.privateAX.rawValue)
+    XCTAssertNotEqual(quality.state, "sparse")
+    let nodes = try XCTUnwrap(capped.nodes)
+    XCTAssertGreaterThan(nodes.count, 1)
+    XCTAssertEqual(nodes.map(\.depth).max(), 1)
+    XCTAssertNotEqual(nodes[0].rect, SnapshotRect(x: 0, y: 0, width: 0, height: 0))
+    XCTAssertTrue(nodes.contains { $0.label == "Readable target" })
+
+    // The presented cut only ever narrows the unscoped capture from the same backend.
+    let unscoped = try XCTUnwrap(try capture(depth: nil).nodes)
+    XCTAssertLessThanOrEqual(nodes.count, unscoped.count)
+  }
+#endif
 }
 #endif

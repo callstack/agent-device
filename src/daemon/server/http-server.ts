@@ -40,6 +40,7 @@ import {
   DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
+import { readLeaseAllocateProviderFlags } from '@agent-device/contracts/lease-scope';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
@@ -316,10 +317,7 @@ function toLeaseDaemonRequest(
     session: readStringParam(params, 'session') ?? 'default',
     command,
     positionals: [],
-    flags:
-      command === 'lease_allocate'
-        ? { providerApp: readStringParam(params, 'providerApp') }
-        : undefined,
+    flags: command === 'lease_allocate' ? readLeaseAllocateProviderFlags(params) : undefined,
     meta: {
       tenantId: readStringParam(params, 'tenantId') ?? readStringParam(params, 'tenant'),
       runId: readStringParam(params, 'runId'),

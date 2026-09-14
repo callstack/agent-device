@@ -5,14 +5,19 @@ enum SnapshotBackendEnvironment {
   case physicalDevice
 }
 
+/// How a backend's acquisition relates to a regular `--depth` request. Every backend serves the
+/// request: `SnapshotPresentation` applies the presented-depth cut to whatever hierarchy was
+/// acquired, and an acquisition that stopped short of the cut discloses that through its own
+/// truncation verdict. The capability only says how much acquisition work the request bounds.
 enum SnapshotRegularDepthCapability: String {
-  /// The backend can stop acquisition at the requested regular presented-depth frontier.
+  /// Acquisition stops at the requested regular presented-depth frontier.
   case presentedFrontier = "presented-frontier"
-  /// The backend is flat; it can answer the root and one presented level, but has no hierarchy
-  /// from which to prove deeper regular depth.
+  /// The backend is flat: it acquires the root and one presented level, so a cut past depth 1
+  /// returns the sweep unchanged.
   case flat
-  /// The backend can return raw traversal depth, but cannot prove regular presented depth.
-  case rawOnly = "raw-only"
+  /// Acquisition walks its raw-depth ladder regardless of the request; the presented cut happens
+  /// in presentation and the ladder's cap is disclosed as `effectiveDepth`.
+  case presentationCut = "presentation-cut"
 }
 
 enum SnapshotBackendKind: String, CaseIterable {
@@ -62,19 +67,7 @@ enum SnapshotBackendKind: String, CaseIterable {
     case .querySweep:
       return .flat
     case .privateAX:
-      return .rawOnly
-    }
-  }
-
-  func canServeRegularPresentedDepth(_ requestedDepth: Int?) -> Bool {
-    guard let requestedDepth else { return true }
-    switch regularDepthCapability {
-    case .presentedFrontier:
-      return true
-    case .flat:
-      return requestedDepth <= 1
-    case .rawOnly:
-      return false
+      return .presentationCut
     }
   }
 
@@ -170,15 +163,6 @@ extension RunnerTests {
         "physical-device availability: \(expected.name)"
       )
     }
-  }
-
-  func testRegularDepthCapabilityDoesNotClaimFlatOrRawOnlyParity() {
-    XCTAssertTrue(SnapshotBackendKind.recursiveTree.canServeRegularPresentedDepth(8))
-    XCTAssertTrue(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(0))
-    XCTAssertTrue(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(1))
-    XCTAssertFalse(SnapshotBackendKind.querySweep.canServeRegularPresentedDepth(2))
-    XCTAssertFalse(SnapshotBackendKind.privateAX.canServeRegularPresentedDepth(1))
-    XCTAssertTrue(SnapshotBackendKind.privateAX.canServeRegularPresentedDepth(nil))
   }
 }
 #endif

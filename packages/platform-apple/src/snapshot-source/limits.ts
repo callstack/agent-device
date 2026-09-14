@@ -10,7 +10,7 @@ const MAXIMUM_NODES = 10_000;
 export const DEFAULT_SNAPSHOT_SOURCE_LIMITS: SnapshotSourceLimits = Object.freeze({
   maxRequestBytes: 64 * 1024,
   maxResponseBytes: 4 * 1024 * 1024,
-  maxNodes: 1500,
+  maxNodes: 5000,
   maxTraversalDepth: 64,
   maxDurationMs: 5_000,
 });

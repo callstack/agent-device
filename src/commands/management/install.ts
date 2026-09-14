@@ -67,6 +67,7 @@ const reinstallCliSchema = {
 const installFromSourceCliSchema = {
   usageOverride:
     'install-from-source <url> | install-from-source --github-actions-artifact <owner/repo:artifact>',
+  usageFlags: [],
   listUsageOverride: 'install-from-source',
   positionalArgs: ['url?'],
   allowedFlags: ['header', 'githubActionsArtifact', 'installSource', 'retainPaths', 'retentionMs'],

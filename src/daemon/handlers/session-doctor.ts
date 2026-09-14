@@ -3,7 +3,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
-import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
+import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import {
   listLocalDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,

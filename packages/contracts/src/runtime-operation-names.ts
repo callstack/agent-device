@@ -37,7 +37,6 @@ export const RUNTIME_OPERATION_NAMES = [
   'fillPoint',
   'fillRef',
   'finalizeApplicationClose',
-  'findSelector',
   'findText',
   'focusPoint',
   'gestureViewport',

@@ -121,13 +121,35 @@ export type PreresolvedInteractionTarget = {
   node: SnapshotNode;
   /** The tree `node` came from — the guards read its siblings for occlusion/viewport. */
   nodes: SnapshotNode[];
+  /**
+   * The in-place iOS system surface `nodes` describes (#2438), absent for ordinary app content.
+   * Travels with the tree so the adopting consumer's post-action comparison knows which surface
+   * its baseline came from.
+   */
+  iosSystemSurfaceBundleId?: string;
+};
+
+/**
+ * One side of a post-action comparison: the nodes, and the SURFACE the capture they came from
+ * described (#2438: the bundle id of an in-place iOS system surface such as a web sign-in sheet,
+ * absent for ordinary app content).
+ *
+ * One value, never two channels: a capture of the sheet and a capture of the app describe
+ * different surfaces, so a `--verify` digest comparison or a `--settle` diff across that boundary
+ * is not about one presentation. Every boundary that carries a baseline carries this type, so
+ * nodes cannot arrive without the surface they describe.
+ */
+export type SurfaceScopedNodes = {
+  nodes: SnapshotNode[];
+  /** Bundle id of the in-place iOS system surface; absent for ordinary app content. */
+  surfaceBundleId?: string;
 };
 
 export type ResolvedInteractionTarget =
   | {
       kind: 'point';
       point: Point;
-      preActionNodes?: SnapshotNode[];
+      preAction?: SurfaceScopedNodes;
     }
   | {
       kind: 'ref';
@@ -138,9 +160,9 @@ export type ResolvedInteractionTarget =
       refLabel?: string;
       targetHittable?: boolean;
       hint?: string;
-      preActionNodes?: SnapshotNode[];
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
+      preAction?: SurfaceScopedNodes;
     }
   | {
       kind: 'selector';
@@ -151,10 +173,27 @@ export type ResolvedInteractionTarget =
       refLabel?: string;
       targetHittable?: boolean;
       hint?: string;
-      preActionNodes?: SnapshotNode[];
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
+      preAction?: SurfaceScopedNodes;
     };
+
+/**
+ * A post-action capture that describes a DIFFERENT surface than the pre-action baseline (#2438): an
+ * in-place iOS system surface (a web sign-in sheet, hosted out of the app's process) was presented
+ * over the app, or left it. `from`/`to` name the two surfaces — a host bundle id, or `app` for
+ * ordinary app content.
+ *
+ * Its presence IS the refusal of a same-surface claim: the two captures are not one presentation,
+ * so `--verify` reports `changedFromBefore` from this transition instead of from a digest
+ * comparison across it, and `--settle` attaches no settled diff (and therefore no refs) across it.
+ */
+export type PostActionSurfaceChange = {
+  from: string;
+  to: string;
+  /** The one agent-facing sentence for this transition (`@agent-device/contracts/ios-system-surface`). */
+  disclosure: string;
+};
 
 /**
  * Opt-in (`--verify`) cheap post-condition evidence for mutating interaction
@@ -164,6 +203,10 @@ export type ResolvedInteractionTarget =
  * held, so no extra device round trip is spent beyond the one verify capture.
  * `changedFromBefore: false` is evidence, not failure — the command still
  * succeeded.
+ *
+ * When `surfaceChange` is present the two captures describe different surfaces, so the digest
+ * comparison is not made at all: `changedFromBefore` then reports that transition, which replaced
+ * the whole observed surface.
  */
 export type InteractionEvidence = {
   foregroundApp?: string;
@@ -171,6 +214,7 @@ export type InteractionEvidence = {
   interactiveNodeCount: number;
   digest: string;
   changedFromBefore: boolean;
+  surfaceChange?: PostActionSurfaceChange;
 };
 
 export type SettleDiffLine = {
@@ -249,7 +293,17 @@ export type SettleObservation = {
    * intentionally omitted.
    */
   refs?: Array<{ ref: string }>;
-  /** Present only for `settled: true` observations that stored the settled tree. */
+  /**
+   * Present when the settled capture describes a different surface than the pre-action baseline
+   * (#2438). The settled tree then replaced the whole surface rather than changing within one, so
+   * `diff` is omitted: its lines (and their refs) would present a surface replacement as an
+   * in-surface change. `hint` says what to do instead.
+   */
+  surfaceChange?: PostActionSurfaceChange;
+  /**
+   * Present only for `settled: true` observations that stored the settled tree, and never across a
+   * `surfaceChange` — a diff describes change WITHIN one surface.
+   */
   diff?: {
     summary: { additions: number; removals: number; unchanged: number };
     lines: SettleDiffLine[];

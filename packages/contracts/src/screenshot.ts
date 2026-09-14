@@ -97,6 +97,8 @@ type ScreenshotSpecificFlagDefinition = {
   max?: number;
   usageLabel: string;
   usageDescription: string;
+  projectConfig: boolean;
+  recorded: boolean;
 };
 
 export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFlagDefinition[] = [
@@ -107,6 +109,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--crop-on <selector-expression>',
     usageDescription:
       'Screenshot: crop the capture to the frame of the selector resolved on the same screen',
+    projectConfig: false,
+    recorded: true,
   },
   {
     key: 'screenshotPixelDensity',
@@ -116,6 +120,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--pixel-density <n>',
     usageDescription:
       'Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'screenshotFullscreen',
@@ -124,6 +130,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--fullscreen, --full, -f',
     usageDescription:
       'Screenshot: on web capture the full page; on macOS app sessions capture the full desktop instead of the app window',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'screenshotScale',
@@ -134,6 +142,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--scale <0.01-1>',
     usageDescription:
       'Screenshot: resize both dimensions by this factor (or use AGENT_DEVICE_SCREENSHOT_SCALE)',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'screenshotNoStabilize',
@@ -142,6 +152,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--no-stabilize',
     usageDescription:
       'Screenshot: skip Android demo-mode/status-bar stabilization and settle delay for low-latency capture loops',
+    projectConfig: true,
+    recorded: true,
   },
   {
     key: 'screenshotNormalizeStatusBar',
@@ -150,6 +162,8 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageLabel: '--normalize-status-bar',
     usageDescription:
       'Screenshot: on iOS simulators temporarily normalize status-bar chrome for deterministic screenshot diffs',
+    projectConfig: true,
+    recorded: true,
   },
 ];
 

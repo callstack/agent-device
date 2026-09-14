@@ -4,7 +4,10 @@ import {
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import type {
+  RuntimeOperationFact,
+  RuntimeOperationUnavailability,
+} from '@agent-device/contracts/platform-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
@@ -38,6 +41,7 @@ function unsupportedAppleDeviceKind(hint: string) {
 export function appleGestureAndScrollFacts(device: DeviceInfo) {
   return {
     ...gestureRuntimeOperationFacts({
+      unsupported: appleGestureFamilyUnavailable(device),
       plan: appleGesturePlanFact(device),
       directionalFling: appleGesturePlanFact(device),
       multiTouch: appleMultiTouchGestureFact(device),
@@ -46,6 +50,13 @@ export function appleGestureAndScrollFacts(device: DeviceInfo) {
     }),
     ...scrollRuntimeOperationFacts({ scroll: appleScrollFact(device) }),
   };
+}
+
+/** The reason this leaf refuses gestures it does not name, before any tier is consulted. */
+function appleGestureFamilyUnavailable(device: DeviceInfo): RuntimeOperationUnavailability {
+  return device.appleOs === 'watchos' || device.appleOs === 'visionos'
+    ? gestureLeafUnavailable
+    : gestureKindUnavailable;
 }
 
 function appleGesturePlanFact(device: DeviceInfo): RuntimeOperationFact {

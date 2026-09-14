@@ -68,10 +68,15 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     relaunch?: boolean;
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
     timeoutMs?: number;
+    // Editor documentation for a public type: a `.d.ts` is read where no
+    // FlagDefinition resolves, and nothing generates these docs. It is not a second
+    // statement of what the option does — it is the option's ONE declaration (the
+    // `--foreground` FlagDefinition's `inputDescription`) verbatim, pinned to it by
+    // `commands/command-input-option-field.test.ts`.
     /**
-     * Include the initial interactive snapshot in a fresh open response. With
-     * no app argument, iOS can discover the sole running app on the sole booted
-     * simulator and fails closed when that environment is ambiguous.
+     * Include an initial interactive snapshot in a fresh open response. With no
+     * app argument, discover the sole running app on the sole booted iOS
+     * simulator; ambiguous environments fail closed.
      */
     foreground?: boolean;
     saveScript?: boolean | string;

@@ -6,7 +6,7 @@ import type {
   KeyboardStatusResult,
   RunnerContext,
 } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 export type { KeyboardDismissResult, KeyboardEnterResult, KeyboardStatusResult };
@@ -43,17 +43,35 @@ export type KeyboardRuntimeOperationFacts = Readonly<{
   keyboardEnter: RuntimeOperationFact;
 }>;
 
+/**
+ * What an owner declares about the keyboard family. No operation here is one every owner serves,
+ * and several owners serve no keyboard operation at all, so every operation is optional and
+ * `unsupported` names the denial an omitted cell reports. An owner with no keyboard surface states
+ * that denial once instead of writing it out per operation, with the reason and hint it would
+ * otherwise repeat by hand.
+ *
+ * Omission is a classified denial, never an unclassified cell and never an implied success: the
+ * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
+ * An owner that serves one operation names it — omission means "refuses", never "the same as the
+ * neighbour" — and its `unsupported` must refuse the family, not one operation of it, because
+ * whatever the owner leaves unnamed reports that cell verbatim.
+ */
+export type KeyboardRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  status?: RuntimeOperationFact;
+  dismiss?: RuntimeOperationFact;
+  enter?: RuntimeOperationFact;
+}>;
+
 export function keyboardRuntimeOperationFacts(
-  input: Readonly<{
-    status: RuntimeOperationFact;
-    dismiss: RuntimeOperationFact;
-    enter: RuntimeOperationFact;
-  }>,
+  input: KeyboardRuntimeOperationFactsInput,
 ): KeyboardRuntimeOperationFacts {
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
   return Object.freeze({
-    keyboardStatus: input.status,
-    keyboardDismiss: input.dismiss,
-    keyboardEnter: input.enter,
+    keyboardStatus: declared(input.status),
+    keyboardDismiss: declared(input.dismiss),
+    keyboardEnter: declared(input.enter),
   });
 }
 

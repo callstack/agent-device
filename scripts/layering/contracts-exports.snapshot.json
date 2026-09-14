@@ -58,6 +58,7 @@
   "@agent-device/contracts/interactor-operation-catalog",
   "@agent-device/contracts/interactor-types",
   "@agent-device/contracts/ios-snapshot",
+  "@agent-device/contracts/ios-system-surface",
   "@agent-device/contracts/is-predicate",
   "@agent-device/contracts/keyboard",
   "@agent-device/contracts/keyboard-runtime",

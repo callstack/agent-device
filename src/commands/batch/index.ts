@@ -13,6 +13,7 @@ const batchCommandMetadata = createBatchCommandMetadata();
 
 const batchCliSchema = {
   usageOverride: 'batch [--steps <json> | --steps-file <path>]',
+  usageFlags: [],
   listUsageOverride: 'batch --steps <json> | --steps-file <path>',
   allowedFlags: ['steps', 'stepsFile', 'batchOnError', 'batchMaxSteps', 'out'],
 } as const satisfies CommandSchemaOverride;

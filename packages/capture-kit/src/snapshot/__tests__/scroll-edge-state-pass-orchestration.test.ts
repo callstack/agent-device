@@ -14,45 +14,67 @@ import { captureThrows, scrollSnapshot, windowRoot } from './scroll-edge-state-f
 
 test('formatScrollEdgeMessage: edge reached with zero passes reports already-at-edge (bottom)', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', 'bottom', 0, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'down', edge: 'bottom', passes: 0 }),
     'Already at bottom; no hidden content below detected',
   );
 });
 
 test('formatScrollEdgeMessage: edge reached with zero passes reports already-at-edge (top)', () => {
   assert.equal(
-    formatScrollEdgeMessage('up', 'top', 0, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'up', edge: 'top', passes: 0 }),
     'Already at top; no hidden content above detected',
   );
 });
 
 test('formatScrollEdgeMessage: edge reached after N passes', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', 'bottom', 4, undefined, undefined),
+    formatScrollEdgeMessage({ direction: 'down', edge: 'bottom', passes: 4 }),
     'Scrolled to bottom with 4 down passes',
   );
 });
 
 test('formatScrollEdgeMessage: no edge, pixel amount given', () => {
   assert.equal(
-    formatScrollEdgeMessage('down', undefined, 0, undefined, 250),
+    formatScrollEdgeMessage({ direction: 'down', passes: 0, pixels: 250 }),
     'Scrolled down by 250px',
   );
 });
 
 test('formatScrollEdgeMessage: no edge, no pixels, symbolic amount given', () => {
-  assert.equal(formatScrollEdgeMessage('up', undefined, 0, 3, undefined), 'Scrolled up by 3');
-});
-
-test('formatScrollEdgeMessage: no edge, no pixels, no amount falls back to bare direction', () => {
   assert.equal(
-    formatScrollEdgeMessage('left', undefined, 0, undefined, undefined),
-    'Scrolled left',
+    formatScrollEdgeMessage({ direction: 'up', passes: 0, amount: 3 }),
+    'Scrolled up by 3',
   );
 });
 
+test('formatScrollEdgeMessage: no edge, no pixels, no amount falls back to bare direction', () => {
+  assert.equal(formatScrollEdgeMessage({ direction: 'left', passes: 0 }), 'Scrolled left');
+});
+
 test('formatScrollEdgeMessage: pixels takes priority over amount when both are set', () => {
-  assert.equal(formatScrollEdgeMessage('down', undefined, 0, 3, 250), 'Scrolled down by 250px');
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 0, amount: 3, pixels: 250 }),
+    'Scrolled down by 250px',
+  );
+});
+
+/**
+ * One gesture saturates at the viewport axis minus its edge padding, so a large amount buys less
+ * travel than it names. The message reports what the planner honored rather than what was asked.
+ */
+test('an amount-based message names the honored travel when the planner reports it', () => {
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, amount: 3, honoredPixels: 640 }),
+    'Scrolled down by 3 of the viewport (640px)',
+  );
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, amount: 0.65 }),
+    'Scrolled down by 0.65',
+  );
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, pixels: 5000, honoredPixels: 640 }),
+    'Scrolled down by 640px',
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -262,6 +284,8 @@ test('runScrollEdgePasses: throws a COMMAND_FAILED AppError once the pass limit 
   await assert.rejects(
     runScrollEdgePasses({
       edge: 'bottom',
+      // No fingerprint on these manual captures, so no-progress detection is inert and only the
+      // 40-pass backstop can end the loop. The real capture path always sets a fingerprint.
       captureState: async () => ({
         canScroll: true,
         emptySnapshot: false,
@@ -278,13 +302,88 @@ test('runScrollEdgePasses: throws a COMMAND_FAILED AppError once the pass limit 
         error.message,
         'scroll bottom reached the safety limit before the snapshot showed the edge',
       );
-      assert.deepEqual(error.details, {
-        hint: 'The scoped scroll container still reports hidden content. Use a smaller manual scroll + snapshot loop to inspect the current state.',
-      });
+      assert.equal(error.details?.reason, 'scroll_edge_pass_limit');
+      assert.equal(error.details?.passes, 40);
+      assert.match(String(error.details?.hint), /--until <selector>/);
       return true;
     },
   );
   assert.equal(scrollCalls, 40);
+});
+
+test('runScrollEdgePasses: stops as no-progress after a couple of passes when the fingerprint never moves', async () => {
+  let scrollCalls = 0;
+  await assert.rejects(
+    runScrollEdgePasses({
+      edge: 'bottom',
+      // canScroll stays true but the surface fingerprint is byte-identical every capture — the
+      // stuck-container signature (the gesture is not reaching this scroll view).
+      captureState: async () => ({
+        canScroll: true,
+        emptySnapshot: false,
+        fingerprint: 'stuck-surface',
+      }),
+      scroll: async () => {
+        scrollCalls += 1;
+        return undefined;
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'scroll_edge_no_progress');
+      assert.equal(error.details?.edge, 'bottom');
+      assert.match(String(error.details?.hint), /not reaching this container/);
+      return true;
+    },
+  );
+  // The whole point: a stuck container stops within a few flings, not 40.
+  assert.equal(scrollCalls, 3);
+});
+
+test('runScrollEdgePasses: a moving fingerprint never trips no-progress and scrolls to the edge', async () => {
+  let scrollCalls = 0;
+  const result = await runScrollEdgePasses({
+    edge: 'bottom',
+    captureState: async () => ({
+      canScroll: scrollCalls < 5,
+      emptySnapshot: false,
+      fingerprint: `surface-${scrollCalls}`,
+    }),
+    scroll: async () => {
+      scrollCalls += 1;
+      return undefined;
+    },
+  });
+  assert.equal(result.passes, 5);
+});
+
+test('runScrollEdgePasses: a fresh surface signature continues after identical passes', async () => {
+  let scrollCalls = 0;
+  // The surface sits at `a` for three captures, then a pass finally reveals `b`. `b` is a signature
+  // the window has not seen, so the loop keeps going rather than stopping as no-progress on the pass
+  // that actually advanced.
+  const captures = [
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'a' },
+    { canScroll: true, fingerprint: 'b' },
+    { canScroll: false, fingerprint: 'b' },
+  ];
+  let index = 0;
+  const result = await runScrollEdgePasses({
+    edge: 'bottom',
+    captureState: async () => ({
+      emptySnapshot: false,
+      ...(captures[index++] ?? { canScroll: false }),
+    }),
+    scroll: async () => {
+      scrollCalls += 1;
+      return undefined;
+    },
+  });
+  assert.equal(result.passes, 4);
+  assert.equal(scrollCalls, 4);
 });
 
 test('unique container scope is retained across edge pass captures', async () => {

@@ -1,6 +1,7 @@
 import type { SnapshotCommandOptions } from '../../runtime-types.ts';
 import {
   buildSnapshotPresentationKey,
+  type Rect,
   type SnapshotNode,
   type SnapshotState,
   type SnapshotUnchanged,
@@ -69,41 +70,85 @@ function areSnapshotPresentationsEquivalent(
   current: SnapshotState,
 ): boolean {
   if (previous.truncated !== current.truncated) return false;
-  // TODO: replace stringify with a field-by-field comparison or stable presentation hash.
   return (
-    JSON.stringify(buildComparableSnapshotPresentation(previous.nodes)) ===
-    JSON.stringify(buildComparableSnapshotPresentation(current.nodes))
+    previous.nodes.length === current.nodes.length &&
+    previous.nodes.every((node, index) => areSnapshotNodesEquivalent(node, current.nodes[index]!))
   );
 }
 
-function buildComparableSnapshotPresentation(
-  nodes: readonly SnapshotNode[],
-): ComparableSnapshotNode[] {
-  return nodes.map((node) => ({
-    index: node.index,
-    depth: node.depth,
-    parentIndex: node.parentIndex,
-    type: node.type,
-    role: node.role,
-    subrole: node.subrole,
-    label: node.label,
-    value: node.value,
-    identifier: node.identifier,
-    enabled: node.enabled,
-    selected: node.selected,
-    focused: node.focused,
-    hittable: node.hittable,
-    rect: node.rect,
-    bundleId: node.bundleId,
-    appName: node.appName,
-    windowTitle: node.windowTitle,
-    surface: node.surface,
-    hiddenContentAbove: node.hiddenContentAbove,
-    hiddenContentBelow: node.hiddenContentBelow,
-    interactionBlocked: node.interactionBlocked,
-    presentationHints: node.presentationHints,
-    actions: node.actions,
-  }));
+// Native text-entry/visibility facts are not rendered; refs and process ids are volatile.
+// Inheritance markers are output-only: this comparison runs before label deduplication.
+type ComparableSnapshotNode = Omit<
+  SnapshotNode,
+  | 'ref'
+  | 'pid'
+  | 'editable'
+  | 'password'
+  | 'hintShowing'
+  | 'selectionStart'
+  | 'selectionEnd'
+  | 'visibleToUser'
+  | 'inheritsLabel'
+  | 'inheritsIdentifier'
+>;
+
+type ScalarPresentationField = Exclude<
+  keyof ComparableSnapshotNode,
+  'rect' | 'presentationHints' | 'actions'
+>;
+
+const PRESENTATION_SCALAR_FIELDS = {
+  index: true,
+  depth: true,
+  parentIndex: true,
+  type: true,
+  role: true,
+  subrole: true,
+  label: true,
+  value: true,
+  identifier: true,
+  enabled: true,
+  selected: true,
+  focused: true,
+  hittable: true,
+  bundleId: true,
+  appName: true,
+  windowTitle: true,
+  surface: true,
+  hiddenContentAbove: true,
+  hiddenContentBelow: true,
+  interactionBlocked: true,
+} satisfies Record<ScalarPresentationField, true>;
+
+const PRESENTATION_SCALAR_KEYS = Object.keys(
+  PRESENTATION_SCALAR_FIELDS,
+) as ScalarPresentationField[];
+
+function areSnapshotNodesEquivalent(previous: SnapshotNode, current: SnapshotNode): boolean {
+  return (
+    PRESENTATION_SCALAR_KEYS.every((field) => previous[field] === current[field]) &&
+    areRectsEquivalent(previous.rect, current.rect) &&
+    areStringArraysEquivalent(previous.presentationHints, current.presentationHints) &&
+    areStringArraysEquivalent(previous.actions, current.actions)
+  );
 }
 
-type ComparableSnapshotNode = Omit<SnapshotNode, 'ref' | 'pid'>;
+function areRectsEquivalent(previous: Rect | undefined, current: Rect | undefined): boolean {
+  if (!previous || !current) return previous === current;
+  return (
+    previous.x === current.x &&
+    previous.y === current.y &&
+    previous.width === current.width &&
+    previous.height === current.height
+  );
+}
+
+function areStringArraysEquivalent(
+  previous: readonly string[] | undefined,
+  current: readonly string[] | undefined,
+): boolean {
+  if (!previous || !current) return previous === current;
+  return (
+    previous.length === current.length && previous.every((value, index) => value === current[index])
+  );
+}

@@ -67,11 +67,11 @@ function buildReplayJunitXml(suite: ReplaySuiteResult): string {
 }
 
 function renderJUnitTestCase(test: ReplaySuiteTestResult): string[] {
-  const name = escapeXmlTextAndAttribute(replayTestCaseName(test));
-  const className = escapeXmlTextAndAttribute(
+  const name = escapeJunitXml(replayTestCaseName(test));
+  const className = escapeJunitXml(
     `${path.dirname(test.file) === '.' ? test.file : path.dirname(test.file)}${formatReplayTestShardSuffix(test)}`,
   );
-  const file = escapeXmlTextAndAttribute(test.file);
+  const file = escapeJunitXml(test.file);
   const time = formatJUnitSeconds(test.durationMs);
   const lines = [
     `    <testcase classname="${className}" name="${name}" file="${file}" time="${time}">`,
@@ -79,19 +79,32 @@ function renderJUnitTestCase(test: ReplaySuiteTestResult): string[] {
 
   if (test.status === 'failed') {
     lines.push(
-      `      <failure message="${escapeXmlTextAndAttribute(test.error.message)}">${escapeXmlTextAndAttribute(buildFailureDetails(test))}</failure>`,
+      `      <failure message="${escapeJunitXml(test.error.message)}">${escapeJunitXml(buildFailureDetails(test))}</failure>`,
     );
   } else if (test.status === 'skipped') {
-    lines.push(`      <skipped message="${escapeXmlTextAndAttribute(test.message)}" />`);
+    lines.push(`      <skipped message="${escapeJunitXml(test.message)}" />`);
   }
 
   const systemOut = buildSystemOut(test);
   if (systemOut) {
-    lines.push(`      <system-out>${escapeXmlTextAndAttribute(systemOut)}</system-out>`);
+    lines.push(`      <system-out>${escapeJunitXml(systemOut)}</system-out>`);
   }
 
   lines.push('    </testcase>');
   return lines;
+}
+
+function escapeJunitXml(value: string): string {
+  // XML 1.0 cannot represent these characters, even as numeric character references.
+  const representable = value.replaceAll(
+    /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu,
+    '\uFFFD',
+  );
+  // Character references preserve whitespace through XML attribute and line-end normalization.
+  return escapeXmlTextAndAttribute(representable)
+    .replaceAll('\t', '&#9;')
+    .replaceAll('\n', '&#10;')
+    .replaceAll('\r', '&#13;');
 }
 
 function buildFailureDetails(test: FailedReplayTestResult): string {

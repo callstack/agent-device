@@ -15,10 +15,11 @@ final class TouchCommandHandler {
   private TouchCommandHandler() {}
 
   static void populateViewport(Bundle result, UiAutomation automation) {
-    Rect viewport = GestureViewportReader.read(automation);
+    GestureViewportReader.Reading reading = GestureViewportReader.readReading(automation);
     result.putString("ok", "true");
     result.putString("kind", "viewport");
-    putViewportMetadata(result, viewport);
+    putViewportMetadata(result, reading.application);
+    putKeyboardMetadata(result, reading.inputMethod);
   }
 
   static void populateGesture(Bundle result, UiAutomation automation, String payloadBase64)
@@ -68,5 +69,18 @@ final class TouchCommandHandler {
     result.putString("y", Integer.toString(viewport.top));
     result.putString("width", Integer.toString(viewport.width()));
     result.putString("height", Integer.toString(viewport.height()));
+  }
+
+  /**
+   * The input method window's screen bounds, reported only when one is on screen. An absent keyboard
+   * is reported by absence: a keyboard this helper cannot see is not evidence that a surface is
+   * blocked, so the caller must not read a zero frame as an occlusion.
+   */
+  private static void putKeyboardMetadata(Bundle result, Rect inputMethod) {
+    if (inputMethod == null) return;
+    result.putString("keyboardX", Integer.toString(inputMethod.left));
+    result.putString("keyboardY", Integer.toString(inputMethod.top));
+    result.putString("keyboardWidth", Integer.toString(inputMethod.width()));
+    result.putString("keyboardHeight", Integer.toString(inputMethod.height()));
   }
 }

@@ -131,4 +131,9 @@ export type SnapshotSourceDecodedTree = Readonly<{
   nodes: readonly RawSnapshotNode[];
   viewport: IosViewportEvidence;
   maxTraversalDepth: number;
+  /**
+   * `AXRemoteElement` leaves under a web view whose frame reaches the viewport, or that report no
+   * frame: pages the reader could not cross into (#2484).
+   */
+  opaqueRemoteElements: number;
 }>;

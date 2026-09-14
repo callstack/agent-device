@@ -52,6 +52,7 @@ import {
 } from '../runner-cache.ts';
 import { ensureXctestrunArtifact, xctestrunReferencesProjectRoot } from '../runner-artifact.ts';
 import {
+  createRunnerPhaseBudget,
   markRunnerXctestrunArtifactBadForRun,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
@@ -1099,10 +1100,10 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   });
 
   const canceledPromise = ensureXctestrunArtifact(canceledDevice, {
-    signal: canceledController.signal,
+    budget: createRunnerPhaseBudget(undefined, canceledController.signal),
   });
   const survivorPromise = ensureXctestrunArtifact(survivorDevice, {
-    signal: survivorController.signal,
+    budget: createRunnerPhaseBudget(undefined, survivorController.signal),
   });
 
   await Promise.all([canceledBuildStarted.promise, survivorBuildStarted.promise]);
@@ -1408,7 +1409,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   });
 
   const rebuilt = await ensureXctestrunArtifact(macOsDevice, {
-    buildTimeoutMs: 300_000,
+    budget: createRunnerPhaseBudget(300_000, undefined),
   });
 
   assert.equal(rebuilt.xctestrunPath, rebuiltXctestrunPath);
@@ -1416,7 +1417,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   assert.equal(rebuilt.artifact, 'rebuilt');
   assert.equal(rebuilt.reason, 'missing_xctestrun');
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
-  assert.equal(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs, 300_000);
+  assert.equal(Math.ceil(Number(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs) / 1e3), 300); // phase remainder (#2422)
 });
 
 test('ensureXctestrunArtifact rethrows unexpected cached macOS runner repair errors', async () => {

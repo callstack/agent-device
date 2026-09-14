@@ -28,6 +28,7 @@ export const debugCommandMetadata = defineFieldCommandMetadata(
 const debugCliSchema = {
   usageOverride:
     'debug symbols --artifact <crash.ips|crash.log> (--dsym <App.dSYM> | --search-path <dir>) [--out <symbolicated>]',
+  usageFlags: [],
   listUsageOverride: 'debug',
   positionalArgs: ['symbols'],
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],

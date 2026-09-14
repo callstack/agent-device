@@ -21,7 +21,10 @@ import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
 } from '@agent-device/capture-kit/snapshot-diff';
-import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
+import {
+  renderSnapshotQualityWarnings,
+  truncatedCaptureWarning,
+} from '@agent-device/capture-kit/quality-warnings';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
@@ -247,6 +250,7 @@ function buildSnapshotWarnings(params: {
       ...renderSnapshotQualityWarnings(params.annotations.quality, params.snapshot.nodes),
     );
   }
+  warnings.push(...truncatedCaptureWarning(snapshotTruncationForResult(params.snapshot)));
   warnings.push(...buildEmptyAndroidInteractiveWarnings(params));
   if (!params.annotations.quality) {
     // Legacy runners without a structured verdict keep the old daemon-side heuristics.

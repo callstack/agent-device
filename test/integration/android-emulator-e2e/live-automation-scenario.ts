@@ -15,6 +15,7 @@ import {
   scrollToVisibleSelector,
 } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
+import { assertHumanSnapshotCompaction } from './live-snapshot-compaction.ts';
 
 const C = PUBLIC_COMMANDS;
 
@@ -50,6 +51,13 @@ export async function assertAutomationSystem(context: LiveContext): Promise<void
   await runStep(context, 'open Settings tab', ['click', `@${settingsRef}`]);
   await assertWaitText(context, 'Settings');
   await runStep(context, 'open automation lab', ['click', 'id="open-automation-lab"']);
+  await assertWaitText(context, 'Automation lab');
+
+  await assertHumanSnapshotCompaction(context);
+  await runStep(context, 'return to automation lab after snapshot compaction check', [
+    'click',
+    'id="open-automation-lab"',
+  ]);
   await assertWaitText(context, 'Automation lab');
 
   const snapshot = await runStep(context, 'capture Android automation tree', ['snapshot', '-i']);

@@ -68,7 +68,7 @@ export function classifyAbsenceObservation(
       ...(firstMatch ? { firstMatch } : {}),
     };
   }
-  const sparseQuality = sparseQualityForSnapshot(snapshot);
+  const sparseQuality = sparseCaptureQuality(snapshot);
   if (sparseQuality) {
     return {
       kind: 'sparse',
@@ -86,7 +86,12 @@ export function classifyAbsenceObservation(
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
 }
 
-function sparseQualityForSnapshot(
+/**
+ * The one definition of "this capture is too sparse to trust": the backend's own verdict, then the
+ * legacy iOS shape that predates verdicts. Shared with `scroll --until`, which must not stop on a
+ * tree whose selectors are unreliable.
+ */
+export function sparseCaptureQuality(
   snapshot: Pick<SnapshotState, 'backend' | 'nodes' | 'snapshotQuality'>,
 ): SparseQuality | undefined {
   const quality = snapshot.snapshotQuality;

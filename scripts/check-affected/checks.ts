@@ -10,7 +10,6 @@
 // agent reads before skipping a check locally cannot go stale.
 
 import { ALL_CHECKS, type CheckId } from './model.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
@@ -122,6 +121,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'Runner XCTest selection and package-source boundary',
     'check:xctest-selection',
   ),
+  // Line parity needs no toolchain; the `swiftc -parse` half reports itself skipped on a host
+  // without Swift, so the gate is declared on the macOS lane where both halves run.
+  gate(
+    'packaged-runner-swift',
+    'Packaged runner Swift parses and keeps checkout line numbering',
+    'check:packaged-runner-swift',
+  ),
 
   // --- Gates that drive their own runner -------------------------------------
   // The ones no naming convention could find: an executable terminal for
@@ -183,16 +189,7 @@ export function resolveCommand(
   changedFiles: readonly string[] = [],
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
-    return [
-      'pnpm',
-      'exec',
-      'vitest',
-      'related',
-      '--run',
-      '--passWithNoTests',
-      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
-      ...changedFiles,
-    ];
+    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {

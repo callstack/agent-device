@@ -1,6 +1,9 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  SettleObservation,
+  SettleParams,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   captureSnapshotForSession,
@@ -73,8 +76,14 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  const baselineNodes = params.session.snapshot?.nodes ?? [];
-  return { observe: async () => await observeSettled(params, settle, baselineNodes) };
+  const snapshot = params.session.snapshot;
+  const baseline: SurfaceScopedNodes = {
+    nodes: snapshot?.nodes ?? [],
+    ...(snapshot?.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+      : {}),
+  };
+  return { observe: async () => await observeSettled(params, settle, baseline) };
 }
 
 /**
@@ -87,7 +96,7 @@ export function planGenericSettleObservation(
 async function observeSettled(
   context: GenericSettleContext,
   settle: SettleParams,
-  baselineNodes: SnapshotNode[],
+  baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
   const runtime = createGenericSettleRuntime(context);
   if (!runtime) return undefined;
@@ -96,7 +105,7 @@ async function observeSettled(
   // use for press/fill.
   const observation = await runtime.interactions.settleObservation({
     ...settle,
-    baselineNodes,
+    baseline,
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });

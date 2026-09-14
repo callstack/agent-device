@@ -42,6 +42,22 @@ fallback when bridge acquisition or presentation fails. Disable the bridge for t
 after fallback; a new app generation re-enables it. Physical devices, providers, custom-action
 captures, and interactions remain on their existing owners.
 
+A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
+tree as an `AXRemoteElement` under the web view, with its children in that other process. The
+bridge reads one process, so it delivers the element as a leaf. The source refuses a tree in which
+such a leaf sits under a `WebView`-typed ancestor and reaches the viewport (`remote-content-boundary`)
+instead of publishing a screen without its page: refs issued from it would target the host views
+around the page rather than the page. A leaf whose frame is zero-area or off screen hosts nothing
+the capture can miss and is published; one that reports no frame is refused, because nothing proves
+it empty. Remote elements outside a web view are not classified — no capture has shown one — and a
+web view truncated away by the node or depth cap stays disclosed as truncation. XCTest resolves
+remote elements, so the fallback serves the page (#2484).
+
+The refusal opens the generation circuit like any other bridge failure, so a hybrid app that showed
+one web screen takes XCTest for its remaining native screens until it relaunches — the 0.20.x path
+for every screen. Re-asking the bridge per capture would instead charge a refused bridge round trip
+to every `wait` poll on the web screen; the circuit keeps that cost to one capture per generation.
+
 Keep the two public snapshot strategies explicit:
 
 - **Regular visible strategy**: use recursive XCTest snapshots, emit the effective user-visible
@@ -273,11 +289,18 @@ fold and eligibility collapse. This keeps shallow probes bounded by the requeste
 frontier without inventing a raw-depth multiplier. Scoped captures remain broad because depth is
 relative to the scope root selected in presentation.
 
-Backend capability declarations are part of the contract: recursive tree supports the presented
-frontier, the flat query sweep supports only its root and one presented level, and private AX is
-raw-depth-only for regular depth requests until it has an equivalent hierarchy-aware frontier.
-The capture plan does not claim deeper regular-depth completeness from a backend that cannot prove
-it. Raw depth remains acquisition depth for every backend.
+Backend capability declarations are part of the contract, and they describe how much acquisition
+work a regular depth request bounds — never whether the backend may answer it. Every backend
+serves a regular `--depth` request because presentation applies the presented-depth cut to
+whatever hierarchy was acquired: the recursive tree stops acquisition at the presented frontier,
+the flat query sweep has only its root and one presented level (so a cut past depth 1 returns the
+sweep unchanged), and private AX walks its raw-depth ladder and is cut afterwards
+(`presentation-cut`). Completeness below an acquisition cap is disclosed the same way it is for an
+unscoped capture — through `truncated` and `effectiveDepth` — because a depth-capped regular
+capture is a subset of the unscoped one from the same backend. Refusing the request instead
+produced no answer at all: a plan pinned or deferred to private AX fell through to the synthetic
+sparse root, which the daemon then rejected as a missing viewport (#2403). Raw depth remains
+acquisition depth for every backend.
 
 Acquisition-side limits remain explicit: raw private-AX captures still disclose their bridge-side
 node cap, the flat query sweep still drops frameless elements because it has no hierarchy to attach
@@ -288,3 +311,47 @@ When adding new iOS snapshot behavior, maintainers should first decide which str
 change tries to make regular snapshots fast by dropping visible controls behind a node budget, or
 tries to make raw snapshots safe by silently truncating, it is probably crossing strategy
 boundaries.
+
+## Amendment: in-place system surfaces (issue #2438)
+
+Some UI is presented out of the app's process by a system bundle — `com.apple.SafariViewService`,
+which hosts `ASWebAuthenticationSession` and `SFSafariViewController` for delegated OAuth/OIDC
+sign-in. Two facts, both verified live on the iOS 26.2 Simulator, shape how it is captured:
+
+- The surface dies if activated. `XCUIApplication.activate()` or `simctl launch` on the host cancels
+  the authentication session and blacks the view. So the host must be observed and driven **in
+  place**, never activated, and `open` refuses to launch a registered host.
+- The local host AX bridge cannot see it. While the sheet is up the app remains the AX `primaryApp`,
+  so the bridge serves the (occluded) app tree as if healthy. Only the XCTest runner, addressing the
+  host by bundle id, can read and drive the sheet.
+
+Decision. A closed registry names these hosts (`contracts/fixtures/ios-system-surface-hosts.json`,
+mirrored by the TypeScript and Swift registries under a parity test). When a registered host is
+genuinely presented, the runner serves and drives it in place and never adopts it as the cached
+session target; the session binding stays on the app, so once the surface is gone the next command
+resolves back to the app. On the Simulator a cheap, device-scoped host-side probe (a registered
+host process running for the device) routes the capture to the runner instead of the bridge; when no
+host is running the bridge fast path is untouched.
+
+A presented surface also outranks an explicitly requested bundle id: the runner checks for a
+presented host before it resolves or activates `command.appBundleId`, so a command that names a
+*different* app is still served the sheet. That is deliberate — the sheet occludes the screen, so
+the named app has nothing readable under it, and the capture discloses which surface it describes —
+and it costs nothing once the sheet is gone, because the session binding never moved.
+
+Presence is `XCUIApplication.state == .runningForeground`, not tree content. The live spike showed a
+torn-down host still serving a *richer* tree than a live one, so content heuristics cannot separate
+live from dead; foreground state can. Crucially, the only way a host is foreground with a stale tree
+is if it was activated or relaunched — which the open guard and the in-place policy both refuse — so
+this fix and the never-activate guard are one design: the guard is what makes the foreground
+predicate sound. This also makes issue #2438's second bug (a stale tree served confidently after
+teardown) unrepresentable for the delegated-auth flow, because the session never binds to the host.
+
+Captures of a system surface carry a response-level `systemSurface` provenance and the shared
+`IOS_SYSTEM_SURFACE_DISCLOSURE`, so the agent is told the controls belong to a system sheet rather
+than the app. They are also lineaged to the host rather than the app, so their comparison identity
+differs from an app capture's by construction: every consumer that asks "are these two captures the
+same presentation" refuses a cross-surface pair through ordinary key equality, and no comparison
+site carries a surface check of its own. Physical devices always use the runner, so the in-place
+serve applies there without a route change; the Simulator route probe is the only
+Simulator-specific piece.

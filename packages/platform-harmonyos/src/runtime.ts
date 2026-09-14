@@ -246,13 +246,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // No native text reading: every text wait on this owner polls the canonical tree.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
-          findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
         // Gestures share focus's HDC-driven kind cell; only the two tiers HDC cannot synthesize
         // are refused.
         ...gestureRuntimeOperationFacts({
+          unsupported: gestureKindUnavailable,
           plan: harmonyGestureFact(device),
           directionalFling: harmonyGestureFact(device),
           multiTouch: multiTouchUnavailable,
@@ -263,14 +263,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
           tap: harmonyFocusFact(device),
-          tapRef: unavailable,
           longPress: harmonyFocusFact(device),
-          hover: unavailable,
-          hoverRef: unavailable,
           fill: harmonyFocusFact(device),
-          fillRef: unavailable,
-          tapElementSelector: unavailable,
         }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
@@ -292,16 +288,15 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
+        // HDC drives dismissal and the enter key; any other keyboard operation is a leaf gap.
         ...keyboardRuntimeOperationFacts({
+          unsupported: harmonyPlatformLeafUnavailable,
           status: harmonyKeyboardStatusUnavailable,
           dismiss: harmonyFocusFact(device),
           enter: harmonyFocusFact(device),
         }),
         // HarmonyOS exposes no clipboard automation operation.
-        ...clipboardRuntimeOperationFacts({
-          read: harmonyPlatformLeafUnavailable,
-          write: harmonyPlatformLeafUnavailable,
-        }),
+        ...clipboardRuntimeOperationFacts({ unsupported: harmonyPlatformLeafUnavailable }),
         ...audioProbeRuntimeOperationFacts({
           capture: audioProbeUnavailable,
           query: audioProbeUnavailable,

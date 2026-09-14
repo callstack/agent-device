@@ -4,6 +4,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '../commands/cli-grammar/flag-types.ts';
+import { projectConfigFlagKeys } from './command-schema.ts';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import {
   getConfigurableOptionSpecs,
@@ -32,95 +33,10 @@ type ConfigFileSource = 'user' | 'project' | 'explicit';
 
 type ConfigPath = { path: string; required: boolean; source: ConfigFileSource };
 
-// Project config is repository-controlled, so new flags are operator-only by default.
-// Adding a key here is the only way to make it available to ./agent-device.json.
-const PROJECT_CONFIG_FLAG_KEYS = new Set<FlagKey>([
-  'json',
-  'platform',
-  'target',
-  'device',
-  'udid',
-  'serial',
-  'session',
-  'sessionLock',
-  'activity',
-  'launchArgs',
-  'launchUrl',
-  'remote',
-  'deviceHub',
-  'testIme',
-  'appsFilter',
-  'clean',
-  'force',
-  'stale',
-  'relaunch',
-  'shutdown',
-  'surface',
-  'headless',
-  'restart',
-  'noRecord',
-  'record',
-  'recordAs',
-  'snapshotInteractiveOnly',
-  'snapshotDiff',
-  'snapshotDepth',
-  'snapshotScope',
-  'snapshotRaw',
-  'snapshotCustomActions',
-  'snapshotForceFull',
-  'screenshotPixelDensity',
-  'screenshotFullscreen',
-  'screenshotScale',
-  'screenshotNoStabilize',
-  'screenshotNormalizeStatusBar',
-  'overlayRefs',
-  'networkInclude',
-  'baseline',
-  'threshold',
-  'count',
-  'pointerCount',
-  'fps',
-  'quality',
-  'hideTouches',
-  'recordingScope',
-  'intervalMs',
-  'delayMs',
-  'durationMs',
-  'holdMs',
-  'jitterPx',
-  'pixels',
-  'doubleTap',
-  'verify',
-  'settle',
-  'settleQuietMs',
-  'clickButton',
-  'backMode',
-  'pauseMs',
-  'pattern',
-  'kind',
-  'perfTemplate',
-  'responseLevel',
-  'verbose',
-  'cost',
-  'timeoutMs',
-  'retries',
-  'failFast',
-  'recordVideo',
-  'replayUpdate',
-  'replayMaestro',
-  'replayFrom',
-  'replayPlanDigest',
-  'replayKeepSession',
-  'findFirst',
-  'findLast',
-  'batchOnError',
-  'batchMaxSteps',
-  'retainPaths',
-  'retentionMs',
-  'shardAll',
-  'shardSplit',
-  'noLogin',
-]);
+// Project config is repository-controlled, so a flag stays operator-only unless its
+// own declaration sets `projectConfig: true`. This set derives from those declarations;
+// admitting a new key to ./agent-device.json edits the declaration, not this file.
+const PROJECT_CONFIG_FLAG_KEYS = projectConfigFlagKeys();
 
 function resolveConfigPaths(
   cwd: string,

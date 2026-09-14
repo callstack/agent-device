@@ -10,6 +10,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
@@ -70,7 +71,7 @@ export function makeRecordRuntimeHarness(
     sessionName,
     sessionStore,
     runtime,
-    run: (positionals: string[], meta?: { cwd: string }) =>
+    run: (positionals: string[], meta?: DaemonRequest['meta']) =>
       handleRecordCommand({
         ...common,
         req: {
@@ -104,10 +105,12 @@ export function recordingResourcePath(
 function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
   const owner = localRuntimeOwner(session.device.platform);
   let currentOutPath = '';
+  let currentClientOutPath: string | undefined;
   const handle: ScreenRecordingLiveHandle = {
     inspect: () => ({
       backend: 'adb screenrecord',
       outPath: currentOutPath,
+      ...(currentClientOutPath ? { clientOutPath: currentClientOutPath } : {}),
       startedAt: 1,
       scope: 'app',
       showTouches: true,
@@ -125,6 +128,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
         result: {
           backend: 'adb screenrecord',
           outPath: currentOutPath,
+          ...(currentClientOutPath ? { clientOutPath: currentClientOutPath } : {}),
           startedAt: 1,
           completedAt: 2,
           scope: 'app' as const,
@@ -139,6 +143,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
   const start = vi.fn(
     async (input: Parameters<PlatformRuntimeOperations['screenRecordingStart']>[0]) => {
       currentOutPath = input.outputPath;
+      currentClientOutPath = input.clientOutputPath;
       return {
         pendingHandle: new PendingTransferGuard(handle),
         envelope: createDurableResourceEnvelope({

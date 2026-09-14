@@ -24,7 +24,7 @@ const prepareCommandMetadata = defineFieldCommandMetadata(
 );
 
 const prepareCliSchema = {
-  usageOverride: 'prepare ios-runner --platform ios|macos [--timeout <ms>]',
+  usageOverride: 'prepare ios-runner --platform ios|macos',
   listUsageOverride: 'prepare',
   positionalArgs: ['ios-runner'],
   allowedFlags: ['timeoutMs'],

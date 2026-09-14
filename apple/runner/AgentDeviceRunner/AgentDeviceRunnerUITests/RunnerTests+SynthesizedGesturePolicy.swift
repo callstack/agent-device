@@ -89,8 +89,14 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
       fallbackPolicy: .xctestCoordinateAllowed
     )
   case .scroll:
+    // Scroll places a viewport-center-symmetric swipe, so it cannot tell a keyboard-struck swipe
+    // from a scroll that reached the edge without reading the live keyboard frame (#2500). The
+    // probe is not free — `visibleKeyboardFrame` resolves `app.keyboards.firstMatch` with a live AX
+    // fetch — but skipping it on `.unknown` left the first scroll of a session swiping under the
+    // keys, which is the failure this command exists to avoid. `.unavailable` still skips it: there
+    // the fetch is known not to answer, and `ScrollViewportPolicy` fails open on a missing frame.
     return SynthesizedGesturePolicy(
-      keyboardPolicy: .whenAccessibilityHealthy,
+      keyboardPolicy: .requiredWhenAvailable,
       fallbackPolicy: .privateSynthesisRequired
     )
   case .synthesizedDrag:
@@ -182,7 +188,9 @@ extension RunnerTests {
     )
   }
 
-  func testSynthesizedKeyboardPolicyKeepsUnknownDragProbeButNotUnknownScrollProbe() {
+  /// Keyboard-policy semantics only. Which command gets which policy is the table below; a probe
+  /// that is merely permitted still costs a live AX fetch, so the two questions stay separate.
+  func testSynthesizedKeyboardPolicyAllowsProbeOnlyWhenAccessibilityPermitsIt() {
     XCTAssertFalse(
       SynthesizedKeyboardPolicy.whenAccessibilityHealthy
         .allowsProbe(accessibilityHealth: .unknown)
@@ -208,7 +216,7 @@ extension RunnerTests {
     XCTAssertEqual(
       synthesizedGesturePolicy(.scroll),
       SynthesizedGesturePolicy(
-        keyboardPolicy: .whenAccessibilityHealthy,
+        keyboardPolicy: .requiredWhenAvailable,
         fallbackPolicy: .privateSynthesisRequired
       )
     )

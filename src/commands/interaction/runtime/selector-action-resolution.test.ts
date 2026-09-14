@@ -4,9 +4,25 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from '@agent-device/selectors/interaction-targeting-fixtures';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { resolveActionSelector } from './selector-action-resolution.ts';
+
+test('mutating selector collapses a wrapper chain whose hittability is unverified', () => {
+  const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+
+  const result = resolveActionSelector(
+    snapshot.nodes,
+    'id="scoring_home_button"',
+    'ios',
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+  );
+
+  assert.equal(result?.node.index, 1);
+  assert.equal(result?.matches, 2);
+  assert.equal(result?.disambiguation?.tiebreak, 'structural-equivalence');
+});
 
 test('mutating selector collapses a wrapper chain that resolves to one actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);

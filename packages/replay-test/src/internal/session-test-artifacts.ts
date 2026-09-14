@@ -59,11 +59,16 @@ export function materializeReplayTestAttemptArtifacts(params: {
 }): void {
   const { outcome, filePath, sessionName, attempts, maxAttempts, attemptArtifactsDir } = params;
   const passed = outcome.status === 'passed';
-  const sourcePaths = [...new Set(outcome.artifactPaths)];
+  const sourcePaths = new Set(outcome.artifactPaths);
   if (outcome.status === 'failed' && typeof outcome.error.logPath === 'string') {
-    sourcePaths.push(outcome.error.logPath);
+    sourcePaths.add(outcome.error.logPath);
   }
-  const copiedArtifacts = copyReplayTestArtifacts(sourcePaths, attemptArtifactsDir);
+  const resultPath = path.join(attemptArtifactsDir, 'result.txt');
+  const failurePath = path.join(attemptArtifactsDir, 'failure.txt');
+  const copiedArtifacts = copyReplayTestArtifacts([...sourcePaths], attemptArtifactsDir, [
+    resultPath,
+    failurePath,
+  ]);
 
   const lines = [
     `file: ${filePath}`,
@@ -90,24 +95,33 @@ export function materializeReplayTestAttemptArtifacts(params: {
     );
   }
 
-  const resultPath = path.join(attemptArtifactsDir, 'result.txt');
   const output = `${lines.join('\n')}\n`;
   fs.writeFileSync(resultPath, output);
   if (!passed) {
-    fs.writeFileSync(path.join(attemptArtifactsDir, 'failure.txt'), output);
+    fs.writeFileSync(failurePath, output);
   }
 }
 
-function copyReplayTestArtifacts(paths: string[], attemptArtifactsDir: string): string[] {
+function copyReplayTestArtifacts(
+  paths: string[],
+  attemptArtifactsDir: string,
+  manifestPaths: string[],
+): string[] {
   const copiedPaths: string[] = [];
-  const usedNames = new Map<string, number>();
+  const reservedNames = new Set(manifestPaths.map((entry) => path.basename(entry).toLowerCase()));
   for (const sourcePath of paths) {
     if (!isExistingFile(sourcePath)) continue;
-    const fileName = buildUniqueArtifactFileName(path.basename(sourcePath), usedNames);
-    const destinationPath = path.join(attemptArtifactsDir, fileName);
-    if (path.resolve(sourcePath) !== path.resolve(destinationPath)) {
-      fs.copyFileSync(sourcePath, destinationPath);
+    const sourceName = path.basename(sourcePath);
+    if (
+      path.resolve(sourcePath) === path.resolve(attemptArtifactsDir, sourceName) &&
+      !reservedNames.has(sourceName.toLowerCase())
+    ) {
+      copiedPaths.push(sourcePath);
+      continue;
     }
+    const fileName = buildUniqueArtifactFileName(sourceName, attemptArtifactsDir, reservedNames);
+    const destinationPath = path.join(attemptArtifactsDir, fileName);
+    fs.copyFileSync(sourcePath, destinationPath);
     copiedPaths.push(destinationPath);
   }
   return copiedPaths;
@@ -129,13 +143,22 @@ function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): vo
   }
 }
 
-function buildUniqueArtifactFileName(fileName: string, usedNames: Map<string, number>): string {
+function buildUniqueArtifactFileName(
+  fileName: string,
+  attemptArtifactsDir: string,
+  reservedNames: ReadonlySet<string>,
+): string {
   const extension = path.extname(fileName);
   const stem = extension ? fileName.slice(0, -extension.length) : fileName;
-  const current = usedNames.get(fileName) ?? 0;
-  usedNames.set(fileName, current + 1);
-  if (current === 0) return fileName;
-  return `${stem}-${current + 1}${extension}`;
+  let candidate = fileName;
+  let suffix = 2;
+  while (
+    reservedNames.has(candidate.toLowerCase()) ||
+    fs.existsSync(path.join(attemptArtifactsDir, candidate))
+  ) {
+    candidate = `${stem}-${suffix++}${extension}`;
+  }
+  return candidate;
 }
 
 function isExistingFile(filePath: string): boolean {

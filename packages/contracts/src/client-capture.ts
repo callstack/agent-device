@@ -4,6 +4,7 @@ import type { SessionSurface } from './session-surface.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
+  SnapshotCommandOptionFields,
   SnapshotNode,
   SnapshotUnchanged,
   SnapshotVisibility,
@@ -16,15 +17,26 @@ import type {
   DeviceCommandBaseOptions,
 } from './client-connection.ts';
 
+// The snapshot capture keys and their value types come from the one snapshot
+// option declaration (`SnapshotCommandOptionFields`). `customActions` is lifted
+// out of that spread only to carry its editor documentation — a `.d.ts` is read
+// where no FlagDefinition resolves, and nothing generates these docs. Its type
+// still comes from the declaration, and the prose is the option's ONE
+// declaration (the `--actions` FlagDefinition's `inputDescription`) verbatim,
+// pinned to it by `commands/command-input-option-field.test.ts`.
 export type CaptureSnapshotOptions = AgentDeviceRequestOverrides &
-  AgentDeviceSelectionOptions & {
-    interactiveOnly?: boolean;
-    depth?: number;
-    scope?: string;
-    raw?: boolean;
-    /** List accessibility custom actions on merged elements (iOS simulator). */
-    customActions?: boolean;
-    forceFull?: boolean;
+  AgentDeviceSelectionOptions &
+  Omit<SnapshotCommandOptionFields, 'customActions'> & {
+    /**
+     * Name the affordances an element merged away (iOS UIAccessibilityCustomAction,
+     * React Native accessibilityActions) — a card whose reply/options controls are not
+     * separate elements still lists them here. The names are for PLANNING, not
+     * invocation: there is no API to trigger them, so reach the affordance through the
+     * element detail screen, through the same control exposed as a labeled element
+     * elsewhere, or by coordinates from its rect. iOS simulator only; costs one
+     * accessibility round trip per merged element.
+     */
+    customActions?: SnapshotCommandOptionFields['customActions'];
     timeoutMs?: number;
     /**
      * #1271 stage 2 (ADR 0012 amendment): `snapshot` is observation-only and

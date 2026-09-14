@@ -3,6 +3,7 @@ import {
   keyboardRuntimeOperationFacts,
   type KeyboardDismissResult,
   type KeyboardEnterResult,
+  type KeyboardRuntimeOperationFactsInput,
   type KeyboardStatusResult,
 } from '@agent-device/contracts/keyboard-runtime';
 import {
@@ -10,7 +11,6 @@ import {
   narrowDeviceBinding,
   type DeviceBinding,
   type RuntimeFacts,
-  type RuntimeOperationFact,
 } from '@agent-device/contracts/platform-runtime';
 import {
   keyboardDismissUse,
@@ -60,11 +60,7 @@ const unavailable = Object.freeze({
 function runtimeHarness(
   device: DeviceInfo,
   owner: string,
-  facts: Readonly<{
-    status: RuntimeOperationFact;
-    dismiss: RuntimeOperationFact;
-    enter: RuntimeOperationFact;
-  }>,
+  facts: KeyboardRuntimeOperationFactsInput,
 ) {
   const keyboardStatus = vi.fn<() => Promise<KeyboardStatusResult>>(async () => ({
     kind: 'ime-probe',
@@ -100,6 +96,7 @@ function runtimeHarness(
 
 test('android status admits keyboardStatusUse and reports the platform-shaped state', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -140,6 +137,7 @@ test('android status admits keyboardStatusUse and reports the platform-shaped st
 
 test('`get` is an alias for `status`', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -158,6 +156,7 @@ test('`get` is an alias for `status`', async () => {
 
 test('`return` is an alias for `enter`', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -176,7 +175,7 @@ test('`return` is an alias for `enter`', async () => {
 
 test('android status is refused on iOS with the retired in-handler hint', async () => {
   const harness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -204,7 +203,7 @@ test('android status is refused on iOS with the retired in-handler hint', async 
 
 test('iOS dismiss reports the mechanism disclosure and its own message', async () => {
   const harness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -241,7 +240,7 @@ test('iOS dismiss reports the mechanism disclosure and its own message', async (
 // value must degrade to the bare message rather than a false claim.
 test('iOS dismiss degrades an unrecognized mechanism to the bare message', async () => {
   const harness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -267,7 +266,7 @@ test('iOS dismiss degrades an unrecognized mechanism to the bare message', async
 
 test('iOS dismiss omits a message mechanism claim when every mechanism failed', async () => {
   const harness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -296,7 +295,7 @@ test('iOS dismiss omits a message mechanism claim when every mechanism failed', 
 
 test('iOS dismiss omits a mechanism claim when the keyboard was never visible', async () => {
   const harness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -325,7 +324,7 @@ test('iOS dismiss omits a mechanism claim when the keyboard was never visible', 
 
 test('harmonyos dismiss reports success with no structured fields beyond the message', async () => {
   const harness = runtimeHarness(harmonyDevice, 'harmonyos', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -348,6 +347,7 @@ test('harmonyos dismiss reports success with no structured fields beyond the mes
 
 test('android dismiss reports the full IME probe evidence', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -392,7 +392,7 @@ test('android dismiss reports the full IME probe evidence', async () => {
 
 test('iOS enter reports visibility evidence; android enter reports only success', async () => {
   const iosHarness = runtimeHarness(iosDevice, 'apple', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -419,6 +419,7 @@ test('iOS enter reports visibility evidence; android enter reports only success'
   }
 
   const androidHarness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -441,7 +442,7 @@ test('iOS enter reports visibility evidence; android enter reports only success'
 
 test('harmonyos enter reports only success, distinctly from android despite an identical shape', async () => {
   const harness = runtimeHarness(harmonyDevice, 'harmonyos', {
-    status: unavailable,
+    unsupported: unavailable,
     dismiss: available,
     enter: available,
   });
@@ -464,6 +465,7 @@ test('harmonyos enter reports only success, distinctly from android despite an i
 
 test('rejects an unknown subcommand before inspection or binding', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -483,6 +485,7 @@ test('rejects an unknown subcommand before inspection or binding', async () => {
 
 test('rejects more than one subcommand argument', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,
@@ -500,6 +503,7 @@ test('rejects more than one subcommand argument', async () => {
 
 test('defaults to status with no positional', async () => {
   const harness = runtimeHarness(androidDevice, 'android', {
+    unsupported: unavailable,
     status: available,
     dismiss: available,
     enter: available,

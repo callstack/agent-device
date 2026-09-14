@@ -173,7 +173,7 @@ test(scenario('responseConstruction'), async () => {
   // ADR 0012 decision 3: the preflight's guard lookup supplies the
   // record-time evidence node on the runtime result.
   assert.equal(result.node?.ref, 'e1');
-  assert.ok(Array.isArray(result.preActionNodes));
+  assert.ok(Array.isArray(result.preAction?.nodes));
 
   const {
     result: visualization,
@@ -188,7 +188,7 @@ test(scenario('responseConstruction'), async () => {
   assert.equal(recordedTarget?.node.ref, 'e1');
   for (const payload of [visualization, responseData]) {
     assert.equal('node' in payload, false);
-    assert.equal('preActionNodes' in payload, false);
+    assert.equal('preAction' in payload, false);
     assert.equal('targetEvidence' in payload, false);
   }
 });

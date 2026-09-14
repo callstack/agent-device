@@ -72,7 +72,8 @@ export type ScreenshotDiffOptions = {
 // white (255,255,255): √(255² + 255² + 255²) = 255√3 ≈ 441.67.
 // We use this as the denominator so threshold 0–1 maps linearly to the full
 // color distance range: 0 = exact match only, 1 = everything matches.
-const COLOR_DISTANCE_SCALE = 255 * Math.sqrt(3);
+// Match the per-pixel square-root rounding so the maximum stays inclusive.
+const COLOR_DISTANCE_SCALE = Math.sqrt(3 * 255 ** 2);
 
 export async function compareScreenshots(
   baselinePath: string,

@@ -592,6 +592,19 @@ function createTimeoutError(
   });
 }
 
+/**
+ * True only for the COMMAND_FAILED error this module raises when it kills a command at
+ * its own `timeoutMs`. Callers classify with this rather than matching the message text,
+ * so a command whose own output says "timed out" is not mistaken for one exec killed.
+ */
+export function isCommandTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    typeof error.details?.timeoutMs === 'number'
+  );
+}
+
 function createExitError(
   executable: string,
   cmd: string,

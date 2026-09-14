@@ -1,7 +1,11 @@
 import type { NetworkDump } from '@agent-device/contracts/network-traffic';
 import type { NetworkDumpInput, NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { mergeNetworkDumps, readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
+import {
+  mergeNetworkScans,
+  readRecentNetworkTrafficFromText,
+  type NetworkScan,
+} from '@agent-device/capture-kit';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { backendForAppleDevice } from '../logs/backend.ts';
 
@@ -13,7 +17,7 @@ export async function dumpAppleNetworkTraffic(
 ): Promise<NetworkDumpResult> {
   const backend = backendForAppleDevice(device);
   const recent = await host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-  let dump = readRecentNetworkTrafficFromText(recent.text, {
+  let scan = readRecentNetworkTrafficFromText(recent.text, {
     ...input,
     path: recent.path,
     exists: recent.exists,
@@ -21,24 +25,47 @@ export async function dumpAppleNetworkTraffic(
     backend,
   });
   const notes: string[] = [];
-  if (canRecoverSimulator(device, input, dump)) {
+  if (canRecoverSimulator(device, input, scan.dump)) {
     const recovery = await recoverSimulatorTraffic(host, device, input, recent.path, signal);
-    if (recovery) {
-      if (recovery.dump.entries.length > 0) {
-        dump = mergeNetworkDumps(recovery.dump, dump, input.maxEntries);
-        notes.push(
-          `Recovered ${recovery.dump.entries.length} iOS simulator HTTP entr${recovery.dump.entries.length === 1 ? 'y' : 'ies'} from simctl log show (${recovery.lineCount} app log lines scanned).`,
-        );
-      } else if (recovery.lineCount > 0) {
-        notes.push(
-          `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
-        );
-      }
-    }
+    if (recovery) scan = mergeRecoveredTraffic(notes, scan, recovery, input.maxEntries);
   }
   appendLifecycleNote(notes, device, input);
-  if (dump.entries.length === 0) notes.push(noEntriesNote(device));
-  return Object.freeze({ source: 'app-log', backend, dump, notes: Object.freeze(notes) });
+  appendUnnamedRequestNote(notes, scan.dump);
+  if (scan.dump.entries.length === 0) notes.push(noEntriesNote(device));
+  return Object.freeze({
+    source: 'app-log',
+    backend,
+    dump: scan.dump,
+    notes: Object.freeze(notes),
+  });
+}
+
+/**
+ * Traffic the recovery pass saw but could not name is still traffic, so it is
+ * merged for its count alone; only a pass that found nothing at all reports the
+ * window as non-network.
+ */
+function mergeRecoveredTraffic(
+  notes: string[],
+  scan: NetworkScan,
+  recovery: { scan: NetworkScan; lineCount: number },
+  maxEntries: number,
+): NetworkScan {
+  const recovered = recovery.scan.dump.entries.length;
+  if (recovered === 0 && (recovery.scan.dump.unnamedRequests ?? 0) === 0) {
+    if (recovery.lineCount > 0) {
+      notes.push(
+        `Recovered ${recovery.lineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
+      );
+    }
+    return scan;
+  }
+  if (recovered > 0) {
+    notes.push(
+      `Recovered ${recovered} iOS simulator HTTP entr${recovered === 1 ? 'y' : 'ies'} from simctl log show (${recovery.lineCount} app log lines scanned).`,
+    );
+  }
+  return mergeNetworkScans(recovery.scan, scan, maxEntries);
 }
 
 function canRecoverSimulator(
@@ -60,7 +87,7 @@ async function recoverSimulatorTraffic(
   input: NetworkDumpInput,
   appLogPath: string,
   signal: AbortSignal,
-): Promise<{ dump: NetworkDump; lineCount: number } | undefined> {
+): Promise<{ scan: NetworkScan; lineCount: number } | undefined> {
   const args = [
     ...(device.simulatorSetPath ? ['--set', device.simulatorSetPath] : []),
     'spawn',
@@ -93,7 +120,7 @@ async function recoverSimulatorTraffic(
     );
   if (lines.length === 0) return undefined;
   return {
-    dump: readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
+    scan: readRecentNetworkTrafficFromText(`${lines.join('\n')}\n`, {
       ...input,
       path: `${appLogPath} (simctl log show recovery)`,
       exists: true,
@@ -111,6 +138,34 @@ function buildPredicate(appBundleId: string): string {
     `processImagePath ENDSWITH[c] "/${value}"`,
     `senderImagePath ENDSWITH[c] "/${value}"`,
   ].join(' OR ');
+}
+
+/**
+ * CFNetwork logs a request URL only when a connection is opened, so a request
+ * that reused a keep-alive connection is reported against its connection's
+ * origin with no path. Saying so keeps "this endpoint was never called" from
+ * being read off a dump that could not name every request it observed.
+ */
+function appendUnnamedRequestNote(notes: string[], dump: NetworkDump): void {
+  const againstOrigin = dump.entries.filter((entry) => entry.pathUnavailable).length;
+  const unresolved = dump.unnamedRequests ?? 0;
+  const observed = againstOrigin + unresolved;
+  if (observed === 0) return;
+  const parts = [
+    `${observed} request${observed === 1 ? '' : 's'} reused a keep-alive connection, so CFNetwork logged no request URL.`,
+  ];
+  if (againstOrigin > 0) {
+    parts.push(
+      `${againstOrigin} listed against the origin the connection was opened for, without a path.`,
+    );
+  }
+  if (unresolved > 0) {
+    parts.push(
+      `${unresolved} opened before this scan window and are missing from the entries entirely; scan more lines, or run logs clear --restart before the repro.`,
+    );
+  }
+  parts.push('Absence of an endpoint in this dump does not prove it was not called.');
+  notes.push(parts.join(' '));
 }
 
 function appendLifecycleNote(notes: string[], device: DeviceInfo, input: NetworkDumpInput): void {

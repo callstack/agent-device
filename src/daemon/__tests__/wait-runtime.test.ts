@@ -432,6 +432,31 @@ test('an owner that advertises no native reading polls the tree only', async () 
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
 });
 
+test('native text failure cannot hide a canonical capture failure', async () => {
+  const harness = waitRuntimeHarness({
+    findText: available,
+    findTextAnswers: () => {
+      throw new Error('native observation failed');
+    },
+    captureSnapshot: async () => {
+      throw new AppError('COMMAND_FAILED', 'canonical capture failed', {
+        reason: 'capture_failed',
+      });
+    },
+  });
+  const { response } = await runWait(['text', 'Ready', '200'], harness);
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'canonical capture failed',
+      details: { reason: 'capture_failed' },
+    },
+  });
+  expect(harness.findText).toHaveBeenCalledOnce();
+  expect(harness.captureSnapshot).toHaveBeenCalledOnce();
+});
+
 test('an unavailable conditional observation preserves the capture-backed owner path', async () => {
   const harness = waitRuntimeHarness({
     findText: findTextUnavailable,

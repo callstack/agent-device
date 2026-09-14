@@ -50,6 +50,7 @@ import {
   orderByViewportPosition,
 } from '../../session-target-evidence.ts';
 import { resolveRecordedTarget } from '@agent-device/selectors';
+import { resolveUnverifiedWrapperControl } from '@agent-device/selectors/interaction-targeting';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { ReplayDivergenceTargetBindingKind } from '@agent-device/contracts/divergence';
 
@@ -216,7 +217,16 @@ function resolveSelectorTargetMatches(
   if (resolution.kind === 'resolved') {
     return { matchedNodes: [...resolution.matchedNodes], winnerRef: resolution.winner.ref };
   }
-  return { matchedNodes: [...resolution.matchedNodes], winnerRef: '' };
+  // A refusal is not always a changed screen. The rows that verify without
+  // disambiguation — `is <predicate>` and `get attrs` — dispatch through a
+  // pipeline that resolves one control reported by its own accessibility wrapper
+  // to the control, so naming no winner here reports a divergence for a screen
+  // that did not change.
+  const control = resolveUnverifiedWrapperControl(nodes, resolution.matchedNodes);
+  return {
+    matchedNodes: [...resolution.matchedNodes],
+    winnerRef: control?.ref ?? '',
+  };
 }
 
 type MappedVerificationFailure = Omit<ReplayTargetDivergent, 'verified'>;

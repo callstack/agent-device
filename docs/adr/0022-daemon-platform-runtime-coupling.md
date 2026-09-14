@@ -79,7 +79,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 4. **The entry-to-platform hop trace was re-run with hop roles**
     (policy / orchestration / translation / adapter / pass-through + terminal) and a deletion
     test per pass-through/translation hop. The updated artifact is
-    [`0019-end-state-hop-trace.md`](0019-end-state-hop-trace.md): 41 hops for `press`/Android and
+    [`0023-end-state-hop-trace.md`](0023-end-state-hop-trace.md): 41 hops for `press`/Android and
     47/49 per arm for the now dual-arm `snapshot`/iOS route (shared 30 + AX bridge 17 / runner
     fallback 19). The deletion test proves a single distinct removable hop
     (`commands/runtime-types.ts`); the request-spine guards (auth comparison, cancellation gate,

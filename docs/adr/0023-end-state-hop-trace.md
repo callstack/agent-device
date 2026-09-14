@@ -1,4 +1,4 @@
-# ADR-0019 end-state: entry-to-platform hop trace
+# ADR-0023: end-state entry-to-platform hop trace
 
 Backs the "Entry-to-platform hop count" paragraph in
 [0019-request-bound-platform-runtime.md](./0019-request-bound-platform-runtime.md#end-state-proposed-2026-09-02-maintainer-decision-pending).

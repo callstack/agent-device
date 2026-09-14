@@ -10,6 +10,7 @@ import {
   enumField,
   integerField,
   jsonSchemaField,
+  optionField,
   stringArrayField,
   stringField,
   stringSchema,
@@ -53,9 +54,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
       { min: 1 },
     ),
-    foreground: booleanField(
-      'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
-    ),
+    foreground: optionField('foreground'),
     saveScript: jsonSchemaField<boolean | string>({
       oneOf: [booleanSchema(), stringSchema()],
     }),

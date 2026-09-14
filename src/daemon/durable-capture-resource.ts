@@ -44,7 +44,7 @@ export function createDurableCaptureResource<
   H extends LiveResourceHandle<C>,
   C,
 >(definition: DurableCaptureResourceDefinition<K, H, C, SessionState>) {
-  const resourcePath = (
+  const sessionResourcePath = (
     sessionStore: DurableCaptureSessionStore<SessionState>,
     sessionName: string,
   ): string => definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
@@ -58,6 +58,8 @@ export function createDurableCaptureResource<
 
   return Object.freeze({
     store: definition.store,
+    /** Where this session's record for this resource lives. */
+    resourcePath: sessionResourcePath,
     createNextFence(params: {
       admissionLedger: DurableCaptureAdmissionLedger;
       resourcePath: string;
@@ -75,7 +77,7 @@ export function createDurableCaptureResource<
             else params.admissionLedger.blockUndurableCleanup(device, outcome.reason);
           },
         },
-        resourcePath(params.sessionStore, params.sessionName),
+        sessionResourcePath(params.sessionStore, params.sessionName),
       );
     },
     finishLive(params: {
@@ -86,7 +88,7 @@ export function createDurableCaptureResource<
       return finishLiveDurableCapture(
         definition,
         params,
-        resourcePath(params.sessionStore, params.sessionName),
+        sessionResourcePath(params.sessionStore, params.sessionName),
       );
     },
     finishRecovered(params: FinishRecoveredDurableCaptureParams<K, H, C>): Promise<C> {

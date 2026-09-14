@@ -1,3 +1,4 @@
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ConvertedAction, MaestroExportCommand } from './export-types.ts';
 
@@ -15,12 +16,12 @@ function convertOpenAction(action: SessionAction): ConvertedAction {
   const [first, second] = action.positionals;
   if (!first) return { kind: 'unsupported', message: 'open requires an app id or URL' };
 
-  if (isUrl(first)) {
+  if (isDeepLinkTarget(first)) {
     return { kind: 'commands', commands: [{ openLink: first }] };
   }
 
   const launchApp = buildLaunchAppCommand(action, first);
-  if (second && isUrl(second)) {
+  if (second && isDeepLinkTarget(second)) {
     return { kind: 'config', appId: first, commands: [launchApp, { openLink: second }] };
   }
   if (second) {
@@ -51,8 +52,4 @@ function convertKeyboardAction(action: SessionAction): ConvertedAction {
     return { kind: 'commands', commands: [{ pressKey: 'Enter' }] };
   }
   return { kind: 'unsupported', message: `keyboard ${subcommand ?? ''}`.trim() };
-}
-
-function isUrl(value: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
 }

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -123,3 +124,76 @@ test('record stop rejects a cross-session recovery manifest before exact-owner b
   });
   expect(harness.runtime.bindExactDeviceCalls).not.toHaveBeenCalled();
 });
+
+test('record stop returns the export whose response never reached the caller', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-replayed-stop-');
+  const outPath = writeRecording('record-runtime-replayed-stop-output-');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+
+  const recovered = await harness.run(['stop']);
+
+  expect(recovered).toMatchObject({
+    ok: true,
+    data: { recording: 'stopped', outPath, recordingBackend: 'adb screenrecord' },
+  });
+  expect(harness.runtime.finish).toHaveBeenCalledOnce();
+  expect(harness.runtime.bindExactDeviceCalls).not.toHaveBeenCalled();
+});
+
+test('a recovered stop keeps the caller-side output path that makes it downloadable', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-replayed-remote-stop-');
+  const cwd = mkdtempForTestSync('record-runtime-replayed-remote-stop-output-');
+  const outPath = path.join(cwd, 'capture.mp4');
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath], {
+    cwd,
+    clientArtifactPaths: { outPath: '/client/capture.mp4' },
+  });
+  await harness.run(['stop'], { cwd });
+
+  const recovered = await harness.run(['stop'], { cwd });
+
+  expect(recovered).toMatchObject({
+    ok: true,
+    data: {
+      recording: 'stopped',
+      outPath,
+      artifacts: [{ field: 'outPath', path: outPath, localPath: '/client/capture.mp4' }],
+    },
+  });
+});
+
+test('a recovered stop does not record a second session stop action', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-replayed-stop-action-');
+  const outPath = writeRecording('record-runtime-replayed-stop-action-output-');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+
+  await harness.run(['stop']);
+
+  const actions = harness.sessionStore.get(harness.sessionName)?.actions ?? [];
+  expect(actions.filter((action) => action.positionals[0] === 'stop')).toHaveLength(1);
+});
+
+test('record stop reports no active recording once a completed export is gone', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-deleted-stop-');
+  const outPath = writeRecording('record-runtime-deleted-stop-output-');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+  fs.rmSync(outPath);
+
+  const recovered = await harness.run(['stop']);
+
+  expect(recovered).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: 'no active recording' },
+  });
+  expect(harness.runtime.bindExactDeviceCalls).not.toHaveBeenCalled();
+});
+
+function writeRecording(prefix: string): string {
+  const outPath = path.join(mkdtempForTestSync(prefix), 'capture.mp4');
+  fs.writeFileSync(outPath, 'mp4');
+  return outPath;
+}

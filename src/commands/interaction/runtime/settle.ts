@@ -11,13 +11,14 @@ import {
   collectSettleChromeRefs,
   withoutSettleChrome,
 } from '@agent-device/capture-kit/snapshot-chrome';
-import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
+  PostActionSurfaceChange,
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
   SettleTailEntry,
+  SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
@@ -28,6 +29,12 @@ import {
   TINY_STABLE_TREE_HINT,
   TINY_STABLE_TREE_NODE_COUNT,
 } from './stable-capture.ts';
+import {
+  crossSurfaceSettleHint,
+  resolvePostActionSurfaceChange,
+  summarizePostActionEvidence,
+  surfaceScopedNodes,
+} from './post-action-surface.ts';
 
 /**
  * `--settle` (#1101): after a mutating command, wait for the UI to go quiet
@@ -49,8 +56,8 @@ import {
 
 export type SettleOutcome = {
   observation: SettleObservation;
-  /** Nodes of the final capture; doubles as the `--verify` evidence source. */
-  settledNodes?: SnapshotNode[];
+  /** The final capture; doubles as the `--verify` evidence source. */
+  settledCapture?: SurfaceScopedNodes;
 };
 
 // Changed-lines bound: the settled diff is the response payload, and unbounded
@@ -76,15 +83,15 @@ export async function settleAfterInteraction(
 ): Promise<SettleOutcome> {
   return await settleAfterAction(runtime, options, {
     ...params,
-    baselineNodes: await resolveBaselineNodes(runtime, options, params.resolved),
+    baseline: await resolveSettleBaseline(runtime, options, params.resolved),
     actionPoint: params.resolved.point,
   });
 }
 
 export type SettleObservationCommandOptions = CommandContext &
   SettleParams & {
-    /** The pre-action tree the settled diff is taken against. */
-    baselineNodes: SnapshotNode[];
+    /** The pre-action tree the settled diff is taken against, and the surface it describes. */
+    baseline: SurfaceScopedNodes;
   };
 
 /**
@@ -106,17 +113,18 @@ export const settleObservationCommand: RuntimeCommand<
  * interaction entry point — only the two things a resolution would have
  * supplied come from the caller:
  *
- * - `baselineNodes` is the diff baseline. On the generic route it is the
- *   session's STORED pre-action tree, which may be several commands older than
- *   the action, so the diff honestly reads "settled tree vs the last tree you
- *   observed" rather than press's freshly resolved pre-action capture.
+ * - `baseline` is the diff baseline and the surface it describes. On the generic
+ *   route the nodes are the session's STORED pre-action tree, which may be
+ *   several commands older than the action, so the diff honestly reads "settled
+ *   tree vs the last tree you observed" rather than press's freshly resolved
+ *   pre-action capture.
  * - `actionPoint` is absent: with no point there is nothing to self-echo
  *   against, so the tail's self-echo exclusion simply never fires.
  */
 async function settleAfterAction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  params: SettleParams & { baselineNodes: SnapshotNode[]; actionPoint?: Point },
+  params: SettleParams & { baseline: SurfaceScopedNodes; actionPoint?: Point },
 ): Promise<SettleOutcome> {
   const quietMs = params.quietMs ?? DEFAULT_STABLE_QUIET_MS;
   const timeoutMs = params.timeoutMs ?? DEFAULT_STABLE_TIMEOUT_MS;
@@ -126,7 +134,7 @@ async function settleAfterAction(
       quietMs,
       timeoutMs,
       resetBudgetOnPrivateAxRecovery: true,
-      broadTransitionBaselineNodes: params.baselineNodes,
+      broadTransitionBaselineNodes: params.baseline.nodes,
     });
     return await readSettledOutcome(runtime, options, params, base, outcome);
   } catch (error) {
@@ -145,7 +153,7 @@ async function settleAfterAction(
 async function readSettledOutcome(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  params: { baselineNodes: SnapshotNode[]; actionPoint?: Point },
+  params: { baseline: SurfaceScopedNodes; actionPoint?: Point },
   base: SettleObservation,
   outcome: Awaited<ReturnType<typeof runStableCaptureLoop>>,
 ): Promise<SettleOutcome> {
@@ -164,10 +172,17 @@ async function readSettledOutcome(
     };
   }
   const { stored, session } = await storeSettledSnapshot(runtime, options, outcome.lastCapture);
-  const settledNodes = outcome.lastCapture.snapshot.nodes;
+  const settledCapture = surfaceScopedNodes(outcome.lastCapture.snapshot);
+  const settledNodes = settledCapture.nodes;
+  // A settled capture of an in-place system surface (a web sign-in sheet) and a pre-action capture
+  // of the app describe different surfaces (#2438). The diff below would then be a whole-surface
+  // replacement presented as change within one surface, refs included, so it is refused and the
+  // transition is disclosed instead.
+  const surfaceChange = resolvePostActionSurfaceChange(params.baseline, settledCapture);
   return {
     observation: {
       ...observation,
+      ...(surfaceChange ? { surfaceChange } : {}),
       // The diff (with its added-line refs) is only attached when the settled
       // tree actually became the stored session snapshot: those refs must be
       // valid against the tree the next @ref command resolves on. The daemon
@@ -175,17 +190,17 @@ async function readSettledOutcome(
       // captures are intentionally diff-less: they are not a stable
       // observation, so surfacing refs would invite agents to act on
       // advisory state.
-      ...(outcome.settled && stored
+      ...(outcome.settled && stored && !surfaceChange
         ? buildSettleDiffAndTail(
-            params.baselineNodes,
+            params.baseline.nodes,
             settledNodes,
             params.actionPoint,
             session?.appBundleId,
           )
         : {}),
-      ...resolveSettleHint(outcome, stored, settledNodes.length),
+      ...resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
     },
-    settledNodes,
+    settledCapture,
   };
 }
 
@@ -195,21 +210,18 @@ async function readSettledOutcome(
  * final capture there is no evidence — best-effort, like verify itself.
  */
 export function settleEvidence(
-  settledNodes: SnapshotNode[] | undefined,
-  preActionNodes: SnapshotNode[] | undefined,
+  settledCapture: SurfaceScopedNodes | undefined,
+  baseline: SurfaceScopedNodes | undefined,
 ): InteractionEvidence | undefined {
-  if (!settledNodes) return undefined;
-  const after = summarizeAxEvidence(settledNodes);
-  const changedFromBefore =
-    preActionNodes !== undefined && after.digest !== summarizeAxEvidence(preActionNodes).digest;
-  return { ...after, changedFromBefore };
+  if (!settledCapture) return undefined;
+  return summarizePostActionEvidence(settledCapture, baseline);
 }
 
-async function resolveBaselineNodes(
+async function resolveSettleBaseline(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   resolved: ResolvedInteractionTarget,
-): Promise<SnapshotNode[]> {
+): Promise<SurfaceScopedNodes> {
   const session = await runtime.sessions.get(options.session ?? 'default');
   // A ref is authorized against the stored ref frame. Keep that visible presentation as the
   // transition baseline: a best-effort evidence recapture can recover through private AX and see
@@ -220,7 +232,7 @@ async function resolveBaselineNodes(
   // and pre-frame sessions.
   return (
     authorizedRefBaseline(resolved, session) ??
-    evidenceBaseline(resolved) ??
+    nonEmptyBaseline(resolved.preAction) ??
     sessionBaseline(session)
   );
 }
@@ -228,22 +240,21 @@ async function resolveBaselineNodes(
 function authorizedRefBaseline(
   resolved: ResolvedInteractionTarget,
   session: CommandSessionRecord | undefined,
-): SnapshotNode[] | undefined {
+): SurfaceScopedNodes | undefined {
   if (resolved.kind !== 'ref') return undefined;
-  return nonEmptyNodes(session?.refFrameSnapshot?.nodes);
+  const frame = session?.refFrameSnapshot;
+  return frame ? nonEmptyBaseline(surfaceScopedNodes(frame)) : undefined;
 }
 
-function evidenceBaseline(resolved: ResolvedInteractionTarget): SnapshotNode[] | undefined {
-  if (!('preActionNodes' in resolved)) return undefined;
-  return nonEmptyNodes(resolved.preActionNodes);
+function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
+  const tree = session?.refFrameSnapshot ?? session?.snapshot;
+  return tree ? surfaceScopedNodes(tree) : { nodes: [] };
 }
 
-function sessionBaseline(session: CommandSessionRecord | undefined): SnapshotNode[] {
-  return session?.refFrameSnapshot?.nodes ?? session?.snapshot?.nodes ?? [];
-}
-
-function nonEmptyNodes(nodes: SnapshotNode[] | undefined): SnapshotNode[] | undefined {
-  return nodes?.length ? nodes : undefined;
+function nonEmptyBaseline(
+  baseline: SurfaceScopedNodes | undefined,
+): SurfaceScopedNodes | undefined {
+  return baseline?.nodes.length ? baseline : undefined;
 }
 
 function buildSettleDiff(
@@ -405,7 +416,24 @@ function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
   return kept;
 }
 
+/**
+ * The settled observation's hint. A surface change (#2438) is stated alongside whatever the loop
+ * itself reports rather than in place of it: the transition explains the missing diff, and the
+ * loop's own verdict (stalled, never settled, sparse, tiny tree) still explains the capture.
+ */
 function resolveSettleHint(
+  outcome: { settled: boolean; stalled: boolean },
+  stored: boolean,
+  settledNodeCount: number,
+  surfaceChange: PostActionSurfaceChange | undefined,
+): { hint?: string } {
+  const loopHint = resolveSettleLoopHint(outcome, stored, settledNodeCount).hint;
+  if (!surfaceChange) return loopHint === undefined ? {} : { hint: loopHint };
+  const surfaceHint = crossSurfaceSettleHint(surfaceChange);
+  return { hint: loopHint === undefined ? surfaceHint : `${surfaceHint} ${loopHint}` };
+}
+
+function resolveSettleLoopHint(
   outcome: { settled: boolean; stalled: boolean },
   stored: boolean,
   settledNodeCount: number,

@@ -1,6 +1,7 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { discoverReplaySourcePaths } from './source-discovery.ts';
@@ -12,6 +13,66 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 // filtering policy is pinned in the replay-test package.
 const discover = (inputs: string[], cwd: string, replayBackend?: string) =>
   discoverReplaySourcePaths({ inputs, cwd, replayBackend });
+
+test.each(['[ab]', '{a,b}'])('relative suite globs treat cwd %s literally', (directoryName) => {
+  const root = mkdtempForTestSync('agent-device-discovery-literal-cwd-');
+  const cwd = path.join(root, directoryName);
+  for (const directory of [cwd, path.join(root, 'a')]) {
+    fs.mkdirSync(path.join(directory, 'flows'), { recursive: true });
+  }
+  for (const name of ['01-native.ad', '02-flow.yaml', '03-flow.yml', 'ignored.txt']) {
+    fs.writeFileSync(path.join(cwd, 'flows', name), '');
+  }
+  fs.writeFileSync(path.join(root, 'a', 'flows', 'wrong-checkout.ad'), '');
+
+  const pattern = './flows/*.{ad,yaml,yml}';
+  assert.deepEqual(discover([pattern], cwd), [path.join(cwd, 'flows', '01-native.ad')]);
+  assert.deepEqual(discover([pattern], cwd, 'maestro'), [
+    path.join(cwd, 'flows', '02-flow.yaml'),
+    path.join(cwd, 'flows', '03-flow.yml'),
+    path.join(cwd, 'flows', '01-native.ad'),
+  ]);
+  assert.deepEqual(discover(['./flows/absent*.ad'], cwd), []);
+});
+
+test.each(['plain', '[ab]', '{a,b}'])(
+  'a missing literal suite input is rejected from cwd %s',
+  (directoryName) => {
+    const root = mkdtempForTestSync('agent-device-discovery-missing-');
+    const cwd = path.join(root, directoryName);
+    fs.mkdirSync(cwd);
+
+    assert.throws(
+      () => discover(['missing.ad'], cwd),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === 'test input not found: missing.ad',
+    );
+  },
+);
+
+test('absolute and home suite globs preserve authored patterns', () => {
+  const root = mkdtempForTestSync('agent-device-discovery-glob-paths-');
+  const cwd = path.join(root, '[workspace]');
+  fs.mkdirSync(cwd);
+  for (const name of ['a.ad', 'b.ad', 'c.ad', '[literal].ad']) {
+    fs.writeFileSync(path.join(root, name), '');
+  }
+  const homedir = vi.spyOn(os, 'homedir').mockReturnValue(root);
+
+  try {
+    const expected = [path.join(root, 'a.ad'), path.join(root, 'b.ad')];
+    assert.deepEqual(discover(['../{a,b}.ad'], cwd), expected);
+    assert.deepEqual(discover([path.join(root, '[ab].ad')], cwd), expected);
+    assert.deepEqual(discover(['~/{a,b}.ad'], cwd), expected);
+    assert.deepEqual(discover([path.join(root, '[literal].ad')], cwd), [
+      path.join(root, '[literal].ad'),
+    ]);
+  } finally {
+    homedir.mockRestore();
+  }
+});
 
 test('replay source discovery discovers nested .ad suites through native DFS traversal', () => {
   const root = mkdtempForTestSync('agent-device-test-discovery-');

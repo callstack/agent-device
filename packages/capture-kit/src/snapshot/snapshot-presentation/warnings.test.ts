@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { readSnapshotQualityVerdict } from '../../snapshot-quality-verdict.ts';
-import { renderSnapshotQualityWarnings } from './quality-warnings.ts';
+import { renderSnapshotQualityWarnings, truncatedCaptureWarning } from './quality-warnings.ts';
 
 const sharedRecoveryReason =
   'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>';
@@ -35,7 +35,7 @@ test('penalty-deferred recovered captures suppress the fallback warning but keep
   );
 
   assert.deepEqual(warnings, [
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 
@@ -53,7 +53,7 @@ test('non-presentation recovery keeps the generic warning for the same reason te
 
   assert.deepEqual(warnings, [
     'Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 
@@ -71,7 +71,7 @@ test('presentation failures identify a runner bug and preserve composed warnings
 
   assert.deepEqual(warnings, [
     'Agent Device could not safely present the captured accessibility tree and fell back to the private-ax snapshot backend. This is an Agent Device runner bug, not an app accessibility-tree issue. Use screenshot as visual truth and report snapshotQuality.reason with the screenshot.',
-    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+    'Some deeper accessibility nodes were omitted; the accessibility backend capped this tree at depth 56. Navigate so the content you need sits higher in the tree, and use screenshot as visual truth for the rest.',
   ]);
 });
 
@@ -269,4 +269,15 @@ test('the coverage line is independent of degradation state', () => {
 
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] ?? '', /read for 3 of 8 merged elements/);
+});
+
+test('a cut capture is disclosed once, from the shared truncated flag alone', () => {
+  assert.deepEqual(truncatedCaptureWarning(false), []);
+  assert.deepEqual(truncatedCaptureWarning(undefined), []);
+  const [warning, ...rest] = truncatedCaptureWarning(true);
+  assert.deepEqual(rest, []);
+  assert.match(warning ?? '', /cut at a backend limit/);
+  assert.match(warning ?? '', /footers, tab bars/);
+  assert.match(warning ?? '', /refs and selectors cannot be resolved/);
+  assert.match(warning ?? '', /screenshot/);
 });

@@ -1,4 +1,4 @@
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, isRectVisibleInViewport } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
@@ -110,6 +110,20 @@ const CLASS_PROMOTED_TYPES: Readonly<Record<string, string>> = {
 
 const NODE_KEYS = new Set<string>(Object.values(ATTRIBUTE));
 
+/**
+ * A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
+ * tree as an `AXRemoteElement` under the web view, with its children in that other process. The
+ * guest reader snapshots one process, so it delivers that element as a leaf (#2484). Such a leaf
+ * is opaque when it sits under a `WebView`-typed ancestor and its frame reaches the viewport: the
+ * page is on screen and the tree does not describe it. A leaf whose frame is zero-area or off
+ * screen hosts nothing the capture can miss; one that reports no frame at all is refused, because
+ * nothing proves it is empty. Remote elements outside a web view are not classified here — no
+ * capture has shown one — and content truncated away above the web view stays disclosed as
+ * truncation, not as a boundary.
+ */
+const REMOTE_ELEMENT_CLASS = 'AXRemoteElement';
+const WEB_VIEW_TYPE = 'WebView';
+
 export function decodeSnapshotBridgeTree(
   tree: unknown,
   envelope: Readonly<{ truncated: unknown }>,
@@ -120,9 +134,10 @@ export function decodeSnapshotBridgeTree(
     throw snapshotSourceError('malformed-tree', 'guest-tree-root-invalid');
   }
   const nodes: RawSnapshotNode[] = [];
+  const webHostedRemoteLeaves: (Rect | undefined)[] = [];
   let maxTraversalDepth = 0;
   for (const root of roots) {
-    visitNode(root, undefined, 0);
+    visitNode(root, undefined, 0, false);
   }
   if (nodes.length > limits.maxNodes) {
     throw snapshotSourceError('malformed-tree', 'node-limit-exceeded', {
@@ -139,18 +154,22 @@ export function decodeSnapshotBridgeTree(
   if (typeof envelope.truncated !== 'boolean') {
     throw snapshotSourceError('malformed-tree', 'truncated-invalid');
   }
+  const viewport = viewportFromRoot(
+    nodes.find((node) => node.type === 'Application' || node.type === 'Window'),
+  );
   return {
     nodes,
     maxTraversalDepth,
-    viewport: viewportFromRoot(
-      nodes.find((node) => node.type === 'Application' || node.type === 'Window'),
-    ),
+    viewport,
+    opaqueRemoteElements: webHostedRemoteLeaves.filter((rect) => isOpaqueRemoteLeaf(rect, viewport))
+      .length,
   };
 
   function visitNode(
     value: Record<string, unknown>,
     parentIndex: number | undefined,
     depth: number,
+    underWebView: boolean,
   ): void {
     if (nodes.length >= limits.maxNodes) {
       throw snapshotSourceError('malformed-tree', 'node-limit-exceeded', {
@@ -170,9 +189,13 @@ export function decodeSnapshotBridgeTree(
     const node = nodeFacts(value, index, parentIndex, depth);
     nodes.push(node);
     maxTraversalDepth = Math.max(maxTraversalDepth, depth);
+    if (isWebHostedRemoteLeaf(node, children.length, underWebView)) {
+      webHostedRemoteLeaves.push(node.rect);
+    }
+    const hostsWeb = underWebView || node.type === WEB_VIEW_TYPE;
     for (const child of children) {
       if (!isRecord(child)) throw snapshotSourceError('malformed-tree', 'child-invalid');
-      visitNode(child, index, depth + 1);
+      visitNode(child, index, depth + 1, hostsWeb);
     }
   }
 }
@@ -222,6 +245,20 @@ function elementTypeName(
   }
   if (automationType === undefined) return undefined;
   return ELEMENT_TYPE_NAMES[automationType] ?? 'Other';
+}
+
+function isWebHostedRemoteLeaf(
+  node: RawSnapshotNode,
+  childCount: number,
+  underWebView: boolean,
+): boolean {
+  return underWebView && node.role === REMOTE_ELEMENT_CLASS && childCount === 0;
+}
+
+function isOpaqueRemoteLeaf(rect: Rect | undefined, viewport: IosViewportEvidence): boolean {
+  if (rect === undefined) return true;
+  if (!isPositiveFiniteRect(rect)) return false;
+  return viewport.kind !== 'reported' || isRectVisibleInViewport(rect, viewport.rect);
 }
 
 function frameFromGuest(value: unknown): Rect | undefined {

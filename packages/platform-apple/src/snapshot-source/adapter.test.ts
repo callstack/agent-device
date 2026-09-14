@@ -78,11 +78,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(rawDepthOne.stage, 'acquired');
     assert.equal(fixture.requestedDepths.at(-1), 1);
-    assert.ok(
-      rawDepthOne.acquisition.residue.some(
-        (item) => item.kind === 'truncated' && item.dimension === 'depth',
-      ),
-    );
+    assert.ok(rawDepthOne.acquisition.residue.some((item) => item.kind === 'truncated'));
 
     fixture.responsePid = 999;
     const outcome = await source.acquire({
@@ -92,6 +88,56 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     assert.equal(outcome.stage, 'failed');
     if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'stale-target');
     assert.equal(fixture.runs, 6);
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the Simulator AX source refuses a tree that ends at content another process owns', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-remote-'));
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of [
+    'SnapshotBridge.m',
+    'SnapshotBridgeRuntime.m',
+    'SnapshotBridgeRuntime.h',
+    'SnapshotBridgeCapture.h',
+    'SnapshotBridgeCapture.m',
+  ]) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  fixture.remoteContent = true;
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+
+  try {
+    for (const request of [
+      createIosSnapshotRequest(),
+      createIosSnapshotRequest({ acquisitionIntent: 'surface-observation' }),
+    ]) {
+      const outcome = await source.acquire({ target, hint: deriveIosCaptureHint(request) });
+      assert.equal(outcome.stage, 'failed');
+      if (outcome.stage === 'failed') {
+        assert.equal(outcome.failure.kind, 'unsupported');
+        assert.equal(outcome.failure.code, 'remote-content-boundary');
+        assert.equal(outcome.failure.details?.remoteElements, 1);
+      }
+    }
+    // A refused tree teaches no depth hint: nothing about it validated.
+    assert.deepEqual(fixture.diagnostics, []);
+
+    fixture.remoteContent = false;
+    const recovered = await source.acquire({
+      target,
+      hint: deriveIosCaptureHint(createIosSnapshotRequest()),
+    });
+    assert.equal(recovered.stage, 'acquired');
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });
@@ -373,6 +419,8 @@ type AdapterFixture = {
   truncated: boolean;
   /** Whether the fake guest answers with sound counters but an unusable tree. */
   malformedTree: boolean;
+  /** Whether the fake guest's tree ends at another process's content (a remote element leaf). */
+  remoteContent: boolean;
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
 };
@@ -397,6 +445,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     rejectLevelsAbove: undefined,
     truncated: false,
     malformedTree: false,
+    remoteContent: false,
     omitRecovery: false,
     diagnostics: [],
   };
@@ -542,7 +591,22 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
                   XC_kAXXCAttributeChildren:
                     request.maxDepth === 1
                       ? [{ XC_kAXXCAttributeElementType: 'Button', XC_kAXXCAttributeChildren: [] }]
-                      : [],
+                      : this.fixture.remoteContent
+                        ? [
+                            {
+                              XC_kAXXCAttributeElementType: 'WebView',
+                              XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
+                              XC_kAXXCAttributeChildren: [
+                                {
+                                  XC_kAXXCAttributeElementType: 'AXRemoteElement',
+                                  XC_kAXXCAttributeElementBaseType: 'NSObject',
+                                  XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
+                                  XC_kAXXCAttributeChildren: [],
+                                },
+                              ],
+                            },
+                          ]
+                        : [],
                 },
           },
           {

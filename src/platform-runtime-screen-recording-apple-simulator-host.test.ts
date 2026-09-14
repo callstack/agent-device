@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, onTestFinished, test, vi } from 'vitest';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
@@ -44,6 +45,89 @@ beforeEach(() => {
   processes.alive.clear();
   processes.starts.clear();
   processes.commands.clear();
+});
+
+test.each([
+  { exitCode: 16, pid: 43, hasIdentity: true, code: 'DEVICE_IN_USE' },
+  { exitCode: 16, pid: 43, hasIdentity: false, code: 'DEVICE_IN_USE' },
+  { exitCode: 16, pid: undefined, hasIdentity: false, code: 'DEVICE_IN_USE' },
+  { exitCode: 1, pid: 43, hasIdentity: true, code: 'UNKNOWN' },
+  { exitCode: 1, pid: 43, hasIdentity: false, code: 'UNKNOWN' },
+  { exitCode: 1, pid: undefined, hasIdentity: false, code: 'UNKNOWN' },
+])(
+  'classifies recorder exit $exitCode with pid=$pid and identity=$hasIdentity',
+  async ({ exitCode, pid, hasIdentity, code }) => {
+    const root = mkdtempForTestSync('agent-device-recording-busy-');
+    const failed = background(pid);
+    const stderr =
+      'Error starting video recorder: Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy"\nNSLocalizedFailureReason=Host recording is already in progress';
+    failed.resolveWait({ stdout: '', stderr, exitCode });
+    if (!hasIdentity) {
+      processes.starts.clear();
+      processes.commands.clear();
+    }
+
+    const error = await withTransport(
+      failed.process,
+      async () =>
+        await createAppleScreenRecordingHost().startSimulator(
+          simulator,
+          path.join(root, 'failed.mp4'),
+        ),
+    ).then(() => {
+      throw new Error('unexpected recording start');
+    }, normalizeError);
+
+    expect(error.code).toBe(code);
+    if (exitCode === 16) {
+      expect(error).toMatchObject({
+        retriable: false,
+        hint: expect.stringContaining('CoreSimulator'),
+        details: { reason: 'apple_simulator_recording_busy', exitCode, stderr },
+      });
+      expect(error.hint).toContain('record stop');
+    } else {
+      expect(error.details?.reason).toBeUndefined();
+    }
+  },
+);
+
+test('classifies a recorder exit that settles during the final identity poll', async () => {
+  vi.useFakeTimers();
+  const failed = background(43);
+  const readStart = vi.spyOn(processes.starts, 'get');
+  const identityPolls = 2_000 / 25 + 1;
+  readStart.mockImplementation(() => {
+    if (readStart.mock.calls.length === identityPolls) {
+      failed.resolveWait({
+        stdout: '',
+        stderr: 'Host recording is already in progress',
+        exitCode: 16,
+      });
+    }
+    return undefined;
+  });
+  try {
+    const root = mkdtempForTestSync('agent-device-recording-identity-deadline-');
+    const starting = withTransport(
+      failed.process,
+      async () => await startAppleSimulatorRecording(simulator, path.join(root, 'failed.mp4')),
+    ).then(() => {
+      throw new Error('unexpected recording start');
+    }, normalizeError);
+
+    await vi.waitFor(() => expect(readStart).toHaveBeenCalled());
+    await vi.runAllTimersAsync();
+    expect(readStart).toHaveBeenCalledTimes(identityPolls);
+    expect(await starting).toMatchObject({
+      code: 'DEVICE_IN_USE',
+      details: { reason: 'apple_simulator_recording_busy', exitCode: 16 },
+    });
+    expect(failed.kill).toHaveBeenCalledWith('SIGINT');
+  } finally {
+    readStart.mockRestore();
+    vi.useRealTimers();
+  }
 });
 
 test('waits for delayed output and rejects an early nonzero exit', async () => {
@@ -109,8 +193,45 @@ test('late provider acquisition after abort is rolled back exactly once', async 
   await expect(starting).rejects.toBe(reason);
   resolveStart?.(late.process);
   await vi.waitFor(() => expect(late.kill).toHaveBeenCalledTimes(1));
-  expect(late.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(late.kill).toHaveBeenCalledWith('SIGINT');
 });
+
+test.each([
+  { label: 'before the acquisition is observed', abortedInStart: true },
+  { label: 'while the transport imports settle', abortedInStart: false },
+])(
+  'discards a transport rejection that arrives when the start was aborted %s',
+  async ({ abortedInStart }) => {
+    const root = mkdtempForTestSync('agent-device-recording-rejected-start-');
+    const controller = new AbortController();
+    const reason = new Error('cancel simulator transport start');
+    let rejectStart: ((error: unknown) => void) | undefined;
+    const start = vi.fn(() => {
+      if (abortedInStart) controller.abort(reason);
+      return new Promise<ReturnType<typeof background>['process']>((_resolve, reject) => {
+        rejectStart = reject;
+      });
+    });
+
+    const rejection = observeUnhandledRejections();
+    const starting = withAppleSimulatorScreenRecordingTransport(
+      { available: true, mode: 'transport-composed', start },
+      async () =>
+        await startAppleSimulatorRecording(
+          simulator,
+          path.join(root, 'capture.mp4'),
+          controller.signal,
+        ),
+    );
+    const rejected = expect(starting).rejects.toBe(reason);
+    await vi.waitFor(() => expect(rejectStart).toBeTypeOf('function'));
+    if (!abortedInStart) controller.abort(reason);
+    rejectStart?.(controller.signal.reason);
+
+    await rejected;
+    await expect(rejection.settle()).resolves.toEqual([]);
+  },
+);
 
 test('resolved provider acquisition aborted before publication removes partial output and settles', async () => {
   const root = mkdtempForTestSync('agent-device-recording-acquired-abort-');
@@ -134,7 +255,7 @@ test('resolved provider acquisition aborted before publication removes partial o
 
   await expect(starting).rejects.toBe(reason);
   expect(acquired.kill).toHaveBeenCalledTimes(1);
-  expect(acquired.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(acquired.kill).toHaveBeenCalledWith('SIGINT');
   expect(fs.existsSync(outputPath)).toBe(false);
 });
 
@@ -235,6 +356,7 @@ test.each([
 });
 
 test('pidless provider process is killed and settled before start fails', async () => {
+  const rejection = observeUnhandledRejections();
   const running = background(undefined);
   await expect(
     withTransport(
@@ -242,8 +364,51 @@ test('pidless provider process is killed and settled before start fails', async 
       async () => await startAppleSimulatorRecording(simulator, '/tmp/pidless.mp4'),
     ),
   ).rejects.toThrow('complete process identity');
-  expect(running.kill).toHaveBeenCalledWith('SIGKILL');
+  expect(running.kill.mock.calls).toEqual([['SIGINT']]);
+  await expect(rejection.settle()).resolves.toEqual([]);
 });
+
+test('unpublished recorder cleanup gives SIGINT a grace window before forcing exit', async () => {
+  vi.useFakeTimers();
+  try {
+    const running = background(undefined);
+    running.kill.mockImplementationOnce(() => true);
+    const starting = withTransport(
+      running.process,
+      async () => await startAppleSimulatorRecording(simulator, '/tmp/stalled-provider.mp4'),
+    );
+    const rejected = expect(starting).rejects.toThrow('complete process identity');
+
+    await vi.waitFor(() => expect(running.kill).toHaveBeenCalledWith('SIGINT'));
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(running.kill).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rejected;
+    expect(running.kill.mock.calls).toEqual([['SIGINT'], ['SIGKILL']]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+function observeUnhandledRejections() {
+  const messages: string[] = [];
+  const listener = (reason: unknown) => {
+    messages.push(reason instanceof Error ? reason.message : String(reason));
+  };
+  process.on('unhandledRejection', listener);
+  onTestFinished(() => {
+    process.off('unhandledRejection', listener);
+  });
+  return {
+    settle: async () => {
+      for (let turn = 0; turn < 2; turn += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      return messages;
+    },
+  };
+}
 
 function background(pid: number | undefined, command?: string) {
   let settle: ((result: { stdout: string; stderr: string; exitCode: number }) => void) | undefined;

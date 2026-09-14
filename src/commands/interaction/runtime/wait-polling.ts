@@ -1,4 +1,4 @@
-import { AppError, type AppErrorDetails } from '@agent-device/kernel/errors';
+import { AppError, asAppError, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { WAIT_REASONS, type WaitReason } from '@agent-device/contracts/wait';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { selectorPollBudget } from '@agent-device/selectors/selector-pipeline';
@@ -18,11 +18,17 @@ export const DEFAULT_WAIT_TIMEOUT_MS = SELECTOR_PIPELINE_POLICIES.wait.poll.defa
 export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated' | 'runner-restart-exhausted';
 
 /**
- * How one poll ended: a readable capture, an unreadable content verdict the wait rode out, the
+ * How one poll ended: a readable capture, an unreadable content verdict the wait rode out, a
+ * producer refusal the wait rode out because the producer itself classified it as retriable, the
  * deadline cancelling the capture in flight, or that cancellation carrying runner-restart
  * evidence. Whether a readable capture matched is the caller's verdict, not the poll's.
  */
-export type WaitPollOutcome = 'readable' | 'unreadable' | 'deadline' | 'runner-restart';
+export type WaitPollOutcome =
+  | 'readable'
+  | 'unreadable'
+  | 'retriable'
+  | 'deadline'
+  | 'runner-restart';
 
 /** One poll on the wait's own clock: when it started after the wait began and how long it ran. */
 export type WaitPollRecord = {
@@ -69,17 +75,26 @@ export type WaitPollingClassification = {
   preserveUnreadableOnStall?: boolean;
 };
 
-type UnreadablePollTracker = {
+/** The failure a poll hit instead of an observation, and how the tracker classified it. */
+type UnobservedPollCause = {
+  outcome: Extract<WaitPollOutcome, 'unreadable' | 'retriable'>;
+  error: unknown;
+};
+
+type UnobservedPollTracker = {
   attempt: <T>(capture: () => Promise<T>) => Promise<T | undefined>;
+  /** The last poll's cause — also names that poll's timeline outcome. */
+  lastUnobservedCause: () => UnobservedPollCause | undefined;
   recordReadableCapture: () => void;
   readableCaptures: () => number;
-  rethrowIfNeverReadable: () => void;
+  /** The cause every poll hit, or undefined once any capture was readable. */
+  neverReadableCause: () => UnobservedPollCause | undefined;
 };
 
 type WaitFailurePolling = {
   failureEvidence: () => WaitFailureEvidence;
   preserveUnreadableOnStall?: boolean;
-  rethrowIfNeverReadable: () => void;
+  neverReadableCause: () => UnobservedPollCause | undefined;
 };
 
 /**
@@ -97,7 +112,7 @@ export function createWaitPolling(
   const budget = selectorPollBudget(policy);
   const timeoutMs = requestedTimeoutMs ?? budget.defaultTimeoutMs;
   const startedAtMs = now(runtime);
-  const unreadable = createUnreadablePollTracker(classification.isUnreadableError);
+  const unobserved = createUnobservedPollTracker(classification.isUnreadableError);
   const polls: WaitPollRecord[] = [];
   let timeoutEvidence: Partial<WaitFailureEvidence> = {};
   const remainingMs = () => Math.max(0, timeoutMs - (now(runtime) - startedAtMs));
@@ -113,15 +128,15 @@ export function createWaitPolling(
         options,
         remainingMs(),
         async (signal) =>
-          await unreadable.attempt(async () => {
+          await unobserved.attempt(async () => {
             const value = await capture(signal);
             captureWasReadable = true;
             return value;
           }),
       );
       if (!result.timedOut) {
-        if (captureWasReadable) unreadable.recordReadableCapture();
-        recordPoll(captureWasReadable ? 'readable' : 'unreadable');
+        if (captureWasReadable) unobserved.recordReadableCapture();
+        recordPoll(completedPollOutcome(captureWasReadable, unobserved.lastUnobservedCause()));
         return result;
       }
       const runnerRestart = runnerRestartTimeoutEvidence(result.error);
@@ -131,33 +146,45 @@ export function createWaitPolling(
       // Count only captures that completed before runWithinWaitDeadline returned a timeout.
       return {
         timedOut: true as const,
-        // A poll is a backend stall when no completed capture established a readable observation;
-        // the poll index is not evidence. This remains true after one or more unreadable content
-        // verdicts followed by a capture that consumes the remaining budget.
-        deadline:
-          runnerRestart !== undefined
-            ? ('runner-restart-exhausted' as const)
-            : unreadable.readableCaptures() === 0
-              ? ('capture-stalled' as const)
-              : ('capture-truncated' as const),
+        deadline: timedOutDeadline(runnerRestart !== undefined, unobserved.readableCaptures()),
       };
     },
     hasTimeRemaining: () => remainingMs() > 0,
     failureEvidence: (): WaitFailureEvidence => ({
       timeoutMs,
-      readableCaptures: unreadable.readableCaptures(),
+      readableCaptures: unobserved.readableCaptures(),
       captures: polls.length,
       polls: compactPollTimeline(polls),
       waitedMs: now(runtime) - startedAtMs,
       ...timeoutEvidence,
     }),
     preserveUnreadableOnStall: classification.preserveUnreadableOnStall,
-    rethrowIfNeverReadable: unreadable.rethrowIfNeverReadable,
+    neverReadableCause: unobserved.neverReadableCause,
     sleepUntilNextPoll: async () =>
       await sleepWithWaitCancellation(runtime, options, Math.min(budget.intervalMs, remainingMs())),
     timeoutMs,
     waitedMs: () => now(runtime) - startedAtMs,
   };
+}
+
+/** How a poll that finished inside its deadline is recorded: what it produced, or why it did not. */
+function completedPollOutcome(
+  readable: boolean,
+  cause: UnobservedPollCause | undefined,
+): WaitPollOutcome {
+  if (readable) return 'readable';
+  return cause?.outcome ?? 'unreadable';
+}
+
+/**
+ * Why the deadline, not the target, ended the wait. A poll is a backend stall when no completed
+ * capture established a readable observation; the poll index is not evidence. This remains true
+ * after one or more unreadable content verdicts followed by a capture that consumes the remaining
+ * budget.
+ */
+function timedOutDeadline(runnerRestarted: boolean, readableCaptures: number): WaitPollDeadline {
+  if (runnerRestarted) return 'runner-restart-exhausted';
+  return readableCaptures === 0 ? 'capture-stalled' : 'capture-truncated';
 }
 
 function compactPollTimeline(polls: readonly WaitPollRecord[]): WaitPollRecord[] {
@@ -200,6 +227,49 @@ function waitTargetAbsentError(message: string, evidence: WaitFailureEvidence): 
   });
 }
 
+/**
+ * Hands back the cause every poll hit when none produced a readable observation, because it says
+ * more than a generic timeout. The two kinds of cause need different treatment:
+ *
+ * - A content verdict (sparse, truncated, unreadable) already describes the capture it came from,
+ *   so it is preserved exactly as the producer wrote it.
+ * - A retriable refusal describes a single poll. On its own it cannot distinguish one immediate
+ *   refusal from a whole budget spent being refused — the distinction this wait exists to make —
+ *   so it is re-raised with the producer's code, message and retry details intact plus the poll
+ *   timeline that shows the exhaustion.
+ *
+ * `preserveContentVerdict` is the caller's policy for the first kind only (`wait absent` keeps its
+ * typed observation ahead of the wait's own stall verdict); a refusal is preserved for every wait.
+ */
+function rethrowNeverReadableCause(
+  polling: WaitFailurePolling,
+  evidence: WaitFailureEvidence,
+  preserveContentVerdict: boolean,
+): void {
+  const cause = polling.neverReadableCause();
+  if (cause === undefined) return;
+  // A refusal names a condition the caller can act on, so it is preserved however the budget ran
+  // out — polled away between refusals, or cancelled mid-capture by the deadline.
+  if (cause.outcome === 'retriable') throw waitRetriableRefusalError(cause.error, evidence);
+  if (preserveContentVerdict) throw cause.error;
+}
+
+function waitRetriableRefusalError(cause: unknown, evidence: WaitFailureEvidence): AppError {
+  const refusal = asAppError(cause);
+  return new AppError(
+    refusal.code,
+    refusal.message,
+    {
+      // `wait_capture_stalled` by definition: no readable capture established an observation
+      // before the timeout. A reason the producer already set is more specific, so it wins.
+      reason: WAIT_REASONS.captureStalled satisfies WaitReason,
+      ...refusal.details,
+      ...evidence,
+    },
+    refusal,
+  );
+}
+
 export function waitTimeoutError(
   message: string,
   polling: WaitFailurePolling,
@@ -210,12 +280,14 @@ export function waitTimeoutError(
     return waitRunnerRestartExhaustedError(message, evidence);
   }
   if (deadline === 'capture-stalled') {
-    if (polling.preserveUnreadableOnStall) polling.rethrowIfNeverReadable();
+    // Whether a content verdict outranks the stall verdict is the caller's policy; a refusal is
+    // preserved either way.
+    rethrowNeverReadableCause(polling, evidence, polling.preserveUnreadableOnStall === true);
     return waitCaptureStalledError(message, evidence);
   }
   if (deadline === 'capture-truncated') return waitDeadlineExceededError(message, evidence);
 
-  polling.rethrowIfNeverReadable();
+  rethrowNeverReadableCause(polling, evidence, true);
   return evidence.readableCaptures === 0
     ? waitCaptureStalledError(message, evidence)
     : waitTargetAbsentError(message, evidence);
@@ -245,30 +317,47 @@ function copyStringDetail<Key extends keyof WaitFailureEvidence>(
   return typeof value === 'string' ? ({ [key]: value } as Pick<WaitFailureEvidence, Key>) : {};
 }
 
-function createUnreadablePollTracker(
+/**
+ * A failure the producer itself classified as retriable — the iOS runner draining the abandoned
+ * main-thread work of a command that exceeded its execution watchdog reports `RUNNER_BUSY` this
+ * way (#2484 follow-up). It says the surface was not observable on *this* poll, not that it stays
+ * unobservable: `wait` is a budgeted retry loop, so it keeps polling and lets the deadline rather
+ * than the first refusal decide. A runner past its wedge threshold reports `RUNNER_WEDGED`, which
+ * is not retriable and still ends the wait at once.
+ */
+function isRetriablePollFailure(error: unknown): boolean {
+  return error instanceof AppError && error.details?.retriable === true;
+}
+
+/**
+ * Rides out the polls that produced no observation and keeps the last one's error, so a wait that
+ * never saw a readable capture fails with the reason its polls actually hit rather than a generic
+ * timeout. The content classification is the caller's (`wait absent` reads its own observation
+ * verdicts); the retriable-refusal arm applies to every wait, because it is about whether the
+ * producer could answer at all.
+ */
+function createUnobservedPollTracker(
   isUnreadableError: (error: unknown) => boolean = isUnreadableCaptureContentError,
-): UnreadablePollTracker {
+): UnobservedPollTracker {
   let readableCaptureCount = 0;
-  let lastUnreadableError: unknown;
+  let lastCause: UnobservedPollCause | undefined;
   return {
     attempt: async <T>(capture: () => Promise<T>): Promise<T | undefined> => {
       try {
         return await capture();
       } catch (error) {
-        if (!isUnreadableError(error)) throw error;
-        lastUnreadableError = error;
+        if (isUnreadableError(error)) lastCause = { outcome: 'unreadable', error };
+        else if (isRetriablePollFailure(error)) lastCause = { outcome: 'retriable', error };
+        else throw error;
         return undefined;
       }
     },
+    lastUnobservedCause: () => lastCause,
     recordReadableCapture: () => {
       readableCaptureCount += 1;
     },
     readableCaptures: () => readableCaptureCount,
-    rethrowIfNeverReadable: () => {
-      if (readableCaptureCount === 0 && lastUnreadableError !== undefined) {
-        throw lastUnreadableError;
-      }
-    },
+    neverReadableCause: () => (readableCaptureCount === 0 ? lastCause : undefined),
   };
 }
 

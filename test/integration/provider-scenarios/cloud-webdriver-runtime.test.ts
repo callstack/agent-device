@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
+  clearRequestAbortRegistration,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
+import {
   CLOUD_WEBDRIVER_PROVIDERS,
   createProviderWebDriver,
 } from '@agent-device/provider-webdriver';
@@ -29,6 +34,9 @@ import {
 
 const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const CLIENT_VERSION = '0.20.3-test';
+/** One transparent pixel: enough for a driver answer to be real base64 PNG. */
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 test('packaged Cloud WebDriver facade drives provider devices through daemon commands', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
@@ -207,6 +215,82 @@ test('packaged Cloud WebDriver expiry releases the live provider session', async
     }
   });
 }, 15_000);
+
+// #2509: on a screen that never goes idle — a looping onboarding video — the driver's
+// page-source read outlived the request that asked for it. The client had given up,
+// but nothing at the wire said so: the read stayed in flight and every command after
+// it, including one that never touches the UI tree, queued behind a capture nobody was
+// waiting for. A capture nobody is waiting for has to end, and the session has to stay
+// usable after it.
+test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its session', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const { daemon, server } = world;
+    const requestId = 'cloud-webdriver-cancelled-source';
+    const lease = await openWebDriverSession(daemon);
+    const registration = registerRequestAbort(requestId);
+    server.sourceBehavior = 'never';
+
+    try {
+      const capture = daemon.callCommand('snapshot', [], leaseFlags(lease.leaseId), {
+        meta: { ...leaseMeta(lease.leaseId), requestId },
+      });
+      await waitForSourceRequest(server);
+      markRequestCanceled(requestId);
+
+      // Bounded on purpose: the bug was that this never returned at all, and a
+      // regression should fail here with its reason rather than as a test timeout.
+      const canceled = await settleWithin(
+        capture,
+        3_000,
+        'the abandoned capture was still running after its client hung up',
+      );
+      assert.notEqual(canceled.json?.error, undefined, 'an abandoned capture must not succeed');
+      assert.equal(canceled.json?.error?.data?.details?.reason, 'request_canceled');
+      assert.equal(
+        sourceCalls(server)[0]?.signal?.aborted,
+        true,
+        'the abandoned read must be hung up at the wire, not left held by our transport',
+      );
+
+      await withProviderScenarioTempDir('agent-device-cloud-webdriver-cancel-', async (tempDir) => {
+        // The command that never walks the UI tree still works on the same session —
+        // the whole user-visible symptom, in one assertion.
+        const shot = await daemon.callCommand(
+          'screenshot',
+          [path.join(tempDir, 'after-cancel.png')],
+          leaseFlags(lease.leaseId),
+          { meta: leaseMeta(lease.leaseId) },
+        );
+        assertRpcOk(shot);
+      });
+    } finally {
+      clearRequestAbortRegistration(registration);
+    }
+  });
+}, 20_000);
+
+function sourceCalls(server: FakeWebDriverServer): readonly CloudWebDriverHttpCall[] {
+  return server.calls.filter((call) => call.method === 'GET' && call.path.endsWith('/source'));
+}
+
+async function settleWithin<T>(work: Promise<T>, budgetMs: number, failure: string): Promise<T> {
+  const stillRunning = Symbol('still-running');
+  const settled = await Promise.race([
+    work,
+    new Promise<typeof stillRunning>((resolve) => {
+      setTimeout(() => resolve(stillRunning), budgetMs).unref?.();
+    }),
+  ]);
+  assert.notEqual(settled, stillRunning, failure);
+  return settled as T;
+}
+
+async function waitForSourceRequest(server: FakeWebDriverServer): Promise<void> {
+  for (let attempt = 0; attempt < 200 && sourceCalls(server).length === 0; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.ok(sourceCalls(server).length > 0, 'the driver never received a page-source request');
+}
 
 async function createCloudWebDriverWorld() {
   const server = await FakeWebDriverServer.start();
@@ -423,6 +507,13 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
   artifactFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
   /**
+   * How the driver answers `GET /source`. `never` is a driver still walking a UI
+   * that never goes idle: the read stays in flight until the caller's own
+   * cancellation reaches it, which is the only way to test what a client giving up
+   * actually does to the session (#2509).
+   */
+  sourceBehavior: 'ok' | 'never' = 'ok';
+  /**
    * How the driver answers `POST /rotation`. `unsupported` is a driver that does not implement the
    * route; `server-error` is one that implements it and failed. Orientation must treat those
    * differently — only the first earns a fallback.
@@ -451,7 +542,11 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
         }),
       'POST /app-automate/upload': () => cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' }),
       'GET /wd/hub/session/wd-1/source': () =>
-        cloudWebDriverTestJson({ value: fakeWebDriverSource() }),
+        this.sourceBehavior === 'never'
+          ? { body: null, neverAnswers: true }
+          : cloudWebDriverTestJson({ value: fakeWebDriverSource() }),
+      'GET /wd/hub/session/wd-1/screenshot': () =>
+        cloudWebDriverTestJson({ value: TINY_PNG_BASE64 }),
       'GET /wd/hub/session/wd-1/window/rect': () =>
         cloudWebDriverTestJson({ value: { x: 0, y: 0, width: 1080, height: 1920 } }),
       'DELETE /wd/hub/session/wd-1/actions': () =>

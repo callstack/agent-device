@@ -6,6 +6,11 @@ import { computeTargetEvidence } from '../../../session-target-evidence.ts';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { resolveUnverifiedWrapperControl } from '@agent-device/selectors/interaction-targeting';
+import {
+  ELEMENT14_DISTINCT_SUBTREE_NODES,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
+} from '@agent-device/selectors/interaction-targeting-fixtures';
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
@@ -646,3 +651,54 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
 });
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// #2498 end-to-end mechanism: a read that resolved through the wrapper-chain
+// collapse must verify against the SAME tree it was recorded on. Dispatch
+// resolves one control reported by its own accessibility wrapper to the control;
+// verification that named no winner for that pair reported IDENTITY_MISMATCH for
+// a screen that had not changed, on the step's very first replay.
+// ---------------------------------------------------------------------------
+
+test('#2498 e2e: a read recorded on a collapsed wrapper chain verifies on the same tree', () => {
+  const nodes = toSnapshotNodes(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+  const reports = nodes.filter((node) => node.identifier === 'scoring_home_button');
+  const control = resolveUnverifiedWrapperControl(nodes, reports);
+  assert.ok(control, 'dispatch resolves the toolbar button, not the item host that reports it');
+  const recorded = computeTargetEvidence({ node: control, preActionNodes: nodes });
+  assert.ok(recorded);
+
+  // `is <predicate>` and `get attrs` verify without disambiguation.
+  const result = classifyReplayTarget({
+    recorded,
+    token: 'id="scoring_home_button"',
+    nodes,
+    platform: PLATFORM,
+    refLabel: undefined,
+    requireRect: false,
+    allowDisambiguation: false,
+  });
+  assertVerified(result, { winnerRef: 'e2', matchCount: 2 });
+});
+
+test('#2498 e2e: matches in distinct subtrees stay a refusal, not a collapse to one of them', () => {
+  const nodes = toSnapshotNodes(ELEMENT14_DISTINCT_SUBTREE_NODES);
+  const recordedWinner = nodes.find((node) => node.type === 'XCUIElementTypeButton');
+  assert.ok(recordedWinner);
+  const recorded = computeTargetEvidence({ node: recordedWinner, preActionNodes: nodes });
+  assert.ok(recorded);
+
+  const result = classifyReplayTarget({
+    recorded,
+    token: 'label="Team Standup"',
+    nodes,
+    platform: PLATFORM,
+    refLabel: undefined,
+    requireRect: false,
+    allowDisambiguation: false,
+  });
+  assert.equal(result.verified, false);
+  if (result.verified) throw new Error('unreachable');
+  assert.equal(result.kind, 'identity-mismatch');
+  assert.equal(result.matchCount, 4);
+});

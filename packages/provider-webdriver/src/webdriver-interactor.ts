@@ -22,6 +22,7 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
+import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { touchPointer } from './webdriver-gestures.ts';
 import {
   scrollFrameFromAndroidWebDriverSource,
@@ -303,18 +304,37 @@ class WebDriverInteractor implements Interactor {
     await this.client.screenshot(outPath);
   }
 
-  async snapshot(_options?: SnapshotOptions) {
+  async snapshot(options?: SnapshotOptions) {
     this.requireSupport('snapshot');
+    return await this.captureSource(options?.signal);
+  }
+
+  /**
+   * One page-source read, bound to the request that asked for it. Providers answer
+   * commands one at a time, so a read the client merely gave up on is not gone: the
+   * driver keeps walking the tree and every later command queues behind it (#2509).
+   */
+  private async captureSource(signal?: AbortSignal) {
+    const source = await this.readSource(signal);
     if (this.backend === 'xctest') {
-      const { captureWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
-      return await captureWebDriverIosSnapshot(this.client, this.targetId);
+      const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
+      return acquireWebDriverIosSnapshot(source, this.targetId);
     }
     const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes: parseWebDriverSourceFacts(await this.client.source(), 'android').nodes,
+      nodes: parseWebDriverSourceFacts(source, 'android').nodes,
     };
+  }
+
+  private async readSource(signal?: AbortSignal): Promise<string> {
+    try {
+      return await this.client.source(signal === undefined ? {} : { signal });
+    } catch (error) {
+      if (!isWebDriverRequestTimeout(error)) throw error;
+      throw webDriverSourceTimeoutError(error);
+    }
   }
 
   async back(_mode?: BackMode): Promise<void> {
@@ -572,4 +592,30 @@ function webDriverOperationForGesture(plan: GesturePlan): CloudWebDriverOperatio
     case 'rotate':
       return 'rotateGesture';
   }
+}
+
+/**
+ * A source read that ran out of budget is the one WebDriver timeout a caller can
+ * do something about, and #2509 showed it reading as an unexplained hang: the
+ * driver answers this call by walking the live UI tree, so a screen that never
+ * goes idle — looping video, live ticker, continuous animation — gives the walk no
+ * reason to settle. The transport's reason code is kept as-is; what the capture
+ * adds is what the wait was waiting for, and the one thing the caller cannot do,
+ * since this read's budget is the transport's own and no wider than the command's
+ * `--timeout` envelope around it.
+ */
+function webDriverSourceTimeoutError(error: AppError): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The cloud driver did not finish reading the screen in its budget.',
+    {
+      ...error.details,
+      hint:
+        'A screen that never goes idle (looping video, live ticker, continuous animation) ' +
+        "gives the driver no moment to read the UI tree. This read has the transport's own " +
+        'budget and does not grow with --timeout; take a screenshot, or drive the screen from ' +
+        'refs an earlier snapshot already captured.',
+    },
+    error,
+  );
 }

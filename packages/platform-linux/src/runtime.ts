@@ -196,8 +196,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     home: homeKindUnavailable,
     orientation: linuxPlatformLeafUnavailable,
     tvRemote: linuxPlatformLeafUnavailable,
-    readClipboard: clipboardKindUnavailable,
-    writeClipboard: clipboardKindUnavailable,
+    clipboard: clipboardKindUnavailable,
     // The Linux interactor's own `appSwitcher` throws unsupported, and the retired descriptor
     // declared `linux: {}`, so no Linux cell was ever admitted.
     appSwitcher: linuxPlatformLeafUnavailable,
@@ -210,9 +209,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     awaitAlert: linuxPlatformLeafUnavailable,
     acceptAlert: linuxPlatformLeafUnavailable,
     dismissAlert: linuxPlatformLeafUnavailable,
-    keyboardStatus: linuxPlatformLeafUnavailable,
-    keyboardDismiss: linuxPlatformLeafUnavailable,
-    keyboardEnter: linuxPlatformLeafUnavailable,
+    keyboard: linuxPlatformLeafUnavailable,
     audioProbeCapture: linuxAudioProbeUnavailable,
     audioProbeQuery: linuxAudioProbeUnavailable,
     perf: linuxPlatformLeafUnavailable,
@@ -249,6 +246,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // every cell — a direction-authored fling's speed semantics, two-contact synthesis, and
       // target-authored drag timing.
       ...gestureRuntimeOperationFacts({
+        unsupported: gestureKindUnavailable,
         plan: linuxDesktopFact(device, gestureKindUnavailable),
         directionalFling: directionalFlingUnavailable,
         multiTouch: multiTouchUnavailable,
@@ -270,6 +268,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // Parity with the retired `clipboard` capability bucket (`{ device: true }`): wl-clipboard
       // / xclip / xsel drive the desktop session's selection, and no other Linux cell has one.
       ...clipboardRuntimeOperationFacts({
+        unsupported: clipboardKindUnavailable,
         read: linuxDesktopFact(device, clipboardKindUnavailable),
         write: linuxDesktopFact(device, clipboardKindUnavailable),
       }),
@@ -288,14 +287,10 @@ function linuxDesktopFact(
 function linuxTouchFacts(device: DeviceInfo) {
   const point = device.kind === 'device' ? supported : focusKindUnavailable;
   return touchRuntimeOperationFacts({
+    unsupported: unsupportedPlatformLeaf,
     tap: point,
-    tapRef: unsupportedPlatformLeaf,
     longPress: point,
-    hover: unsupportedPlatformLeaf,
-    hoverRef: unsupportedPlatformLeaf,
     fill: point,
-    fillRef: unsupportedPlatformLeaf,
-    tapElementSelector: unsupportedPlatformLeaf,
   });
 }
 

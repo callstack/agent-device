@@ -30,6 +30,10 @@ import { handleSessionCommands } from './session-command-harness.ts';
 import { refFrameState } from '../../ref-frame.ts';
 
 const available = Object.freeze({ available: true } as const);
+const keyboardFamilyDenial = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing' as const,
+});
 
 /** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection.
  * `keyboardDismiss` is overridable so a test can force the invocation itself to reject, proving
@@ -41,6 +45,7 @@ function keyboardCapableRuntime(
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(device), providerMode: 'local' },
     operations: keyboardRuntimeOperationFacts({
+      unsupported: keyboardFamilyDenial,
       status: available,
       dismiss: available,
       enter: available,

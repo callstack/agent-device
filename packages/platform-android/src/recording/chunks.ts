@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingStartInput,
@@ -235,7 +236,7 @@ async function waitForStopped(
   for (let elapsed = 0; elapsed <= GRACEFUL_STOP_TIMEOUT_MS; elapsed += STOP_POLL_INTERVAL_MS) {
     const state = await transport.inspect(processIdentity);
     if (state === 'missing') return true;
-    if (state === 'ownership-lost') {
+    if (provesAndroidScreenRecordTermination(state)) {
       throw new Error(
         `Android screenrecord ownership could not be confirmed for pid ${processIdentity.pid}`,
       );

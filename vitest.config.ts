@@ -29,7 +29,7 @@ const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
 // instruments, so this file reports the same lines with or without it.
 //
 // Membership is by demonstrated failure, not by a property of the code. In particular it is
-// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro.test.ts`
+// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro-run-script.test.ts`
 // does exactly that and stays in `unit-core`, instrumented and green. The proximate cause was
 // never reproduced — what these entries share is an observed record of vanishing from the
 // Coverage lane, and that record is the only thing that admits a file here. A new entry needs
@@ -147,10 +147,18 @@ export default defineConfig({
             // Publish preparation spawns only fixture-owned scripts and proves both Android
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
+            // The packager's Swift comment scanner: pure string transform, and the only place a
+            // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
+            // to survive packaging before the npm package ships unbuildable Swift.
+            'scripts/__tests__/strip-swift-comments.test.ts',
+            // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
+            // over two strings; the gate itself is what runs the packager and the Swift parse.
+            'scripts/__tests__/packaged-runner-swift.test.ts',
             // Parse-only guard on the checked-in registry entry: the npm package must declare
             // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
             'scripts/__tests__/mcp-metadata.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            'scripts/png-crop-benchmark/*.test.ts',
             'scripts/ios-ax-bridge-spike/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',

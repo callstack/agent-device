@@ -152,6 +152,7 @@ export function createManagedLeaseAdmission(params: {
         pending,
         horizon.deadline,
         AbortSignal.any([signal, fenced.signal]),
+        (error) => stop('authority-unconfirmed', normalizeError(error)),
       );
       if (stopped) return stopped;
       if (abandoned) return abandoned;
@@ -199,6 +200,7 @@ function waitForRenewal(
   work: Promise<void>,
   deadline: Deadline,
   signal: AbortSignal,
+  onRejection: (error: unknown) => void,
 ): Promise<ManagedLeaseAdmissionFailure | undefined> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => finish({ status: 'deadline-exceeded' }), deadline.remainingMs());
@@ -208,6 +210,14 @@ function waitForRenewal(
       listener[Symbol.dispose]();
       resolve(result);
     }
-    void work.then(() => finish());
+    // A settled renewal only means "re-check the horizon"; a rejected one is unconfirmed
+    // authority, so it must fence instead of re-arming renewal work in a tight loop.
+    void work.then(
+      () => finish(),
+      (error) => {
+        onRejection(error);
+        finish();
+      },
+    );
   });
 }

@@ -1,4 +1,6 @@
+import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
 import {
+  GESTURE_SAMPLE_INTERVAL_MS,
   interpolateGesturePoint,
   sampleGestureOffsets,
 } from '@agent-device/contracts/gesture-plan';
@@ -18,7 +20,9 @@ export type AndroidLongPressTouchPlan = {
   pointers: readonly [PointerTrajectory];
 };
 
-export type AndroidTouchPlan = GesturePlan | AndroidLongPressTouchPlan;
+export type AndroidTouchPlan =
+  | (GesturePlan & { releaseBehavior?: ScrollReleaseBehavior })
+  | AndroidLongPressTouchPlan;
 
 /**
  * Transport samples are strictly denser than the canonical endpoint pair, so the shared plan a
@@ -57,7 +61,8 @@ export type AndroidProviderTouchPlan =
 export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTouchPlan {
   if (plan.topology === 'two' || plan.intent === 'longPress') return plan;
 
-  const [{ pointerId, samples: canonicalSamples }] = plan.pointers;
+  const { releaseBehavior, ...gesturePlan } = plan;
+  const [{ pointerId, samples: canonicalSamples }] = gesturePlan.pointers;
   const offsets = [
     ...new Set([
       ...sampleGestureOffsets(plan.durationMs, 'android'),
@@ -75,6 +80,7 @@ export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTou
     const start = canonicalSamples[segmentIndex]!;
     const end = canonicalSamples[segmentIndex + 1]!;
     const segmentDurationMs = end.offsetMs - start.offsetMs;
+    const progress = (offsetMs - start.offsetMs) / segmentDurationMs;
     return {
       offsetMs,
       point:
@@ -83,7 +89,9 @@ export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTou
           : interpolateGesturePoint(
               start.point,
               end.point,
-              (offsetMs - start.offsetMs) / segmentDurationMs,
+              releaseBehavior === 'controlled'
+                ? controlledScrollProgress(progress, segmentDurationMs)
+                : progress,
             ),
     };
   });
@@ -91,7 +99,14 @@ export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTou
   const samples: AndroidTransportSamples = [dense[0]!, dense[1]!, dense[2]!, ...dense.slice(3)];
 
   return {
-    ...plan,
+    ...gesturePlan,
     pointers: [{ pointerId, samples }],
   };
+}
+
+function controlledScrollProgress(progress: number, durationMs: number): number {
+  const accelerationFraction = Math.min(GESTURE_SAMPLE_INTERVAL_MS / durationMs, 0.5);
+  return progress < accelerationFraction
+    ? progress ** 2 / accelerationFraction
+    : 1 - (1 - progress) ** 2 / (1 - accelerationFraction);
 }

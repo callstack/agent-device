@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripSwiftComments } from './strip-swift-comments.mjs';
 
 const UNIT_TEST_CONDITION = 'AGENT_DEVICE_RUNNER_UNIT_TESTS';
 const SOURCE_DIR = path.join('apple', 'runner');
@@ -52,6 +53,8 @@ function packageAppleRunnerSource(options = {}) {
     copiedFiles: 0,
     strippedFiles: 0,
     strippedBlocks: 0,
+    strippedComments: 0,
+    strippedCommentBytes: 0,
   };
 
   processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary);
@@ -127,6 +130,7 @@ function consumeSwiftLine(state, line) {
   if (isRunnerUnitTestBlockStart(line)) {
     state.skippedDepth = 1;
     state.strippedBlocks += 1;
+    state.output.push(emptiedLine(line));
     return;
   }
   state.output.push(line);
@@ -139,6 +143,16 @@ function consumeSkippedConditionalLine(state, line) {
   if (isConditionalEnd(line)) {
     state.skippedDepth -= 1;
   }
+  state.output.push(emptiedLine(line));
+}
+
+/**
+ * A removed line, reduced to its newline. Keeping it is what makes the packaged file's line N the
+ * same line N as the checkout's: a user's `xcodebuild` failure names the packaged path, and the
+ * block strip would otherwise move everything below a unit-test block by hundreds of lines.
+ */
+function emptiedLine(line) {
+  return line.endsWith('\n') ? '\n' : '';
 }
 
 function processDirectory(sourceDir, outputDir, relativeDir, summary, options = {}) {
@@ -210,15 +224,24 @@ function validateFile(sourcePath, relativePath, summary, options) {
   return validateSwiftFile(sourcePath, relativePath, summary);
 }
 
+// The unit-test strip runs first and stays line-based, so which blocks it removes does not depend
+// on comment removal. The comment scanner then reads Swift that is already in its shipped shape,
+// and the shipped-test-method guard sees exactly the text the package will contain. Both passes
+// empty the lines they remove rather than deleting them, so the packaged file has the checkout's
+// line numbering; `pnpm check:packaged-runner-swift` asserts that, file by file.
 function validateSwiftFile(sourcePath, relativePath, summary) {
   const source = fs.readFileSync(sourcePath, 'utf8');
   const stripped = stripRunnerUnitTestBlocks(source, sourcePath);
-  assertNoShippedTestMethods(stripped.contents, relativePath);
+  const withoutComments = stripSwiftComments(stripped.contents, sourcePath);
+  assertNoShippedTestMethods(withoutComments.contents, relativePath);
   if (stripped.strippedBlocks > 0) {
     summary.strippedFiles += 1;
     summary.strippedBlocks += stripped.strippedBlocks;
   }
-  return stripped;
+  summary.strippedComments += withoutComments.removedComments;
+  summary.strippedCommentBytes +=
+    Buffer.byteLength(stripped.contents) - Buffer.byteLength(withoutComments.contents);
+  return { contents: withoutComments.contents, strippedBlocks: stripped.strippedBlocks };
 }
 
 function assertNoShippedTestMethods(strippedContents, relativePath) {
@@ -323,7 +346,8 @@ if (isMainModule()) {
       const relativeOutput = path.relative(path.resolve(options.root), summary.outputRoot);
       console.log(
         `Packaged Apple runner source at ${relativeOutput} ` +
-          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks).`,
+          `(${summary.copiedFiles} files, stripped ${summary.strippedBlocks} unit-test blocks ` +
+          `and ${summary.strippedComments} comments worth ${summary.strippedCommentBytes} bytes).`,
       );
     }
   }

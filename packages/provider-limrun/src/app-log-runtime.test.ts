@@ -358,6 +358,14 @@ test('fails closed for a stale Android identity before exposing facts or binding
   expect(facts.operations.captureScreenshot).toMatchObject({ available: false });
   expect(facts.operations.focusPoint).toMatchObject({ available: false });
   expect(facts.operations.typeText).toMatchObject({ available: false });
+  // Every keyboard operation shares the session gap, not a leaf's own refusal.
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+      hint: 'Limrun requires a matching live provider session for this device.',
+    });
+  }
   await expect(
     owner.bind({ device: staleDevice, intent: { kind: 'ordinary' }, scope }),
   ).rejects.toMatchObject({
@@ -473,11 +481,56 @@ test('closes every Limrun gesture and scroll cell without a live session', async
   const facts = await owner.inspectFacts(limrunAndroid);
   for (const operation of [
     'performGesturePlan',
+    'performDirectionalFlingPlan',
     'performMultiTouchGesturePlan',
     'performTargetAuthoredDrag',
     'gestureViewport',
     'scrollDirection',
   ] as const) {
-    expect(facts.operations[operation].available).toBe(false);
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+      hint: 'Limrun requires a matching live provider session for this device.',
+    });
   }
+});
+
+test('an iOS limrun dump bounded to one entry reports unnamed traffic without its identities', async () => {
+  // Five keep-alive requests CFNetwork logged no URL for, and no connection
+  // line to resolve them against: many more unnamed tasks than maxEntries.
+  const summaries = Array.from(
+    { length: 5 },
+    (_, index) =>
+      `2026-09-09 18:22:28.167 Df app[1:2] [com.apple.CFNetwork:Summary] Task <2FAEF670>.<${index + 10}> summary for task success {transaction_duration_ms=1, response_status=200, connection=9, reused=1}`,
+  );
+  const base = unusedHost();
+  const owner = createLimrunPlatformRuntimeOwner(
+    limrunOwnerOptions({
+      host: {
+        ...base,
+        appLogs: {
+          ...base.appLogs,
+          readRecent: async () => ({
+            path: '/sessions/session/app.log',
+            exists: true,
+            text: `${summaries.join('\n')}\n`,
+            skippedLines: 0,
+          }),
+        },
+      },
+    }),
+  );
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+
+  const result = await binding.operations.networkDump?.({
+    sessionId: 'session',
+    maxEntries: 1,
+    include: 'summary',
+    maxPayloadChars: 2048,
+    maxScanLines: 4000,
+  });
+
+  if (result?.source !== 'app-log') throw new Error('expected app-log result');
+  expect(result.dump.unnamedRequests).toBe(5);
+  expect(result.dump).not.toHaveProperty('unnamedRequestIds');
 });

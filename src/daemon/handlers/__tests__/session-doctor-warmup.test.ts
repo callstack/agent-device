@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
+import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
@@ -28,7 +28,7 @@ vi.mock('../session-doctor-app.ts', () => ({
 vi.mock('../session-doctor-metro.ts', () => ({
   probeMetro: vi.fn(async () => ({ id: 'metro', status: 'pass', summary: 'mocked' })),
 }));
-vi.mock('../../../provider-device-runtime.ts', () => ({
+vi.mock('../../provider-device-admission.ts', () => ({
   isActiveProviderDevice: vi.fn(() => false),
 }));
 

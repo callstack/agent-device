@@ -56,7 +56,7 @@ test('settle recovers the session baseline when resolved target evidence is abse
 
   assert.equal(outcome.observation.settled, true);
   assert.equal(
-    outcome.settledNodes?.some((node) => node.label === 'action file'),
+    outcome.settledCapture?.nodes.some((node) => node.label === 'action file'),
     false,
   );
   assert.ok(
@@ -99,7 +99,7 @@ test('settle uses the authorized ref frame instead of a polluted evidence captur
         kind: 'ref',
         point: { x: 201, y: 795 },
         target: { kind: 'ref', ref: '@e5' },
-        preActionNodes: elementTransientRoomSnapshot.nodes,
+        preAction: { nodes: elementTransientRoomSnapshot.nodes },
       },
       quietMs: 500,
       timeoutMs: 5_000,
@@ -108,7 +108,7 @@ test('settle uses the authorized ref frame instead of a polluted evidence captur
 
   assert.equal(outcome.observation.settled, true);
   assert.equal(
-    outcome.settledNodes?.some((node) => node.label === 'action file'),
+    outcome.settledCapture?.nodes.some((node) => node.label === 'action file'),
     false,
   );
   assert.ok(

@@ -1,7 +1,7 @@
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from './host.ts';
-import type { RunnerCommand } from './runner-contract.ts';
+import { classifyRunnerReportedError, type RunnerCommand } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
@@ -288,14 +288,20 @@ function runnerStatusFailureError(
   const hint =
     typeof status.lifecycleErrorHint === 'string' ? status.lifecycleErrorHint : undefined;
   const readinessPreflight = readReadinessPreflightRecoveryDetails(transportError);
+  // The journal's code means exactly what the same code means on a live response, so read it with
+  // the one classifier (#2484 follow-up): a `RUNNER_BUSY` recovered from the lifecycle journal must
+  // stay `COMMAND_FAILED` + retriable, or a polling `wait` sees an unclassified failure and
+  // surrenders its budget to a condition that clears on its own.
+  const classification = classifyRunnerReportedError(errorCode);
   return new AppError(
-    toAppErrorCode(errorCode),
+    classification.code,
     errorMessage,
     {
       command: command.command,
       commandId: command.commandId,
       lifecycleState: 'failed',
       recovery: 'runner_reported_failure',
+      ...classification.details,
       ...readinessPreflight,
       hint: hint ?? runnerReportedFailureHint(command.command, readinessPreflight),
       logPath: options.logPath,

@@ -4,7 +4,10 @@ import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboar
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import type {
+  RuntimeOperationFact,
+  RuntimeOperationUnavailability,
+} from '@agent-device/contracts/platform-runtime';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
@@ -113,6 +116,15 @@ function appleAppEventFact(device: DeviceInfo): RuntimeOperationFact {
   return resolveDeviceAppleOs(device) === 'watchos' ? appleWatchOsUnavailable : available;
 }
 
+/**
+ * The clipboard denial this leaf reports for a half it does not name: the leaf's own refusal where
+ * it has one, since a leaf that serves clipboard today has no clipboard refusal to state.
+ */
+function appleClipboardFamilyUnavailable(device: DeviceInfo): RuntimeOperationUnavailability {
+  const cell = appleClipboardFact(device);
+  return cell.available ? clipboardLeafUnavailable : cell;
+}
+
 /** The system-surface cells: clipboard read/write, app-event delivery, settings, and alerts. */
 export function appleSystemFacts(device: DeviceInfo) {
   const clipboard = appleClipboardFact(device);
@@ -120,7 +132,11 @@ export function appleSystemFacts(device: DeviceInfo) {
   // press its buttons, so splitting them would invent a cell no Apple owner is ever in.
   const alert = appleAlertFact(device);
   return Object.freeze({
-    ...clipboardRuntimeOperationFacts({ read: clipboard, write: clipboard }),
+    ...clipboardRuntimeOperationFacts({
+      unsupported: appleClipboardFamilyUnavailable(device),
+      read: clipboard,
+      write: clipboard,
+    }),
     ...alertRuntimeOperationFacts({ read: alert, wait: alert, accept: alert, dismiss: alert }),
     ...appEventRuntimeOperationFacts({ triggerAppEvent: appleAppEventFact(device) }),
     ...settingsRuntimeOperationFacts({

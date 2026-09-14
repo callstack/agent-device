@@ -1,7 +1,7 @@
 // Production-seam coverage for the real request-timeout route.
 //
-// src/daemon-client/__tests__/daemon-client.test.ts covers `resolveRequestTimeoutHint`
-// as a pure formatter, but a pure-formatter test cannot catch a bug in
+// src/daemon-client/__tests__/daemon-client-timeout.test.ts covers
+// `resolveRequestTimeoutHint` as a pure formatter, but a pure-formatter test cannot catch a bug in
 // CLEANUP ELIGIBILITY: whether `cleanupTimedOutIosRunnerBuilds` (the Apple
 // xcodebuild pkill sweep) actually runs. This file spies on the real
 // process-execution seam (`runCmdSync`, @agent-device/host-kit/command) and drives an

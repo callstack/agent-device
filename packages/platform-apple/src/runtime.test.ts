@@ -9,6 +9,7 @@ import { listIosApps } from './core/app-resolution.ts';
 import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
+import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
@@ -197,11 +198,6 @@ function expectAppleSnapshotAvailability(
   // capture does; every other supported leaf advertises and binds it.
   expect(binding.facts.operations.readTextAtPoint.available).toBe(available);
   expect(binding.operations.readTextAtPoint).toBeTypeOf(available ? 'function' : 'undefined');
-  const nativeSelectorAvailable = available && device.appleOs !== 'macos';
-  expect(binding.facts.operations.findSelector.available).toBe(nativeSelectorAvailable);
-  expect(binding.operations.findSelector).toBeTypeOf(
-    nativeSelectorAvailable ? 'function' : 'undefined',
-  );
 }
 
 test.each(Object.entries(leaves))(
@@ -219,6 +215,29 @@ test.each(Object.entries(leaves))(
     expectNavigationAndKeyboardFacts(binding, device);
   },
 );
+
+test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial', async () => {
+  for (const device of [leaves.macos, leaves.ios, leaves.tvos]) {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    const hoverDenial = {
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: HOVER_UNAVAILABLE_HINT,
+    };
+    expect(binding.facts.operations.hoverPoint).toEqual(hoverDenial);
+    expect(binding.facts.operations.hoverRef).toEqual(hoverDenial);
+    expect(binding.operations.hoverPoint).toBeTypeOf('undefined');
+    expect(binding.operations.hoverRef).toBeTypeOf('undefined');
+  }
+});
 
 /** Both the fact and the bound operation function agree on availability, for one operation. */
 function expectOperationAvailability(
@@ -583,9 +602,6 @@ function expectLegacyLifecycleFactCell(
     (facts.device.kind === 'simulator' || facts.device.kind === 'device');
   expect(facts.operations.captureSnapshot.available).toBe(snapshotAvailable);
   expect(facts.operations.readTextAtPoint.available).toBe(snapshotAvailable);
-  expect(facts.operations.findSelector.available).toBe(
-    snapshotAvailable && facts.device.appleOs !== 'macos',
-  );
 }
 
 // The macOS non-app surface branch calls `captureSurface` directly instead of going through

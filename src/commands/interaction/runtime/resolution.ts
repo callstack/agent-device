@@ -34,6 +34,7 @@ import {
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { truncateUtf8 } from './truncate-utf8.ts';
+import { surfaceScopedNodes } from './post-action-surface.ts';
 import type {
   InteractionTarget,
   PointTarget,
@@ -42,6 +43,7 @@ import type {
   ResolutionDiagnosticEntry,
   ResolutionDisclosure,
   ResolvedInteractionTarget,
+  SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
@@ -224,11 +226,11 @@ async function resolvePointInteractionTarget(
       ...(warning ? { warning } : {}),
     };
   }
-  const preActionNodes = await tryCaptureEvidenceBaseline(runtime, options);
+  const baseline = await tryCaptureEvidenceBaseline(runtime, options);
   return {
     kind: 'point',
     point: { x: target.x, y: target.y },
-    ...(preActionNodes ? { preActionNodes } : {}),
+    ...(baseline ? { preAction: baseline } : {}),
     ...(warning ? { warning } : {}),
   };
 }
@@ -236,10 +238,10 @@ async function resolvePointInteractionTarget(
 async function tryCaptureEvidenceBaseline(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-): Promise<SnapshotNode[] | undefined> {
+): Promise<SurfaceScopedNodes | undefined> {
   try {
     const capture = await captureInteractionSnapshot(runtime, options, true);
-    return capture.snapshot.nodes;
+    return surfaceScopedNodes(capture.snapshot);
   } catch {
     // Evidence is best-effort: a failed baseline capture must not fail the
     // action itself. Post-action evidence (if any) will simply omit
@@ -249,7 +251,10 @@ async function tryCaptureEvidenceBaseline(
 }
 
 /** The node a ref target acts on, plus the tree the shared guards read it against. */
-type RefResolution = { nodes: SnapshotState['nodes']; resolved: ResolvedRefNode };
+type RefResolution = {
+  tree: SurfaceScopedNodes;
+  resolved: ResolvedRefNode;
+};
 
 /**
  * #1654: adopt the node the caller already resolved instead of resolving the
@@ -276,7 +281,12 @@ function adoptPreresolvedRefTarget(
     );
   }
   return {
-    nodes: preresolved.nodes,
+    tree: {
+      nodes: preresolved.nodes,
+      ...(preresolved.iosSystemSurfaceBundleId
+        ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
+        : {}),
+    },
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),
   };
 }
@@ -287,7 +297,7 @@ async function readRefResolution(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
 ): Promise<RefResolution> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
-  return { nodes: capture.snapshot.nodes, resolved: capture.resolved };
+  return { tree: surfaceScopedNodes(capture.snapshot), resolved: capture.resolved };
 }
 
 async function resolveRefInteractionTarget(
@@ -296,9 +306,10 @@ async function resolveRefInteractionTarget(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const { nodes, resolved } = params.preresolvedTarget
+  const { tree, resolved } = params.preresolvedTarget
     ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
     : await readRefResolution(runtime, options, target);
+  const nodes = tree.nodes;
   // #1542: point/response read from the returned (possibly rescue-patched) node.
   const visibleNode = await runInteractionPipelineStages({
     policy: params.pipeline,
@@ -324,7 +335,7 @@ async function resolveRefInteractionTarget(
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
-      nodes,
+      tree,
       params.action,
       resolved.resolution,
     ),
@@ -389,7 +400,7 @@ async function resolveSelectorInteractionTarget(
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
-      capture.snapshot.nodes,
+      surfaceScopedNodes(capture.snapshot),
       params.action,
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
     ),
@@ -532,11 +543,12 @@ function buildResolutionDiagnosticEntry(
 // Shared tail of a resolved ref/selector interaction target: the node itself
 // plus everything derived from it for the response. Every response field
 // describes the DISPATCHED node — the #1280 retarget rides only on the
-// `recordingTarget` side channel below.
+// `recordingTarget` side channel below. `tree` is the capture the node was
+// resolved from, and becomes the pre-action baseline this publishes.
 function describeResolvedInteractionNode(
   runtime: AgentDeviceRuntime,
   node: SnapshotNode,
-  nodes: SnapshotState['nodes'],
+  tree: SurfaceScopedNodes,
   action: InteractionAction,
   resolution: ResolutionDisclosure,
 ): {
@@ -545,10 +557,11 @@ function describeResolvedInteractionNode(
   refLabel: string | undefined;
   targetHittable?: boolean;
   hint?: string;
-  preActionNodes: SnapshotState['nodes'];
+  preAction: SurfaceScopedNodes;
   resolution: ResolutionDisclosure;
   recordingTarget?: RecordingTargetOverride;
 } {
+  const nodes = tree.nodes;
   return {
     node,
     selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
@@ -557,7 +570,7 @@ function describeResolvedInteractionNode(
     }),
     refLabel: resolveRefLabel(node, nodes),
     ...describeNonHittableTarget(node, action),
-    preActionNodes: nodes,
+    preAction: tree,
     resolution,
     ...pressRecordingTargetOverride(runtime, node, nodes, action),
   };
@@ -881,11 +894,11 @@ async function assertVisibleSelectorTarget(
     // A selector re-resolves against a fresh snapshot on every attempt, so the
     // recovery is: move the named direction, then retry THIS selector — no
     // separate snapshot step, and no @ref (a scroll expires the ref frame,
-    // #1366). Naming the direction stops the wrong-way / retry-the-same-ref loop;
-    // bounded steps stop the overshoot loop — a single large scroll (fling
-    // momentum on iOS) can sail past the target, so a short gesture pan lands it.
+    // #1366). `--until` is that whole loop as one command: it checks the same
+    // selector between passes, which is also what keeps a large step from
+    // overshooting, so the hint no longer has to trade distance for accuracy.
     hint: (direction) =>
-      `${scrollRevealClause(direction)} in small steps, retrying ${action} with the same selector after each (it re-resolves against a fresh snapshot). A single large scroll can overshoot the target; a short bounded gesture pan lands it more reliably. If it is inside a closed drawer or another tab, open that container first.`,
+      `${scrollRevealClause(direction, selector)} then retry ${action} with the same selector. --until checks the selector between passes, so it stops on the target rather than sailing past it. If it is inside a closed drawer or another tab, open that container first.`,
   });
 }
 
@@ -902,19 +915,29 @@ async function assertVisibleRefTarget(
     details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
     // The scroll that reveals the target expires the ref frame (#1366, ADR
     // 0014), so retrying this @ref would be rejected next. Steer to a selector,
-    // which re-resolves against a fresh snapshot and bypasses the ref-frame guard.
+    // which re-resolves against a fresh snapshot and bypasses the ref-frame guard
+    // — and which `--until` can then check between passes.
     hint: (direction) =>
-      `${scrollRevealClause(direction)} in small steps (a single large scroll can overshoot; a short bounded gesture pan lands it more reliably), then retry ${action} with a selector (e.g. text=/id=) rather than this @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.`,
+      `${scrollRevealClause(direction, null)} then retry ${action} with a selector (e.g. text=/id=) rather than this @ref — the scroll expires the ref frame, so re-run snapshot -i before reusing any @ref.`,
   });
 }
 
-// Shared lead-in for both off-screen hints. Names the concrete `scroll <dir>`
-// when the geometry gives one, and falls back to the generic phrasing when the
-// target is off more than one edge in a way that has no single reveal. Callers
-// append the bounded-steps guidance: a single large scroll (fling momentum on
-// iOS) can sail past the target, so small bounded moves are what actually land.
-function scrollRevealClause(direction: OffscreenScrollDirection | null): string {
-  return direction ? `Scroll ${direction} toward it` : 'Scroll toward it';
+/**
+ * Shared lead-in for both off-screen hints: the one command that reveals the target.
+ *
+ * When the geometry names a direction AND the caller has a selector to check, this is a complete
+ * `scroll <dir> --until <selector>` — one request that stops on the target instead of the
+ * scroll-then-look-again loop the hint used to prescribe. Without a selector to check (an @ref
+ * refusal) or without a single reveal direction (off more than one edge), it degrades to naming
+ * the move and leaves the stop condition to the caller's own next step.
+ */
+function scrollRevealClause(
+  direction: OffscreenScrollDirection | null,
+  selector: string | null,
+): string {
+  if (!direction) return 'Scroll toward it,';
+  if (!selector) return `Scroll ${direction} toward it,`;
+  return `Run scroll ${direction} --until '${selector}' to bring it on screen,`;
 }
 
 /**
@@ -951,11 +974,12 @@ export async function preflightNativeRefInteraction(
   targetHittable?: boolean;
   hint?: string;
   node?: SnapshotNode;
-  preActionNodes?: SnapshotNode[];
+  preAction?: SurfaceScopedNodes;
 }> {
   const session = await runtime.sessions.get(options.session ?? 'default');
-  const nodes = session?.snapshot?.nodes;
-  if (!nodes || normalizeRef(target.ref) === null) return {};
+  const storedSnapshot = session?.snapshot;
+  const nodes = storedSnapshot?.nodes;
+  if (!storedSnapshot || !nodes || normalizeRef(target.ref) === null) return {};
   const resolved = tryResolveRefNode(nodes, target.ref, {
     fallbackLabel: target.fallbackLabel ?? '',
   });
@@ -984,7 +1008,7 @@ export async function preflightNativeRefInteraction(
     // ADR 0012 decision 3: the guard lookup above doubles as the record-time
     // evidence source for the fast path, at zero extra capture cost.
     node: visibleNode,
-    preActionNodes: nodes,
+    preAction: surfaceScopedNodes(storedSnapshot),
   };
 }
 

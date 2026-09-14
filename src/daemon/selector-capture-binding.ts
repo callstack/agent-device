@@ -1,9 +1,6 @@
 import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
 import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  FindSelectorRuntimeOperations,
-  FindTextRuntimeOperations,
-} from '@agent-device/contracts/selector-observation-runtime';
+import type { FindTextRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import type {
   CaptureSnapshotInput,
   SnapshotResult,
@@ -32,13 +29,11 @@ export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
 
 /** Optional operations appear only for the command intent that declared them. */
 export type BoundSelectorFindText = FindTextRuntimeOperations['findText'];
-export type BoundSelectorFindSelector = FindSelectorRuntimeOperations['findSelector'];
 
 export type BoundSelectorOperations = Readonly<{
   capture: BoundSelectorCapture;
   readText?: BoundSelectorRead;
   findText?: BoundSelectorFindText;
-  findSelector?: BoundSelectorFindSelector;
 }>;
 
 export type ResolvedSelectorCapture =
@@ -76,7 +71,6 @@ export async function resolveBoundSelectorCapture(
       capture: bound.capture,
       ...(bound.readTextAtPoint ? { readText: bound.readTextAtPoint } : {}),
       ...(bound.findText ? { findText: bound.findText } : {}),
-      ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
     },
   };
 }

@@ -6,7 +6,13 @@ import type {
 /** #1933: every classified backend publishes this shared predicate in the wire `hittable` field. */
 type SnapshotBackendHittable = 'geometric-actionability';
 type SnapshotBackendSupport = 'yes' | 'no' | 'n/a';
-type SnapshotRegularDepthCapability = 'presented-frontier' | 'flat' | 'raw-only';
+/**
+ * How a backend's acquisition relates to a regular `--depth` request. Presentation applies the
+ * presented-depth cut to whatever hierarchy was acquired, so every backend serves the request;
+ * the value says whether acquisition stops at the frontier, is flat, or walks its raw ladder and
+ * is cut afterwards.
+ */
+type SnapshotRegularDepthCapability = 'presented-frontier' | 'flat' | 'presentation-cut';
 
 type SnapshotBackendCapability = {
   supportsRawProjection: boolean;
@@ -57,7 +63,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   'private-ax': {
     forceable: true,
     supportsRawProjection: true,
-    regularDepth: 'raw-only',
+    regularDepth: 'presentation-cut',
     hittable: 'geometric-actionability',
     deepExtension: 'yes',
     depthLadder: 'yes',

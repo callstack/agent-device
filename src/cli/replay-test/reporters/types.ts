@@ -74,6 +74,7 @@ export type ReplayTestReporter = {
   onTestStep?(test: ReplayTestStep, context: ReplayTestReporterContext): void;
   onTestResult?(test: ReplayTestResult, context: ReplayTestReporterContext): void;
   onSuiteEnd?(suite: ReplaySuiteResult, context: ReplayTestReporterContext): void | Promise<void>;
+  /** Return an integer from 0 to 255, or undefined; a reporter can only raise the suite exit code. */
   getExitCode?(suite: ReplaySuiteResult): number | undefined;
 };
 

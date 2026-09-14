@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -84,11 +86,7 @@ async function toolOutput(
   args: string[],
   deadline: SnapshotSourceDeadline,
 ): Promise<string> {
-  const result = await host.run(command, args, {
-    allowFailure: true,
-    signal: deadline.signal,
-    timeoutMs: Math.min(10_000, remainingSnapshotSourceMs(deadline, 'toolchain-probe-deadline')),
-  });
+  const result = await runToolchainProbe(host, command, args, deadline);
   if (result.exitCode !== 0) {
     throw snapshotSourceError('unsupported', 'toolchain-probe-failed', {
       command,
@@ -99,4 +97,41 @@ async function toolOutput(
   const output = (result.stdout || result.stderr).trim();
   if (!output) throw snapshotSourceError('unsupported', 'toolchain-probe-empty', { command });
   return output;
+}
+
+/**
+ * Retries exactly once, and only the exec layer's structured timeout: the stall
+ * {@link COLD_TOOLCHAIN_PROBE_TIMEOUT_MS} names clears on the next exec of the same tool.
+ * Both attempts read one deadline, so the retry gets what the stall left.
+ */
+async function runToolchainProbe(
+  host: SnapshotSourceHost,
+  command: string,
+  args: string[],
+  deadline: SnapshotSourceDeadline,
+): Promise<ExecResult> {
+  try {
+    return await execToolchainProbe(host, command, args, deadline);
+  } catch (error) {
+    if (!isCommandTimeoutError(error)) throw error;
+    if (deadline.signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
+    if (deadline.clock.remainingMs(deadline.now()) <= 0) throw error;
+    return await execToolchainProbe(host, command, args, deadline);
+  }
+}
+
+function execToolchainProbe(
+  host: SnapshotSourceHost,
+  command: string,
+  args: string[],
+  deadline: SnapshotSourceDeadline,
+): Promise<ExecResult> {
+  return host.run(command, args, {
+    allowFailure: true,
+    signal: deadline.signal,
+    timeoutMs: Math.min(
+      COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+      remainingSnapshotSourceMs(deadline, 'toolchain-probe-deadline'),
+    ),
+  });
 }

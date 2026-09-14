@@ -54,7 +54,7 @@
     "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon-client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
     "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
-    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",
+    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
     "src/daemon-client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
     "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
     "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
@@ -119,7 +119,7 @@
     "src/daemon/server/http-server.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
     "src/daemon/server/http-server.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
     "src/daemon/server/http-server.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
-    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:719b5b8c29a95e9d2be01850bb97c8120f5a04aecc09c265bebfc6631e41ffa3",
+    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:ca661f6dd2de6e517c520dbd1e20b59b24b58d925157ed06123149ed2bc0fa3b",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
@@ -208,13 +208,13 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
-      "digest": "sha256:efa9a5da4c7288cceae5656b468946ad3a2af0f0f0fb940f8a37987f922aa4b8",
-      "rationale": "#2110 adds the optional providerApp parameter to lease allocation. A released protocol-2 daemon ignores unknown JSON-RPC parameters, while requests without an initial app retain the previous payload exactly."
+      "digest": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
+      "rationale": "#2110 added the optional providerApp parameter to lease allocation; #2494 extends the same additive projection to the full provider-allocation flag set the lease-lifecycle provider reads in prepareSession — device selection (platform, device), the app/os, the session-naming fields, and the configured device-feature and AWS knobs — so a fresh remote allocation reaches BrowserStack/AWS with a named, configured session instead of failing on a missing --device/--platform or landing in Untitled Project/Build. Producer and consumer both read one shared projection (readLeaseAllocateProviderFlags). Every field is optional and forwarded only when the caller supplied it: a released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request carrying none of these retains the previous payload byte-for-byte."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
-      "digest": "sha256:719b5b8c29a95e9d2be01850bb97c8120f5a04aecc09c265bebfc6631e41ffa3",
-      "rationale": "#2110 reads the optional providerApp lease-allocation parameter into the existing flags bag. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted."
+      "digest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",

@@ -25,8 +25,8 @@ import { createRequestExecutionLocks } from './request-execution-locks.ts';
 import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
+import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import {
-  isHumanControlMutation,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -239,9 +239,7 @@ export async function createRequestExecutionScope(params: {
           providerAppCatalog: params.providerAppCatalog,
         });
         scope.req = scopedReq;
-        return isHumanControlMutation(scopedReq)
-          ? await leaseRegistry.runDeviceMutation(scopedReq.internal?.admittedLease, task)
-          : await task();
+        return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);

@@ -13,8 +13,19 @@ export type CommandSchema = {
   allowedFlags?: readonly FlagKey[];
   supportedFlags?: readonly FlagKey[];
   defaults?: Partial<CliFlags>;
-  /** Replaces the generated synopsis in `--help`, for shapes the generator cannot express. */
+  /**
+   * Replaces the generated synopsis grammar in `--help`, for shapes the generator cannot express.
+   * The flag tail after it stays generated from `usageFlags`, so this string never restates the
+   * command's option list; a bracket it writes itself must be declared out of that tail.
+   */
   usageOverride?: string;
+  /**
+   * The options the synopsis names in its `[label]` flag tail; defaults to `allowedFlags`. Declare
+   * `[]` when the synopsis is pure grammar (or writes its own mutually-exclusive brackets) and the
+   * `Command flags:` section is the option list. Affects the synopsis only: every option in
+   * `allowedFlags` is documented and parsed regardless.
+   */
+  usageFlags?: readonly FlagKey[];
   /** Replaces the generated synopsis in the command list, which stays terser than `--help`. */
   listUsageOverride?: string;
   // Swaps a shared flag's usageDescription for this command only, when the flag's generic

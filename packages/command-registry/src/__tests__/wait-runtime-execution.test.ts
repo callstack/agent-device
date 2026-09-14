@@ -17,12 +17,12 @@ test('wait descriptor declares its complete runtime use with no capability bucke
     {
       required: ['captureSnapshot'],
       preferred: [],
-      conditional: ['findText', 'findSelector'],
+      conditional: ['findText'],
     },
     {
       required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
       preferred: [],
-      conditional: ['findText', 'findSelector'],
+      conditional: ['findText'],
     },
   ]);
 });
@@ -42,9 +42,6 @@ test('wait declares native observations as fact-conditional operations, never op
     expect(use.conditional).toContain('findText');
     expect(use.required).not.toContain('findText');
     expect(use.preferred).not.toContain('findText');
-    expect(use.conditional).toContain('findSelector');
-    expect(use.required).not.toContain('findSelector');
-    expect(use.preferred).not.toContain('findSelector');
     expect(use.required).toContain('captureSnapshot');
   }
 });

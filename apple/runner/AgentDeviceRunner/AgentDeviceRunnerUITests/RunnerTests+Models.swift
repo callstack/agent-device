@@ -241,6 +241,8 @@ struct DataPayload: Codable {
   var truncated: Bool?
   var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
+  /// Set when the capture describes an in-place system surface, not the app itself (#2438).
+  var systemSurface: SystemSurfaceProvenancePayload?
   var gestureStartUptimeMs: Double?
   var gestureEndUptimeMs: Double?
   var x: Double?
@@ -266,6 +268,10 @@ struct DataPayload: Codable {
   var gestureFallback: String?
   var gestureFallbackMessage: String?
   var gestureFallbackHint: String?
+  // Scroll keyboard avoidance evidence (#2500): the swipe was clipped to the band above an
+  // on-screen keyboard, and where that band ended. `referenceHeight` already names the clipped axis.
+  var keyboardAvoided: Bool?
+  var keyboardMinY: Double?
   var maestroNonHittableCoordinateFallbackUsed: Bool?
   var textEntryRoute: String?
   var runnerFatal: Bool?
@@ -273,6 +279,12 @@ struct DataPayload: Codable {
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
+}
+
+/// `kind` mirrors the TS `IosSystemSurfaceKind` (e.g. "web-auth").
+struct SystemSurfaceProvenancePayload: Codable {
+  let bundleId: String
+  let kind: String
 }
 
 struct SnapshotQualityPayload: Codable {

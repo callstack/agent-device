@@ -166,6 +166,12 @@ function hasMatchingPresentation(
   return hasMatchingLegacyPresentation(baseline, after, command);
 }
 
+/**
+ * Key equality, where the key is the capture's whole presentation identity — producer, generation,
+ * and the surface the capture described, since an in-place system surface (a web sign-in sheet) is
+ * captured under its own host lineage (#2438). So a cross-surface pair is refused here, without
+ * this module knowing that system surfaces exist.
+ */
 function compareSnapshotIdentity(
   baseline: SnapshotState,
   after: SnapshotState,

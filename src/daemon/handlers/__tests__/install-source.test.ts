@@ -14,7 +14,9 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
@@ -359,35 +361,24 @@ function sourceRuntimeFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
       findText: unavailable,
-      findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,
       ...touchRuntimeOperationFacts({
+        unsupported: unavailable,
         tap: unavailable,
         longPress: unavailable,
-        hover: unavailable,
         fill: unavailable,
-        tapElementSelector: unavailable,
       }),
-      ...gestureRuntimeOperationFacts({
-        plan: unavailable,
-        directionalFling: unavailable,
-        multiTouch: unavailable,
-        targetAuthoredDrag: unavailable,
-        viewport: unavailable,
-      }),
+      ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
       ...scrollRuntimeOperationFacts({ scroll: unavailable }),
       readTextAtPoint: unavailable,
       back: unavailable,
       home: unavailable,
       setOrientation: unavailable,
       tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
+      ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
+      ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       appSwitcher: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,

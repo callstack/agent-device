@@ -39,6 +39,7 @@ export function analyzeScrollEdgeState(
     canScroll,
     emptySnapshot: false,
     scope: buildScrollContainerScope(container, nodes),
+    fingerprint: buildSurfaceFingerprint(container, nodes),
   };
 }
 
@@ -205,4 +206,55 @@ function containsPoint(rect: NonNullable<SnapshotNode['rect']>, point: Point): b
 
 function isUsableRect(rect: SnapshotNode['rect']): rect is NonNullable<SnapshotNode['rect']> {
   return Boolean(rect && rect.width > 0 && rect.height > 0);
+}
+
+/**
+ * A stable signature of the content the container currently shows, built from the container's own
+ * descendants (via the parent chain), each keyed by its identity fields and rounded position.
+ * Scrolling shifts descendant rects, and a recycled cell that keeps its slot while its text changes
+ * re-keys, so a real pass always changes it; a gesture the container ignores leaves it byte-identical.
+ * Descendant scoping — not geometric overlap — is the point: it excludes the keyboard, its typing
+ * predictions, and scroll-indicator overlays, which are not under the scroller and would otherwise
+ * flicker and mask a stuck container. Rounded to whole pixels so layout jitter never fakes movement;
+ * a false "unchanged" only defers to a later pass or the pass limit. An empty string (a container with
+ * no positioned descendants) leaves both loops to their edge/pass signals.
+ */
+function buildSurfaceFingerprint(container: SnapshotNode, nodes: SnapshotNode[]): string {
+  const byIndex = new Map<number, SnapshotNode>();
+  for (const node of nodes) byIndex.set(node.index, node);
+  const descendants: string[] = [];
+  for (const node of nodes) {
+    const rect = node.rect;
+    if (!isUsableRect(rect)) continue;
+    if (node.index === container.index || !isDescendantOf(node, container.index, byIndex)) continue;
+    descendants.push(
+      `${node.type}#${surfaceIdentity(node)}@${Math.round(rect.x)},${Math.round(rect.y)}`,
+    );
+  }
+  if (descendants.length === 0) return '';
+  descendants.sort();
+  return descendants.join(';');
+}
+
+function surfaceIdentity(node: SnapshotNode): string {
+  // All three content fields, not first-present: a recycled cell keeps its identifier and slot while
+  // its label/value change, and that text change is exactly the progress the signature must register.
+  const identifier = (node.identifier ?? '').trim();
+  const label = (node.label ?? '').trim();
+  const value = (node.value ?? '').trim();
+  return `${identifier} ${label} ${value}`;
+}
+
+function isDescendantOf(
+  node: SnapshotNode,
+  ancestorIndex: number,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): boolean {
+  let parentIndex = node.parentIndex;
+  let guard = byIndex.size + 1;
+  while (parentIndex !== undefined && guard-- > 0) {
+    if (parentIndex === ancestorIndex) return true;
+    parentIndex = byIndex.get(parentIndex)?.parentIndex;
+  }
+  return false;
 }

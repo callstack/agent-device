@@ -38,7 +38,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       description:
         'Stop a local daemon after verifying its PID/start-time identity. Use --clean to remove retained Apple runner processes and leases owned by that daemon.',
     },
-    usageOverride: 'daemon stop [--state-dir <path>] [--clean]',
+    usageOverride: 'daemon stop [--state-dir <path>]',
     listUsageOverride: 'daemon stop',
     positionalArgs: ['stop'],
     allowedFlags: ['clean'],
@@ -51,7 +51,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'Inspect enforced host-local device ownership claims without starting or contacting a daemon; status --stale only inspects proven-stale claims. release --stale settles a provably dead owner through exact-owner resource reconciliation and clears its claim last — live and uncertain owners always fail closed. Automatic reclamation still occurs during open and daemon startup.',
     },
     usageOverride:
-      'device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>] [--stale]',
+      'device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>]',
     listUsageOverride: 'device status',
     positionalArgs: ['status|release'],
     allowedFlags: ['stale'],
@@ -65,6 +65,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     },
     usageOverride:
       'connect [cloud|proxy|limrun|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+    usageFlags: [],
     listUsageOverride: 'connect',
     positionalArgs: ['provider?'],
     allowedFlags: [
@@ -137,8 +138,6 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       description:
         'Expose the local daemon HTTP contract through a tunnel-friendly reverse proxy.\n\nRun this on the host that has access to simulators/devices, expose the printed local proxy URL through a tunnel, then point another machine at the tunnel URL with connect proxy.\n\nThe proxy starts or reuses a local HTTP daemon, accepts /health, /rpc, /upload and resumable /upload/* routes, and /artifacts plus /artifacts/*, and also accepts the same routes under /agent-device/*. Health is unauthenticated for reachability probes. Other routes require the generated bearer token printed at startup, or the explicit --daemon-auth-token value when provided. The proxy rewrites authorized client requests to the upstream daemon token instead of exposing the local daemon token.\n\nUse the /agent-device base path when connecting through cloudflared, ngrok, or another shared origin. Treat the bearer token as a secret; anyone with it can control the proxied daemon. This direct proxy flow does not use agent-device auth.\n\nExamples:\n  agent-device proxy --port 4310\n  cloudflared tunnel --url http://127.0.0.1:4310\n  agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>',
     },
-    usageOverride:
-      'proxy [--host <host>] [--port <port>] [--daemon-auth-token <token>] [--state-dir <path>]',
     listUsageOverride: 'proxy',
     allowedFlags: ['proxyHost', 'proxyPort', 'daemonAuthToken', 'stateDir'],
   },

@@ -209,6 +209,19 @@ const resolutionDisclosureSchema: JsonSchema = {
   ],
 };
 
+// PostActionSurfaceChange (packages/contracts/src/interaction.ts) — the post-action capture
+// describes a different surface than the pre-action baseline (#2438), so no same-surface
+// comparison is presented across it.
+const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
+  {
+    from: stringSchema('Surface the pre-action baseline described: a host bundle id, or app.'),
+    to: stringSchema('Surface the post-action capture describes: a host bundle id, or app.'),
+    disclosure: stringSchema('Agent-facing sentence explaining the surface transition.'),
+  },
+  ['from', 'to', 'disclosure'],
+  'Present when an in-place system surface (web sign-in sheet) was presented over the app, or left it.',
+);
+
 // InteractionEvidence (packages/contracts/src/interaction.ts) — opt-in `--verify` cheap
 // post-condition evidence (#1047).
 const interactionEvidenceSchema: JsonSchema = objectSchema(
@@ -218,8 +231,9 @@ const interactionEvidenceSchema: JsonSchema = objectSchema(
     interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
     digest: stringSchema('Order-independent digest of the post-action node multiset.'),
     changedFromBefore: booleanSchema(
-      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure.',
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
     ),
+    surfaceChange: postActionSurfaceChangeSchema,
   },
   ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
 );
@@ -247,6 +261,7 @@ const settleObservationSchema: JsonSchema = objectSchema(
         ['ref'],
       ),
     },
+    surfaceChange: postActionSurfaceChangeSchema,
     diff: objectSchema(
       {
         summary: objectSchema(
@@ -491,6 +506,8 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       action: constSchema('orientation'),
       orientation: enumSchema(DEVICE_ROTATIONS),
       message: stringSchema(),
+      confirmed: booleanSchema(),
+      warning: stringSchema(),
     },
     ['action', 'orientation', 'message'],
   ),
@@ -531,11 +548,18 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     {
       direction: enumSchema(['up', 'down', 'left', 'right']),
       edge: enumSchema(['top', 'bottom']),
-      passes: numberSchema('Edge scrolls only: how many scroll-and-check passes ran.'),
+      until: stringSchema('Until scrolls only: the selector the passes stopped on.'),
+      passes: numberSchema('Edge and until scrolls only: how many scroll-and-check passes ran.'),
       amount: numberSchema(),
       pixels: numberSchema(),
       durationMs: numberSchema(),
       message: stringSchema(),
+      keyboardAvoided: booleanSchema(
+        'Present only when an on-screen keyboard forced the swipe into the band above it; the reported pixels were planned against the shorter referenceHeight.',
+      ),
+      keyboardMinY: numberSchema(
+        'Where the keyboard began, in the same unit as the gesture coordinates. Clipped scrolls only.',
+      ),
     },
     ['direction'],
   ),

@@ -54,7 +54,7 @@ test('preserves absolute source line numbers after selecting a bounded suffix', 
   fs.writeFileSync(pathname, `${text}\n`);
 
   const recent = readRecentAppLogLines(pathname, 4000);
-  const dump = readRecentNetworkTrafficFromText(recent.text, {
+  const { dump } = readRecentNetworkTrafficFromText(recent.text, {
     path: recent.path,
     exists: recent.exists,
     backend: 'android',

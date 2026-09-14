@@ -8,6 +8,7 @@ import {
   leaseScopeToConnectionMetadata,
   leaseScopeToLeaseRpcParams,
   leaseScopeToRequestMeta,
+  readLeaseAllocateProviderFlags,
 } from '../lease-scope.ts';
 
 test('leaseScopeFromOptions normalizes public aliases and projects request meta', () => {
@@ -165,4 +166,52 @@ test('findMissingProxyLeaseFields enforces complete proxy ownership scope', () =
     }),
     [],
   );
+});
+
+test('readLeaseAllocateProviderFlags carries the provider-allocation flags and drops the rest', () => {
+  assert.deepEqual(
+    readLeaseAllocateProviderFlags({
+      session: 'default',
+      token: 'secret',
+      runId: 'run-a',
+      deviceKey: 'dk-1',
+      provider: 'browserstack',
+      ttlMs: 1000,
+      platform: 'ios',
+      device: 'iPhone 15',
+      providerApp: 'bs://abc',
+      providerOsVersion: '17',
+      providerProject: 'MyProject',
+      providerBuild: 'Build-1',
+      providerSessionName: 'smoke',
+      providerDeviceOrientation: 'landscape',
+      providerGeoLocation: '52.5,13.4',
+      providerLanguage: 'en',
+      providerNoResignApp: true,
+      awsRegion: 'us-west-2',
+      awsProjectArn: 'arn:aws:devicefarm:0',
+      awsInteractionMode: 'NO_VIDEO',
+    }),
+    {
+      platform: 'ios',
+      device: 'iPhone 15',
+      providerApp: 'bs://abc',
+      providerOsVersion: '17',
+      providerProject: 'MyProject',
+      providerBuild: 'Build-1',
+      providerSessionName: 'smoke',
+      providerDeviceOrientation: 'landscape',
+      providerGeoLocation: '52.5,13.4',
+      providerLanguage: 'en',
+      providerNoResignApp: true,
+      awsRegion: 'us-west-2',
+      awsProjectArn: 'arn:aws:devicefarm:0',
+      awsInteractionMode: 'NO_VIDEO',
+    },
+  );
+  assert.deepEqual(
+    readLeaseAllocateProviderFlags({ providerApp: 'bs://abc', providerBuild: undefined }),
+    { providerApp: 'bs://abc' },
+  );
+  assert.deepEqual(readLeaseAllocateProviderFlags(undefined), {});
 });

@@ -277,6 +277,13 @@ test('snapshot command usage documents diff alias', async () => {
   assert.match(help, /verify with diff snapshot -i or snapshot --diff/);
 });
 
+test('snapshot documents the synopsis-hidden record flag', async () => {
+  const help = await usageForCommand('snapshot');
+  if (help === null) throw new Error('Expected command help text');
+  assert.doesNotMatch(help, /agent-device snapshot \[[^\n]*--record/);
+  assert.match(help, /--record\s+Force-record this action/);
+});
+
 test('network command usage documents include flag', async () => {
   const help = await usageForCommand('network');
   if (help === null) throw new Error('Expected command help text');

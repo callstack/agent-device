@@ -7,7 +7,6 @@ import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
-import { queryAppleRunnerSelector } from './core/runner-selector-query.ts';
 import {
   withAppleRunnerProvider,
   type AppleRunnerCommandExecutor,
@@ -35,6 +34,7 @@ import {
   readAppleSnapshotResult,
 } from './runner/snapshot-presentation.ts';
 import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
+import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -82,15 +82,6 @@ export function createAppleInteractor(
         options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
       )) as { found?: boolean };
       return { found: result?.found === true };
-    },
-    findSelector: async (selector, options) => {
-      const result = await queryAppleRunnerSelector(
-        device,
-        selector,
-        options?.appBundleId,
-        options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
-      );
-      return { found: result.found === true };
     },
     back: async (mode) => {
       if (isTvOsDevice(device)) {
@@ -245,15 +236,28 @@ async function captureAppleRunnerSnapshot(
   if (nodes.length === 0 && device.kind === 'simulator' && !isValidEmptyScope) {
     throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
   }
+  const warnings = runnerSnapshotWarnings(result);
   return {
     nodes: presentRunnerSnapshotForDevice(device, options, result),
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,
     ...(result.quality ? { quality: result.quality } : {}),
-    // Legacy runners without a quality verdict still surface their message text.
-    ...(!result.quality && result.message ? { warnings: [result.message] } : {}),
+    ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+/**
+ * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
+ * quality verdict, and the shared disclosure when the capture describes an in-place system surface
+ * (e.g. the web sign-in sheet) rather than the app itself (#2438).
+ */
+function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
+  const warnings: string[] = [];
+  if (!result.quality && result.message) warnings.push(result.message);
+  if (result.systemSurface) warnings.push(IOS_SYSTEM_SURFACE_DISCLOSURE);
+  return warnings;
 }
 
 function presentRunnerSnapshotForDevice(

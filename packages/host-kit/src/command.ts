@@ -7,6 +7,7 @@ export {
   execFailureDetails,
   type ExecOptions,
   type ExecResult,
+  isCommandTimeoutError,
   isExecutablePath,
   requireExecSuccess,
   resolveExecutableOverridePath,

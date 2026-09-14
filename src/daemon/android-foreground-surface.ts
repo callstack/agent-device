@@ -1,6 +1,6 @@
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { AppError } from '@agent-device/kernel/errors';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
 import type { SessionState } from './session-state.ts';
 
 export type AndroidEscapeSurface = {

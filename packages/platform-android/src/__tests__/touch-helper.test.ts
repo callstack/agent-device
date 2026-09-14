@@ -12,7 +12,7 @@ import {
   executeAndroidTouchHelperPlan,
   normalizeAndroidTouchHelperGestureRequest,
   readAndroidTouchHelperFinalRecord,
-  readAndroidTouchHelperViewport,
+  readAndroidTouchHelperViewportReading,
 } from '../touch-helper.ts';
 import { resolveAndroidHelperArtifact } from '../helper-package-install.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
@@ -394,7 +394,7 @@ test('one-shot viewport instruments the snapshot-helper runner and validates bou
       }),
     },
     { serial: device.id },
-    async () => await readAndroidTouchHelperViewport(device),
+    async () => await readAndroidTouchHelperViewportReading(device),
   );
 
   assert.deepEqual(capturedArgs, [
@@ -407,7 +407,73 @@ test('one-shot viewport instruments the snapshot-helper runner and validates bou
     'viewport',
     manifest.instrumentationRunner,
   ]);
-  assert.deepEqual(viewportResult, { x: 10, y: 20, width: 300, height: 500 });
+  assert.deepEqual(viewportResult, { viewport: { x: 10, y: 20, width: 300, height: 500 } });
+});
+
+test('one-shot viewport reports the input method window it read beside the app window', async () => {
+  // #2500: the scroll owner needs the live IME bounds, and the helper already walked the window list
+  // that contains them. They arrive in the same absolute screen space as the app window.
+  const device = makeIsolatedDevice();
+  const reading = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async () => ({
+        exitCode: 0,
+        stdout: [
+          resultRecord({
+            ok: 'true',
+            x: '0',
+            y: '120',
+            width: '1080',
+            height: '2000',
+            keyboardX: '0',
+            keyboardY: '1600',
+            keyboardWidth: '1080',
+            keyboardHeight: '520',
+          }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      })),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewportReading(device),
+  );
+
+  assert.deepEqual(reading, {
+    viewport: { x: 0, y: 120, width: 1080, height: 2000 },
+    keyboard: { x: 0, y: 1600, width: 1080, height: 520 },
+  });
+});
+
+test('a helper that reports no input method window yields no keyboard rather than a zero frame', async () => {
+  // An installed helper older than the keyboard read omits the keys entirely; a helper that cannot
+  // see the IME must not become evidence that every scroll is blocked.
+  const device = makeIsolatedDevice();
+  const reading = await withAndroidAdbProvider(
+    {
+      exec: currentVersionAdb(async () => ({
+        exitCode: 0,
+        stdout: [
+          resultRecord({
+            ok: 'true',
+            x: '0',
+            y: '0',
+            width: '1080',
+            height: '2280',
+            keyboardX: '0',
+            keyboardY: '1600',
+            keyboardWidth: '1080',
+          }),
+          'INSTRUMENTATION_CODE: 0',
+        ].join('\n'),
+        stderr: '',
+      })),
+    },
+    { serial: device.id },
+    async () => await readAndroidTouchHelperViewportReading(device),
+  );
+
+  assert.deepEqual(reading, { viewport: { x: 0, y: 0, width: 1080, height: 2280 } });
 });
 
 test('one-shot viewport rejects invalid bounds', async () => {
@@ -425,7 +491,7 @@ test('one-shot viewport rejects invalid bounds', async () => {
         })),
       },
       { serial: device.id },
-      async () => await readAndroidTouchHelperViewport(device),
+      async () => await readAndroidTouchHelperViewportReading(device),
     ),
     { code: 'COMMAND_FAILED' },
   );
@@ -450,7 +516,7 @@ test('one-shot viewport failure preserves its structured message and error type'
         })),
       },
       { serial: device.id },
-      async () => await readAndroidTouchHelperViewport(device),
+      async () => await readAndroidTouchHelperViewportReading(device),
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
