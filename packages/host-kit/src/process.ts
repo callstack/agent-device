@@ -19,12 +19,12 @@ export {
   readProcessIdentityFacts,
   readProcessStartTime,
   signalPidsBestEffort,
-  signalProcessGroupBestEffort,
   stopPidsWithEscalation,
   uniquePositivePids,
   waitForProcessExit,
   writeHostStderr,
 } from './internal/host-process.ts';
+export { signalProcessGroupBestEffort } from './internal/exec.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {
   createOwnedProcessRecordStore,

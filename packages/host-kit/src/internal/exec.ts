@@ -870,20 +870,36 @@ function watchCommandAbort(
 }
 
 /**
- * A detached command owns a process group, and the descendants we are trying to reach
- * are its members — which is what keeps the group id reserved. So the group is still
- * signalled after the direct child is reaped: those members are holding the pipes this
- * command is waiting on. An empty group's id is not reserved, and a group id that no
- * longer resolves tells us the members are gone, so the signal is skipped rather than
- * aimed at whatever process holds that id now.
+ * Signals the process group led by `pid` — the tree a detached child spawned — best-effort,
+ * and reports whether the write went through. One seam for every group kill in host-kit, so
+ * a caller outside this module can mock it instead of delivering a real signal to a
+ * fabricated pid (#1824). `host-process.ts` reaches it from here rather than the reverse:
+ * that module imports `exec.ts` for `runCmd`, and a value import back up would close a cycle
+ * the layering rules reject.
+ *
+ * A pid that is not a positive integer is refused without signalling: `0` would address this
+ * process's own group, and a negative one every process this user owns.
+ */
+export function signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A detached command owns a process group, and the descendants we are trying to reach are
+ * its members — which is what keeps the group id reserved. So the group is still signalled
+ * after the direct child is reaped: those members are holding the pipes this command is
+ * waiting on. The one group-signal seam reports whether anything was reached rather than
+ * throwing, and a group that is gone or not ours to signal is the case it reports false.
  */
 function killProcessTree(child: ChildProcess, detached: boolean | undefined): void {
   if (detached && child.pid && process.platform !== 'win32') {
-    if (isProcessGroupReachable(child.pid)) {
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {}
-    }
+    signalProcessGroupBestEffort(child.pid, 'SIGKILL');
     return;
   }
   // A non-detached child leaves its pid free for the kernel to hand to an unrelated
@@ -892,16 +908,6 @@ function killProcessTree(child: ChildProcess, detached: boolean | undefined): vo
   // settlement happens on `exit`.
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill('SIGKILL');
-}
-
-function isProcessGroupReachable(pid: number): boolean {
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM means the group exists and simply isn't ours to signal.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
 }
 
 /**

@@ -110,7 +110,12 @@ export type AppLogBackgroundProcess = AsyncDisposable &
 export type AppLogProcessCommand =
   | Readonly<{
       kind: 'host';
-      request: HostCommandRequest;
+      /**
+       * A streamed log tail is stopped by its owner, so a host command here has no deadline to
+       * honour: the background exec drops `timeoutMs`. It stays out of the type so a producer
+       * cannot pass a budget that silently never fires.
+       */
+      request: Omit<HostCommandRequest, 'timeoutMs'>;
     }>
   | Readonly<{
       kind: 'android-adb';

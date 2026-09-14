@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
   isCommandTimeoutError,
   runCmd,
   runCmdBackground,
   runCmdStreaming,
+  signalProcessGroupBestEffort,
   type ExecBackgroundOptions,
 } from './exec.ts';
 import { shellQuote } from './shell-quote.ts';
@@ -164,37 +165,75 @@ test.runIf(process.platform !== 'win32')(
 // would wait forever. Whether the kill request or the child's exit arrives first is not a
 // question the callers answer, so both report to one settlement.
 //
-// The kill paths below address a process group whose leader this worker already reaped,
-// and the hermetic signal setup ends a worker's authority over a pid at that moment.
-// So the group writes are intercepted here, which is the seam that setup points at for
-// a real kill path, and the probe answer is what each test is choosing between.
+// The kill paths below address a process group whose leader this worker already reaped, and
+// the hermetic signal setup ends a worker's authority over a pid at that moment. So every
+// group write is answered by `guardGroupWrites` below, which is the seam that setup points a
+// real kill path at: it records what the kill aimed at and refuses to deliver it.
 
 type GroupWrite = { readonly pid: number; readonly signal: string | number };
 
-function interceptGroupWrites(probeAnswer: 'reachable' | 'gone'): {
-  restore: () => void;
-  signals: GroupWrite[];
-} {
+function guardGroupWrites(): { restore: () => void; writes: GroupWrite[] } {
   const original = process.kill.bind(process);
-  const signals: GroupWrite[] = [];
+  const writes: GroupWrite[] = [];
   process.kill = ((pid: number, signal: string | number = 'SIGTERM') => {
-    if (pid >= 0) return original(pid, signal as NodeJS.Signals);
-    if (signal === 0) {
-      if (probeAnswer === 'gone') {
-        throw Object.assign(new Error('no such process group'), { code: 'ESRCH' });
-      }
-      return true;
+    if (pid < 0) {
+      writes.push({ pid, signal });
+      return false;
     }
-    signals.push({ pid, signal });
-    return true;
+    return original(pid, signal as NodeJS.Signals);
   }) as typeof process.kill;
-  return { signals, restore: () => (process.kill = original) };
+  return { writes, restore: () => (process.kill = original) };
 }
+
+test('group signaling addresses the negative pid and reports delivery', () => {
+  const calls: GroupWrite[] = [];
+  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    calls.push({ pid: Number(pid), signal: signal ?? '' });
+    return true;
+  });
+
+  try {
+    assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), true);
+    assert.deepEqual(calls, [{ pid: -101, signal: 'SIGKILL' }]);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
+
+test('a group write in this module can only come from the seam', () => {
+  // A second group-signal path in here would be the second seam the callers were written
+  // against once more, and nothing at runtime distinguishes the two.
+  const source = fs.readFileSync(new URL('./exec.ts', import.meta.url), 'utf8');
+  const seam = source.indexOf('export function signalProcessGroupBestEffort');
+  const writes = [...source.matchAll(/process\.kill\(-/g)].map((match) => match.index ?? -1);
+
+  assert.ok(seam >= 0);
+  assert.deepEqual(writes, [seam + source.slice(seam).indexOf('process.kill(-')]);
+});
+
+test('group signaling reports a vanished group and never signals an invalid pid', () => {
+  const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
+    const error = new Error('not found') as NodeJS.ErrnoException;
+    error.code = 'ESRCH';
+    throw error;
+  });
+
+  try {
+    assert.equal(signalProcessGroupBestEffort(101, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(0, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(-1, 'SIGTERM'), false);
+    // A zero or negative pid would address the caller's own group, or every
+    // process the user owns, so it must not reach process.kill at all.
+    assert.equal(killSpy.mock.calls.length, 1);
+  } finally {
+    killSpy.mockRestore();
+  }
+});
 
 test.runIf(process.platform !== 'win32')(
   'a detached deadline still kills the group its reaped child left behind',
   async () => {
-    const groupWrites = interceptGroupWrites('reachable');
+    const groupWrites = guardGroupWrites();
     let childPid = 0;
     try {
       const startedAt = Date.now();
@@ -213,7 +252,7 @@ test.runIf(process.platform !== 'win32')(
         },
       );
       assert.ok(Date.now() - startedAt < 1_000, 'settled only once the pipe holder finished');
-      assert.deepEqual(groupWrites.signals, [{ pid: -childPid, signal: 'SIGKILL' }]);
+      assert.deepEqual(groupWrites.writes, [{ pid: -childPid, signal: 'SIGKILL' }]);
     } finally {
       groupWrites.restore();
     }
@@ -222,11 +261,12 @@ test.runIf(process.platform !== 'win32')(
 );
 
 test.runIf(process.platform !== 'win32')(
-  'a detached deadline whose group is already gone signals nothing and still settles',
+  'a detached deadline whose group cannot be signalled still settles',
   async () => {
-    // A group with no members left has an id the kernel can hand to anyone, so a stale
-    // deadline must not aim a signal at it.
-    const groupWrites = interceptGroupWrites('gone');
+    // A vanished group, an empty group, and a group owned by someone else all answer this
+    // write with nothing, and the seam swallows that. The command still cannot wait on a pipe
+    // holder it just asked to be killed.
+    const groupWrites = guardGroupWrites();
     try {
       const startedAt = Date.now();
       await assert.rejects(
@@ -237,7 +277,7 @@ test.runIf(process.platform !== 'win32')(
         },
       );
       assert.ok(Date.now() - startedAt < 1_000, 'settled only once the pipe holder finished');
-      assert.deepEqual(groupWrites.signals, []);
+      assert.equal(groupWrites.writes.length, 1);
     } finally {
       groupWrites.restore();
     }
