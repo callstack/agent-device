@@ -166,11 +166,28 @@ record stop  (request: ensure export)
        manifest completed → replay the committed export (no stop work)
        fence lost with an open manifest → ownership-fence-lost
   1. backend.stop(handle ?? descriptor, budget)      → observation  (recorded; not a checkpoint)
-  2. backend.collect(descriptor, rawPath)            → raw capture, playability sniff passed
+  2. backend.collect(descriptor, collectedPath)      → immutable copy, playability sniff passed
                                                                       checkpoint: collected
-  3. finalizer: trim, overlay, telemetry: rawPath → exportPath      checkpoint: finalized
-  4. commit: manifest completed { export, recorder observation }; respond
+  3. finalizer: overlay, telemetry: collectedPath → exportPath      checkpoint: finalized
+  4. commit: manifest completed { export, recorder observation, native path disposition }; respond
 ```
+
+**`collect` always produces a separate, immutable copy.** Every backend records into a *native
+path* the recorder owns: the `simctl` output file, the runner's device file, the Android
+`/sdcard` chunks, the HarmonyOS media item, the agent-browser WebM. `collect` copies (or pulls)
+from the native path into `collectedPath`, a sibling of the caller's export path, and the
+checkpoint is recorded once that copy passes the sniff. The native path is never the export and
+is never finalized in place. On a local backend "collect" is a file copy, not "none": a playable
+copy does not prove the native writer has stopped using its path, and on the simulator and web
+that writer is exactly the process the observation may have left `unconfirmed`.
+
+**Native-path disposition is a backend proof, recorded at commit.** The native path and the
+recorder identity are retained after commit until the backend proves cleanup safe:
+`recorder: 'confirmed'` (the writer exited or acknowledged), or the writer proven `gone` by a
+later settle. A `lost` observation alone never permits deleting the native path: a pid identity
+that no longer matches says nothing about who writes there now. HarmonyOS and web, which cannot
+prove a writer gone, retain the native item until an explicit, fenced disposal (rule 6). Only the
+collected copy may be finalized, and only the collected copy is removed after commit.
 
 **Checkpoints mark durable, valid artifacts; they never mark attempts.** `collected` is recorded
 only after the raw capture passes the playability sniff (`ftyp` + `moov`, the existing check in
@@ -181,12 +198,12 @@ unreadable once is probed again, and a recorder that has since become readable i
 `confirmed` or `lost` observation is not re-attempted. A retry resumes at the first missing
 checkpoint after re-running step 1 when it must.
 
-The raw capture is preserved until step 4 commits; the finalizer reads it and writes the export
-beside it, so a retry after a failed commit re-runs nothing that changes the video. Today
-`exportProcessedVideo` trims and overlays **in place** (`overlay.ts` renames the processed file
-over the input), which is why the raw copy is required: without it, a retry after a commit
-failure would trim an already-trimmed clip or burn the overlay twice. After commit the raw capture
-is removed; a failed removal is a diagnostic, never an error.
+The collected copy is preserved until step 4 commits; the finalizer reads it and writes the
+export beside it, so a retry after a failed commit re-runs nothing that changes the video. Today
+`exportProcessedVideo` applies the touch overlay **in place** (`overlay.ts` renames the processed
+file over its input; start trimming was removed by PR #2586), which is why the copy is required:
+without it, a retry after a commit failure would burn the overlay twice. After commit the
+collected copy is removed; a failed removal is a diagnostic, never an error.
 
 Failures at 1, 2, 3, or 4 leave the manifest `open` with the recorded observation and checkpoints
 and every artifact in place; the next stop re-drives as above (step 1 re-drive is what #2565
@@ -201,7 +218,9 @@ settle recorder  (request: recovery only)
   0. guard: fence taken over; manifest completed with recorder !== 'confirmed',
             or open and abandoned
   1. backend.stop(descriptor, budget)                → observation
-  2. completed manifest: rewrite metadata.recorder only; the export is not touched
+  2. completed manifest: rewrite metadata.recorder only; the export is not touched;
+     if the backend now proves the writer gone, record the native-path disposition as
+     retirable (the retirement itself is a fenced disposal, rule 6)
      open manifest: continue as ensure export from the recorded phase
 ```
 
@@ -285,11 +304,11 @@ rotation stays. This lands after 2.1–2.7 and is not required by them.
 
 | Backend | `stop` from a live handle | `stop` from a descriptor (recovery) | `collect` | Today after daemon loss |
 | --- | --- | --- | --- | --- |
-| iOS / tvOS simulator | `ChildProcess.kill` tiers; descendant markers probed before pid signals | probe markers; signal on ours; `unconfirmed` if the host is silent; `lost` on mismatch | none (local file) | cleanup signals, then **throws** |
-| iOS device (CoreDevice), macOS | runner stop RPC bound to `runnerSessionId` | same RPC if the runner session matches; `lost` if the runner restarted | device copy (iOS); none (macOS) | cleanup stops the runner, **never retrieves**, throws |
+| iOS / tvOS simulator | `ChildProcess.kill` tiers; descendant markers probed before pid signals | probe markers; signal on ours; `unconfirmed` if the host is silent; `lost` on mismatch | local copy of the `simctl` output file; native file retained until the writer is proven gone | cleanup signals, then **throws** |
+| iOS device (CoreDevice), macOS | runner stop RPC bound to `runnerSessionId` | same RPC if the runner session matches; `lost` if the runner restarted | device copy (iOS); local copy of the runner's output file (macOS) | cleanup stops the runner, **never retrieves**, throws |
 | Android | probe `/proc`, then `kill -2` → `-9`; `unconfirmed` when `/proc` is unreadable | same, from the pid triple in the descriptor | `adb pull` of every chunk, playability sniff | reattach through the device manifest; five ownership states |
 | HarmonyOS | one `aa start` toggle, tracked by the handle | **no signal**; `mediatool query` by file name; `unconfirmed` if found, `lost` if not | stage + `hdc file recv` | `cleanup-pending`, manual |
-| Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | none | `cleanup-pending`, manual |
+| Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | local copy of the WebM; native file retained while the browser is not proven gone | `cleanup-pending`, manual |
 | Limrun, WebDriver providers, Vega | unavailable | — | — | unchanged |
 
 Two traps stay visible: a blind HarmonyOS toggle **starts** a recording, so only the live handle
@@ -330,9 +349,13 @@ completion with `recorder`, or an error that leaves evidence in place.
   `open`, second stop succeeds. (Rule 6; today this deletes the Android artifact.) One such test
   per durable kind, each stating what its retry needs; a kind that keeps disposal says so in the
   test name.
-- Commit fails after finalize (trim and overlay applied) → manifest `open` at phase `finalized`,
-  raw capture present; the retry commits without invoking the finalizer again (spy), and the
-  export's duration and overlay are unchanged byte-for-byte.
+- Commit fails after finalize (overlay applied) → manifest `open` at phase `finalized`, collected
+  copy present; the retry commits without invoking the finalizer again (spy), and the export is
+  unchanged byte-for-byte.
+- Simulator and web: stop returns `unconfirmed` while the native writer is still alive, the
+  collected copy passes the sniff → completion `unconfirmed`, export served from the copy, native
+  file untouched and still open by the writer; a later settle that proves the writer gone records
+  the native path as retirable; a `lost` observation alone leaves it in place.
 - `ours` signalled, no exit inside the budget → completion `unconfirmed`; next stop replays without
   calling the backend (spy); startup recovery calls the backend stop, rewrites the observation to
   `confirmed`, and the export file is unchanged.
@@ -376,7 +399,9 @@ platform packages, Android completed-evidence refusal tests.
 
 ## 7. Rollout
 
-1. Merge the open regression PRs (#2564, #2565, #2566).
+1. Merge the open regression PRs (#2564, #2565, #2566). Done; PR #2586 (start trimming removed)
+   is also on `main`, so the finalizer is overlay and telemetry only and the trim-related
+   `invalidTrimRange` and `trimStartMs` surfaces no longer exist in the contracts this ADR names.
 2. Rule 6 in the shared coordinator, gated per kind: a failed finish no longer runs forced
    cleanup for a kind once that kind's failed-finish test states what its retry needs. Recording
    first; the other three kinds each in their own commit. Independently shippable.
