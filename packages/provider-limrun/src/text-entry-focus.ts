@@ -12,11 +12,13 @@ const TEXT_ENTRY_FOCUS_TIMEOUT_MS = 3_000;
 const TEXT_ENTRY_FOCUS_POLL_INTERVAL_MS = 150;
 
 /**
- * The element that owns text entry, as one tree read saw it. A rect is required:
- * an element without a usable frame cannot be shown to be the one that was tapped.
+ * The element that owns text entry, as one tree read saw it. A rect is required: an
+ * element without a usable frame cannot be shown to be the one that was tapped. The
+ * identity is offered only when that read reports it once, because an identity two
+ * elements share cannot say which of them holds focus.
  */
 export type LimrunTextEntryFocus = Readonly<{
-  identity: string;
+  identity?: string;
   rect: Rect;
 }>;
 
@@ -41,6 +43,29 @@ function textEntryFocusNotObservedError(
   });
 }
 
+/** A node with a rect a point can be tested against, which is what a witness needs. */
+type LimrunFramedNode = Readonly<{ node: IosTreeNode; identity: string; rect: Rect }>;
+
+function readFramedNodes(tree: IosTreeNode | IosTreeNode[]): LimrunFramedNode[] {
+  const framed: LimrunFramedNode[] = [];
+  for (const node of flattenIosNodes(tree)) {
+    const rect = readIosNodeRect(node);
+    if (isPositiveFiniteRect(rect)) {
+      framed.push({ node, identity: limrunTextEntryIdentity(node), rect });
+    }
+  }
+  return framed;
+}
+
+/** How many nodes of one read an identity names. One means the identity picks out a single element. */
+function countIdentitySightings(framed: readonly LimrunFramedNode[]): Map<string, number> {
+  const sightings = new Map<string, number>();
+  for (const entry of framed) {
+    sightings.set(entry.identity, (sightings.get(entry.identity) ?? 0) + 1);
+  }
+  return sightings;
+}
+
 /**
  * The editing element of one tree read. A field and its container can both carry the
  * trait, so the smallest rect wins.
@@ -48,15 +73,18 @@ function textEntryFocusNotObservedError(
 export function readLimrunTextEntryFocus(
   tree: IosTreeNode | IosTreeNode[],
 ): LimrunTextEntryFocus | null {
+  const framed = readFramedNodes(tree);
+  const sightings = countIdentitySightings(framed);
   let focus: LimrunTextEntryFocus | null = null;
   let focusArea = Number.POSITIVE_INFINITY;
-  for (const node of flattenIosNodes(tree)) {
-    if (!node.traits?.includes(LIMRUN_IOS_TEXT_ENTRY_TRAIT)) continue;
-    const rect = readIosNodeRect(node);
-    if (!isPositiveFiniteRect(rect)) continue;
-    const area = rectArea(rect);
+  for (const entry of framed) {
+    if (!entry.node.traits?.includes(LIMRUN_IOS_TEXT_ENTRY_TRAIT)) continue;
+    const area = rectArea(entry.rect);
     if (area >= focusArea) continue;
-    focus = { identity: limrunTextEntryIdentity(node), rect };
+    focus =
+      sightings.get(entry.identity) === 1
+        ? { identity: entry.identity, rect: entry.rect }
+        : { rect: entry.rect };
     focusArea = area;
   }
   return focus;
@@ -65,27 +93,21 @@ export function readLimrunTextEntryFocus(
 /**
  * The elements under the point this fill aims at, read before the tap could move
  * anything, so a field that focusing re-laid out is still recognized. An identity
- * the tree reports more than once is left out: fields with no identifier or label
- * share one identity, and geometry is the only thing that tells them apart.
+ * this read reports more than once is left out, and the post-tap read repeats the
+ * same check: an element that appears after the tap can share an identity with the
+ * one that was under the finger.
  */
 export function readLimrunUnambiguousTapTargets(
   tree: IosTreeNode | IosTreeNode[],
   x: number,
   y: number,
 ): ReadonlySet<string> {
-  const framed: Array<Readonly<{ identity: string; rect: Rect }>> = [];
-  for (const node of flattenIosNodes(tree)) {
-    const rect = readIosNodeRect(node);
-    if (isPositiveFiniteRect(rect)) framed.push({ identity: limrunTextEntryIdentity(node), rect });
-  }
-  const sightings = new Map<string, number>();
-  for (const node of framed) {
-    sightings.set(node.identity, (sightings.get(node.identity) ?? 0) + 1);
-  }
+  const framed = readFramedNodes(tree);
+  const sightings = countIdentitySightings(framed);
   const targets = new Set<string>();
-  for (const node of framed) {
-    if (sightings.get(node.identity) === 1 && containsPoint(node.rect, x, y)) {
-      targets.add(node.identity);
+  for (const entry of framed) {
+    if (sightings.get(entry.identity) === 1 && containsPoint(entry.rect, x, y)) {
+      targets.add(entry.identity);
     }
   }
   return targets;
@@ -137,7 +159,8 @@ function witnessesThisTap(
   x: number,
   y: number,
 ): boolean {
-  return containsPoint(focus.rect, x, y) || targetsAtPoint.has(focus.identity);
+  if (containsPoint(focus.rect, x, y)) return true;
+  return focus.identity !== undefined && targetsAtPoint.has(focus.identity);
 }
 
 function flattenIosNodes(tree: IosTreeNode | IosTreeNode[]): IosTreeNode[] {

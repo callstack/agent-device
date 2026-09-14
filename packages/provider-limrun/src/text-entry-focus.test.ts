@@ -178,6 +178,29 @@ test('a shared identity does not witness the twin that was not tapped', async ()
   });
 });
 
+// One unlabeled field before the tap, two after: the newcomer can share the identity of
+// the field that was under the finger, so only geometry clears it.
+test('a field that appears after the tap does not borrow the identity it now shares', async () => {
+  await expect(
+    awaitLimrunTextEntryFocus({
+      targetsAtPoint: targetsAt({ x: 200, y: 170 }, textField('', { rect: TWIN_A_RECT })),
+      readFocus: async () =>
+        readLimrunTextEntryFocus(
+          tree(
+            textField('', { rect: TWIN_A_RECT }),
+            textField('', { rect: TWIN_B_RECT, editing: true }),
+          ),
+        ),
+      sleep: noSleep,
+      x: 200,
+      y: 170,
+      timeoutMs: 0,
+    }),
+  ).rejects.toMatchObject({
+    details: { reason: 'text_entry_focus_not_observed', editingElementObserved: true },
+  });
+});
+
 test('geometry still witnesses the twin that was tapped', async () => {
   const readiness = await awaitLimrunTextEntryFocus({
     targetsAtPoint: targetsAt(
