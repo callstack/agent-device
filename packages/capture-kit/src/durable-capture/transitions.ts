@@ -1,9 +1,11 @@
 import {
   type CleanupOutcome,
+  type DurableCaptureProgress,
   type FinishOutcome,
   type LiveResourceHandle,
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
+import type { JsonObject } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
@@ -69,9 +71,10 @@ export async function finishDurableCaptureHandle<
     expected: params.fence,
     run: async (lease) => {
       markCompleting(lease);
+      const progress = createStopProgress(lease);
       let finishOutcome: FinishOutcome<C>;
       try {
-        finishOutcome = await params.handle.finish();
+        finishOutcome = await params.handle.finish(progress);
       } catch (finishError) {
         await respondToFailedFinish(definition, lease, params, finishError, params.intent);
         throw finishError;
@@ -291,6 +294,23 @@ export function transitionFinishOutcome<K extends string, C>(
     return;
   }
   transitionCleanupOutcome(lease, outcome);
+}
+
+/**
+ * The manifest the stop is allowed to write into while it holds this fence (ADR 0024 2.3). What a
+ * kind records is its own vocabulary; the mechanics only merge each fact into the metadata and hand
+ * back what is already there, so a stop that dies mid-way leaves its own facts beside the open
+ * record and the next attempt reads them instead of redoing durable work.
+ */
+function createStopProgress<K extends string>(
+  lease: DurableCaptureResourceFenceLease<K>,
+): DurableCaptureProgress {
+  return Object.freeze({
+    learned: lease.envelope.metadata,
+    record: (fact: JsonObject) => {
+      lease.transition('open', { metadata: { ...(lease.envelope.metadata ?? {}), ...fact } });
+    },
+  });
 }
 
 function markCompleting<K extends string>(lease: DurableCaptureResourceFenceLease<K>): void {

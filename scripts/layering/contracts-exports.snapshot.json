@@ -90,6 +90,7 @@
   "@agent-device/contracts/recording",
   "@agent-device/contracts/recording-native-path",
   "@agent-device/contracts/recording-stop-observation",
+  "@agent-device/contracts/recording-stop-progress",
   "@agent-device/contracts/remote",
   "@agent-device/contracts/replay",
   "@agent-device/contracts/runner-lease-context",

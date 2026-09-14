@@ -372,6 +372,10 @@
       "types": "./src/recording-native-path.ts",
       "default": "./src/recording-native-path.ts"
     },
+    "./recording-stop-progress": {
+      "types": "./src/recording-stop-progress.ts",
+      "default": "./src/recording-stop-progress.ts"
+    },
     "./recording-stop-observation": {
       "types": "./src/recording-stop-observation.ts",
       "default": "./src/recording-stop-observation.ts"
