@@ -1,5 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
@@ -124,15 +124,18 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
       // whatever it wrote, and the finalizer is what answers whether that is a video (ADR 0024 2.2).
       // Refusing here by exit code alone threw away a finalized recording and left a retry that could
       // only re-read the same settled exit, so the exit is disclosed and collection proceeds.
-      const exited = describeSimulatorRecorderExit(result);
-      return await completion(
-        host,
-        current,
-        'iOS recording',
-        exited === undefined
-          ? undefined
-          : `simctl recordVideo ${exited} before record stop; the video covers only what the recorder wrote before it stopped.`,
-      );
+      const exit = describeSimctlRecorderExit(result);
+      if (exit === undefined) return await completion(host, current, 'iOS recording');
+      try {
+        return await completion(
+          host,
+          current,
+          'iOS recording',
+          `${exit} before record stop; the video covers only what the recorder wrote before it stopped.`,
+        );
+      } catch (exportError) {
+        throw recorderExitLostTheExport(exportError, exit, result);
+      }
     },
     cleanup: async () => {
       const result = await cleanupAppleSimulatorProcess(nativeProcess);
@@ -237,9 +240,38 @@ async function runAppleRecordingOperation<T>(operation: () => Promise<T>): Promi
   }
 }
 
-function describeSimulatorRecorderExit(result: HostCommandResult): string | undefined {
-  if (result.signal) return `was killed by ${result.signal}`;
-  return result.exitCode === 0 ? undefined : `exited with code ${result.exitCode}`;
+function describeSimctlRecorderExit(result: HostCommandResult): string | undefined {
+  // A termination record stop asked for comes back with the signal still attached and the exit code
+  // normalized to 0 by the host, so checking the signal first would blame the recorder for our own
+  // SIGTERM escalation.
+  if (result.exitCode === 0) return undefined;
+  return result.signal
+    ? `simctl recordVideo was killed by ${result.signal}`
+    : `simctl recordVideo exited with code ${result.exitCode}`;
+}
+
+// The exit is the fact that makes an unreadable file permanent, so it belongs in the error the
+// operator reads: the next `record stop` re-reads the same settled exit and the same bytes.
+function recorderExitLostTheExport(
+  exportError: unknown,
+  exit: string,
+  result: HostCommandResult,
+): AppError {
+  const original = asAppError(exportError, 'COMMAND_FAILED');
+  const { reason } = original.details ?? {};
+  // `processExitError` is what makes normalizeError append the recorder's first stderr line, so the
+  // exit facts reach the operator without repeating them in this message.
+  return new AppError(original.code, `${original.message}; ${exit}`, {
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    processExitError: true,
+    ...(typeof reason === 'string' ? { reason } : {}),
+    ...(result.signal === undefined ? {} : { signal: result.signal }),
+    retriable: false,
+    hint:
+      'The recorder exited before record stop, so the next record stop reads the same file. ' +
+      'Close this session to release the device, then record again.',
+  });
 }
 
 function runnerDescriptorMatchesDevice(

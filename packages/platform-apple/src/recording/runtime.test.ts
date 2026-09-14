@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -239,7 +240,7 @@ test('a refused simulator finish is re-driven by the next record stop', async ()
       apple: {
         startSimulator: async () => ({
           markers: [processIdentity],
-          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+          wait: Promise.resolve({ stdout: '', stderr: 'recordVideo lost its stream', exitCode: 1 }),
           terminate: async () => {},
         }),
       },
@@ -251,9 +252,81 @@ test('a refused simulator finish is re-driven by the next record stop', async ()
   });
   const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
 
-  await expect(handle.finish()).rejects.toThrow('was not finalized into a playable video');
+  await expect(handle.finish()).rejects.toThrow(
+    /was not finalized into a playable video; simctl recordVideo exited with code 1/,
+  );
   await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
   expect(finalizeCalls).toBe(2);
+});
+
+test('an unreadable recording names the exit that made it permanent and the way out', async () => {
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({
+            stdout: '',
+            stderr: 'error: the recorder died mid-write',
+            exitCode: null,
+            signal: 'SIGKILL',
+          }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async () => {
+        throw new AppError('COMMAND_FAILED', 'recording was not finalized into a playable video', {
+          reason: 'recording-output-unplayable',
+          retriable: true,
+        });
+      },
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+
+  await expect(handle.finish()).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message:
+      'recording was not finalized into a playable video; simctl recordVideo was killed by SIGKILL',
+    details: {
+      reason: 'recording-output-unplayable',
+      exitCode: null,
+      signal: 'SIGKILL',
+      stderr: 'error: the recorder died mid-write',
+      retriable: false,
+      hint: expect.stringContaining('Close this session'),
+    },
+  });
+});
+
+test('a recorder that record stop terminated itself is collected without a warning', async () => {
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          // The host normalizes a termination record stop asked for: exit code 0, signal kept.
+          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0, signal: 'SIGTERM' }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async () => ({}),
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+
+  const outcome = await (
+    await operations.screenRecordingStart(input())
+  ).pendingHandle
+    .transfer()
+    .finish();
+  assert.equal(outcome.status, 'completed');
+  if (outcome.status === 'completed') assert.equal(outcome.result.warning, undefined);
 });
 
 test('a refused runner stop is asked again by the next record stop', async () => {
