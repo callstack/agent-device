@@ -35,8 +35,7 @@ const decidePostGestureStabilityVerdict = (params: {
 //
 // Split out of post-gesture-stabilization.test.ts per #1563 review (the pure
 // verdict coverage, alongside its own shared fixtures, moved to this sibling
-// module so the async-loop test file stays under the repo's 500-line
-// tripwire — see post-gesture-stabilization-fixtures.ts).
+// module — see post-gesture-stabilization-fixtures.ts).
 // ---------------------------------------------------------------------------
 
 test('decidePostGestureStabilityVerdict trusts immediately when the platform does not need baseline distrust', () => {

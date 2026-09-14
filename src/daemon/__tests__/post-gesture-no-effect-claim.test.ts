@@ -26,9 +26,8 @@ import {
 } from './post-gesture-stabilization-fixtures.ts';
 
 // When the agent-facing gestureNoEffect claim may and may not surface — split
-// by subject from post-gesture-stabilization.test.ts (the capture loop), the
-// same #1563 convention that keeps test files under the repo's 500-line
-// tripwire. Loop mechanics (rebase, distrust budget, timeouts) stay in the
+// by subject from post-gesture-stabilization.test.ts (the capture loop), per
+// #1563. Loop mechanics (rebase, distrust budget, timeouts) stay in the
 // loop file; everything here is about the claim and its veto instrumentation.
 
 afterEach(() => {

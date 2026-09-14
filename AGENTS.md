@@ -81,8 +81,8 @@ under `contracts/fixtures/`.
 
 - Name modules for the domain question they answer and colocate machine-readable claims with their
   enforcement. Internal barrels are legacy; add barrels only at package boundaries.
-- Implementation files target at most 300 lines. Extract before adding behavior past 500 lines;
-  files past 1,000 lines are architecture debt unless generated or fixture data.
+- Files past 1,000 lines are architecture debt; split them before adding behavior, unless they
+  are generated or fixture data.
 - Tests mirror source topology one-to-one. Split a source module and its test together; do not add to
   the legacy `interaction.test.ts` or platform `index.test.ts` aggregations. Pure moves carry their
   tests unchanged; rename-only hunks owe no new coverage.

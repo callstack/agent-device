@@ -28,8 +28,7 @@ import {
 // Pure verdict/classifier coverage (decidePostGestureStabilityVerdict) lives
 // in the sibling post-gesture-stabilization-verdict.test.ts, and the
 // agent-facing no-effect claim (corroboration, vetoes, warning wording) in
-// post-gesture-no-effect-claim.test.ts — split by subject per #1563 review to
-// stay under the repo's 500-line test-file tripwire.
+// post-gesture-no-effect-claim.test.ts — split by subject per #1563 review.
 
 afterEach(() => {
   vi.useRealTimers();
