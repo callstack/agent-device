@@ -10,7 +10,6 @@ export { createDurableCaptureResourceStore } from './store.ts';
 export { finishLiveDurableCapture, forceCleanupLiveDurableCapture } from './transitions.ts';
 export type {
   AdoptStartedDurableCaptureParams,
-  DurableCaptureFailedFinishPolicy,
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
   DurableCaptureSessionStore,
