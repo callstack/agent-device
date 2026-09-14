@@ -162,6 +162,44 @@ test('release leaves a lock whose record names a different process', async () =>
   assert.equal(fs.existsSync(ownerFilePath), true);
 });
 
+test('release leaves a lock that a new acquisition of the same process republished', async () => {
+  const lockDirPath = path.join(tmpDir, 'reacquired.lock');
+  const ownerFilePath = path.join(lockDirPath, 'owner.json');
+  const owner = currentProcessOwner();
+  const release = await acquireProcessLock({ lockDirPath, owner });
+
+  // Same pid, same start time: the only thing that can tell this record from ours is the
+  // claim written with it. Removing the directory would hand the new holder's lock away.
+  fs.writeFileSync(
+    ownerFilePath,
+    JSON.stringify({ ...owner, acquiredAtMs: Date.now(), claimToken: 'a-different-claim' }),
+  );
+  await release();
+
+  assert.equal(
+    (JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { claimToken: string }).claimToken,
+    'a-different-claim',
+  );
+});
+
+test('a reacquired lock publishes a claim that its predecessor cannot reuse', async () => {
+  const lockDirPath = path.join(tmpDir, 'claim-token.lock');
+  const ownerFilePath = path.join(lockDirPath, 'owner.json');
+  const first = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  const firstToken = (JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { claimToken: string })
+    .claimToken;
+  await first();
+
+  const second = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  const secondToken = (JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { claimToken: string })
+    .claimToken;
+  await second();
+
+  assert.equal(typeof firstToken, 'string');
+  assert.equal(typeof secondToken, 'string');
+  assert.notEqual(firstToken, secondToken);
+});
+
 test('acquireProcessLock does not evict a live owner whose owner.json is malformed', async () => {
   const lockDirPath = path.join(tmpDir, 'malformed.lock');
   fs.mkdirSync(lockDirPath);
