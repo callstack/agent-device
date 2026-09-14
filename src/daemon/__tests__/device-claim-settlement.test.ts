@@ -6,8 +6,10 @@ import { afterEach, test, vi } from 'vitest';
 import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../device-claims.ts';
 import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
@@ -233,4 +235,180 @@ test('an internally inconsistent dead claim never authorizes reconciliation', as
   assert.equal(result.conflict.classification, 'inconsistent');
   assert.equal(reconcile.mock.calls.length, 0);
   assert.equal(fs.existsSync(claimPath(root)), true);
+});
+
+const reconciled = async () => ({ status: 'reconciled' as const });
+
+function storedClaim() {
+  const claim = inspectDeviceClaims({ serial: device.id })[0]?.claim;
+  assert.ok(claim);
+  return claim;
+}
+
+function rewriteClaimOwner(root: string, ownerPid: number): void {
+  const stored = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(claimPath(root), JSON.stringify({ ...stored, ownerPid, ownerStartTime: null }));
+}
+
+/** The claim as this process wrote it, but held by another live process from another state dir. */
+async function seedForeignLiveClaim(root: string, stateDir: string): Promise<void> {
+  fs.mkdirSync(stateDir, { recursive: true });
+  const seeded = await acquireDeviceClaim({
+    device,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+  });
+  assert.equal(seeded.status, 'acquired');
+  rewriteClaimOwner(root, process.ppid);
+}
+
+function observesDeviceBootAt(bootedAtMs: number): DeviceBootObservationService {
+  return { observeBootTimeMs: async () => ({ observed: true, bootedAtMs }) };
+}
+
+const UNOBSERVED_BOOT: DeviceBootObservationService = {
+  observeBootTimeMs: async () => ({ observed: false, reason: 'unobserved' }),
+};
+
+// #2538: a claim that predates the device's current boot cannot describe live device-side ownership
+// — the reboot destroyed the app process, the runner, and the accessibility connection — so it loses
+// the device even while its recorded owner's process looks healthy from the host.
+test('takes a live foreign claim whose device rebooted after the claim was taken', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'owner-state');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+  const bootedAtMs = storedClaim().createdAtMs + 1;
+  let reconciledSession: string | undefined;
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: async (claim) => {
+      reconciledSession = claim.session;
+      return { status: 'reconciled' as const };
+    },
+    observeDeviceBoot: observesDeviceBootAt(bootedAtMs),
+  });
+
+  assert.equal(second.status, 'acquired');
+  if (second.status !== 'acquired') return;
+  assert.deepEqual(second.tookOver, {
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+    bootedAtMs,
+  });
+  assert.equal(reconciledSession, 'cwd:/w:default');
+  assert.equal(storedClaim().session, 'other');
+});
+
+test('keeps a live foreign claim blocking until the device boot is answered', async () => {
+  for (const observeDeviceBoot of [UNOBSERVED_BOOT, undefined]) {
+    const root = useClaimsRoot();
+    const stateDir = path.join(root, 'unobserved-state');
+    await seedForeignLiveClaim(root, stateDir);
+    publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+
+    const second = await acquireDeviceClaim({
+      device,
+      session: 'other',
+      workspace: '/w',
+      stateDir,
+      reconcileOrphanedDeviceClaim: reconciled,
+      ...(observeDeviceBoot ? { observeDeviceBoot } : {}),
+    });
+
+    assert.equal(second.status, 'conflict');
+    if (second.status !== 'conflict') return;
+    assert.equal(second.conflict.classification, 'live');
+    assert.equal(storedClaim().session, 'cwd:/w:default');
+  }
+});
+
+test('a boot that predates the claim proves nothing about it and keeps the conflict', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'pre-claim-boot-state');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconciled,
+    observeDeviceBoot: observesDeviceBootAt(storedClaim().createdAtMs),
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+});
+
+test('a rebooted device stays claimed while its owner has resources left to settle', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'reboot-cleanup-state');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+
+  const second = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    observeDeviceBoot: observesDeviceBootAt(storedClaim().createdAtMs + 1),
+  });
+
+  assert.equal(second.status, 'conflict');
+  if (second.status !== 'conflict') return;
+  assert.equal(second.conflict.classification, 'live');
+  assert.equal(storedClaim().session, 'cwd:/w:default');
+});
+
+// The reboot bound is the last instant the owner vouched for the device, not the instant the claim
+// was first written: an owner that came back on the rebooted device holds it against a later caller.
+test('an owner that reopened its app after the reboot keeps the device', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'renewed-state');
+  const first = await acquireDeviceClaim({
+    device,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+  });
+  assert.equal(first.status, 'acquired');
+  const bootedAtMs = storedClaim().createdAtMs + 1;
+  await new Promise((resolve) => setTimeout(resolve, 2));
+
+  const reopened = await acquireDeviceClaim({
+    device,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+    stateDir,
+    observeDeviceBoot: observesDeviceBootAt(bootedAtMs),
+  });
+  assert.equal(reopened.status, 'acquired');
+  if (reopened.status !== 'acquired') return;
+  assert.equal(reopened.tookOver, undefined);
+  assert.ok(storedClaim().updatedAtMs >= bootedAtMs);
+
+  rewriteClaimOwner(root, process.ppid);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+  const foreign = await acquireDeviceClaim({
+    device,
+    session: 'other',
+    workspace: '/w',
+    stateDir,
+    reconcileOrphanedDeviceClaim: reconciled,
+    observeDeviceBoot: observesDeviceBootAt(bootedAtMs),
+  });
+
+  assert.equal(foreign.status, 'conflict');
+  if (foreign.status !== 'conflict') return;
+  assert.equal(foreign.conflict.classification, 'live');
+  assert.equal(storedClaim().session, 'cwd:/w:default');
 });

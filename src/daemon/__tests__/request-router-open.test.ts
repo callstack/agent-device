@@ -46,6 +46,16 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
     resolveIosApp: vi.fn(async (_device, app) => app),
   };
 });
+// The reboot-stale claim probe (#2538) must never reach the host's real process table here.
+const mockObserveSimulatorBoot = vi.hoisted(() =>
+  vi.fn(async (): Promise<DeviceBootObservation> => ({
+    observed: false,
+    reason: 'unobserved',
+  })),
+);
+vi.mock('@agent-device/platform-apple/simulator-boot', () => ({
+  observeSimulatorBootTimeMs: mockObserveSimulatorBoot,
+}));
 
 import {
   createRequestHandler,
@@ -60,6 +70,7 @@ import {
   discoverReadyAndroidEmulators,
 } from './application-lifecycle-runtime-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
@@ -145,6 +156,11 @@ beforeEach(() => {
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
   mockDiscoverReadyAndroidEmulators.mockReset();
+  mockObserveSimulatorBoot.mockReset();
+  mockObserveSimulatorBoot.mockImplementation(async () => ({
+    observed: false,
+    reason: 'unobserved',
+  }));
   mockDiscoverReadyAndroidEmulators.mockImplementation(async (device) => [
     {
       ...device,
@@ -776,5 +792,71 @@ test('open reconciles a foreign dead owner through that owner state dir, never t
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
+  }
+});
+
+function storedClaimUpdatedAt(device: DeviceInfo): number {
+  const claim = inspectDeviceClaims({ udid: device.id })[0]?.claim;
+  expect(claim?.updatedAtMs).toBeTypeOf('number');
+  return claim?.updatedAtMs ?? 0;
+}
+
+// Preparation can boot the device an open is returning to, and the claim has to cover that boot:
+// otherwise the boot an owner caused for itself is what takes the device away from it. The device
+// boots strictly between the two renewals of one reopen, so only the post-preparation renewal can
+// raise the stamp above the boot, and the foreign open asks from its own store, which is where
+// reboot-based claim settlement happens.
+test('an open that booted the device keeps the device against a foreign open', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-boot-');
+  const foreignStore = makeSessionStore('agent-device-router-open-boot-foreign-');
+  const device = makeIosDevice('SIM-COLD-BOOTED');
+  mockResolveTargetDevice.mockResolvedValue(device);
+  const claimsDir = mkdtempForTestSync('agent-device-router-open-boot-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+
+  // The fixture's platform tools answer device state through this seam, so a test that wants a boot
+  // during preparation arms it here and the fake device reports that boot to every later probe.
+  let bootedAtMs: number | undefined;
+  let bootArmed = false;
+  mockObserveSimulatorBoot.mockImplementation(async () =>
+    bootedAtMs === undefined
+      ? { observed: false, reason: 'unobserved' }
+      : { observed: true, bootedAtMs },
+  );
+  mockAwaitFixtureReadiness.mockImplementation(async () => {
+    if (bootArmed) {
+      bootArmed = false;
+      bootedAtMs = Date.now();
+    }
+  });
+
+  try {
+    const opened = await createOpenHandler(sessionStore)(
+      openRequest('boot-owner', { platform: 'ios' }, 'req-open-boot-owner', {}, ['FixtureApp']),
+    );
+    expect(opened.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+
+    bootArmed = true;
+    const reopened = await createOpenHandler(sessionStore)(
+      openRequest('boot-owner', { platform: 'ios' }, 'req-open-boot-reopen', {}, ['FixtureApp']),
+    );
+    expect(reopened.ok).toBe(true);
+    expect(bootedAtMs).toBeTypeOf('number');
+    expect(storedClaimUpdatedAt(device)).toBeGreaterThanOrEqual(bootedAtMs ?? 0);
+
+    const foreign = await createOpenHandler(foreignStore)(
+      openRequest('boot-foreign', { platform: 'ios' }, 'req-open-boot-foreign', {}, ['FixtureApp']),
+    );
+
+    expect(foreign.ok).toBe(false);
+    if (foreign.ok) return;
+    expect(foreign.error.code).toBe('DEVICE_IN_USE');
+    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('boot-owner');
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });

@@ -35,7 +35,11 @@ physical devices. Live verification steps apply when exercising a device-facing 
 - `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
   `close --session` hint. "owned by session X in workspace Y" is another worktree's device
   claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
-  never PID hunting.
+never PID hunting. One claim settles itself: if that device rebooted after the last `open` its owner
+made, its app, runner, and accessibility session were destroyed, so `open` reconciles the owner's
+resources, takes the claim, and says so in its warnings. A reboot you caused yourself during
+verification looks exactly like that to the next `open` — until the owner reopens, which stamps the
+boot it is now running on and makes the claim live again.
 
 The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
 retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client

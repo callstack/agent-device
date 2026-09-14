@@ -7,6 +7,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { errorResponse } from '../../response.ts';
+import { readResponseWarnings } from './session-open-warnings.ts';
 
 export type ForegroundOpenResolution =
   | { type: 'not-requested' }
@@ -153,7 +154,7 @@ function openWithInitialSnapshotFailure(
     data: {
       ...openData,
       warnings: [
-        ...readStringWarnings(openData),
+        ...readResponseWarnings(openData),
         `The session is open, but the initial interactive snapshot failed (${error.code}: ${error.message}). Run: agent-device snapshot -i`,
       ],
       // The FULL error shape (hint/details/diagnosticId/logPath), not a
@@ -162,9 +163,4 @@ function openWithInitialSnapshotFailure(
       initialSnapshotError: error,
     },
   };
-}
-
-function readStringWarnings(data: Record<string, unknown> | undefined): string[] {
-  if (!data || !Array.isArray(data.warnings)) return [];
-  return data.warnings.filter((warning): warning is string => typeof warning === 'string');
 }

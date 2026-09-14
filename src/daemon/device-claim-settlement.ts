@@ -1,28 +1,37 @@
 import fs from 'node:fs';
+import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import {
+  ownerIdentityMatches,
+  type readCurrentOwnerIdentity,
+} from '@agent-device/host-kit/process';
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaimFile,
+  type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
+import {
+  emitClaimReleasedAfterDeviceReboot,
+  rebootedDeviceClaim,
+  type TakenOverDeviceClaim,
+} from './device-claim-reboot.ts';
 import { resolveDeviceClaimPath } from './device-claim-paths.ts';
 import {
   ownershipFromClaim,
   type DeviceClaim,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
-import {
-  ownerIdentityMatches,
-  type readCurrentOwnerIdentity,
-} from '@agent-device/host-kit/process';
+import { writeDeviceClaim } from './device-claim-store.ts';
 
 /**
  * What the claim file says before an acquisition writes its own record. `available` means the
- * caller may claim the device; `held` means the same session already owns the device and keeps its
- * ownership token.
+ * caller may claim the device, and `tookOver` names the stale claim it replaced; `held` means the
+ * same session already owns the device and keeps its ownership token.
  */
 export type ExistingClaimResolution =
-  | { status: 'available' }
+  | { status: 'available'; tookOver?: TakenOverDeviceClaim }
   | { status: 'held'; ownership: DeviceClaimSessionOwnership }
   | { status: 'conflict'; conflict: InspectedDeviceClaim };
 
@@ -37,16 +46,19 @@ export type DeviceClaimReconciler = (
 /**
  * Settles the claim file an acquisition found, and decides whether this caller may write its own.
  * The recorded owner's own state answers first — a dead, unreachable, or superseded owner is
- * settled exactly as `device release --stale` settles it — and a claim whose owner can still
- * release it holds the device.
+ * settled exactly as `device release --stale` settles it. A claim whose owner can still release it
+ * clears only on the device's own evidence, because a device that rebooted after the claim was
+ * taken destroyed the runner, the app, and the accessibility connection the claim described.
  */
 export async function resolveExistingClaim(params: {
+  device: DeviceInfo;
   deviceKey: string;
   owner: ReturnType<typeof readCurrentOwnerIdentity>;
   session: string;
   workspace: string;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  observeDeviceBoot?: DeviceBootObservationService;
 }): Promise<ExistingClaimResolution> {
   const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey));
   if (!existing) return { status: 'available' };
@@ -58,21 +70,79 @@ export async function resolveExistingClaim(params: {
     return { status: 'available' };
   }
   if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
-    return { status: 'held', ownership: ownershipFromClaim(existing.claim) };
+    return { status: 'held', ownership: renewHeldClaim(existing.claim) };
   }
-  if (!existing.claim || !deviceClaimOwnerCannotRelease(existing.classification)) {
+  return await settleForeignClaim(existing, params);
+}
+
+/**
+ * An owner asking for the device it already holds vouches for that device as of now, which is what
+ * the reboot bound measures. Without this write, an owner that reopened its app after a reboot would
+ * keep a claim stamped before the reboot, and the next foreign `open` would read that stamp as
+ * proof of a device nobody owns and take it out from under a session that is demonstrably running.
+ */
+function renewHeldClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {
+  if (claim.updatedAtMs >= Date.now()) return ownershipFromClaim(claim);
+  const renewed: DeviceClaim = { ...claim, updatedAtMs: Date.now() };
+  writeDeviceClaim(renewed);
+  return ownershipFromClaim(renewed);
+}
+
+/**
+ * A settled foreign claim clears through the same transaction `device release --stale` and the
+ * startup sweep use: durable resources first, claim last, so a resource still owned by the foreign
+ * session keeps the device claimed rather than handing it over mid-cleanup.
+ */
+async function settleForeignClaim(
+  existing: InspectedDeviceClaim,
+  params: {
+    device: DeviceInfo;
+    deviceKey: string;
+    reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+    observeDeviceBoot?: DeviceBootObservationService;
+  },
+): Promise<ExistingClaimResolution> {
+  const claim = existing.claim;
+  if (!claim) {
+    emitClaimConflict(params.deviceKey, existing);
+    return { status: 'conflict', conflict: existing };
+  }
+  const settlement = await foreignClaimSettlement({
+    classification: existing.classification,
+    claim,
+    device: params.device,
+    observeDeviceBoot: params.observeDeviceBoot,
+  });
+  if (!settlement.settles) {
     emitClaimConflict(params.deviceKey, existing);
     return { status: 'conflict', conflict: existing };
   }
   const reconciliation = await settleVerifiedOrphanedClaim(
-    existing.claim,
+    claim,
     params.reconcileOrphanedDeviceClaim,
   );
   if (reconciliation.status === 'retained') {
     emitClaimConflict(params.deviceKey, existing, reconciliation.reason);
     return { status: 'conflict', conflict: existing };
   }
-  return { status: 'available' };
+  if (!settlement.tookOver) return { status: 'available' };
+  emitClaimReleasedAfterDeviceReboot({
+    deviceKey: params.deviceKey,
+    claim,
+    bootedAtMs: settlement.tookOver.bootedAtMs,
+  });
+  return { status: 'available', tookOver: settlement.tookOver };
+}
+
+async function foreignClaimSettlement(params: {
+  classification: DeviceClaimClassification;
+  claim: DeviceClaim;
+  device: DeviceInfo;
+  observeDeviceBoot?: DeviceBootObservationService;
+}): Promise<{ settles: true; tookOver?: TakenOverDeviceClaim } | { settles: false }> {
+  if (deviceClaimOwnerCannotRelease(params.classification)) return { settles: true };
+  const tookOver = await rebootedDeviceClaim(params);
+  return tookOver ? { settles: true, tookOver } : { settles: false };
 }
 
 /**
@@ -104,6 +174,7 @@ export function isClaimOwnedByThisDaemon(
   );
 }
 
+/** An abandoned claim holds the device for nobody, so it grants no authority and fences no daemon. */
 export function isAbandonedDeviceClaim(claim: DeviceClaim): boolean {
   return claim.abandonedAtMs !== undefined;
 }
@@ -118,14 +189,13 @@ function isAbandonedClaimOfThisDaemon(
 
 function isCurrentClaimOwner(
   claim: DeviceClaim,
-  params: Pick<Parameters<typeof resolveExistingClaim>[0], 'session' | 'workspace' | 'stateDir'>,
+  params: { session: string; workspace: string; stateDir: string },
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
 ): boolean {
   return (
     claim.session === params.session &&
     claim.workspace === params.workspace &&
-    claim.stateDir === params.stateDir &&
-    ownerIdentityMatches({ pid: claim.ownerPid, startTime: claim.ownerStartTime }, owner)
+    isClaimOwnedByThisDaemon(claim, params.stateDir, owner)
   );
 }
 

@@ -8,6 +8,7 @@ import {
   type DeviceIdentity,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
@@ -19,6 +20,7 @@ import {
   type DeviceClaimSelectors,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
+import type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 import {
   canonicalLocalDeviceKey,
   resolveDeviceClaimPath,
@@ -44,7 +46,12 @@ export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
 export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
 
 export type DeviceClaimAcquireResult =
-  | { status: 'acquired'; ownership: DeviceClaimSessionOwnership }
+  | {
+      status: 'acquired';
+      ownership: DeviceClaimSessionOwnership;
+      /** The stale foreign claim this acquisition replaced, when there was one. */
+      tookOver?: TakenOverDeviceClaim;
+    }
   | { status: 'conflict'; conflict: InspectedDeviceClaim };
 
 /**
@@ -71,6 +78,11 @@ export async function acquireDeviceClaim(params: {
   workspace: string;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  /**
+   * Asks the device whether it rebooted after a foreign claim was taken, which is the only proof
+   * that outlives a live owner. Callers that have no answer to give omit it and keep the conflict.
+   */
+  observeDeviceBoot?: DeviceBootObservationService;
 }): Promise<DeviceClaimAcquireResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
@@ -128,16 +140,13 @@ async function claimHeldDevice(params: {
   workspace: string;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  observeDeviceBoot?: DeviceBootObservationService;
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
   const existing = await resolveExistingClaim({
-    deviceKey,
+    ...params,
     owner,
-    session: params.session,
-    workspace: params.workspace,
-    stateDir: params.stateDir,
-    reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
   });
   if (existing.status === 'conflict') return existing;
   if (existing.status === 'held') return { status: 'acquired', ownership: existing.ownership };
@@ -159,7 +168,11 @@ async function claimHeldDevice(params: {
     updatedAtMs: now,
   };
   writeDeviceClaim(claim);
-  return { status: 'acquired', ownership: ownershipFromClaim(claim) };
+  return {
+    status: 'acquired',
+    ownership: ownershipFromClaim(claim),
+    ...(existing.tookOver ? { tookOver: existing.tookOver } : {}),
+  };
 }
 
 /**
@@ -329,20 +342,19 @@ export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
 ): Promise<DeviceClaimClearOutcome> {
   if (!ownership) return 'absent';
-  return await withDeviceClaimLock(ownership.deviceKey, async () => {
-    const claimPath = resolveDeviceClaimPath(ownership.deviceKey);
-    const inspected = inspectDeviceClaimFile(claimPath);
-    if (!inspected) return 'absent';
-    const claim = inspected.claim;
-    if (!claim || !claimMatchesOwnership(claim, ownership)) return 'ownership-changed';
-    try {
-      fs.unlinkSync(claimPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      return 'absent';
-    }
-    return 'deleted';
-  });
+  return await writeOwnedDeviceClaim(
+    ownership,
+    (_claim, claimPath) => {
+      try {
+        fs.unlinkSync(claimPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        return 'absent';
+      }
+      return 'deleted';
+    },
+    (conflict) => (conflict ? 'ownership-changed' : 'absent'),
+  );
 }
 
 /**
@@ -362,14 +374,64 @@ export async function abandonDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
 ): Promise<DeviceClaimAbandonOutcome> {
   if (!ownership) return 'absent';
+  return await writeOwnedDeviceClaim(
+    ownership,
+    (claim) => {
+      const now = Date.now();
+      writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
+      return 'abandoned';
+    },
+    (conflict) => (conflict ? 'ownership-changed' : 'absent'),
+  );
+}
+
+/**
+ * What a renewal found when the claim was no longer the one this session holds: the record that
+ * took the device, or nothing at all when the claim is gone.
+ */
+export type DeviceClaimRenewal =
+  | { status: 'renewed' }
+  | { status: 'lost'; conflict: InspectedDeviceClaim | undefined };
+
+/**
+ * Stamps the instant this ownership was last seen holding the device, which is the instant a later
+ * device boot has to postdate before it can invalidate the claim. An existing session that reopened
+ * its app vouched for the device again; without this stamp its first claim timestamp would let a
+ * foreign `open` read a reboot the owner already came back from as a device nobody owns.
+ *
+ * Renewal is the owner's check that it still holds the device, so a caller that is about to touch
+ * the device on this session's behalf has to treat a lost renewal as losing the device.
+ */
+export async function renewDeviceClaim(
+  ownership: DeviceClaimSessionOwnership | undefined,
+): Promise<DeviceClaimRenewal> {
+  if (!ownership) return { status: 'lost', conflict: undefined };
+  return await writeOwnedDeviceClaim(
+    ownership,
+    (claim) => {
+      writeDeviceClaim({ ...claim, updatedAtMs: Date.now() });
+      return { status: 'renewed' } as const;
+    },
+    (conflict) => ({ status: 'lost' as const, conflict }),
+  );
+}
+
+/**
+ * Runs one claim write under the claim lock, for the owner that acquired it, and reports the record
+ * that took the device when it is no longer the one that ownership took.
+ */
+async function writeOwnedDeviceClaim<O, L>(
+  ownership: DeviceClaimSessionOwnership,
+  act: (claim: DeviceClaim, claimPath: string) => O,
+  lost: (conflict: InspectedDeviceClaim | undefined) => L,
+): Promise<O | L> {
   return await withDeviceClaimLock(ownership.deviceKey, async () => {
-    const inspected = inspectDeviceClaimFile(resolveDeviceClaimPath(ownership.deviceKey));
-    if (!inspected) return 'absent';
+    const claimPath = resolveDeviceClaimPath(ownership.deviceKey);
+    const inspected = inspectDeviceClaimFile(claimPath);
+    if (!inspected) return lost(undefined);
     const claim = inspected.claim;
-    if (!claim || !claimMatchesOwnership(claim, ownership)) return 'ownership-changed';
-    const now = Date.now();
-    writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
-    return 'abandoned';
+    if (!claim || !claimMatchesOwnership(claim, ownership)) return lost(inspected);
+    return act(claim, claimPath);
   });
 }
 
