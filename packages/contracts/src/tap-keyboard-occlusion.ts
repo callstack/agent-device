@@ -187,6 +187,15 @@ function resolveVisibleKeyboardSurface(
   const bottomEdge = viewport.y + viewport.height;
   const reportedBottom = Math.max(...reportedRects.map((rect) => rect.y + rect.height));
   if (reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
+  // Reported geometry that arrives taller than it is wide is not in the app's orientation space. iOS
+  // gives up the landscape iPhone keyboard's rects in the keyboard's own rotated space: measured on
+  // iPhone 17 Pro, its key plane is 162 x 327 and its dock button reports y 8 of a 402 pt viewport,
+  // while the screenshot shows the keyboard full width across the bottom 327 pt. A band from that
+  // would refuse app content the keyboard is nowhere near while missing the keyboard itself, which is
+  // worse than not measuring — see the landscape cases in the golden table.
+  const reportedLeft = Math.min(...reportedRects.map((rect) => rect.x));
+  const reportedRight = Math.max(...reportedRects.map((rect) => rect.x + rect.width));
+  if (reportedRight - reportedLeft <= reportedBottom - minY) return null;
   const minX = Math.min(...anchorRects.map((rect) => rect.x));
   const maxRight = Math.max(...anchorRects.map((rect) => rect.x + rect.width));
   const planes = collectKeyboardPlaneIndices(nodes, surfaceNodes);

@@ -1,5 +1,5 @@
 {
-  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the target's rect center, matching isTapPointInsideViewport. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. The band is derived only from keyboard geometry that is docked to the viewport bottom edge: measured on iPhone 17 Pro (iOS 26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, so an 80 pt docking budget is what separates a docked keyboard from an iPad floating or split keyboard, whose band stays unmeasured and fails open. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence.",
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. The band is derived only from keyboard geometry that is docked to the viewport bottom edge: measured on iPhone 17 Pro (iOS 26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, so an 80 pt docking budget is what separates a docked keyboard from an iPad floating or split keyboard, whose band stays unmeasured and fails open. A docked keyboard is also wide: geometry that comes back taller than it is wide did not arrive in the app orientation space — iOS reports the landscape iPhone keyboard in the keyboard's own rotated space — and is refused measurement for the same reason. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence.",
   "constants": {
     "occlusionReason": "tap_keyboard_occludes_target"
   },
@@ -1318,7 +1318,7 @@
       }
     },
     {
-      "name": "a landscape iPhone keyboard fills most of the viewport height and is still the system keyboard",
+      "name": "the landscape iPhone keyboard reports its rects in its own rotated space, which cannot be measured",
       "viewport": {
         "x": 0,
         "y": 0,
@@ -1343,27 +1343,40 @@
           "parentIndex": 0,
           "rect": {
             "x": 0,
-            "y": 330,
+            "y": 338,
             "width": 874,
-            "height": 72
+            "height": 64
           }
         },
         {
           "index": 2,
           "type": "Button",
-          "label": "Form",
+          "label": "Home",
           "parentIndex": 1,
           "rect": {
-            "x": 390,
-            "y": 338,
-            "width": 94,
-            "height": 56
+            "x": 223,
+            "y": 342,
+            "width": 82,
+            "height": 36
           }
         },
         {
           "index": 3,
-          "type": "Keyboard",
-          "label": "Padding-Left",
+          "type": "Button",
+          "role": "UIKeyboardDockItemButton",
+          "label": "Next keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 8,
+            "width": 65,
+            "height": 68
+          }
+        },
+        {
+          "index": 4,
+          "type": "Other",
+          "role": "UIKeyboardLayoutStar",
           "parentIndex": 0,
           "rect": {
             "x": 2,
@@ -1373,10 +1386,11 @@
           }
         },
         {
-          "index": 4,
+          "index": 5,
           "type": "Key",
-          "label": "Q",
-          "parentIndex": 3,
+          "role": "UIAccessibilityElementKBKey",
+          "label": "q",
+          "parentIndex": 4,
           "rect": {
             "x": 124,
             "y": 77,
@@ -1385,15 +1399,16 @@
           }
         },
         {
-          "index": 5,
+          "index": 6,
           "type": "Key",
-          "label": "return",
-          "parentIndex": 3,
+          "role": "UIAccessibilityElementKBKey",
+          "label": "t",
+          "parentIndex": 4,
           "rect": {
-            "x": 700,
-            "y": 330,
-            "width": 150,
-            "height": 72
+            "x": 124,
+            "y": 366,
+            "width": 35,
+            "height": 36
           }
         }
       ],
@@ -1401,12 +1416,63 @@
         "index": 2
       },
       "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a landscape keyboard reported wide and docked is measured against the landscape viewport",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 2400,
+        "height": 1080
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 2400,
+            "height": 1080
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 1100,
+            "y": 900,
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "rect": {
+            "x": 0,
+            "y": 700,
+            "width": 2400,
+            "height": 380
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
         "kind": "occluded",
         "frame": {
-          "x": 2,
-          "y": 75,
-          "width": 848,
-          "height": 327
+          "x": 0,
+          "y": 700,
+          "width": 2400,
+          "height": 380
         }
       }
     },
