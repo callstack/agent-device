@@ -179,7 +179,8 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     data: {
       sessions: [
         expect.objectContaining({
-          name: expect.stringMatching(/^cwd:[a-f0-9]+:default$/),
+          // A platform-selecting request addresses that platform's own implicit session (#2580).
+          name: expect.stringMatching(/^cwd:[a-f0-9]+:ios$/),
         }),
       ],
     },

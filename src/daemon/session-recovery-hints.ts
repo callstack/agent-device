@@ -6,6 +6,12 @@ import { errorResponse } from './response.ts';
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 
+export type SessionRecoveryOptions = {
+  /** Whether the request disagrees with the bound session on *platform*, the one conflict another
+   * platform's implicit session actually answers. */
+  offersPlatformSession?: boolean;
+};
+
 export function describeSessionDevice(session: SessionState): string {
   const platform = session.device.platform;
   const name = session.device.name.trim();
@@ -19,12 +25,16 @@ export function describeSessionDevice(session: SessionState): string {
  * session those two differ (see {@link SessionRef}). Taking the pair rather than a record is what
  * keeps an addressless caller from compiling.
  */
-export function buildSessionRecoveryHint(ref: SessionRef, context: SessionRecoveryContext): string {
+export function buildSessionRecoveryHint(
+  ref: SessionRef,
+  context: SessionRecoveryContext,
+  options: SessionRecoveryOptions = {},
+): string {
   // Active recording state controls user recovery text; record-only ownership controls cleanup.
   if (ref.session.screenRecording) {
     return buildRecordingSessionRecoveryHint(ref.address, context);
   }
-  return buildOpenSessionRecoveryHint(ref.address, context);
+  return buildOpenSessionRecoveryHint(ref, context, options);
 }
 
 export function buildDeviceInUseBySessionError(
@@ -60,16 +70,19 @@ function buildRecordingSessionRecoveryHint(
 }
 
 function buildOpenSessionRecoveryHint(
-  sessionAddress: string,
+  ref: SessionRef,
   context: SessionRecoveryContext,
+  options: SessionRecoveryOptions,
 ): string {
+  const sessionAddress = ref.address;
   const sessionArg = shellQuoteIfNeeded(sessionAddress);
   const closeCommand = `agent-device close --session ${sessionArg}`;
   if (context === 'selector-conflict') {
     return (
       `Run agent-device session list to inspect active sessions. ` +
       `To reuse this device, rerun the command with --session ${sessionArg} and remove conflicting device selectors. ` +
-      `To switch devices, first run ${closeCommand}, then open the desired device with a different --session name.`
+      `To switch devices, first run ${closeCommand}, then open the desired device with a different --session name.` +
+      implicitPlatformSessionHint(ref, options)
     );
   }
 
@@ -78,4 +91,16 @@ function buildOpenSessionRecoveryHint(
     `To reuse this device, rerun the command with --session ${sessionArg}. ` +
     `To open a new session on this device, first run ${closeCommand}.`
   );
+}
+
+/**
+ * An implicit workspace session is addressed by platform, so switching platforms needs no invented
+ * session name (#2580). A session the caller named by hand has no platform address to fall back to,
+ * so the suggestion is withheld there rather than offered as a dead end.
+ */
+function implicitPlatformSessionHint(ref: SessionRef, options: SessionRecoveryOptions): string {
+  const offers = options.offersPlatformSession === true && ref.session.sessionScope?.kind === 'cwd';
+  return offers
+    ? ' Or name the other platform with --platform to open its own session for this workspace.'
+    : '';
 }

@@ -64,3 +64,29 @@ test('an explicitly named session addresses itself unchanged', () => {
 
   expect(hint).toContain('agent-device close --session checkout');
 });
+
+// #2580: an implicit workspace session is addressed by platform, so the other platform needs a
+// --platform, not an invented name. A hand-named session has no platform address to fall back on.
+test('a platform conflict on an implicit workspace session offers that platform session', () => {
+  const hint = buildSessionRecoveryHint(scopedRef(), 'selector-conflict', {
+    offersPlatformSession: true,
+  });
+
+  expect(hint).toContain('--platform to open its own session for this workspace');
+});
+
+test('a device or target conflict does not offer a platform session it cannot answer with', () => {
+  expect(buildSessionRecoveryHint(scopedRef(), 'selector-conflict')).not.toContain('--platform');
+});
+
+test('selector-conflict recovery offers no platform session to a hand-named session', () => {
+  const hint = buildSessionRecoveryHint(
+    {
+      address: 'checkout',
+      session: { ...scopedRef().session, name: 'checkout', sessionScope: undefined },
+    },
+    'selector-conflict',
+  );
+
+  expect(hint).not.toContain('--platform');
+});

@@ -417,7 +417,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--session'],
     type: 'string',
     usageLabel: '--session <name>',
-    usageDescription: 'Named session',
+    usageDescription: 'Named session (implicit default is scoped to this workspace + platform)',
     projectConfig: true,
     recorded: false,
   },

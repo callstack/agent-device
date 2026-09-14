@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+- Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
+  can drive iOS and Android without inventing a `--session` name for every command (#2580). An
+  implicit session was addressed by `cwd:<workspace>:default`, one slot per checkout, and it stayed
+  bound to the first device it touched. A repo that tests both platforms — a visual-regression run
+  across `react-native-paper` components, for example — could not open the second one at all: after
+  `open --platform ios`, `open --platform android` from the same directory failed with `INVALID_ARGS`
+  ("already bound to apple device \"iPhone 17\""), and so did `boot --platform android`, which binds
+  nothing and only needed a device to start. The hint was correct (`--session android` works), but
+  following it means threading a hand-written name through every command of both legs, and a script
+  that drops one flag silently talks to the other platform's device. `--platform` now selects the
+  implicit session, so the platform a script already declares is the only handle it needs:
+  `cwd:<workspace>:ios` and `cwd:<workspace>:android` coexist, each with its own device, app, and
+  artifact directory. Three rules keep the behavior that was already earned.
+  1. A platform-naming request joins the workspace's session only when it genuinely agrees with it,
+     so a session opened without `--platform` — which keeps the platform-less `default` leaf — stays
+     reachable from commands that do name a platform and keeps writing to its own artifact directory
+     instead of growing a twin beside it. A request that agrees on platform but names a different
+     device or target still gets the existing `INVALID_ARGS` refusal; it does not silently fork a
+     second same-platform session that one `--platform` would then have to disambiguate.
+  2. A request naming no platform joins the workspace's only implicit session — what every
+     single-platform script does today, so those are unaffected — and refuses with `AMBIGUOUS_MATCH`
+     when the workspace holds several, naming every address and the `--platform`/`--session` flag
+     that selects it, instead of choosing a platform by open order. Same for a broad selector such as
+     `--platform apple` that matches both this workspace's iPhone and its Mac.
+  3. Inventory commands — `session list`, `devices`, `doctor`, `capabilities`, `apps`, which the
+     registry classifies as `sessionKind: 'inventory'` — never claim a session and keep resolving an
+     address through the ambiguity. Refusing those would refuse the command an agent runs to resolve
+     it. `events` and `close` are deliberately not in that set: each reads or tears down one session,
+     and a silently-empty `events` or a `close` that closed nothing would be worse than the refusal.
+  Two adjacent repairs were required. A settling interaction published the live session under
+  `SessionState.name`, which for an implicit session is only `default` and not the address it answers
+  to, so `agent-device session list` already reported a phantom second row beside the real session;
+  under platform keying that phantom would also have read as a second session the caller has to
+  disambiguate, so the publisher now stores under the key the store itself owns, and workspace-session
+  counting collapses one session reachable under two addresses regardless of writer. And
+  `--session-lock`'s platform reaches `flags` only after routing has chosen the key, so routing now reads `meta.lockPlatform` too — otherwise a
+  lock-policy caller, the exact audience that avoids naming sessions, would land on the wrong leaf.
+  Explicit `--session <name>` is untouched and still addresses one session verbatim.
+
 - Changed: `record stop` no longer carries a start-trim step no recorder could arm. The trim cut the
   interval between recorder start and target-app readiness, but the runner's `recordStart` answer has
   never carried either timing and the simulator path supplies none, so every built-in recording took
@@ -9,6 +48,7 @@
   timestamp shifting stayed shipped with it. Gesture telemetry now carries the timestamps it recorded;
   recorded videos are byte-for-byte the videos those paths already produced. Overlay burn-in, output
   stability checks, and the recorder-start gesture-clock anchor are unchanged (#2584).
+
 - Fixed: an iOS capture that no backend could read now says which backend was asked and what was on
   screen, instead of failing on the internal `regular iOS snapshot presentation requires a valid
   viewport` invariant alone (#2560). The runner declares such a payload sparse — backend, reason code,

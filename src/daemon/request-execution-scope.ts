@@ -26,6 +26,7 @@ import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
 import {
+  getSessionCommandKind,
   shouldBlockForInvalidRecording,
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
@@ -125,7 +126,13 @@ export async function createRequestExecutionScope(params: {
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
-  const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore);
+  const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore, {
+    // Inventory commands (`session list`, `devices`, `doctor`, …) route only to locate their own
+    // artifacts and never act through a session, so they must keep resolving an address even when
+    // the workspace owns several implicit sessions. Refusing them would refuse `session list`, the
+    // command an agent runs to resolve that ambiguity.
+    attachesToSession: getSessionCommandKind(command) !== 'inventory',
+  });
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLog = resolveSessionRequestLog({

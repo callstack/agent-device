@@ -60,7 +60,11 @@ export const captureSnapshotForSession: CaptureSnapshotForSession = async (
     },
     publishSnapshot: (snapshot) => {
       setSessionSnapshot(session, snapshot);
-      sessionStore.set(session.name, session);
+      // The store owns the key a session answers to, and for an implicitly scoped session that is
+      // `cwd:<workspace>:<platform>` while `session.name` is only `default`. Storing by the name
+      // published a second address for the same session, which an implicit request can then read
+      // as two sessions in one workspace.
+      sessionStore.set(sessionStore.resolveStoredSessionName(session), session);
     },
   });
 };

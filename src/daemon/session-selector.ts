@@ -34,7 +34,11 @@ export function assertSessionSelectorMatches(ref: SessionRef, flags?: CommandFla
     {
       session: address,
       conflicts: mismatches.map(formatSessionSelectorConflict),
-      hint: buildSessionRecoveryHint(ref, 'selector-conflict'),
+      hint: buildSessionRecoveryHint(ref, 'selector-conflict', {
+        // Only a platform disagreement is answered by another platform's implicit session; a device
+        // or target disagreement is not, and suggesting it there sends the caller in circles.
+        offersPlatformSession: mismatches.some((mismatch) => mismatch.key === 'platform'),
+      }),
     },
   );
 }

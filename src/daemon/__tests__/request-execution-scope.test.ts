@@ -20,6 +20,7 @@ import {
   prepareLockedRequestScope,
 } from '../request-execution-scope.ts';
 import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
+import { resolveSessionScope } from '../session-routing.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
@@ -935,3 +936,41 @@ function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
     ...overrides,
   };
 }
+
+// The `attachesToSession` routing option is derived from the command's own registry classification,
+// so a swapped derivation has to be visible somewhere: an inventory command must keep resolving an
+// address across implicit session ambiguity, and a session command must refuse instead of picking
+// one workspace session by open order.
+async function createScopeAcrossTwoImplicitWorkspaceSessions(command: string) {
+  const root = mkdtempForTestSync('agent-device-request-scope-ambiguity-');
+  fs.mkdirSync(path.join(root, '.git'));
+  const scope = resolveSessionScope({ ...makeRequest({ command }), meta: { cwd: root } });
+  if (scope.kind !== 'cwd') throw new Error('expected a cwd session scope');
+  const sessionStore = makeSessionStore('agent-device-request-scope-ambiguity-');
+  sessionStore.set(
+    `cwd:${scope.id}:ios`,
+    makeIosSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
+  );
+  sessionStore.set(
+    `cwd:${scope.id}:android`,
+    makeAndroidSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
+  );
+  return await createRequestExecutionScope({
+    req: makeRequest({ command, meta: { cwd: root, requestId: `ambiguity-${command}` } }),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+  });
+}
+
+test('createRequestExecutionScope lets session list route across implicit session ambiguity', async () => {
+  const scope = await createScopeAcrossTwoImplicitWorkspaceSessions('session_list');
+
+  expect(scope.sessionName).toMatch(/^cwd:[a-f0-9]{16}:default$/);
+  await scope[Symbol.asyncDispose]();
+});
+
+test('createRequestExecutionScope refuses a session command across implicit session ambiguity', async () => {
+  await expect(createScopeAcrossTwoImplicitWorkspaceSessions('press')).rejects.toMatchObject({
+    code: 'AMBIGUOUS_MATCH',
+  });
+});
