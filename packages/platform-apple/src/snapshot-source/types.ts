@@ -43,7 +43,9 @@ export type SnapshotSourceFailureKind =
   | 'timeout'
   | 'cancelled'
   | 'process-crash'
-  | 'transport-failure';
+  | 'transport-failure'
+  /** The bridge binary is still being prepared by a detached attempt; nothing failed. */
+  | 'preparing';
 
 export type SnapshotSourceFailure = Readonly<{
   kind: SnapshotSourceFailureKind;
