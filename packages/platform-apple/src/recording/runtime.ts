@@ -1,13 +1,15 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
-import type {
-  ScreenRecordingLiveSnapshot,
-  ScreenRecordingRuntimeOperations,
-  ScreenRecordingStartInput,
+import {
+  RECORDING_OUTPUT_UNPLAYABLE_REASON,
+  type ScreenRecordingLiveSnapshot,
+  type ScreenRecordingRuntimeOperations,
+  type ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
@@ -134,7 +136,7 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
           `${exit} before record stop; the video covers only what the recorder wrote before it stopped.`,
         );
       } catch (exportError) {
-        throw recorderExitLostTheExport(exportError, exit, result);
+        throw recorderExitEndedTheRecording(exportError, exit, result);
       }
     },
     cleanup: async () => {
@@ -250,28 +252,29 @@ function describeSimctlRecorderExit(result: HostCommandResult): string | undefin
     : `simctl recordVideo exited with code ${result.exitCode}`;
 }
 
-// The exit is the fact that makes an unreadable file permanent, so it belongs in the error the
-// operator reads: the next `record stop` re-reads the same settled exit and the same bytes.
-function recorderExitLostTheExport(
+// An unreadable file is the one export failure the recorder's exit explains: the next `record stop`
+// re-reads the same settled exit and the same bytes, so it names the exit and the way out. Anything
+// else the export path raised keeps its own verdict — a telemetry or transport failure a retry can fix
+// must not be told to close the session.
+function recorderExitEndedTheRecording(
   exportError: unknown,
   exit: string,
   result: HostCommandResult,
-): AppError {
+): unknown {
   const original = asAppError(exportError, 'COMMAND_FAILED');
-  const { reason } = original.details ?? {};
-  // `processExitError` is what makes normalizeError append the recorder's first stderr line, so the
-  // exit facts reach the operator without repeating them in this message.
-  return new AppError(original.code, `${original.message}; ${exit}`, {
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-    processExitError: true,
-    ...(typeof reason === 'string' ? { reason } : {}),
-    ...(result.signal === undefined ? {} : { signal: result.signal }),
-    retriable: false,
-    hint:
-      'The recorder exited before record stop, so the next record stop reads the same file. ' +
-      'Close this session to release the device, then record again.',
-  });
+  if (original.details?.reason !== RECORDING_OUTPUT_UNPLAYABLE_REASON) return exportError;
+  return new AppError(
+    original.code,
+    `${original.message}; ${exit}`,
+    execFailureDetails(result, {
+      ...(original.details ?? {}),
+      ...(result.signal === undefined ? {} : { signal: result.signal }),
+      retriable: false,
+      hint:
+        'The recorder exited before record stop, so the next record stop reads the same file. ' +
+        'Close this session to release the device, then record again.',
+    }),
+  );
 }
 
 function runnerDescriptorMatchesDevice(

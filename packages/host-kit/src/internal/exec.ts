@@ -646,10 +646,11 @@ export function requireExecSuccess(
 /**
  * COMMAND_FAILED details for a non-zero exec result. `processExitError: true`
  * lets normalizeError surface the first meaningful stderr line as the user-facing
- * message instead of the generic wrap message.
+ * message instead of the generic wrap message. A process killed by a signal reports
+ * no exit code, so the raw child_process null is accepted as well.
  */
 export function execFailureDetails(
-  result: Pick<ExecResult, 'stdout' | 'stderr' | 'exitCode'>,
+  result: Pick<ExecResult, 'stdout' | 'stderr'> & Readonly<{ exitCode: number | null }>,
   extra?: Record<string, unknown>,
 ): Record<string, unknown> {
   return {

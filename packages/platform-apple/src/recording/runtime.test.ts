@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -231,7 +232,10 @@ test('a refused simulator finish is re-driven by the next record stop', async ()
   const finalize = async () => {
     finalizeCalls += 1;
     if (finalizeCalls === 1) {
-      throw new Error('recording was not finalized into a playable video');
+      throw new AppError('COMMAND_FAILED', 'recording was not finalized into a playable video', {
+        reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
+        retriable: true,
+      });
     }
     return {};
   };
@@ -300,6 +304,34 @@ test('an unreadable recording names the exit that made it permanent and the way 
       hint: expect.stringContaining('Close this session'),
     },
   });
+});
+
+test('an export failure the recorder did not cause keeps its own verdict', async () => {
+  const transient = new AppError('COMMAND_FAILED', 'recording telemetry could not be written', {
+    reason: 'telemetry-write-failed',
+    retriable: true,
+    hint: 'Retry record stop.',
+  });
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 1 }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async () => {
+        throw transient;
+      },
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+
+  await expect(handle.finish()).rejects.toBe(transient);
 });
 
 test('a recorder that record stop terminated itself is collected without a warning', async () => {

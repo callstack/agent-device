@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   getRecordingOverlaySupportWarning,
@@ -25,7 +26,7 @@ async function finalizeScreenRecording(
       'COMMAND_FAILED',
       `recording was not finalized into a playable video: ${input.outputPath}`,
       {
-        reason: 'recording-output-unplayable',
+        reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
         retriable: true,
         hint:
           'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
