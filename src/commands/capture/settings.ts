@@ -1,6 +1,14 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
-import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
+import {
+  MACOS_PERMISSION_TARGETS,
+  MOBILE_PERMISSION_TARGETS,
+  PERMISSION_ACTIONS,
+  PERMISSION_MODES,
+  SETTINGS_MACOS_PERMISSION_USAGE,
+  SETTINGS_USAGE_OVERRIDE,
+  type PermissionMode,
+} from '@agent-device/contracts/settings';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
@@ -32,7 +40,7 @@ const settingsCommandMetadata = defineFieldCommandMetadata(
     latitude: numberField(),
     longitude: numberField(),
     permission: stringField(),
-    mode: enumField(['full', 'limited']),
+    mode: enumField([...PERMISSION_MODES]),
   },
 );
 
@@ -53,8 +61,7 @@ export const settingsCommandFacet = defineCommandFacet({
   name: SETTINGS_COMMAND_NAME,
   text: {
     summary: 'Change OS settings and app permissions',
-    cliDetail:
-      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state.',
+    cliDetail: `macOS supports only settings appearance <light|dark|toggle> and settings ${SETTINGS_MACOS_PERMISSION_USAGE}; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state.`,
   },
   metadata: settingsCommandMetadata,
   run: (client, input) => client.settings.update(input as SettingsUpdateOptions),
@@ -131,8 +138,8 @@ function readPermission(value: string | undefined): PermissionTarget {
   throw new AppError('INVALID_ARGS', 'settings permission requires a permission target.');
 }
 
-function readPermissionMode(value: string | undefined): 'full' | 'limited' | undefined {
-  if (value === undefined || value === 'full' || value === 'limited') return value;
+function readPermissionMode(value: string | undefined): PermissionMode | undefined {
+  if (value === undefined || isOneOf(value, PERMISSION_MODE_VALUES)) return value;
   throw new AppError('INVALID_ARGS', 'settings permission mode must be full or limited.');
 }
 
@@ -146,7 +153,6 @@ type BiometricSetting = Extract<
 type BiometricState = Extract<SettingsUpdateOptions, { setting: 'faceid' | 'touchid' }>['state'];
 type FingerprintState = Extract<SettingsUpdateOptions, { setting: 'fingerprint' }>['state'];
 type AppearanceState = Extract<SettingsUpdateOptions, { setting: 'appearance' }>['state'];
-type PermissionState = Extract<SettingsUpdateOptions, { setting: 'permission' }>['state'];
 
 const ON_OFF_SETTINGS = setOf<OnOffSetting>('wifi', 'airplane', 'location', 'animations');
 const ON_OFF_STATES = setOf<OnOffState>('on', 'off');
@@ -154,22 +160,6 @@ const APPEARANCE_STATES = setOf<AppearanceState>('light', 'dark', 'toggle');
 const BIOMETRIC_SETTINGS = setOf<BiometricSetting>('faceid', 'touchid');
 const BIOMETRIC_STATES = setOf<BiometricState>('match', 'nonmatch', 'enroll', 'unenroll');
 const FINGERPRINT_STATES = setOf<FingerprintState>('match', 'nonmatch');
-const PERMISSION_STATES = setOf<PermissionState>('grant', 'deny', 'reset');
-const PERMISSION_TARGETS = setOf<PermissionTarget>(
-  'camera',
-  'microphone',
-  'photos',
-  'contacts',
-  'contacts-limited',
-  'notifications',
-  'calendar',
-  'location',
-  'location-always',
-  'media-library',
-  'motion',
-  'reminders',
-  'siri',
-  'accessibility',
-  'screen-recording',
-  'input-monitoring',
-);
+const PERMISSION_MODE_VALUES = setOf(...PERMISSION_MODES);
+const PERMISSION_STATES = setOf(...PERMISSION_ACTIONS);
+const PERMISSION_TARGETS = setOf(...MOBILE_PERMISSION_TARGETS, ...MACOS_PERMISSION_TARGETS);

@@ -1,24 +1,21 @@
 // The public API vocabulary for device settings and permission grants.
 
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
+import type {
+  MACOS_PERMISSION_TARGETS,
+  MOBILE_PERMISSION_TARGETS,
+  PermissionAction,
+  PermissionMode,
+} from './settings.ts';
 
+/**
+ * Every permission the public client can name: the app-scoped subset plus the macOS-only one, both
+ * from the owning declaration. Type-only on purpose — naming a permission must not pull
+ * `settings.ts` and its `AppError` dependency onto the client's runtime path.
+ */
 export type PermissionTarget =
-  | 'camera'
-  | 'microphone'
-  | 'photos'
-  | 'contacts'
-  | 'contacts-limited'
-  | 'notifications'
-  | 'calendar'
-  | 'location'
-  | 'location-always'
-  | 'media-library'
-  | 'motion'
-  | 'reminders'
-  | 'siri'
-  | 'accessibility'
-  | 'screen-recording'
-  | 'input-monitoring';
+  | (typeof MOBILE_PERMISSION_TARGETS)[number]
+  | (typeof MACOS_PERMISSION_TARGETS)[number];
 
 export type SettingsUpdateOptions =
   | (DeviceCommandBaseOptions & {
@@ -58,7 +55,7 @@ export type SettingsUpdateOptions =
     })
   | (DeviceCommandBaseOptions & {
       setting: 'permission';
-      state: 'grant' | 'deny' | 'reset';
+      state: PermissionAction;
       permission: PermissionTarget;
-      mode?: 'full' | 'limited';
+      mode?: PermissionMode;
     });
