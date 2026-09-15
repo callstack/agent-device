@@ -46,6 +46,10 @@ extension RunnerTests {
     }
     app.launchArguments = ["--agent-device-selector-read-regression"]
     app.launch()
+    // Resolve the application element while nothing is stubbed: on a fresh simulator the first
+    // resolution is slow, and it must not be the block the plan abandons.
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    XCTAssertFalse(app.frame.isEmpty)
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemptionPending = true
@@ -89,7 +93,7 @@ extension RunnerTests {
       planned.fulfill()
     }
 
-    wait(for: [planned], timeout: 30)
+    wait(for: [planned], timeout: 60)
     let drainDeadline = Date().addingTimeInterval(3)
     while hasAbandonedMainThreadWork(), Date() < drainDeadline {
       sleepFor(0.005)
