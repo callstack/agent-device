@@ -14,7 +14,6 @@ import { isIosFamily, isApplePlatform, type DeviceInfo } from '@agent-device/ker
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { getFreePort } from './runner-io.ts';
-import { releaseXcodebuildSimulatorSetRedirectBestEffort } from './runner-device-set.ts';
 import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
@@ -249,7 +248,7 @@ async function startRunnerSessionWithLease(
       }),
     );
   } catch (error) {
-    await releaseXcodebuildSimulatorSetRedirectBestEffort(simulatorSetRedirect);
+    await simulatorSetRedirect?.releaseBestEffort();
     throw error;
   }
   const sessionId = buildRunnerSessionId(device.id, port);

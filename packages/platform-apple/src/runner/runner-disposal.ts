@@ -11,7 +11,6 @@ import {
 } from './host.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
-import { releaseXcodebuildSimulatorSetRedirectBestEffort } from './runner-device-set.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
@@ -192,7 +191,7 @@ async function cleanupRunnerSessionResources(
   await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
-  await releaseXcodebuildSimulatorSetRedirectBestEffort(session.simulatorSetRedirect);
+  await session.simulatorSetRedirect?.releaseBestEffort();
 }
 
 /**

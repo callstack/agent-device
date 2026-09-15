@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
-  releaseXcodebuildSimulatorSetRedirectBestEffort,
   withXcodebuildSimulatorSetRedirect,
 } from '../runner-device-set.ts';
 
@@ -127,7 +126,48 @@ test('a redirect handed back after its task keeps quiet about a release it canno
     assert.notEqual(redirect, null);
     makeReleaseUnverifiable(paths);
 
-    await releaseXcodebuildSimulatorSetRedirectBestEffort(redirect);
+    await redirect?.releaseBestEffort();
     assert.equal(fs.existsSync(paths.lockDirPath), true);
+  });
+});
+
+test('a redirect that could not restore the host device set reports it instead of swallowing it', async () => {
+  await withTempDir('device-set-restore-failure-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    // The host has a device set of its own, so giving the redirect back renames it out of the
+    // backup. Without this the release has nothing to restore and no rename to attempt.
+    fs.mkdirSync(paths.xctestDeviceSetPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'the host owns this');
+    const redirect = await acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+      lockDirPath: paths.lockDirPath,
+      xctestDeviceSetPath: paths.xctestDeviceSetPath,
+    });
+    assert.notEqual(redirect, null);
+
+    // The restore of the host's own `XCTestDevices` is a rename back from the backup, and a
+    // refusal there is a fact about this machine that no caller may lose.
+    let attempted = false;
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((
+      from: fs.PathLike,
+      to: fs.PathLike,
+    ) => {
+      if (String(to) === paths.xctestDeviceSetPath && !attempted) {
+        attempted = true;
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realRename(from as string, to as string);
+    }) as typeof fs.renameSync);
+
+    try {
+      await assert.rejects(
+        () => redirect!.releaseBestEffort(),
+        (error: unknown) => (error as NodeJS.ErrnoException).code === 'EACCES',
+      );
+      assert.equal(attempted, true);
+    } finally {
+      renameSpy.mockRestore();
+    }
   });
 });
