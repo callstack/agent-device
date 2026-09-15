@@ -11,23 +11,12 @@ import {
 } from '../snapshot-helper-install.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 import type { AndroidAdbInstaller } from '../adb-transport.ts';
-import type { AndroidSnapshotHelperManifest } from '../snapshot-helper-types.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 
-const manifest: AndroidSnapshotHelperManifest = {
-  name: 'android-snapshot-helper',
-  version: '0.13.3',
-  apkUrl: null,
-  sha256: 'a'.repeat(64),
-  packageName: 'com.callstack.agentdevice.snapshothelper',
-  versionCode: 13003,
-  instrumentationRunner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
-  minSdk: 23,
-  targetSdk: 36,
-  outputFormat: 'uiautomator-xml',
-  statusProtocol: 'android-snapshot-helper-v1',
-  installArgs: ['install', '-r'],
-};
+// Every test here re-hashes the manifest for the APK it writes, so the identity fields come from the
+// one helper fixture rather than a second copy that can drift from the manifest type.
+const manifest = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest;
 
 beforeEach(() => {
   resetAndroidSnapshotHelperInstallCache();
