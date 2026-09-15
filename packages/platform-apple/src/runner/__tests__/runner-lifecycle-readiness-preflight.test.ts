@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
@@ -176,6 +180,31 @@ test('a failed readiness probe without the marker does not restart the session',
     },
   );
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
+});
+
+test('a cancellation during the readiness preflight does not restart the session it canceled', async () => {
+  const session = makeRunnerSession({ port: 8100, ready: true });
+
+  // The preflight's catch marks whatever it was waiting on when it gave up, and one of the things
+  // it waits on is a caller that stopped waiting. That mark describes a walkaway, not a wedged
+  // runner, and a session that is ready is the one the caller just left: restarting it would boot a
+  // runner for a command nobody is going to send again, and take down a session that still works.
+  mockEnsureRunnerSession.mockResolvedValueOnce(session);
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
+    createRequestCanceledError({ runnerReadinessPreflightFailed: true, command: 'tap' }),
+  );
+
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.ok(isRequestCanceledError(error));
+      return true;
+    },
+  );
+  assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
+  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 1);
 });
 
 test('a boot that exited early does not wipe a restored runner artifact', async () => {

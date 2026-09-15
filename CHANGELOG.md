@@ -22,7 +22,9 @@
   `pressButton`, `activateApp`).
 - Changed (iOS runner): what recovers a stuck runner is decided by the recorded error, not by its
   wording. A readiness preflight marks the error it gives up with, and that marker is now the whole
-  test for restarting the session and replaying the command. Two message checks decided it before,
+  test for restarting the session and replaying the command — except for a request that was canceled,
+  which that same catch also marks: a command nobody is going to send again has no restart to spend,
+  and the session it would tear down may be one that still works. Two message checks decided it before,
   and a preflight reaches the caller in whatever shape its connect loop ended with — "Runner did not
   accept connection", "Runner endpoint probe failed", a killed `simctl` fallback, a post that ran out
   of its budget — so only some of those restarted and the rest failed the command. The other half is

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   RUNNER_ERROR_RULES,
   isRetryableRunnerError,
@@ -106,6 +106,14 @@ test('the preflight marker alone decides the restart', () => {
   );
   assert.equal(
     shouldRestartRunnerAfterReadinessPreflight(commandFailed('Runner readiness refused')),
+    false,
+  );
+  // The same catch marks a caller that stopped waiting. That mark is not a runner that stopped
+  // answering: the command was canceled, so no restart has a request left to serve.
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      createRequestCanceledError({ runnerReadinessPreflightFailed: true }),
+    ),
     false,
   );
 });

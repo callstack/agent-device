@@ -262,10 +262,19 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   );
 }
 
+/**
+ * The typed reason of a canceled request, for a caller holding the details rather than the error:
+ * a rule table that matches on details needs the same fact {@link isRequestCanceledError} reads, and
+ * must not restate the literal.
+ */
+export function isRequestCanceledDetails(details: AppErrorDetails | undefined): boolean {
+  return details?.reason === REQUEST_CANCELED_REASON;
+}
+
 export function isRequestCanceledError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   if (error.code !== 'COMMAND_FAILED') return false;
-  if (error.details?.reason === REQUEST_CANCELED_REASON) return true;
+  if (isRequestCanceledDetails(error.details)) return true;
   // Owned debt: canceled errors that crossed a wire without their details keep
   // the message; do not add new message sniffs beside it.
   return error.message === REQUEST_CANCELED_MESSAGE;

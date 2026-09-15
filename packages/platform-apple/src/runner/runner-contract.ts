@@ -1,6 +1,7 @@
 import {
   AppError,
   createRequestCanceledError,
+  isRequestCanceledDetails,
   toAppErrorCode,
   type AppErrorCode,
   type AppErrorDetails,
@@ -168,8 +169,14 @@ type RunnerErrorMatch = {
 const hasRetriableFlag: RunnerErrorDetailsMatch = (details) => details.retriable === true;
 const hasUsbmuxDeviceUnattached: RunnerErrorDetailsMatch = (details) =>
   details.usbmuxDeviceAttached === false;
+/**
+ * The preflight marks whatever it was waiting on when it stopped, and one of the things it waits on
+ * is a caller that stopped waiting. A canceled request is not a wedged runner: the restart this
+ * marker authorises would boot a runner for a command nobody is going to send again. Every abort in
+ * the connect loop normalizes to the typed canceled reason before it reaches here.
+ */
 const hasReadinessPreflightFailure: RunnerErrorDetailsMatch = (details) =>
-  details.runnerReadinessPreflightFailed === true;
+  details.runnerReadinessPreflightFailed === true && !isRequestCanceledDetails(details);
 
 type RunnerErrorVerdicts = {
   /** isRetryableRunnerError: transport error worth a same-session resend. */
