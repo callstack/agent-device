@@ -172,10 +172,30 @@ test('a managed port scope refuses global options the provider cannot restate', 
   ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
   expect(providerCalls).toEqual([]);
 
+  // A port typed into argv is the same conflict as one naming another target: the provider would
+  // hand the caller's `-P` to an adb it does not address, so the call is refused here.
+  providerCalls.length = 0;
+  await expect(
+    capture({ serial: DEVICE.id, serverPort: 15_037 }, [
+      '-P',
+      '9_999',
+      '-s',
+      DEVICE.id,
+      'shell',
+      'ls',
+    ]),
+  ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
+  expect(providerCalls).toEqual([]);
+
   // Without a lease the caller's own adb invocation is what runs, globals and all: the provider
   // receives the request with only this scope's `-s` pair removed.
   await capture({ serial: DEVICE.id }, ['-t', '42', '-s', DEVICE.id, 'shell', 'ls']);
   expect(providerCalls).toEqual([['-t', '42', 'shell', 'ls']]);
+  await capture({ serial: DEVICE.id }, ['-P', '9999', '-s', DEVICE.id, 'shell', 'ls']);
+  expect(providerCalls).toEqual([
+    ['-t', '42', 'shell', 'ls'],
+    ['-P', '9999', 'shell', 'ls'],
+  ]);
 });
 
 test('the provider receives the caller request with only the scope serial removed', async () => {
@@ -433,6 +453,20 @@ test('a device route answers for the server it was built with, not one a call na
     },
   );
   expect(calls).toEqual([]);
+
+  // A port typed into argv names the same conflict as one passed as an option, and the route has to
+  // answer for it too: it is the arm that would otherwise overwrite the caller's `-P`.
+  await expect(route.exec(['-P', '9999', 'shell', 'id'])).rejects.toMatchObject({
+    details: { reason: 'managed-device-transport-mismatch' },
+  });
+  expect(() => route.spawn?.(['-P', '9999', 'logcat'])).toThrowError(
+    expect.objectContaining({ details: { reason: 'managed-device-transport-mismatch' } }),
+  );
+  expect(calls).toEqual([]);
+
+  // The port this route was built with is the one it may answer for, however the caller spells it.
+  await route.exec(['-P', '15037', 'shell', 'id']);
+  expect(calls).toEqual([scoped(DEVICE.id, 'shell', 'id')]);
 });
 
 test('a managed port scope keeps shell -s arguments on the private transport', async () => {

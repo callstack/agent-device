@@ -253,10 +253,13 @@ function createAndroidCommandExecutorOverride(
     requireScopedSerial(scope, invocation.target.selector);
     if (invocation.target.selector.kind === 'serial') {
       if (invocation.target.selector.serial !== scope.serial) return undefined;
-      // Under a private adb server the provider cannot restate a caller's host globals, so the
-      // call is refused rather than answered with addressing quietly left behind. Without a lease
-      // the caller's own adb invocation is what runs, as it always has.
-      if (scope.serverPort !== undefined) requireManagedAndroidAdbAddressing(invocation.target);
+      // Under a private adb server the provider cannot restate a caller's host globals, and a
+      // `-P` naming another server would reach adb through a provider that never sees addressing,
+      // so both are refused here. Without a lease the caller's own adb invocation is what runs, as
+      // it always has.
+      if (scope.serverPort !== undefined) {
+        requireManagedAndroidAdbAddressing(invocation.target, scope.serverPort);
+      }
       // The provider contract is argv-shaped, so it receives the caller's request with this
       // scope's own `-s` pair removed — readiness tokens and transport globals left where the
       // caller put them, and never a rebuild with the scope's serial stitched back in.

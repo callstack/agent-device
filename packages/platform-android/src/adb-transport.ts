@@ -524,17 +524,17 @@ export function androidAdbPayloadWithoutSerial(
 export type AndroidManagedAdbServer = Readonly<{ port: number }>;
 
 /**
- * Adopts `invocation` for one managed adb server. Addressing is rewritten; the command travels by
- * reference, so a payload authored upstream is the same array that reaches the spawn boundary.
- * A caller-supplied `-P` is overwritten, as it is today; anything else that preselects a target
- * or server is refused, as it is today.
+ * Adopts `invocation` for one managed adb server. The command travels by reference, so a payload
+ * authored upstream is the same array that reaches the spawn boundary. Addressing is rewritten
+ * wherever the lease adds something the caller left unsaid, and refused wherever the caller named
+ * a server of their own — see {@link requireManagedAndroidAdbAddressing}.
  */
 export function applyManagedAndroidAdbServer(
   invocation: AndroidAdbInvocation,
   server: AndroidManagedAdbServer,
 ): AndroidAdbInvocation {
   const { target, command } = invocation;
-  requireManagedAndroidAdbAddressing(target);
+  requireManagedAndroidAdbAddressing(target, server.port);
   requireManagedAndroidAdbCommand(command);
   return androidAdbInvocation(
     {
@@ -563,9 +563,24 @@ export function requireUnconflictedAndroidAdbSelector(
   if (selector.kind === 'serial' && selector.serial !== serial) throw transportMismatch('device');
 }
 
-/** A caller cannot point a managed transport at another server or preselect another target. */
-export function requireManagedAndroidAdbAddressing(target: AndroidAdbTarget): void {
+/**
+ * What a managed transport may be addressed by: no target globals it cannot restate, and no adb
+ * server but the one it holds.
+ *
+ * A `-P` naming a different server is refused here, before anything is dispatched, rather than
+ * rewritten onto the lease's server. A caller who asked for 5037 and got 15038 would otherwise
+ * read a successful exit as evidence about 5037, which is the one answer a private server must not
+ * give. A `-P` naming this server, or none at all, is the ordinary case.
+ */
+export function requireManagedAndroidAdbAddressing(
+  target: AndroidAdbTarget,
+  managedPort: number,
+): void {
   if (target.hostGlobals) throw transportMismatch('target');
+  requireSameAndroidAdbServer(
+    managedPort,
+    target.server.kind === 'port' ? target.server.port : undefined,
+  );
 }
 
 /**

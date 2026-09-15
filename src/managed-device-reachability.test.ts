@@ -88,7 +88,11 @@ test.skipIf(process.platform === 'win32')(
       adbPath,
       [
         '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
         'const args = process.argv.slice(2);',
+        'const logPath = process.env.FAKE_ADB_CALL_LOG;',
+        'if (logPath)',
+        String.raw`  fs.appendFileSync(logPath, JSON.stringify({ args }) + "\n");`,
         'const output = args.includes("devices") && args.includes("-l")',
         String.raw`  ? "List of devices attached\nemulator-15037 device model:Managed_Pixel\n"`,
         '  : args.includes("ro.boot.qemu.avd_name")',
@@ -105,9 +109,11 @@ test.skipIf(process.platform === 'win32')(
       ].join('\n'),
     );
     fs.chmodSync(adbPath, 0o755);
+    const callLogPath = path.join(tmpDir, 'adb-calls.ndjson');
     const previousPath = process.env.PATH;
     const previousPort = process.env.ANDROID_ADB_SERVER_PORT;
     process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
+    process.env.FAKE_ADB_CALL_LOG = callLogPath;
     try {
       const reachability = createManagedLeaseReachability({
         platform: 'android',
@@ -144,15 +150,20 @@ test.skipIf(process.platform === 'win32')(
           } satisfies PlatformRequestScope,
         );
         const host = await runAndroidHostAdb(parseAndroidAdbArgv(['devices']));
-        const hostWithWrongPort = await runAndroidHostAdb(
-          parseAndroidAdbArgv(['-P', '9999', 'devices']),
-        );
+        // The lease owns the adb server, so a call naming another one is refused rather than
+        // answered on the lease's server: the caller would read it as evidence about 9999.
+        let wrongPortReason: unknown = 'not-refused';
+        try {
+          await runAndroidHostAdb(parseAndroidAdbArgv(['-P', '9999', 'devices']));
+        } catch (error) {
+          wrongPortReason = (error as { details?: { reason?: string } }).details?.reason;
+        }
         const provider = resolveAndroidAdbProvider(reachability.device);
         const serial = await provider.exec(['shell', 'id']);
         return {
           inventory,
           host: JSON.parse(host.stdout),
-          hostWithWrongPort: JSON.parse(hostWithWrongPort.stdout),
+          wrongPortReason,
           serial: JSON.parse(serial.stdout),
         };
       });
@@ -172,18 +183,23 @@ test.skipIf(process.platform === 'win32')(
           },
         ],
         host: { args: ['-P', '15037', '-s', 'emulator-15037', 'devices'], port: '15037' },
-        hostWithWrongPort: {
-          args: ['-P', '15037', '-s', 'emulator-15037', 'devices'],
-          port: '15037',
-        },
+        wrongPortReason: 'managed-device-transport-mismatch',
         serial: {
           args: ['-P', '15037', '-s', 'emulator-15037', 'shell', 'id'],
           port: '15037',
         },
       });
       expect(outside).toEqual({ args: ['devices'], port: previousPort ?? null });
+      // The refused request never reached adb: every call the lease dispatched named its own port.
+      const dispatched = fs
+        .readFileSync(callLogPath, 'utf8')
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => JSON.parse(line) as { args: string[] });
+      expect(dispatched.filter((call) => call.args.includes('9999'))).toEqual([]);
       expect(process.env.ANDROID_ADB_SERVER_PORT).toBe(previousPort);
     } finally {
+      delete process.env.FAKE_ADB_CALL_LOG;
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
     }

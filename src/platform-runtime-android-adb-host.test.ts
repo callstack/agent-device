@@ -70,9 +70,24 @@ test.skipIf(process.platform === 'win32')(
     const previousPort = process.env.ANDROID_ADB_SERVER_PORT;
     const previousSocket = process.env.ADB_SERVER_SOCKET;
     process.env.ADB_SERVER_SOCKET = 'tcp:inherited.example:9999';
+    const callLogPath = path.join(
+      mkdtempForTestSync('agent-device-adb-call-log-'),
+      'adb-calls.ndjson',
+    );
     try {
       await withFakeAdbOnPath(
-        'process.stdout.write(JSON.stringify({args: process.argv.slice(2), port: process.env.ANDROID_ADB_SERVER_PORT ?? null, address: process.env.ANDROID_ADB_SERVER_ADDRESS ?? null, socket: process.env.ADB_SERVER_SOCKET ?? null}));',
+        [
+          'const fs = require("node:fs");',
+          'const call = {',
+          '  args: process.argv.slice(2),',
+          '  port: process.env.ANDROID_ADB_SERVER_PORT ?? null,',
+          '  address: process.env.ANDROID_ADB_SERVER_ADDRESS ?? null,',
+          '  socket: process.env.ADB_SERVER_SOCKET ?? null,',
+          '};',
+          'const logPath = process.env.FAKE_ADB_CALL_LOG;',
+          String.raw`if (logPath) fs.appendFileSync(logPath, JSON.stringify(call) + "\n");`,
+          'process.stdout.write(JSON.stringify(call));',
+        ].join('\n'),
         async () => {
           const provider = createLocalAndroidAdbProvider(ANDROID_EMULATOR, {
             serverPort: 15_037,
@@ -82,8 +97,8 @@ test.skipIf(process.platform === 'win32')(
             args: string[];
             port: string | null;
           };
-          const serialWithWrongPort = JSON.parse(
-            (await adb(['-P', '9999', 'shell', 'id'])).stdout,
+          const serialOnItsOwnServer = JSON.parse(
+            (await adb(['-P', '15037', 'shell', 'id'])).stdout,
           ) as { args: string[]; port: string | null };
           const serialWithWrongEnvironment = JSON.parse(
             (
@@ -98,11 +113,30 @@ test.skipIf(process.platform === 'win32')(
           ) as { args: string[]; port: string | null };
           const host = JSON.parse(
             (
-              await runAndroidHostAdb(parseAndroidAdbArgv(['-P', '9999', 'devices']), {
+              await runAndroidHostAdb(parseAndroidAdbArgv(['-P', '15038', 'devices']), {
                 serverPort: 15_038,
               })
             ).stdout,
           ) as { args: string[]; port: string | null };
+          const ambientHost = JSON.parse(
+            (await runAndroidHostAdb(parseAndroidAdbArgv(['-P', '9999', 'devices']))).stdout,
+          ) as { args: string[]; port: string | null };
+          // A private adb server is not a channel a caller may retarget, so a `-P` naming another
+          // one is refused before adb is asked anything. The port this route was built with is
+          // accepted however it is spelled, including as the first token of argv.
+          await assert.rejects(adb(['-P', '9999', 'shell', 'id']), {
+            details: { reason: 'managed-device-transport-mismatch' },
+          });
+          assert.throws(() => provider.spawn?.(['-P', '9999', 'logcat']), {
+            details: { reason: 'managed-device-transport-mismatch' },
+          });
+          // A host call names its own server, and the two ways of naming it have to agree.
+          await assert.rejects(
+            runAndroidHostAdb(parseAndroidAdbArgv(['-P', '9999', 'devices']), {
+              serverPort: 15_038,
+            }),
+            { details: { reason: 'managed-device-transport-mismatch' } },
+          );
           for (const selector of [
             ['-H', 'foreign.example'],
             ['-L', 'tcp:foreign.example:5037'],
@@ -140,7 +174,7 @@ test.skipIf(process.platform === 'win32')(
             address: '127.0.0.1',
             socket: null,
           });
-          assert.deepEqual(serialWithWrongPort, serial);
+          assert.deepEqual(serialOnItsOwnServer, serial);
           assert.deepEqual(serialWithWrongEnvironment, serial);
           const waited = JSON.parse((await adb(['wait-for-device', 'shell', 'id'])).stdout);
           assert.deepEqual(waited, {
@@ -153,9 +187,30 @@ test.skipIf(process.platform === 'win32')(
             address: '127.0.0.1',
             socket: null,
           });
+          // Nothing named a private server on the ambient call, so its argv is what runs.
+          assert.deepEqual(ambientHost, {
+            args: ['-P', '9999', 'devices'],
+            port: null,
+            address: null,
+            socket: 'tcp:inherited.example:9999',
+          });
+          // A refusal is before dispatch: the private route never asked adb for another server. An
+          // ambient host call naming 9999 is a different matter, and did run with that argv.
+          const dispatched = fs
+            .readFileSync(callLogPath, 'utf8')
+            .split('\n')
+            .filter((line) => line !== '')
+            .map((line) => JSON.parse(line) as { args: string[] });
+          assert.deepEqual(
+            dispatched
+              .filter((call) => call.args.includes('-s'))
+              .filter((call) => call.args.includes('9999')),
+            [],
+          );
           assert.equal(process.env.ANDROID_ADB_SERVER_PORT, previousPort);
           assert.equal(process.env.ADB_SERVER_SOCKET, 'tcp:inherited.example:9999');
         },
+        { FAKE_ADB_CALL_LOG: callLogPath },
       );
     } finally {
       if (previousSocket === undefined) delete process.env.ADB_SERVER_SOCKET;

@@ -324,9 +324,17 @@ describe('applyManagedAndroidAdbServer', () => {
     ]);
   });
 
-  it('overwrites a port the caller typed', () => {
+  it('refuses a port the caller typed for another server', () => {
+    expect(() =>
+      applyManagedAndroidAdbServer(parseAndroidAdbArgv(['-P', '5037', '-s', 'A', 'shell', 'id']), {
+        port: 5039,
+      }),
+    ).toThrowError(/cannot select another server/);
+  });
+
+  it('accepts a port the caller typed for the server the lease already holds', () => {
     const invocation = applyManagedAndroidAdbServer(
-      parseAndroidAdbArgv(['-P', '5037', '-s', 'A', 'shell', 'id']),
+      parseAndroidAdbArgv(['-P', '5039', '-s', 'A', 'shell', 'id']),
       { port: 5039 },
     );
     expect(invocation.rawArgv).toBeUndefined();
