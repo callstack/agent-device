@@ -238,7 +238,8 @@ export function observeAndroidSnapshotHelperProcessExit(
   };
 }
 
-function hasAndroidSnapshotHelperProcessEnded(childProcess: AndroidAdbProcess): boolean {
+/** Whether the host side of an instrumentation session is already gone. */
+export function hasAndroidSnapshotHelperProcessEnded(childProcess: AndroidAdbProcess): boolean {
   return childProcess.exitCode != null || childProcess.signalCode != null;
 }
 

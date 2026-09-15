@@ -35,6 +35,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS,
   getAndroidSnapshotHelperSessionDeviceKey,
+  hasAndroidSnapshotHelperProcessEnded,
   observeAndroidSnapshotHelperProcessExit,
   recoverAndroidSnapshotHelperRetirement,
   recordAndroidSnapshotHelperRelease,
@@ -137,11 +138,16 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   const { deviceKey, identity, options, resolved } = params;
-  let session = sessions.get(deviceKey);
-  if (session && session.identity !== identity) {
-    await stopAndroidSnapshotHelperSession(deviceKey);
-    session = undefined;
+  const cached = sessions.get(deviceKey);
+  const reusable = cached !== undefined && isReusableAndroidSnapshotHelperSession(cached, identity);
+  if (cached && !reusable) {
+    await stopAndroidSnapshotHelperSession(deviceKey, {
+      // A process that already exited cannot answer the forwarded port: the forward is all that is
+      // left of it, so there is nothing to quit gracefully.
+      force: hasAndroidSnapshotHelperProcessEnded(cached.process),
+    });
   }
+  let session = reusable ? cached : undefined;
   if (!session) {
     try {
       session = await startAndroidSnapshotHelperSession({
@@ -165,6 +171,19 @@ async function resolveAndroidSnapshotHelperSession(params: {
     }
   }
   return session;
+}
+
+/**
+ * A cached session is worth writing to only while it belongs to this helper build and its
+ * instrumentation process is still running. The helper binds its session socket inside that
+ * process, so a process that has exited has nobody left to accept on the forwarded port: the
+ * command would die on a dead socket and fall back, instead of starting a helper that can answer.
+ */
+function isReusableAndroidSnapshotHelperSession(
+  session: AndroidSnapshotHelperSession,
+  identity: string,
+): boolean {
+  return session.identity === identity && !hasAndroidSnapshotHelperProcessEnded(session.process);
 }
 
 async function startAndroidSnapshotHelperSession(params: {

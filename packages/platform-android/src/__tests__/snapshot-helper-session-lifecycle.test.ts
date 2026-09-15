@@ -174,6 +174,33 @@ test('restarts the helper session when capture options change', async () => {
   );
 });
 
+test('a session whose helper process died is not written to again', async () => {
+  const calls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createSessionProvider({ calls, spawnArgs, processes });
+
+  await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+  processes[0]!.emitExit(137, null);
+
+  const restarted = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+  });
+
+  assert.equal(restarted?.metadata.sessionReused, false);
+  assert.equal(spawnArgs.length, 2);
+  assert.equal(
+    calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
+});
+
 test('a quit acknowledged and followed by process exit skips the force-stop round trip', async () => {
   const calls: string[][] = [];
   const processes: FakeAndroidProcess[] = [];
