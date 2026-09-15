@@ -45,7 +45,7 @@ test('names the retry and the escape for a recording that never became playable'
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    message: expect.stringContaining('is not a playable video'),
+    message: expect.stringContaining('was not finalized into a playable video'),
     details: {
       reason: 'recording-output-unplayable',
       retriable: true,

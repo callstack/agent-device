@@ -159,20 +159,10 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
         progress,
         steps: {
           stop: stopSimulatorRecorder,
-          collect: async (collectedPath) => {
-            try {
-              await host.screenRecording.outputs.collectFromRecorder({
-                recorderPath: nativePath,
-                collectedPath,
-              });
-              await host.screenRecording.finalize.validatePlayable({
-                outputPath: collectedPath,
-                targetLabel: SIMULATOR_TARGET_LABEL,
-              });
-            } catch (collectError) {
-              throw recorderExitEndedTheRecording(collectError, recorderExit, recorderResult);
-            }
-          },
+          // Playability is checked once, on the export `finalize` writes from this copy. simctl has
+          // exited before `collect` runs, so these bytes are final and a second check adds only latency.
+          collect: (collectedPath) =>
+            host.screenRecording.outputs.copy({ from: nativePath, to: collectedPath }),
           finalize: async ({ collectedPath, exportPath }) => {
             try {
               return await finalizeAppleRecordingFromCollected({

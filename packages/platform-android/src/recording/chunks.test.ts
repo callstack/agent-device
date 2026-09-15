@@ -221,7 +221,7 @@ test('retries a pulled MP4 until its moov is playable and retains remote evidenc
       '/tmp/capture.mp4',
     );
     await vi.advanceTimersByTimeAsync(2_000);
-    await expect(becomingPlayable).resolves.toEqual([{ index: 1, path: '/tmp/capture.mp4' }]);
+    await expect(becomingPlayable).resolves.toBeUndefined();
     expect(pulls).toBe(3);
 
     pulls = 0;

@@ -109,10 +109,7 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     screenRecording: {
       android: { resolve: async () => transport },
       outputs: Object.assign({}, store.outputs, legacy.outputs),
-      finalize: Object.assign(
-        { complete: async () => ({}), validatePlayable: async () => {} },
-        legacy.finalize,
-      ),
+      finalize: Object.assign({ complete: async () => ({}) }, legacy.finalize),
     },
   } as unknown as PlatformRuntimeHost;
 }

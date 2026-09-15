@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { expect, test, vi } from 'vitest';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { bindWebScreenRecordingRuntime } from './runtime.ts';
 
 const device = {
@@ -185,23 +186,8 @@ async function runtime(
     host: {
       screenRecording: {
         web: { resolve: async () => transport },
-        finalize: { complete, validatePlayable: async () => {} },
-        outputs: {
-          prepare,
-          // The web transport writes the served file itself, so it never collects a copy.
-          collectFromRecorder: async () => {
-            throw new Error('unused');
-          },
-          writeExportFromCollected: async () => {
-            throw new Error('unused');
-          },
-          retireRecorderFile: async () => {
-            throw new Error('unused');
-          },
-          discardCollectedFile: async () => {
-            throw new Error('unused');
-          },
-        },
+        finalize: { complete },
+        outputs: { ...recordingFileStore().outputs, prepare },
       },
     },
     device,

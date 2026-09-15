@@ -224,3 +224,103 @@ test('measures a pulled MP4 against the window the host bracketed around the rec
   expect(outcome.result.outPath).toBe(path.join(directory, 'capture.mp4'));
   expect(outcome.result.warning).toMatch(/it covers 7\.0s of the 16\.\ds recording window\./);
 });
+
+test('a retried commit serves every chunk and the captured length its first attempt finalized', async () => {
+  const directory = mkdtempForTestSync('agent-device-android-retry-');
+  const files = recordingFileStore();
+  let completedWrites = 0;
+  const host = recordingHost({
+    files,
+    isRunning: async () => false,
+    pullPlayable: async ({ outputPath }: { outputPath: string }) => {
+      fs.writeFileSync(outputPath, playableMp4(90_000));
+      files.files.set(outputPath, 'pulled');
+      return { stdout: '', stderr: '', exitCode: 0, playable: true };
+    },
+    writeManifest: async ({ contents }: { contents: string }) => {
+      // The export is finalized and journaled; the device refuses the completion marker once, which
+      // is the commit failure a retried `record stop` has to replay rather than redo.
+      if (JSON.parse(contents).completion && ++completedWrites === 1) {
+        throw new Error('adb: device offline');
+      }
+    },
+  });
+  const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
+  const evidence = evidenceFor([REMOTE_CHUNK, '/sdcard/agent-device-recording-2.mp4']);
+  const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+  const manifest = journal();
+  const stop = () =>
+    finalizeAndroidRecording({
+      host,
+      transport,
+      evidence,
+      manifestPath: '/sdcard/agent-device-recording-active.json',
+      recording: snapshot(input, 1),
+      startedAtMs: Date.now() - 181_000,
+      progress: manifest.progress(),
+    });
+
+  await expect(stop()).rejects.toThrow('device offline');
+  const outcome = await stop();
+
+  expect(outcome.status).toBe('completed');
+  if (outcome.status !== 'completed') return;
+  expect(outcome.result.chunks).toEqual([
+    { index: 1, path: path.join(directory, 'capture.mp4') },
+    { index: 2, path: path.join(directory, 'capture.part-002.mp4') },
+  ]);
+  expect(outcome.result.capturedDurationMs).toBe(180_000);
+});
+
+test('a stop resumed after its collect measures the window its first attempt signalled', async () => {
+  const directory = mkdtempForTestSync('agent-device-android-resume-');
+  const collectedPath = path.join(directory, 'capture.collected.mp4');
+  fs.writeFileSync(collectedPath, playableMp4(7_000));
+  const files = recordingFileStore({ [collectedPath]: 'pulled' });
+  const host = recordingHost({ files });
+  const input = { ...recordingInput(), outputPath: path.join(directory, 'capture.mp4') };
+  const startedAtMs = Date.now() - 120_000;
+  const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+
+  const outcome = await finalizeAndroidRecording({
+    host,
+    transport,
+    evidence: evidenceFor([REMOTE_CHUNK]),
+    manifestPath: '/sdcard/agent-device-recording-active.json',
+    recording: snapshot(input, 1),
+    startedAtMs,
+    // Signalled 7.5 s in, then the first attempt failed and this one runs almost two minutes later.
+    progress: completedProgress({
+      stopObservation: { recorder: 'confirmed' },
+      stoppedAtMs: startedAtMs + 7_500,
+      collectedPath,
+    }),
+  });
+
+  expect(outcome.status).toBe('completed');
+  if (outcome.status !== 'completed') return;
+  expect(outcome.result.capturedDurationMs).toBe(7_000);
+  expect(outcome.result.warning).toBeUndefined();
+});
+
+function playableMp4(durationMs: number): Buffer {
+  return Buffer.concat([
+    mp4Atom('mdat', Buffer.alloc(8)),
+    mp4Atom(
+      'moov',
+      mp4Atom('mvhd', mp4MovieHeader({ version: 0, timescale: 1_000, duration: durationMs })),
+    ),
+  ]);
+}
+
+function journal() {
+  let stored: JsonObject | undefined;
+  return {
+    progress: (): DurableCaptureProgress => ({
+      learned: stored,
+      record: (fact) => {
+        stored = { ...(stored ?? {}), ...fact };
+      },
+    }),
+  };
+}

@@ -69,7 +69,6 @@ export function appleRecordingHost(
   options: {
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
     complete?: ScreenRecordingFinalizer['complete'];
-    validatePlayable?: ScreenRecordingFinalizer['validatePlayable'];
     files?: ReturnType<typeof recordingFileStore>;
     outputs?: Partial<ScreenRecordingRuntimeHost['outputs']>;
     ownedProcesses?: ScreenRecordingRuntimeHost['ownedProcesses'];
@@ -97,8 +96,6 @@ export function appleRecordingHost(
     },
     provided,
     {
-      // The recorder owns its own file, and the stop copies it, so the double has to leave one
-      // behind wherever the runtime told `simctl` to write.
       startSimulator: async (
         device: DeviceInfo,
         outputPath: string,
@@ -115,10 +112,7 @@ export function appleRecordingHost(
     screenRecording: {
       apple,
       outputs: Object.assign({}, store.outputs, options.outputs),
-      finalize: {
-        complete: options.complete ?? (async () => ({})),
-        validatePlayable: options.validatePlayable ?? (async () => {}),
-      },
+      finalize: { complete: options.complete ?? (async () => ({})) },
       ownedProcesses: options.ownedProcesses ?? { replace: () => {}, clear: () => {} },
     },
   };

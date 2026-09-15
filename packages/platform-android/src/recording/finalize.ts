@@ -8,13 +8,11 @@ import type {
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
-import {
-  type ScreenRecordingFinalization,
-  stopAndExportScreenRecording,
-} from '@agent-device/capture-kit/recording-stop-sequence';
+import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
+import { stopAndExportScreenRecording } from '@agent-device/capture-kit/recording-stop-sequence';
 import { measureCapturedWindow } from './captured-window.ts';
+import { chunkPathAt } from './chunk-path.ts';
 import {
-  chunkOutputPath,
   cleanupChunks,
   nativeChunksDisposition,
   pullChunks,
@@ -58,9 +56,6 @@ export async function finalizeAndroidRecording(
   }>,
 ): Promise<FinishOutcome<ScreenRecordingCompletion>> {
   const { host, transport, evidence, recording, startedAtMs, progress } = params;
-  // Read the clock before the signal below: everything after that signal is this tool's own export
-  // latency rather than time the screen sat unchanged.
-  const stoppedAtMs = Date.now();
   let reachedLimit = params.reachedLimit === true;
   const outcome = await stopAndExportScreenRecording({
     snapshot: recording,
@@ -78,16 +73,10 @@ export async function finalizeAndroidRecording(
           ...(reachedLimit ? { warning: PLATFORM_LIMIT_WARNING } : {}),
         };
       },
-      collect: async (collectedPath) => {
-        // No client mirror is named here: `clientOutPath` labels the files a caller is served, and the
-        // pulled set is nobody's export. The labels travel with the served set below.
-        await pullChunks(transport, evidence.chunks, collectedPath);
-        await host.screenRecording.finalize.validatePlayable({
-          outputPath: collectedPath,
-          targetLabel: TARGET_LABEL,
-        });
-      },
-      finalize: ({ collectedPath, exportPath }) =>
+      // Each chunk is pulled until its host copy plays, which is the playability check for the pulled
+      // set; the finalizer checks the export once more because that is the file the caller is served.
+      collect: (collectedPath) => pullChunks(transport, evidence.chunks, collectedPath),
+      finalize: ({ collectedPath, exportPath, stoppedAtMs }) =>
         exportCollectedChunks({
           host,
           evidence,
@@ -146,10 +135,7 @@ async function copyCollectedChunksToExport(
   files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[],
 ): Promise<void> {
   for (const { collected, served } of files) {
-    await host.screenRecording.outputs.writeExportFromCollected({
-      collectedPath: collected.path,
-      exportPath: served.path,
-    });
+    await host.screenRecording.outputs.copy({ from: collected.path, to: served.path });
   }
 }
 
@@ -163,7 +149,7 @@ async function discardCollectedChunks(
   files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[],
 ): Promise<void> {
   for (const { collected } of files) {
-    await host.screenRecording.outputs.discardCollectedFile(collected.path).catch(() => {});
+    await host.screenRecording.outputs.remove(collected.path);
   }
 }
 
@@ -236,16 +222,7 @@ async function recordCompletionAndDisposeChunks(
   };
 }
 
-/**
- * The files one recording is made of, derived from where that set is being written. Both the pulled set
- * and the served set follow the same rule from the same base, which is what lets an attempt that never
- * ran the pull name the collected files a previous attempt left behind.
- */
-/**
- * The files one recording is made of, on both sides of the copy. The pulled set and the served set
- * follow one naming rule from their own base, which is what lets an attempt that never ran the pull name
- * the collected files a previous attempt left behind.
- */
+/** The files one recording is made of, on both sides of the copy, named by the one chunk rule. */
 function chunkFilePairs(
   params: Readonly<{
     collectedPath: string;
@@ -258,19 +235,15 @@ function chunkFilePairs(
     Array.from({ length: params.count }, (_, offset) => ({
       collected: Object.freeze({
         index: offset + 1,
-        path: chunkPathAt(params.collectedPath, offset),
+        path: chunkPathAt(params.collectedPath, offset + 1),
       }),
       served: Object.freeze({
         index: offset + 1,
-        path: chunkPathAt(params.exportPath, offset),
+        path: chunkPathAt(params.exportPath, offset + 1),
         ...(params.exportClientPath === undefined
           ? {}
-          : { clientOutPath: chunkPathAt(params.exportClientPath, offset) }),
+          : { clientOutPath: chunkPathAt(params.exportClientPath, offset + 1) }),
       }),
     })),
   );
-}
-
-function chunkPathAt(basePath: string, offset: number): string {
-  return offset === 0 ? basePath : chunkOutputPath(basePath, offset + 1);
 }

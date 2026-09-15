@@ -2,7 +2,11 @@ import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import {
+  createDurableResourceEnvelope,
+  createScreenRecordingLiveHandle,
+} from '@agent-device/capture-kit';
+import { stopAndExportScreenRecording } from '@agent-device/capture-kit/recording-stop-sequence';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import {
@@ -163,6 +167,103 @@ test('a failed recording finish keeps the record open and never disposes the rec
     status: 'decoded',
     envelope: { lifecycle: 'open', metadata: { phase: 'completing' } },
   });
+});
+
+test('a record stop that fails after collecting resumes through the fence without a second signal', async () => {
+  const sessionStore = makeSessionStore('screen-recording-resumed-stop-');
+  const sessionName = 'recording';
+  const session: SessionState = {
+    name: sessionName,
+    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+    createdAt: 1,
+    actions: [],
+  };
+  sessionStore.set(sessionName, session);
+  const owner = localRuntimeOwner('android');
+  const fence = { token: 'recording-fence', generation: 1 } as const;
+  const signals = vi.fn(async () => ({ observation: { recorder: 'confirmed' as const } }));
+  const copies = vi.fn(async (_collectedPath: string) => {});
+  const exports = vi.fn(async () => {
+    if (exports.mock.calls.length === 1) throw new Error('overlay export failed');
+    return {
+      telemetryPath: '/tmp/recording.telemetry.json',
+      nativePathDisposition: 'retired' as const,
+    };
+  });
+  const handle = createScreenRecordingLiveHandle(
+    {
+      backend: 'android',
+      outPath: '/tmp/recording.mp4',
+      startedAt: 1,
+      scope: 'app',
+      showTouches: false,
+      recordOnlySession: false,
+      gestureEvents: [],
+    },
+    {
+      // The real sequence behind the real handle: only the device work is counted.
+      finish: (snapshot, progress) =>
+        stopAndExportScreenRecording({
+          snapshot,
+          progress,
+          steps: { stop: signals, collect: copies, finalize: exports },
+        }),
+      forceCleanup: async () => ({ status: 'cleaned' }),
+    },
+  );
+  await adoptStartedScreenRecording({
+    admissionLedger: createScreenRecordingAdmissionLedger(),
+    session,
+    sessionName,
+    sessionStore,
+    device: session.device,
+    owner,
+    fence,
+    pendingHandle: new PendingTransferGuard(handle),
+    envelope: createDurableResourceEnvelope({
+      resourceKind: 'screen-recording',
+      sessionId: sessionName,
+      device: { id: session.device.id, family: 'android', kind: 'emulator' },
+      owner,
+      fence,
+      lifecycle: 'open',
+      descriptor: { version: 1, body: { recordingId: 'recording-id' } },
+    }),
+    throwIfCanceled: () => {},
+  });
+  const stop = () => {
+    const active = sessionStore.get(sessionName);
+    if (!active) throw new Error('Expected screen-recording session');
+    return finishLiveScreenRecording({
+      intent: 'capture',
+      session: active,
+      sessionName,
+      sessionStore,
+    });
+  };
+
+  await expect(stop()).rejects.toThrow('overlay export failed');
+  expect(screenRecordingResourceStore.read(resourcePath(sessionStore, sessionName))).toMatchObject({
+    status: 'decoded',
+    envelope: {
+      lifecycle: 'open',
+      metadata: {
+        stopObservation: { recorder: 'confirmed' },
+        collectedPath: '/tmp/recording.collected.mp4',
+      },
+    },
+  });
+
+  await expect(stop()).resolves.toMatchObject({
+    outPath: '/tmp/recording.mp4',
+    telemetryPath: '/tmp/recording.telemetry.json',
+    stopObservation: { recorder: 'confirmed' },
+    nativePathDisposition: 'retired',
+  });
+  expect(signals).toHaveBeenCalledOnce();
+  expect(copies).toHaveBeenCalledOnce();
+  expect(exports).toHaveBeenCalledTimes(2);
+  expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
 function resourcePath(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {

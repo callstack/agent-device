@@ -229,10 +229,8 @@ test('a simulator stop exports from a copy and retires the file the recorder own
           };
         },
       },
-      validatePlayable: async ({ outputPath }) => {
-        saw.push(`playable:${outputPath}`);
-      },
       complete: async ({ outputPath }) => {
+        // The export is checked once, here; `collect` only copies bytes a recorder that exited wrote.
         saw.push(`finalize:${outputPath}`);
         return {};
       },
@@ -256,11 +254,7 @@ test('a simulator stop exports from a copy and retires the file the recorder own
   expect(outcome.status).toBe('completed');
   if (outcome.status !== 'completed') return;
   expect(outcome.result).toMatchObject({ nativePathDisposition: 'retired' });
-  expect(saw).toEqual([
-    `record:${nativePath}`,
-    `playable:${collectedPath}`,
-    `finalize:${exportPath}`,
-  ]);
+  expect(saw).toEqual([`record:${nativePath}`, `finalize:${exportPath}`]);
   expect(files.exists(exportPath)).toBe(true);
   expect(files.exists(nativePath)).toBe(false);
   expect(files.exists(collectedPath)).toBe(false);

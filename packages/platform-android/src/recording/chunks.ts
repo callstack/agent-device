@@ -1,11 +1,8 @@
-import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
-import type {
-  ScreenRecordingChunk,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/screen-recording-runtime';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
+import { chunkPathAt } from './chunk-path.ts';
 import type { NativeChunk } from './manifest.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -115,27 +112,15 @@ export async function waitForStableArtifacts(
   }
 }
 
+/** Pulls each device chunk to its host path under `outputPath`, retrying until the host copy plays. */
 export async function pullChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
   outputPath: string,
-  clientOutputPath?: string,
-): Promise<readonly ScreenRecordingChunk[]> {
-  const results: ScreenRecordingChunk[] = [];
+): Promise<void> {
   for (const [offset, chunk] of chunks.entries()) {
-    const pathForChunk = offset === 0 ? outputPath : chunkOutputPath(outputPath, offset + 1);
-    await pullPlayableChunk(transport, chunk.remotePath, pathForChunk);
-    const clientPath =
-      offset === 0 || clientOutputPath === undefined
-        ? clientOutputPath
-        : chunkOutputPath(clientOutputPath, offset + 1);
-    results.push({
-      index: offset + 1,
-      path: pathForChunk,
-      ...(clientPath === undefined ? {} : { clientOutPath: clientPath }),
-    });
+    await pullPlayableChunk(transport, chunk.remotePath, chunkPathAt(outputPath, offset + 1));
   }
-  return Object.freeze(results);
 }
 
 export async function cleanupChunks(
@@ -266,12 +251,4 @@ async function waitForStopped(
 
 function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-export function chunkOutputPath(outputPath: string, index: number): string {
-  const parsed = path.parse(outputPath);
-  return path.join(
-    parsed.dir,
-    `${parsed.name}.part-${String(index).padStart(3, '0')}${parsed.ext || '.mp4'}`,
-  );
 }

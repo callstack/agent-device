@@ -1,4 +1,3 @@
-import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 
 /**
@@ -27,18 +26,12 @@ export function recordingFileStore(initial: Readonly<Record<string, string>> = {
       prepare: async (outputPath) => {
         files.delete(outputPath);
       },
-      collectFromRecorder: async ({ recorderPath, collectedPath }) => {
-        copy(recorderPath, collectedPath);
+      copy: async ({ from, to }) => {
+        copy(from, to);
       },
-      writeExportFromCollected: async ({ collectedPath, exportPath }) => {
-        copy(collectedPath, exportPath);
-      },
-      retireRecorderFile: async (recorderPath): Promise<NativePathDisposition> => {
-        files.delete(recorderPath);
-        return files.has(recorderPath) ? 'retirable' : 'retired';
-      },
-      discardCollectedFile: async (collectedPath) => {
-        files.delete(collectedPath);
+      remove: async (filePath) => {
+        files.delete(filePath);
+        return files.has(filePath) ? 'present' : 'removed';
       },
     },
   };

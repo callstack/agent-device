@@ -1,3 +1,4 @@
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { createHarmonyScreenRecordingOperations } from './runtime.ts';
@@ -52,25 +53,10 @@ export function harmonyRecordingHost(
     screenRecording: {
       harmony,
       outputs: {
+        ...recordingFileStore().outputs,
         prepare: overrides.prepare ?? (async () => {}),
-        // HarmonyOS still hands the recorder's own file to the finalizer, so it never collects a copy.
-        collectFromRecorder: async () => {
-          throw new Error('unused');
-        },
-        writeExportFromCollected: async () => {
-          throw new Error('unused');
-        },
-        retireRecorderFile: async () => {
-          throw new Error('unused');
-        },
-        discardCollectedFile: async () => {
-          throw new Error('unused');
-        },
       },
-      finalize: {
-        complete: overrides.complete ?? (async () => ({})),
-        validatePlayable: async () => {},
-      },
+      finalize: { complete: overrides.complete ?? (async () => ({})) },
     },
     clock: { now: () => 0, sleep: async () => {} },
   };

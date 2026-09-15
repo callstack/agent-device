@@ -1,5 +1,5 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import type { ScreenRecordingFinalization } from '@agent-device/capture-kit/recording-stop-sequence';
+import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
@@ -80,7 +80,7 @@ export async function finalizeAppleRecordingFromCollected(
   if (snapshot.invalidatedReason && !snapshot.showTouches) {
     throw new Error(`recording invalidated: ${snapshot.invalidatedReason}`);
   }
-  await host.screenRecording.outputs.writeExportFromCollected({ collectedPath, exportPath });
+  await host.screenRecording.outputs.copy({ from: collectedPath, to: exportPath });
   const finalization = await asAppErrorAsync(() =>
     host.screenRecording.finalize.complete({
       outputPath: exportPath,
@@ -92,13 +92,16 @@ export async function finalizeAppleRecordingFromCollected(
   );
   // The export is durable from this line on, so the copy the stop made is disposable. A refusal to
   // delete it is never an error: the caller's video already exists.
-  await host.screenRecording.outputs.discardCollectedFile(collectedPath).catch(() => {});
+  await host.screenRecording.outputs.remove(collectedPath);
   return {
     ...finalization,
     ...(snapshot.invalidatedReason
       ? { overlayWarning: `overlay unavailable: ${snapshot.invalidatedReason}` }
       : {}),
-    nativePathDisposition: await host.screenRecording.outputs.retireRecorderFile(nativePath),
+    nativePathDisposition:
+      (await host.screenRecording.outputs.remove(nativePath)) === 'removed'
+        ? 'retired'
+        : 'retirable',
   };
 }
 

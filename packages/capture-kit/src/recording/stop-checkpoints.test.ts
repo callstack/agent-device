@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import type { JsonObject } from '@agent-device/contracts/client';
 import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import { readStopCheckpoints, writeStopCheckpoint } from './stop-checkpoints.ts';
 
@@ -8,6 +9,15 @@ const FULL_FINALIZATION = Object.freeze({
   warning: '2 chunks were merged',
   overlayWarning: 'overlay unavailable: session invalidated',
   nativePathDisposition: 'retired',
+  chunks: [
+    { index: 1, path: '/tmp/recording.mp4', clientOutPath: '/client/recording.mp4' },
+    {
+      index: 2,
+      path: '/tmp/recording.part-002.mp4',
+      clientOutPath: '/client/recording.part-002.mp4',
+    },
+  ],
+  capturedDurationMs: 181_500,
 } as const);
 
 test('writes only the checkpoints a stop reached', () => {
@@ -33,6 +43,7 @@ test('reads back every checkpoint a stop wrote', () => {
       recorder: 'unconfirmed',
       why: 'no-exit-in-budget',
     } satisfies StopObservation,
+    stoppedAtMs: 1_700_000_000_000,
     recorderWarning: 'simctl exited with code 1 before record stop',
     collectedPath: '/tmp/recording.collected.mp4',
     exportPath: '/tmp/recording.mp4',
@@ -107,6 +118,30 @@ test('keeps the finalization fields that are readable and drops the ones that ar
     }),
     { finalization: { warning: '2 chunks were merged', nativePathDisposition: 'retired' } },
   );
+});
+
+test('refuses a finalization whose chunks or captured length it cannot read', () => {
+  // Serving the export without its later chunks is the loss a replay must not cause, so a finalization
+  // that cannot vouch for them is redone rather than served short.
+  const damages: JsonObject[] = [
+    { chunks: [{ index: 1 }] },
+    { chunks: [{ index: 0, path: '/tmp/recording.mp4' }] },
+    { chunks: 'two' },
+    { capturedDurationMs: -1 },
+    { capturedDurationMs: '181s' },
+  ];
+  for (const damaged of damages) {
+    assert.deepEqual(
+      readStopCheckpoints({
+        stopFinalization: {
+          warning: '2 chunks were merged',
+          nativePathDisposition: 'retired',
+          ...damaged,
+        },
+      }),
+      {},
+    );
+  }
 });
 
 test('refuses an observation that is shaped like something else', () => {

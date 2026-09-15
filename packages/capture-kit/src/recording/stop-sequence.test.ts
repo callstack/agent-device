@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableCaptureProgress } from '@agent-device/contracts/durable-resource';
+import type { ScreenRecordingFinalization } from '@agent-device/contracts/recording-stop-progress';
 import { type RecorderStop, stopAndExportScreenRecording } from './stop-sequence.ts';
 
 test('signals the recorder, collects a sibling copy, and finalizes that copy into the export', async () => {
@@ -12,16 +13,24 @@ test('signals the recorder, collects a sibling copy, and finalizes that copy int
     steps,
     snapshot: snapshot(),
     progress: manifest.progress,
+    now: () => STOPPED_AT_MS,
   });
 
   assert.deepEqual(steps.collect.mock.calls, [['/tmp/recording.collected.mp4']]);
   assert.deepEqual(steps.finalize.mock.calls, [
-    [{ collectedPath: '/tmp/recording.collected.mp4', exportPath: '/tmp/recording.mp4' }],
+    [
+      {
+        collectedPath: '/tmp/recording.collected.mp4',
+        exportPath: '/tmp/recording.mp4',
+        stoppedAtMs: STOPPED_AT_MS,
+      },
+    ],
   ]);
   assert.deepEqual(outcome.result.stopObservation, { recorder: 'confirmed' });
   assert.equal(outcome.result.nativePathDisposition, 'retired');
   assert.deepEqual(manifest.read(), {
     stopObservation: { recorder: 'confirmed' },
+    stoppedAtMs: STOPPED_AT_MS,
     collectedPath: '/tmp/recording.collected.mp4',
     exportPath: '/tmp/recording.mp4',
     stopFinalization: {
@@ -91,16 +100,57 @@ test('never signals or retires the path of a recorder reported lost', async () =
 test('resumes from the collected copy instead of collecting again', async () => {
   const manifest = stopManifest({
     stopObservation: { recorder: 'confirmed' },
+    // The clock the earlier attempt read before it signalled: the resumed export measures that window,
+    // not one that grows with the time between attempts.
+    stoppedAtMs: STOPPED_AT_MS - 60_000,
     collectedPath: '/tmp/earlier.collected.mp4',
   });
   const steps = recordingSteps();
 
-  await stopAndExportScreenRecording({ steps, snapshot: snapshot(), progress: manifest.progress });
+  await stopAndExportScreenRecording({
+    steps,
+    snapshot: snapshot(),
+    progress: manifest.progress,
+    now: () => STOPPED_AT_MS,
+  });
 
   assert.deepEqual(steps.collect.mock.calls, []);
   assert.deepEqual(steps.finalize.mock.calls, [
-    [{ collectedPath: '/tmp/earlier.collected.mp4', exportPath: '/tmp/recording.mp4' }],
+    [
+      {
+        collectedPath: '/tmp/earlier.collected.mp4',
+        exportPath: '/tmp/recording.mp4',
+        stoppedAtMs: STOPPED_AT_MS - 60_000,
+      },
+    ],
   ]);
+});
+
+test('serves every field a journaled finalization carries, chunks and captured length included', async () => {
+  const chunks = [
+    { index: 1, path: '/tmp/recording.mp4' },
+    { index: 2, path: '/tmp/recording.part-002.mp4' },
+  ];
+  const first = stopManifest();
+  // The first attempt finalizes and journals; its commit is what fails, so the retry replays it.
+  await stopAndExportScreenRecording({
+    steps: recordingSteps({ finalization: { chunks, capturedDurationMs: 181_500 } }),
+    snapshot: snapshot(),
+    progress: first.progress,
+    now: () => STOPPED_AT_MS,
+  });
+  const retry = recordingSteps();
+
+  const outcome = await stopAndExportScreenRecording({
+    steps: retry,
+    snapshot: snapshot(),
+    progress: stopManifest(first.read()).progress,
+    now: () => STOPPED_AT_MS,
+  });
+
+  assert.deepEqual(retry.finalize.mock.calls, []);
+  assert.deepEqual(outcome.result.chunks, chunks);
+  assert.equal(outcome.result.capturedDurationMs, 181_500);
 });
 
 test('commits a journaled finalization without writing the export a second time', async () => {
@@ -143,6 +193,8 @@ test('restarts a step whose checkpoint it cannot vouch for', async () => {
   assert.equal(steps.finalize.mock.calls.length, 1);
 });
 
+const STOPPED_AT_MS = 1_700_000_000_000;
+
 function snapshot() {
   return {
     backend: 'fixture' as const,
@@ -158,6 +210,7 @@ function snapshot() {
 function recordingSteps(
   overrides: {
     stop?: () => Promise<Readonly<{ observation: RecorderStop['observation']; warning?: string }>>;
+    finalization?: Partial<ScreenRecordingFinalization>;
   } = {},
 ) {
   return {
@@ -169,6 +222,7 @@ function recordingSteps(
       telemetryPath: '/tmp/recording.telemetry.json',
       warning: '2 chunks were merged',
       nativePathDisposition: 'retired' as const,
+      ...overrides.finalization,
     })),
   };
 }
