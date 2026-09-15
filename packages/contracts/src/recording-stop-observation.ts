@@ -6,6 +6,14 @@
  * The observation describes what was observed, never what identity proved. An identity probe that
  * could not be read is `unconfirmed`, not `lost`, and a proven mismatch is `lost` even though the
  * same probe found nothing.
+ *
+ * The variants below define the vocabulary; they are not a claim that anything emits each one.
+ * Today's producers answer `confirmed` — an exited `simctl` process, an acknowledged runner stop,
+ * Android recorders proven gone, a stopped HarmonyOS toggle, a stopped browser provider — and `lost`
+ * with `owner-session-lost` for an Apple recording whose session was invalidated. The unconfirmed
+ * reasons and the two identity reasons for `lost` arrive with the steps that gain the probe or the
+ * retry they describe; until a step owns one, a stop that cannot prove its recorder gone reports
+ * that as its own error rather than serving an export labelled `unconfirmed`.
  */
 export const RECORDER_OBSERVATION_VALUES = ['confirmed', 'unconfirmed', 'lost'] as const;
 

@@ -848,11 +848,11 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
           capturedDurationMs: numberSchema(),
           recorder: enumSchema(
             RECORDER_OBSERVATION_VALUES,
-            'What the recorder was observed doing when the recording was stopped.',
+            'What the recorder was observed doing when the recording was stopped: confirmed, or lost when the session holding it died. ADR 0024 reserves unconfirmed for the step that gains the probe.',
           ),
           nativePathDisposition: enumSchema(
             NATIVE_PATH_DISPOSITION_VALUES,
-            'What became of the artifact path the recorder writes to: pending, retirable, or retired.',
+            'What became of the artifact path the recorder writes to: retirable while it still owes a removal, retired once that removal was verified. ADR 0024 reserves pending.',
           ),
           showTouches: booleanSchema(),
           warning: stringSchema(),

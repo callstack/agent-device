@@ -54,11 +54,14 @@
   artifact rebuilds it, so a runner that refuses the connection or never answers on any route still
   wipes it and rebuilds, which is what that rule is for.
 - Added (record): `record stop` now answers the question a video cannot — whether its recorder
-  actually stopped — beside the export. The result carries `recorder` (`confirmed`, `unconfirmed`, or
-  `lost`) and `nativePathDisposition` (`pending`, `retirable`, or `retired`) on CLI `--json`, the Node
-  client, and MCP (ADR 0024). Both are disclosures about the recorder and the path it writes to, not
-  failures: the export is served either way, and a stop that had no recorder to report — an older
-  session's replay, or a backend with no artifact path of its own — simply omits them. No stop changes
+  actually stopped — beside the export. The result carries `recorder` and `nativePathDisposition` on
+  CLI `--json`, the Node client, and MCP (ADR 0024). Today a stop says `confirmed`, or `lost` with
+  `owner-session-lost` for an Apple recording whose session was invalidated, and names its artifact
+  path `retirable` or `retired`; the wider vocabulary those two fields declare (`unconfirmed`, the
+  identity-mismatch reasons, `pending`) arrives with the later ADR 0024 steps that gain the probes
+  those states describe. Both are disclosures about the recorder and the path it writes to, not
+  failures: the export is served either way, and a stop with nothing to report — an older session's
+  replay, or a backend whose recorder writes the served file itself — omits them. No stop changes
   outcome in this release; the fields land first so the coordinator can report what it already knows
    before it starts acting on it.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout

@@ -82,6 +82,50 @@ test('declares the exact XCTest backend failure before exposing operations', () 
   });
 });
 
+test('a runner recording that wrote on the device reports that path as owed a retirement', async () => {
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost(),
+    device: coreDevice,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (await operations.screenRecordingStart(input())).pendingHandle.transfer();
+
+  await expect(handle.finish()).resolves.toMatchObject({
+    status: 'completed',
+    result: {
+      stopObservation: { recorder: 'confirmed' },
+      // The stop RPC was acknowledged and the file was retrieved off the device, so nothing removes
+      // it here — retiring it is owed, and saying so is what lets a later step do it (ADR 0024 2.3).
+      nativePathDisposition: 'retirable',
+    },
+  });
+});
+
+test('an invalidated runner recording still names its device-side path as owed', async () => {
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost(),
+    device: coreDevice,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const handle = (
+    await operations.screenRecordingStart(input({ showTouches: true }))
+  ).pendingHandle.transfer();
+  handle.invalidate('runner restarted');
+
+  await expect(handle.finish()).resolves.toMatchObject({
+    status: 'completed',
+    result: {
+      // Losing the session that held the recorder says nothing about who stopped writing, while the
+      // file the runner left on the device is still there to be retired.
+      stopObservation: { recorder: 'lost', why: 'owner-session-lost' },
+      nativePathDisposition: 'retirable',
+      overlayWarning: 'overlay unavailable: runner restarted',
+    },
+  });
+});
+
 test('uses simctl on simulators and retains the macOS runner path', async () => {
   const calls: string[] = [];
   const ownedProcesses = { replace: vi.fn(), clear: vi.fn() };
