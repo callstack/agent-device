@@ -26,6 +26,7 @@ const iosSimulator: DeviceInfo = {
 type RedirectPaths = {
   requestedSetPath: string;
   xctestDeviceSetPath: string;
+  backupPath: string;
   lockDirPath: string;
 };
 
@@ -33,6 +34,7 @@ function makeRedirectPaths(root: string): RedirectPaths {
   return {
     requestedSetPath: path.join(root, 'requested'),
     xctestDeviceSetPath: path.join(root, 'Library', 'Developer', 'XCTestDevices'),
+    backupPath: path.join(root, 'Library', 'Developer', 'XCTestDevices.set-aside'),
     lockDirPath: path.join(root, '.agent-device', 'xctest-device-set.lock'),
   };
 }
@@ -222,6 +224,47 @@ test('a restore that was refused outranks the lock that could not be verified', 
   }
 });
 
+test('the host’s device set is back before the lock is', async () => {
+  await withTempDir('device-set-hand-back-order-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(paths.xctestDeviceSetPath, { recursive: true });
+
+    // The lock is what lets another runner build read the host's `XCTestDevices`, so the order the
+    // give-back works in is the contract: releasing first would hand out a directory that is still a
+    // symlink into this simulator's set. The events record when each step actually happened.
+    const events: string[] = [];
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+      const source = String(from);
+      const target = String(to);
+      if (target === paths.backupPath) events.push('renamed-aside');
+      else if (source === paths.backupPath) events.push('restored');
+      else if (target === paths.xctestDeviceSetPath) events.push('symlink-installed');
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+    const realRemoveDir = fs.rmdirSync;
+    const removeDirSpy = vi.spyOn(fs, 'rmdirSync').mockImplementation(((target, ...rest) => {
+      if (String(target) === paths.lockDirPath) events.push('lock-released');
+      return realRemoveDir(target, ...rest);
+    }) as typeof fs.rmdirSync);
+
+    try {
+      const handle = await acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+        ...redirectOptions(paths),
+        backupPath: paths.backupPath,
+      });
+      assert.ok(handle);
+      await handle.release();
+
+      assert.deepEqual(events, ['renamed-aside', 'symlink-installed', 'restored', 'lock-released']);
+    } finally {
+      renameSpy.mockRestore();
+      removeDirSpy.mockRestore();
+    }
+  });
+});
+
 test('a redirect that could not be installed reports the redirect, not the failed clean-up', async () => {
   await withTempDir('device-set-install-failure-', async (root) => {
     const paths = makeRedirectPaths(root);
@@ -230,7 +273,8 @@ test('a redirect that could not be installed reports the redirect, not the faile
     fs.writeFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'the host owns this');
 
     // The install breaks after the host's set is renamed into the backup, and the restore that the
-    // catch runs to undo it breaks too. Two failures, one report: the redirect that did not happen.
+    // catch runs to undo it breaks too. Two failures, one report: the redirect that did not happen,
+    // carrying the restore that could not run and naming where the host's device set is waiting.
     let restoreAttempted = false;
     const realRename = fs.renameSync;
     const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((
@@ -253,11 +297,17 @@ test('a redirect that could not be installed reports the redirect, not the faile
           acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
             lockDirPath: paths.lockDirPath,
             xctestDeviceSetPath: paths.xctestDeviceSetPath,
+            backupPath: paths.backupPath,
           }),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.message, 'Failed to redirect XCTest device set path');
           assert.match(String(error.details?.error), /EPERM/);
+          assert.match(String(error.details?.restoreError), /EACCES/);
+          assert.ok(
+            String(error.details?.hint).includes(paths.backupPath),
+            `the hint must name where the host's device set is: ${String(error.details?.hint)}`,
+          );
           return true;
         },
       );
