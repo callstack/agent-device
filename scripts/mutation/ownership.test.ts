@@ -29,8 +29,9 @@ test('a kernel is owned by the mirrored test that imports it directly', () => {
   );
 });
 
-// The omission that hand-listed ownership could not see: this test asserts over
-// normalizeError without importing packages/kernel/src/errors.ts itself.
+// The omission that hand-listed ownership could not see: neither test below names the kernel source
+// it reaches. `daemon-error.test.ts` asserts over `normalizeError` without importing
+// packages/kernel/src/errors.ts, and the scroll runtime test never mentions scroll-edge-state.
 test('a kernel is owned by tests that reach it indirectly', () => {
   const deriver = ownershipDeriver(repoRoot);
   assert.ok(
@@ -38,9 +39,8 @@ test('a kernel is owned by tests that reach it indirectly', () => {
     'daemon-error.test.ts exercises normalizeError but does not own kernel-errors',
   );
   assert.ok(
-    deriver
-      .ownersOf('src/commands/interaction/runtime/gestures.test.ts')
-      .includes('scroll-edge-state'),
+    deriver.ownersOf('src/daemon/__tests__/scroll-runtime.test.ts').includes('scroll-edge-state'),
+    'scroll-runtime.test.ts reaches scroll-edge-state through the daemon runtime, not by import',
   );
 });
 
