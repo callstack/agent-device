@@ -268,7 +268,7 @@ function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-function chunkOutputPath(outputPath: string, index: number): string {
+export function chunkOutputPath(outputPath: string, index: number): string {
   const parsed = path.parse(outputPath);
   return path.join(
     parsed.dir,

@@ -141,9 +141,10 @@ test('retains native evidence when finalization fails and cleans it only on requ
       return true;
     },
   });
-  (host.screenRecording.finalize as { complete: () => Promise<never> }).complete = async () => {
-    throw new Error('finalizer failed');
-  };
+  (host.screenRecording.finalize as unknown as { complete: () => Promise<never> }).complete =
+    async () => {
+      throw new Error('finalizer failed');
+    };
   const runtime = await bindAndroidScreenRecordingRuntime({
     host,
     device: androidRecordingDevice,

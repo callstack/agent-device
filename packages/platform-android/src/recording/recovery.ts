@@ -17,7 +17,7 @@ import {
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
 import { nativeChunksDisposition } from './chunks.ts';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
-import { snapshot } from './completion.ts';
+import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -185,7 +185,7 @@ async function reattachEvidence(params: {
   );
   let nativeCleanupConfirmed = false;
   const handle = createScreenRecordingLiveHandle(snapshot(inputForHandle, evidence.startedAt), {
-    finish: async (current) => {
+    finish: async (current, progress) => {
       const outcome = await finalizeAndroidRecording({
         host,
         transport,
@@ -194,6 +194,7 @@ async function reattachEvidence(params: {
         recording: current,
         startedAtMs: evidence.startedAt,
         reachedLimit: provesAndroidScreenRecordTermination(running),
+        progress,
       });
       nativeCleanupConfirmed = true;
       return outcome;

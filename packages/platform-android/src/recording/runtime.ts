@@ -21,7 +21,7 @@ import {
 import { rollbackChunks, stopChunk } from './chunks.ts';
 import { startInitialTransaction, startPendingChunk } from './launch.ts';
 import { persistNativeManifest } from './manifest-store.ts';
-import { snapshot } from './completion.ts';
+import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
 import { cleanupAndroidRecording, reattachAndroidRecording, readLiveEvidence } from './recovery.ts';
@@ -150,7 +150,7 @@ async function startAndroidRecording(params: {
   };
   schedule();
   const handle = createScreenRecordingLiveHandle(snapshot(input, startedAt), {
-    finish: async (current) => {
+    finish: async (current, progress) => {
       if (timer) clearTimeout(timer);
       await rotation;
       if (rotationFailure) throw rotationFailure;
@@ -161,6 +161,7 @@ async function startAndroidRecording(params: {
         manifestPath,
         recording: current,
         startedAtMs: initial.startedAtMs,
+        progress,
       });
       nativeCleanupConfirmed = true;
       return outcome;

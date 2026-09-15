@@ -1,7 +1,6 @@
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { cleanupChunks, stopOwnedChunks } from './chunks.ts';
-import { pending } from './completion.ts';
 import type { NativeChunk, NativeManifest } from './manifest.ts';
 import { removeNativeManifest } from './manifest-store.ts';
 
@@ -25,7 +24,7 @@ export async function cleanupVerifiedAndroidEvidence(
     await removeNativeManifest(transport, manifestPath);
     return { status: 'cleaned' };
   } catch (error) {
-    return pending(error);
+    return transportFailure(error);
   }
 }
 
@@ -49,4 +48,13 @@ async function pendingWriterChunks(
     remotePid: writer.pid,
     remoteStartTime: writer.startTime,
   }));
+}
+
+/** A cleanup that could not be finished is retained, never declared done on the tool's own say-so. */
+function transportFailure(error: unknown): CleanupOutcome {
+  return {
+    status: 'cleanup-pending',
+    reason: 'transport-failed',
+    message: error instanceof Error ? error.message : String(error),
+  };
 }

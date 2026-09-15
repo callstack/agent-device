@@ -1,4 +1,46 @@
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
+
+/**
+ * The recording files a stop moves between host paths, held where the output host would hold them. A
+ * copy with no source fails here the way it fails on a real volume, so a stop that invents a path it
+ * never pulled cannot pass (ADR 0024 2.3).
+ */
+export function recordingFileStore(initial: Readonly<Record<string, string>> = {}): Readonly<{
+  files: Map<string, string>;
+  exists(filePath: string): boolean;
+  outputs: ScreenRecordingRuntimeHost['outputs'];
+}> {
+  const files = new Map(Object.entries(initial));
+  const missing = (filePath: string) => new Error(`ENOENT: no such file, copyfile '${filePath}'`);
+  return {
+    files,
+    exists: (filePath) => files.has(filePath),
+    outputs: {
+      prepare: async (outputPath) => {
+        files.delete(outputPath);
+      },
+      collectFromRecorder: async ({ recorderPath, collectedPath }) => {
+        const bytes = files.get(recorderPath);
+        if (bytes === undefined) throw missing(recorderPath);
+        files.set(collectedPath, bytes);
+      },
+      writeExportFromCollected: async ({ collectedPath, exportPath }) => {
+        const bytes = files.get(collectedPath);
+        if (bytes === undefined) throw missing(collectedPath);
+        files.set(exportPath, bytes);
+      },
+      retireRecorderFile: async (recorderPath): Promise<NativePathDisposition> => {
+        files.delete(recorderPath);
+        return files.has(recorderPath) ? 'retirable' : 'retired';
+      },
+      discardCollectedFile: async (collectedPath) => {
+        files.delete(collectedPath);
+      },
+    },
+  };
+}
 
 export const androidRecordingDevice = {
   platform: 'android' as const,
@@ -23,6 +65,8 @@ export function recordingInput() {
 
 export function recordingHost(overrides: Record<string, unknown>): PlatformRuntimeHost {
   const stopped = new Set<string>();
+  const store =
+    (overrides as { files?: ReturnType<typeof recordingFileStore> }).files ?? recordingFileStore();
   // The device's own files, so `exists` answers what a disposal did or failed to do rather than
   // always agreeing that an artifact is still there.
   const deviceFiles = new Set<string>();
@@ -61,12 +105,17 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
       stopped.add(processIdentity.pid);
       return 'stopped' as const;
     },
-    pullPlayable: async (input: { remotePath: string; outputPath: string }) =>
-      legacy.pullPlayable
+    pullPlayable: async (input: { remotePath: string; outputPath: string }) => {
+      const pulled = legacy.pullPlayable
         ? await legacy.pullPlayable(input)
         : legacy.pull
           ? { ...(await legacy.pull(input)), playable: true }
-          : { stdout: '', stderr: '', exitCode: 0, playable: true },
+          : { stdout: '', stderr: '', exitCode: 0, playable: true };
+      // A pull that succeeded left a file on the host, and the stop copies from that file. Modelling
+      // it here is what makes a stop that pulls from nowhere fail instead of quietly succeeding.
+      if (pulled.exitCode === 0) store.files.set(input.outputPath, 'pulled');
+      return pulled;
+    },
     remove: async (remotePath: string) => {
       const removed = legacy.remove ? await legacy.remove(remotePath) : true;
       if (removed) deviceFiles.delete(remotePath);
@@ -99,8 +148,11 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
   return {
     screenRecording: {
       android: { resolve: async () => transport },
-      outputs: legacy.outputs ?? { prepare: async () => {} },
-      finalize: legacy.finalize ?? { complete: async () => ({}) },
+      outputs: Object.assign({}, store.outputs, legacy.outputs),
+      finalize: Object.assign(
+        { complete: async () => ({}), validatePlayable: async () => {} },
+        legacy.finalize,
+      ),
     },
   } as unknown as PlatformRuntimeHost;
 }

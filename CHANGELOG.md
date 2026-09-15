@@ -79,6 +79,15 @@
   signalling a recorder that already stopped. Both siblings are deleted on success, and a stop that
   got that far answers `nativePathDisposition: retired` rather than the `retirable` it had to answer
   while the recorder's file and the served file were one file.
+- Changed (record): an Android recording is no longer pulled onto the path the caller asked for.
+  `record stop` pulls the device's chunks to `<name>.collected.<ext>` siblings, asks whether the first
+  one is a playable video, then writes the caller's paths from copies of them and drops the collected
+  set (ADR 0024 2.3). A stop that dies before the export exists leaves it absent with the pulled set in
+  place, and the next stop resumes from that set instead of signalling a `screenrecord` process that
+  already stopped and pulling a file that may have moved since. The 180s platform-limit disclosure now
+  travels with the recorder's own observation rather than with the export, so a stop that has to be
+  driven again still says it; every disclosure is still in the one `warning`. Chunk paths and
+  `--client-output-path` naming are unchanged.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
