@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   ensureAndroidImeHelper,
   resetAndroidImeHelperInstallCache,
@@ -144,6 +145,48 @@ test('ensureAndroidImeHelper skips install when a newer version is already prese
 
   assert.equal(result.installed, false);
   assert.equal(result.reason, 'current');
+});
+
+test('ensureAndroidImeHelper install timeout points at the OEM install dialog', async () => {
+  const tmpDir = await mkdtempForTest('ime-helper-install-timeout-');
+  const apkPath = path.join(tmpDir, 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return { exitCode: 1, stdout: '', stderr: 'not found' };
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  const adbProvider: AndroidAdbProvider = {
+    exec: adb,
+    install: async () => {
+      // An unattended first install blocks on the OEM install-confirmation dialog until
+      // adb gives up, leaving no output behind.
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 30000ms', {
+        stdout: '',
+        stderr: '',
+        exitCode: 1,
+        timeoutMs: 30_000,
+      });
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      ensureAndroidImeHelper({
+        adb,
+        adbProvider,
+        artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
+        deviceKey: 'android:R52N30PZXBT',
+      }),
+    (error) => {
+      const details = (error as AppError).details;
+      assert.equal(details?.adbFailure, 'timeout');
+      assert.match(String(details?.hint), /install-confirmation dialog/);
+      assert.doesNotMatch(String(details?.hint), /wedged/);
+      return true;
+    },
+  );
 });
 
 function sha256Text(text: string): string {

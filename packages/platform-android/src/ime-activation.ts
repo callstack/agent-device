@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { waitForStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor, resolveAndroidAdbProvider } from './adb-provider-scope.ts';
@@ -29,6 +29,11 @@ export type AndroidTestImeActivationResult =
        */
       outcome: 'helper-unavailable';
       reason: string;
+      /**
+       * What to do about it, when the failure carried curated advice (e.g. an install timeout that
+       * names an OEM install-confirmation dialog). The caller logs it beside `reason`.
+       */
+      hint?: string;
     }>
   | Readonly<{
       outcome: 'settled';
@@ -54,6 +59,17 @@ export async function activateAndroidTestIme(
   );
 }
 
+function androidTestImeUnavailableOutcome(error: unknown): AndroidTestImeActivationResult {
+  // `normalizeError` always resolves a hint, defaulting per code, so the curated one is read off
+  // the error itself: only curated advice earns a field of its own in the caller's log.
+  const curatedHint = asAppError(error).details?.hint;
+  return {
+    outcome: 'helper-unavailable',
+    reason: normalizeError(error).message,
+    ...(typeof curatedHint === 'string' ? { hint: curatedHint } : {}),
+  };
+}
+
 async function activateAndroidTestImeAfterStartupRecovery(
   device: DeviceInfo,
   options: { stateDir: string },
@@ -69,7 +85,7 @@ async function activateAndroidTestImeAfterStartupRecovery(
     artifact = await selectAndroidImeHelperArtifact(adbProvider);
     await ensureAndroidImeHelper({ adb, adbProvider, artifact, deviceKey });
   } catch (error) {
-    return { outcome: 'helper-unavailable', reason: normalizeError(error).message };
+    return androidTestImeUnavailableOutcome(error);
   }
   const { manifest } = artifact;
 

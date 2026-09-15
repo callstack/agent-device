@@ -5,6 +5,12 @@ import { createAndroidApplicationTools } from '../platform-runtime-android-appli
 
 const activateAndroidTestIme = vi.hoisted(() => vi.fn());
 const restoreAndroidTestIme = vi.hoisted(() => vi.fn());
+const emitDiagnostic = vi.hoisted(() => vi.fn());
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>()),
+  emitDiagnostic,
+}));
 
 vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme,
@@ -38,6 +44,46 @@ describe('android application tools: test IME activation policy', () => {
     await expect(
       createAndroidApplicationTools().activateTestIme(device, { stateDir: '/state' }),
     ).resolves.toBeUndefined();
+  });
+
+  test('an unobtainable helper logs the curated advice the activation reported', async () => {
+    activateAndroidTestIme.mockResolvedValueOnce({
+      outcome: 'helper-unavailable',
+      reason: 'adb timed out after 30000ms',
+      hint: 'check the device screen for a pending install confirmation',
+    });
+
+    await createAndroidApplicationTools().activateTestIme(device, { stateDir: '/state' });
+
+    // The dialog advice reaches the request log; without it the only trace of an OEM
+    // install-confirmation block is a bare timeout.
+    expect(emitDiagnostic).toHaveBeenCalledWith({
+      level: 'warn',
+      phase: 'android_test_ime_activate_failed',
+      data: {
+        device: 'emulator-5554',
+        error: 'adb timed out after 30000ms',
+        hint: 'check the device screen for a pending install confirmation',
+      },
+    });
+  });
+
+  test('an unobtainable helper without curated advice logs no hint', async () => {
+    activateAndroidTestIme.mockResolvedValueOnce({
+      outcome: 'helper-unavailable',
+      reason: 'the bundled Android IME helper artifact was not found',
+    });
+
+    await createAndroidApplicationTools().activateTestIme(device, { stateDir: '/state' });
+
+    expect(emitDiagnostic).toHaveBeenCalledWith({
+      level: 'warn',
+      phase: 'android_test_ime_activate_failed',
+      data: {
+        device: 'emulator-5554',
+        error: 'the bundled Android IME helper artifact was not found',
+      },
+    });
   });
 
   test('a pre-switch persistence failure keeps the open successful without switching IME', async () => {

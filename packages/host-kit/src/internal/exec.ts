@@ -597,7 +597,7 @@ function createTimeoutError(
  * its own `timeoutMs`. Callers classify with this rather than matching the message text,
  * so a command whose own output says "timed out" is not mistaken for one exec killed.
  */
-export function isCommandTimeoutError(error: unknown): boolean {
+export function isCommandTimeoutError(error: unknown): error is AppError {
   return (
     error instanceof AppError &&
     error.code === 'COMMAND_FAILED' &&

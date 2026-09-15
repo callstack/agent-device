@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
@@ -91,6 +92,30 @@ test('a switch that never takes effect rolls back records and claims nothing', a
   });
 });
 
+test('an unobtainable helper carries its curated advice into the outcome', async () => {
+  bindAndroidAdbHostStub({
+    ensureHelperInstalled: async () => {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 30000ms', {
+        timeoutMs: 30_000,
+        hint: 'check the device screen for a pending install confirmation',
+      });
+    },
+  });
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+
+  const result = await activateWith(state);
+
+  // The caller logs `reason` plus `hint`; dropping the hint would hide the install-confirmation
+  // advice that the helper install seam attached.
+  expect(result).toMatchObject({
+    outcome: 'helper-unavailable',
+    reason: 'adb timed out after 30000ms',
+    hint: 'check the device screen for a pending install confirmation',
+  });
+});
+
 test('an unobtainable helper is an outcome that mutates nothing', async () => {
   const host = bindAndroidAdbHostStub({
     ensureHelperInstalled: async () => {
@@ -107,6 +132,8 @@ test('an unobtainable helper is an outcome that mutates nothing', async () => {
     outcome: 'helper-unavailable',
     reason: expect.stringContaining('device refused the install'),
   });
+  // No curated advice, no `hint`: the caller's log must not gain per-code boilerplate.
+  expect(result).not.toHaveProperty('hint');
   expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
   expect(host.markerStore.get(STATE_DIR)).toBeUndefined();
 });

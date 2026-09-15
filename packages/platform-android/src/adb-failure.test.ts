@@ -5,6 +5,7 @@ import {
   androidAdbResultError,
   androidDiscoveryCommandError,
   attachAdbFailureHint,
+  attachAndroidHelperInstallTimeoutHint,
   classifyAndroidAdbFailure,
 } from './adb-failure.ts';
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
@@ -69,6 +70,51 @@ test('attachAdbFailureHint classifies timeouts first and never overwrites a site
 
   const foreign = new AppError('INVALID_ARGS', 'not an adb failure', { stderr: 'device offline' });
   assert.equal(attachAdbFailureHint(foreign).details?.adbFailure, undefined);
+});
+
+test('attachAndroidHelperInstallTimeoutHint names the OEM install dialog, not a wedged server', () => {
+  const helperInstallTimeout = attachAndroidHelperInstallTimeoutHint(
+    attachAdbFailureHint(
+      new AppError('COMMAND_FAILED', 'adb timed out after 30000ms', {
+        timeoutMs: 30_000,
+        stdout: '',
+        stderr: '',
+      }),
+    ),
+  );
+  assert.equal(helperInstallTimeout.details?.adbFailure, 'timeout');
+  assert.match(String(helperInstallTimeout.details?.hint), /install-confirmation dialog/);
+  assert.doesNotMatch(String(helperInstallTimeout.details?.hint), /wedged/);
+
+  // The helper hint is scoped to helper installs: any other adb timeout keeps the
+  // generic advice, because nothing at that call site knows about a package installer.
+  const shellTimeout = attachAdbFailureHint(
+    new AppError('COMMAND_FAILED', 'adb timed out after 5000ms', { timeoutMs: 5000 }),
+  );
+  assert.match(String(shellTimeout.details?.hint), /wedged/);
+
+  // Only a timeout is rewritten: an exit-coded install rejection keeps its own classification,
+  // and anything that is not a COMMAND_FAILED AppError passes through untouched.
+  const installRejection = attachAndroidHelperInstallTimeoutHint(
+    new AppError('COMMAND_FAILED', 'adb install rejected', { stderr: 'device offline' }),
+  );
+  assert.equal(installRejection.details?.adbFailure, undefined);
+  assert.equal(installRejection.details?.hint, undefined);
+
+  // A hint curated nearer the failure — a provider's own advice — outranks this heuristic.
+  const curated = attachAndroidHelperInstallTimeoutHint(
+    new AppError('COMMAND_FAILED', 'adb timed out after 30000ms', {
+      timeoutMs: 30_000,
+      hint: 'the cloud session expired',
+    }),
+  );
+  assert.equal(curated.details?.hint, 'the cloud session expired');
+
+  const unsupported = new AppError('UNSUPPORTED_OPERATION', 'helper unavailable', {
+    timeoutMs: 30_000,
+  });
+  assert.equal(attachAndroidHelperInstallTimeoutHint(unsupported), unsupported);
+  assert.equal(attachAndroidHelperInstallTimeoutHint('adb install failed'), 'adb install failed');
 });
 
 test('androidAdbResultError flags process exits but never a semantic exit-0 failure', () => {

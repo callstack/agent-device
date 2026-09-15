@@ -55,7 +55,11 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
         emitDiagnostic({
           level: 'warn',
           phase: 'android_test_ime_activate_failed',
-          data: { device: device.id, error: result.reason },
+          data: {
+            device: device.id,
+            error: result.reason,
+            ...(result.hint === undefined ? {} : { hint: result.hint }),
+          },
         });
         return;
       }

@@ -111,6 +111,21 @@ test('Android inventory prepares the legacy toolchain before an ANDROID_HOME-onl
   assert.deepEqual(preparedFamilies, ['android']);
 });
 
+test('Android inventory classifies a killed adb probe as a timeout', async () => {
+  // The exec layer kills a wedged adb with `timeoutMs` in details and no stderr, so discovery
+  // must classify it rather than report an unclassified command failure.
+  const host = createHost(async () => {
+    throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+  });
+
+  await assert.rejects(createAndroidInventory(host).discover({}, scope), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.adbFailure, 'timeout');
+    assert.match(String(error.details?.hint), /wedged/);
+    return true;
+  });
+});
+
 function createHost(
   run: DeviceInventoryHostFor<'android'>['commands']['run'],
   tools: { adb?: string; emulator?: string } = { adb: 'adb', emulator: 'emulator' },

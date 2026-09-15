@@ -20,6 +20,10 @@ type AndroidAdbTransferProviderOptions = {
   provider?: AndroidAdbProvider | AndroidAdbExecutor;
 };
 
+/** Everything a caller can ask a package install to do: install flags, exec options, and routing. */
+export type AndroidAdbPackageInstallOptions = AndroidAdbInstallOptions &
+  AndroidAdbTransferProviderOptions;
+
 export async function pullAndroidAdbFile(
   remotePath: string,
   localPath: string,
@@ -45,7 +49,7 @@ export async function pullAndroidAdbFile(
 
 export async function installAndroidAdbPackage(
   apkPath: string,
-  options?: AndroidAdbInstallOptions & AndroidAdbTransferProviderOptions,
+  options?: AndroidAdbPackageInstallOptions,
 ): Promise<AndroidAdbExecutorResult> {
   const { device, provider, ...installOptions } = options ?? {};
   const resolved = resolveAndroidAdbTransferProvider(device, provider);

@@ -6,8 +6,11 @@ import {
   installAndroidAdbPackage,
   pullAndroidAdbFile,
   type AndroidAdbExecutor,
+  type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
 } from './adb-executor.ts';
+import type { AndroidAdbPackageInstallOptions } from './adb-transfer.ts';
+import { attachAndroidHelperInstallTimeoutHint } from './adb-failure.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import type {
   AndroidHelperInstallDecision,
@@ -19,6 +22,22 @@ import type {
 export type { AndroidHelperInstallDecision, InstalledAndroidHelperState };
 
 const ANDROID_HELPER_IDENTITY_TIMEOUT_MS = 10_000;
+
+/**
+ * The one install seam every Android helper APK crosses, so an install timeout carries the
+ * install-specific hint wherever a helper is pushed on. Non-timeout failures pass through
+ * exactly as the transfer layer classified them; app installs keep their own advice.
+ */
+export async function installAndroidHelperPackage(
+  apkPath: string,
+  options?: AndroidAdbPackageInstallOptions,
+): Promise<AndroidAdbExecutorResult> {
+  try {
+    return await installAndroidAdbPackage(apkPath, options);
+  } catch (error) {
+    throw attachAndroidHelperInstallTimeoutHint(error);
+  }
+}
 
 async function ensureAndroidHelperPackageInstalled(options: {
   adb: AndroidAdbExecutor;
@@ -73,7 +92,7 @@ async function ensureAndroidHelperPackageInstalled(options: {
     };
   }
 
-  const result = await installAndroidAdbPackage(apkPath, {
+  const result = await installAndroidHelperPackage(apkPath, {
     provider: adbProvider,
     replace: true,
     allowFailure: true,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { installAndroidInstallablePath } from '../app-deployment.ts';
 import {
   inferAndroidAppName,
@@ -78,6 +79,51 @@ test('installAndroidInstallablePath uses provider install capability when availa
   }
 
   assert.deepEqual(installCalls, [{ source: apkPath, replace: true }]);
+});
+
+test('an app install timeout keeps the generic adb-server advice', async () => {
+  // The OEM install dialog can hold an app install too, but the helper-specific advice names an
+  // agent-device helper package, so it must not leak onto the app-under-test install path.
+  const apkPath = path.join(os.tmpdir(), `agent-device-app-install-timeout-${Date.now()}.apk`);
+  await fs.writeFile(apkPath, 'placeholder', 'utf8');
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          throw new Error(`unexpected adb exec: ${args.join(' ')}`);
+        },
+        install: async () => {
+          throw new AppError('COMMAND_FAILED', 'adb timed out after 30000ms', {
+            stdout: '',
+            stderr: '',
+            exitCode: 1,
+            timeoutMs: 30_000,
+          });
+        },
+      },
+      { serial: 'emulator-5554' },
+      async () =>
+        await assert.rejects(
+          () => installAndroidInstallablePath(device, apkPath),
+          (error) => {
+            const details = (error as AppError).details;
+            assert.equal(details?.adbFailure, 'timeout');
+            assert.match(String(details?.hint), /wedged/);
+            return true;
+          },
+        ),
+    );
+  } finally {
+    await fs.rm(apkPath, { force: true });
+  }
 });
 
 test('installAndroidInstallablePath installs .aab via bundletool build-apks + install-apks', async () => {

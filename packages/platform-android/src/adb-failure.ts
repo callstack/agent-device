@@ -117,6 +117,9 @@ const ANDROID_ADB_TIMEOUT_FAILURE: AndroidAdbFailureClassification = Object.free
   hint: 'adb timed out — the adb server may be wedged. Run adb kill-server && adb start-server, check adb devices, then retry.',
 });
 
+const ANDROID_HELPER_INSTALL_TIMEOUT_HINT =
+  'The helper install timed out — some OEM builds (ColorOS is one) hold the first install of each package behind a system install-confirmation dialog and adb waits for it. Check the device screen, confirm any pending install prompt, then retry; if none is showing, run adb kill-server && adb start-server and retry.';
+
 export function classifyAndroidAdbFailure(
   stderr: string,
   stdout = '',
@@ -132,6 +135,7 @@ export function classifyAndroidAdbFailure(
 }
 
 import { AppError } from '@agent-device/kernel/errors';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { AndroidAdbExecutorResult } from './adb-transport.ts';
 
@@ -156,6 +160,26 @@ export function attachAdbFailureHint<T>(error: T): T {
       : {}),
   };
   return error;
+}
+
+/**
+ * Rewrites the hint on a helper-APK install timeout to name the likelier cause. Some OEM builds
+ * (ColorOS is one) hold the package installer open on a system install-confirmation dialog for
+ * the first install of a package; the command yields no stderr, so the generic timeout hint reads
+ * as a wedged adb server and points away from the only fix. Reach it only through
+ * `installAndroidHelperPackage`, the Android helper install seam: every other adb timeout keeps
+ * the generic advice. Only that generic advice is replaced — a hint curated nearer the failure
+ * (a provider's own advice, or a request cancellation) survives, as elsewhere in this module.
+ */
+export function attachAndroidHelperInstallTimeoutHint<T>(error: T): T {
+  if (!isCommandTimeoutError(error)) return error;
+  const curatedHint = error.details?.hint;
+  if (typeof curatedHint === 'string' && curatedHint !== ANDROID_ADB_TIMEOUT_FAILURE.hint) {
+    return error;
+  }
+  const classified = attachAdbFailureHint(error);
+  classified.details = { ...classified.details, hint: ANDROID_HELPER_INSTALL_TIMEOUT_HINT };
+  return classified;
 }
 
 // Timeout wins over text matchers: the exec layer deliberately builds timeout
@@ -231,17 +255,11 @@ export function androidDiscoveryCommandError(
 }
 
 export function attachAndroidDiscoveryTimeout<T>(error: T): T {
-  if (
-    !(error instanceof AppError) ||
-    error.code !== 'COMMAND_FAILED' ||
-    typeof error.details?.timeoutMs !== 'number'
-  ) {
-    return error;
-  }
+  if (!isCommandTimeoutError(error)) return error;
   error.details = {
     ...error.details,
     adbFailure: ANDROID_ADB_TIMEOUT_FAILURE.reason,
-    ...(typeof error.details.hint === 'string'
+    ...(typeof error.details?.hint === 'string'
       ? {}
       : {
           hint: ANDROID_ADB_TIMEOUT_FAILURE.hint,
