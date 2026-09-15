@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import {
+  collectedRecordingPath,
+  nativeRecordingPath,
+} from '@agent-device/capture-kit/recording-stop-sequence';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import {
@@ -66,6 +70,8 @@ test('iOS simulator recording reports host contention and recovers through the f
     'agent-device-provider-scenario-ios-sim-record-',
     async (tmpDir) => {
       const recordingPath = path.join(tmpDir, 'sim-recording.mp4');
+      const recorderPath = nativeRecordingPath(recordingPath);
+      const collectedPath = collectedRecordingPath(recordingPath);
       const runnerTranscript = createProviderTranscript([]);
       const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
         runnerTranscript,
@@ -169,7 +175,12 @@ test('iOS simulator recording reports host contention and recovers through the f
         assert.equal(fs.existsSync(ownedProcessRecordPath), false);
 
         runnerTranscript.assertComplete();
-        assert.deepEqual(recordingStarts, [recordingPath, recordingPath]);
+        // The recorder is told its own path, and the caller's path arrives from a copy of it
+        // (ADR 0024 2.3), so neither sibling is left behind for the next run to wonder about.
+        assert.deepEqual(recordingStarts, [recorderPath, recorderPath]);
+        assert.equal(fs.existsSync(recordingPath), true);
+        assert.equal(fs.existsSync(recorderPath), false);
+        assert.equal(fs.existsSync(collectedPath), false);
         assert.deepEqual(recordingSignals, ['SIGINT']);
         assertFlatToolCallStartsWith(appleTool.calls, [
           'simctl',

@@ -70,6 +70,15 @@
   `nativePathDisposition: "retired"`, and a reattach that could not question the device at all
   declared the recording's artifact lost. A probe that never ran now answers uncertain: the path
   stays `retirable` and the recording stays finishable until the device answers.
+- Changed (record): an iOS Simulator recording no longer has the recorder write the file the caller
+  asked for. `simctl` records to a `<name>.native.<ext>` sibling; `record stop` copies that file to a
+  `<name>.collected.<ext>` sibling, asks whether *that* is a playable video, and only then writes the
+  caller's `--out` path once, from the copy, retiring the recorder's own file (ADR 0024 2.3). The
+  caller's path is never a file a recorder is still writing, and a stop that fails before the export
+  exists leaves it absent with the copy in place — so the next stop resumes from the copy instead of
+  signalling a recorder that already stopped. Both siblings are deleted on success, and a stop that
+  got that far answers `nativePathDisposition: retired` rather than the `retirable` it had to answer
+  while the recorder's file and the served file were one file.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An

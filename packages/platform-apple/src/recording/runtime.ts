@@ -1,19 +1,29 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
+import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   RECORDING_OUTPUT_UNPLAYABLE_REASON,
+  type ScreenRecordingCompletion,
+  type ScreenRecordingLiveHandle,
   type ScreenRecordingLiveSnapshot,
   type ScreenRecordingRuntimeOperations,
   type ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
-import { completeAppleRecording as completion } from './completion.ts';
+import {
+  nativeRecordingPath,
+  type RecorderStop,
+  stopAndExportScreenRecording,
+} from '@agent-device/capture-kit/recording-stop-sequence';
+import {
+  completeAppleRecording as completion,
+  finalizeAppleRecordingFromCollected,
+} from './completion.ts';
 import {
   cleanupAppleRecording,
   createAppleRecordingEnvelope,
@@ -22,6 +32,8 @@ import {
   type AppleScreenRecordingOperationHost,
 } from './recovery.ts';
 import { validateAppleSimulatorRecording } from './validation.ts';
+
+const SIMULATOR_TARGET_LABEL = 'iOS recording';
 
 export function appleScreenRecordingFacts(device: DeviceInfo) {
   if (device.appleOs === 'watchos')
@@ -86,12 +98,12 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
         signal,
       )
     : undefined;
-  await host.screenRecording.outputs.prepare(input.outputPath);
-  const nativeProcess = await host.screenRecording.apple.startSimulator(
-    device,
-    input.outputPath,
-    signal,
-  );
+  // The recorder owns its own file and the export is produced from a copy of it (ADR 0024 2.3), so a
+  // stop that fails midway cannot leave the caller's path holding bytes the next attempt has to guess
+  // about. `simctl` is told where to write; the caller's path is written once, from the copy.
+  const nativePath = nativeRecordingPath(input.outputPath);
+  await host.screenRecording.outputs.prepare(nativePath);
+  const nativeProcess = await host.screenRecording.apple.startSimulator(device, nativePath, signal);
   const processes = nativeProcess.markers;
   if (!processes || processes.length === 0) {
     await settleAppleSimulatorProcess(nativeProcess).catch(() => {});
@@ -112,40 +124,71 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
     await settleAppleSimulatorProcess(nativeProcess).catch(() => {});
     throw error;
   }
+  // The exit stays in scope because it is the one thing that explains an unreadable file: naming it
+  // turns a permanent condition into a way out instead of a retry loop on the same bytes.
+  let recorderExit: string | undefined;
+  let recorderResult: HostCommandResult | undefined;
+  const stopSimulatorRecorder = async (): Promise<RecorderStop> => {
+    // An exited recorder is an observation about the recorder, not about the export: simctl wrote
+    // whatever it wrote, and the playability rule is what answers whether that is a video
+    // (ADR 0024 2.2). Refusing by exit code alone threw away a finished recording and left a retry
+    // that could only re-read the same settled exit, so the exit is disclosed and collection proceeds.
+    await nativeProcess.terminate();
+    const result = await nativeProcess.wait;
+    recorderResult = result;
+    recorderExit = describeSimctlRecorderExit(result);
+    host.screenRecording.ownedProcesses.clear({ kind: 'session', sessionId: input.sessionId });
+    return {
+      observation: { recorder: 'confirmed' },
+      ...(recorderExit === undefined
+        ? {}
+        : {
+            warning: `${recorderExit} before record stop; the video covers only what the recorder wrote before it stopped.`,
+          }),
+    };
+  };
   return startResult({
     device,
     owner,
     input,
-    descriptor: { backend: 'simctl', outputPath: input.outputPath, processes },
+    descriptor: { backend: 'simctl', outputPath: nativePath, processes },
     snapshot: snapshot(input, 'simctl recordVideo', {}, clockAnchor),
-    finish: async (current) => {
-      await nativeProcess.terminate();
-      const result = await nativeProcess.wait;
-      host.screenRecording.ownedProcesses.clear({ kind: 'session', sessionId: input.sessionId });
-      // An exited recorder is an observation about the recorder, not about the export: simctl wrote
-      // whatever it wrote, and the finalizer is what answers whether that is a video (ADR 0024 2.2).
-      // Refusing here by exit code alone threw away a finalized recording and left a retry that could
-      // only re-read the same settled exit, so the exit is disclosed and collection proceeds.
-      const exit = describeSimctlRecorderExit(result);
-      if (exit === undefined)
-        return await completion({
-          host,
-          snapshot: current,
-          targetLabel: 'iOS recording',
-          stopObservation: { recorder: 'confirmed' },
-        });
-      try {
-        return await completion({
-          host,
-          snapshot: current,
-          targetLabel: 'iOS recording',
-          stopObservation: { recorder: 'confirmed' },
-          recorderWarning: `${exit} before record stop; the video covers only what the recorder wrote before it stopped.`,
-        });
-      } catch (exportError) {
-        throw recorderExitEndedTheRecording(exportError, exit, result);
-      }
-    },
+    finish: (current, progress) =>
+      stopAndExportScreenRecording({
+        snapshot: current,
+        progress,
+        steps: {
+          stop: stopSimulatorRecorder,
+          collect: async (collectedPath) => {
+            try {
+              await host.screenRecording.outputs.collectFromRecorder({
+                recorderPath: nativePath,
+                collectedPath,
+              });
+              await host.screenRecording.finalize.validatePlayable({
+                outputPath: collectedPath,
+                targetLabel: SIMULATOR_TARGET_LABEL,
+              });
+            } catch (collectError) {
+              throw recorderExitEndedTheRecording(collectError, recorderExit, recorderResult);
+            }
+          },
+          finalize: async ({ collectedPath, exportPath }) => {
+            try {
+              return await finalizeAppleRecordingFromCollected({
+                host,
+                snapshot: current,
+                targetLabel: SIMULATOR_TARGET_LABEL,
+                collectedPath,
+                exportPath,
+                nativePath,
+              });
+            } catch (exportError) {
+              throw recorderExitEndedTheRecording(exportError, recorderExit, recorderResult);
+            }
+          },
+        },
+      }),
     cleanup: async () => {
       const result = await cleanupAppleSimulatorProcess(nativeProcess);
       if (result.status === 'cleaned' || result.status === 'already-missing') {
@@ -269,10 +312,11 @@ function describeSimctlRecorderExit(result: HostCommandResult): string | undefin
 // must not be told to close the session.
 function recorderExitEndedTheRecording(
   exportError: unknown,
-  exit: string,
-  result: HostCommandResult,
+  exit: string | undefined,
+  result: HostCommandResult | undefined,
 ): unknown {
   const original = asAppError(exportError, 'COMMAND_FAILED');
+  if (exit === undefined || result === undefined) return exportError;
   if (original.details?.reason !== RECORDING_OUTPUT_UNPLAYABLE_REASON) return exportError;
   return new AppError(
     original.code,
@@ -325,7 +369,10 @@ function startResult(params: {
   input: ScreenRecordingStartInput;
   descriptor: AppleRecordingDescriptor;
   snapshot: ScreenRecordingLiveSnapshot;
-  finish(snapshot: ScreenRecordingLiveSnapshot): ReturnType<typeof completion>;
+  finish(
+    snapshot: ScreenRecordingLiveSnapshot,
+    progress?: Parameters<ScreenRecordingLiveHandle['finish']>[0],
+  ): Promise<FinishOutcome<ScreenRecordingCompletion>>;
   cleanup(): Promise<CleanupOutcome>;
 }) {
   const { device, owner, input, descriptor, snapshot, finish, cleanup } = params;
