@@ -480,29 +480,32 @@ async function captureAndroidHelperContentAttempt(params: {
   const content = classifyAndroidHelperContent(helperCapture.xml, helperCapture.metadata, {
     foregroundAppPackage: options.appBundleId,
   });
-  if (content.outcome === 'system-surface-only') {
+  if (content.outcome === 'unusable') {
+    return { outcome: 'unusable', decision: content.decision };
+  }
+  // Only content the helper cannot answer with is worth another call. A tree holding just the
+  // system surface is an answer, so it is disclosed rather than recaptured.
+  const systemSurfaceOnly = content.outcome === 'system-surface-only';
+  if (systemSurfaceOnly) {
     emitDiagnostic({
       phase: 'android_snapshot_helper_system_surface',
       data: { foregroundAppPackage: options.appBundleId },
     });
-    return {
-      outcome: 'captured',
-      capture: {
-        xml: helperCapture.xml,
-        metadata: { ...helperCapture.metadata, systemSurfaceOnly: true },
-      },
-    };
+  } else if (attempt > 0) {
+    emitDiagnostic({
+      phase: 'android_snapshot_helper_content_recaptured',
+      data: { attempts: attempt + 1, recoveredFromReason: params.previousContentReason },
+    });
   }
-  if (content.outcome === 'ok') {
-    if (attempt > 0) {
-      emitDiagnostic({
-        phase: 'android_snapshot_helper_content_recaptured',
-        data: { attempts: attempt + 1, recoveredFromReason: params.previousContentReason },
-      });
-    }
-    return { outcome: 'captured', capture: helperCapture };
-  }
-  return { outcome: 'unusable', decision: content.decision };
+  return {
+    outcome: 'captured',
+    capture: {
+      xml: helperCapture.xml,
+      metadata: systemSurfaceOnly
+        ? { ...helperCapture.metadata, systemSurfaceOnly: true }
+        : helperCapture.metadata,
+    },
+  };
 }
 
 async function delayBeforeContentRecapture(signal?: AbortSignal): Promise<void> {

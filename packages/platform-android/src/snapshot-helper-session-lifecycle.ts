@@ -25,13 +25,8 @@ import {
   type AndroidSnapshotHelperResolvedCaptureOptions,
 } from './snapshot-helper-capture.ts';
 import {
-  isAndroidSnapshotHelperRetryStateStanding,
-  type AndroidSnapshotHelperRetryState,
-} from './snapshot-helper-retry-state.ts';
-import {
   allocateAndroidSnapshotHelperSessionPort,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
-  provesAndroidSnapshotHelperSessionUnavailable,
   sendAndroidSnapshotHelperSessionCommand,
   waitForAndroidSnapshotHelperSessionReady,
 } from './snapshot-helper-session-protocol.ts';
@@ -49,9 +44,6 @@ import {
   waitForAndroidSnapshotHelperProcessExit,
 } from './snapshot-helper-retirement.ts';
 
-const SESSION_READY_TIMEOUT_MS = 10_000;
-// How long a device that merely started too slowly stays excluded from the persistent path.
-const SESSION_START_RETRY_AFTER_MS = 60_000;
 const SESSION_STOP_TIMEOUT_MS = 1_000;
 // SnapshotInstrumentation.finishSafely can spend up to 10 seconds waiting for Android to finish
 // connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
@@ -90,11 +82,6 @@ export type AndroidSnapshotHelperSessionAcquisition = {
 };
 
 const sessions = new Map<string, AndroidSnapshotHelperSession>();
-
-/** A start that failed for this identity, standing until it is worth starting again. */
-type DisabledAndroidSnapshotHelperSession = AndroidSnapshotHelperRetryState<string>;
-
-const disabledSessionIdentities = new Map<string, DisabledAndroidSnapshotHelperSession>();
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
@@ -155,65 +142,29 @@ async function resolveAndroidSnapshotHelperSession(params: {
     await stopAndroidSnapshotHelperSession(deviceKey);
     session = undefined;
   }
-  if (!session && !isAndroidSnapshotHelperSessionIdentityDisabled(deviceKey, identity)) {
-    session = await startAndroidSnapshotHelperSessionOrDisable({
-      deviceKey,
-      identity,
-      options,
-      resolved,
-    });
+  if (!session) {
+    try {
+      session = await startAndroidSnapshotHelperSession({
+        deviceKey,
+        identity,
+        options,
+        resolved,
+      });
+    } catch (error) {
+      // A start that failed is not a command that failed: the caller answers with the one-shot
+      // transport and the next command tries the persistent path again.
+      options.signal?.throwIfAborted();
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'android_snapshot_helper_session_start_failed',
+        data: {
+          deviceKey,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
   return session;
-}
-
-/**
- * A start that failed is not a command that failed: the caller answers with the one-shot transport.
- * What it does decide is how soon this identity is worth starting again.
- */
-async function startAndroidSnapshotHelperSessionOrDisable(params: {
-  deviceKey: string;
-  identity: string;
-  options: AndroidSnapshotHelperCaptureOptions;
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions;
-}): Promise<AndroidSnapshotHelperSession | undefined> {
-  try {
-    return await startAndroidSnapshotHelperSession(params);
-  } catch (error) {
-    params.options.signal?.throwIfAborted();
-    disableAndroidSnapshotHelperSessionIdentity(params.deviceKey, params.identity, error);
-    return undefined;
-  }
-}
-
-function disableAndroidSnapshotHelperSessionIdentity(
-  deviceKey: string,
-  identity: string,
-  error: unknown,
-): void {
-  // Only a helper that ran and exited before announcing readiness proves this identity unusable. A
-  // start that ran out of time or lost its transport says nothing, so the exclusion expires.
-  const unavailable = provesAndroidSnapshotHelperSessionUnavailable(error);
-  disabledSessionIdentities.set(deviceKey, {
-    value: identity,
-    ...(unavailable ? {} : { retryAtMs: Date.now() + SESSION_START_RETRY_AFTER_MS }),
-  });
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'android_snapshot_helper_session_disabled',
-    data: {
-      deviceKey,
-      reason: error instanceof Error ? error.message : String(error),
-      ...(unavailable ? {} : { retryAfterMs: SESSION_START_RETRY_AFTER_MS }),
-    },
-  });
-}
-
-function isAndroidSnapshotHelperSessionIdentityDisabled(deviceKey: string, identity: string) {
-  const disabled = disabledSessionIdentities.get(deviceKey);
-  if (!disabled || disabled.value !== identity) return false;
-  if (isAndroidSnapshotHelperRetryStateStanding(disabled)) return true;
-  disabledSessionIdentities.delete(deviceKey);
-  return false;
 }
 
 async function startAndroidSnapshotHelperSession(params: {
@@ -259,13 +210,15 @@ async function startAndroidSnapshotHelperSession(params: {
     capturedCount: 0,
   };
   try {
+    // Starting the session gets the budget the caller already allowed one helper command, which is
+    // how `--timeout` reaches it. A fixed guess below that pushed a slow device out of the persistent
+    // path while the one-shot transport it fell back to had room for the same start.
     await waitForAndroidSnapshotHelperSessionReady(
       childProcess,
-      SESSION_READY_TIMEOUT_MS,
+      params.resolved.commandTimeoutMs,
       params.options.signal,
     );
     sessions.set(params.deviceKey, session);
-    disabledSessionIdentities.delete(params.deviceKey);
     emitDiagnostic({
       phase: 'android_snapshot_helper_session_ready',
       data: {
@@ -482,7 +435,6 @@ export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
       await stopAndroidSnapshotHelperSession(deviceKey);
     }),
   );
-  disabledSessionIdentities.clear();
   resetAndroidSnapshotHelperRetirements();
   resetAndroidAdbShellProtocolProbes();
 }

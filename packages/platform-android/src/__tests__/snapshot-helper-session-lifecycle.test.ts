@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import {
   resetAndroidSnapshotHelperSessions,
@@ -50,7 +50,7 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('disables repeated persistent session attempts after startup failure', async () => {
+test('a failed start answers with the one-shot transport and the next command starts again', async () => {
   const calls: string[][] = [];
   const spawnArgs: string[][] = [];
   const provider: AndroidAdbProvider = {
@@ -79,40 +79,39 @@ test('disables repeated persistent session attempts after startup failure', asyn
 
   assert.equal(first, undefined);
   assert.equal(second, undefined);
-  assert.equal(spawnArgs.length, 1);
-  assert.equal(readSessionArgument(spawnArgs[0]!, 'timeoutMs'), '2000');
-  assert.equal(calls.filter((args) => args[0] === 'forward').length, 2);
+  assert.equal(spawnArgs.length, 2, 'a failed start does not end the persistent path');
+  assert.equal(
+    calls.filter((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:')).length,
+    2,
+  );
 });
 
-test('a start that failed for a transient reason is retried instead of ending the persistent path', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  try {
-    const calls: string[][] = [];
-    const spawnArgs: string[][] = [];
-    const provider = createSessionProvider({ calls, spawnArgs });
-    let transportHealthy = false;
-    const adb: AndroidAdbExecutor = async (args, options) => {
-      if (args[0] === 'forward' && !transportHealthy) throw new Error('adb server is restarting');
-      return await provider.exec!(args, options);
-    };
-    const capture = () =>
-      captureAndroidSnapshotWithHelperSession({
-        adb,
-        adbProvider: { ...provider, exec: adb },
-        deviceKey: 'android:emulator-5554',
-      });
+test('a session start waits only as long as the caller budgeted for one helper command', async () => {
+  const spawnArgs: string[][] = [];
+  const provider = createSessionProvider({ calls: [], spawnArgs });
+  const startedAtMs = Date.now();
 
-    assert.equal(await capture(), undefined);
-    assert.equal(await capture(), undefined);
-    assert.equal(spawnArgs.length, 0, 'the failed start is not retried inside its cooldown');
+  // The spawned instrumentation never announces readiness, so only the caller's own command budget
+  // ends the wait. A fixed floor above it would starve the one-shot transport this call falls back to.
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: {
+      ...provider,
+      spawn: (args) => {
+        spawnArgs.push(args);
+        return new FakeAndroidProcess();
+      },
+    },
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 50,
+  });
 
-    vi.advanceTimersByTime(61_000);
-    transportHealthy = true;
-    assert.match((await capture())?.xml ?? '', /snapshot 1/);
-    assert.equal(spawnArgs.length, 1);
-  } finally {
-    vi.useRealTimers();
-  }
+  assert.equal(output, undefined);
+  assert.equal(spawnArgs.length, 1);
+  assert.ok(
+    Date.now() - startedAtMs < 3_000,
+    'the start obeys the caller budget, not a fixed floor',
+  );
 });
 
 test('starts and reuses a persistent Android snapshot helper session', async () => {
@@ -336,9 +335,4 @@ function countForceStops(options: SessionProviderOptions): number {
 
 function isHelperRuntimeForceStop(args: string[]): boolean {
   return args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper';
-}
-
-function readSessionArgument(args: string[], name: string): string | undefined {
-  const index = args.indexOf(name);
-  return index < 0 ? undefined : args[index + 1];
 }
