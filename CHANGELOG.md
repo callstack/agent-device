@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed (android): a chunked `record stop` (recordings over 170 s) no longer warns that screenrecord
+  stopped before record stop at the 180 s limit. Rotation always ends every earlier chunk before
+  stop, so the warning now fires only when the last chunk's recorder had already exited.
 - Fixed: an iOS snapshot whose XCTest query-sweep tier cannot read the screen no longer ends the
   runner process. On a live React Native feed (Bluesky Home, images re-rendering) the AX server
   rejects each of the sweep's 19 element-type queries with `kAXErrorIllegalArgument`, and XCTest

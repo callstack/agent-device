@@ -80,21 +80,27 @@ function validProcessIdentity(
   );
 }
 
+/**
+ * Resolves whether the active (last) chunk's recorder had already exited, i.e. the video ends before
+ * record stop. Earlier chunks always end before stop because rotation replaced them.
+ */
 export async function stopOwnedChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<boolean> {
-  let reachedLimit = false;
+  const active = chunks.at(-1);
+  let activeAlreadyExited = false;
   let failure: unknown;
   for (const chunk of [...chunks].reverse()) {
     try {
-      reachedLimit = (await stopChunk(transport, chunk)) || reachedLimit;
+      const alreadyExited = await stopChunk(transport, chunk);
+      if (chunk === active) activeAlreadyExited = alreadyExited;
     } catch (error) {
       failure ??= error;
     }
   }
   if (failure) throw failure;
-  return reachedLimit;
+  return activeAlreadyExited;
 }
 
 export async function waitForStableArtifacts(
