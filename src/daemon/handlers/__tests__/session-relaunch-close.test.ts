@@ -25,7 +25,6 @@ vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  const stopIosRunnerSession = vi.fn(async (_deviceId: string) => {});
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -38,11 +37,8 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     // A retained Simulator runner survives the relaunch, so its cached target is reset.
     hasLiveIosRunnerSession: vi.fn(() => true),
-    stopIosRunnerSession,
-    // Mirrors the runner module: a retained close keeps warm reuse; any other close stops it.
-    releaseIosRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
-      if (!options.retain) await stopIosRunnerSession(deviceId);
-    }),
+    stopIosRunnerSession: vi.fn(async () => {}),
+    releaseIosRunnerOnClose: vi.fn(async () => {}),
   };
 });
 vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
@@ -115,7 +111,7 @@ beforeEach(() => {
   mockNotifyIosRunnerAppRelaunched.mockResolvedValue(undefined);
   mockStopIosRunner.mockReset();
   mockStopIosRunner.mockResolvedValue(undefined);
-  mockReleaseRunnerOnClose.mockClear();
+  mockReleaseRunnerOnClose.mockReset();
   mockDismissMacOsAlert.mockReset();
   mockDismissMacOsAlert.mockResolvedValue({} as any);
 });
@@ -523,8 +519,8 @@ test('close on macOS session stops runner and dismisses automation alert before 
   );
 
   const calls: string[] = [];
-  mockStopIosRunner.mockImplementation(async (deviceId) => {
-    calls.push(`stop-runner:${deviceId}`);
+  mockReleaseRunnerOnClose.mockImplementation(async (deviceId, options) => {
+    calls.push(`release-runner:${deviceId}:${options.retain ? 'retain' : 'stop'}`);
   });
   mockDismissMacOsAlert.mockImplementation(async (action, options) => {
     calls.push(
@@ -537,7 +533,7 @@ test('close on macOS session stops runner and dismisses automation alert before 
 
   expect(response.ok).toBe(true);
   expect(calls).toEqual([
-    'stop-runner:host-macos-local',
+    'release-runner:host-macos-local:stop',
     'dismiss-alert:dismiss:com.apple.systempreferences',
   ]);
   expect(sessionStore.get(sessionName)).toBe(undefined);
@@ -589,7 +585,7 @@ test('close on iOS simulator with scoped simulator set stops runner before delet
   const response = await createHandler(sessionStore)(sessionRequest(sessionName, 'close'));
 
   expect(response.ok).toBe(true);
-  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
@@ -633,7 +629,7 @@ test('close on leased iOS simulator session stops runner before deleting session
   )(sessionRequest(sessionName, 'close'));
 
   expect(response.ok).toBe(true);
-  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
@@ -659,7 +655,7 @@ test('close --shutdown on iOS simulator stops runner before deleting session', a
   );
 
   expect(response.ok).toBe(true);
-  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
@@ -684,6 +680,9 @@ test('close <app> on iOS stops runner before app close dispatch and performs fin
   mockStopIosRunner.mockImplementation(async () => {
     calls.push('stop-runner');
   });
+  mockReleaseRunnerOnClose.mockImplementation(async (_deviceId, options) => {
+    calls.push(`release-runner:${options.retain ? 'retain' : 'stop'}`);
+  });
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
     calls.push(`${command}:${(positionals ?? []).join(' ')}`);
     return {};
@@ -694,7 +693,7 @@ test('close <app> on iOS stops runner before app close dispatch and performs fin
   );
 
   expect(response.ok).toBe(true);
-  expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'stop-runner']);
+  expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'release-runner:stop']);
 });
 
 test('close <app> on iOS simulator retains runner while terminating app', async () => {
@@ -718,6 +717,9 @@ test('close <app> on iOS simulator retains runner while terminating app', async 
   mockStopIosRunner.mockImplementation(async () => {
     calls.push('stop-runner');
   });
+  mockReleaseRunnerOnClose.mockImplementation(async (_deviceId, options) => {
+    calls.push(`release-runner:${options.retain ? 'retain' : 'stop'}`);
+  });
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
     calls.push(`${command}:${(positionals ?? []).join(' ')}`);
     return {};
@@ -728,7 +730,7 @@ test('close <app> on iOS simulator retains runner while terminating app', async 
   );
 
   expect(response.ok).toBe(true);
-  expect(calls).toEqual(['close:com.example.app']);
+  expect(calls).toEqual(['close:com.example.app', 'release-runner:retain']);
 });
 
 test('app-only close terminates an iOS simulator app without ending its session', async () => {
@@ -794,6 +796,9 @@ test('close <app> on macOS stops runner before app close dispatch and dismisses 
   mockStopIosRunner.mockImplementation(async (deviceId) => {
     calls.push(`stop-runner:${deviceId}`);
   });
+  mockReleaseRunnerOnClose.mockImplementation(async (deviceId, options) => {
+    calls.push(`release-runner:${deviceId}:${options.retain ? 'retain' : 'stop'}`);
+  });
   mockDismissMacOsAlert.mockImplementation(async (action, options) => {
     calls.push(
       `dismiss-alert:${action}:${(options as any)?.bundleId ?? (options as any)?.surface ?? 'frontmost'}`,
@@ -813,7 +818,7 @@ test('close <app> on macOS stops runner before app close dispatch and dismisses 
   expect(calls).toEqual([
     'stop-runner:host-macos-local',
     'close:System Settings',
-    'stop-runner:host-macos-local',
+    'release-runner:host-macos-local:stop',
     'dismiss-alert:dismiss:com.apple.systempreferences',
   ]);
 });

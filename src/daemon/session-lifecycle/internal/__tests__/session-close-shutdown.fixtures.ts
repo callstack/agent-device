@@ -11,14 +11,10 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  const stopIosRunnerSession = vi.fn(async (_deviceId: string) => {});
   return {
     ...actual,
-    stopIosRunnerSession,
-    // Mirrors the runner module: a retained close keeps warm reuse; any other close stops it.
-    releaseIosRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
-      if (!options.retain) await stopIosRunnerSession(deviceId);
-    }),
+    stopIosRunnerSession: vi.fn(async () => {}),
+    releaseIosRunnerOnClose: vi.fn(async () => {}),
   };
 });
 vi.mock('@agent-device/platform-apple/perf', async (importOriginal) => {
@@ -69,7 +65,10 @@ import {
   cleanupAndroidNativePerfSession,
   stopAndroidSnapshotHelperSessionForDevice,
 } from '@agent-device/platform-android/mechanics';
-import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
+import {
+  releaseIosRunnerOnClose,
+  stopIosRunnerSession,
+} from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
 import { WEB_DESKTOP_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
 import { acquireDeviceClaim } from '../../../device-claims.ts';
@@ -98,6 +97,7 @@ const mockStopAndroidSnapshotHelperSessionForDevice = vi.mocked(
   stopAndroidSnapshotHelperSessionForDevice,
 );
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
+const mockReleaseRunnerOnClose = vi.mocked(releaseIosRunnerOnClose);
 
 const teardownSessionResources = (
   request: Parameters<typeof teardownProductionSessionResources>[0],
@@ -258,6 +258,7 @@ export const sessionCloseShutdownFixture = Object.freeze({
   mockShutdownTargetRuntime,
   mockRunCmd,
   mockStopAndroidSnapshotHelperSessionForDevice,
+  mockReleaseRunnerOnClose,
   mockStopIosRunnerSession,
   narrowDeviceBinding,
   noopInvoke,

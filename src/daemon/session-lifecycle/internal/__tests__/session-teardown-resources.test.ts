@@ -12,6 +12,7 @@ const {
   makeSession,
   makeSessionStore,
   mockRunCmd,
+  mockReleaseRunnerOnClose,
   mockStopAndroidSnapshotHelperSessionForDevice,
   mockStopIosRunnerSession,
   mockStopIosRunnerSession: stopIosRunnerSession,
@@ -60,9 +61,9 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   expect(sessionStore.get(sessionName)).toBeUndefined();
   // An active recording at close time still defeats iOS runner retention even
   // though the recording is finalized (and cleared) before the retention step.
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
   expect(finish.mock.invocationCallOrder[0]).toBeLessThan(
-    mockStopIosRunnerSession.mock.invocationCallOrder[0]!,
+    mockReleaseRunnerOnClose.mock.invocationCallOrder[0]!,
   );
 });
 
@@ -95,7 +96,7 @@ test('close surfaces a recording finalization failure through the cleanup-failur
   // Cleanup failure is reported, later cleanup still ran, session still deleted.
   expect(finish).toHaveBeenCalledOnce();
   expect(forceCleanup).toHaveBeenCalledOnce();
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

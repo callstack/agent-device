@@ -7,6 +7,7 @@ const {
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
+  mockReleaseRunnerOnClose,
   mockStopIosRunnerSession,
   noopInvoke,
   os,
@@ -61,6 +62,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   expect(finish).not.toHaveBeenCalled();
   expect(session.screenRecording).toBeDefined();
   expect(mockStopIosRunnerSession).not.toHaveBeenCalled();
+  expect(mockReleaseRunnerOnClose).not.toHaveBeenCalled();
 
   // A plain close (no --save-script) still closes the same session cleanly afterward, and now
   // teardown genuinely does run: the recorder is signaled and the session deleted.
@@ -79,7 +81,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   });
   expect(plainClose?.ok).toBe(true);
   expect(finish).toHaveBeenCalledOnce();
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

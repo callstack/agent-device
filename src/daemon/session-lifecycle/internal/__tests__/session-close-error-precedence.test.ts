@@ -16,6 +16,7 @@ const {
   makeSessionStore,
   mkdtempForTestSync,
   mockDispatchCommand,
+  mockReleaseRunnerOnClose,
   mockStopIosRunnerSession,
   noopInvoke,
   os,
@@ -72,7 +73,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
   // A failed close is not recorded as `Closed`.
   expect(session.actions.some((action) => action.command === 'close')).toBe(false);
   // Subsequent independent cleanup still ran, and the session was still deleted.
-  expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
@@ -401,9 +402,10 @@ test('targeted close skips platform dispatch and preserves the error when the re
   });
   // A skipped close is not recorded as `Closed`.
   expect(session.actions.some((action) => action.command === 'close')).toBe(false);
-  // Later independent cleanup still ran (runner stop re-attempted), and the
+  // Later independent cleanup still ran (runner release re-attempted), and the
   // session was still deleted.
-  expect(mockStopIosRunnerSession.mock.calls.length).toBeGreaterThan(1);
+  expect(mockStopIosRunnerSession).toHaveBeenCalledOnce();
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

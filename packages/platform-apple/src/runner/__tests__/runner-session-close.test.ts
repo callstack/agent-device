@@ -296,8 +296,22 @@ test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and t
   assert.ok(getRunnerSessionSnapshot(device.id));
   assert.equal((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
 
-  // Busy + retain: the stalled runner is disposed, so the next open boots a clean one.
-  session.runnerMainThreadBusy = true;
+  // Busy + retain: a command that stalls answers MAIN_THREAD_TIMEOUT, so the stalled runner is
+  // disposed and the next open boots a clean one.
+  // The session has not served a command yet, so the read-only snapshot answers over the startup
+  // transport with no preflight.
+  mockWaitForRunner.mockResolvedValueOnce(
+    runnerError({ code: 'MAIN_THREAD_TIMEOUT', message: 'main thread execution timed out' }),
+  );
+  await assert.rejects(() =>
+    executeRunnerCommandWithSession(
+      device,
+      session,
+      { command: 'snapshot', appBundleId: 'com.example.demo' },
+      '/tmp/runner.log',
+      30_000,
+    ),
+  );
   await releaseIosRunnerOnClose(device.id, { retain: true });
   assert.equal(getRunnerSessionSnapshot(device.id), null);
   assert.notEqual((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
