@@ -484,14 +484,10 @@ async function captureAndroidHelperContentAttempt(params: {
     return { outcome: 'unusable', decision: content.decision };
   }
   // Only content the helper cannot answer with is worth another call. A tree holding just the
-  // system surface is an answer, so it is disclosed rather than recaptured.
+  // system surface is an answer, and `systemSurfaceOnly` on the capture is where it is recorded:
+  // it travels with the response and becomes the disclosure the caller reads.
   const systemSurfaceOnly = content.outcome === 'system-surface-only';
-  if (systemSurfaceOnly) {
-    emitDiagnostic({
-      phase: 'android_snapshot_helper_system_surface',
-      data: { foregroundAppPackage: options.appBundleId },
-    });
-  } else if (attempt > 0) {
+  if (!systemSurfaceOnly && attempt > 0) {
     emitDiagnostic({
       phase: 'android_snapshot_helper_content_recaptured',
       data: { attempts: attempt + 1, recoveredFromReason: params.previousContentReason },
