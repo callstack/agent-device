@@ -77,23 +77,35 @@ test('connect loop stops for terminal verdicts', () => {
   assert.equal(shouldRetryRunnerConnectError(new AppError('DEVICE_NOT_FOUND', 'gone')), true);
 });
 
-// --- connect deadline ---
+// --- readiness preflight ---
 
-test('a readiness preflight that outlived its deadline restarts the session', () => {
-  // The marked shape this recovery actually sees: the simctl-spawn fallback killed at
-  // its budget, then marked by the readiness preflight that was waiting on it.
+test('the preflight marker alone decides the restart', () => {
+  // The marker is applied by the preflight's own catch, whatever it was waiting on when it gave
+  // up: a killed fallback, an exhausted probe, a refusal. Which of those arrived is not evidence
+  // about whether the command reached the runner, and the marker is.
   const killedSpawn = commandFailed('xcrun timed out after 45000ms', {
     cmd: 'xcrun',
     timeoutMs: 45_000,
     runnerReadinessPreflightFailed: true,
   });
   assert.equal(shouldRestartRunnerAfterReadinessPreflight(killedSpawn), true);
-  assert.equal(shouldRetryRunnerConnectError(killedSpawn), true);
-  // A preflight refusal with no deadline restarts nothing: the runner answered and said no.
   assert.equal(
     shouldRestartRunnerAfterReadinessPreflight(
       commandFailed('Runner readiness refused', { runnerReadinessPreflightFailed: true }),
     ),
+    true,
+  );
+  // The restart the marker authorises is a new session, not more waiting inside this one.
+  assert.equal(shouldRetryRunnerConnectError(killedSpawn), true);
+  // Without the marker the same two shapes say nothing about the command having been written.
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      commandFailed('xcrun timed out after 45000ms', { cmd: 'xcrun', timeoutMs: 45_000 }),
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(commandFailed('Runner readiness refused')),
     false,
   );
 });

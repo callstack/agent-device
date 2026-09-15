@@ -16,7 +16,6 @@ import {
 import {
   assertRunnerRequestActive,
   isRetryableRunnerError,
-  isRunnerReadinessPreflightFailure,
   resolveRunnerRequestSignal,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
@@ -309,7 +308,7 @@ export async function executeRunnerCommand(
         restartReason: 'runner_connect_failed_before_command_send',
       });
     }
-    if (session && shouldRestartAfterReadinessPreflightError(appErr)) {
+    if (session && shouldRestartRunnerAfterReadinessPreflight(appErr)) {
       assertRunnerRequestActive(options.requestId);
       return await restartSessionAndRunCommand({
         device,
@@ -599,11 +598,4 @@ function emitPrepareDiagnostic(
       failureReason: result.failureReason,
     },
   });
-}
-
-function shouldRestartAfterReadinessPreflightError(error: AppError): boolean {
-  return (
-    isRunnerReadinessPreflightFailure(error) &&
-    (isRetryableRunnerError(error) || shouldRestartRunnerAfterReadinessPreflight(error))
-  );
 }

@@ -21,11 +21,12 @@
   back to Appium 1.x, which predates the `mobile:` commands the interactor issues (`deepLink`,
   `pressButton`, `activateApp`).
 - Changed (iOS runner): what recovers a stuck runner is decided by the recorded error, not by its
-  wording. A readiness preflight that runs out of time posting to the runner records the budget it
-  ran out and says "Runner command deadline exceeded" — neither of the two message checks on the
-  recovery paths looked for that phrasing, so the session was never restarted and the command was
-  never replayed. The rule reads the preflight marker and the recorded deadline now, so the restart
-  happens whatever the message happens to say. The other half is what no longer happens: when a slow
+  wording. A readiness preflight marks the error it gives up with, and that marker is now the whole
+  test for restarting the session and replaying the command. Two message checks decided it before,
+  and a preflight reaches the caller in whatever shape its connect loop ended with — "Runner did not
+  accept connection", "Runner endpoint probe failed", a killed `simctl` fallback, a post that ran out
+  of its budget — so only some of those restarted and the rest failed the command. The other half is
+  what no longer happens: when a slow
   boot spends the whole prepare budget, the health check reports "prepare ios-runner timed out", and
   that no longer wipes a restored `xcodebuild` artifact on the way to a rebuild — the runner session
   is invalidated and prepare retries with the artifact intact. Only a failure that indicts the

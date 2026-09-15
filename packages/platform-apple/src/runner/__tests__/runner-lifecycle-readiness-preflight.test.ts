@@ -106,42 +106,14 @@ test('mutating commands restart stale sessions when readiness preflight fails be
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
 });
 
-test('mutating commands restart stale sessions when readiness preflight outlives its deadline', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
-
-  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
-  mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      new AppError('COMMAND_FAILED', 'xcrun timed out after 45000ms', {
-        cmd: 'xcrun',
-        timeoutMs: 45_000,
-        runnerReadinessPreflightFailed: true,
-      }),
-    )
-    .mockResolvedValueOnce({ message: 'tapped' });
-
-  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
-
-  assert.deepEqual(result, { message: 'tapped' });
-  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
-  assert.deepEqual(mockInvalidateRunnerSession.mock.calls[0], [
-    staleSession,
-    'runner_readiness_preflight_failed_before_command_send',
-  ]);
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 2);
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
-});
-
 test('a readiness preflight that runs out a post deadline restarts the session and replays', async () => {
   const staleSession = makeRunnerSession({ port: 8100, ready: true });
   const freshSession = makeRunnerSession({ port: 8101, ready: false });
 
-  // The real shape of a preflight that ran out of time on a direct post: the simulator and
-  // usbmux paths post to the runner themselves, and `fetchWithTimeout` reports its expiry as
-  // "Runner command deadline exceeded" with the budget it ran out. The preflight marker is
-  // added on the way past the preflight catch. Neither of the deleted message checks matched
-  // that wording, so the session was never restarted and the command was never replayed.
+  // The simulator and usbmux routes post to the runner themselves, and `fetchWithTimeout` reports
+  // an expiry as "Runner command deadline exceeded" with the budget it ran out. Neither of the two
+  // message checks this rule replaced matched that wording, so the command was never replayed.
+  // What routes it is the marker the preflight catch puts on its way out, not the wording.
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(
@@ -160,14 +132,39 @@ test('a readiness preflight that runs out a post deadline restarts the session a
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[1]?.[1], freshSession);
 });
 
-test('a readiness preflight refusal that is neither transport-shaped nor deadline-shaped surfaces', async () => {
+test('a readiness preflight refusal restarts the session like any other preflight failure', async () => {
   const staleSession = makeRunnerSession({ port: 8100, ready: true });
+  const freshSession = makeRunnerSession({ port: 8101, ready: false });
 
-  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession);
+  // This is the shape no message check could have been written for: the runner answered the probe
+  // and the answer was no, which says nothing about whether the command was written. The marker
+  // says that, and it says it for every shape at once.
+  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'Runner readiness refused', {
+        runnerReadinessPreflightFailed: true,
+      }),
+    )
+    .mockResolvedValueOnce({ message: 'tapped' });
+
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+
+  assert.deepEqual(result, { message: 'tapped' });
+  assert.deepEqual(mockInvalidateRunnerSession.mock.calls[0], [
+    staleSession,
+    'runner_readiness_preflight_failed_before_command_send',
+  ]);
+});
+
+test('a failed readiness probe without the marker does not restart the session', async () => {
+  const session = makeRunnerSession({ port: 8100, ready: true });
+
+  // Without the marker the failure is just a transport shape, and the one that says the command
+  // was never written is the reason this restart is safe at all.
+  mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'Runner readiness refused', {
-      runnerReadinessPreflightFailed: true,
-    }),
+    new AppError('COMMAND_FAILED', 'Runner readiness refused'),
   );
 
   await assert.rejects(

@@ -168,13 +168,8 @@ type RunnerErrorMatch = {
 const hasRetriableFlag: RunnerErrorDetailsMatch = (details) => details.retriable === true;
 const hasUsbmuxDeviceUnattached: RunnerErrorDetailsMatch = (details) =>
   details.usbmuxDeviceAttached === false;
-/** The numeric deadline a command timeout records, including an `AbortSignal.timeout` wrap. */
-const hasCommandDeadline: RunnerErrorDetailsMatch = (details) =>
-  typeof details.timeoutMs === 'number';
 const hasReadinessPreflightFailure: RunnerErrorDetailsMatch = (details) =>
   details.runnerReadinessPreflightFailed === true;
-const hasReadinessPreflightDeadline: RunnerErrorDetailsMatch = (details) =>
-  hasReadinessPreflightFailure(details) && hasCommandDeadline(details);
 
 type RunnerErrorVerdicts = {
   /** isRetryableRunnerError: transport error worth a same-session resend. */
@@ -185,7 +180,7 @@ type RunnerErrorVerdicts = {
   sessionFatalReason?: string;
   /** Connect-shaped failure before the command was sent: restart the session and replay. */
   restartBeforeSend?: boolean;
-  /** Readiness preflight gave up on its deadline: restart the session and replay. */
+  /** Readiness preflight gave up before the command was written: restart the session and replay. */
   restartAfterReadinessPreflight?: boolean;
   /** The runner never accepted a connection, so the restored artifact itself is suspect. */
   artifactSuspect?: boolean;
@@ -234,13 +229,13 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: { retryable: false, connectRetry: false },
   },
   {
-    // A deadline alone earns no verdict: the same recorded budget covers a wait inside
-    // the connect loop, where waiting is right, and a fetch that died after the command
-    // was written, where replaying it is not. Only the preflight marker says the runner
-    // never saw the command, and it sits beside the deadline here for that reason.
-    reason: 'runner_readiness_preflight_deadline',
-    match: { code: 'COMMAND_FAILED', details: hasReadinessPreflightDeadline },
-    verdicts: { restartAfterReadinessPreflight: true, connectRetry: true },
+    // The marker is the whole fact: the preflight gave up before the command was written, so
+    // replaying it cannot duplicate anything. It is asked for alone because the preflight fails in
+    // whatever shape the connect loop ended with — a refusal, an exhausted probe, a killed
+    // fallback — and a rule that also required a recorded budget would fire on only some of them.
+    reason: 'runner_readiness_preflight_failed',
+    match: { code: 'COMMAND_FAILED', details: hasReadinessPreflightFailure },
+    verdicts: { restartAfterReadinessPreflight: true },
   },
   {
     reason: 'runner_connect_refused',
@@ -352,18 +347,8 @@ export function shouldRetryRunnerConnectError(error: unknown): boolean {
 }
 
 /**
- * The readiness preflight gave up before the command was written. The marker is the only
- * evidence for that: an error carrying it arrives in whatever shape the preflight failed
- * in, so no message check can be the test.
- */
-export function isRunnerReadinessPreflightFailure(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  return hasReadinessPreflightFailure((error.details ?? {}) as AppErrorDetails);
-}
-
-/**
- * The readiness preflight ran out of its own deadline, so the runner never saw the
- * command: restarting the session and replaying is both safe and the only way out.
+ * The readiness preflight gave up, so the runner never saw the command: restarting the session and
+ * replaying is both safe and the only way out. The marker carries the rule; the message does not.
  */
 export function shouldRestartRunnerAfterReadinessPreflight(error: unknown): boolean {
   return runnerErrorVerdict(error, 'restartAfterReadinessPreflight') ?? false;
