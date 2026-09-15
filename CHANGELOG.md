@@ -6,6 +6,10 @@
   unsupported although the SDK exposes the HID primitives; it now holds one touch as a
   `performActions` batch of `touchDown`, `wait`, `touchUp`, defaulting to the 800 ms the Android
   and Linux interactors use when no duration is given.
+- Fixed (limrun): `press --double-tap` on Limrun iOS direct sessions sends both taps in one
+  `performActions` batch with an 80 ms on-device pause. The interactor issued two independent `tap`
+  requests, so a network round trip sat between the taps and iOS recognized them as two slow
+  single taps.
 - Added (ios): `type` and `fill` work in the Apple Pay sheet on iOS Simulator instead of failing
   with `TEXT_INPUT_NOT_FOCUSED`. `com.apple.PassbookUIService` is served in place like the web
   sign-in host (#2438).

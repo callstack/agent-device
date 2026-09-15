@@ -212,9 +212,17 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.tapElement(toIosSelector(selector));
   }
 
+  /**
+   * Both taps travel in one `performActions` batch so the inter-tap gap is enforced on the
+   * device. Two separate `tap` requests put a network round trip between the taps, which
+   * exceeds the double-tap recognition window and registers as two slow single taps.
+   */
   async doubleTap(x: number, y: number): Promise<void> {
-    await this.tap(x, y);
-    await this.tap(x, y);
+    await this.session.client.performActions([
+      { type: 'tap', x, y },
+      { type: 'wait', durationMs: DOUBLE_TAP_INTERVAL_MS },
+      { type: 'tap', x, y },
+    ]);
   }
 
   /** One held touch as HID primitives; the hold runs on the device, not across the wire. */
@@ -412,6 +420,8 @@ const IOS_APP_INVENTORY_RETRY_DELAYS_MS = [0, 250] as const;
 
 /** Hold applied when the caller names no duration; matches the Android and Linux interactors. */
 const DEFAULT_LONG_PRESS_DURATION_MS = 800;
+/** On-device pause between the two taps of a double tap; well inside the recognizer's window. */
+const DOUBLE_TAP_INTERVAL_MS = 80;
 
 function resolveInstalledIosAppId(params: {
   resultBundleId?: string;
