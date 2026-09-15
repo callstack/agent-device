@@ -121,11 +121,42 @@ test('returns fenced native completion after a crash between native finalization
     expect(result.result.nativePathDisposition).toBe('retired');
     await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
       status: 'completed',
-      // The marker froze the completion while the chunks still sat on the device, so a replay
-      // reports that disposal is owed rather than repeating a removal it never verified.
-      result: { ...result.result, nativePathDisposition: 'retirable' },
+      // The marker froze its disposition before disposal, and the replay answers that one field from
+      // the device in front of it, so a completed recording is not still owed a retirement it never
+      // had to repeat. One value, from the stop and from the replay alike (ADR 0024 2.3).
+      result: result.result,
     });
   }
+  expect(removals).toHaveLength(1);
+});
+
+test('a device that kept the artifact it was told to remove is still owed the retirement', async () => {
+  let manifest = '';
+  const removals: string[] = [];
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    remove: async (remotePath: string) => {
+      removals.push(remotePath);
+      return true;
+    },
+    // A device that answers `rm` with success and keeps the file: the removal is reported, the
+    // artifact is not gone, and the disposition has to say so rather than trust the exit status.
+    exists: async () => true,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const result = await started.pendingHandle.transfer().finish();
+
+  expect(result.status).toBe('completed');
+  if (result.status !== 'completed') return;
+  expect(result.result.nativePathDisposition).toBe('retirable');
+  await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
+    status: 'completed',
+    result: result.result,
+  });
   expect(removals).toHaveLength(1);
 });
 
@@ -212,6 +243,9 @@ test.each([
         scope: native.scope,
         showTouches: native.showTouches,
         recordOnlySession: native.recordOnlySession,
+        // Nothing was disposed of here, and the disposition the replay serves is read from the
+        // device rather than from the marker — which this marker never carried at all.
+        nativePathDisposition: 'retirable',
       },
     });
     expect(removals).toEqual([]);

@@ -23,6 +23,9 @@ export function recordingInput() {
 
 export function recordingHost(overrides: Record<string, unknown>): PlatformRuntimeHost {
   const stopped = new Set<string>();
+  // The device's own files, so `exists` answers what a disposal did or failed to do rather than
+  // always agreeing that an artifact is still there.
+  const deviceFiles = new Set<string>();
   const legacy = overrides as Record<string, any>;
   const transport = {
     ...overrides,
@@ -30,11 +33,13 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
     start: async ({ remotePath, quality }: { remotePath: string; quality: 'medium' | 'high' }) => {
       const started = await (legacy.start?.({ remotePath, quality }) ??
         recordingProcess('42', remotePath));
+      deviceFiles.add(remotePath);
       return 'process' in started
         ? { process: { ...started.process, remotePath } }
         : recordingProcess(started.remotePid, remotePath);
     },
-    exists: async (remotePath: string) => (legacy.exists ? await legacy.exists(remotePath) : true),
+    exists: async (remotePath: string) =>
+      legacy.exists ? await legacy.exists(remotePath) : deviceFiles.has(remotePath),
     size: async (remotePath: string) => (legacy.size ? await legacy.size(remotePath) : 1),
     inspect: async (processIdentity: { pid: string }) =>
       legacy.inspect
@@ -62,7 +67,11 @@ export function recordingHost(overrides: Record<string, unknown>): PlatformRunti
         : legacy.pull
           ? { ...(await legacy.pull(input)), playable: true }
           : { stdout: '', stderr: '', exitCode: 0, playable: true },
-    remove: async (remotePath: string) => (legacy.remove ? await legacy.remove(remotePath) : true),
+    remove: async (remotePath: string) => {
+      const removed = legacy.remove ? await legacy.remove(remotePath) : true;
+      if (removed) deviceFiles.delete(remotePath);
+      return removed;
+    },
     manifestPathFor: (remotePath: string) =>
       legacy.manifestPathFor?.(remotePath) ??
       `${remotePath.slice(0, remotePath.lastIndexOf('/'))}/agent-device-recording-active.json`,
