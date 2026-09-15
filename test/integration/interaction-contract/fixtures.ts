@@ -346,34 +346,6 @@ export function runnerPresentedDragEndpointsNodes(): RawSnapshotNode[] {
  * provider-transcript scenarios.
  */
 
-export const RUNNER_EQUIVALENT_WRAPPER_NODES = [
-  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Cell',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: false,
-  },
-  {
-    index: 2,
-    parentIndex: 1,
-    type: 'Button',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: true,
-  },
-  {
-    index: 3,
-    parentIndex: 2,
-    type: 'StaticText',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: false,
-  },
-];
-
 export const RUNNER_CONTINUE_NODES = [
   {
     index: 0,
@@ -388,82 +360,6 @@ export const RUNNER_CONTINUE_NODES = [
     label: 'Continue',
     hittable: true,
     rect: { x: 100, y: 300, width: 200, height: 44 },
-  },
-] as const;
-
-export const RUNNER_CHANGED_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'StaticText',
-    label: 'Welcome!',
-    rect: { x: 100, y: 300, width: 200, height: 44 },
-  },
-] as const;
-
-// Runner-side closed drawer: the only match is off-screen, so the runtime
-// fallback path must refuse it instead of tapping out-of-viewport coordinates.
-export const RUNNER_CLOSED_DRAWER_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    label: 'Explore',
-    hittable: true,
-    rect: { x: -320, y: 240, width: 300, height: 50 },
-  },
-] as const;
-
-// Runner-side covered control (#1091 delegation): the runner skips it as
-// non-hittable (ELEMENT_NOT_FOUND) and the runtime fallback must refuse with
-// the covered shape instead of tapping through the overlay.
-export const RUNNER_COVERED_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    label: 'Save draft',
-    hittable: false,
-    interactionBlocked: 'covered',
-    rect: { x: 16, y: 700, width: 140, height: 44 },
-  },
-] as const;
-
-// Runner-side visible-but-non-hittable cell (#1037 shape): the runner reports
-// ELEMENT_NOT_FOUND, the runtime fallback proceeds by coordinates and
-// annotates the result instead of failing.
-export const RUNNER_NON_HITTABLE_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Cell',
-    label: 'Recents row',
-    hittable: false,
-    rect: { x: 20, y: 300, width: 360, height: 60 },
   },
 ] as const;
 
