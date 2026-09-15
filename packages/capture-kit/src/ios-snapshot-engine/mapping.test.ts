@@ -44,6 +44,7 @@ test('publishes an exact representative for every semantic source index', () => 
       parentIndex: 4,
       type: 'Other',
       identifier: 'shared-but-not-a-representative',
+      hittable: false,
       rect: { x: 20, y: 240, width: 120, height: 40 },
     },
   ];

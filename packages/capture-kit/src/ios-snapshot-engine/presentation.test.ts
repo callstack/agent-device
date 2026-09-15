@@ -498,6 +498,7 @@ test('buildSnapshotState keeps React Native warning banner instead of full-scree
       parentIndex: 1,
       type: 'Other',
       identifier: 'SearchRouterPage',
+      hittable: false,
       rect: { x: 0, y: 0, width: 402, height: 874 },
     },
     {
@@ -719,6 +720,7 @@ test('buildSnapshotState suppresses structural iOS identifier-only nodes', () =>
       parentIndex: 0,
       type: 'Other',
       identifier: 'SearchRouterPage',
+      hittable: false,
       rect: { x: 0, y: 0, width: 402, height: 874 },
     },
     {
@@ -735,6 +737,7 @@ test('buildSnapshotState suppresses structural iOS identifier-only nodes', () =>
       parentIndex: 2,
       type: 'Other',
       identifier: 'ReportActionAvatars-SingleAvatar',
+      hittable: false,
       rect: { x: 20, y: 252, width: 40, height: 40 },
     },
   ];

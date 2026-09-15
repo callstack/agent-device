@@ -77,6 +77,39 @@ describe('collectIosStructuralIdentifierSuppression', () => {
     expect(suppressed.sort((a, b) => a - b)).toEqual([1, 4, 7]);
   });
 
+  test('keeps a childless identifier wrapper whose capture reported no hittability', () => {
+    const nodes: RawSnapshotNode[] = [
+      { index: 0, type: 'Application', label: 'App' },
+      { index: 1, parentIndex: 0, type: 'Other', identifier: 'members.count' },
+    ];
+
+    const unreported: number[] = [];
+    collectIosStructuralIdentifierSuppression(nodes, {
+      ...makeRuleContext(nodes),
+      suppressNode: (source) => unreported.push(source.index),
+    });
+    expect(unreported).toEqual([]);
+
+    const declared: number[] = [];
+    collectIosStructuralIdentifierSuppression(
+      [{ ...nodes[0]! }, { ...nodes[1]!, hittable: false }],
+      { ...makeRuleContext(nodes), suppressNode: (source) => declared.push(source.index) },
+    );
+    expect(declared).toEqual([1]);
+  });
+
+  test('delegates an identifier wrapper to its content even without a hittability verdict', () => {
+    const { nodes } = makeStructuralTree(1, 2);
+    const suppressed: number[] = [];
+
+    collectIosStructuralIdentifierSuppression(nodes, {
+      ...makeRuleContext(nodes),
+      suppressNode: (source) => suppressed.push(source.index),
+    });
+
+    expect(suppressed).toEqual([1]);
+  });
+
   test('builds the child index once instead of per structural candidate', () => {
     const candidateCount = 40;
     const descendantsPerCandidate = 25;
