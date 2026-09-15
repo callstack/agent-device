@@ -106,7 +106,7 @@ import {
   ensureRunnerSession,
   executeRunnerCommandWithSession,
   getRunnerSessionSnapshot,
-  stopIosRunnerSessionIfBusy,
+  releaseIosRunnerOnClose,
 } from '../runner-session.ts';
 
 // Test-only stand-in for the daemon's runtime lease-owner-state-dir setter (root-only; the package
@@ -287,17 +287,22 @@ test('a served non-busy error clears a stale busy report so close keeps a draine
   assert.equal(session.runnerMainThreadBusy, false);
 });
 
-test('stopIosRunnerSessionIfBusy leaves an idle runner and stops a busy one so the next open boots fresh (#2552)', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-stop-if-busy-sim' };
+test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and the reopen boots fresh (#2552)', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-release-on-close-sim' };
   const session = await ensureRunnerSession(device, {});
 
-  assert.equal(await stopIosRunnerSessionIfBusy(device.id), false);
+  // Idle + retain: warm reuse, same session comes back for the next open.
+  await releaseIosRunnerOnClose(device.id, { retain: true });
   assert.ok(getRunnerSessionSnapshot(device.id));
+  assert.equal((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
 
+  // Busy + retain: the stalled runner is disposed, so the next open boots a clean one.
   session.runnerMainThreadBusy = true;
-  assert.equal(await stopIosRunnerSessionIfBusy(device.id), true);
+  await releaseIosRunnerOnClose(device.id, { retain: true });
   assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.notEqual((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
 
-  const reopened = await ensureRunnerSession(device, {});
-  assert.notEqual(reopened.sessionId, session.sessionId);
+  // Non-retained close: stops regardless of occupancy.
+  await releaseIosRunnerOnClose(device.id, { retain: false });
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
 });

@@ -581,20 +581,29 @@ export async function stopIosRunnerSession(deviceId: string): Promise<void> {
 }
 
 /**
- * Stops a retained runner whose last exchange reported main-thread work still draining, and reports
- * whether it did. Retaining such a runner only hands the same stalled process to the next `open`, so
- * `close` stops it instead of scheduling an idle stop (#2552). Returns false without touching the
- * runner when it is idle, so the caller's retain-vs-stop decision stays atomic (no re-check window).
+ * Releases a runner at session close, preferring warm reuse only when the runner is actually
+ * reusable. A non-retained close, or a retained close over a runner whose last exchange reported
+ * main-thread work still draining, stops it now: a busy runner refuses every command until it drains
+ * or wedges, so pooling it back hands the same stalled process to the next `open` (#2552). An idle
+ * retained runner keeps warm reuse via the idle-stop timer. The decision is owned here because the
+ * occupancy fact lives on the session, and awaited so `close` returns only once the lease is gone.
  */
-export async function stopIosRunnerSessionIfBusy(deviceId: string): Promise<boolean> {
-  if (runnerSessions.get(deviceId)?.runnerMainThreadBusy !== true) return false;
-  emitDiagnostic({
-    level: 'info',
-    phase: 'ios_runner_retain_skipped_busy',
-    data: { deviceId },
-  });
+export async function releaseIosRunnerOnClose(
+  deviceId: string,
+  options: { retain: boolean },
+): Promise<void> {
+  if (options.retain && runnerSessions.get(deviceId)?.runnerMainThreadBusy !== true) {
+    scheduleIosRunnerIdleStop(deviceId);
+    return;
+  }
+  if (options.retain) {
+    emitDiagnostic({
+      level: 'info',
+      phase: 'ios_runner_retain_skipped_busy',
+      data: { deviceId },
+    });
+  }
   await stopIosRunnerSession(deviceId);
-  return true;
 }
 
 export async function abortAllIosRunnerSessions(): Promise<void> {

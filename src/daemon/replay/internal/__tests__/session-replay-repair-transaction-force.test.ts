@@ -13,9 +13,8 @@ import { test, expect, vi, beforeEach } from 'vitest';
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   prewarmIosRunnerSession: vi.fn(),
   resolveRunnerAppBundleId: vi.fn(),
-  scheduleIosRunnerIdleStop: vi.fn(),
   stopIosRunnerSession: vi.fn(),
-  stopIosRunnerSessionIfBusy: vi.fn(async () => false),
+  releaseIosRunnerOnClose: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/platform-apple/perf', () => ({
   cleanupAppleXctracePerfCapture: vi.fn(async () => ({})),

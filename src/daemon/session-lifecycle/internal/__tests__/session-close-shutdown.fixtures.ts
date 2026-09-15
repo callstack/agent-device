@@ -11,9 +11,14 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  const stopIosRunnerSession = vi.fn(async (_deviceId: string) => {});
   return {
     ...actual,
-    stopIosRunnerSession: vi.fn(async () => {}),
+    stopIosRunnerSession,
+    // Mirrors the runner module: a retained close keeps warm reuse; any other close stops it.
+    releaseIosRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
+      if (!options.retain) await stopIosRunnerSession(deviceId);
+    }),
   };
 });
 vi.mock('@agent-device/platform-apple/perf', async (importOriginal) => {

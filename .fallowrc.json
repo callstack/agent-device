@@ -95,9 +95,9 @@
       "exports": [
         "detachIosSimulatorRunnerSessionsForShutdown",
         "hasLiveIosRunnerSession",
+        "releaseIosRunnerOnClose",
         "releaseSpeculativeIosRunnerSessionFor",
-        "stopAllIosRunnerSessions",
-        "stopIosRunnerSessionIfBusy"
+        "stopAllIosRunnerSessions"
       ]
     },
     {
@@ -161,7 +161,6 @@
         "resolveRunnerAppBundleId",
         "detachIosSimulatorRunnerSessionsForShutdown",
         "getRunnerSessionSnapshot",
-        "scheduleIosRunnerIdleStop",
         "stopIosRunnerSession",
         "stopAllIosRunnerSessions",
         "readStaleRunnerLease",

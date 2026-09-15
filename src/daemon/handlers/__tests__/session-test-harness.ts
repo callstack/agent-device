@@ -38,6 +38,7 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  const stopIosRunnerSession = vi.fn(async (_deviceId: string) => {});
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -48,8 +49,11 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     prewarmAppleRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
-    scheduleIosRunnerIdleStop: vi.fn(),
-    stopIosRunnerSession: vi.fn(async () => {}),
+    stopIosRunnerSession,
+    // Mirrors the runner module: a retained close keeps warm reuse; any other close stops it.
+    releaseIosRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
+      if (!options.retain) await stopIosRunnerSession(deviceId);
+    }),
   };
 });
 vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
@@ -102,8 +106,8 @@ import {
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
   notifyIosRunnerAppRelaunched,
-  scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
+  releaseIosRunnerOnClose,
 } from '@agent-device/platform-apple/runner/operations';
 import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
 import {
@@ -119,24 +123,20 @@ export const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 export const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
 export const mockClearRuntimeHints = vi.mocked(clearRuntimeHintValues);
-export const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
-export const mockNotifyIosRunnerAppRelaunched = vi.mocked(notifyIosRunnerAppRelaunched);
+const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
+const mockNotifyIosRunnerAppRelaunched = vi.mocked(notifyIosRunnerAppRelaunched);
 export const mockPrewarmAppleRunnerCache = vi.mocked(prewarmAppleRunnerCache);
-export const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
-export const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
-export const mockScheduleIosRunnerIdleStop = vi.mocked(scheduleIosRunnerIdleStop);
-export const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
+const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
+const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
+const mockReleaseRunnerOnClose = vi.mocked(releaseIosRunnerOnClose);
+const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
 export const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
-export const mockCleanupRetainedMaterializedPaths = vi.mocked(
-  cleanupRetainedMaterializedPathsForSession,
-);
+const mockCleanupRetainedMaterializedPaths = vi.mocked(cleanupRetainedMaterializedPathsForSession);
 export const mockRunCmd = vi.mocked(runCmd);
 /** The retired dispatcher's snapshot leg, now an owned test double (R58). */
 export const mockDispatch = legacyDispatchCapture;
-export const mockResolveIosApp = vi.mocked(resolveIosApp);
-export const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(
-  resolveIosSimulatorDeepLinkBundleId,
-);
+const mockResolveIosApp = vi.mocked(resolveIosApp);
+const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(resolveIosSimulatorDeepLinkBundleId);
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -162,7 +162,7 @@ beforeEach(() => {
     healthCheckMs: 3,
   });
   mockStopIosRunner.mockReset();
-  mockScheduleIosRunnerIdleStop.mockReset();
+  mockReleaseRunnerOnClose.mockClear();
   mockStopIosRunner.mockResolvedValue(undefined);
   mockDismissMacOsAlert.mockReset();
   mockDismissMacOsAlert.mockResolvedValue({} as any);

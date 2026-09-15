@@ -8,13 +8,12 @@ export {
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
   readStaleRunnerLease,
+  releaseIosRunnerOnClose,
   releaseSpeculativeIosRunnerSessionFor,
   resolveRunnerAppBundleId,
   runAppleRunnerCommand,
-  scheduleIosRunnerIdleStop,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
-  stopIosRunnerSessionIfBusy,
   verifyLeaseRunnerPidIdentity,
 } from './core/runner-client.ts';
 export { queryAppleRunnerSelector } from './core/runner-selector-query.ts';

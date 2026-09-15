@@ -25,6 +25,7 @@ vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+  const stopIosRunnerSession = vi.fn(async (_deviceId: string) => {});
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -37,8 +38,11 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     // A retained Simulator runner survives the relaunch, so its cached target is reset.
     hasLiveIosRunnerSession: vi.fn(() => true),
-    scheduleIosRunnerIdleStop: vi.fn(),
-    stopIosRunnerSession: vi.fn(async () => {}),
+    stopIosRunnerSession,
+    // Mirrors the runner module: a retained close keeps warm reuse; any other close stops it.
+    releaseIosRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
+      if (!options.retain) await stopIosRunnerSession(deviceId);
+    }),
   };
 });
 vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => {
@@ -73,7 +77,7 @@ import {
   prewarmIosRunnerSession,
   notifyIosRunnerAppRelaunched,
   stopIosRunnerSession,
-  scheduleIosRunnerIdleStop,
+  releaseIosRunnerOnClose,
 } from '@agent-device/platform-apple/runner/operations';
 import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
 import { refFrameState } from '../../ref-frame.ts';
@@ -86,7 +90,7 @@ const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulator
 const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
 const mockNotifyIosRunnerAppRelaunched = vi.mocked(notifyIosRunnerAppRelaunched);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
-const mockScheduleIosRunnerIdleStop = vi.mocked(scheduleIosRunnerIdleStop);
+const mockReleaseRunnerOnClose = vi.mocked(releaseIosRunnerOnClose);
 const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
 
 beforeEach(() => {
@@ -111,7 +115,7 @@ beforeEach(() => {
   mockNotifyIosRunnerAppRelaunched.mockResolvedValue(undefined);
   mockStopIosRunner.mockReset();
   mockStopIosRunner.mockResolvedValue(undefined);
-  mockScheduleIosRunnerIdleStop.mockReset();
+  mockReleaseRunnerOnClose.mockClear();
   mockDismissMacOsAlert.mockReset();
   mockDismissMacOsAlert.mockResolvedValue({} as any);
 });
@@ -560,7 +564,7 @@ test('close on iOS simulator session retains runner and deletes the session', as
 
   expect(response.ok).toBe(true);
   expect(mockStopIosRunner).not.toHaveBeenCalled();
-  expect(mockScheduleIosRunnerIdleStop).toHaveBeenCalledWith('sim-1');
+  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: true });
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

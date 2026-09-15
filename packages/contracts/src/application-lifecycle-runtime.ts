@@ -316,12 +316,12 @@ export type AppleApplicationTools = Readonly<{
     execution: Readonly<{ requestId?: string }>,
   ): Promise<boolean>;
   /**
-   * Stops this device's runner only if its last exchange reported main-thread work still draining,
-   * and returns whether it did. `close` calls it before deciding to retain a runner, so a stalled
-   * runner is never pooled back out to the next `open` (#2552).
+   * Releases this device's runner at session close. When `retain` is set and the runner is idle it
+   * keeps warm reuse under an idle-stop timer; otherwise it stops now. A runner whose last exchange
+   * reported main-thread work still draining is never retained, so a stalled process is not pooled
+   * back out to the next `open` (#2552). Awaited so `close` returns only once the lease is gone.
    */
-  stopRunnerSessionIfBusy(deviceId: string): Promise<boolean>;
-  scheduleRunnerIdleStop(deviceId: string): void;
+  releaseRunnerOnClose(deviceId: string, options: Readonly<{ retain: boolean }>): Promise<void>;
   prepareRunner(
     device: DeviceInfo,
     input: PrepareAppleRunnerInput,

@@ -244,19 +244,41 @@ test('discards a retained physical iOS runner when relaunch fails and preserves 
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
 });
 
-test('close finalization stops a busy retained runner instead of pooling it back (#2552)', async () => {
+test.each([true, false])(
+  'close finalization delegates the runner release to the runner module with retain=%s (#2552)',
+  async (retainRunner) => {
+    const signal = new AbortController().signal;
+    const baseHost = platformRuntimeHostFixture();
+    const releaseRunnerOnClose = vi.fn(async () => {});
+    const dismissCloseAlerts = vi.fn(async () => {});
+    const host = {
+      ...baseHost,
+      appleApplications: {
+        ...baseHost.appleApplications,
+        releaseRunnerOnClose,
+        dismissCloseAlerts,
+      },
+    } as unknown as PlatformRuntimeHost;
+    const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+    await lifecycle.finalizeApplicationClose({ surface: 'app', retainRunner, stateDir: '/tmp' });
+
+    expect(releaseRunnerOnClose).toHaveBeenCalledWith(device.id, { retain: retainRunner });
+    expect(dismissCloseAlerts).toHaveBeenCalled();
+  },
+);
+
+test('daemon-shutdown finalization dismisses alerts and defers the runner release to the gateway (#2552)', async () => {
   const signal = new AbortController().signal;
   const baseHost = platformRuntimeHostFixture();
-  const stopRunnerSessionIfBusy = vi.fn(async () => true);
-  const stopRunnerSession = vi.fn(async () => {});
-  const scheduleRunnerIdleStop = vi.fn();
+  const releaseRunnerOnClose = vi.fn(async () => {});
+  const dismissCloseAlerts = vi.fn(async () => {});
   const host = {
     ...baseHost,
     appleApplications: {
       ...baseHost.appleApplications,
-      stopRunnerSessionIfBusy,
-      stopRunnerSession,
-      scheduleRunnerIdleStop,
+      releaseRunnerOnClose,
+      dismissCloseAlerts,
     },
   } as unknown as PlatformRuntimeHost;
   const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
@@ -265,64 +287,11 @@ test('close finalization stops a busy retained runner instead of pooling it back
     surface: 'app',
     retainRunner: true,
     stateDir: '/tmp',
+    daemonShutdown: true,
   });
 
-  expect(stopRunnerSessionIfBusy).toHaveBeenCalledWith(device.id);
-  expect(scheduleRunnerIdleStop).not.toHaveBeenCalled();
-  expect(stopRunnerSession).not.toHaveBeenCalled();
-});
-
-test('close finalization retains an idle runner and schedules its idle stop', async () => {
-  const signal = new AbortController().signal;
-  const baseHost = platformRuntimeHostFixture();
-  const stopRunnerSessionIfBusy = vi.fn(async () => false);
-  const stopRunnerSession = vi.fn(async () => {});
-  const scheduleRunnerIdleStop = vi.fn();
-  const host = {
-    ...baseHost,
-    appleApplications: {
-      ...baseHost.appleApplications,
-      stopRunnerSessionIfBusy,
-      stopRunnerSession,
-      scheduleRunnerIdleStop,
-    },
-  } as unknown as PlatformRuntimeHost;
-  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
-
-  await lifecycle.finalizeApplicationClose({
-    surface: 'app',
-    retainRunner: true,
-    stateDir: '/tmp',
-  });
-
-  expect(stopRunnerSessionIfBusy).toHaveBeenCalledWith(device.id);
-  expect(scheduleRunnerIdleStop).toHaveBeenCalledWith(device.id);
-  expect(stopRunnerSession).not.toHaveBeenCalled();
-});
-
-test('close finalization stops a non-retained runner without the busy probe', async () => {
-  const signal = new AbortController().signal;
-  const baseHost = platformRuntimeHostFixture();
-  const stopRunnerSessionIfBusy = vi.fn(async () => true);
-  const stopRunnerSession = vi.fn(async () => {});
-  const host = {
-    ...baseHost,
-    appleApplications: {
-      ...baseHost.appleApplications,
-      stopRunnerSessionIfBusy,
-      stopRunnerSession,
-    },
-  } as unknown as PlatformRuntimeHost;
-  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
-
-  await lifecycle.finalizeApplicationClose({
-    surface: 'app',
-    retainRunner: false,
-    stateDir: '/tmp',
-  });
-
-  expect(stopRunnerSessionIfBusy).not.toHaveBeenCalled();
-  expect(stopRunnerSession).toHaveBeenCalledWith(device.id);
+  expect(releaseRunnerOnClose).not.toHaveBeenCalled();
+  expect(dismissCloseAlerts).toHaveBeenCalled();
 });
 
 test('prepare shares one startup budget across the Simulator boot and the runner preparation', async () => {
