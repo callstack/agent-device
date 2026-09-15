@@ -157,6 +157,7 @@ beforeEach(async () => {
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
   mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({
     release: mockRedirectRelease,
+    releaseBestEffort: mockRedirectRelease,
   });
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });

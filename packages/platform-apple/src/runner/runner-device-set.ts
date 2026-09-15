@@ -20,7 +20,15 @@ const XCTEST_DEVICE_SET_LOCK_POLL_MS = 100;
 const XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS = 5_000;
 
 export type XcodebuildSimulatorSetRedirectHandle = {
+  /** Reconciles the host's device set and gives the lock back, reporting whatever goes wrong. */
   release: () => Promise<void>;
+  /**
+   * Gives the redirect back for a caller whose own outcome is already decided — a launch that
+   * failed, a teardown that ran — and so has nothing left to displace. Only a release that cannot
+   * verify ownership is dropped: that claim is spent, and a later reclaim reads it as dead. A
+   * failure to restore the host's own `XCTestDevices` is not that, and is not swallowed.
+   */
+  releaseBestEffort: () => Promise<void>;
 };
 
 type XcodebuildSimulatorSetRedirectOptions = {
@@ -60,21 +68,6 @@ export async function withXcodebuildSimulatorSetRedirect<Task>(
   const redirect = await acquireXcodebuildSimulatorSetRedirect(device, options);
   if (!redirect) return await task();
   return await withProcessLock({ acquire: async () => redirect.release, task });
-}
-
-/**
- * Gives a redirect back from a site that outlives a single task — a launch that already failed, a
- * teardown that already ran — and so has nothing left to displace. A release that cannot verify
- * ownership leaves the lock standing for the stale-clear path, which is the smaller loss.
- */
-export async function releaseXcodebuildSimulatorSetRedirectBestEffort(
-  redirect: XcodebuildSimulatorSetRedirectHandle | null | undefined,
-): Promise<void> {
-  try {
-    await redirect?.release();
-  } catch {
-    // The lock stays where it is; nobody but the stale-clear path may take it from here.
-  }
 }
 
 export async function acquireXcodebuildSimulatorSetRedirect(
@@ -143,22 +136,38 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   }
 
   let released = false;
+  const release = async () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    try {
+      reconcileXcodebuildSimulatorSetRedirect({
+        xctestDeviceSetPath,
+        backupPath,
+      });
+    } finally {
+      await releaseLock();
+    }
+  };
   return {
-    release: async () => {
-      if (released) {
-        return;
-      }
-      released = true;
+    release,
+    releaseBestEffort: async () => {
       try {
-        reconcileXcodebuildSimulatorSetRedirect({
-          xctestDeviceSetPath,
-          backupPath,
-        });
-      } finally {
-        await releaseLock();
+        await release();
+      } catch (error) {
+        // The one failure a caller with nothing left to report may drop. The lock stands under a
+        // claim that has since been spent, which the next reclaim from this process reads as dead,
+        // and `releaseProcessLock` has already recorded it in the request log. Anything else — a
+        // restore of the host's own device set that could not run — is a fact about this machine.
+        if (!isOwnerReleaseUnverified(error)) throw error;
       }
     },
   };
+}
+
+function isOwnerReleaseUnverified(error: unknown): boolean {
+  return error instanceof AppError && error.details?.ownerReleaseUnverified === true;
 }
 
 // fallow-ignore-next-line complexity
