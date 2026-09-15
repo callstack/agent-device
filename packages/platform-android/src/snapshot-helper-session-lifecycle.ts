@@ -120,15 +120,15 @@ export async function acquireAndroidSnapshotHelperSession(
   if (!isAndroidSnapshotHelperSessionEnabled() || !options.adbProvider?.spawn) {
     return undefined;
   }
-  const resolved = resolvePersistentSessionCaptureOptions(
-    resolveAndroidSnapshotHelperCaptureOptions(options),
-  );
+  const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
+  const resolved = resolvePersistentSessionCaptureOptions(callerResolved);
   const identity = createSessionIdentity(deviceKey, resolved, options);
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
     identity,
     options,
     resolved,
+    startBudgetMs: resolveAndroidSnapshotHelperStartBudgetMs(callerResolved.commandTimeoutMs),
   });
   return session ? { session, resolved, deviceKey } : undefined;
 }
@@ -148,6 +148,7 @@ async function resolveAndroidSnapshotHelperSession(params: {
   identity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+  startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   if (isAndroidSnapshotHelperStartBackedOff(params.identity)) return undefined;
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
@@ -178,6 +179,7 @@ async function tryStartAndroidSnapshotHelperSession(params: {
   identity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+  startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   const startedAtMs = Date.now();
   try {
@@ -240,6 +242,7 @@ async function startAndroidSnapshotHelperSession(params: {
   identity: string;
   options: AndroidSnapshotHelperCaptureOptions;
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
+  startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession> {
   const port = await allocateAndroidSnapshotHelperSessionPort();
   await params.options.adb(['forward', `tcp:${port}`, `tcp:${port}`], {
@@ -278,12 +281,12 @@ async function startAndroidSnapshotHelperSession(params: {
     capturedCount: 0,
   };
   try {
-    // Starting the session gets the budget the caller already allowed one helper command, which is
-    // how `--timeout` reaches it. A fixed guess below that pushed a slow device out of the persistent
-    // path while the one-shot transport it fell back to had room for the same start.
+    // A helper that announces itself late is a slow `am instrument`, which the one-shot transport it
+    // falls back to pays too. The start gets its share of the caller's command budget instead of a
+    // fixed guess, so `--timeout` decides whether the persistent path is affordable at all.
     await waitForAndroidSnapshotHelperSessionReady(
       childProcess,
-      params.resolved.commandTimeoutMs,
+      params.startBudgetMs,
       params.options.signal,
     );
     sessions.set(params.deviceKey, session);
@@ -367,6 +370,22 @@ function resolvePersistentSessionCaptureOptions(
     timeoutMs,
     commandTimeoutMs: Math.min(resolved.commandTimeoutMs, timeoutMs + SESSION_REQUEST_OVERHEAD_MS),
   };
+}
+
+/**
+ * What a start gets out of the budget the caller allowed one helper command: half of it, so a helper
+ * that announces itself later than a session capture takes is not pushed off the persistent path by
+ * a capture-sized guess, while the one-shot transport that answers a failed start keeps the other
+ * half. Never less than one session command is worth, never more than the caller allowed.
+ */
+export function resolveAndroidSnapshotHelperStartBudgetMs(commandTimeoutMs: number): number {
+  return Math.min(
+    commandTimeoutMs,
+    Math.max(
+      Math.floor(commandTimeoutMs / 2),
+      SESSION_CAPTURE_TIMEOUT_MS + SESSION_REQUEST_OVERHEAD_MS,
+    ),
+  );
 }
 
 function isAndroidSnapshotHelperSessionEnabled(): boolean {

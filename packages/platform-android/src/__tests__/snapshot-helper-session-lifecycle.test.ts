@@ -3,6 +3,7 @@ import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import {
   resetAndroidSnapshotHelperSessions,
+  resolveAndroidSnapshotHelperStartBudgetMs,
   stopAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
 import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retirement.ts';
@@ -121,6 +122,16 @@ test('a session start waits only as long as the caller budgeted for one helper c
     Date.now() - startedAtMs < 3_000,
     'the start obeys the caller budget, not a fixed floor',
   );
+});
+
+test('a generous caller budget buys a slow start, and never more than the caller allowed', () => {
+  // A capture-sized guess is what pushed the slow hosts of #2553 off the persistent path even when
+  // `--timeout` left plenty of room for the same start in the one-shot transport.
+  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(60_000), 30_000);
+  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(30_000), 15_000);
+  // A short budget buys nothing extra, and a tiny one is not answered with a longer wait.
+  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(6_000), 5_000);
+  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(1_000), 1_000);
 });
 
 test('a session that reaches ready settles a release the device could not confirm', async () => {

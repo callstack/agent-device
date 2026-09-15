@@ -23,7 +23,11 @@
   `pidof` happens to be unreadable. A helper start that fails is also retried after a backoff scaled
   to how long it spent failing (10 s to 60 s) instead of on every command, which had roughly doubled
   command time on hosts where the helper never starts, and the wait for a started helper to announce
-  itself now uses the caller's own helper-command budget, so `--timeout` reaches it.
+  itself now takes a share of the caller's own helper-command budget — half of `--timeout`, never
+  less than one session command is worth — so a device that needs longer than a capture to bring the
+  helper up stays on the persistent path when the caller budgeted for it. On a host where the helper
+  took 12 s to announce itself, `--timeout 60000` used to answer with the one-shot transport and now
+  answers from the session.
 
 - Fixed: an iOS snapshot whose XCTest query-sweep tier cannot read the screen no longer ends the
   runner process. On a live React Native feed (Bluesky Home, images re-rendering) the AX server
