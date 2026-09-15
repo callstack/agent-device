@@ -224,6 +224,85 @@ test('a restore that was refused outranks the lock that could not be verified', 
   }
 });
 
+test('an interrupted build that left the symlink is redirected again, not read as already done', async () => {
+  await withTempDir('device-set-leftover-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    // What an interrupted build leaves: the host's set renamed aside, and `XCTestDevices` a symlink
+    // pointing into this simulator's requested set. Following that symlink makes the two paths look
+    // identical, and deciding from that would hand the symlink back and let the next `xcodebuild` run
+    // against the host's own devices.
+    fs.mkdirSync(paths.backupPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.backupPath, 'host-device.txt'), 'the host owns this');
+    fs.symlinkSync(paths.requestedSetPath, paths.xctestDeviceSetPath, 'dir');
+
+    const handle = await acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+      ...redirectOptions(paths),
+      backupPath: paths.backupPath,
+    });
+
+    try {
+      assert.ok(handle, 'this simulator needs its own redirect, leftovers and all');
+      assert.equal(
+        fs.realpathSync.native(paths.xctestDeviceSetPath),
+        fs.realpathSync.native(paths.requestedSetPath),
+      );
+      // The leftover backup was put back where it belongs and then renamed aside by this run, so the
+      // host's device set is whole exactly once.
+      assert.equal(
+        fs.readFileSync(path.join(paths.backupPath, 'host-device.txt'), 'utf8'),
+        'the host owns this',
+      );
+
+      await handle.release();
+      assert.equal(
+        fs.readFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'utf8'),
+        'the host owns this',
+      );
+    } finally {
+      await handle?.releaseBestEffort();
+    }
+  });
+});
+
+test('a restore that was refused on the way in is not reported as a simulator that needs no redirect', async () => {
+  await withTempDir('device-set-leftover-restore-failed-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(paths.backupPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.backupPath, 'host-device.txt'), 'the host owns this');
+    fs.symlinkSync(paths.requestedSetPath, paths.xctestDeviceSetPath, 'dir');
+
+    // The same leftovers, with the rename that would put the host's set back refusing. Both paths still
+    // resolve to the same directory, so this is the moment where "nothing to do" and "the host has no
+    // device set" look identical from here.
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+      if (String(to) === paths.xctestDeviceSetPath) {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+
+    try {
+      await assert.rejects(
+        () =>
+          acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+            ...redirectOptions(paths),
+            backupPath: paths.backupPath,
+          }),
+        /EACCES/,
+      );
+      // The host's set is still renamed aside, which is the fact the caller needs, and the lock went
+      // back anyway so the next acquire does not wait on this one.
+      assert.equal(fs.existsSync(paths.backupPath), true);
+      assert.equal(fs.existsSync(paths.lockDirPath), false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+  });
+});
+
 test('the host’s device set is back before the lock is', async () => {
   await withTempDir('device-set-hand-back-order-', async (root) => {
     const paths = makeRedirectPaths(root);
@@ -261,6 +340,50 @@ test('the host’s device set is back before the lock is', async () => {
     } finally {
       renameSpy.mockRestore();
       removeDirSpy.mockRestore();
+    }
+  });
+});
+
+test('a redirect that failed before it moved anything names no backup that is not there', async () => {
+  await withTempDir('device-set-failed-before-rename-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(paths.xctestDeviceSetPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'the host owns this');
+
+    // The install dies on the rename that was meant to move the host's set aside, so nothing ever left
+    // its place. A report that still said "still renamed aside at <backup>" would send the reader to a
+    // path that does not exist.
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+      if (String(to) === paths.backupPath) {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+
+    try {
+      await assert.rejects(
+        () =>
+          acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+            ...redirectOptions(paths),
+            backupPath: paths.backupPath,
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'Failed to redirect XCTest device set path');
+          assert.match(String(error.details?.error), /EACCES/);
+          assert.equal(error.details?.restoreError, undefined);
+          assert.equal(error.details?.hint, undefined);
+          return true;
+        },
+      );
+      assert.equal(
+        fs.readFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'utf8'),
+        'the host owns this',
+      );
+    } finally {
+      renameSpy.mockRestore();
     }
   });
 });
