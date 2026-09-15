@@ -3246,6 +3246,12 @@ This is an Apple platform constraint that affects all XCUITest-based automation 
 
 If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to the existing ASCII-only `adb shell input text` path and non-ASCII `fill`/`type` reports the gap.
 
+## Android: first helper install can wait on an OEM install dialog
+
+Some OEM builds gate the first install of a package behind the system package installer and keep `adb install` open until someone confirms it on the device screen. That applies to both `agent-device` helper APKs (the snapshot helper and the test IME), one time per package: on ColorOS, reported on an OPPO Find N6, the first install needs two taps — confirm the install, then dismiss the completion screen — and every later install of the same package is silent.
+
+An unattended first Android snapshot therefore times out with a helper install failure whose hint says to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry; if no dialog is showing, restart the ADB server as the hint says.
+
 
 
 ---
@@ -3286,6 +3292,8 @@ agent-device disconnect
 Limrun Android uses the direct ADB tunnel. Normal Android helper-backed snapshots, installs, and port reverse flow are available, including the usual Android reverse setup for a local Metro server.
 
 Limrun iOS uses the direct Limrun iOS client. It supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, and app installation. It cannot reverse a remote device port to a local host port. For iOS Metro or React DevTools, use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+
+iOS text entry is witnessed rather than assumed. `fill` taps the target, waits for that field to take text-entry focus, and only then types, so an app that exposes fields without ever publishing a globally focused element - Flutter forms are the common case - still fills and reports `textEntryReadiness: "focused-element"`. A tap that nothing answers fails with `text_entry_focus_not_observed` instead of typing into an unknown field; `type` stays the deliberate route into whichever field already holds focus.
 
 For MCP-only use, run `connect` in the same effective state directory before starting `agent-device mcp`. MCP exposes operational tools but not provider `connect` commands.
 
