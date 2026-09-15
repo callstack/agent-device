@@ -141,6 +141,14 @@ function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boole
   );
 }
 
+/**
+ * The container sniff alone: `ftyp` and `moov` for MP4, the EBML segment for WebM. It reads the file and
+ * spawns nothing, which is what lets a stop check a copy before it trusts it (ADR 0024 2.3).
+ */
+export async function hasVideoContainer(filePath: string): Promise<boolean> {
+  return (await likelyPlayableVideoContainer(filePath)) !== undefined;
+}
+
 async function likelyPlayableVideoContainer(filePath: string): Promise<'mp4' | 'webm' | undefined> {
   try {
     const stats = fs.statSync(filePath);

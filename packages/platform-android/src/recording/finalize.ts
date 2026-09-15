@@ -86,6 +86,8 @@ export async function finalizeAndroidRecording(
           collectedPath,
           exportPath,
         }),
+      discard: (collectedPath) =>
+        discardCollectedChunks(host, collectedPath, evidence.chunks.length),
     },
   });
   return await recordCompletionAndDisposeChunks(params, outcome);
@@ -110,15 +112,24 @@ async function exportCollectedChunks(
     exportClientPath: recording.clientOutPath,
     count: evidence.chunks.length,
   });
-  await copyCollectedChunksToExport(host, files);
   const chunked = files.length > 1;
-  const finalization = await host.screenRecording.finalize.complete({
-    outputPath: exportPath,
-    showTouches: chunked ? false : recording.showTouches,
-    gestureEvents: recording.gestureEvents,
-    exportQuality: recording.exportQuality ?? 'medium',
-    targetLabel: TARGET_LABEL,
-  });
+  let finalization: Awaited<
+    ReturnType<PlatformRuntimeHost['screenRecording']['finalize']['complete']>
+  >;
+  try {
+    await copyCollectedChunksToExport(host, files);
+    finalization = await host.screenRecording.finalize.complete({
+      outputPath: exportPath,
+      showTouches: chunked ? false : recording.showTouches,
+      gestureEvents: recording.gestureEvents,
+      exportQuality: recording.exportQuality ?? 'medium',
+      targetLabel: TARGET_LABEL,
+    });
+  } catch (error) {
+    // The caller's paths only ever hold bytes the finalizer accepted. The collected set stays for the retry.
+    for (const { served } of files) await host.screenRecording.outputs.remove(served.path);
+    throw error;
+  }
   // The length is measured on the pulled set because those are the bytes the recorder wrote; the
   // export is a copy of them, and a copy cannot tell the caller anything the original did not.
   const captured = measureCapturedWindow({
@@ -126,7 +137,6 @@ async function exportCollectedChunks(
     startedAtMs: params.startedAtMs,
     stoppedAtMs: params.stoppedAtMs,
   });
-  await discardCollectedChunks(host, files);
   return finalizationFromExport({ finalization, captured, recording, chunked, files });
 }
 
@@ -140,16 +150,17 @@ async function copyCollectedChunksToExport(
 }
 
 /**
- * The collected set has served its purpose once the export is durable; keeping it would leave a second
- * copy of the video behind with nothing left to read it. Refusing to delete it is not a failure the
+ * The collected set has served its purpose once its finalization is journaled; keeping it would leave a
+ * second copy of the video behind with nothing left to read it. A refused removal is not a failure the
  * caller can act on, because their video already exists.
  */
 async function discardCollectedChunks(
   host: PlatformRuntimeHost,
-  files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[],
+  collectedPath: string,
+  count: number,
 ): Promise<void> {
-  for (const { collected } of files) {
-    await host.screenRecording.outputs.remove(collected.path);
+  for (let index = 1; index <= count; index += 1) {
+    await host.screenRecording.outputs.remove(chunkPathAt(collectedPath, index));
   }
 }
 

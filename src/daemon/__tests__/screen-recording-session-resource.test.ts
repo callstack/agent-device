@@ -206,7 +206,7 @@ test('a record stop that fails after collecting resumes through the fence withou
         stopAndExportScreenRecording({
           snapshot,
           progress,
-          steps: { stop: signals, collect: copies, finalize: exports },
+          steps: { stop: signals, collect: copies, finalize: exports, discard: async () => {} },
         }),
       forceCleanup: async () => ({ status: 'cleaned' }),
     },

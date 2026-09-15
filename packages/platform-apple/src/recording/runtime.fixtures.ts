@@ -69,6 +69,7 @@ export function appleRecordingHost(
   options: {
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
     complete?: ScreenRecordingFinalizer['complete'];
+    sniff?: ScreenRecordingFinalizer['sniff'];
     files?: ReturnType<typeof recordingFileStore>;
     outputs?: Partial<ScreenRecordingRuntimeHost['outputs']>;
     ownedProcesses?: ScreenRecordingRuntimeHost['ownedProcesses'];
@@ -112,7 +113,10 @@ export function appleRecordingHost(
     screenRecording: {
       apple,
       outputs: Object.assign({}, store.outputs, options.outputs),
-      finalize: { complete: options.complete ?? (async () => ({})) },
+      finalize: {
+        sniff: options.sniff ?? (async () => {}),
+        complete: options.complete ?? (async () => ({})),
+      },
       ownedProcesses: options.ownedProcesses ?? { replace: () => {}, clear: () => {} },
     },
   };

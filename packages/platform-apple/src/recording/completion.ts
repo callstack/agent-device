@@ -80,19 +80,23 @@ export async function finalizeAppleRecordingFromCollected(
   if (snapshot.invalidatedReason && !snapshot.showTouches) {
     throw new Error(`recording invalidated: ${snapshot.invalidatedReason}`);
   }
-  await host.screenRecording.outputs.copy({ from: collectedPath, to: exportPath });
-  const finalization = await asAppErrorAsync(() =>
-    host.screenRecording.finalize.complete({
-      outputPath: exportPath,
-      showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
-      gestureEvents: snapshot.gestureEvents,
-      exportQuality: snapshot.exportQuality ?? 'medium',
-      targetLabel,
-    }),
-  );
-  // The export is durable from this line on, so the copy the stop made is disposable. A refusal to
-  // delete it is never an error: the caller's video already exists.
-  await host.screenRecording.outputs.remove(collectedPath);
+  let finalization: Awaited<ReturnType<typeof host.screenRecording.finalize.complete>>;
+  try {
+    await host.screenRecording.outputs.copy({ from: collectedPath, to: exportPath });
+    finalization = await asAppErrorAsync(() =>
+      host.screenRecording.finalize.complete({
+        outputPath: exportPath,
+        showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
+        gestureEvents: snapshot.gestureEvents,
+        exportQuality: snapshot.exportQuality ?? 'medium',
+        targetLabel,
+      }),
+    );
+  } catch (error) {
+    // `--out` only ever holds bytes the finalizer accepted. The collected copy stays for the retry.
+    await host.screenRecording.outputs.remove(exportPath);
+    throw error;
+  }
   return {
     ...finalization,
     ...(snapshot.invalidatedReason

@@ -41,6 +41,31 @@ test('signals the recorder, collects a sibling copy, and finalizes that copy int
   });
 });
 
+test('discards the collected copy only once its finalization is journaled, on a replay too', async () => {
+  const manifest = stopManifest();
+  const journaledBeforeDiscard: (JsonObject | undefined)[] = [];
+  const steps = recordingSteps();
+  steps.discard.mockImplementation(async () => {
+    journaledBeforeDiscard.push(manifest.read());
+  });
+
+  await stopAndExportScreenRecording({ steps, snapshot: snapshot(), progress: manifest.progress });
+  const replay = recordingSteps();
+  await stopAndExportScreenRecording({
+    steps: replay,
+    snapshot: snapshot(),
+    progress: stopManifest(manifest.read()).progress,
+  });
+
+  assert.deepEqual(steps.discard.mock.calls, [['/tmp/recording.collected.mp4']]);
+  assert.ok(
+    journaledBeforeDiscard[0]?.stopFinalization,
+    'discard ran before the finalization was journaled',
+  );
+  // A crash between the journal and the removal leaves the copy behind; the replay removes it.
+  assert.deepEqual(replay.discard.mock.calls, [['/tmp/recording.collected.mp4']]);
+});
+
 test('discloses what the recorder did beside the export it produced', async () => {
   const steps = recordingSteps({
     stop: async () => ({
@@ -218,6 +243,7 @@ function recordingSteps(
       overrides.stop ?? (async () => ({ observation: { recorder: 'confirmed' } as const })),
     ),
     collect: vi.fn(async (_collectedPath: string) => {}),
+    discard: vi.fn(async (_collectedPath: string) => {}),
     finalize: vi.fn(async () => ({
       telemetryPath: '/tmp/recording.telemetry.json',
       warning: '2 chunks were merged',

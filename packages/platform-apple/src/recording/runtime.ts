@@ -159,10 +159,16 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
         progress,
         steps: {
           stop: stopSimulatorRecorder,
-          // Playability is checked once, on the export `finalize` writes from this copy. simctl has
-          // exited before `collect` runs, so these bytes are final and a second check adds only latency.
-          collect: (collectedPath) =>
-            host.screenRecording.outputs.copy({ from: nativePath, to: collectedPath }),
+          // The copy gets the container sniff before it is checkpointed; the full playability verdict
+          // runs once, on the export `finalize` writes from it.
+          collect: async (collectedPath) => {
+            try {
+              await host.screenRecording.outputs.copy({ from: nativePath, to: collectedPath });
+              await host.screenRecording.finalize.sniff({ outputPath: collectedPath });
+            } catch (collectError) {
+              throw recorderExitEndedTheRecording(collectError, recorderExit, recorderResult);
+            }
+          },
           finalize: async ({ collectedPath, exportPath }) => {
             try {
               return await finalizeAppleRecordingFromCollected({
@@ -176,6 +182,9 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
             } catch (exportError) {
               throw recorderExitEndedTheRecording(exportError, recorderExit, recorderResult);
             }
+          },
+          discard: async (collectedPath) => {
+            await host.screenRecording.outputs.remove(collectedPath);
           },
         },
       }),

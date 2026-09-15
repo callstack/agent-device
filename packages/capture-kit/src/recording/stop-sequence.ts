@@ -22,7 +22,7 @@ export type RecorderStop = Readonly<{
 }>;
 
 /**
- * The three things a backend can do to a recording, named separately so a stop can commit between
+ * The four things a backend can do to a recording, named separately so a stop can commit between
  * them (ADR 0024 2.3). A backend implements these and owns nothing about ordering: the sequence below
  * decides when a recorder is asked again, when a collected copy may be reused, and which facts are
  * durable before the export is written.
@@ -30,7 +30,7 @@ export type RecorderStop = Readonly<{
 export type ScreenRecordingStopSteps = Readonly<{
   /** Signal this recording's recorder safely and report what was observed. Writes no artifacts. */
   stop(): Promise<RecorderStop>;
-  /** Copy or pull the recorder's own artifact into `collectedPath`. */
+  /** Copy or pull the recorder's own artifact into `collectedPath`, past the container sniff. */
   collect(collectedPath: string): Promise<void>;
   /**
    * Turn the collected copy into the export. Never finalizes the recorder's own path in place, and
@@ -40,6 +40,8 @@ export type ScreenRecordingStopSteps = Readonly<{
   finalize(
     input: Readonly<{ collectedPath: string; exportPath: string; stoppedAtMs: number }>,
   ): Promise<ScreenRecordingFinalization>;
+  /** Remove the collected copy. It runs only once the finalization is journaled, and never throws. */
+  discard(collectedPath: string): Promise<void>;
 }>;
 
 /**
@@ -91,6 +93,9 @@ export async function stopAndExportScreenRecording(
       stoppedAtMs: stoppedAtMs ?? now(),
     }));
   progress?.record(writeStopCheckpoint({ exportPath: snapshot.outPath, finalization }));
+  // The copy is what a retry re-finalizes from, so it goes only after the finalization it produced is
+  // journaled: from here a retry replays that finalization and never reads the copy again.
+  await steps.discard(collectedPath);
   const { nativePathDisposition, warning, ...exportFacts } = finalization;
   const warnings = [warning, recorderWarning].filter(
     (entry): entry is string => entry !== undefined && entry.length > 0,

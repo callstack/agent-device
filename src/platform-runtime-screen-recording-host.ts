@@ -39,6 +39,11 @@ export function createScreenRecordingRuntimeHost(
     },
   });
   const finalize: ScreenRecordingRuntimeHost['finalize'] = Object.freeze({
+    sniff: async (input) => {
+      const { createScreenRecordingFinalizer } =
+        await import('./platform-runtime-screen-recording-finalizer-host.ts');
+      await createScreenRecordingFinalizer().sniff(input);
+    },
     complete: async (input, signal) => {
       const { createScreenRecordingFinalizer } =
         await import('./platform-runtime-screen-recording-finalizer-host.ts');

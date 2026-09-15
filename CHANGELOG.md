@@ -72,8 +72,10 @@
   stays `retirable` and the recording stays finishable until the device answers.
 - Changed (record): an iOS Simulator recording no longer has the recorder write the file the caller
   asked for. `simctl` records to a `<name>.native.<ext>` sibling; `record stop` copies that file to a
-  `<name>.collected.<ext>` sibling, writes the caller's `--out` path once from the copy, checks that
-  export is a playable video, and retires the recorder's own file (ADR 0024 2.3). The
+  `<name>.collected.<ext>` sibling, checks that the copy has an MP4 container, writes the caller's
+  `--out` path once from the copy, checks that export is a playable video, and retires the recorder's
+  own file (ADR 0024 2.3). An export the finalizer refuses is removed, so `--out` only ever holds a
+  video that passed that check. The
   caller's path is never a file a recorder is still writing, and a stop that fails before the export
   exists leaves it absent with the copy in place — so the next stop resumes from the copy instead of
   signalling a recorder that already stopped. Both siblings are deleted on success, and a stop that
@@ -84,8 +86,8 @@
   video, so nothing deletes them.
 - Changed (record): an Android recording is no longer pulled onto the path the caller asked for.
   `record stop` pulls the device's chunks to `<name>.collected.<ext>` siblings, retrying each pull
-  until it plays, then writes the caller's paths from copies of them and drops the collected set
-  (ADR 0024 2.3). A stop that dies before the export exists leaves it absent with the pulled set in
+  until it plays, then writes the caller's paths from copies of them and drops the collected set once the
+  finalization is journaled (ADR 0024 2.3). Chunk paths the finalizer refused are removed. A stop that dies before the export exists leaves it absent with the pulled set in
   place, and the next stop resumes from that set instead of signalling a `screenrecord` process that
   already stopped and pulling a file that may have moved since. The 180s platform-limit disclosure now
   travels with the recorder's own observation rather than with the export, so a stop that has to be

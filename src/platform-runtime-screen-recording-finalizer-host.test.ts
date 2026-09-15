@@ -5,12 +5,14 @@ const video = vi.hoisted(() => ({
   stable: vi.fn(async () => {}),
   playable: vi.fn(async () => {}),
   isPlayable: vi.fn(async () => true),
+  container: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
   isPlayableVideo: video.isPlayable,
+  hasVideoContainer: video.container,
 }));
 vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
   persistRecordingTelemetry: telemetry,
@@ -52,4 +54,22 @@ test('names the retry and the escape for a recording that never became playable'
       hint: expect.stringContaining('close this session'),
     },
   });
+});
+
+test('sniffs a collected copy without spawning the validator, and refuses one with no container', async () => {
+  const validatorCalls = video.isPlayable.mock.calls.length + video.playable.mock.calls.length;
+  await expect(
+    createScreenRecordingFinalizer().sniff({ outputPath: '/tmp/capture.collected.mp4' }),
+  ).resolves.toBeUndefined();
+  video.container.mockResolvedValueOnce(false);
+
+  await expect(
+    createScreenRecordingFinalizer().sniff({ outputPath: '/tmp/capture.collected.mp4' }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'recording-output-unplayable', retriable: true },
+  });
+  expect(video.isPlayable.mock.calls.length + video.playable.mock.calls.length).toBe(
+    validatorCalls,
+  );
 });

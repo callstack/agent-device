@@ -56,7 +56,7 @@ export function harmonyRecordingHost(
         ...recordingFileStore().outputs,
         prepare: overrides.prepare ?? (async () => {}),
       },
-      finalize: { complete: overrides.complete ?? (async () => ({})) },
+      finalize: { sniff: async () => {}, complete: overrides.complete ?? (async () => ({})) },
     },
     clock: { now: () => 0, sleep: async () => {} },
   };

@@ -7,13 +7,18 @@ import {
 } from '@agent-device/capture-kit/recording-overlay';
 import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
 import {
+  hasVideoContainer,
   isPlayableVideo,
   waitForPlayableVideo,
   waitForStableFile,
 } from '@agent-device/capture-kit/recording-video';
 
 export function createScreenRecordingFinalizer(): ScreenRecordingRuntimeHost['finalize'] {
-  return Object.freeze({ complete: finalizeScreenRecording });
+  return Object.freeze({ sniff: sniffRecording, complete: finalizeScreenRecording });
+}
+
+async function sniffRecording(input: Readonly<{ outputPath: string }>): Promise<void> {
+  if (!(await hasVideoContainer(input.outputPath))) throw unplayableRecording(input.outputPath);
 }
 
 async function finalizeScreenRecording(
@@ -21,20 +26,7 @@ async function finalizeScreenRecording(
 ) {
   await waitForStableFile(input.outputPath);
   await waitForPlayableVideo(input.outputPath);
-  if (!(await isPlayableVideo(input.outputPath))) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `recording was not finalized into a playable video: ${input.outputPath}`,
-      {
-        reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
-        retriable: true,
-        hint:
-          'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
-          'next stop, and the recording keeps its evidence either way. If the recorder died before ' +
-          'writing a video, close this session to release the device and record again.',
-      },
-    );
-  }
+  if (!(await isPlayableVideo(input.outputPath))) throw unplayableRecording(input.outputPath);
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
@@ -65,4 +57,19 @@ async function overlayTouches(
       overlayWarning: `failed to overlay recording touches: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+function unplayableRecording(outputPath: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `recording was not finalized into a playable video: ${outputPath}`,
+    {
+      reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
+      retriable: true,
+      hint:
+        'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
+        'next stop, and the recording keeps its evidence either way. If the recorder died before ' +
+        'writing a video, close this session to release the device and record again.',
+    },
+  );
 }

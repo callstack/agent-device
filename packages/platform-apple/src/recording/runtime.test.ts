@@ -229,8 +229,10 @@ test('a simulator stop exports from a copy and retires the file the recorder own
           };
         },
       },
+      sniff: async ({ outputPath }) => {
+        saw.push(`sniff:${outputPath}`);
+      },
       complete: async ({ outputPath }) => {
-        // The export is checked once, here; `collect` only copies bytes a recorder that exited wrote.
         saw.push(`finalize:${outputPath}`);
         return {};
       },
@@ -254,10 +256,43 @@ test('a simulator stop exports from a copy and retires the file the recorder own
   expect(outcome.status).toBe('completed');
   if (outcome.status !== 'completed') return;
   expect(outcome.result).toMatchObject({ nativePathDisposition: 'retired' });
-  expect(saw).toEqual([`record:${nativePath}`, `finalize:${exportPath}`]);
+  expect(saw).toEqual([`record:${nativePath}`, `sniff:${collectedPath}`, `finalize:${exportPath}`]);
   expect(files.exists(exportPath)).toBe(true);
   expect(files.exists(nativePath)).toBe(false);
   expect(files.exists(collectedPath)).toBe(false);
+});
+
+test('a simulator export the finalizer refuses leaves the caller path empty and the copy for the retry', async () => {
+  const exportPath = recordingOutputPath('refused.mp4');
+  const nativePath = exportPath.replace(/\.mp4$/, '.native.mp4');
+  const collectedPath = exportPath.replace(/\.mp4$/, '.collected.mp4');
+  const files = recordingFileStore();
+  const operations = createAppleScreenRecordingOperations({
+    host: appleHost({
+      files,
+      apple: {
+        startSimulator: async () => ({
+          markers: [processIdentity],
+          wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+          terminate: async () => {},
+        }),
+      },
+      complete: async () => {
+        throw new Error('recording was not finalized into a playable video');
+      },
+    }),
+    device: simulator,
+    owner: localRuntimeOwner('apple'),
+    signal: new AbortController().signal,
+  });
+  const started = await operations.screenRecordingStart({ ...input(), outputPath: exportPath });
+
+  await expect(started.pendingHandle.transfer().finish()).rejects.toThrow('playable video');
+
+  // `--out` only ever holds bytes the finalizer accepted; the recorder's file and the copy stay.
+  expect(files.exists(exportPath)).toBe(false);
+  expect(files.exists(collectedPath)).toBe(true);
+  expect(files.exists(nativePath)).toBe(true);
 });
 
 test('simulator cleanup waits for confirmed process exit', async () => {

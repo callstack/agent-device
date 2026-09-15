@@ -240,6 +240,13 @@ export type WebScreenRecordingHost = Readonly<{
 
 /** Closed post-processing authority for stable/playable validation, telemetry, and overlays. */
 export type ScreenRecordingFinalizer = Readonly<{
+  /**
+   * The container sniff a stop runs on its collected copy before it checkpoints that copy (ADR 0024
+   * 2.3): `ftyp` and `moov` for MP4, the EBML segment for WebM. It spawns no validator; `complete`
+   * still gives the export the full playability verdict. A file that fails is refused with the same
+   * retriable unplayable error `complete` uses.
+   */
+  sniff(input: Readonly<{ outputPath: string }>): Promise<void>;
   complete(
     input: Readonly<{
       outputPath: string;

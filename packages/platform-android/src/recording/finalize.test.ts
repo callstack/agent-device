@@ -128,6 +128,35 @@ test('a stop that already collected serves the export without signalling again',
   expect(files.exists('/tmp/capture.mp4')).toBe(true);
 });
 
+test('a chunked export the finalizer refuses leaves the caller paths empty and the pulled set for the retry', async () => {
+  const files = recordingFileStore();
+  const host = recordingHost({
+    files,
+    finalize: {
+      complete: async () => {
+        throw new Error('recording was not finalized into a playable video');
+      },
+    },
+  });
+  const transport = await host.screenRecording.android.resolve(androidRecordingDevice);
+
+  await expect(
+    finalizeAndroidRecording({
+      host,
+      transport,
+      evidence: evidenceFor([REMOTE_CHUNK, '/sdcard/agent-device-recording-2.mp4']),
+      manifestPath: '/sdcard/agent-device-recording-active.json',
+      recording: snapshot(recordingInput(), 1),
+      startedAtMs: 1,
+    }),
+  ).rejects.toThrow('playable video');
+
+  expect(files.exists('/tmp/capture.mp4')).toBe(false);
+  expect(files.exists('/tmp/capture.part-002.mp4')).toBe(false);
+  expect(files.exists('/tmp/capture.collected.mp4')).toBe(true);
+  expect(files.exists('/tmp/capture.collected.part-002.mp4')).toBe(true);
+});
+
 test('answers with the disposition the device shows after disposal', async () => {
   const host = recordingHost({
     // The device agrees to every removal and then keeps listing the file, which is the case the
