@@ -1,7 +1,29 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  androidAdbInvocation,
+  androidAdbPayloadWithoutSerial,
+  applyManagedAndroidAdbServer,
+  normalizeAndroidAdbInstallOptions,
+  parseAndroidAdbArgv,
+  adoptAndroidAdbSerial,
+  requireManagedAndroidAdbAddressing,
+  requireManagedAndroidAdbSerial,
+  requireSameAndroidAdbServer,
+  requireUnconflictedAndroidAdbSelector,
+  type AndroidAdbExecutor,
+  type AndroidAdbExecutorOptions,
+  type AndroidAdbExecutorResult,
+  type AndroidAdbInvocation,
+  type AndroidAdbProvider,
+  type AndroidAdbProviderScopeOptions,
+  type AndroidAdbSelector,
+  type AndroidAdbSpawner,
+  type AndroidTextInjector,
+  type AndroidTouchProvider,
+  type ScopedAndroidAdbBackgroundTransport,
+} from './adb-transport.ts';
 import {
   requireAndroidAdbHost,
   withAndroidHostAdbTransport,
@@ -11,17 +33,6 @@ import {
 import { withAdbFailureHints } from './adb-failure.ts';
 import { createExecAndroidPortReverseProvider } from './adb-port-reverse.ts';
 import { normalizeAndroidAdbProvider } from './adb-provider-normalization.ts';
-import {
-  normalizeAndroidAdbInstallOptions,
-  type AndroidAdbExecutor,
-  type AndroidAdbExecutorOptions,
-  type AndroidAdbProvider,
-  type AndroidAdbProviderScopeOptions,
-  type AndroidAdbSpawner,
-  type AndroidTextInjector,
-  type AndroidTouchProvider,
-  type ScopedAndroidAdbBackgroundTransport,
-} from './adb-transport.ts';
 
 // The request-scoped provider seam: withAndroidAdbProvider installs a provider for one device
 // serial, and every resolver below answers from that scope — falling back to host adb through
@@ -44,24 +55,87 @@ export function createDeviceAdbExecutor(
 
 function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAdbExecutor {
   return withAdbFailureHints(async (args, options) => {
-    const port = scopedServerPort(serial, serverPort);
-    return await requireAndroidAdbHost().execSerialAdb(
-      serial,
-      args,
-      port === undefined ? options : { ...options, serverPort: port },
+    const request = deviceAdbRouteRequest(serial, serverPort, args, options);
+    // A device-scoped executor is the terminal local route: an installed provider must not
+    // capture it and route the call back into itself.
+    return await requireAndroidAdbHost().withoutAdbCommandExecutorOverride(
+      async () => await requireAndroidAdbHost().execAdb(request.invocation, request.options),
     );
   });
 }
 
 function createSerialAdbSpawner(serial: string, serverPort?: number): AndroidAdbSpawner {
   return (args, options) => {
-    const port = scopedServerPort(serial, serverPort);
-    return requireAndroidAdbHost().spawnSerialAdb(
+    const request = deviceAdbRouteRequest(serial, serverPort, args, options);
+    return requireAndroidAdbHost().spawnAdb(request.invocation, request.options);
+  };
+}
+
+/** One device-scoped request: addressing decided once, and the server's option channel removed. */
+function deviceAdbRouteRequest<Options extends { serverPort?: number }>(
+  serial: string,
+  installed: number | undefined,
+  args: string[],
+  options: Options | undefined,
+): { invocation: AndroidAdbInvocation; options: Omit<Options, 'serverPort'> } {
+  const { serverPort: requested, ...rest } = options ?? ({} as Options);
+  return {
+    invocation: androidDeviceAdbInvocation(
       serial,
       args,
-      port === undefined ? options : { ...options, serverPort: port },
-    );
+      deviceServerPort(serial, installed, requested),
+    ),
+    options: rest,
   };
+}
+
+/**
+ * Addresses `args` for `serial`, carrying the chosen adb server on the target and nowhere else. A
+ * managed transport re-reads the argv through the shared managed rules, so the payload it spawns
+ * is the parsed command by reference. A caller-chosen server rewrites addressing too, and an
+ * ambient transport keeps the caller's argv as the emitted form, because ambient adb lets a later
+ * `-s` win.
+ */
+function androidDeviceAdbInvocation(
+  serial: string,
+  args: string[],
+  port: number | undefined,
+): AndroidAdbInvocation {
+  const parsed = parseAndroidAdbArgv(args);
+  const selector = adoptAndroidAdbSerial(parsed.target, serial);
+  if (port === undefined) {
+    return androidAdbInvocation(selector, parsed.command, ['-s', serial, ...args]);
+  }
+  // A private adb server makes this a managed transport, whoever named the port: the rules over
+  // what such a transport may be asked for are the same ones the lease is held to.
+  const managed = applyManagedAndroidAdbServer(parsed, { port });
+  return androidAdbInvocation(
+    requireManagedAndroidAdbSerial(managed.target, serial),
+    managed.command,
+  );
+}
+
+/**
+ * The adb server a device-scoped route runs against, from the one channel that may name it.
+ *
+ * Under a lease that is the lease's private server and nothing else: a route constructed for
+ * another port, or a call asking for one, is refused rather than followed. Without a lease the
+ * owner's port wins over a per-call request, which is what the route was built to answer for.
+ */
+function deviceServerPort(
+  serial: string,
+  installed: number | undefined,
+  requested: number | undefined,
+): number | undefined {
+  const scope = androidAdbProviderScope.getStore();
+  if (scope) requireScopedSerial(scope, { kind: 'serial', serial });
+  if (scope?.serverPort !== undefined) {
+    // A lease's server is the only one this route may answer for; naming another, at construction
+    // or per call, is refused rather than followed.
+    requireSameAndroidAdbServer(installed, scope.serverPort);
+    return requireSameAndroidAdbServer(requested, scope.serverPort);
+  }
+  return installed ?? requested;
 }
 
 export function createLocalAndroidAdbProvider(
@@ -163,7 +237,10 @@ export async function withAndroidAdbProvider<T>(
       async () => await requireAndroidAdbHost().withAdbCommandExecutorOverride(override, fn),
     );
   if (options.serverPort === undefined) return await run();
-  return await withAndroidHostAdbTransport(createScopedHostTransport(scope), run);
+  return await withAndroidHostAdbTransport(
+    createScopedHostTransport(scope, options.serverPort),
+    run,
+  );
 }
 
 function createAndroidCommandExecutorOverride(
@@ -172,107 +249,82 @@ function createAndroidCommandExecutorOverride(
   return (cmd, args, options) => {
     if (!isAdbCommand(cmd)) return undefined;
     if (scope.serverPort === undefined && cmd !== 'adb') return undefined;
-    const serial = readAdbSerial(args);
-    requireScopedSerial(scope, serial);
-    if (serial && serial !== scope.serial) return undefined;
-    if (serial === scope.serial) {
-      const providerArgs = stripAdbSerialArgs(args, scope.serial);
-      if (!providerArgs) return undefined;
+    const invocation = parseAndroidAdbArgv(args);
+    requireScopedSerial(scope, invocation.target.selector);
+    if (invocation.target.selector.kind === 'serial') {
+      if (invocation.target.selector.serial !== scope.serial) return undefined;
+      // Under a private adb server the provider cannot restate a caller's host globals, and a
+      // `-P` naming another server would reach adb through a provider that never sees addressing,
+      // so both are refused here. Without a lease the caller's own adb invocation is what runs, as
+      // it always has.
+      if (scope.serverPort !== undefined) {
+        requireManagedAndroidAdbAddressing(invocation.target, scope.serverPort);
+      }
+      // The provider contract is argv-shaped, so it receives the caller's request with this
+      // scope's own `-s` pair removed — readiness tokens and transport globals left where the
+      // caller put them, and never a rebuild with the scope's serial stitched back in.
+      const payload = androidAdbPayloadWithoutSerial(args, scope.serial);
+      if (payload === undefined) return undefined;
       return requireAndroidAdbHost().withoutAdbCommandExecutorOverride(
-        async () => await scope.provider.exec(providerArgs, options),
+        async () => await scope.provider.exec(payload, options),
       );
     }
-    if (scope.serverPort === undefined) return undefined;
-    return requireAndroidAdbHost().withoutAdbCommandExecutorOverride(
-      async () =>
-        await requireAndroidAdbHost().execHostAdb(['-s', scope.serial, ...args], {
-          ...options,
-          allowFailure: true,
-          serverPort: scope.serverPort,
-        }),
-    );
+    const port = scope.serverPort;
+    if (port === undefined) return undefined;
+    return execOnScopedTransport(scope, port, invocation, options);
   };
 }
 
-function createScopedHostTransport(scope: AndroidAdbProviderScope): AndroidAdbHostTransport {
-  return async (args: string[], options?: AndroidAdbExecutorOptions) => {
-    const serial = readAdbSerial(args);
-    requireScopedSerial(scope, serial);
-    const host = requireAndroidAdbHost();
-    return await host.withoutAdbCommandExecutorOverride(
-      async () =>
-        await host.execHostAdb(serial === undefined ? ['-s', scope.serial, ...args] : args, {
-          ...options,
-          allowFailure: true,
-          serverPort: scope.serverPort,
-        }),
-    );
+function createScopedHostTransport(
+  scope: AndroidAdbProviderScope,
+  port: number,
+): AndroidAdbHostTransport {
+  return async (invocation, options) => {
+    requireScopedSerial(scope, invocation.target.selector);
+    return execOnScopedTransport(scope, port, invocation, options);
   };
+}
+
+/**
+ * Answers one request on the lease's own transport: the scope's serial, and its server carried in
+ * the addressing rather than in the options, which is what leaves a caller no second way to name
+ * another adb server. A call that names one anyway is refused, not quietly restated.
+ */
+async function execOnScopedTransport(
+  scope: AndroidAdbProviderScope,
+  port: number,
+  invocation: AndroidAdbInvocation,
+  options: AndroidAdbExecutorOptions | undefined,
+): Promise<AndroidAdbExecutorResult> {
+  requireSameAndroidAdbServer(port, options?.serverPort);
+  const { serverPort: _omitted, ...rest } = options ?? {};
+  const serialTarget = requireManagedAndroidAdbSerial(invocation.target, scope.serial);
+  const scoped = applyManagedAndroidAdbServer(
+    androidAdbInvocation(serialTarget, invocation.command),
+    { port },
+  );
+  const host = requireAndroidAdbHost();
+  return await host.withoutAdbCommandExecutorOverride(
+    async () => await host.execAdb(scoped, { ...rest, allowFailure: true }),
+  );
 }
 
 function scopeForDevice(device: DeviceInfo): AndroidAdbProviderScope | undefined {
   const scoped = androidAdbProviderScope.getStore();
-  requireScopedSerial(scoped, device.id);
+  if (scoped) requireScopedSerial(scoped, { kind: 'serial', serial: device.id });
   return scoped;
 }
 
+/** Under a private server, a request that names another device is not this scope's to answer. */
 function requireScopedSerial(
   scope: AndroidAdbProviderScope | undefined,
-  serial: string | undefined,
-) {
-  if (scope?.serverPort !== undefined && serial !== undefined && serial !== scope.serial) {
-    throw new AppError('COMMAND_FAILED', 'Managed ADB transport cannot address another device.', {
-      reason: 'managed-device-transport-mismatch',
-    });
-  }
-}
-
-function scopedServerPort(serial: string, requested: number | undefined): number | undefined {
-  const scope = androidAdbProviderScope.getStore();
-  requireScopedSerial(scope, serial);
-  if (scope?.serverPort === undefined) return requested;
-  if (requested !== undefined && requested !== scope.serverPort) {
-    throw new AppError('COMMAND_FAILED', 'Managed ADB transport cannot select another server.', {
-      reason: 'managed-device-transport-mismatch',
-    });
-  }
-  return scope.serverPort;
+  selector: AndroidAdbSelector,
+): void {
+  if (scope?.serverPort === undefined) return;
+  requireUnconflictedAndroidAdbSelector(selector, scope.serial);
 }
 
 function isAdbCommand(command: string): boolean {
   const executable = path.basename(command).replace(/\.(?:com|exe|bat|cmd)$/i, '');
   return executable === 'adb';
-}
-
-function readAdbSerial(args: readonly string[]): string | undefined {
-  const serialIndex = findAdbSerialIndex(args);
-  return serialIndex === undefined ? undefined : args[serialIndex + 1];
-}
-
-function findAdbSerialIndex(args: readonly string[]): number | undefined {
-  let index = 0;
-  while (index < args.length) {
-    const argument = args[index];
-    if (argument === '-s') return index;
-    if (argument === '-P' || argument === '-H' || argument === '-L') {
-      index += 2;
-      continue;
-    }
-    if (argument === '-a' || argument === '-d' || argument === '-e') {
-      index += 1;
-      continue;
-    }
-    return undefined;
-  }
-  return undefined;
-}
-
-function stripAdbSerialArgs(args: string[], expectedSerial: string): string[] | undefined {
-  // The provider scope only owns normalized device-scoped adb calls:
-  // adb -s <serial> <command...>. Global commands
-  // such as adb devices/version, calls for another serial, and host-preconfigured
-  // invocations stay local.
-  const serialIndex = findAdbSerialIndex(args);
-  if (serialIndex === undefined || args[serialIndex + 1] !== expectedSerial) return undefined;
-  return [...args.slice(0, serialIndex), ...args.slice(serialIndex + 2)];
 }

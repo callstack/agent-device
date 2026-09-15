@@ -1,3 +1,4 @@
+import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
@@ -88,15 +89,22 @@ export type LimrunAndroidRuntimeAdapter = {
   getKeyboardState(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardState>;
   dismissKeyboard(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardDismissResult>;
   readLogs(adb: LimrunAdbExecutor, lineLimit: number): Promise<string>;
+  /**
+   * Builds the failure an ADB command answered with. The invocation is what was asked of adb; how
+   * it is named in the error belongs to whoever renders it, not to this provider.
+   */
   adbError(
     message: string,
     result: LimrunAdbCommandResult,
-    details?: Record<string, unknown>,
+    invocation?: AndroidAdbInvocation,
   ): Promise<AppError>;
 };
 
 export type LimrunHostAdapter = {
-  runAdb(args: string[], options?: LimrunAdbCommandOptions): Promise<LimrunAdbCommandResult>;
+  runAdb(
+    invocation: AndroidAdbInvocation,
+    options?: LimrunAdbCommandOptions,
+  ): Promise<LimrunAdbCommandResult>;
   archiveDirectory(options: {
     sourceDirectory: string;
     entryName: string;

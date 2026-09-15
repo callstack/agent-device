@@ -57,14 +57,11 @@ export function bindAndroidAdbHostStub(
         throw new Error('adb-host stub: writeBytes not stubbed');
       },
     },
-    execSerialAdb: async () => {
-      throw new Error('adb-host stub: execSerialAdb not stubbed');
+    execAdb: async () => {
+      throw new Error('adb-host stub: execAdb not stubbed');
     },
-    spawnSerialAdb: () => {
-      throw new Error('adb-host stub: spawnSerialAdb not stubbed');
-    },
-    execHostAdb: async () => {
-      throw new Error('adb-host stub: execHostAdb not stubbed');
+    spawnAdb: () => {
+      throw new Error('adb-host stub: spawnAdb not stubbed');
     },
     withAdbCommandExecutorOverride: async (_override, fn) => await fn(),
     withoutAdbCommandExecutorOverride: async (fn) => await fn(),

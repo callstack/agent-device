@@ -3,6 +3,10 @@ import { test, vi } from 'vitest';
 import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  serializeAndroidAdbInvocation,
+  type AndroidAdbInvocation,
+} from '@agent-device/platform-android/mechanics';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLimrunRuntime } from './runtime.ts';
 import type {
@@ -211,6 +215,52 @@ test('allocation rejects an unrelated foreground app after preinstall', async ()
   assert.equal(fixture.getForegroundApp.mock.calls.length, 0);
 });
 
+test('a failed device adb command hands the addressed invocation to the root adapter', async () => {
+  const fixture = createContractFixture();
+  const handed: Array<AndroidAdbInvocation | undefined> = [];
+  const invocations: AndroidAdbInvocation[] = [];
+  const dependencies: LimrunRuntimeDependencies = {
+    ...fixture.dependencies,
+    android: {
+      ...fixture.dependencies.android,
+      adbError: async (message, _result, invocation) => {
+        handed.push(invocation);
+        return new AppError('COMMAND_FAILED', message);
+      },
+    },
+    host: {
+      ...fixture.dependencies.host,
+      runAdb: async (invocation) => {
+        invocations.push(invocation);
+        return { stdout: '', stderr: 'offline', exitCode: 1 };
+      },
+    },
+  };
+  const runtime = createLimrunRuntime({ apiKey: 'lim_test_key' }, dependencies);
+
+  try {
+    await allocateAndroidDevice(runtime);
+    await assert.rejects(async () =>
+      runtime.configurePortReverse?.({
+        leaseId: 'lease-android',
+        devicePort: 8081,
+        hostPort: 8081,
+        name: 'metro',
+      }),
+    );
+  } finally {
+    await runtime.shutdown();
+  }
+
+  // The provider restates no argv of its own: the failure carries the typed invocation it addressed.
+  const invocation = invocations[0];
+  assert.ok(invocation);
+  assert.deepEqual(handed[0], invocation);
+  assert.deepEqual(invocation.target.server, { kind: 'ambient' });
+  assert.deepEqual(invocation.target.selector, { kind: 'serial', serial: '127.0.0.1:62001' });
+  assert.equal(serializeAndroidAdbInvocation(invocation)[0], '-s');
+});
+
 function createContractFixture() {
   const adbCalls: string[][] = [];
   const activeReverseMappings: LimrunPortReverseMapping[] = [];
@@ -248,8 +298,8 @@ function createContractFixture() {
       adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
     host: {
-      runAdb: async (args: string[]) => {
-        adbCalls.push(args);
+      runAdb: async (invocation: AndroidAdbInvocation) => {
+        adbCalls.push(serializeAndroidAdbInvocation(invocation));
         return { stdout: '', stderr: '', exitCode: 0 };
       },
       archiveDirectory: async () => undefined,

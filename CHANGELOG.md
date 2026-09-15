@@ -13,6 +13,16 @@
   shows that sheet (hosted out of the app process)." to "This snapshot shows a system web sign-in
   sheet presented over the app (hosted out of the app process), not app content". The payment host
   says "the system Apple Pay sheet" instead.
+- Changed (android): a private adb server no longer absorbs a port its caller named. An adb request
+  that names a server other than the one its route holds — `-P 5037` in argv, or `serverPort` in the
+  call's options — is now refused with `managed-device-transport-mismatch` before anything is
+  dispatched, where previously a `-P` in argv was rewritten onto the route's own port. A caller that
+  asked for 5037 could read a zero exit as an answer about 5037 after the request had run on 15038.
+  It reaches `createLocalAndroidAdbProvider(device, { serverPort })`,
+  `runAndroidHostAdb(invocation, { serverPort })`, and the Limrun runtime dependency's adb calls. A
+  request that names no server, or names the one the route already holds, runs exactly as before, and
+  ambient adb is unchanged: with no private server named, the caller's argv is what runs, `-P`
+  included (#2632).
 - Fixed (android): a chunked `record stop` (recordings over 170 s) no longer warns that screenrecord
   stopped before record stop at the 180 s limit. Rotation always ends every earlier chunk before
   stop, so the warning now fires only when the last chunk's recorder had already exited.

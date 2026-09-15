@@ -136,26 +136,71 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   assert.equal(observedSignal, controller.signal);
 });
 
-test('host.runAdb keeps its exported shape and routes through the host transport', async () => {
+test('host.runAdb carries addressing apart from payload and routes through the host transport', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const { withAndroidHostAdbTransport } = await import('@agent-device/platform-android/mechanics');
+  const {
+    androidAdbInvocation,
+    androidAdbSerialTarget,
+    serializeAndroidAdbInvocation,
+    withAndroidHostAdbTransport,
+  } = await import('@agent-device/platform-android/mechanics');
   const dependencies = createLimrunRuntimeDependencies();
-  const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
+  const seen: Array<{
+    args: string[];
+    payload: readonly string[];
+    options?: Record<string, unknown>;
+  }> = [];
 
   const result = await withAndroidHostAdbTransport(
-    async (args, options) => {
-      seen.push({ args, ...(options ? { options } : {}) });
+    async (invocation, options) => {
+      seen.push({
+        args: serializeAndroidAdbInvocation(invocation),
+        payload: invocation.command,
+        ...(options ? { options } : {}),
+      });
       return { stdout: 'ok', stderr: '', exitCode: 0 };
     },
     async () =>
-      await dependencies.host.runAdb(['disconnect', 'emulator-5554'], {
-        allowFailure: true,
-        timeoutMs: 10_000,
-      }),
+      await dependencies.host.runAdb(
+        androidAdbInvocation(androidAdbSerialTarget('emulator-5554'), [
+          'disconnect',
+          'emulator-5554',
+        ]),
+        {
+          allowFailure: true,
+          timeoutMs: 10_000,
+        },
+      ),
   );
 
   assert.deepEqual(result, { stdout: 'ok', stderr: '', exitCode: 0 });
   assert.deepEqual(seen, [
-    { args: ['disconnect', 'emulator-5554'], options: { allowFailure: true, timeoutMs: 10_000 } },
+    {
+      args: ['-s', 'emulator-5554', 'disconnect', 'emulator-5554'],
+      payload: ['disconnect', 'emulator-5554'],
+      options: { allowFailure: true, timeoutMs: 10_000 },
+    },
   ]);
+});
+
+test('adbError names the failed command with the platform serializer', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const { androidAdbInvocation, androidAdbSerialTarget } =
+    await import('@agent-device/platform-android/mechanics');
+  const dependencies = createLimrunRuntimeDependencies();
+
+  const failure = await dependencies.android.adbError(
+    'Limrun Android ADB command failed',
+    { exitCode: 1, stdout: '', stderr: 'device offline' },
+    androidAdbInvocation(androidAdbSerialTarget('127.0.0.1:62001'), ['reverse', 'tcp:8081']),
+  );
+
+  assert.equal(failure.details?.command, 'adb -s 127.0.0.1:62001 reverse tcp:8081');
+
+  const addressless = await dependencies.android.adbError('ADB failed', {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'no device',
+  });
+  assert.equal(addressless.details?.command, undefined);
 });

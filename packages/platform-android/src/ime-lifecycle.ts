@@ -1,3 +1,4 @@
+import { parseAndroidAdbArgv } from './adb-transport.ts';
 import { requireAndroidAdbHost, runAndroidHostAdb } from './adb-host.ts';
 
 export {
@@ -18,7 +19,9 @@ export {
 export async function listAndroidAdbSerialsQuick(): Promise<string[]> {
   requireAndroidAdbHost();
   try {
-    const result = await runAndroidHostAdb(['devices'], { timeoutMs: 5_000 });
+    const result = await runAndroidHostAdb(parseAndroidAdbArgv(['devices']), {
+      timeoutMs: 5_000,
+    });
     return result.stdout
       .split('\n')
       .map((line) => line.trim())

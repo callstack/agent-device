@@ -1,6 +1,5 @@
 import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';
-import type { AndroidAdbExecutorOptions } from '@agent-device/platform-android/mechanics';
-import { AppError } from '@agent-device/kernel/errors';
+import { lowerAndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   coerceExecResult,
@@ -82,35 +81,24 @@ bindAndroidAdbHost({
     },
     writeBytes: async (filePath, value) => await writeFile(filePath, value),
   },
-  execSerialAdb: async (serial, args, options) => {
-    const invocation = adbInvocation(['-s', serial, ...args], options);
-    return await withoutCommandExecutorOverride(
-      async () =>
-        await runCmd('adb', invocation.args, {
-          ...invocation.options,
-          detached: process.platform !== 'win32',
-        }),
-    );
+  execAdb: async (invocation, options) => {
+    const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
+    return await runCmd('adb', lowered.args, {
+      ...lowered.options,
+      // adb's fork-server is a grandchild: without its own process group a deadline can only
+      // signal `adb` itself, and the server keeps the stdio pipes open behind it.
+      detached: process.platform !== 'win32',
+    });
   },
-  spawnSerialAdb: (serial, args, options) => {
-    const invocation = adbInvocation(['-s', serial, ...args], options);
-    const background = runCmdBackground('adb', invocation.args, {
-      ...invocation.options,
+  spawnAdb: (invocation, options) => {
+    const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
+    const background = runCmdBackground('adb', lowered.args, {
+      ...lowered.options,
       allowFailure: true,
       captureOutput: false,
     });
     void background.wait.catch(() => {});
     return background.child;
-  },
-  execHostAdb: async (args, options) => {
-    const invocation = adbInvocation(args, options);
-    return await runCmd('adb', invocation.args, {
-      ...invocation.options,
-      // adb's fork-server is a grandchild: without its own process group a
-      // deadline can only signal `adb` itself, and the server keeps the stdio
-      // pipes open behind it.
-      detached: process.platform !== 'win32',
-    });
   },
   withAdbCommandExecutorOverride: withCommandExecutorOverride,
   withoutAdbCommandExecutorOverride: withoutCommandExecutorOverride,
@@ -145,76 +133,3 @@ bindAndroidAdbHost({
     return await makeEnsureAndroidHelperInstalled(config)(request);
   },
 });
-
-function adbInvocation<Options extends AndroidAdbExecutorOptions>(
-  args: string[],
-  options?: Options,
-): { args: string[]; options: Omit<Options, 'serverPort'> } {
-  const { serverPort, ...withoutServerPort } = options ?? ({} as Options);
-  if (serverPort === undefined) return { args, options: withoutServerPort };
-  return {
-    args: withServerPort(args, serverPort),
-    options: {
-      ...withoutServerPort,
-      env: {
-        ...environment,
-        ...(withoutServerPort.env ?? {}),
-        ADB_SERVER_SOCKET: undefined,
-        ANDROID_ADB_SERVER_PORT: String(serverPort),
-        ANDROID_ADB_SERVER_ADDRESS: '127.0.0.1',
-      },
-    },
-  };
-}
-
-function withServerPort(args: string[], serverPort: number): string[] {
-  const normalized = ['-P', String(serverPort)];
-  let index = 0;
-  let serial: string | undefined;
-  while (index < args.length) {
-    const argument = args[index];
-    if (argument === '-P') {
-      index += 2;
-      continue;
-    }
-    if (argument === '-s') {
-      if (serial !== undefined && serial !== args[index + 1]) throw transportMismatch();
-      serial = args[index + 1];
-      normalized.push(argument, args[index + 1]!);
-      index += 2;
-      continue;
-    }
-    if (argument?.startsWith('-')) throw transportMismatch();
-    break;
-  }
-  const command = args.slice(index);
-  assertManagedAdbCommand(command);
-  return [...normalized, ...command];
-}
-
-function assertManagedAdbCommand(args: string[]): void {
-  const command = args.find((argument) => !argument.startsWith('wait-for-'));
-  if (
-    [
-      'nodaemon',
-      'server',
-      'fork-server',
-      'kill-server',
-      'start-server',
-      'connect',
-      'disconnect',
-      'reconnect',
-      'attach',
-      'detach',
-      'pair',
-    ].includes(command ?? '')
-  ) {
-    throw transportMismatch();
-  }
-}
-
-function transportMismatch(): AppError {
-  return new AppError('COMMAND_FAILED', 'Managed ADB transport cannot select another target.', {
-    reason: 'managed-device-transport-mismatch',
-  });
-}

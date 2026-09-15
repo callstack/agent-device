@@ -437,6 +437,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/platform-android':
+        specifier: workspace:*
+        version: link:../platform-android
     devDependencies:
       '@limrun/api':
         specifier: ^0.49.3
