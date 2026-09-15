@@ -27,6 +27,12 @@ export type ProcessLockOwner = {
  */
 export type ProcessLockOwnerRecord = ProcessLockOwner & {
   claimToken: string | null;
+  /**
+   * Which loading of this module issued the claim. A pid names a process, not a copy of this file:
+   * two bundles of it in one process share the pid and the start time, and only one of them holds
+   * the other's tokens. Absent on a record written before claims carried an issuer.
+   */
+  claimIssuerId?: string;
 };
 
 /** Gives a lock back. Rejects when the lock is standing and this process cannot prove it owns it. */
@@ -72,6 +78,9 @@ type ProcessLockOwnerReading =
  */
 const liveClaimTokens = new Set<string>();
 
+/** Which loading of this module issues this process's claims. See `ProcessLockOwnerRecord`. */
+const CLAIM_ISSUER_ID = crypto.randomUUID();
+
 export async function acquireProcessLock(params: {
   lockDirPath: string;
   owner: ProcessLockOwner;
@@ -89,7 +98,7 @@ export async function acquireProcessLock(params: {
 
   fs.mkdirSync(path.dirname(lockDirPath), { recursive: true });
   const claimToken = crypto.randomUUID();
-  const claim: ProcessLockOwnerRecord = { ...owner, claimToken };
+  const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
 
   while (Date.now() < deadline) {
     try {
@@ -428,6 +437,7 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
     // A record written before claims were tokenized names a process without saying which
     // acquisition it was, which no release can match and no reclaim can be blamed for.
     claimToken: typeof record.claimToken === 'string' ? record.claimToken : null,
+    claimIssuerId: typeof record.claimIssuerId === 'string' ? record.claimIssuerId : undefined,
   };
 }
 
@@ -473,7 +483,10 @@ function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
  * for the pid would be waiting for this process to restart.
  */
 function isSpentOwnClaim(owner: ProcessLockOwnerRecord): boolean {
-  return (
-    owner.pid === process.pid && owner.claimToken !== null && !liveClaimTokens.has(owner.claimToken)
-  );
+  if (owner.pid !== process.pid || owner.claimToken === null) return false;
+  // A token this loading of the module never issued is either a claim by another loading in the
+  // same process, which is live and not ours to judge, or a record from before issuers existed,
+  // which is no evidence of a spent claim either. Both stay subject to the liveness answer.
+  if (owner.claimIssuerId !== CLAIM_ISSUER_ID) return false;
+  return !liveClaimTokens.has(owner.claimToken);
 }

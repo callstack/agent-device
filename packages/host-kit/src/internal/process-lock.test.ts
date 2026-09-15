@@ -406,6 +406,39 @@ test('a release that could not verify ownership does not wedge the next acquire 
   assert.equal(fs.existsSync(lockDirPath), false);
 });
 
+// The spent-claim rule reads a record that names this process, so it has to know which copy of this
+// module wrote it. Two bundles of `process-lock.ts` in one process share the pid and the start time,
+// and neither can see the other's tokens; reading the other's live claim as spent would clear a lock
+// somebody is holding, which is worse than the wait the rule exists to end.
+test('a claim issued by another loading of this module is not read as spent', async () => {
+  const lockDirPath = path.join(tmpDir, 'other-issuer.lock');
+  fs.mkdirSync(lockDirPath);
+  fs.writeFileSync(
+    path.join(lockDirPath, 'owner.json'),
+    JSON.stringify({
+      ...currentProcessOwner(),
+      claimToken: 'a-token-this-loading-never-issued',
+      claimIssuerId: 'another-loading-of-this-module',
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      acquireProcessLock({
+        lockDirPath,
+        owner: currentProcessOwner(),
+        timeoutMs: 50,
+        pollMs: 5,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.match(error.message, /Timed out waiting for/);
+      return true;
+    },
+  );
+  assert.equal(fs.existsSync(path.join(lockDirPath, 'owner.json')), true);
+});
+
 test('acquireProcessLock reclaims a stray path in place of the lock directory', async () => {
   const lockDirPath = path.join(tmpDir, 'stray.lock');
   fs.writeFileSync(lockDirPath, 'not a lock');
