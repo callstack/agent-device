@@ -16,6 +16,7 @@ import type {
   AndroidAdbProcess,
   AndroidAdbProvider,
 } from '../adb-executor.ts';
+import { ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER } from '../snapshot-helper-retirement.ts';
 import type { AndroidSnapshotHelperRuntimeRelease } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import { bindAndroidAdbTestHost } from './test-utils/android-host-test-setup.ts';
@@ -165,13 +166,16 @@ export type SessionProviderOptions = {
 };
 
 /**
- * What a fake device answers about the helper process. `unreadable` is a transport fault adb's own
- * failure classifier recognises and `closed` is one it does not; the probe has to fail closed on both.
+ * What a fake device answers about the helper process. `unreadable` and `closed` are transport faults
+ * adb puts on stderr, one its own failure classifier recognises and one it does not; `signalled` is
+ * an adb client killed before it wrote anything, which the executor reports as an invented exit code
+ * and empty streams. The probe has to fail closed on all three.
  */
 export type FakeAndroidHelperRuntimeRelease =
   | Exclude<AndroidSnapshotHelperRuntimeRelease, 'unknown'>
   | 'unreadable'
-  | 'closed';
+  | 'closed'
+  | 'signalled';
 
 export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
   bindAndroidAdbTestHost();
@@ -300,14 +304,18 @@ export function isAndroidHelperRuntimeProbe(args: readonly string[]): boolean {
 export function androidHelperRuntimeProbeResult(
   release: FakeAndroidHelperRuntimeRelease = 'released',
 ): AndroidAdbExecutorResult {
-  // A host whose adb cannot carry the call answers the way the executor really answers it: a non-zero
-  // exit, empty stdout and a fault on stderr. The shell's own "no such process" is that same shape
-  // with nothing at all on stderr, which is the only non-pid answer that means released.
-  if (release === 'unreadable') return { exitCode: 1, stdout: '', stderr: 'error: device offline' };
-  if (release === 'closed') return { exitCode: 1, stdout: '', stderr: 'error: closed' };
-  return release === 'occupied'
-    ? { exitCode: 0, stdout: '4211\n', stderr: '' }
-    : { exitCode: 1, stdout: '', stderr: '' };
+  switch (release) {
+    case 'occupied':
+      return { exitCode: 0, stdout: '4211\n', stderr: '' };
+    case 'released':
+      return { exitCode: 0, stdout: `${ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER}\n`, stderr: '' };
+    case 'unreadable':
+      return { exitCode: 1, stdout: '', stderr: 'error: device offline' };
+    case 'closed':
+      return { exitCode: 1, stdout: '', stderr: 'error: closed' };
+    case 'signalled':
+      return { exitCode: 1, stdout: '', stderr: '' };
+  }
 }
 
 function adbFeaturesResult(options: SessionProviderOptions): {
@@ -454,7 +462,7 @@ function persistentSnapshotExecResult(
     return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
   }
   if (isAndroidHelperRuntimeProbe(args)) {
-    return Promise.resolve({ exitCode: 1, stdout: '', stderr: '' });
+    return Promise.resolve(androidHelperRuntimeProbeResult('released'));
   }
   if (args.includes('instrument')) {
     options.oneShotAttempts?.push(args);

@@ -17,6 +17,11 @@ const RUNTIME_OCCUPANCY_RECHECK_MS = 250;
 export const ANDROID_SNAPSHOT_HELPER_HOST_PROCESS_EXIT_GRACE_MS = 250;
 export const ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS = 2_000;
 const RUNTIME_OCCUPIED_REASON = 'android_snapshot_helper_runtime_occupied';
+/**
+ * Printed by the device's own shell, and only by it, when the helper process is not running.
+ * Exported so a fake device can answer with the real thing.
+ */
+export const ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER = 'AGENT_DEVICE_NO_HELPER';
 
 /**
  * Whether anything on the device still owns UiAutomation through the helper runtime. `unknown` is
@@ -174,21 +179,27 @@ async function readAndroidSnapshotHelperRuntimeRelease(params: {
   packageName: string;
 }): Promise<AndroidSnapshotHelperRuntimeRelease> {
   try {
-    const result = await params.adb(['shell', 'pidof', params.packageName], {
-      allowFailure: true,
-      timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
-    });
+    // The marker comes from the device shell, and only from it, so a release is claimed by an answer
+    // the transport cannot forge: an adb client that ran out of budget, was killed by a signal, or
+    // lost the connection prints nothing at all. No exit status is consulted either, because `adb
+    // shell` answers 0 for a device command that failed and the executor has to invent one when the
+    // client dies before reporting one.
+    const result = await params.adb(
+      [
+        'shell',
+        'pidof',
+        params.packageName,
+        '||',
+        'echo',
+        ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER,
+      ],
+      { allowFailure: true, timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS },
+    );
     const stdout = result.stdout.trim();
-    const stderr = result.stderr.trim();
-    // A process id for the helper package is the device naming whoever owns the runtime.
     if (findPidToken(stdout)) return 'occupied';
-    // `pidof` answers "no process" by exiting non-zero with nothing on either stream. Every other
-    // shape — a line of stderr, a zero exit that names nobody, output without a pid — is adb or the
-    // shell describing itself, and a transport describing itself says nothing about the runtime.
-    // Enumerating adb's failure texts is not an option either: the list is long, version-dependent
-    // and includes plain `error: closed`, and every missed entry would clear a pending release that
-    // was never proven.
-    return result.exitCode !== 0 && stdout.length === 0 && stderr.length === 0
+    // A shell with no `pidof` prints the marker too, after it complains, so the answer counts only
+    // from a shell that had nothing to say about the command it ran.
+    return stdout === ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER && result.stderr.trim().length === 0
       ? 'released'
       : 'unknown';
   } catch {

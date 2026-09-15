@@ -10,14 +10,16 @@
   `am force-stop` as the fact it was supposed to measure, and on a loaded host that round trip can
   outlive its budget while the device is healthy — the shape of #2553 — so the helper process was
   already gone and the command still failed with `Android automation helper is still holding device
-  automation ownership`. Ownership is read off the device now: `adb shell pidof
-  com.callstack.agentdevice.snapshothelper` says `occupied` while it names a process, and says
-  `released` only on the shell's own no-process answer — a non-zero exit with nothing on either
-  stream. Anything else, including `error: closed`, `cannot connect to daemon` and `device offline`,
-  is `unknown`: those describe the transport, not who holds the runtime, and a release is never
-  cleared on a description of the transport. A refusal requires two reads that both name the process,
-  which keeps a helper still inside Android's exit path from costing a command. Scripts that match the
-  failure reason see `android_snapshot_helper_runtime_occupied`, which replaces
+  automation ownership`. Ownership is read off the device now: the probe asks the device shell for
+  `pidof com.callstack.agentdevice.snapshothelper` and tells it to echo a marker when nothing matched.
+  A process id is `occupied`, the bare marker is `released`, and everything else is `unknown` —
+  `error: closed`, `cannot connect to daemon`, `device offline`, or an adb client killed by a signal
+  before it wrote anything. A release is therefore claimed only by an answer the transport cannot
+  produce about itself, and no exit status is trusted: `adb shell` answers 0 for a device command that
+  failed, and an adb that dies by signal leaves the executor inventing an exit code it never saw. A
+  refusal requires two reads that both name the process, which keeps a helper still inside Android's
+  exit path from costing a command. Scripts that match the failure reason see
+  `android_snapshot_helper_runtime_occupied`, which replaces
   `android_snapshot_helper_retirement_unconfirmed`.
 - Changed (android): a snapshot helper session that reaches ready settles a release the previous
   teardown could not prove. `am instrument` force-stops whatever is already instrumenting the helper
