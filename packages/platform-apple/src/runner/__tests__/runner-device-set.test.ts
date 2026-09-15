@@ -171,3 +171,103 @@ test('a redirect that could not restore the host device set reports it instead o
     }
   });
 });
+
+test('a restore that was refused outranks the lock that could not be verified', async () => {
+  // Both steps lean on the same filesystem, so they fail together. The `finally` that handed the lock
+  // back used to replace the restore's EACCES with `ownerReleaseUnverified`, which the best-effort
+  // door then dropped and the strict door then reported in its place: the host kept an
+  // `XCTestDevices` pointing at this simulator's set, and the only report named the lock.
+  for (const door of ['release', 'releaseBestEffort'] as const) {
+    await withTempDir(`device-set-both-fail-${door}-`, async (root) => {
+      const paths = makeRedirectPaths(root);
+      fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+      fs.mkdirSync(paths.xctestDeviceSetPath, { recursive: true });
+      fs.writeFileSync(
+        path.join(paths.xctestDeviceSetPath, 'host-device.txt'),
+        'the host owns this',
+      );
+      const redirect = await acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+        lockDirPath: paths.lockDirPath,
+        xctestDeviceSetPath: paths.xctestDeviceSetPath,
+      });
+      assert.notEqual(redirect, null);
+      makeReleaseUnverifiable(paths);
+
+      let attempted = false;
+      const realRename = fs.renameSync;
+      const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((
+        from: fs.PathLike,
+        to: fs.PathLike,
+      ) => {
+        if (String(to) === paths.xctestDeviceSetPath && !attempted) {
+          attempted = true;
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }
+        return realRename(from, to);
+      }) as typeof fs.renameSync);
+
+      try {
+        await assert.rejects(
+          () => redirect![door](),
+          (error: unknown) => (error as NodeJS.ErrnoException).code === 'EACCES',
+          door,
+        );
+        assert.equal(attempted, true, door);
+        // The lock went back into the same refusing filesystem, which is what makes this the pair.
+        assert.equal(fs.existsSync(paths.lockDirPath), true, `${door}: the release failed too`);
+      } finally {
+        renameSpy.mockRestore();
+      }
+    });
+  }
+});
+
+test('a redirect that could not be installed reports the redirect, not the failed clean-up', async () => {
+  await withTempDir('device-set-install-failure-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(paths.xctestDeviceSetPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'the host owns this');
+
+    // The install breaks after the host's set is renamed into the backup, and the restore that the
+    // catch runs to undo it breaks too. Two failures, one report: the redirect that did not happen.
+    let restoreAttempted = false;
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((
+      from: fs.PathLike,
+      to: fs.PathLike,
+    ) => {
+      if (String(to) === paths.xctestDeviceSetPath) {
+        restoreAttempted = true;
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+    const symlinkSpy = vi.spyOn(fs, 'symlinkSync').mockImplementation((() => {
+      throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+    }) as typeof fs.symlinkSync);
+
+    try {
+      await assert.rejects(
+        () =>
+          acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+            lockDirPath: paths.lockDirPath,
+            xctestDeviceSetPath: paths.xctestDeviceSetPath,
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'Failed to redirect XCTest device set path');
+          assert.match(String(error.details?.error), /EPERM/);
+          return true;
+        },
+      );
+      assert.equal(restoreAttempted, true);
+      // The clean-up did not run to completion, and the lock went back regardless: the caller is
+      // free to try again rather than wait 30 s on a claim nobody holds.
+      assert.equal(fs.existsSync(paths.lockDirPath), false);
+    } finally {
+      renameSpy.mockRestore();
+      symlinkSpy.mockRestore();
+    }
+  });
+});

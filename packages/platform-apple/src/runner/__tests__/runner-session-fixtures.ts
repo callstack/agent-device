@@ -186,8 +186,9 @@ export function makeClassifyOwnerLivenessViaMocks(deps: {
 }
 
 /**
- * The give-back a launched session holds. One spy answers both strictnesses: the the host's device set came back, and which door it came back
- * through is pinned where the handle is made, in `runner-device-set.test.ts`.
+ * The give-back a launched session holds. One spy answers both doors, because these tests ask whether
+ * the host's device set came back; which door it came back through is pinned where the handle is
+ * made, in `runner-device-set.test.ts`.
  */
 export const redirectRelease = vi.fn(async () => {});
 
