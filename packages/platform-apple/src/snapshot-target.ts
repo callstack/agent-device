@@ -69,6 +69,10 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
  * One caller's wait for a discovery it did not start. Resolving is the wait being spent, not the
  * discovery failing: a client abort rejects with its own reason so it stays typed `cancelled`, while
  * `stop` means this caller already has its answer and is only letting go of the timer.
+ *
+ * The stop needs no cleanup here and no already-aborted check: `value()` creates it moments before
+ * calling this and aborts it in a `finally`, so the listener is gone once that abort fires. The
+ * caller's signal outlives this wait and does need its listener removed.
  */
 function waitForDiscoveryAttempt(
   waitMs: number,
@@ -82,10 +86,8 @@ function waitForDiscoveryAttempt(
     function finish(settle: () => void): void {
       clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
-      stop.removeEventListener('abort', onStop);
       settle();
     }
-    if (stop.aborted) return finish(resolve);
     signal.addEventListener('abort', onAbort, { once: true });
     stop.addEventListener('abort', onStop, { once: true });
   });

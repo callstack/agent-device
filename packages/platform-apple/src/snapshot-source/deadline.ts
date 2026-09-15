@@ -28,6 +28,10 @@ export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code
  * Sleeps inside the caller's own deadline. `stop` is for a caller that no longer needs the sleep
  * because the work it was waiting on answered elsewhere: the delay resolves instead of burning its
  * remaining budget, while an aborted `deadline` stays a typed `cancelled`.
+ *
+ * A stop is only ever created by the code that calls this and is always aborted by it afterwards,
+ * so it needs no already-aborted check and no listener removal; the deadline's signal is the
+ * caller's and does.
  */
 export async function waitForSnapshotSourceDelay(
   deadline: SnapshotSourceDeadline,
@@ -48,10 +52,8 @@ export async function waitForSnapshotSourceDelay(
       settled = true;
       clearTimeout(timer);
       deadline.signal?.removeEventListener('abort', onAbort);
-      stop?.removeEventListener('abort', onStop);
       action();
     };
-    if (stop?.aborted) return finish(resolve);
     deadline.signal?.addEventListener('abort', onAbort, { once: true });
     if (deadline.signal?.aborted) onAbort();
     stop?.addEventListener('abort', onStop, { once: true });
