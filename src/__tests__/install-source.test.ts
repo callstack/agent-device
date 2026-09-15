@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
+// oxlint-disable-next-line no-restricted-imports -- vi.spyOn(os,'tmpdir') aims production's install source
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- real /tmp socket path within the 104-char limit
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';

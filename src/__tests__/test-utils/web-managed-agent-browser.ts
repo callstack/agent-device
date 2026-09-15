@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- real browser install/socket dir under TMPDIR (socket length limit)
 import os from 'node:os';
 import path from 'node:path';
 

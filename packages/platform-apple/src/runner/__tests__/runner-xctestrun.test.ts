@@ -1,6 +1,7 @@
 import { test, vi, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- mirrors production's os.tmpdir xctestrun path
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

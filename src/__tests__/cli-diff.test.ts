@@ -1,6 +1,7 @@
 import { describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- asserts the default diff path under os.tmpdir
 import os from 'node:os';
 import path from 'node:path';
 import { PNG } from '@agent-device/capture-kit/png';

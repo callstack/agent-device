@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 import { promises as fs } from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- vi.spyOn(os,'tmpdir') aims production's install scratch
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';

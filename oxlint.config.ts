@@ -1,6 +1,20 @@
 import nkzw from '@nkzw/oxlint-config';
 import { defineConfig } from 'oxlint';
 
+// Product source trees, where unit tests get scratch from the package tmp-dir helpers.
+// scripts/, test/, and package test harnesses manage TMPDIR for child processes on purpose,
+// so keeping the roots explicit holds them out of scope that a bare `**` would sweep in.
+const PRODUCT_TEST_ROOTS = ['src', 'packages/*/src'];
+const PRODUCT_TEST_SHAPES = [
+  '**/*.test.ts',
+  '**/*.fixtures.ts',
+  '**/__tests__/**/*.ts',
+  '**/test-utils/**/*.ts',
+];
+const PRODUCT_TEST_FILES = PRODUCT_TEST_ROOTS.flatMap((root) =>
+  PRODUCT_TEST_SHAPES.map((shape) => `${root}/${shape}`),
+);
+
 export default defineConfig({
   env: {
     builtin: true,
@@ -144,6 +158,34 @@ export default defineConfig({
       files: ['scripts/maestro-conformance/corpus/authored/runscript.js'],
       globals: {
         output: 'writable',
+      },
+    },
+    {
+      // Product tests get scratch from the package tmp-dir helpers, which honor the run's
+      // redirected TMPDIR; reading node:os reuses a fixed path across the suite. A file with a
+      // justified read (mocking production, a real socket path, or the TMPDIR mechanism itself)
+      // oxlint-disables its one import line with a reason instead of widening this list.
+      files: PRODUCT_TEST_FILES,
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              {
+                name: 'node:os',
+                message:
+                  'Create test scratch with mkdtempForTest()/mkdtempForTestSync() from the package tmp-dir helper instead of reading node:os.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      // The tmp-dir helper modules are the sanctioned os.tmpdir() readers.
+      files: ['**/tmp-dir.ts', '**/tmp-dir.fixtures.ts'],
+      rules: {
+        'no-restricted-imports': ['error', { paths: [] }],
       },
     },
   ],

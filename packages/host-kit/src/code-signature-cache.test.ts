@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- vi.spyOn(os,'tmpdir') aims production's cache home
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';

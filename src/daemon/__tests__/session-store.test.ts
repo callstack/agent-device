@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- asserts a path under os.homedir
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
