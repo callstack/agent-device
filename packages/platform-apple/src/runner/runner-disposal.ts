@@ -191,7 +191,7 @@ async function cleanupRunnerSessionResources(
   await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
-  await session.simulatorSetRedirect?.release();
+  await session.simulatorSetRedirect?.releaseBestEffort();
 }
 
 /**

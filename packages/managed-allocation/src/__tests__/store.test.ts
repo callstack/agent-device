@@ -126,6 +126,21 @@ test('retains corrupt, unsupported, unfenced, and path-ambiguous records as diag
   assert.equal(path.dirname(path.dirname(operationPath)), path.join(root, 'allocations'));
 });
 
+test('listing a lane lock and the mutex a stale reclaim holds finds no extra record', () => {
+  const { root, store, record } = fixture();
+  store.create(record);
+  const listed = store.list();
+  const allocationsDir = path.join(root, 'allocations');
+  const lane = path.basename(path.dirname(store.resolvePath(record)));
+  for (const lockName of [`${lane}.lane.lock`, `${lane}.lane.reclaim.lock`]) {
+    const lockDir = path.join(allocationsDir, lockName);
+    fs.mkdirSync(lockDir, { recursive: true });
+    fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid }));
+  }
+
+  assert.deepEqual(store.list(), listed);
+});
+
 test('does not follow a symbolic-link destination', () => {
   const { root, store, record } = fixture();
   const operationPath = store.resolvePath(record);

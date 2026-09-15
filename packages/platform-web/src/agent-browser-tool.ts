@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
-import { acquireProcessLock } from '@agent-device/host-kit/file';
+import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
   ensureHostDirectorySync,
@@ -70,41 +70,42 @@ export async function setupManagedAgentBrowser(options: {
   assertWebNodeSupported(status.nodeMajor);
   const processId = hostProcessId();
 
-  const release = await acquireProcessLock({
-    lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
-    owner: {
-      pid: processId,
-      startTime: readProcessStartTime(processId),
-      acquiredAtMs: Date.now(),
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: path.join(status.installDir, '..', '.agent-browser-install.lock'),
+        owner: {
+          pid: processId,
+          startTime: readProcessStartTime(processId),
+          acquiredAtMs: Date.now(),
+        },
+        timeoutMs: SETUP_TIMEOUT_MS,
+        description: 'managed agent-browser setup',
+      }),
+    task: async () => {
+      const freshStatus = getManagedAgentBrowserStatus(options);
+      if (freshStatus.installed) return freshStatus;
+      ensureHostDirectorySync(freshStatus.installDir);
+      await installManagedAgentBrowserPackage({
+        packageRoot: path.join(freshStatus.installDir, 'package'),
+        packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
+        timeoutMs: SETUP_TIMEOUT_MS,
+      });
+      // The backend entry only exists once npm has written the package.
+      const installedStatus = getManagedAgentBrowserStatus(options);
+      if (!installedStatus.entryScript) throw unusableInstallError(installedStatus);
+      await spawnManagedAgentBrowser(installedStatus, ['install'], { timeoutMs: SETUP_TIMEOUT_MS });
+      await spawnManagedAgentBrowser(installedStatus, ['doctor', '--offline', '--quick'], {
+        timeoutMs: DOCTOR_TIMEOUT_MS,
+      });
+      writeManagedAgentBrowserManifest({
+        installDir: installedStatus.installDir,
+        packageName: AGENT_BROWSER,
+        version: MANAGED_AGENT_BROWSER_VERSION,
+      });
+      return await getManagedAgentBrowserStatus(options);
     },
-    timeoutMs: SETUP_TIMEOUT_MS,
-    description: 'managed agent-browser setup',
   });
-  try {
-    const freshStatus = getManagedAgentBrowserStatus(options);
-    if (freshStatus.installed) return freshStatus;
-    ensureHostDirectorySync(freshStatus.installDir);
-    await installManagedAgentBrowserPackage({
-      packageRoot: path.join(freshStatus.installDir, 'package'),
-      packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
-      timeoutMs: SETUP_TIMEOUT_MS,
-    });
-    // The backend entry only exists once npm has written the package.
-    const installedStatus = getManagedAgentBrowserStatus(options);
-    if (!installedStatus.entryScript) throw unusableInstallError(installedStatus);
-    await spawnManagedAgentBrowser(installedStatus, ['install'], { timeoutMs: SETUP_TIMEOUT_MS });
-    await spawnManagedAgentBrowser(installedStatus, ['doctor', '--offline', '--quick'], {
-      timeoutMs: DOCTOR_TIMEOUT_MS,
-    });
-    writeManagedAgentBrowserManifest({
-      installDir: installedStatus.installDir,
-      packageName: AGENT_BROWSER,
-      version: MANAGED_AGENT_BROWSER_VERSION,
-    });
-    return getManagedAgentBrowserStatus(options);
-  } finally {
-    await release();
-  }
 }
 
 export async function doctorManagedAgentBrowser(options: {

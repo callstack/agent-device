@@ -50,7 +50,11 @@ export type RunnerSession = {
   startupTimings?: Record<string, number>;
   startupTimingsReported?: boolean;
   logicalLeaseContext?: RunnerLogicalLeaseContext;
-  simulatorSetRedirect?: { release: () => Promise<void> };
+  /** `XcodebuildSimulatorSetRedirectHandle`, seen through the two operations a session performs. */
+  simulatorSetRedirect?: {
+    release: () => Promise<void>;
+    releaseBestEffort: () => Promise<void>;
+  };
   lease?: RunnerLease;
 };
 

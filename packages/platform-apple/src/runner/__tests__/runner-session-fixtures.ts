@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
+import { vi } from 'vitest';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
+import type { XcodebuildSimulatorSetRedirectHandle } from '../runner-device-set.ts';
 
 // Fabricated runner sessions, leases, background children, and transport
 // payloads shared by the runner-session tests. The child pids here are made up
@@ -182,3 +184,15 @@ export function makeClassifyOwnerLivenessViaMocks(deps: {
     return stateDir ? classifyStateDir(stateDir) : 'live';
   };
 }
+
+/**
+ * The give-back a launched session holds. One spy answers both doors, because these tests ask whether
+ * the host's device set came back; which door it came back through is pinned where the handle is
+ * made, in `runner-device-set.test.ts`.
+ */
+export const redirectRelease = vi.fn(async () => {});
+
+export const redirectHandle: XcodebuildSimulatorSetRedirectHandle = {
+  release: redirectRelease,
+  releaseBestEffort: redirectRelease,
+};

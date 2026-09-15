@@ -8,6 +8,7 @@ import {
   makeRunnerSession,
   runnerError,
   runnerResponse,
+  redirectHandle,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -35,7 +36,6 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
   mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
@@ -55,7 +55,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
@@ -152,7 +151,7 @@ beforeEach(async () => {
   });
   mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(redirectHandle);
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);

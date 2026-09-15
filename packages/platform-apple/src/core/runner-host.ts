@@ -1,5 +1,5 @@
 import type { AppleRunnerHost } from '../runner/index.ts';
-import { publishFileSync, acquireProcessLock } from '@agent-device/host-kit/file';
+import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 
 import {
@@ -73,6 +73,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   findProjectRoot,
   readVersion,
   acquireProcessLock,
+  withProcessLock,
   withKeyedLock,
   publishFileSync,
   classifyOwnerLiveness,

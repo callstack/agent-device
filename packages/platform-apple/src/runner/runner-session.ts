@@ -248,7 +248,7 @@ async function startRunnerSessionWithLease(
       }),
     );
   } catch (error) {
-    await simulatorSetRedirect?.release();
+    await simulatorSetRedirect?.releaseBestEffort();
     throw error;
   }
   const sessionId = buildRunnerSessionId(device.id, port);

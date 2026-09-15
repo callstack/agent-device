@@ -121,6 +121,9 @@ export type ProcessLockOwner = {
   acquiredAtMs: number;
 };
 
+/** Hands a lock back. Rejects when the lock is standing and this process cannot prove it owns it. */
+export type ProcessLockRelease = () => Promise<void>;
+
 export type OwnerLiveness =
   | 'live'
   | 'owner-process-dead'
@@ -203,7 +206,11 @@ export type AppleRunnerHost = {
     pollMs?: number;
     ownerGraceMs?: number;
     description?: string;
-  }): Promise<() => Promise<void>>;
+  }): Promise<ProcessLockRelease>;
+  withProcessLock<T>(params: {
+    acquire: () => Promise<ProcessLockRelease>;
+    task: () => Promise<T>;
+  }): Promise<T>;
   withKeyedLock<T>(
     locks: Map<string, Promise<unknown>>,
     key: string,
@@ -335,6 +342,8 @@ export const readVersion: AppleRunnerHost['readVersion'] = (root) =>
   requireHost().readVersion(root);
 export const acquireProcessLock: AppleRunnerHost['acquireProcessLock'] = (params) =>
   requireHost().acquireProcessLock(params);
+export const withProcessLock: AppleRunnerHost['withProcessLock'] = (params) =>
+  requireHost().withProcessLock(params);
 export const withKeyedLock = <T>(
   locks: Map<string, Promise<unknown>>,
   key: string,

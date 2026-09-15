@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
+import { openVerifiedFileForRead, withProcessLock } from '@agent-device/host-kit/file';
 import type {
   AllocationOperationRecord,
   AllocationOperationRef,
@@ -85,15 +85,14 @@ async function transitionRecord(
   nowMs: number,
 ): Promise<AllocationOperationWrite> {
   const recordPath = operationPath(allocationsDir, ref);
-  const release = await acquireAllocationStoreLock(
-    `${recordPath}.lock`,
-    `allocation operation ${ref.requesterId}/${ref.attemptKey}`,
-  );
-  try {
-    return applyStoredTransition(recordPath, ref, expectedFence, transition, nowMs);
-  } finally {
-    await release();
-  }
+  return await withProcessLock({
+    acquire: () =>
+      acquireAllocationStoreLock(
+        `${recordPath}.lock`,
+        `allocation operation ${ref.requesterId}/${ref.attemptKey}`,
+      ),
+    task: async () => applyStoredTransition(recordPath, ref, expectedFence, transition, nowMs),
+  });
 }
 
 function applyStoredTransition(

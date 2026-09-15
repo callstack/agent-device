@@ -6,6 +6,7 @@ import {
   makeBackgroundRunner,
   makeClassifyOwnerLivenessViaMocks,
   runnerResponse,
+  redirectHandle,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -28,7 +29,6 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
   mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
@@ -52,7 +52,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 vi.mock('../runner-io.ts', async () => {
@@ -138,7 +137,7 @@ beforeEach(async () => {
   });
   mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(redirectHandle);
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
@@ -189,7 +188,7 @@ test('a release that arrives while the speculative start is still in flight stop
   });
   mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async () => {
     await gate;
-    return { release: mockRedirectRelease };
+    return redirectHandle;
   });
 
   const starting = ensureRunnerSession(device, { speculative: true });
@@ -215,7 +214,7 @@ test('a release that waits out a demanded start leaves that runner alone', async
   });
   mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async () => {
     await gate;
-    return { release: mockRedirectRelease };
+    return redirectHandle;
   });
 
   const starting = ensureRunnerSession(device, {});

@@ -6,6 +6,7 @@ import {
   emitDiagnostic,
   publishFileSync,
   acquireProcessLock,
+  withProcessLock,
   hasDeviceClaimAuthority,
   isProcessAlive,
   readProcessCommand,
@@ -115,23 +116,22 @@ export function buildRunnerLease(params: {
 }
 
 export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promise<T>): Promise<T> {
-  const release = await acquireProcessLock({
-    lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
-    owner: {
-      pid: RUNNER_OWNER_PID,
-      startTime: runnerOwnerStartTime(),
-      acquiredAtMs: Date.now(),
-    },
-    timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
-    pollMs: RUNNER_LEASE_LOCK_POLL_MS,
-    ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
-    description: `iOS runner lease for ${deviceId}`,
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
+        owner: {
+          pid: RUNNER_OWNER_PID,
+          startTime: runnerOwnerStartTime(),
+          acquiredAtMs: Date.now(),
+        },
+        timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
+        pollMs: RUNNER_LEASE_LOCK_POLL_MS,
+        ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
+        description: `iOS runner lease for ${deviceId}`,
+      }),
+    task,
   });
-  try {
-    return await task();
-  } finally {
-    await release();
-  }
 }
 
 function readRunnerLease(deviceId: string): RunnerLease | null {

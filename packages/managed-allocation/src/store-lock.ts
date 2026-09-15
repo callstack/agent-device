@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { acquireProcessLock } from '@agent-device/host-kit/file';
+import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { AllocationOperationStore } from './store.ts';
 
@@ -18,15 +18,14 @@ async function withAllocationLaneLock<T>(
   requesterId: string,
   task: () => Promise<T>,
 ): Promise<T> {
-  const release = await acquireAllocationStoreLock(
-    path.join(allocationsDir, `${hash(requesterId)}.lane.lock`),
-    `allocation lane ${requesterId}`,
-  );
-  try {
-    return await task();
-  } finally {
-    await release();
-  }
+  return await withProcessLock({
+    acquire: () =>
+      acquireAllocationStoreLock(
+        path.join(allocationsDir, `${hash(requesterId)}.lane.lock`),
+        `allocation lane ${requesterId}`,
+      ),
+    task,
+  });
 }
 
 export function acquireAllocationStoreLock(

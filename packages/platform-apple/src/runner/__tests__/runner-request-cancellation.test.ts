@@ -5,6 +5,7 @@ import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { IOS_DEVICE, IOS_SIMULATOR } from './device-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { redirectHandle } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 
 const {
@@ -22,7 +23,6 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
   mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
@@ -39,7 +39,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 vi.mock('../runner-io.ts', async () => {
@@ -155,9 +154,7 @@ beforeEach(async () => {
   });
   mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({
-    release: mockRedirectRelease,
-  });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(redirectHandle);
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);

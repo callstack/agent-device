@@ -139,6 +139,31 @@
   against the instant that attempt signalled the recorder rather than the time of the retry. A stop
   that fails and is then abandoned keeps the pulled set on the host beside `--out`. Chunk paths and
   `--client-output-path` naming are unchanged.
+- Fixed: a process lock that could not be given back no longer waits for the daemon to restart. A
+  release that cannot verify ownership — a refused `unlink`, an unreadable record — left its record
+  standing and naming the live daemon, and the next acquire read that as a live owner and timed out
+  after 30 s on every runner build or launch until the process restarted. The claim inside is spent
+  the moment the release is asked for, so a reclaim here now reads it as dead and takes the path
+  back, and the failed release is recorded in the request log as `process_lock_release_unverified`.
+  A record is only read that way when this loading of the lock code issued it: a second bundled copy
+  of the module in the same process shares the pid and cannot have a live claim cleared under it.
+- Changed (lock errors): code that takes a process lock now answers one question in one helper, which
+  of its two failures the caller hears. The work inside the lock outranks a lock that could not be
+  handed back, so a build or a publish that failed keeps its own error instead of being replaced by
+  `Timed out waiting for …`, and work that succeeded still reports the lock it could not give back.
+  The Apple runner's artifact, cache, lease and disposal paths, the managed-allocation store, the
+  device-claim store, atomic file publishes, the Swift recording cache and the agent-browser setup
+  moved onto it, replacing hand-written try/catch pairs that each chose differently.
+- Fixed: the redirect of `~/Library/Developer/XCTestDevices` gives itself back in one order — restore
+  the host's own device set, then release the lock — and a restore that was refused is what the caller
+  is told, whichever give-back door a teardown used. The lock's own complaint used to replace it in a
+  `finally` and the best-effort door then dropped it, leaving the symlink pointed at the agent-device
+  simulator set with nothing said about why. A simulator whose set already is `XCTestDevices` is no
+  longer failed by a lock it could not verify, either. A leftover from an interrupted build — the host's
+  set renamed aside and `XCTestDevices` symlinked into a simulator's own set — is now put back before the
+  redirect decides whether it is needed, so the first build after an interruption still gets its own
+  device set instead of the host's. A redirect that could not be installed reports the restore that failed
+  with it, and names a backup path only when that backup is really on disk.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
