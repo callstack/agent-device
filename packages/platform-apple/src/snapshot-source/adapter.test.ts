@@ -16,7 +16,12 @@ import {
   SNAPSHOT_SOURCE_PROTOCOL_VERSION,
   SNAPSHOT_SOURCE_VERSION,
 } from './protocol.ts';
-import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
+import type {
+  SnapshotSourceHost,
+  SnapshotSourceOutcome,
+  SnapshotSourceProcess,
+  SnapshotSourceSocket,
+} from './types.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('the Simulator AX source returns raw acquisition facts and discloses unsupported facets', async () => {
@@ -144,8 +149,8 @@ test('the Simulator AX source refuses a tree that ends at content another proces
   }
 });
 
-test('preparation consumes the same acquisition deadline as bridge I/O', async () => {
-  const root = await mkdtempForTest('agent-device-snapshot-adapter-deadline-');
+test('a capture reports a cold preparation instead of spending its deadline on it', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-preparing-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
@@ -154,19 +159,33 @@ test('preparation consumes the same acquisition deadline as bridge I/O', async (
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
   await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  const fixture = createAdapterHost(150);
+  const fixture = createAdapterHost(300);
   const source = createSimulatorSnapshotSource({ host: fixture.host, sourceRoot, cacheRoot });
-  const request = createIosSnapshotRequest();
-  const hint = deriveIosCaptureHint(request);
+  const hint = deriveIosCaptureHint(createIosSnapshotRequest());
+  const target = { ...targetForTest(), generation: 'generation-1' };
 
   try {
-    const outcome = await source.acquire({
-      target: { ...targetForTest(), generation: 'generation-1' },
+    const startedAt = performance.now();
+    let outcome: SnapshotSourceOutcome = await source.acquire({
+      target,
       hint,
       limits: { maxDurationMs: 100 },
     });
+    const waitedMs = performance.now() - startedAt;
     assert.equal(outcome.stage, 'failed');
-    if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'timeout');
+    if (outcome.stage === 'failed') {
+      assert.equal(outcome.failure.kind, 'preparing');
+      assert.equal(outcome.failure.code, 'bridge-preparation-pending');
+    }
+    // The capture ends on its own budget while the attempt it started keeps compiling detached;
+    // waiting for that build is what let a cold host cancel captures that had a working runner.
+    assert.ok(waitedMs < 300, `capture waited ${waitedMs}ms for a 300ms build`);
+
+    for (let attempt = 0; attempt < 20 && outcome.stage !== 'acquired'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      outcome = await source.acquire({ target, hint });
+    }
+    assert.equal(outcome.stage, 'acquired');
     assert.equal(fixture.builds, 1);
   } finally {
     await source.close();

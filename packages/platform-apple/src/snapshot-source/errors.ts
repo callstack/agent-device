@@ -9,6 +9,7 @@ const APP_ERROR_CODE_BY_KIND: Readonly<Record<SnapshotSourceFailureKind, string>
   cancelled: 'COMMAND_FAILED',
   'process-crash': 'COMMAND_FAILED',
   'transport-failure': 'COMMAND_FAILED',
+  preparing: 'COMMAND_FAILED',
 };
 
 export class SnapshotSourceError extends AppError {

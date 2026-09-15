@@ -1,4 +1,5 @@
 import { Deadline } from '@agent-device/host-kit/retry';
+import { waitForDetachedAttempt } from '../detached-attempt.ts';
 import { snapshotSourceError } from './errors.ts';
 
 export type SnapshotSourceDeadline = Readonly<{
@@ -24,26 +25,22 @@ export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code
   return Math.max(1, Math.floor(remainingMs));
 }
 
+/**
+ * Sleeps inside the caller's own deadline, so a client abort stays a typed `cancelled` instead of
+ * arriving as a fresh timeout. `stop` is for a caller that no longer needs the sleep because the work
+ * it was waiting on answered elsewhere: the delay ends without burning the rest of its budget.
+ */
 export async function waitForSnapshotSourceDelay(
   deadline: SnapshotSourceDeadline,
   requestedMs: number,
   code: string,
+  stop?: AbortSignal,
 ): Promise<void> {
   const delayMs = Math.min(requestedMs, remainingSnapshotSourceMs(deadline, code));
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const timer = setTimeout(() => finish(resolve), delayMs);
-    const onAbort = () => {
-      finish(() => reject(snapshotSourceError('cancelled', 'abort-signal')));
-    };
-    const finish = (action: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      deadline.signal?.removeEventListener('abort', onAbort);
-      action();
-    };
-    deadline.signal?.addEventListener('abort', onAbort, { once: true });
-    if (deadline.signal?.aborted) onAbort();
+  await waitForDetachedAttempt({
+    waitMs: delayMs,
+    signal: deadline.signal,
+    stop,
+    cancelled: () => snapshotSourceError('cancelled', 'abort-signal'),
   });
 }

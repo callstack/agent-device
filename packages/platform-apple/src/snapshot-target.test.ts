@@ -1,3 +1,4 @@
+import { getEventListeners } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
@@ -140,6 +141,11 @@ test('an aborted request cannot reuse a cached target', async () => {
   });
 });
 
+/** The abort listeners still attached to a caller's signal, once its call has returned. */
+function abortListeners(signal: AbortSignal): number {
+  return getEventListeners(signal, 'abort').length;
+}
+
 function deferredSpawn(fixture: ReturnType<typeof targetFixture>) {
   let release!: () => void;
   const released = new Promise<void>((resolve) => {
@@ -258,6 +264,31 @@ test('a failed runtime probe does not release the slot while the launch-job prob
       await expect(fixture.resolve(ios, app, signal())).rejects.toMatchObject({
         details: { reason: 'simulator-runtime-probe-failed' },
       });
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a discovery that settles leaves no timer or abort listener behind for its waiters', async () => {
+  const fixture = targetFixture();
+  const release = deferredSpawn(fixture);
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(fixture.provider, async () => {
+      const starting = new AbortController();
+      const joining = new AbortController();
+      const first = fixture.resolve(ios, app, starting.signal);
+      const second = fixture.resolve(ios, app, joining.signal);
+      await vi.advanceTimersByTimeAsync(0);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.all([first, second]);
+
+      expect(abortListeners(starting.signal)).toBe(0);
+      expect(abortListeners(joining.signal)).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
   } finally {
     vi.useRealTimers();

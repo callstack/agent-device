@@ -4,18 +4,17 @@ import type {
   IosSnapshotAcquisition,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
-import { ensureSnapshotBridgeBinary } from './cache.ts';
 import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 import { AcceptedDepthHints, type DepthHintDecision } from './depth-hints.ts';
 import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
 import { readSnapshotBridgeRecovery, type SnapshotBridgeEnvelope } from './protocol.ts';
+import { createSnapshotBridgePreparation } from './preparation.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
 import { createSnapshotSourceHost } from './host.ts';
 import type {
   SnapshotSourceHost,
-  SnapshotSourceBridgeBinary,
   SnapshotSourceLimits,
   SnapshotSourceOutcome,
   SnapshotSourceRequest,
@@ -41,35 +40,16 @@ export function createSimulatorSnapshotSource(
   const host = options.host ?? createSnapshotSourceHost();
   const manager = new SnapshotBridgeManager(host);
   const depthHints = new AcceptedDepthHints();
-  const preparedBinaries = new Map<string, SnapshotSourceBridgeBinary>();
+  // Preparation is daemon-scoped work: it reads the toolchain identity, fingerprints the bridge
+  // source and may compile it. It runs detached so no capture's deadline pays for it (#2491).
+  const preparation = createSnapshotBridgePreparation({
+    host,
+    limits: resolveSnapshotSourceLimits(options.limits),
+    producer: SNAPSHOT_SOURCE_PRODUCER,
+    sourceRoot: options.sourceRoot,
+    cacheRoot: options.cacheRoot,
+  });
   let closed = false;
-
-  const prepare = async (
-    input: Readonly<{
-      runtime: string;
-      limits: SnapshotSourceLimits;
-      deadline: import('./deadline.ts').SnapshotSourceDeadline;
-    }>,
-  ) => {
-    if (closed) throw snapshotSourceError('unsupported', 'source-closed');
-    const prepared = preparedBinaries.get(input.runtime);
-    if (prepared) return prepared;
-    const completed = await host.withDiagnosticTimer(
-      'ios.snapshot-source.prepare',
-      async () =>
-        await ensureSnapshotBridgeBinary({
-          host,
-          runtime: input.runtime,
-          limits: input.limits,
-          deadline: input.deadline,
-          sourceRoot: options.sourceRoot,
-          cacheRoot: options.cacheRoot,
-        }),
-      { producer: SNAPSHOT_SOURCE_PRODUCER },
-    );
-    preparedBinaries.set(input.runtime, completed);
-    return completed;
-  };
 
   const acquire = async (request: SnapshotSourceRequest): Promise<SnapshotSourceOutcome> => {
     try {
@@ -83,11 +63,11 @@ export function createSimulatorSnapshotSource(
       return await host.withDiagnosticTimer(
         'ios.snapshot-source.acquire',
         async () => {
-          const bridge = await prepare({
-            runtime: request.target.runtime,
-            limits,
+          const bridge = await preparation.readyBinary(
+            request.target.runtime,
             deadline,
-          });
+            'bridge-preparation-deadline',
+          );
           const decision = depthHints.consume(request.target, requestedLevels, explicitDepth);
           const envelope = await manager.request({
             target: request.target,
@@ -130,6 +110,9 @@ export function createSimulatorSnapshotSource(
     close: async () => {
       if (closed) return;
       closed = true;
+      // A bridge build that outlives this source answers to nobody: no request is waiting on it and
+      // its cache write would land after the source is gone (#2491).
+      preparation.close();
       await manager.close();
     },
   };

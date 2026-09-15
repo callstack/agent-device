@@ -302,6 +302,33 @@ test('typed bridge failure falls back once and disables retries for that app gen
   });
 });
 
+test('a bridge still being prepared sends only that capture to the runner', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'preparing', code: 'bridge-preparation-pending' },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  const first = await route.capture(ios, input, signal(), fallback);
+  const second = await route.capture(ios, input, signal(), fallback);
+
+  // An attempt in flight says nothing about this app generation, so unlike a failed bridge it must
+  // not close the circuit: a stable screen would never use the finished preparation.
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+  expect(fallback).toHaveBeenCalledTimes(2);
+  const pending = [
+    'Simulator AX snapshot unavailable (bridge-preparation-pending); used XCTest for this capture while the bridge is still being prepared.',
+  ];
+  expect(first.warnings).toEqual(pending);
+  // The circuit-disabled sentence would mean the route gave up on the bridge for this generation,
+  // and the app-generation sentence would mean the same; only this capture moved to the runner.
+  expect(second.warnings).toEqual(pending);
+});
+
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({
     stage: 'failed',

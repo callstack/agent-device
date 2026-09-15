@@ -49,6 +49,13 @@ const SYSTEM_SURFACE_PRESENTED = 'system-surface-presented';
  */
 const SYSTEM_SURFACE_HOST_LINGERING = 'system-surface-host-lingering';
 
+/**
+ * Why this capture left the bridge: the bridge binary is still being built. The generation stays on
+ * the bridge path, so the warning has to say the runner served this capture rather than the
+ * generation (#2491).
+ */
+const BRIDGE_PREPARATION_PENDING = 'bridge-preparation-pending';
+
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
     capture(
@@ -258,7 +265,11 @@ async function fallbackAfterFailure(
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  disabledGenerations.add(generationKey(failedTarget));
+  // A failed bridge is evidence about this app generation, so its captures take the runner until the
+  // generation is rebaselined. A bridge that is merely still being prepared is evidence about the
+  // daemon's build queue instead: the same generation has to be able to use it as soon as it exists,
+  // which is what let one cold host cost every later capture of a stable screen (#2491).
+  if (failure.kind !== 'preparing') disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
     { id: failedTarget.udid },
@@ -419,6 +430,12 @@ function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: bo
   // and the content sentence says what arrived.
   if (served) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest, which read the system surface presented over the app.`;
+  }
+  // A bridge that is still being built says nothing about this generation, and the route keeps the
+  // generation on the bridge path because of it. The generation sentence would claim a retirement
+  // that did not happen (#2491).
+  if (reason === BRIDGE_PREPARATION_PENDING) {
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture while the bridge is still being prepared.`;
   }
   const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
   return `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;

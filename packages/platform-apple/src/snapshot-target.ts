@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
 import { runSimctl } from './core/apps-simctl.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
@@ -33,8 +34,13 @@ export type SimulatorSnapshotTargetResolver = (
 
 export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTargetResolver {
   const targets = new Map<string, SimulatorSnapshotTarget>();
-  const discoveries = new Map<string, Promise<SimulatorSnapshotTarget>>();
   const runtimeByDevice = new Map<string, Promise<string>>();
+  // One discovery per target at a time, detached from the caller's signal: a capture that gives up
+  // on it, or is cancelled, must not take it down. A discovery that fails is forgotten, so the next
+  // capture starts a new one.
+  const discoveries = createDetachedAttempts<SimulatorSnapshotTarget>({
+    waitMs: TARGET_DISCOVERY_WAIT_MS,
+  });
   return async (device, appBundleId, signal, refresh) => {
     signal.throwIfAborted();
     const key = `${device.id}:${appBundleId}`;
@@ -47,46 +53,17 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
       if (observed === cached.processStartTime) return cached;
     }
     targets.delete(key);
-    let discovery = discoveries.get(key);
-    if (!discovery) {
-      // One discovery per target at a time, detached from the caller's signal: a capture that
-      // gives up on it, or is cancelled, must not take it down. A discovery that fails is
-      // forgotten, so the next capture starts a new one.
-      discovery = resolveSimulatorSnapshotTarget(device, appBundleId, runtimeByDevice)
-        .then((target) => {
-          targets.set(key, target);
-          return target;
-        })
-        .finally(() => discoveries.delete(key));
-      discovery.catch(() => undefined);
-      discoveries.set(key, discovery);
-    }
-    return await awaitDiscovery(discovery, signal, device, appBundleId);
+    return await discoveries.value(key, {
+      start: async () => {
+        const target = await resolveSimulatorSnapshotTarget(device, appBundleId, runtimeByDevice);
+        targets.set(key, target);
+        return target;
+      },
+      wait: (waitMs, stop) =>
+        waitForDetachedAttempt({ waitMs, signal, stop, cancelled: () => signal.reason }),
+      pending: () => targetError('simulator-target-discovery-pending', device, appBundleId),
+    });
   };
-}
-
-async function awaitDiscovery(
-  discovery: Promise<SimulatorSnapshotTarget>,
-  signal: AbortSignal,
-  device: DeviceInfo,
-  appBundleId: string,
-): Promise<SimulatorSnapshotTarget> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let onAbort: (() => void) | undefined;
-  const bound = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(targetError('simulator-target-discovery-pending', device, appBundleId)),
-      TARGET_DISCOVERY_WAIT_MS,
-    );
-    onAbort = () => reject(signal.reason);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    return await Promise.race([discovery, bound]);
-  } finally {
-    clearTimeout(timer);
-    if (onAbort) signal.removeEventListener('abort', onAbort);
-  }
 }
 
 async function resolveSimulatorSnapshotTarget(
