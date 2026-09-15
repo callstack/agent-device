@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -34,6 +35,19 @@ const pushBroadcastLab =
     ? requireOptionalNativeModule<PushBroadcastLabModule>('PushBroadcastLab')
     : null;
 
+type ApplePayLabModule = {
+  canMakePayments(): boolean;
+  presentPaymentSheetAsync(): Promise<string>;
+};
+
+const applePayLab =
+  Platform.OS === 'ios' ? requireOptionalNativeModule<ApplePayLabModule>('ApplePayLab') : null;
+
+function initialApplePayResult(): string {
+  if (!applePayLab) return 'unavailable';
+  return applePayLab.canMakePayments() ? 'ready' : 'unsupported';
+}
+
 export function AutomationLabScreen(props: {
   eventName: string;
   eventPayload: string;
@@ -53,6 +67,8 @@ export function AutomationLabScreen(props: {
   const [lastPushBroadcast, setLastPushBroadcast] = useState('none');
   const [sheetVisible, setSheetVisible] = useState(false);
   const [keychainAuthStatus, setKeychainAuthStatus] = useState('checking');
+  const [applePayResult, setApplePayResult] = useState(initialApplePayResult);
+  const [flattenedInput, setFlattenedInput] = useState('');
   const permissionReadGeneration = useRef(0);
   const windowMode = dimensions.width > dimensions.height ? 'landscape' : 'portrait';
 
@@ -153,6 +169,16 @@ export function AutomationLabScreen(props: {
     setKeychainAuthStatus('signed-in');
   }
 
+  async function presentApplePaySheet() {
+    if (!applePayLab) return;
+    setApplePayResult('presented');
+    try {
+      setApplePayResult(await applePayLab.presentPaymentSheetAsync());
+    } catch {
+      setApplePayResult('error');
+    }
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <ScreenTitle
@@ -238,6 +264,47 @@ export function AutomationLabScreen(props: {
           Long presses: {longPressCount}
         </Text>
       </SectionCard>
+
+      <SectionCard
+        subtitle="accessible={true} hides the field from the accessibility tree; only the keyboard proves focus."
+        title="Flattened input"
+      >
+        <View
+          accessibilityLabel="Flattened input group"
+          accessible
+          style={styles.flattenedGroup}
+          testID="automation-flattened-group"
+        >
+          <Text style={styles.label}>Nickname</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setFlattenedInput}
+            placeholder="Tap here, then type"
+            placeholderTextColor={colors.textSoft}
+            style={styles.flattenedInput}
+            testID="automation-flattened-input"
+            value={flattenedInput}
+          />
+        </View>
+        <Text style={styles.value} testID="automation-flattened-value">
+          Flattened value: {flattenedInput === '' ? 'none' : flattenedInput}
+        </Text>
+      </SectionCard>
+
+      {Platform.OS === 'ios' ? (
+        <SectionCard
+          subtitle="The sheet and its billing address form live in com.apple.PassbookUIService, not in this app."
+          title="Apple Pay sheet"
+        >
+          <ActionButton
+            label="Open Apple Pay sheet"
+            onPress={() => void presentApplePaySheet()}
+            testID="automation-open-apple-pay"
+          />
+          <StateRow label="Apple Pay" testID="automation-apple-pay-result" value={applePayResult} />
+        </SectionCard>
+      ) : null}
 
       <SectionCard title="Native alert">
         <ActionButton
@@ -329,6 +396,22 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     content: {
       paddingBottom: 28,
+    },
+    flattenedGroup: {
+      borderColor: colors.lineStrong,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      gap: 8,
+      padding: 12,
+    },
+    flattenedInput: {
+      borderColor: colors.lineStrong,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      color: colors.text,
+      fontSize: 15,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
     label: {
       color: colors.text,

@@ -60,7 +60,9 @@ test('the same host running for another device is absent', async () => {
 test('no host process at all is absent without reading any environment', async () => {
   stubProbes({ pgrep: NOT_RUNNING });
   await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toBe('absent');
-  expect(mockRunCmd).toHaveBeenCalledOnce();
+  // One process-table scan per registered host and not a single environment read.
+  expect(mockRunCmd).toHaveBeenCalledTimes(IOS_SYSTEM_SURFACE_HOSTS.length);
+  expect(mockRunCmd.mock.calls.every(([command]) => command === 'pgrep')).toBe(true);
 });
 
 test('a non-simulator is absent without probing', async () => {

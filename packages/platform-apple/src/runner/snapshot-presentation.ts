@@ -22,8 +22,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import {
-  isIosSystemSurfaceHost,
-  type IosSystemSurfaceKind,
+  iosSystemSurfaceHost,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
 
@@ -56,14 +55,12 @@ export function readAppleSnapshotResult(
 }
 
 function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance | undefined {
-  if (!isRecord(value)) return undefined;
-  const bundleId = value.bundleId;
-  const kind = value.kind;
-  // Trust only a bundle id the shared registry recognizes; an unknown value is dropped rather than
-  // surfaced, mirroring the wire-reader discipline elsewhere in this module.
-  if (typeof bundleId !== 'string' || !isIosSystemSurfaceHost(bundleId)) return undefined;
-  if (typeof kind !== 'string') return undefined;
-  return { bundleId, kind: kind as IosSystemSurfaceKind };
+  if (!isRecord(value) || typeof value.bundleId !== 'string') return undefined;
+  // The shared registry is the authority for both fields: an unknown bundle id is dropped rather
+  // than surfaced, mirroring the wire-reader discipline elsewhere in this module, and the kind is
+  // read from the registry rather than trusted from the wire.
+  const host = iosSystemSurfaceHost(value.bundleId);
+  return host && { bundleId: host.bundleId, kind: host.kind };
 }
 
 export function presentAppleRunnerSnapshot(

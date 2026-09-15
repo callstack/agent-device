@@ -10,7 +10,7 @@ import {
 } from '../../../runtime.ts';
 import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
-import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
+import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   coveredByTabBarSnapshot,
@@ -497,6 +497,7 @@ test('runtime press with verify reports changedFromBefore true when the post-act
 // still-foreground app, so a capture of the sheet and a capture of the app describe DIFFERENT
 // surfaces. `--verify` must not answer "did this change?" by comparing their node digests.
 const WEB_SIGN_IN_SHEET_BUNDLE_ID = 'com.apple.SafariViewService';
+const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET_BUNDLE_ID);
 
 function webSignInSheetSnapshot(labels: string[]): SnapshotState {
   return {
@@ -540,7 +541,7 @@ test('runtime press with verify discloses the surface change when a sign-in shee
   assert.deepEqual(result.evidence?.surfaceChange, {
     from: 'app',
     to: WEB_SIGN_IN_SHEET_BUNDLE_ID,
-    disclosure: IOS_SYSTEM_SURFACE_DISCLOSURE,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
   });
   // The transition is what changed, not a digest comparison between two different surfaces.
   assert.equal(result.evidence?.changedFromBefore, true);
@@ -575,7 +576,7 @@ test('runtime press with verify reports the sheet leaving even when the two dige
   assert.equal(result.evidence?.surfaceChange?.to, 'app');
   assert.match(result.evidence?.surfaceChange?.disclosure ?? '', /sign-in sheet/);
   // The sheet is gone, so the standing "is presented over the app" sentence cannot be the one used.
-  assert.notEqual(result.evidence?.surfaceChange?.disclosure, IOS_SYSTEM_SURFACE_DISCLOSURE);
+  assert.notEqual(result.evidence?.surfaceChange?.disclosure, WEB_SIGN_IN_DISCLOSURE);
   assert.equal(result.evidence?.changedFromBefore, true);
 });
 

@@ -2,7 +2,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
-  IOS_SYSTEM_SURFACE_DISCLOSURE,
+  APP_SURFACE,
+  iosSystemSurfaceDisclosure,
   iosSystemSurfaceTransitionDisclosure,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
@@ -307,6 +308,11 @@ const WEB_SIGN_IN_SHEET: IosSystemSurfaceProvenance = {
   bundleId: 'com.apple.SafariViewService',
   kind: 'web-auth',
 };
+const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET.bundleId);
+const WEB_SIGN_IN_DEPARTED_DISCLOSURE = iosSystemSurfaceTransitionDisclosure({
+  from: WEB_SIGN_IN_SHEET.bundleId,
+  to: APP_SURFACE,
+});
 
 /** Five nodes, so a settled sheet clears the tiny-tree readiness hint and the hint under test is
  * the cross-surface one. No Application root: the sheet is hosted out of the app's process. */
@@ -389,7 +395,7 @@ test('scroll --settle attaches no diff across an app-to-sheet surface change and
   expectCrossSurfaceSettle(expectOkData(response).settle as SettlePayload, {
     from: 'app',
     to: WEB_SIGN_IN_SHEET.bundleId,
-    disclosure: IOS_SYSTEM_SURFACE_DISCLOSURE,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
   });
   // Disclosed, not hidden: the settled sheet still becomes the stored observation a follow-up
   // snapshot reads — and the surface identity the NEXT command's baseline is built from.
@@ -423,9 +429,9 @@ test('scroll --settle attaches no diff across a sheet-to-app surface change and 
     to: 'app',
     // The sheet is gone, so the standing "is presented over the app" sentence cannot be the one
     // used — the transition disclosure has to say it left.
-    disclosure: iosSystemSurfaceTransitionDisclosure(undefined),
+    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
   });
-  expect(settle.surfaceChange?.disclosure).not.toBe(IOS_SYSTEM_SURFACE_DISCLOSURE);
+  expect(settle.surfaceChange?.disclosure).not.toBe(WEB_SIGN_IN_DISCLOSURE);
   expect(settle.surfaceChange?.disclosure).toMatch(/sign-in sheet/);
   const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
   expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
@@ -459,7 +465,7 @@ test('back --settle attaches no diff across an app-to-sheet surface change and d
   expectCrossSurfaceSettle(data.settle as SettlePayload, {
     from: 'app',
     to: WEB_SIGN_IN_SHEET.bundleId,
-    disclosure: IOS_SYSTEM_SURFACE_DISCLOSURE,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
   });
   const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
   expect(stored.snapshot?.iosSystemSurfaceBundleId).toBe(WEB_SIGN_IN_SHEET.bundleId);
@@ -494,7 +500,7 @@ test('back --settle attaches no diff across a sheet-to-app surface change and di
   expectCrossSurfaceSettle(data.settle as SettlePayload, {
     from: WEB_SIGN_IN_SHEET.bundleId,
     to: 'app',
-    disclosure: iosSystemSurfaceTransitionDisclosure(undefined),
+    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
   });
   const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
   expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();

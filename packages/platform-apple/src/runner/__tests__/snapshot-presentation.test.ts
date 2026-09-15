@@ -81,6 +81,23 @@ test('a sparse capture of a presented system surface names the surface host', ()
   });
 });
 
+// The registry, not the wire, decides the kind: a payment host stamped with the wrong kind reads
+// back as `payment`, and a bundle id the registry does not know is dropped rather than surfaced.
+test('the wire reader takes surface kind from the registry and drops unregistered hosts', () => {
+  const mismatched = readAppleSnapshotResult({
+    systemSurface: { bundleId: 'com.apple.PassbookUIService', kind: 'web-auth' },
+  });
+  assert.deepEqual(mismatched.systemSurface, {
+    bundleId: 'com.apple.PassbookUIService',
+    kind: 'payment',
+  });
+
+  const unregistered = readAppleSnapshotResult({
+    systemSurface: { bundleId: 'com.example.notahost', kind: 'payment' },
+  });
+  assert.equal(unregistered.systemSurface, undefined);
+});
+
 test('a sparse payload failing another invariant still carries the verdict', () => {
   const error = catchPresent({
     nodes: [

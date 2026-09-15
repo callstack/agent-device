@@ -196,9 +196,9 @@ export async function closeIosApp(
  * app-lifecycle facade's eager closure flat.
  */
 async function assertNotSystemSurfaceHost(bundleId: string): Promise<void> {
-  const { isIosSystemSurfaceHost, iosSystemSurfaceOpenRefusal } =
+  const { iosSystemSurfaceHost, iosSystemSurfaceOpenRefusal } =
     await import('@agent-device/contracts/ios-system-surface');
-  if (!isIosSystemSurfaceHost(bundleId)) return;
+  if (!iosSystemSurfaceHost(bundleId)) return;
   throw new AppError('UNSUPPORTED_OPERATION', iosSystemSurfaceOpenRefusal(bundleId), {
     reason: 'system-surface-host-not-openable',
     appBundleId: bundleId,

@@ -180,9 +180,9 @@ export type ResolvedInteractionTarget =
 
 /**
  * A post-action capture that describes a DIFFERENT surface than the pre-action baseline (#2438): an
- * in-place iOS system surface (a web sign-in sheet, hosted out of the app's process) was presented
- * over the app, or left it. `from`/`to` name the two surfaces — a host bundle id, or `app` for
- * ordinary app content.
+ * in-place iOS system surface (a web sign-in or Apple Pay sheet, hosted out of the app's process)
+ * was presented over the app, or left it. `from`/`to` name the two surfaces — a host bundle id, or
+ * `APP_SURFACE` (`@agent-device/contracts/ios-system-surface`) for ordinary app content.
  *
  * Its presence IS the refusal of a same-surface claim: the two captures are not one presentation,
  * so `--verify` reports `changedFromBefore` from this transition instead of from a digest

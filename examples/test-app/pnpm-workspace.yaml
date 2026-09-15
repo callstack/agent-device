@@ -20,5 +20,8 @@ overrides:
   js-yaml@4: ^4.3.1
   nanoid@3: ^3.3.18
   '@babel/core@7': ^7.29.6
+  # expo-modules-core pins ~56.0.10; 56.0.13 is the first patch whose Swift compiles under Xcode 27
+  # (JavaScriptRuntime.swift formed a C function pointer from a ternary).
+  expo-modules-jsi: 56.0.13
 patchedDependencies:
   image-size@1.2.1: patches/image-size@1.2.1.patch

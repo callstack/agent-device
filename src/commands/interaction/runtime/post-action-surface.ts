@@ -5,21 +5,22 @@ import type {
   PostActionSurfaceChange,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import { iosSystemSurfaceTransitionDisclosure } from '@agent-device/contracts/ios-system-surface';
+import {
+  APP_SURFACE,
+  iosSystemSurfaceTransitionDisclosure,
+} from '@agent-device/contracts/ios-system-surface';
 
 /**
  * The surface question every post-action observation owes (#2438): iOS serves an in-place system
- * surface — a web sign-in sheet hosted out of the app's process — over a still-foreground app, so a
- * capture of the sheet and a capture of the app describe DIFFERENT surfaces. Comparing their node
+ * surface — a web sign-in or Apple Pay sheet hosted out of the app's process — over a
+ * still-foreground app, so a capture of the sheet and a capture of the app describe DIFFERENT
+ * surfaces. Comparing their node
  * digests yields a meaningless "changed" verdict, and diffing them presents a whole-surface
  * replacement as an in-surface diff, with refs.
  *
  * Both `--verify` and `--settle` route their comparison through this module, so the refusal and its
  * disclosure cannot hold on one route and drop on the other.
  */
-
-/** How a capture of ordinary app content names its surface in a {@link PostActionSurfaceChange}. */
-const APP_SURFACE = 'app';
 
 /** Mints the one carried value from a capture: the nodes together with the surface they describe. */
 export function surfaceScopedNodes(snapshot: SnapshotState): SurfaceScopedNodes {
@@ -41,11 +42,11 @@ export function resolvePostActionSurfaceChange(
   after: SurfaceScopedNodes,
 ): PostActionSurfaceChange | undefined {
   if (!baseline || baseline.surfaceBundleId === after.surfaceBundleId) return undefined;
-  return {
+  const surfaces = {
     from: baseline.surfaceBundleId ?? APP_SURFACE,
     to: after.surfaceBundleId ?? APP_SURFACE,
-    disclosure: iosSystemSurfaceTransitionDisclosure(after.surfaceBundleId),
   };
+  return { ...surfaces, disclosure: iosSystemSurfaceTransitionDisclosure(surfaces) };
 }
 
 /**

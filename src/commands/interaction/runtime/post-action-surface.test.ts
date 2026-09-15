@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
-import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
+import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { selector } from './selector-read-utils.ts';
 import {
   buttonSnapshot,
@@ -18,6 +18,7 @@ import {
 // within one surface — and, since diff presence is what issues refs, it would hand
 // the caller refs for that claim.
 const WEB_SIGN_IN_SHEET_BUNDLE_ID = 'com.apple.SafariViewService';
+const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET_BUNDLE_ID);
 
 function webSignInSheetSnapshot(labels: string[]): SnapshotState {
   return {
@@ -70,7 +71,7 @@ test('press --settle attaches no diff across an app-to-sheet surface change and 
   assert.deepEqual(settle.surfaceChange, {
     from: 'app',
     to: WEB_SIGN_IN_SHEET_BUNDLE_ID,
-    disclosure: IOS_SYSTEM_SURFACE_DISCLOSURE,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
   });
   // No same-surface claim: no diff, so no issued refs, and no tail either.
   assert.equal(settle.diff, undefined);
@@ -110,7 +111,7 @@ test('press --settle attaches no diff across a sheet-to-app surface change and d
   assert.match(settle.surfaceChange?.disclosure ?? '', /sign-in sheet/);
   // The sheet is gone, so the standing "is presented over the app" sentence cannot
   // be the one used.
-  assert.notEqual(settle.surfaceChange?.disclosure, IOS_SYSTEM_SURFACE_DISCLOSURE);
+  assert.notEqual(settle.surfaceChange?.disclosure, WEB_SIGN_IN_DISCLOSURE);
   assert.equal(settle.diff, undefined);
   assert.equal(settle.tail, undefined);
   assert.match(settle.hint ?? '', /different surfaces/);
@@ -139,7 +140,7 @@ test('press --settle --verify reports one app-to-sheet surface change on both pa
   assert.deepEqual(result.evidence?.surfaceChange, {
     from: 'app',
     to: WEB_SIGN_IN_SHEET_BUNDLE_ID,
-    disclosure: IOS_SYSTEM_SURFACE_DISCLOSURE,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
   });
   assert.equal(result.evidence?.changedFromBefore, true);
   assert.equal(result.settle?.surfaceChange?.to, WEB_SIGN_IN_SHEET_BUNDLE_ID);

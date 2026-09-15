@@ -34,7 +34,7 @@ import {
   readAppleSnapshotResult,
 } from './runner/snapshot-presentation.ts';
 import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
-import { IOS_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/ios-system-surface';
+import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -251,12 +251,13 @@ async function captureAppleRunnerSnapshot(
 /**
  * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
  * quality verdict, and the shared disclosure when the capture describes an in-place system surface
- * (e.g. the web sign-in sheet) rather than the app itself (#2438).
+ * (e.g. the web sign-in or Apple Pay sheet) rather than the app itself (#2438).
  */
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];
   if (!result.quality && result.message) warnings.push(result.message);
-  if (result.systemSurface) warnings.push(IOS_SYSTEM_SURFACE_DISCLOSURE);
+  if (result.systemSurface)
+    warnings.push(iosSystemSurfaceDisclosure(result.systemSurface.bundleId));
   return warnings;
 }
 

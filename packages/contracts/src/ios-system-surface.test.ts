@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
-  IOS_SYSTEM_SURFACE_DISCLOSURE,
+  APP_SURFACE,
   IOS_SYSTEM_SURFACE_HOSTS,
+  iosSystemSurfaceDisclosure,
+  iosSystemSurfaceHost,
   iosSystemSurfaceOpenRefusal,
   iosSystemSurfaceTransitionDisclosure,
-  isIosSystemSurfaceHost,
 } from './ios-system-surface.ts';
+
+const WEB_AUTH_HOST = 'com.apple.SafariViewService';
+const PAYMENT_HOST = 'com.apple.PassbookUIService';
 
 const FIXTURE_PATH = path.resolve(
   import.meta.dirname,
@@ -46,23 +50,45 @@ test('the TS registry mirrors the canonical fixture exactly', () => {
   );
 });
 
-test('isIosSystemSurfaceHost recognizes registered hosts and rejects others', () => {
-  expect(isIosSystemSurfaceHost('com.apple.SafariViewService')).toBe(true);
-  expect(isIosSystemSurfaceHost('com.example.app')).toBe(false);
-  expect(isIosSystemSurfaceHost(undefined)).toBe(false);
+test('iosSystemSurfaceHost resolves registered hosts and rejects others', () => {
+  expect(iosSystemSurfaceHost(WEB_AUTH_HOST)?.kind).toBe('web-auth');
+  expect(iosSystemSurfaceHost(PAYMENT_HOST)?.kind).toBe('payment');
+  expect(iosSystemSurfaceHost('com.example.app')).toBeUndefined();
+  expect(iosSystemSurfaceHost(undefined)).toBeUndefined();
 });
 
-test('the open refusal names the bundle and does not claim to open it', () => {
-  const refusal = iosSystemSurfaceOpenRefusal('com.apple.SafariViewService');
-  expect(refusal).toContain('com.apple.SafariViewService');
+test('the open refusal names the bundle and its sheet and does not claim to open it', () => {
+  const refusal = iosSystemSurfaceOpenRefusal(WEB_AUTH_HOST);
+  expect(refusal).toContain(WEB_AUTH_HOST);
+  expect(refusal).toContain('web sign-in');
   expect(refusal.toLowerCase()).not.toContain('opened it');
+  expect(iosSystemSurfaceOpenRefusal(PAYMENT_HOST)).toContain('Apple Pay');
+});
+
+test('the standing disclosure names the kind of sheet the host presents', () => {
+  expect(iosSystemSurfaceDisclosure(WEB_AUTH_HOST)).toContain('a system web sign-in sheet');
+  expect(iosSystemSurfaceDisclosure(PAYMENT_HOST)).toContain('the system Apple Pay sheet');
+  expect(iosSystemSurfaceDisclosure(PAYMENT_HOST)).not.toContain('sign-in');
+});
+
+// Only registered hosts are ever stamped on a capture, so an unregistered id reaching a sentence
+// is a programming error and must not be described as some plausible sheet.
+test('an unregistered host cannot be worded', () => {
+  expect(() => iosSystemSurfaceDisclosure('com.example.unknown')).toThrow(/not a registered/);
 });
 
 test('the transition disclosure says the sheet is gone only when it left', () => {
-  expect(iosSystemSurfaceTransitionDisclosure('com.apple.SafariViewService')).toBe(
-    IOS_SYSTEM_SURFACE_DISCLOSURE,
+  expect(iosSystemSurfaceTransitionDisclosure({ from: APP_SURFACE, to: WEB_AUTH_HOST })).toBe(
+    iosSystemSurfaceDisclosure(WEB_AUTH_HOST),
   );
-  const departed = iosSystemSurfaceTransitionDisclosure(undefined);
-  expect(departed).not.toBe(IOS_SYSTEM_SURFACE_DISCLOSURE);
+  expect(iosSystemSurfaceTransitionDisclosure({ from: APP_SURFACE, to: PAYMENT_HOST })).toBe(
+    iosSystemSurfaceDisclosure(PAYMENT_HOST),
+  );
+  const departed = iosSystemSurfaceTransitionDisclosure({ from: WEB_AUTH_HOST, to: APP_SURFACE });
+  expect(departed).not.toBe(iosSystemSurfaceDisclosure(WEB_AUTH_HOST));
   expect(departed).toContain('gone now');
+  expect(departed).toContain('web sign-in');
+  expect(iosSystemSurfaceTransitionDisclosure({ from: PAYMENT_HOST, to: APP_SURFACE })).toContain(
+    'Apple Pay',
+  );
 });

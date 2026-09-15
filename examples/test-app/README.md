@@ -16,7 +16,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
 - `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard dismiss, success summary
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
-- `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, and log canaries
+- `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
@@ -38,6 +38,7 @@ These are the main case families this app can support without adding more screen
 - `press` on stable buttons, pills, and rows
 - `fill` on single-line and multiline fields
 - `type` after focus for append flows
+- `type` into a focused field the accessibility tree cannot resolve (flattened input, Apple Pay billing address form)
 - `get text` on headings, badges, summaries, and accordion content
 - `is visible`, `is exists`, and `is absent` assertions
 - `wait` for async loading and success states
@@ -90,7 +91,12 @@ The `/automation` route is intentionally JavaScript-only and can be opened from
 outcomes for long press, native alert actions, app-event name/payload, app state, appearance,
 window orientation, and microphone permission recovery; the
 `maestro-clickable-first-target` duplicate pair exercises Android Maestro clickable-first
-ordering. CI repacks JavaScript-only changes into the
+ordering. `automation-flattened-group` wraps a `TextInput` in an `accessible={true}` view, so the
+field itself never appears in the accessibility tree and only the keyboard proves it has focus;
+`automation-flattened-value` mirrors what was typed. `automation-open-apple-pay` (iOS only, native
+module `modules/apple-pay-lab`) presents the system Apple Pay sheet requiring a billing address plus
+contact email and phone; those forms are hosted out of process in `com.apple.PassbookUIService`, and
+`automation-apple-pay-result` reports `authorized` or `dismissed` once the sheet closes. CI repacks JavaScript-only changes into the
 cached Release app without starting Metro; native configuration changes intentionally produce one
 new fingerprinted build that all simulator consumers share.
 

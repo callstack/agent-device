@@ -221,7 +221,7 @@ const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
     disclosure: stringSchema('Agent-facing sentence explaining the surface transition.'),
   },
   ['from', 'to', 'disclosure'],
-  'Present when an in-place system surface (web sign-in sheet) was presented over the app, or left it.',
+  'Present when an in-place system surface (web sign-in or Apple Pay sheet) was presented over the app, or left it.',
 );
 
 // InteractionEvidence (packages/contracts/src/interaction.ts) — opt-in `--verify` cheap
