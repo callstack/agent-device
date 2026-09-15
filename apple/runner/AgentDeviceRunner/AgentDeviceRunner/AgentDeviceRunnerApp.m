@@ -62,11 +62,46 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
+@property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @end
 
 @implementation AgentDeviceRunnerViewController
 
 #if TARGET_OS_IOS
+// An animation that never ends is what "busy" looks like to XCTest while it decides whether the app
+// may receive an event: the app keeps reporting work in flight, which is the state that cost an alert
+// command its whole deadline in #2546. It stops the moment an alert button is answered, since that
+// answer is the event the runner is trying to land, and the backstop stops it even when no answer
+// arrives so a regressed run finishes rather than waiting out XCTest's own timeout. A layer
+// animation on its own is not enough; only a UIView animation counts as in-flight work here.
+static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
+
+- (void)startAlertActivationBusy {
+  if (self.alertActivationBusyBackstop != nil) {
+    return;
+  }
+  self.alertActivationBusyBackstop = [NSTimer scheduledTimerWithTimeInterval:kAgentDeviceAlertActivationBusyWindow
+                                                                      target:self
+                                                                    selector:@selector(stopAlertActivationBusy)
+                                                                    userInfo:nil
+                                                                     repeats:NO];
+  [UIView animateWithDuration:0.4
+                          delay:0
+                        options:(UIViewAnimationOptionRepeat | UIViewAnimationOptionAutoreverse)
+                     animations:^{
+                       self.alertActionStatus.transform = CGAffineTransformMakeTranslation(0, 8);
+                     }
+                     completion:nil];
+}
+
+- (void)stopAlertActivationBusy {
+  [self.alertActionStatus.layer removeAllAnimations];
+  self.alertActionStatus.transform = CGAffineTransformIdentity;
+  [self.alertActivationBusyBackstop invalidate];
+  self.alertActivationBusyBackstop = nil;
+}
+
+
 - (void)updateAlertActionStatus {
   self.alertActionStatus.text = [NSString stringWithFormat:@"First actions: %lu; replacement actions: %lu",
                                                          (unsigned long)self.firstAlertActions,
@@ -88,6 +123,7 @@ int main(int argc, const char *argv[]) {
         ? UIAlertActionStyleCancel : UIAlertActionStyleDefault;
     [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
       (void)action;
+      [self stopAlertActivationBusy];
       if (replacement) {
         self.replacementAlertActions += 1;
       } else {
@@ -110,6 +146,9 @@ int main(int argc, const char *argv[]) {
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
     self.alertFixtureStarted = YES;
     [self presentAlertFixtureReplacement:NO];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
+      [self startAlertActivationBusy];
+    }
   }
 }
 #endif

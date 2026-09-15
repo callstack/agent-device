@@ -57,6 +57,38 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  func testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline() throws {
+    app.launchArguments = [
+      "--agent-device-alert-replacement-regression",
+      "--agent-device-alert-activation-busy"
+    ]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    let alert = try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(10)))
+
+    let deadline = Date().addingTimeInterval(6)
+    let startedAt = Date()
+    let response = handleAlert(alert, action: "accept", deadline: deadline)
+    let elapsed = Date().timeIntervalSince(startedAt)
+
+    // The fixture keeps its main thread busy until a button is answered, so this only comes back
+    // early because activation refused to wait for an app that has no intention of settling (#2546).
+    XCTAssertLessThan(elapsed, 9, "activation waited \(elapsed)s for a busy app to idle")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
+    if !response.ok, response.error?.code == "ALERT_DEADLINE_EXCEEDED" {
+      XCTAssertEqual(
+        app.staticTexts["agent-device-alert-actions"].label,
+        "First actions: 0; replacement actions: 0",
+        "a caller told about an expired deadline must not have a button activated behind it"
+      )
+    }
+  }
+
   private func assertReplacementAlertUntouched(action: String, arguments: [String], confirmed: Bool) throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"] + arguments
     app.launch()
