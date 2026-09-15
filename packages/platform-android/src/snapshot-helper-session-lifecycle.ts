@@ -1,10 +1,10 @@
 /**
  * Who owns the device's UiAutomation right now, and how that ownership starts and ends.
  *
- * Android permits ONE UiAutomation owner, so a live helper session is device-exclusive state: this
- * module is the only place that starts one, hands it out, and retires it. Commands run OVER a
- * session (snapshot capture, gestures) live in `snapshot-helper-session.ts`; they acquire through
- * here and never reach the registry themselves.
+ * `am instrument` force-stops whatever is already instrumenting the helper package, so a live helper
+ * session is device-exclusive state: this module is the only place that starts one, hands it out, and
+ * retires it. Commands run OVER a session (snapshot capture, gestures) live in
+ * `snapshot-helper-session.ts`; they acquire through here and never reach the registry themselves.
  */
 import type { AndroidAdbProcess } from './adb-executor.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';

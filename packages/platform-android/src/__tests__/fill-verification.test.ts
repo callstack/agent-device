@@ -1,8 +1,9 @@
 // Fill reads the live hierarchy four times per attempt (one pre-action target read plus the
-// 0/150/350 ms settling samples). Android permits ONE UiAutomation owner, so a command-scoped
-// capture stops the automation-helper session after every one of those reads and the next read
-// pays a fresh `am instrument` start. These tests pin who owns the helper session across the
-// samples — not what the samples conclude, which fill-diagnostics/input-actions-fill own.
+// 0/150/350 ms settling samples). `am instrument` force-stops whatever is already instrumenting the
+// helper package, so a command-scoped capture stops the automation-helper session after every one of
+// those reads and the next read pays a fresh `am instrument` start. These tests pin who owns the
+// helper session across the samples — not what the samples conclude, which
+// fill-diagnostics/input-actions-fill own.
 
 import { afterEach, beforeEach, test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';

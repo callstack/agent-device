@@ -86,8 +86,9 @@ async function captureFromAndroidSnapshotHelperSession(params: {
 }
 
 // Touch commands piggyback on a live snapshot session so gestures do not restart instrumentation
-// (Android permits one UiAutomation owner). They never start a session: without one, callers use
-// the same helper APK through a one-shot `am instrument` run instead.
+// (a second instrumentation for the helper package would force-stop the session that has it). They
+// never start a session: without one, callers use the same helper APK through a one-shot
+// `am instrument` run instead.
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
   action: 'gesture' | 'viewport';

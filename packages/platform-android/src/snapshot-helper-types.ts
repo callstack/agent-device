@@ -26,12 +26,12 @@ export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
 /**
  * Who releases the helper's persistent instrumentation session.
  *
- * Android permits ONE UiAutomation owner, so a `command`-scoped call stops the session when it
- * finishes and the next helper call pays a fresh `am instrument` start plus the UiAutomation
- * connect wait. `daemon-session` hands that release to session teardown
- * (`stopSessionAndroidSnapshotHelper`), which every Android session runs, so consecutive commands
- * in one session share one warm helper. Device-scoped work stays `command` so nothing squats
- * UiAutomation once the command returns.
+ * `am instrument` force-stops whatever is already instrumenting the helper package, so a
+ * `command`-scoped call stops the session when it finishes and the next helper call pays a fresh
+ * `am instrument` start plus the UiAutomation connect wait. `daemon-session` hands that release to
+ * session teardown (`stopSessionAndroidSnapshotHelper`), which every Android session runs, so
+ * consecutive commands in one session share one warm helper. Device-scoped work stays `command` so
+ * nothing squats UiAutomation once the command returns.
  */
 export type AndroidHelperSessionScope = 'command' | 'daemon-session';
 
