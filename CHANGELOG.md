@@ -5,6 +5,26 @@
 - Fixed (android): a chunked `record stop` (recordings over 170 s) no longer warns that screenrecord
   stopped before record stop at the 180 s limit. Rotation always ends every earlier chunk before
   stop, so the warning now fires only when the last chunk's recorder had already exited.
+- Fixed (android): a snapshot helper that could not prove it released device automation no longer
+  refuses the next command on the strength of an `adb` call. The old code read the outcome of
+  `am force-stop` as the fact it was supposed to measure, and on a loaded host that round trip can
+  outlive its budget while the device is healthy — the shape of #2553 — so the helper process was
+  already gone and the command still failed with `Android automation helper is still holding device
+  automation ownership`. Ownership is read off the device now: `adb shell pidof
+  com.callstack.agentdevice.snapshothelper` says `occupied` only while it names a process, `released`
+  when the device answers that nothing is running, and `unknown` when adb could not carry the call,
+  so a `device offline` stderr no longer counts as a release either. A refusal requires two reads that
+  both name the process, which keeps a helper still inside Android's exit path from costing a
+  command. Scripts that match the failure reason see `android_snapshot_helper_runtime_occupied`,
+  which replaces `android_snapshot_helper_retirement_unconfirmed`.
+- Changed (android): a snapshot helper session that reaches ready settles a release the previous
+  teardown could not prove, because Android hands UiAutomation to one connection at a time and that
+  helper owns it now; the next command no longer force-stops the session it has just started while
+  `pidof` happens to be unreadable. A helper start that fails is also retried after a backoff scaled
+  to how long it spent failing (10 s to 60 s) instead of on every command, which had roughly doubled
+  command time on hosts where the helper never starts, and the wait for a started helper to announce
+  itself now uses the caller's own helper-command budget, so `--timeout` reaches it.
+
 - Fixed: an iOS snapshot whose XCTest query-sweep tier cannot read the screen no longer ends the
   runner process. On a live React Native feed (Bluesky Home, images re-rendering) the AX server
   rejects each of the sweep's 19 element-type queries with `kAXErrorIllegalArgument`, and XCTest

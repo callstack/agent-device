@@ -9,6 +9,7 @@ import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retir
 import {
   createSessionProvider,
   FakeAndroidProcess,
+  isAndroidHelperRuntimeForceStop,
   type SessionProviderOptions,
 } from './snapshot-helper-session.fixtures.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
@@ -50,40 +51,48 @@ test('returns undefined when the adb provider cannot spawn a helper process', as
   assert.deepEqual(calls, []);
 });
 
-test('a failed start answers with the one-shot transport and the next command starts again', async () => {
+test('a helper that never starts is not spawned again on every command', async () => {
   const calls: string[][] = [];
   const spawnArgs: string[][] = [];
-  const provider: AndroidAdbProvider = {
-    exec: async (args) => {
-      calls.push(args);
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
+  const provider = createSessionProvider({ calls });
+  // The spawned instrumentation never announces readiness, so every start spends the caller's whole
+  // command budget failing before the one-shot transport answers. Paying for that on every command
+  // is what made the commands of #2553 take roughly twice as long.
+  const adbProvider: AndroidAdbProvider = {
+    ...provider,
     spawn: (args) => {
       spawnArgs.push(args);
-      const process = new FakeAndroidProcess();
-      queueMicrotask(() => process.emitExit(0, null));
-      return process;
+      return new FakeAndroidProcess();
     },
   };
 
-  const first = await captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
-  });
-  const second = await captureAndroidSnapshotWithHelperSession({
-    adb: provider.exec,
-    adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
-  });
+  for (let command = 0; command < 3; command += 1) {
+    const output = await captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider,
+      deviceKey: 'android:emulator-5554',
+      commandTimeoutMs: 50,
+    });
+    assert.equal(output, undefined, 'the one-shot transport answers every command');
+  }
 
-  assert.equal(first, undefined);
-  assert.equal(second, undefined);
-  assert.equal(spawnArgs.length, 2, 'a failed start does not end the persistent path');
+  assert.equal(spawnArgs.length, 1, 'a failed start earns a backoff, not another spawn');
   assert.equal(
     calls.filter((args) => args[0] === 'forward' && args[1]?.startsWith('tcp:')).length,
-    2,
+    1,
   );
+
+  // The backoff belongs to one helper build under one set of budgets, not to the device forever.
+  const otherBuild = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider,
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 50,
+    waitForIdleTimeoutMs: 40,
+  });
+
+  assert.equal(otherBuild, undefined);
+  assert.equal(spawnArgs.length, 2, 'a different capture identity is not covered by the backoff');
 });
 
 test('a session start waits only as long as the caller budgeted for one helper command', async () => {
@@ -111,6 +120,52 @@ test('a session start waits only as long as the caller budgeted for one helper c
   assert.ok(
     Date.now() - startedAtMs < 3_000,
     'the start obeys the caller budget, not a fixed floor',
+  );
+});
+
+test('a session that reaches ready settles a release the device could not confirm', async () => {
+  const calls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  // The device cannot be read at all, and the first command's session stalls, so that command's
+  // teardown records a release nothing could prove.
+  const provider = createSessionProvider({
+    calls,
+    spawnArgs,
+    stalledSnapshots: 1,
+    runtimeRelease: 'unreadable',
+  });
+
+  const stalled = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 400,
+  });
+  assert.equal(stalled, undefined);
+
+  const started = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 400,
+  });
+  assert.equal(started?.metadata.sessionReused, false);
+  const forceStopsWhilePending = calls.filter(isAndroidHelperRuntimeForceStop).length;
+
+  // Android hands UiAutomation to one connection, so the helper that just reported itself ready owns
+  // the runtime and the unreadable device has nothing left to hold the next command with.
+  const reused = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    commandTimeoutMs: 400,
+  });
+
+  assert.equal(reused?.metadata.sessionReused, true);
+  assert.equal(
+    calls.filter(isAndroidHelperRuntimeForceStop).length,
+    forceStopsWhilePending,
+    'a live session is not force-stopped for a release its own readiness settled',
   );
 });
 
