@@ -1,46 +1,6 @@
-import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 
-/**
- * The recording files a stop moves between host paths, held where the output host would hold them. A
- * copy with no source fails here the way it fails on a real volume, so a stop that invents a path it
- * never pulled cannot pass (ADR 0024 2.3).
- */
-export function recordingFileStore(initial: Readonly<Record<string, string>> = {}): Readonly<{
-  files: Map<string, string>;
-  exists(filePath: string): boolean;
-  outputs: ScreenRecordingRuntimeHost['outputs'];
-}> {
-  const files = new Map(Object.entries(initial));
-  const missing = (filePath: string) => new Error(`ENOENT: no such file, copyfile '${filePath}'`);
-  return {
-    files,
-    exists: (filePath) => files.has(filePath),
-    outputs: {
-      prepare: async (outputPath) => {
-        files.delete(outputPath);
-      },
-      collectFromRecorder: async ({ recorderPath, collectedPath }) => {
-        const bytes = files.get(recorderPath);
-        if (bytes === undefined) throw missing(recorderPath);
-        files.set(collectedPath, bytes);
-      },
-      writeExportFromCollected: async ({ collectedPath, exportPath }) => {
-        const bytes = files.get(collectedPath);
-        if (bytes === undefined) throw missing(collectedPath);
-        files.set(exportPath, bytes);
-      },
-      retireRecorderFile: async (recorderPath): Promise<NativePathDisposition> => {
-        files.delete(recorderPath);
-        return files.has(recorderPath) ? 'retirable' : 'retired';
-      },
-      discardCollectedFile: async (collectedPath) => {
-        files.delete(collectedPath);
-      },
-    },
-  };
-}
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 
 export const androidRecordingDevice = {
   platform: 'android' as const,

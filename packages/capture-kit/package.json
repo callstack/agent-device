@@ -86,6 +86,10 @@
       "types": "./src/react-native-overlay.ts",
       "default": "./src/react-native-overlay.ts"
     },
+    "./recording-artifact-fixtures": {
+      "types": "./src/recording/artifact.fixtures.ts",
+      "default": "./src/recording/artifact.fixtures.ts"
+    },
     "./recording-mp4-fixtures": {
       "types": "./src/recording/mp4.fixtures.ts",
       "default": "./src/recording/mp4.fixtures.ts"

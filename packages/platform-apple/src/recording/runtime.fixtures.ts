@@ -5,7 +5,7 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { AppleScreenRecordingOperationHost } from './recovery.ts';
 
 export const coreDevice = Object.freeze({
@@ -44,46 +44,6 @@ export const processIdentity = Object.freeze({
   startTime: 'start-time',
   command: 'xcrun simctl io sim recordVideo /tmp/capture.mp4',
 });
-
-/**
- * The recording files a stop moves between paths, held where the output host would hold them. A copy
- * with no source fails here the way it fails on a real volume, so a runtime that invents a path cannot
- * pass (ADR 0024 2.3).
- */
-export function recordingFileStore(initial: Readonly<Record<string, string>> = {}): Readonly<{
-  files: Map<string, string>;
-  exists(filePath: string): boolean;
-  outputs: ScreenRecordingRuntimeHost['outputs'];
-}> {
-  const files = new Map(Object.entries(initial));
-  const missing = (filePath: string) => new Error(`ENOENT: no such file, copyfile '${filePath}'`);
-  return {
-    files,
-    exists: (filePath) => files.has(filePath),
-    outputs: {
-      prepare: async (outputPath) => {
-        files.delete(outputPath);
-      },
-      collectFromRecorder: async ({ recorderPath, collectedPath }) => {
-        const bytes = files.get(recorderPath);
-        if (bytes === undefined) throw missing(recorderPath);
-        files.set(collectedPath, bytes);
-      },
-      writeExportFromCollected: async ({ collectedPath, exportPath }) => {
-        const bytes = files.get(collectedPath);
-        if (bytes === undefined) throw missing(collectedPath);
-        files.set(exportPath, bytes);
-      },
-      retireRecorderFile: async (recorderPath): Promise<NativePathDisposition> => {
-        files.delete(recorderPath);
-        return files.has(recorderPath) ? 'retirable' : 'retired';
-      },
-      discardCollectedFile: async (collectedPath) => {
-        files.delete(collectedPath);
-      },
-    },
-  };
-}
 
 export function recordingOutputPath(name = 'capture.mp4'): string {
   return `/tmp/${name}`;

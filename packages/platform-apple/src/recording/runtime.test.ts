@@ -4,6 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createAppleScreenRecordingOperations, appleScreenRecordingFacts } from './runtime.ts';
 import {
@@ -12,7 +13,6 @@ import {
   coreDeviceRunnerStart,
   processIdentity,
   recordingInput as input,
-  recordingFileStore,
   recordingOutputPath,
   runnerOwnership,
   simulator,

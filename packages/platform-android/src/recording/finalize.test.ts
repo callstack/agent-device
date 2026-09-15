@@ -6,12 +6,8 @@ import type { JsonObject } from '@agent-device/contracts/client';
 import { mp4Atom, mp4MovieHeader } from '@agent-device/capture-kit/recording-mp4-fixtures';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
-import {
-  androidRecordingDevice,
-  recordingFileStore,
-  recordingHost,
-  recordingInput,
-} from './fixtures.ts';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
+import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
 import { createNativeManifest, type NativeManifest } from './manifest.ts';
 import { snapshot } from './live-snapshot.ts';
 
