@@ -164,7 +164,7 @@ export function limrunInteractionOperationFacts(
     ...touchRuntimeOperationFacts({
       unsupported: unsupportedTouch,
       tap: cell,
-      longPress: liveSessionUnavailable ?? (isIosFamily(device) ? unsupportedTouch : cell),
+      longPress: cell,
       // A dead session refuses hover for its own reason; the family builder adds the redirection
       // to longpress either way.
       hover: liveSessionUnavailable ?? unsupportedTouch,

@@ -217,8 +217,17 @@ class LimrunIosInteractor implements Interactor {
     await this.tap(x, y);
   }
 
-  async longPress(): Promise<never> {
-    throw unsupported('longpress', 'Limrun iOS direct sessions do not expose long press yet.');
+  /** One held touch as HID primitives; the hold runs on the device, not across the wire. */
+  async longPress(
+    x: number,
+    y: number,
+    durationMs = DEFAULT_LONG_PRESS_DURATION_MS,
+  ): Promise<void> {
+    await this.session.client.performActions([
+      { type: 'touchDown', x, y },
+      { type: 'wait', durationMs },
+      { type: 'touchUp', x, y },
+    ]);
   }
 
   async focus(x: number, y: number): Promise<void> {
@@ -400,6 +409,9 @@ function inferAppNameFromPath(appPath: string): string | undefined {
 }
 
 const IOS_APP_INVENTORY_RETRY_DELAYS_MS = [0, 250] as const;
+
+/** Hold applied when the caller names no duration; matches the Android and Linux interactors. */
+const DEFAULT_LONG_PRESS_DURATION_MS = 800;
 
 function resolveInstalledIosAppId(params: {
   resultBundleId?: string;

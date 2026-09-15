@@ -8,6 +8,7 @@ import {
   limrunSettingsOperationFacts,
   limrunAppSwitcherOperationFacts,
   limrunClipboardOperationFacts,
+  limrunInteractionOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
 
@@ -211,4 +212,14 @@ test('binding omits every operation an unavailable fact refused', () => {
   expect(operations.setOrientation).toBeTypeOf('function');
   expect(operations.home).toBeUndefined();
   expect(operations.tvRemote).toBeUndefined();
+});
+
+test('long press is admitted on both direct-session legs and closed with a dead session', () => {
+  expect(limrunInteractionOperationFacts(iosDevice).longPressPoint).toEqual({ available: true });
+  expect(limrunInteractionOperationFacts(androidMobileDevice).longPressPoint).toEqual({
+    available: true,
+  });
+  expect(limrunInteractionOperationFacts(iosDevice, liveSessionUnavailable).longPressPoint).toEqual(
+    liveSessionUnavailable,
+  );
 });
