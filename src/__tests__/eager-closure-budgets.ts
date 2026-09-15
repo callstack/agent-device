@@ -121,7 +121,8 @@ export const FACADE_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
 
   // --- @agent-device/capture-kit ---
   // R60 review: audio-probe split into descriptor/status/recovery/live-process modules (+3 files).
-  'packages/capture-kit/src/index.ts': 32,
+  // #2616: shared app-log poller mechanics join the durable-capture façade (+1 file).
+  'packages/capture-kit/src/index.ts': 33,
 
   // --- @agent-device/contracts ---
   'packages/contracts/src/alert-contract.ts': 1,
@@ -348,7 +349,8 @@ export const HUB_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   // R64 removes the perf plugin facet and keeps collector binding behind the selected runtime
   // operation. Teardown now owns only neutral durable-resource cleanup; platform collectors load
   // through the perf host when an admitted operation actually runs.
-  'src/daemon/session-teardown.ts': 60,
+  // #2616: the shared app-log poller module adds one eagerly-loaded capture-kit façade file.
+  'src/daemon/session-teardown.ts': 61,
 });
 
 /**

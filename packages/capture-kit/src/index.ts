@@ -10,6 +10,7 @@ export {
   decodeAppLogProcessMarker,
 } from './app-log-runtime.ts';
 export { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
+export { startAppLogPoller, type AppLogPollerReader } from './app-log-polling.ts';
 export { createHostAudioProbeCaptureOperations } from './audio-probe-runtime.ts';
 export { hostAudioProbeDescriptorCodec } from './audio-probe-descriptor.ts';
 export { decodeDurableDescriptor } from './durable-descriptor-codec.ts';

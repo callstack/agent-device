@@ -6,94 +6,36 @@ function reader(overrides: Partial<DoublespeedAppLogReader> = {}): DoublespeedAp
   return {
     leaseId: 'lease-1',
     simulatorId: 'sim-1',
-    readLogs: async () => '',
+    readLogs: async () => 'one line\n',
     [Symbol.asyncDispose]: async () => {},
     ...overrides,
   };
 }
 
 describe('Doublespeed app-log poller', () => {
-  test('deduplicates the persisted tail and stops before disposing its resources', async () => {
+  test('reports the ios-simulator backend identity independently of the shared poller', async () => {
     const sleeps = deferredSleeps();
     const writes: string[] = [];
-    let outputDisposed = false;
-    let readerDisposed = false;
-    const logReader = reader({
-      readLogs: vi.fn(async () => 'old line\nshared\nnew line\n'),
-      [Symbol.asyncDispose]: async () => {
-        readerDisposed = true;
-      },
-    });
     const handle = await startDoublespeedAppLogPoller({
-      host: pollerHost({
-        existingTail: 'old line\nshared\n[agent-device][mark][time] checkpoint\n',
-        writes,
-        sleeps,
-        onOutputDispose: () => {
-          outputDisposed = true;
-        },
-      }),
-      reader: logReader,
+      host: pollerHost({ existingTail: '', writes, sleeps }),
+      reader: reader(),
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     });
-    await vi.waitFor(() => expect(writes).toEqual(['new line\n']));
+    await vi.waitFor(() => expect(writes).toEqual(['one line\n']));
     expect(handle.inspect().backend).toBe('ios-simulator');
-
     const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
-    expect(outputDisposed).toBe(false);
     sleeps.resolveNext(1_000);
-    await finishing;
-    expect(logReader.readLogs).toHaveBeenCalledTimes(1);
-    expect(readerDisposed).toBe(true);
-    expect(outputDisposed).toBe(true);
-  });
-
-  test.each(['readTail', 'openAppend'] as const)(
-    'rolls back the reader when %s fails during acquisition',
-    async (failure) => {
-      const dispose = vi.fn(async () => {});
-      const host = pollerHost({ existingTail: '', writes: [], sleeps: deferredSleeps(), failure });
-      await expect(
-        startDoublespeedAppLogPoller({
-          host,
-          reader: reader({ [Symbol.asyncDispose]: dispose }),
-          appBundleId: 'com.example.app',
-          outputPath: '/sessions/one/app.log',
-        }),
-      ).rejects.toThrow(`${failure === 'readTail' ? 'tail' : 'open'} failed`);
-      expect(dispose).toHaveBeenCalledOnce();
-    },
-  );
-
-  test('uses linear overlap matching for a near-limit tail without overlap', async () => {
-    const sleeps = deferredSleeps();
-    const writes: string[] = [];
-    const handle = await startDoublespeedAppLogPoller({
-      host: pollerHost({ existingTail: `${'a'.repeat(240_000)}\n`, writes, sleeps }),
-      reader: reader({ readLogs: async () => `${'b'.repeat(240_000)}\n` }),
-      appBundleId: 'com.example.app',
-      outputPath: '/sessions/one/app.log',
+    await expect(finishing).resolves.toMatchObject({
+      status: 'completed',
+      result: { backend: 'ios-simulator' },
     });
-    await vi.waitFor(() => expect(writes[0]?.length).toBe(240_001));
-    const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
-    await finishing;
   });
 
-  test('still disposes the output when reader cleanup rejects', async () => {
+  test('keeps the Doublespeed cleanup wording when disposal fails', async () => {
     const sleeps = deferredSleeps();
-    let outputDisposed = false;
     const handle = await startDoublespeedAppLogPoller({
-      host: pollerHost({
-        existingTail: '',
-        writes: [],
-        sleeps,
-        onOutputDispose: () => {
-          outputDisposed = true;
-        },
-      }),
+      host: pollerHost({ existingTail: '', writes: [], sleeps }),
       reader: reader({
         [Symbol.asyncDispose]: async () => {
           throw new Error('reader cleanup failed');
@@ -105,31 +47,31 @@ describe('Doublespeed app-log poller', () => {
     await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
     const finishing = handle.finish();
     sleeps.resolveNext(1_000);
-    await expect(finishing).resolves.toMatchObject({ status: 'cleanup-pending' });
-    expect(outputDisposed).toBe(true);
+    await expect(finishing).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      message: 'Doublespeed app-log cleanup did not settle every owned resource',
+    });
   });
 
-  test('allows one bounded read only and settles it before disposal', async () => {
+  test('forwards an abort signal to the provider reader read', async () => {
     const sleeps = deferredSleeps();
-    let readerDisposed = false;
-    const readLogs = vi.fn(async () => await new Promise<string>(() => {}));
+    const writes: string[] = [];
+    let seenSignal: AbortSignal | undefined;
+    const readLogs = vi.fn(async (_appId: string, _limit: number, signal?: AbortSignal) => {
+      seenSignal = signal;
+      return 'one line\n';
+    });
     const handle = await startDoublespeedAppLogPoller({
-      host: pollerHost({ existingTail: '', writes: [], sleeps }),
-      reader: reader({
-        readLogs,
-        [Symbol.asyncDispose]: async () => {
-          readerDisposed = true;
-        },
-      }),
+      host: pollerHost({ existingTail: '', writes, sleeps }),
+      reader: reader({ readLogs }),
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     });
+    await vi.waitFor(() => expect(writes).toEqual(['one line\n']));
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
     const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
-    sleeps.resolveNext(5_000);
+    sleeps.resolveNext(1_000);
     await finishing;
-    expect(readLogs).toHaveBeenCalledTimes(1);
-    expect(readerDisposed).toBe(true);
   });
 });
 
@@ -137,8 +79,6 @@ function pollerHost(options: {
   existingTail: string;
   writes: string[];
   sleeps: ReturnType<typeof deferredSleeps>;
-  onOutputDispose?: () => void;
-  failure?: 'readTail' | 'openAppend';
 }): AppLogRuntimeHost {
   return {
     appleTools: {
@@ -159,19 +99,13 @@ function pollerHost(options: {
       run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
     },
     outputs: {
-      readTail: async () => {
-        if (options.failure === 'readTail') throw new Error('tail failed');
-        return options.existingTail;
-      },
-      openAppend: async () => {
-        if (options.failure === 'openAppend') throw new Error('open failed');
-        return {
-          write: async (chunk) => {
-            options.writes.push(String(chunk));
-          },
-          [Symbol.asyncDispose]: async () => options.onOutputDispose?.(),
-        };
-      },
+      readTail: async () => options.existingTail,
+      openAppend: async () => ({
+        write: async (chunk) => {
+          options.writes.push(String(chunk));
+        },
+        [Symbol.asyncDispose]: async () => {},
+      }),
     },
     processTransports: {
       resolve: async () => ({ mode: 'local' }),
