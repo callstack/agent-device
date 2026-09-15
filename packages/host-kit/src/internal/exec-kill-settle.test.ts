@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import {
   isCommandTimeoutError,
   runCmd,
@@ -199,53 +199,40 @@ function guardGroupWrites(answer: GroupWriteAnswer = 'delivered'): {
   return { writes, restore: () => (process.kill = original) };
 }
 
-test('group signaling addresses the negative pid and reports delivery', () => {
-  const calls: GroupWrite[] = [];
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-    calls.push({ pid: Number(pid), signal: signal ?? '' });
-    return true;
-  });
-
-  try {
-    assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), true);
-    assert.deepEqual(calls, [{ pid: -101, signal: 'SIGKILL' }]);
-  } finally {
-    killSpy.mockRestore();
-  }
-});
-
-test('group signaling reports a vanished group and never signals an invalid pid', () => {
-  const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
-    const error = new Error('not found') as NodeJS.ErrnoException;
-    error.code = 'ESRCH';
-    throw error;
-  });
-
-  try {
-    assert.equal(signalProcessGroupBestEffort(101, 'SIGTERM'), false);
-    assert.equal(signalProcessGroupBestEffort(0, 'SIGTERM'), false);
-    assert.equal(signalProcessGroupBestEffort(-1, 'SIGTERM'), false);
-    // A zero or negative pid would address the caller's own group, or every
-    // process the user owns, so it must not reach process.kill at all.
-    assert.equal(killSpy.mock.calls.length, 1);
-  } finally {
-    killSpy.mockRestore();
-  }
-});
-
-test('a group that is gone and a group that is not ours to signal both report nothing reached', () => {
-  // `process.kill` answers a negative pid in exactly three ways: `true` once the kernel accepted the
-  // write, `ESRCH` when no member is left, and `EPERM` when a member belongs to another user. The
-  // second and third are the same answer to this seam — nothing was reached, so the caller must not
-  // keep waiting on a pipe holder it just asked to be killed — and only the first of them was tested.
-  for (const answer of ['no-such-process', 'not-permitted'] as const) {
+// One seam, one double. Every group write in this file — the direct calls below included — is answered
+// by `guardGroupWrites`, so a hand-written spy beside it would be a second answer to the same question,
+// and the two are free to drift from each other.
+test('the group signal seam answers each way process.kill answers a negative pid', () => {
+  // `true` once the kernel accepted the write; `ESRCH` when no member is left and `EPERM` when a
+  // member belongs to another user. The two throws are the same answer to this seam — nothing was
+  // reached, so the caller must not keep waiting on a pipe holder it just asked to be killed.
+  const cases = [
+    ['delivered', true],
+    ['no-such-process', false],
+    ['not-permitted', false],
+  ] as const;
+  for (const [answer, reported] of cases) {
     const groupWrites = guardGroupWrites(answer);
     try {
-      assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), false);
-      assert.deepEqual(groupWrites.writes, [{ pid: -101, signal: 'SIGKILL' }]);
+      assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), reported, answer);
+      assert.deepEqual(groupWrites.writes, [{ pid: -101, signal: 'SIGKILL' }], answer);
     } finally {
       groupWrites.restore();
     }
+  }
+});
+
+test('an invalid pid is refused before anything is signalled', () => {
+  // A zero or negative pid would address this worker's own group, or every process the user owns. The
+  // guard records every write it is asked about, so an empty list is the proof none was attempted.
+  const groupWrites = guardGroupWrites();
+  try {
+    assert.equal(signalProcessGroupBestEffort(0, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(-1, 'SIGTERM'), false);
+    assert.equal(signalProcessGroupBestEffort(1.5, 'SIGTERM'), false);
+    assert.deepEqual(groupWrites.writes, []);
+  } finally {
+    groupWrites.restore();
   }
 });
 
