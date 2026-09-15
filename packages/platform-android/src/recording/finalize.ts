@@ -121,14 +121,8 @@ async function exportCollectedChunks(
     exportClientPath: recording.clientOutPath,
     count: evidence.chunks.length,
   });
-  const served = files.map((file) => file.served);
-  for (const { collected: source, served: target } of files) {
-    await host.screenRecording.outputs.writeExportFromCollected({
-      collectedPath: source.path,
-      exportPath: target.path,
-    });
-  }
-  const chunked = served.length > 1;
+  await copyCollectedChunksToExport(host, files);
+  const chunked = files.length > 1;
   const finalization = await host.screenRecording.finalize.complete({
     outputPath: exportPath,
     showTouches: chunked ? false : recording.showTouches,
@@ -143,16 +137,53 @@ async function exportCollectedChunks(
     startedAtMs: params.startedAtMs,
     stoppedAtMs: params.stoppedAtMs,
   });
+  await discardCollectedChunks(host, files);
+  return finalizationFromExport({ finalization, captured, recording, chunked, files });
+}
+
+async function copyCollectedChunksToExport(
+  host: PlatformRuntimeHost,
+  files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[],
+): Promise<void> {
+  for (const { collected, served } of files) {
+    await host.screenRecording.outputs.writeExportFromCollected({
+      collectedPath: collected.path,
+      exportPath: served.path,
+    });
+  }
+}
+
+/**
+ * The collected set has served its purpose once the export is durable; keeping it would leave a second
+ * copy of the video behind with nothing left to read it. Refusing to delete it is not a failure the
+ * caller can act on, because their video already exists.
+ */
+async function discardCollectedChunks(
+  host: PlatformRuntimeHost,
+  files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[],
+): Promise<void> {
+  for (const { collected } of files) {
+    await host.screenRecording.outputs.discardCollectedFile(collected.path).catch(() => {});
+  }
+}
+
+function finalizationFromExport(
+  params: Readonly<{
+    finalization: Awaited<
+      ReturnType<PlatformRuntimeHost['screenRecording']['finalize']['complete']>
+    >;
+    captured: Readonly<{ capturedDurationMs?: number; idleTailWarning?: string }>;
+    recording: ScreenRecordingLiveSnapshot;
+    chunked: boolean;
+    files: readonly Readonly<{ collected: ScreenRecordingChunk; served: ScreenRecordingChunk }>[];
+  }>,
+): ScreenRecordingFinalization {
+  const { finalization, captured, recording, chunked, files } = params;
   const warnings = [
     finalization.warning,
     ...(chunked ? [CHUNKED_WARNING] : []),
     captured.idleTailWarning,
   ].filter((warning): warning is string => warning !== undefined && warning.length > 0);
-  // The collected set has served its purpose once the export is durable; keeping it would leave a
-  // second copy of the video behind with nothing left to read it.
-  for (const { collected: source } of files) {
-    await host.screenRecording.outputs.discardCollectedFile(source.path).catch(() => {});
-  }
   return {
     ...(finalization.telemetryPath === undefined
       ? {}
@@ -164,7 +195,7 @@ async function exportCollectedChunks(
     ...(captured.capturedDurationMs === undefined
       ? {}
       : { capturedDurationMs: captured.capturedDurationMs }),
-    ...(chunked ? { chunks: served } : {}),
+    ...(chunked ? { chunks: files.map((file) => file.served) } : {}),
     // The recorders are gone and the chunks still sit on the device: owed a removal, safe to do.
     nativePathDisposition: 'retirable',
   };
