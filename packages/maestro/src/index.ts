@@ -36,6 +36,8 @@ export {
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
 } from './internal/facade-support.ts';
 
+export { MAESTRO_PERMISSION_VALUES } from './internal/program-ir-values.ts';
+
 export {
   createMaestroRuntimePort,
   literalFromMaestroRegex,

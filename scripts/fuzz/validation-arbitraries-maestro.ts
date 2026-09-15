@@ -47,6 +47,9 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- scrollUntilVisible:', '    element:', `        text: ${text}`],
     () => ['- repeat:', '    times: 2', '    commands:', '      - back'],
     () => ['- runFlow: other.yaml'],
+    () => ['- setPermissions:', '    permissions:', '      camera: allow'],
+    () => ['- setPermissions:', '    permissions:', '      all: deny'],
+    () => ['- launchApp:', '    appId: com.example.app', '    permissions:', '      camera: allow'],
     () => [`- evalScript: ${text}`],
   ];
   return options[pick % options.length]!();
@@ -89,6 +92,11 @@ const MAESTRO_MUTATIONS: readonly MaestroMutation[] = [
   },
   { name: 'bad-press-key', code: 'INVALID_ARGS', lines: () => ['- pressKey: sleep'] },
   { name: 'scroll-options', code: 'INVALID_ARGS', lines: () => ['- scroll:', '    direction: UP'] },
+  {
+    name: 'bad-permission-value',
+    code: 'INVALID_ARGS',
+    lines: () => ['- setPermissions:', '    permissions:', '      camera: maybe'],
+  },
 ];
 
 /** Declared classes plus the config-level variant `unsupported-field` renders for a salt slice. */

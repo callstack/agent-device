@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { pointInsideRect, stripUndefined } from './shared.ts';
+import { MAESTRO_PERMISSION_VALUES } from './program-ir-values.ts';
 import {
   maestroScrollDurationFromSpeed,
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -30,7 +31,7 @@ type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
 >;
 
 type MaestroLifecycleCommand = MaestroCommandOf<
-  'launchApp' | 'stopApp' | 'clearState' | 'openLink'
+  'launchApp' | 'stopApp' | 'setPermissions' | 'clearState' | 'openLink'
 >;
 type MaestroTargetCommand = MaestroCommandOf<'tapOn' | 'doubleTapOn' | 'longPressOn'>;
 type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText'>;
@@ -55,6 +56,7 @@ type MaestroRuntimeCommandHandlers = {
 const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   launchApp: executeLifecycleCommand,
   stopApp: executeLifecycleCommand,
+  setPermissions: executeLifecycleCommand,
   clearState: executeLifecycleCommand,
   openLink: executeLifecycleCommand,
   tapOn: executeTargetCommand,
@@ -81,6 +83,7 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
 const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   launchApp: true,
   stopApp: true,
+  setPermissions: true,
   clearState: true,
   openLink: true,
   tapOn: true,
@@ -148,6 +151,16 @@ async function executeLifecycleCommand(
         context,
         'invalidate',
       );
+    case 'setPermissions':
+      return await invokeOperation(
+        operations.setPermissions,
+        {
+          appId: command.appId ?? request.appId,
+          permissions: resolveSetPermissions(command.permissions),
+        },
+        context,
+        'invalidate',
+      );
     case 'clearState':
       return await invokeOperation(
         operations.clearState,
@@ -170,9 +183,25 @@ function launchAppInput(command: MaestroCommandOf<'launchApp'>, request: Maestro
     appId: command.appId ?? request.appId,
     stopApp: command.stopApp,
     clearState: command.clearState,
+    permissions: command.permissions ? resolveSetPermissions(command.permissions) : undefined,
     arguments: command.arguments,
     launchArguments: command.launchArguments,
   });
+}
+
+function resolveSetPermissions(permissions: Readonly<Record<string, string>>) {
+  const resolved: Record<string, string> = {};
+  for (const [name, value] of Object.entries(permissions)) {
+    const normalized = value.toLowerCase();
+    if (!MAESTRO_PERMISSION_VALUES.has(normalized)) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Maestro setPermissions.permissions.${name} expects allow|deny|unset (plus always|inuse|never|limited for location/photos); received "${value}".`,
+      );
+    }
+    resolved[name] = normalized;
+  }
+  return resolved;
 }
 
 async function executeTargetCommand(

@@ -21,6 +21,13 @@ export type MaestroPublicOperation =
     }
   | { kind: 'stopApp'; appId?: string }
   | { kind: 'clearState'; appId?: string }
+  | {
+      kind: 'settingsPermission';
+      appId?: string;
+      state: 'grant' | 'deny' | 'reset';
+      permission: string;
+      mode?: 'full' | 'limited';
+    }
   | { kind: 'openLink'; appId?: string; link: string; prewarmRunner: boolean }
   | { kind: 'typeText'; text: string }
   | {
@@ -49,6 +56,7 @@ export function projectMaestroPublicOperation(
   if (operation.kind === 'clearState') return projectClearState(operation);
   if (isAppOperation(operation)) return projectAppOperation(operation);
   if (isCaptureOperation(operation)) return projectCaptureOperation(operation);
+  if (operation.kind === 'settingsPermission') return projectSettingsPermission(operation);
   return projectInputOperation(operation);
 }
 
@@ -117,9 +125,27 @@ function projectOpenLink(
   };
 }
 
+function projectSettingsPermission(
+  operation: Extract<MaestroPublicOperation, { kind: 'settingsPermission' }>,
+): ProjectedMaestroPublicOperation {
+  return {
+    command: 'settings',
+    positionals: [
+      'permission',
+      operation.state,
+      operation.permission,
+      ...(operation.mode ? [operation.mode] : []),
+    ],
+    ...(operation.appId ? { internal: { settingsAppBundleId: operation.appId } } : {}),
+  };
+}
+
 type MaestroInputOperation = Exclude<
   MaestroPublicOperation,
-  MaestroAppOperation | MaestroCaptureOperation | { kind: 'clearState' }
+  | MaestroAppOperation
+  | MaestroCaptureOperation
+  | { kind: 'settingsPermission' }
+  | { kind: 'clearState' }
 >;
 
 function projectInputOperation(operation: MaestroInputOperation): ProjectedMaestroPublicOperation {

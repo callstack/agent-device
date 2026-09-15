@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added (maestro): `setPermissions` and `launchApp.permissions` support `all: allow|deny|unset`
+  on iOS simulators and Android, with specific entries overriding `all`. Both accept a
+  Maestro-style permissions map.
 - Added (ios): `type` and `fill` work in the Apple Pay sheet on iOS Simulator instead of failing
   with `TEXT_INPUT_NOT_FOCUSED`. `com.apple.PassbookUIService` is served in place like the web
   sign-in host (#2438).

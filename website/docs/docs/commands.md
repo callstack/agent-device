@@ -728,8 +728,8 @@ agent-device settings permission reset screen-recording --platform macos
 - Fingerprint simulation is supported on Android targets where `cmd fingerprint` or `adb emu finger` is available.
   On physical Android devices, only `cmd fingerprint` is attempted.
 - Permission actions are scoped to the active session app.
-- iOS permission targets: `camera`, `microphone`, `photos` (`full` or `limited`), `contacts`, `notifications`.
-- Android permission targets: `camera`, `microphone`, `photos`, `contacts`, `notifications`.
+- iOS permission targets: `all`, `camera`, `microphone`, `photos` (`full` or `limited`), `contacts`, `contacts-limited`, `notifications`, `calendar`, `location`, `location-always`, `media-library`, `motion`, `reminders`, `siri`. `all` travels as one `simctl privacy … all` call.
+- Android permission targets: `all`, `calendar`, `camera`, `contacts`, `location`, `media-library`, `microphone`, `notifications`, `photos`. `contacts` fans out to `READ_CONTACTS`+`WRITE_CONTACTS`, `location` to `FINE`+`COARSE`, `calendar` to `READ`+`WRITE`; named multi-id targets intersect the package's declared permissions so a coarse-only or read-only app still succeeds, while a target declaring none of its ids fails loudly. `all` resolves against the package's declared permissions instead. `deny|reset` of a multi-id target returns a comma-joined `permission` list.
 - macOS permission targets: `accessibility`, `screen-recording`, `input-monitoring`.
 - On macOS, `settings permission grant ...` checks/request access and opens System Settings guidance when needed; it does not silently grant TCC permissions.
 - On macOS, `settings permission deny ...` is intentionally unsupported.

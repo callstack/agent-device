@@ -53,11 +53,6 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     reason: 'Standalone killApp is outside the supported subset.',
     unsupported: ['killApp'],
   },
-  'upstream/131_setPermissions': {
-    classification: 'we-reject',
-    reason: 'Standalone setPermissions is outside the supported subset.',
-    unsupported: ['setPermissions'],
-  },
   // --- Deliberately stricter than upstream ---
   'invalid/duplicate-keys': {
     classification: 'we-reject',

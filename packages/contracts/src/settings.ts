@@ -14,6 +14,7 @@ export const PERMISSION_MODES = ['full', 'limited'] as const;
 
 /** The app-scoped targets, the only ones `parsePermissionTarget` accepts. */
 export const MOBILE_PERMISSION_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',
@@ -34,6 +35,28 @@ export const MACOS_PERMISSION_TARGETS = [
   'accessibility',
   'screen-recording',
   'input-monitoring',
+] as const;
+
+/**
+ * The names each mobile backend serves individually (`all` travels as one
+ * backend call and resolves there). iOS serves the whole mobile vocabulary;
+ * Android serves the subset below. Declared once so the Android table, the
+ * Maestro adapter lists, and the hint text cannot drift from each other —
+ * which is what left `bluetooth`/`phone`/`sms`/`storage` advertised but
+ * unreachable.
+ */
+export const IOS_PERMISSION_TARGETS = MOBILE_PERMISSION_TARGETS;
+
+export const ANDROID_PERMISSION_TARGETS = [
+  'all',
+  'camera',
+  'microphone',
+  'photos',
+  'contacts',
+  'notifications',
+  'calendar',
+  'location',
+  'media-library',
 ] as const;
 
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];

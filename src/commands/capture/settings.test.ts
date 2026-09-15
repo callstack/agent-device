@@ -136,7 +136,7 @@ describe('settings CLI permission vocabulary', () => {
   });
 
   test('rejects a target outside the vocabulary without normalizing it', () => {
-    for (const permission of ['CAMERA', ' all', 'all', 'location-always ']) {
+    for (const permission of ['CAMERA', ' all', 'location-always ']) {
       expectInvalidArgs(() => readGrant(permission), PERMISSION_TARGETS_MESSAGE);
     }
   });

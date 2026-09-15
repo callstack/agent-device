@@ -55,6 +55,7 @@ export type MaestroLaunchAppCommand = {
   appId?: string;
   stopApp?: boolean;
   clearState?: boolean;
+  permissions?: Record<string, string>;
   arguments?: MaestroLaunchArguments;
   launchArguments?: MaestroLaunchArguments;
 };
@@ -207,6 +208,14 @@ export type MaestroStopAppCommand = {
   appId?: string;
 };
 
+export type MaestroSetPermissionsCommand = MaestroOptionalCommand & {
+  kind: 'setPermissions';
+  source: MaestroSourceLocation;
+  appId?: string;
+  permissions: Record<string, string>;
+  label?: string;
+};
+
 export type MaestroClearStateCommand = {
   kind: 'clearState';
   source: MaestroSourceLocation;
@@ -277,6 +286,7 @@ export type MaestroCommand =
   | MaestroBackCommand
   | MaestroWaitForAnimationToEndCommand
   | MaestroStopAppCommand
+  | MaestroSetPermissionsCommand
   | MaestroClearStateCommand
   | MaestroRunScriptCommand
   | MaestroEvalScriptCommand

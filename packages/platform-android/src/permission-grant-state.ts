@@ -62,9 +62,20 @@ export async function readAndroidCurrentUserId(device: DeviceInfo): Promise<numb
 const USER_BLOCK = /^\s*User (\d+):/;
 const RUNTIME_PERMISSIONS_BLOCK = /^\s*runtime permissions:\s*$/;
 const GRANT_LINE = /^\s*([\w.]+): granted=(true|false)\b/;
+const PACKAGE_BLOCK = /^\s*Package \[.+?\]/;
+const REQUESTED_PERMISSIONS_BLOCK = /^\s*requested permissions:\s*$/;
+const PERMISSION_ID = /^\s*([A-Za-z][\w.]*)/;
 
 /** A non-blank dump line with the indentation that places it in the tree. */
 type DumpLine = { text: string; indent: number };
+
+/** Split a dump into indented lines; blank lines carry no structure. */
+function dumpLines(dumpsysOutput: string): DumpLine[] {
+  return dumpsysOutput
+    .split('\n')
+    .filter((text) => text.trim().length > 0)
+    .map((text) => ({ text, indent: text.length - text.trimStart().length }));
+}
 
 /**
  * Runtime permission grants for `userId` only, or `undefined` when that user has no
@@ -80,10 +91,7 @@ export function parseAndroidRuntimePermissionGrants(
   dumpsysOutput: string,
   userId: number,
 ): AndroidRuntimePermissionGrants | undefined {
-  const lines = dumpsysOutput
-    .split('\n')
-    .filter((text) => text.trim().length > 0)
-    .map((text) => ({ text, indent: text.length - text.trimStart().length }));
+  const lines = dumpLines(dumpsysOutput);
   const packages = nestedBlock(
     lines,
     (line) => line.indent === 0 && line.text.trim() === 'Packages:',
@@ -116,4 +124,51 @@ function nestedBlock(
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => line.indent <= lines[start]!.indent);
   return end < 0 ? rest : rest.slice(0, end);
+}
+
+/**
+ * Both halves of one `dumpsys package` read: the declared ids and the acting
+ * user's runtime grants. Each half keeps its own absent-vs-empty semantics —
+ * see the two parsers — so callers can refuse on a missing section while
+ * still answering `unknown` for missing grants.
+ */
+export function parseAndroidPackagePermissions(
+  dumpsysOutput: string,
+  userId: number,
+): {
+  requested: string[] | undefined;
+  grants: AndroidRuntimePermissionGrants | undefined;
+} {
+  return {
+    requested: parseAndroidRequestedPermissions(dumpsysOutput),
+    grants: parseAndroidRuntimePermissionGrants(dumpsysOutput, userId),
+  };
+}
+
+/**
+ * The permission ids the package declares, in dump order, or `undefined` when
+ * the dump carries no `requested permissions:` block for a package. An empty
+ * block is still an answer — the app declares nothing — while a missing one
+ * means the device did not tell us, and `all` must refuse rather than guess.
+ *
+ * Entries are bare ids (`android.permission.CAMERA`); any trailing attribute
+ * (`: restricted=false`) is not part of the id. Section scoping reuses the
+ * same `Packages:` → `Package […]` nesting as the grants read, so the later
+ * top-level sections cannot leak ids in.
+ */
+export function parseAndroidRequestedPermissions(dumpsysOutput: string): string[] | undefined {
+  const lines = dumpLines(dumpsysOutput);
+  const packages = nestedBlock(
+    lines,
+    (line) => line.indent === 0 && line.text.trim() === 'Packages:',
+  );
+  const pkg = nestedBlock(packages, (line) => PACKAGE_BLOCK.test(line.text));
+  const requested = nestedBlock(pkg, (line) => REQUESTED_PERMISSIONS_BLOCK.test(line.text));
+  if (!requested) return undefined;
+  const ids: string[] = [];
+  for (const { text } of requested) {
+    const id = PERMISSION_ID.exec(text)?.[1];
+    if (id && id.includes('.') && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }

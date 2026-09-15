@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import {
+  ANDROID_PERMISSION_TARGETS,
   getUnsupportedMacOsSettingMessage,
+  IOS_PERMISSION_TARGETS,
   isMacOsSettingSupported,
   MACOS_PERMISSION_TARGETS,
   MOBILE_PERMISSION_TARGETS,
@@ -18,7 +20,10 @@ import {
 // Fixed expected data on purpose (#2614): this file is the witness that a shared permission
 // declaration neither widened nor narrowed what any settings surface already accepted, and that it
 // kept the accepted names in the order `settings` help has always listed them.
+// The one deliberate widening is `all`, first in the list: the Maestro setPermissions merge
+// needs it to travel as one `settings permission` call while each backend resolves it.
 const MOBILE_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',
@@ -61,7 +66,6 @@ const NORMALIZATIONS = [
 
 const REJECTED_TARGETS = [
   ...MACOS_ONLY_TARGETS,
-  'all',
   'bluetooth',
   'camera-x',
   'camera limited',
@@ -85,6 +89,24 @@ describe('the declared permission vocabulary', () => {
     expect([...MACOS_PERMISSION_TARGETS]).toEqual([...MACOS_ONLY_TARGETS]);
     expect([...PERMISSION_ACTIONS]).toEqual(['grant', 'deny', 'reset']);
     expect([...PERMISSION_MODES]).toEqual(['full', 'limited']);
+  });
+
+  test('per-platform targets stay subsets of the accepted vocabulary', () => {
+    expect([...IOS_PERMISSION_TARGETS]).toEqual([...MOBILE_TARGETS]);
+    expect([...ANDROID_PERMISSION_TARGETS]).toEqual([
+      'all',
+      'camera',
+      'microphone',
+      'photos',
+      'contacts',
+      'notifications',
+      'calendar',
+      'location',
+      'media-library',
+    ]);
+    for (const target of ANDROID_PERMISSION_TARGETS) {
+      expect(MOBILE_TARGETS).toContain(target);
+    }
   });
 });
 
@@ -172,6 +194,5 @@ describe('permission vocabulary types', () => {
     expectTypeOf<'accessibility'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'screen-recording'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'input-monitoring'>().not.toMatchTypeOf<PermissionTarget>();
-    expectTypeOf<'all'>().not.toMatchTypeOf<PermissionTarget>();
   });
 });

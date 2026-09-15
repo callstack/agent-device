@@ -4,6 +4,7 @@ import type { SettingsUpdateOptions } from './client-settings.ts';
 type Permission = Extract<SettingsUpdateOptions, { setting: 'permission' }>;
 
 const MOBILE_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',
@@ -23,6 +24,8 @@ const MACOS_ONLY_TARGETS = ['accessibility', 'screen-recording', 'input-monitori
 
 // Fixed expected data (#2614): the public client vocabulary is written out here so a shared
 // declaration can neither widen the accepted permission names nor drop the macOS-only ones.
+// The one deliberate widening is `all`: the Maestro setPermissions merge needs it to travel
+// as one `settings permission` call while each backend resolves it.
 describe('public client permission vocabulary', () => {
   test('names exactly the app-scoped targets plus the macOS-only ones', () => {
     expectTypeOf<Permission['permission']>().toEqualTypeOf<
@@ -31,7 +34,6 @@ describe('public client permission vocabulary', () => {
   });
 
   test('does not name a permission the vocabulary does not declare', () => {
-    expectTypeOf<'all'>().not.toMatchTypeOf<Permission['permission']>();
     expectTypeOf<'bluetooth'>().not.toMatchTypeOf<Permission['permission']>();
   });
 
