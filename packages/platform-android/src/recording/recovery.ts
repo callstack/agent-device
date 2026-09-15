@@ -15,6 +15,8 @@ import {
   type NativeManifest,
 } from './manifest.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
+import { nativeChunksDisposition } from './chunks.ts';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import { snapshot } from './completion.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 
@@ -138,13 +140,24 @@ async function reattachEvidence(params: {
   evidence: NativeManifest;
 }) {
   const { host, transport, device, input, descriptor, evidence } = params;
-  if (evidence.completion !== undefined && (await completedEvidenceIsTerminal(transport, evidence)))
-    return { status: 'completed' as const, result: evidence.completion };
-  if (evidence.completion !== undefined)
+  if (evidence.completion !== undefined) {
+    const observed = await observeCompletedEvidence(transport, evidence);
+    if (observed.status === 'terminal')
+      return {
+        status: 'completed' as const,
+        // The marker froze its disposition when the chunks were still owed a removal, so the replay
+        // answers that field from the device in front of it (ADR 0024 2.3). A recording whose chunks
+        // were disposed of while the daemon was down is not still owed a retirement.
+        result: {
+          ...evidence.completion,
+          nativePathDisposition: observed.nativePathDisposition,
+        },
+      };
     return unreattachable(
       'ownership-fence-lost',
       'Android recording completed evidence still names a live or unverifiable recorder.',
     );
+  }
   if (evidence.pendingRemotePath !== undefined)
     return unreattachable(
       'transport-not-reattachable',
@@ -190,7 +203,14 @@ async function reattachEvidence(params: {
   return { status: 'active' as const, handle };
 }
 
-async function completedEvidenceIsTerminal(transport: Transport, evidence: NativeManifest) {
+type CompletedEvidenceObservation =
+  | Readonly<{ status: 'terminal'; nativePathDisposition: NativePathDisposition }>
+  | Readonly<{ status: 'retained' }>;
+
+async function observeCompletedEvidence(
+  transport: Transport,
+  evidence: NativeManifest,
+): Promise<CompletedEvidenceObservation> {
   try {
     for (const chunk of evidence.chunks) {
       if (
@@ -202,11 +222,14 @@ async function completedEvidenceIsTerminal(transport: Transport, evidence: Nativ
           }),
         )
       )
-        return false;
+        return { status: 'retained' };
     }
-    return true;
+    return {
+      status: 'terminal',
+      nativePathDisposition: await nativeChunksDisposition(transport, evidence.chunks),
+    };
   } catch {
-    return false;
+    return { status: 'retained' };
   }
 }
 

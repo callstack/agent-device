@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingStartInput,
@@ -151,6 +152,22 @@ export async function cleanupChunks(
     }
   }
   if (failure) throw failure;
+}
+
+/**
+ * Whether this recording's own files still sit on the device (ADR 0024 2.3). This is the only place
+ * a disposition is decided: the answer is read from the device, so a value a marker froze before a
+ * removal cannot survive as the claim after one, and a removal the device reported but did not
+ * perform is still seen as owed.
+ */
+export async function nativeChunksDisposition(
+  transport: Transport,
+  chunks: readonly NativeChunk[],
+): Promise<NativePathDisposition> {
+  for (const chunk of chunks) {
+    if (await transport.exists(chunk.remotePath)) return 'retirable';
+  }
+  return 'retired';
 }
 
 export async function rollbackChunks(
