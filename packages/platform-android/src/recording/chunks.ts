@@ -158,14 +158,15 @@ export async function cleanupChunks(
  * Whether this recording's own files still sit on the device (ADR 0024 2.3). This is the only place
  * a disposition is decided: the answer is read from the device, so a value a marker froze before a
  * removal cannot survive as the claim after one, and a removal the device reported but did not
- * perform is still seen as owed.
+ * perform is still seen as owed. `retired` needs a probe that answered "gone" for every chunk, so a
+ * probe that could not run leaves the path owed rather than crediting a removal nobody observed.
  */
 export async function nativeChunksDisposition(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<NativePathDisposition> {
   for (const chunk of chunks) {
-    if (await transport.exists(chunk.remotePath)) return 'retirable';
+    if ((await transport.exists(chunk.remotePath)) !== false) return 'retirable';
   }
   return 'retired';
 }

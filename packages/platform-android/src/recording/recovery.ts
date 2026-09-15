@@ -170,7 +170,10 @@ async function reattachEvidence(params: {
     remotePath: active.remotePath,
     startTime: active.remoteStartTime,
   });
-  if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) !== true)
+  // A recorder that is not running is only finished with once the device has *answered* that its
+  // artifact is gone: a probe that could not run leaves the recording finishable, so the caller can
+  // pull it when the device answers again instead of being told a loss nobody observed (ADR 0024).
+  if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) === false)
     return unreattachable(
       'transport-not-reattachable',
       'Android recording process ended before its artifact could be recovered.',

@@ -250,6 +250,29 @@ test('retains an interrupted empty-stderr presence probe as uncertain', async ()
   }
 });
 
+test('credits a path as absent only from a probe that answered, not from one that failed', async () => {
+  let attempt = 0;
+  adbExecutor.override = async (args) => {
+    expect(args).toEqual(['shell', "test -e '/sdcard/capture.mp4'"]);
+    attempt += 1;
+    if (attempt === 1) return result('', '', 1);
+    if (attempt === 2) return result('', '', null);
+    if (attempt === 3) return result('', 'adb: device offline', 1);
+    if (attempt === 4) return result('', '', null);
+    return result('');
+  };
+  try {
+    const transport = await createAndroidScreenRecordingTransport(android);
+    await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe(false);
+    await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe('uncertain');
+    await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe('uncertain');
+    await expect(transport.size('/sdcard/capture.mp4')).resolves.toBe('uncertain');
+    await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe(true);
+  } finally {
+    adbExecutor.override = undefined;
+  }
+});
+
 test('retains an interrupted empty-stderr manifest probe as unavailable', async () => {
   adbExecutor.override = async (args) => {
     expect(args).toEqual(['shell', "test -e '/sdcard/interrupted.json'"]);

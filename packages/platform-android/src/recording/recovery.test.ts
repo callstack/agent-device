@@ -72,6 +72,32 @@ test('reattaches an ended pid with an artifact as finishable recovery and report
     });
 });
 
+test('keeps a recording finishable when a reattach cannot ask the device about its artifact', async () => {
+  let manifest = '';
+  let askedAfterStart = false;
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    isRunning: async () => false,
+    // A device that will not answer the probe — adb dropped it, the shell never ran — has not said
+    // its artifact is gone, so reattach may not declare the recording lost (ADR 0024 2.3).
+    exists: async () => (askedAfterStart ? ('uncertain' as const) : true),
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  askedAfterStart = true;
+
+  const reattached = await runtime.screenRecordingReattach({ envelope: started.envelope });
+  expect(reattached.status).toBe('active');
+  if (reattached.status !== 'active') return;
+  await expect(reattached.handle.finish()).resolves.toMatchObject({
+    status: 'completed',
+    result: { nativePathDisposition: 'retirable' },
+  });
+});
+
 test('discloses truncation when recovery proved the recorder gone before record stop', async () => {
   let manifest = '';
   const observations = ['ownership-lost', 'missing'] as const;
@@ -146,6 +172,39 @@ test('a device that kept the artifact it was told to remove is still owed the re
     // A device that answers `rm` with success and keeps the file: the removal is reported, the
     // artifact is not gone, and the disposition has to say so rather than trust the exit status.
     exists: async () => true,
+  });
+  const started = await runtime.screenRecordingStart(recordingInput());
+  const result = await started.pendingHandle.transfer().finish();
+
+  expect(result.status).toBe('completed');
+  if (result.status !== 'completed') return;
+  expect(result.result.nativePathDisposition).toBe('retirable');
+  await expect(runtime.screenRecordingReattach({ envelope: started.envelope })).resolves.toEqual({
+    status: 'completed',
+    result: result.result,
+  });
+  expect(removals).toHaveLength(1);
+});
+
+test('a probe that cannot answer after a crash leaves the retirement owed', async () => {
+  let manifest = '';
+  const removals: string[] = [];
+  let removalAttempted = false;
+  const runtime = await start({
+    writeManifest: async ({ contents }: { contents: string }) => {
+      manifest = contents;
+    },
+    readManifest: async () =>
+      manifest ? { status: 'read' as const, contents: manifest } : { status: 'missing' as const },
+    remove: async (remotePath: string) => {
+      removals.push(remotePath);
+      removalAttempted = true;
+      return true;
+    },
+    // A daemon that died before disposal can come back to a device it cannot question: an adb probe
+    // that never ran proves nothing about the chunks, so neither the stop nor the replay may claim
+    // the device retired them (ADR 0024 2.3).
+    exists: async () => (removalAttempted ? ('uncertain' as const) : true),
   });
   const started = await runtime.screenRecordingStart(recordingInput());
   const result = await started.pendingHandle.transfer().finish();

@@ -26,6 +26,17 @@ export async function createAndroidScreenRecordingTransport(
       timeoutMs: ADB_TIMEOUT_MS,
       signal,
     });
+  // `test -e` exits 0 on a path it saw and 1 on a path it did not, so only those two answers are
+  // evidence. Any other exit — a killed probe, a device that went away mid-call, a shell that could
+  // not run the test — says nothing about the path and must not read as an absence.
+  const probeRemotePath = async (
+    remotePath: string,
+    signal?: AbortSignal,
+  ): Promise<'present' | 'absent' | 'uncertain'> => {
+    const probed = await shell(`test -e ${shellQuote(remotePath)}`, signal);
+    if (probed.exitCode === 0) return 'present';
+    return probed.exitCode === 1 && probed.stderr.trim() === '' ? 'absent' : 'uncertain';
+  };
   return Object.freeze({
     mode: scoped.mode,
     start: async ({ remotePath, quality = 'medium' }, signal) => {
@@ -55,13 +66,14 @@ export async function createAndroidScreenRecordingTransport(
       const stopped = await shell(`kill ${options?.force ? '-9 ' : '-2 '}${process.pid}`, signal);
       return stopped.exitCode === 0 ? 'stopped' : 'uncertain';
     },
-    exists: async (remotePath, signal) =>
-      (await shell(`test -e ${shellQuote(remotePath)}`, signal)).exitCode === 0,
+    exists: async (remotePath, signal) => {
+      const probe = await probeRemotePath(remotePath, signal);
+      if (probe === 'present') return true;
+      return probe === 'absent' ? false : 'uncertain';
+    },
     size: async (remotePath, signal) => {
-      const exists = await shell(`test -e ${shellQuote(remotePath)}`, signal);
-      if (exists.exitCode !== 0) {
-        return exists.stderr.trim() === '' ? undefined : 'uncertain';
-      }
+      const probe = await probeRemotePath(remotePath, signal);
+      if (probe !== 'present') return probe === 'absent' ? undefined : 'uncertain';
       const result = await shell(`stat -c %s ${shellQuote(remotePath)}`, signal);
       if (result.exitCode !== 0) return 'uncertain';
       const size = Number(result.stdout.trim());

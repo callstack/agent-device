@@ -63,7 +63,13 @@
   failures: the export is served either way, and a stop with nothing to report — an older session's
   replay, or a backend whose recorder writes the served file itself — omits them. No stop changes
   outcome in this release; the fields land first so the coordinator can report what it already knows
-   before it starts acting on it.
+  before it starts acting on it.
+- Fixed (record): an Android stop credits the device with retiring its recording only when the
+  device proved the chunks gone. The probe read any failed `test -e` as "not there", so an adb that
+  timed out or a device dropped mid-call turned chunks that were still on the device into
+  `nativePathDisposition: "retired"`, and a reattach that could not question the device at all
+  declared the recording's artifact lost. A probe that never ran now answers uncertain: the path
+  stays `retirable` and the recording stays finishable until the device answers.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
