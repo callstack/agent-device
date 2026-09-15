@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import { collectedRecordingPath } from '@agent-device/capture-kit/recording-stop-sequence';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { ANDROID_RECORDING_CONTRACT_EVIDENCE } from './android-recording.coverage.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -45,8 +46,11 @@ test(ANDROID_RECORDING_CONTRACT_EVIDENCE.testName, async () => {
         assert.ok(calls.some((args) => args[1]?.startsWith('screenrecord --bit-rate 20000000 ')));
         assert.ok(calls.some((args) => args.join(' ') === 'shell kill -2 4321'));
         assert.equal(pulls.length, 1);
-        assert.equal(pulls[0]?.localPath, outputPath);
+        // The recorder's chunks land on a collected sibling and the caller's path is written from a
+        // copy of them, which is what lets a failed stop leave the export absent (ADR 0024 2.3).
+        assert.equal(pulls[0]?.localPath, collectedRecordingPath(outputPath));
         assert.equal(fs.existsSync(outputPath), true);
+        assert.equal(fs.existsSync(collectedRecordingPath(outputPath)), false);
       } finally {
         await daemon.close();
       }
@@ -82,7 +86,8 @@ test('Provider-backed integration Android record stop reattaches a matching dura
           calls.some((args) => args[1]?.includes('/sdcard/agent-device-recording-active.json')),
         );
         assert.ok(calls.some((args) => args.join(' ') === 'shell kill -2 4321'));
-        assert.deepEqual(pulls, [{ remotePath, localPath: outputPath }]);
+        assert.deepEqual(pulls, [{ remotePath, localPath: collectedRecordingPath(outputPath) }]);
+        assert.equal(fs.existsSync(outputPath), true);
       } finally {
         await daemon.close();
       }
