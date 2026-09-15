@@ -2,11 +2,15 @@ import type { DurableCaptureProgress } from '@agent-device/contracts/durable-res
 import { mustSignalRecorder } from '@agent-device/contracts/recording-stop-progress';
 import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
+  ScreenRecordingChunk,
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { createScreenRecordingCompletion } from '../screen-recording-completion.ts';
 import { collectedRecordingPath } from './artifact-paths.ts';
+
+/** Where a recorder writes when its file must stay separate from the export (ADR 0024 2.3). */
+export { collectedRecordingPath, nativeRecordingPath } from './artifact-paths.ts';
 import { readStopCheckpoints, writeStopCheckpoint } from './stop-checkpoints.ts';
 import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
 
@@ -22,6 +26,10 @@ export type ScreenRecordingFinalization = Readonly<{
   warning?: string;
   overlayWarning?: string;
   nativePathDisposition?: NativePathDisposition;
+  /** The files an export is served as when one recorder produced several of them. */
+  chunks?: readonly ScreenRecordingChunk[];
+  /** Wall time the recorder's own files cover, which is shorter than the stop's own export latency. */
+  capturedDurationMs?: number;
 }>;
 
 /**
@@ -82,7 +90,7 @@ export async function stopAndExportScreenRecording(
   const finalization =
     learned.finalization ?? (await steps.finalize({ collectedPath, exportPath: snapshot.outPath }));
   progress?.record(writeStopCheckpoint({ exportPath: snapshot.outPath, finalization }));
-  return createScreenRecordingCompletion(snapshot, joinWarnings(finalization, recorderWarning), {
+  return createScreenRecordingCompletion(snapshot, exportFacts(finalization, recorderWarning), {
     stopObservation: observation,
     ...(finalization.nativePathDisposition === undefined
       ? {}
@@ -90,10 +98,21 @@ export async function stopAndExportScreenRecording(
   });
 }
 
-function joinWarnings(
+/**
+ * The export's own facts, with the recorder's disclosure folded into the warning the caller reads.
+ * `chunks` and `capturedDurationMs` travel here because they are decided with the export and journaled
+ * beside it: a replay that reuses a committed finalization must still serve them.
+ */
+function exportFacts(
   finalization: ScreenRecordingFinalization,
   recorderWarning: string | undefined,
-): Readonly<{ telemetryPath?: string; warning?: string; overlayWarning?: string }> {
+): Readonly<{
+  telemetryPath?: string;
+  warning?: string;
+  overlayWarning?: string;
+  chunks?: readonly ScreenRecordingChunk[];
+  capturedDurationMs?: number;
+}> {
   const warnings = [finalization.warning, recorderWarning].filter(
     (warning): warning is string => warning !== undefined && warning.length > 0,
   );
@@ -105,5 +124,9 @@ function joinWarnings(
       ? {}
       : { overlayWarning: finalization.overlayWarning }),
     ...(warnings.length === 0 ? {} : { warning: warnings.join(' ') }),
+    ...(finalization.chunks === undefined ? {} : { chunks: finalization.chunks }),
+    ...(finalization.capturedDurationMs === undefined
+      ? {}
+      : { capturedDurationMs: finalization.capturedDurationMs }),
   };
 }

@@ -6,6 +6,7 @@ import type {
   ManagedProcessOwnership,
   OwnedProcessRecordWriter,
 } from './platform-runtime-host.ts';
+import type { NativePathDisposition } from './recording-native-path.ts';
 import type { RecordingGestureEvent } from './screen-recording-runtime.ts';
 
 /** A long-lived native recorder process. It deliberately carries no request scope. */
@@ -240,6 +241,15 @@ export type WebScreenRecordingHost = Readonly<{
 
 /** Closed post-processing authority for stable/playable validation, telemetry, and overlays. */
 export type ScreenRecordingFinalizer = Readonly<{
+  /**
+   * The playability rule on its own, for the artifact a stop collected before it wrote the export
+   * (ADR 0024 2.3). A copy is checked with the same patience and the same verdict the export gets —
+   * a container sniff alone would let a file no player can read become the served video.
+   */
+  validatePlayable(
+    input: Readonly<{ outputPath: string; targetLabel: string }>,
+    signal?: AbortSignal,
+  ): Promise<void>;
   complete(
     input: Readonly<{
       outputPath: string;
@@ -255,6 +265,26 @@ export type ScreenRecordingFinalizer = Readonly<{
 /** Destructive output preparation occurs only after package-owned semantic validation. */
 export type ScreenRecordingOutputHost = Readonly<{
   prepare(outputPath: string): Promise<void>;
+  /**
+   * Copies what a recorder wrote onto the path a stop collects (ADR 0024 2.3). The copy is what the
+   * playability rule examines and what a retry resumes from, so the recorder keeps its own file until
+   * an export exists. An absent recorder file is an error rather than a step to skip: a recording that
+   * is not there is something the stop has to say out loud.
+   */
+  collectFromRecorder(
+    input: Readonly<{ recorderPath: string; collectedPath: string }>,
+  ): Promise<void>;
+  /** Writes the caller's export from the collected copy, replacing whatever already sits there. */
+  writeExportFromCollected(
+    input: Readonly<{ collectedPath: string; exportPath: string }>,
+  ): Promise<void>;
+  /**
+   * Removes the recorder's own file now that an export exists and answers whether it worked. Only the
+   * host can see the path, so only the host can say `retired` instead of `retirable`.
+   */
+  retireRecorderFile(recorderPath: string): Promise<NativePathDisposition>;
+  /** Discards the collected copy once the export stands. Refusing to delete it is not a failure. */
+  discardCollectedFile(collectedPath: string): Promise<void>;
 }>;
 
 /** Focused host authorities consumed only by package-owned screen-recording mechanics. */

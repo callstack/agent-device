@@ -1,4 +1,5 @@
 import type {
+  ScreenRecordingChunk,
   ScreenRecordingCompletion,
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
@@ -13,7 +14,12 @@ import type { ScreenRecordingFinalizer } from '@agent-device/contracts/screen-re
  */
 export function createScreenRecordingCompletion(
   snapshot: ScreenRecordingLiveSnapshot,
-  finalization: Awaited<ReturnType<ScreenRecordingFinalizer['complete']>>,
+  finalization: Awaited<ReturnType<ScreenRecordingFinalizer['complete']>> &
+    Readonly<{
+      /** Set when one recorder produced several files that the export is served as. */
+      chunks?: readonly ScreenRecordingChunk[];
+      capturedDurationMs?: number;
+    }>,
   facts: Readonly<{
     stopObservation: StopObservation;
     nativePathDisposition?: NativePathDisposition;

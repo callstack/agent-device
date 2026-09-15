@@ -27,8 +27,39 @@ export function createScreenRecordingRuntimeHost(
         await import('./platform-runtime-screen-recording-output-host.ts');
       await createScreenRecordingOutputHost().prepare(outputPath);
     },
+    collectFromRecorder: async ({ recorderPath, collectedPath }) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      await createScreenRecordingOutputHost().collectFromRecorder({
+        recorderPath,
+        collectedPath,
+      });
+    },
+    writeExportFromCollected: async ({ collectedPath, exportPath }) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      await createScreenRecordingOutputHost().writeExportFromCollected({
+        collectedPath,
+        exportPath,
+      });
+    },
+    retireRecorderFile: async (recorderPath) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      return await createScreenRecordingOutputHost().retireRecorderFile(recorderPath);
+    },
+    discardCollectedFile: async (collectedPath) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      await createScreenRecordingOutputHost().discardCollectedFile(collectedPath);
+    },
   });
   const finalize: ScreenRecordingRuntimeHost['finalize'] = Object.freeze({
+    validatePlayable: async (input, signal) => {
+      const { createScreenRecordingFinalizer } =
+        await import('./platform-runtime-screen-recording-finalizer-host.ts');
+      await createScreenRecordingFinalizer().validatePlayable(input, signal);
+    },
     complete: async (input, signal) => {
       const { createScreenRecordingFinalizer } =
         await import('./platform-runtime-screen-recording-finalizer-host.ts');

@@ -13,28 +13,42 @@ import {
 } from '@agent-device/capture-kit/recording-video';
 
 export function createScreenRecordingFinalizer(): ScreenRecordingRuntimeHost['finalize'] {
-  return Object.freeze({ complete: finalizeScreenRecording });
+  return Object.freeze({
+    validatePlayable: validatePlayableRecording,
+    complete: finalizeScreenRecording,
+  });
+}
+
+/**
+ * The one playability rule, applied to any file a recording step is about to rely on: the export
+ * before it is overlaid, and the copy a stop collected before it wrote the export (ADR 0024 2.3).
+ * Patience first — a recorder still closing its file becomes playable — then AVFoundation's verdict,
+ * because a container sniff alone would certify a file no player can read.
+ */
+async function validatePlayableRecording(
+  input: Readonly<{ outputPath: string; targetLabel: string }>,
+): Promise<void> {
+  await waitForStableFile(input.outputPath);
+  await waitForPlayableVideo(input.outputPath);
+  if (await isPlayableVideo(input.outputPath)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${input.targetLabel} is not a playable video: ${input.outputPath}`,
+    {
+      reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
+      retriable: true,
+      hint:
+        'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
+        'next stop, and the recording keeps its evidence either way. If the recorder died before ' +
+        'writing a video, close this session to release the device and record again.',
+    },
+  );
 }
 
 async function finalizeScreenRecording(
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
 ) {
-  await waitForStableFile(input.outputPath);
-  await waitForPlayableVideo(input.outputPath);
-  if (!(await isPlayableVideo(input.outputPath))) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `recording was not finalized into a playable video: ${input.outputPath}`,
-      {
-        reason: RECORDING_OUTPUT_UNPLAYABLE_REASON,
-        retriable: true,
-        hint:
-          'Run record stop again: a recorder that is still finalizing its file is playable on the ' +
-          'next stop, and the recording keeps its evidence either way. If the recorder died before ' +
-          'writing a video, close this session to release the device and record again.',
-      },
-    );
-  }
+  await validatePlayableRecording(input);
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });

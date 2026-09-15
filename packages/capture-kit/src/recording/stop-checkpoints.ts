@@ -1,5 +1,8 @@
 import type { JsonObject } from '@agent-device/contracts/client';
-import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import {
+  isNativePathDisposition,
+  type NativePathDisposition,
+} from '@agent-device/contracts/recording-native-path';
 import type { RecordingStopProgress } from '@agent-device/contracts/recording-stop-progress';
 import {
   type StopObservation,
@@ -69,33 +72,45 @@ function encodeFinalization(
   };
 }
 
-function readFinalization(value: unknown): RecordingStopProgress['finalization'] | undefined {
+type StopFinalization = NonNullable<RecordingStopProgress['finalization']>;
+
+type StopFinalizationFields = Readonly<{
+  telemetryPath?: unknown;
+  warning?: unknown;
+  overlayWarning?: unknown;
+  nativePathDisposition?: unknown;
+}>;
+
+const FINALIZATION_STRING_KEYS = ['telemetryPath', 'warning', 'overlayWarning'] as const;
+
+function readFinalization(value: unknown): StopFinalization | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
-  const candidate: {
-    telemetryPath?: unknown;
-    warning?: unknown;
-    overlayWarning?: unknown;
-    nativePathDisposition?: unknown;
-  } = value;
-  const disposition = candidate.nativePathDisposition;
-  if (disposition !== undefined && !isNativePathDisposition(disposition)) return undefined;
-  const telemetryPath = readNonEmptyString(candidate.telemetryPath);
-  const warning = readNonEmptyString(candidate.warning);
-  const overlayWarning = readNonEmptyString(candidate.overlayWarning);
-  if (
-    telemetryPath === undefined &&
-    warning === undefined &&
-    overlayWarning === undefined &&
-    disposition === undefined
-  ) {
-    return undefined;
-  }
-  return {
-    ...(telemetryPath === undefined ? {} : { telemetryPath }),
-    ...(warning === undefined ? {} : { warning }),
-    ...(overlayWarning === undefined ? {} : { overlayWarning }),
+  const fields: StopFinalizationFields = value;
+  const disposition = readDeclaredDisposition(fields.nativePathDisposition);
+  if (disposition === 'undeclared') return undefined;
+  const finalization: { -readonly [K in keyof StopFinalization]?: StopFinalization[K] } = {
+    ...readFinalizationStrings(fields),
     ...(disposition === undefined ? {} : { nativePathDisposition: disposition }),
   };
+  // A checkpoint that names nothing the finalizer learned is worse than none: the next attempt would
+  // serve an empty result as though the finalizer had run, and never redo the step that did not.
+  return Object.keys(finalization).length === 0 ? undefined : finalization;
+}
+
+function readDeclaredDisposition(value: unknown): NativePathDisposition | 'undeclared' | undefined {
+  if (value === undefined) return undefined;
+  return isNativePathDisposition(value) ? value : 'undeclared';
+}
+
+function readFinalizationStrings(fields: StopFinalizationFields): {
+  -readonly [K in (typeof FINALIZATION_STRING_KEYS)[number]]?: string;
+} {
+  const readable: { -readonly [K in (typeof FINALIZATION_STRING_KEYS)[number]]?: string } = {};
+  for (const key of FINALIZATION_STRING_KEYS) {
+    const value = readNonEmptyString(fields[key]);
+    if (value !== undefined) readable[key] = value;
+  }
+  return readable;
 }
 
 function encodeOptionalString(key: string, value: unknown): JsonObject {

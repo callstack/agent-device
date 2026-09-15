@@ -185,8 +185,23 @@ async function runtime(
     host: {
       screenRecording: {
         web: { resolve: async () => transport },
-        finalize: { complete },
-        outputs: { prepare },
+        finalize: { complete, validatePlayable: async () => {} },
+        outputs: {
+          prepare,
+          // The web transport writes the served file itself, so it never collects a copy.
+          collectFromRecorder: async () => {
+            throw new Error('unused');
+          },
+          writeExportFromCollected: async () => {
+            throw new Error('unused');
+          },
+          retireRecorderFile: async () => {
+            throw new Error('unused');
+          },
+          discardCollectedFile: async () => {
+            throw new Error('unused');
+          },
+        },
       },
     },
     device,

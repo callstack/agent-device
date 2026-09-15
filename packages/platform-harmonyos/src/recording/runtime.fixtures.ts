@@ -51,8 +51,26 @@ export function harmonyRecordingHost(
   return {
     screenRecording: {
       harmony,
-      outputs: { prepare: overrides.prepare ?? (async () => {}) },
-      finalize: { complete: overrides.complete ?? (async () => ({})) },
+      outputs: {
+        prepare: overrides.prepare ?? (async () => {}),
+        // HarmonyOS still hands the recorder's own file to the finalizer, so it never collects a copy.
+        collectFromRecorder: async () => {
+          throw new Error('unused');
+        },
+        writeExportFromCollected: async () => {
+          throw new Error('unused');
+        },
+        retireRecorderFile: async () => {
+          throw new Error('unused');
+        },
+        discardCollectedFile: async () => {
+          throw new Error('unused');
+        },
+      },
+      finalize: {
+        complete: overrides.complete ?? (async () => ({})),
+        validatePlayable: async () => {},
+      },
     },
     clock: { now: () => 0, sleep: async () => {} },
   };
