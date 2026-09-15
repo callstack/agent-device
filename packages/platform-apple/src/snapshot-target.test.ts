@@ -1,4 +1,4 @@
-import { listenerCount } from 'node:events';
+import { getEventListeners } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
@@ -141,9 +141,9 @@ test('an aborted request cannot reuse a cached target', async () => {
   });
 });
 
-/** Node counts EventTarget listeners through the same entry point it uses for emitters. */
+/** The abort listeners still attached to a caller's signal, once its call has returned. */
 function abortListeners(signal: AbortSignal): number {
-  return listenerCount(signal as unknown as Parameters<typeof listenerCount>[0], 'abort');
+  return getEventListeners(signal, 'abort').length;
 }
 
 function deferredSpawn(fixture: ReturnType<typeof targetFixture>) {
