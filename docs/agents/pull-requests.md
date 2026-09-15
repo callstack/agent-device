@@ -79,5 +79,19 @@ Ready-for-review by default; draft when requested or intentionally incomplete. K
   At roughly 700 net production lines (excluding tests, generated data, fixtures, and docs) or
   more than 3 kB npm unpacked growth, obtain an independent review of whether a smaller owning
   interface or deletion of superseded code would suffice. Consider gross churn for move-heavy
-  changes. These are investigation thresholds, not automatic rejection; explain justified growth
-  and why a smaller design was rejected.
+  changes. Ask the same question when a change adds an abstraction, seam, dependency, or ownership
+  rule, whatever its size. These are investigation thresholds, not automatic rejection; explain
+  justified growth and why a smaller design was rejected.
+
+## Answering review findings
+
+- Fix the rule, not the listed sites. Find what enumerates the sites a finding names (the owning
+  helper, type, or registry) and satisfy the invariant there; patching only the named sites starts
+  the next round.
+- A completeness claim carries its proof. Before writing "one reader", "no shim left", "pure move",
+  or "behavior unchanged elsewhere", run the grep or `git diff -M90%` that shows it and cite it.
+- Test doubles fail the way production fails: fixtures carry the error production produces, and
+  stubs throw where the real call throws. Name the mutation that makes the new test fail.
+- Live evidence must reach the route the change adds, with the output that proves it; a run on a
+  neighbouring pre-existing route is not evidence.
+- Push back with evidence when a finding is wrong; do not patch to end the thread.
