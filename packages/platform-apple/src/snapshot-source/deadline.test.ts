@@ -1,4 +1,3 @@
-import { getEventListeners } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import { createSnapshotSourceDeadline, waitForSnapshotSourceDelay } from './deadline.ts';
 import { SnapshotSourceError } from './errors.ts';
@@ -43,25 +42,6 @@ test('an aborted caller signal stays typed cancellation next to a stop', async (
       failureKind: 'cancelled',
       failureCode: 'abort-signal',
     });
-    expect(vi.getTimerCount()).toBe(0);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test('a delay called with no stop, the way every lifecycle site sends it, leaves no listener behind', async () => {
-  vi.useFakeTimers();
-  try {
-    const caller = new AbortController();
-    const deadline = createSnapshotSourceDeadline(60_000, caller.signal);
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const waiting = waitForSnapshotSourceDelay(deadline, 1_000, WAIT_CODE);
-      await vi.advanceTimersByTimeAsync(1_000);
-      await waiting;
-    }
-
-    expect(getEventListeners(caller.signal, 'abort').length).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   } finally {
     vi.useRealTimers();

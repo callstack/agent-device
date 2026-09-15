@@ -96,6 +96,7 @@ export function waitForDetachedAttempt(
     signal?.addEventListener('abort', onAbort, { once: true });
     stop?.addEventListener('abort', onStop, { once: true });
     if (signal?.aborted) onAbort();
+    else if (stop?.aborted) onStop();
   });
 }
 

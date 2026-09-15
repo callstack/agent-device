@@ -293,6 +293,27 @@ test('a caller signal already aborted rejects at once, without spending waitMs',
   }
 });
 
+test('a stop already aborted resolves at once, without spending waitMs', async () => {
+  vi.useFakeTimers();
+  try {
+    const stop = new AbortController();
+    stop.abort();
+
+    const waiting = waitForDetachedAttempt({
+      waitMs: 60_000,
+      signal: undefined,
+      stop: stop.signal,
+      cancelled: () => new Error('unreachable'),
+    });
+
+    await waiting;
+    assert.equal(vi.getTimerCount(), 0);
+    assert.equal(getEventListeners(stop.signal, 'abort').length, 0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 function identity(error: unknown): unknown {
   return error;
 }
