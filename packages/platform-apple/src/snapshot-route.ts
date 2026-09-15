@@ -265,7 +265,11 @@ async function fallbackAfterFailure(
   disabledGenerations: Set<string>,
   cause?: unknown,
 ): Promise<SnapshotResult> {
-  disableGenerationFor(failure, failedTarget, disabledGenerations);
+  // A failed bridge is evidence about this app generation, so its captures take the runner until the
+  // generation is rebaselined. A bridge that is merely still being prepared is evidence about the
+  // daemon's build queue instead: the same generation has to be able to use it as soon as it exists,
+  // which is what let one cold host cost every later capture of a stable screen (#2491).
+  if (failure.kind !== 'preparing') disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
     { id: failedTarget.udid },
@@ -282,21 +286,6 @@ async function fallbackAfterFailure(
     failure.code,
     identity.residue,
   );
-}
-
-/**
- * A failed bridge is evidence about this app generation, so its captures take the runner until the
- * generation is rebaselined. A bridge that is merely still being prepared is evidence about the
- * daemon's build queue instead: the same generation must be able to use it as soon as it exists,
- * which is what let one cold host cost every later capture of a stable screen (#2491).
- */
-function disableGenerationFor(
-  failure: SnapshotSourceFailure,
-  failedTarget: SimulatorSnapshotTarget,
-  disabledGenerations: Set<string>,
-): void {
-  if (failure.kind === 'preparing') return;
-  disabledGenerations.add(generationKey(failedTarget));
 }
 
 async function runFallback(

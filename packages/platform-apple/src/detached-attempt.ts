@@ -63,6 +63,41 @@ type Attempt<Value> = {
   settled: Promise<void>;
 };
 
+/**
+ * The wait an owner hands to `value()`, built once so the promise every owner needs is the promise
+ * this module describes: sleeps `waitMs`, resolves when that sleep is spent or when `stop` says the
+ * answer arrived elsewhere, and rejects only on the caller's own abort so that stays typed.
+ *
+ * `stop` needs neither cleanup nor an already-aborted check: `value()` creates it moments before
+ * calling and aborts it in a `finally`, which releases the `{ once: true }` listener. The caller's
+ * signal outlives the wait and does have its listener removed.
+ */
+export function waitForDetachedAttempt(
+  params: Readonly<{
+    waitMs: number;
+    /** The caller's own deadline signal; a wait inside it keeps a client abort a client abort. */
+    signal: AbortSignal | undefined;
+    stop: AbortSignal;
+    /** The rejection for the caller aborting, so each owner keeps its own error type. */
+    cancelled: () => unknown;
+  }>,
+): Promise<void> {
+  const { waitMs, signal, stop, cancelled } = params;
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => finish(() => reject(cancelled()));
+    const onStop = () => finish(resolve);
+    const timer = setTimeout(() => finish(resolve), waitMs);
+    function finish(settle: () => void): void {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      settle();
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    stop.addEventListener('abort', onStop, { once: true });
+  });
+}
+
 export function createDetachedAttempts<Value>(
   deps: Readonly<{
     waitMs: number;
