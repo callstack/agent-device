@@ -7,8 +7,8 @@ import type { DaemonResponse } from './daemon-request.ts';
  * Append the occluding-system-surface disclosure to a selector-route response whose consumed
  * snapshot was a system surface: an Android notification shade / quick settings, or an iOS in-place
  * system sheet such as web sign-in or Apple Pay (#2438). Both found and not-found outcomes must
- * explain that app content is occluded: a match found inside the surface is not app content, and a miss is expected while the
- * surface covers the app.
+ * explain that app content is occluded: a match found inside the surface is not app content, and a
+ * miss is expected while the surface covers the app.
  */
 export function withSystemSurfaceDisclosure(
   response: DaemonResponse,

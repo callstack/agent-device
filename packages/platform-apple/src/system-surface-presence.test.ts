@@ -24,10 +24,33 @@ const sim = {
 
 type ProbeReply = { exitCode: number; stdout: string };
 
-/** Routes the two probe commands independently so each failure mode can be exercised alone. */
-function stubProbes(replies: { pgrep?: ProbeReply | Error; ps?: ProbeReply | Error }): void {
-  mockRunCmd.mockImplementation(async (command: string) => {
-    const reply = command === 'pgrep' ? replies.pgrep : replies.ps;
+const SAFARI_HOST = IOS_SYSTEM_SURFACE_HOSTS.find(
+  (host) => host.bundleId === 'com.apple.SafariViewService',
+)!;
+const PASSBOOK_HOST = IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.kind === 'payment')!;
+
+/** Literals, not registry reads, so a drifted registry executable fails the per-host cases. */
+const SAFARI_EXECUTABLE = 'SafariViewService.app/SafariViewService';
+const PASSBOOK_EXECUTABLE = 'PassbookUIService.app/PassbookUIService';
+
+/**
+ * Routes the two probe commands independently so each failure mode can be exercised alone.
+ * `pgrepByExecutable` answers per `pgrep -f` target; `pgrep` answers every target alike.
+ */
+function stubProbes(replies: {
+  pgrep?: ProbeReply | Error;
+  pgrepByExecutable?: Readonly<Record<string, ProbeReply | Error>>;
+  ps?: ProbeReply | Error;
+}): void {
+  mockRunCmd.mockImplementation(async (command: string, args: string[] = []) => {
+    if (command === 'pgrep') {
+      const executable = args[1] ?? '';
+      const reply = replies.pgrepByExecutable?.[executable] ?? replies.pgrep;
+      if (reply === undefined) throw new Error(`unexpected pgrep target ${executable}`);
+      if (reply instanceof Error) throw reply;
+      return { exitCode: reply.exitCode, stdout: reply.stdout, stderr: '' };
+    }
+    const reply = replies.ps;
     if (reply === undefined) throw new Error(`unexpected probe command ${command}`);
     if (reply instanceof Error) throw reply;
     return { exitCode: reply.exitCode, stdout: reply.stdout, stderr: '' };
@@ -37,10 +60,13 @@ function stubProbes(replies: { pgrep?: ProbeReply | Error; ps?: ProbeReply | Err
 const RUNNING = { exitCode: 0, stdout: '900\n' } as const;
 const NOT_RUNNING = { exitCode: 1, stdout: '' } as const;
 /** The verdict a matched host produces: the host travels with it, to become the capture's lineage. */
-const PRESENT = { kind: 'present', host: IOS_SYSTEM_SURFACE_HOSTS[0]! } as const;
-const scopedTo = (udid: string): ProbeReply => ({
+const SAFARI_PRESENT = { kind: 'present', host: SAFARI_HOST } as const;
+const scopedTo = (
+  udid: string,
+  executable: string = SAFARI_HOST.processExecutable,
+): ProbeReply => ({
   exitCode: 0,
-  stdout: `/…/SafariViewService.app/SafariViewService SIMULATOR_UDID=${udid}`,
+  stdout: `/…/${executable} SIMULATOR_UDID=${udid}`,
 });
 
 beforeEach(() => {
@@ -49,7 +75,21 @@ beforeEach(() => {
 
 test('a host process scoped to this device is present, and names the host it matched', async () => {
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
-  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toEqual(PRESENT);
+  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toEqual(SAFARI_PRESENT);
+});
+
+test('a device-scoped PassbookUIService pid present while SafariViewService is absent resolves to the payment host', async () => {
+  stubProbes({
+    pgrepByExecutable: {
+      [SAFARI_EXECUTABLE]: NOT_RUNNING,
+      [PASSBOOK_EXECUTABLE]: RUNNING,
+    },
+    ps: scopedTo('UDID-1', PASSBOOK_EXECUTABLE),
+  });
+  await expect(createSystemSurfacePresenceProbe()(sim)).resolves.toEqual({
+    kind: 'present',
+    host: PASSBOOK_HOST,
+  });
 });
 
 test('the same host running for another device is absent', async () => {
@@ -113,7 +153,7 @@ test('absence is not cached: a sheet opening within the TTL is seen immediately'
 
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   clock += 10; // far inside the memo TTL
-  await expect(probe(sim)).resolves.toEqual(PRESENT);
+  await expect(probe(sim)).resolves.toEqual(SAFARI_PRESENT);
 });
 
 test('unknown is not cached either', async () => {
@@ -124,7 +164,7 @@ test('unknown is not cached either', async () => {
 
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   clock += 10;
-  await expect(probe(sim)).resolves.toEqual(PRESENT);
+  await expect(probe(sim)).resolves.toEqual(SAFARI_PRESENT);
 });
 
 test('a positive observation is memoized within the TTL and re-probed after it', async () => {
@@ -133,7 +173,7 @@ test('a positive observation is memoized within the TTL and re-probed after it',
   stubProbes({ pgrep: RUNNING, ps: scopedTo('UDID-1') });
   await probe(sim);
   const callsAfterFirst = mockRunCmd.mock.calls.length;
-  await expect(probe(sim)).resolves.toEqual(PRESENT);
+  await expect(probe(sim)).resolves.toEqual(SAFARI_PRESENT);
   expect(mockRunCmd.mock.calls.length).toBe(callsAfterFirst);
 
   clock += 2_000; // past the TTL

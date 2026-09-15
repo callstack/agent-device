@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added (ios): `type` and `fill` work in the Apple Pay sheet on iOS Simulator instead of failing
+  with `TEXT_INPUT_NOT_FOCUSED`. `com.apple.PassbookUIService` is served in place like the web
+  sign-in host (#2438).
+- Changed (ios): Simulator captures also probe for `com.apple.PassbookUIService`. It can keep
+  running after the Apple Pay sheet closes, so a later capture in that app can report
+  `system-surface-host-lingering` while the process stays alive.
+- Changed (ios): the in-place system surface disclosure now names the sheet kind. The web sign-in
+  sentence changed from "A system web sign-in sheet is presented over the app, so this snapshot
+  shows that sheet (hosted out of the app process)." to "This snapshot shows a system web sign-in
+  sheet presented over the app (hosted out of the app process), not app content". The payment host
+  says "the system Apple Pay sheet" instead.
 - Fixed (android): a chunked `record stop` (recordings over 170 s) no longer warns that screenrecord
   stopped before record stop at the 180 s limit. Rotation always ends every earlier chunk before
   stop, so the warning now fires only when the last chunk's recorder had already exited.

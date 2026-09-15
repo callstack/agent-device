@@ -96,9 +96,9 @@ field itself never appears in the accessibility tree and only the keyboard prove
 `automation-flattened-value` mirrors what was typed. `automation-open-apple-pay` (iOS only, native
 module `modules/apple-pay-lab`) presents the system Apple Pay sheet requiring a billing address plus
 contact email and phone; those forms are hosted out of process in `com.apple.PassbookUIService`, and
-`automation-apple-pay-result` reports `authorized` or `dismissed` once the sheet closes. CI repacks JavaScript-only changes into the
-cached Release app without starting Metro; native configuration changes intentionally produce one
-new fingerprinted build that all simulator consumers share.
+`automation-apple-pay-result` reports `authorized` or `dismissed` once the sheet closes. CI repacks
+JavaScript-only changes into the cached Release app without starting Metro; native configuration
+changes intentionally produce one new fingerprinted build that all simulator consumers share.
 
 ### iOS simulator
 

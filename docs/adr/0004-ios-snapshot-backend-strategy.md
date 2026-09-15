@@ -360,14 +360,14 @@ teardown) unrepresentable for the delegated-auth flow, because the session never
 Captures of a system surface carry a response-level `systemSurface` provenance and the shared
 `iosSystemSurfaceDisclosure`, worded per host kind, so the agent is told the controls belong to a
 system sheet (web sign-in, Apple Pay) rather than the app. They are also lineaged to the host rather
-than the app, so their comparison identity differs from an app capture's by construction: every consumer that asks "are these two captures the
-same presentation" refuses a cross-surface pair through ordinary key equality, and no comparison
-site carries a surface check of its own. Physical devices always use the runner, so the in-place
-serve applies there without a route change; the Simulator route probe is the only
-Simulator-specific piece.
+than the app, so their comparison identity differs from an app capture's by construction: every
+consumer that asks "are these two captures the same presentation" refuses a cross-surface pair
+through ordinary key equality, and no comparison site carries a surface check of its own. Physical
+devices always use the runner, so the in-place serve applies there without a route change; the
+Simulator route probe is the only Simulator-specific piece.
 
-The Apple Pay host (`com.apple.PassbookUIService`) joined the registry for text entry as much as
-for snapshots. Its billing, shipping, and contact forms hold text fields the session app's tree cannot
+The Apple Pay host (`com.apple.PassbookUIService`) joined the registry for text entry as much as for
+snapshots. Its billing, shipping, and contact forms hold text fields the session app's tree cannot
 resolve, and a bare `type` addressed to the app process never sees that keyboard. Addressing the
 host in place is what lets the runner's first-responder route type into them; no text-entry branch
 changed for it.
