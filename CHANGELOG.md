@@ -159,8 +159,11 @@
   is told, whichever give-back door a teardown used. The lock's own complaint used to replace it in a
   `finally` and the best-effort door then dropped it, leaving the symlink pointed at the agent-device
   simulator set with nothing said about why. A simulator whose set already is `XCTestDevices` is no
-  longer failed by a lock it could not verify, either, and a redirect that could not be installed names
-  the path a failed restore left the host's device set at instead of only logging it.
+  longer failed by a lock it could not verify, either. A leftover from an interrupted build — the host's
+  set renamed aside and `XCTestDevices` symlinked into a simulator's own set — is now put back before the
+  redirect decides whether it is needed, so the first build after an interruption still gets its own
+  device set instead of the host's. A redirect that could not be installed reports the restore that failed
+  with it, and names a backup path only when that backup is really on disk.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An
