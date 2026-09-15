@@ -172,25 +172,37 @@ test('a managed port scope refuses global options the provider cannot restate', 
   ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
   expect(providerCalls).toEqual([]);
 
-  // A port typed into argv is the same conflict as one naming another target: the provider would
-  // hand the caller's `-P` to an adb it does not address, so the call is refused here.
+  // A port typed into argv names a server the provider cannot address, so the server rule refuses
+  // it here — not the host-global rule, which is why the port has to parse.
   providerCalls.length = 0;
   await expect(
     capture({ serial: DEVICE.id, serverPort: 15_037 }, [
       '-P',
-      '9_999',
+      '9999',
       '-s',
       DEVICE.id,
       'shell',
       'ls',
     ]),
-  ).rejects.toMatchObject({ details: { reason: 'managed-device-transport-mismatch' } });
+  ).rejects.toThrowError(/cannot select another server/);
   expect(providerCalls).toEqual([]);
 
+  // The server this lease holds is the one port the provider may be handed a request for, argv
+  // included, and the request still travels as the caller wrote it.
+  await capture({ serial: DEVICE.id, serverPort: 15_037 }, [
+    '-P',
+    '15037',
+    '-s',
+    DEVICE.id,
+    'shell',
+    'ls',
+  ]);
+  expect(providerCalls).toEqual([['-P', '15037', 'shell', 'ls']]);
+
   // Without a lease the caller's own adb invocation is what runs, globals and all: the provider
-  // receives the request with only this scope's `-s` pair removed.
+  // receives the request with only this scope's `-s` pair removed, and no server rule applies.
+  providerCalls.length = 0;
   await capture({ serial: DEVICE.id }, ['-t', '42', '-s', DEVICE.id, 'shell', 'ls']);
-  expect(providerCalls).toEqual([['-t', '42', 'shell', 'ls']]);
   await capture({ serial: DEVICE.id }, ['-P', '9999', '-s', DEVICE.id, 'shell', 'ls']);
   expect(providerCalls).toEqual([
     ['-t', '42', 'shell', 'ls'],
