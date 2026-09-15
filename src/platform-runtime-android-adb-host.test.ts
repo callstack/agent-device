@@ -5,6 +5,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   createLocalAndroidAdbProvider,
+  parseAndroidAdbArgv,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
 import { ANDROID_EMULATOR } from './__tests__/test-utils/device-fixtures.ts';
@@ -49,7 +50,7 @@ test.skipIf(process.platform === 'win32')(
     await withFakeAdbOnPath(
       String.raw`process.stderr.write("error: device offline\n"); process.exit(1);`,
       async () => {
-        const error = await runAndroidHostAdb(['devices']).then(
+        const error = await runAndroidHostAdb(parseAndroidAdbArgv(['devices'])).then(
           () => assert.fail('expected local adb to reject'),
           (error: unknown) => error,
         );
@@ -96,7 +97,11 @@ test.skipIf(process.platform === 'win32')(
             ).stdout,
           ) as { args: string[]; port: string | null };
           const host = JSON.parse(
-            (await runAndroidHostAdb(['-P', '9999', 'devices'], { serverPort: 15_038 })).stdout,
+            (
+              await runAndroidHostAdb(parseAndroidAdbArgv(['-P', '9999', 'devices']), {
+                serverPort: 15_038,
+              })
+            ).stdout,
           ) as { args: string[]; port: string | null };
           for (const selector of [
             ['-H', 'foreign.example'],
@@ -171,7 +176,7 @@ test.skipIf(process.platform === 'win32')(
         'try { process.kill(-process.pid, 0); ownGroup = true; } catch {}',
         'process.stdout.write(JSON.stringify({ ownGroup }));',
       ].join('\n'),
-      async () => await runAndroidHostAdb(['devices'], { timeoutMs: 3_000 }),
+      async () => await runAndroidHostAdb(parseAndroidAdbArgv(['devices']), { timeoutMs: 3_000 }),
     );
 
     assert.equal((JSON.parse(reported.stdout) as { ownGroup: boolean }).ownGroup, true);

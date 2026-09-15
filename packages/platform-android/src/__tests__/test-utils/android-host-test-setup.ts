@@ -7,6 +7,7 @@ import {
   withoutCommandExecutorOverride,
 } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { lowerAndroidAdbInvocation } from '../../adb-transport.ts';
 import { bindAndroidAdbHostStub } from '../../adb-host.fixtures.ts';
 import { createAndroidFileHost } from './android-file-host.ts';
 
@@ -14,25 +15,26 @@ export function bindAndroidAdbTestHost() {
   return bindAndroidAdbHostStub({
     environment: process.env,
     files: createAndroidFileHost(),
-    execSerialAdb: async (serial, args, options) =>
-      await withoutCommandExecutorOverride(
+    execAdb: async (invocation, options) => {
+      const lowered = lowerAndroidAdbInvocation(invocation, options, process.env);
+      return await withoutCommandExecutorOverride(
         async () =>
-          await runCmd('adb', ['-s', serial, ...args], {
-            ...options,
+          await runCmd('adb', lowered.args, {
+            ...lowered.options,
             detached: process.platform !== 'win32',
           }),
-      ),
-    spawnSerialAdb: (serial, args, options) => {
-      const background = runCmdBackground('adb', ['-s', serial, ...args], {
-        ...options,
+      );
+    },
+    spawnAdb: (invocation, options) => {
+      const lowered = lowerAndroidAdbInvocation(invocation, options, process.env);
+      const background = runCmdBackground('adb', lowered.args, {
+        ...lowered.options,
         allowFailure: true,
         captureOutput: false,
       });
       void background.wait.catch(() => {});
       return background.child;
     },
-    execHostAdb: async (args, options) =>
-      await runCmd('adb', args, { ...options, detached: process.platform !== 'win32' }),
     withAdbCommandExecutorOverride: withCommandExecutorOverride,
     withoutAdbCommandExecutorOverride: withoutCommandExecutorOverride,
     coerceAdbResult: coerceExecResult,

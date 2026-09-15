@@ -15,10 +15,13 @@ const DEVICE: DeviceInfo = {
 const NOW_MS = 1_700_000_000_000;
 
 function answersUptime(stdout: string, exitCode = 0) {
-  let received: { serial: string; args: string[] } | undefined;
+  let received: { serial: string; args: readonly string[] } | undefined;
   bindAndroidAdbHostStub({
-    execSerialAdb: async (serial, args) => {
-      received = { serial, args };
+    execAdb: async (invocation) => {
+      if (invocation.target.selector.kind !== 'serial') {
+        throw new Error('expected a serial-target adb invocation');
+      }
+      received = { serial: invocation.target.selector.serial, args: invocation.command };
       return { exitCode, stdout, stderr: '' };
     },
   });
@@ -48,7 +51,7 @@ test('derives the boot instant from the uptime duration on the host clock', asyn
 
 test('a slow uptime answer cannot move the boot instant past the moment the probe began', async () => {
   bindAndroidAdbHostStub({
-    execSerialAdb: async () => {
+    execAdb: async () => {
       vi.setSystemTime(NOW_MS + 4_000);
       return { exitCode: 0, stdout: '120.45 0', stderr: '' };
     },

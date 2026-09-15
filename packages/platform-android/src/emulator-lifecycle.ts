@@ -4,6 +4,7 @@ import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { type ExecResult, runCmdDetached, whichCmd } from '@agent-device/host-kit/command';
 import { Deadline, retryWithPolicy, sleep } from '@agent-device/host-kit/retry';
 
+import { androidAdbInvocation, androidAdbSerialTarget } from './adb-transport.ts';
 import { runAndroidHostAdb } from './adb-executor.ts';
 import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
 import { ensureAndroidSdkPathConfigured } from './sdk.ts';
@@ -154,11 +155,14 @@ async function readAndroidBootProp(
   timeoutMs = ANDROID_BOOT_PROP_TIMEOUT_MS,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  return await runAndroidHostAdb(['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], {
-    allowFailure: true,
-    signal,
-    timeoutMs,
-  });
+  return await runAndroidHostAdb(
+    androidAdbInvocation(androidAdbSerialTarget(serial), [
+      'shell',
+      'getprop',
+      'sys.boot_completed',
+    ]),
+    { allowFailure: true, signal, timeoutMs },
+  );
 }
 
 export async function waitForAndroidBoot(

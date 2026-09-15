@@ -57,14 +57,21 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
           timeoutMs: 5_000,
         });
       },
-      adbError: async (message, result, details) => {
+      adbError: async (message, result, invocation) => {
         // Error construction is async so the platform helper remains lazy until an ADB failure.
-        const { androidAdbResultError } = await import('@agent-device/platform-android/mechanics');
-        return androidAdbResultError(message, result, details);
+        const { androidAdbResultError, serializeAndroidAdbInvocation } =
+          await import('@agent-device/platform-android/mechanics');
+        return androidAdbResultError(
+          message,
+          result,
+          invocation
+            ? { command: `adb ${serializeAndroidAdbInvocation(invocation).join(' ')}` }
+            : undefined,
+        );
       },
     },
     host: {
-      runAdb: async (args, options) => await runAndroidHostAdb(args, options),
+      runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
       archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
         const args = ['-qr', archivePath, entryName];
         const result = await runCmd('zip', args, {

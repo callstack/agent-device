@@ -737,6 +737,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
+    '@agent-device/platform-android',
   ]);
   const rootExternalDependencies = rootExternalDependencyRanges(repoRoot);
   for (const pkg of packages) {

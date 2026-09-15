@@ -8,6 +8,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import { createAndroidInventoryModule } from '@agent-device/platform-android';
 import {
+  parseAndroidAdbArgv,
   resolveAndroidAdbProvider,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
@@ -142,8 +143,10 @@ test.skipIf(process.platform === 'win32')(
             progress: { report: () => {} },
           } satisfies PlatformRequestScope,
         );
-        const host = await runAndroidHostAdb(['devices']);
-        const hostWithWrongPort = await runAndroidHostAdb(['-P', '9999', 'devices']);
+        const host = await runAndroidHostAdb(parseAndroidAdbArgv(['devices']));
+        const hostWithWrongPort = await runAndroidHostAdb(
+          parseAndroidAdbArgv(['-P', '9999', 'devices']),
+        );
         const provider = resolveAndroidAdbProvider(reachability.device);
         const serial = await provider.exec(['shell', 'id']);
         return {
@@ -153,7 +156,9 @@ test.skipIf(process.platform === 'win32')(
           serial: JSON.parse(serial.stdout),
         };
       });
-      const outside = JSON.parse((await runAndroidHostAdb(['devices'])).stdout);
+      const outside = JSON.parse(
+        (await runAndroidHostAdb(parseAndroidAdbArgv(['devices']))).stdout,
+      );
 
       expect(results).toEqual({
         inventory: [

@@ -1,25 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { parseAndroidAdbArgv } from './adb-transport.ts';
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { runAndroidHostAdb, withAndroidHostAdbTransport } from './adb-executor.ts';
 
 test('a scoped transport intercepts host adb without reaching the injected host', async () => {
   let hostCalls = 0;
   bindAndroidAdbHostStub({
-    execHostAdb: async () => {
+    execAdb: async () => {
       hostCalls += 1;
       return { stdout: 'host', stderr: '', exitCode: 0 };
     },
   });
 
   const result = await withAndroidHostAdbTransport(
-    async (args, options) => {
-      assert.deepEqual(args, ['devices']);
+    async (invocation, options) => {
+      assert.deepEqual(invocation.command, ['devices']);
       assert.deepEqual(options, { timeoutMs: 1_234 });
       return { stdout: 'transport', stderr: '', exitCode: 0 };
     },
-    async () => await runAndroidHostAdb(['devices'], { timeoutMs: 1_234 }),
+    async () => await runAndroidHostAdb(parseAndroidAdbArgv(['devices']), { timeoutMs: 1_234 }),
   );
 
   assert.equal(result.stdout, 'transport');
@@ -29,13 +30,13 @@ test('a scoped transport intercepts host adb without reaching the injected host'
 test('the local host arm always obtains a result before applying the shared failure contract', async () => {
   let receivedOptions: Record<string, unknown> | undefined;
   bindAndroidAdbHostStub({
-    execHostAdb: async (_args, options) => {
+    execAdb: async (_invocation, options) => {
       receivedOptions = options;
       return { stdout: '', stderr: 'error: device offline', exitCode: 1 };
     },
   });
 
-  const error = await runAndroidHostAdb(['devices']).then(
+  const error = await runAndroidHostAdb(parseAndroidAdbArgv(['devices'])).then(
     () => assert.fail('expected the host adb call to reject'),
     (error: unknown) => error,
   );
@@ -49,10 +50,13 @@ test('the local host arm always obtains a result before applying the shared fail
 
 test('allowFailure returns a nonzero local result unchanged', async () => {
   const scripted = { stdout: '', stderr: 'offline', exitCode: 7 };
-  bindAndroidAdbHostStub({ execHostAdb: async () => scripted });
+  bindAndroidAdbHostStub({ execAdb: async () => scripted });
 
   assert.deepEqual(
-    await runAndroidHostAdb(['devices'], { allowFailure: true, timeoutMs: 5_000 }),
+    await runAndroidHostAdb(parseAndroidAdbArgv(['devices']), {
+      allowFailure: true,
+      timeoutMs: 5_000,
+    }),
     scripted,
   );
 });
@@ -70,7 +74,7 @@ test('unchecked transport results are normalized at the package boundary', async
 
   const result = await withAndroidHostAdbTransport(
     async () => sloppy,
-    async () => await runAndroidHostAdb(['devices'], { allowFailure: true }),
+    async () => await runAndroidHostAdb(parseAndroidAdbArgv(['devices']), { allowFailure: true }),
   );
 
   assert.deepEqual(result, { stdout: '', stderr: '', exitCode: 1 });
@@ -78,7 +82,7 @@ test('unchecked transport results are normalized at the package boundary', async
 
 test('nested transport scopes are innermost-first and restore on scope exit', async () => {
   bindAndroidAdbHostStub({
-    execHostAdb: async () => ({ stdout: 'host', stderr: '', exitCode: 0 }),
+    execAdb: async () => ({ stdout: 'host', stderr: '', exitCode: 0 }),
   });
   const transportFor = (name: string) => async () => ({
     stdout: name,
@@ -87,11 +91,11 @@ test('nested transport scopes are innermost-first and restore on scope exit', as
   });
 
   await withAndroidHostAdbTransport(transportFor('outer'), async () => {
-    assert.equal((await runAndroidHostAdb(['devices'])).stdout, 'outer');
+    assert.equal((await runAndroidHostAdb(parseAndroidAdbArgv(['devices']))).stdout, 'outer');
     await withAndroidHostAdbTransport(transportFor('inner'), async () => {
-      assert.equal((await runAndroidHostAdb(['devices'])).stdout, 'inner');
+      assert.equal((await runAndroidHostAdb(parseAndroidAdbArgv(['devices']))).stdout, 'inner');
     });
-    assert.equal((await runAndroidHostAdb(['devices'])).stdout, 'outer');
+    assert.equal((await runAndroidHostAdb(parseAndroidAdbArgv(['devices']))).stdout, 'outer');
   });
-  assert.equal((await runAndroidHostAdb(['devices'])).stdout, 'host');
+  assert.equal((await runAndroidHostAdb(parseAndroidAdbArgv(['devices']))).stdout, 'host');
 });

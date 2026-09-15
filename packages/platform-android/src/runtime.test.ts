@@ -7,6 +7,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
+import type { AndroidAdbExecutorOptions, AndroidAdbInvocation } from './adb-transport.ts';
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import {
   ANDROID_EMULATOR,
@@ -27,20 +28,24 @@ test.each([
   ['device', { ...ANDROID_EMULATOR, kind: 'device' as const }],
   ['unknown', UNKNOWN_KIND_DEVICE],
 ])('classifies the Android %s runtime denominator', async (_name, runtimeDevice) => {
-  const execSerialAdb = vi.fn(async (_serial: string, args: string[]) => {
-    if (args.includes('query-activities')) {
-      return { stdout: 'com.example.app/.MainActivity\n', stderr: '', exitCode: 0 };
-    }
-    if (args.includes('dumpsys')) {
-      return {
-        stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
-        stderr: '',
-        exitCode: 0,
-      };
-    }
-    return { stdout: '', stderr: '', exitCode: 0 };
-  });
-  bindAndroidAdbHostStub({ execSerialAdb });
+  const deviceCall = vi.fn(
+    async (_serial: string, args: string[], _options?: AndroidAdbExecutorOptions) => {
+      if (args.includes('query-activities')) {
+        return { stdout: 'com.example.app/.MainActivity\n', stderr: '', exitCode: 0 };
+      }
+      if (args.includes('dumpsys')) {
+        return {
+          stdout: 'mCurrentFocus=Window{1 u0 com.example.app/.MainActivity}',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  );
+  const execAdb = async (invocation: AndroidAdbInvocation, options?: AndroidAdbExecutorOptions) =>
+    await deviceCall(deviceSerial(invocation), [...invocation.command], options);
+  bindAndroidAdbHostStub({ execAdb, spawnAdb: execAdb as never });
   const host = androidRuntimeHost({
     commands: {
       which: async () => 'tool',
@@ -100,7 +105,7 @@ test.each([
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([{ id: 'com.example.app', name: 'Example' }]);
-  expect(execSerialAdb).toHaveBeenCalledWith(
+  expect(deviceCall).toHaveBeenCalledWith(
     runtimeDevice.id,
     expect.arrayContaining(['query-activities']),
     expect.objectContaining({ allowFailure: true }),
@@ -114,7 +119,7 @@ test.each([
     package: 'com.example.app',
     activity: '.MainActivity',
   });
-  expect(execSerialAdb).toHaveBeenCalledWith(
+  expect(deviceCall).toHaveBeenCalledWith(
     runtimeDevice.id,
     ['shell', 'dumpsys', 'window', 'windows'],
     expect.objectContaining({ allowFailure: true }),
@@ -506,3 +511,8 @@ test('a host with no clipboard probe refuses rather than assuming support', asyn
   expect(facts.operations.readClipboard.available).toBe(false);
   expect(facts.operations.writeClipboard.available).toBe(false);
 });
+
+function deviceSerial(invocation: AndroidAdbInvocation): string {
+  if (invocation.target.selector.kind !== 'serial') throw new Error('expected a serial target');
+  return invocation.target.selector.serial;
+}

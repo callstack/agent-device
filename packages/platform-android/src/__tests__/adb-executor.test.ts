@@ -245,15 +245,17 @@ test('createLocalAndroidAdbProvider carries a private server port through every 
   await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4');
   await provider.install?.('/tmp/app.apk');
 
-  assert.equal(readServerPort(mockRunCmdBackground.mock.calls[0]?.[2]), 15_037);
+  assert.equal(readServerPortArgv(mockRunCmdBackground.mock.calls[0]?.[1]), 15_037);
   assert.equal(mockRunCmd.mock.calls.length, 4);
-  for (const call of mockRunCmd.mock.calls) assert.equal(readServerPort(call[2]), 15_037);
+  for (const call of mockRunCmd.mock.calls) assert.equal(readServerPortArgv(call[1]), 15_037);
 });
 
-function readServerPort(options: unknown): number | undefined {
-  if (options === null || typeof options !== 'object') return undefined;
-  const value = (options as { serverPort?: unknown }).serverPort;
-  return typeof value === 'number' ? value : undefined;
+function readServerPortArgv(args: unknown): number | undefined {
+  if (!Array.isArray(args)) return undefined;
+  const index = args.indexOf('-P');
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  return typeof value === 'string' ? Number(value) : undefined;
 }
 
 test('createAndroidPortReverseManager makes duplicate setup idempotent and cleans owner mappings', async () => {
