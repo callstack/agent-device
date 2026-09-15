@@ -164,6 +164,15 @@ nodes belong in the regular presentation, while publication adds refs and emits 
 payload. An optional unscoped quality payload is validated for classification evidence and is never
 published.
 
+Semantic compaction may move an identifier; it may not un-make one. A structural `Other` wrapper
+carrying an identifier and nothing else is suppressed in favour of its content, which is a
+delegation: the identifier goes on living in whatever the wrapper stood for. A wrapper with no
+content has nothing to delegate to, so suppressing it deletes the identifier from every canonical
+view while `is`, `get`, and `click` still resolve it from the same capture. That deletion needs the
+node's own declared `hittable: false`, because it is the only verdict in the capture that says the
+wrapper is inert; a producer that reports no hittability for any node declares nothing, and an
+absent fact is not a negative answer (#2638).
+
 ## Regression Notes
 
 PR #639 made XCTest AX serialization failures explicit instead of swallowing them as empty

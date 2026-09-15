@@ -17,7 +17,14 @@ export function collectIosStructuralIdentifierSuppression(
     if (!node.identifier?.trim()) {
       continue;
     }
-    context.suppressNode(node, collectSubtreeByParentLinks(node, childrenByParent));
+    const content = collectSubtreeByParentLinks(node, childrenByParent);
+    // Suppression delegates the identifier to the wrapper's content. With no content there is
+    // nothing to delegate to, and only the node's own declared `hittable: false` says the wrapper
+    // is inert; a producer that reports no hittability at all declares nothing (#2638).
+    if (content.length === 0 && node.hittable !== false) {
+      continue;
+    }
+    context.suppressNode(node, content);
   }
 }
 

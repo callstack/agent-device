@@ -46,6 +46,7 @@ const screen: RawSnapshotNode[] = [
     parentIndex: 0,
     type: 'Other',
     identifier: 'promo-banner',
+    hittable: false,
     rect: { x: 110, y: 130, width: 180, height: 44 },
   },
   // No label, identifier, or value: survival proves the interactive branch, not content.
