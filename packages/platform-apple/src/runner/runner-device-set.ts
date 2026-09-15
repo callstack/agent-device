@@ -104,28 +104,19 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     },
   });
 
-  const giveLockBack = async (): Promise<unknown> => {
-    try {
-      await releaseLock();
-      return null;
-    } catch (error) {
-      return error;
-    }
-  };
+  const paths = { xctestDeviceSetPath, backupPath };
+
+  if (sameResolvedPath(requestedSetPath, xctestDeviceSetPath)) {
+    // Nothing is displaced and the caller gets no handle, so this hand-back has no failure of its own
+    // to report: a lock this simulator never needed must not arrive as a redirect problem. Whatever it
+    // could not verify is recorded where the claim lives.
+    recordReleaseFailure((await handBackDeviceSet(paths, releaseLock)).releaseFailure, lockDirPath);
+    return null;
+  }
 
   try {
-    reconcileXcodebuildSimulatorSetRedirect({
-      xctestDeviceSetPath,
-      backupPath,
-    });
-    if (sameResolvedPath(requestedSetPath, xctestDeviceSetPath)) {
-      // Nothing was redirected, so nothing was displaced and this simulator needs no handle: the
-      // caller has no redirect to report, and a lock it never held must not arrive as one. The
-      // give-back records its own failure where the claim lives.
-      recordHandBackFailure(await giveLockBack(), lockDirPath);
-      return null;
-    }
-
+    // Clean up whatever an earlier run left, out of the way of the rename below.
+    reconcileXcodebuildSimulatorSetRedirect(paths);
     fs.mkdirSync(requestedSetPath, { recursive: true });
     if (fs.existsSync(xctestDeviceSetPath)) {
       fs.renameSync(xctestDeviceSetPath, backupPath);
@@ -135,56 +126,37 @@ export async function acquireXcodebuildSimulatorSetRedirect(
       xctestDeviceSetPath,
     });
   } catch (error) {
-    // The redirect failure outranks everything the hand-back does, including a restore that could not
-    // run on the way out. Both are recorded; the caller hears why the redirect failed.
-    try {
-      reconcileXcodebuildSimulatorSetRedirect({
-        xctestDeviceSetPath,
-        backupPath,
-      });
-    } catch (restoreError) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_xctest_device_set_restore_failed',
-        data: { xctestDeviceSetPath, backupPath, error: String(restoreError) },
-      });
-    }
-    recordHandBackFailure(await giveLockBack(), lockDirPath);
+    const handBack = await handBackDeviceSet(paths, releaseLock);
+    recordReleaseFailure(handBack.releaseFailure, lockDirPath);
     throw new AppError('COMMAND_FAILED', 'Failed to redirect XCTest device set path', {
       requestedSetPath,
       xctestDeviceSetPath,
       backupPath,
       error: String(error),
+      ...(handBack.restoreFailure === null
+        ? {}
+        : {
+            restoreError: String(handBack.restoreFailure),
+            hint:
+              `The host's own device set is still renamed aside at ${backupPath}: restore it, ` +
+              'or remove that path, before another runner build redirects it.',
+          }),
     });
   }
 
   let givenBack = false;
-  // One ordered give-back: restore the host's own device set, then hand the lock back. A restore that
-  // could not run is a fact about this machine — the symlink stays pointed at this simulator's set and
-  // every later `simctl` run sees the wrong devices — so its failure always outranks the release, and
-  // the lock goes back anyway so the next acquire does not wait on it. Whatever the release could not
-  // do is recorded either way; the two doors differ only in whether the caller also throws it.
   const giveBack = async (reportUnverifiedRelease: boolean): Promise<void> => {
     if (givenBack) {
       return;
     }
     givenBack = true;
-    let restoreFailure: unknown = null;
-    try {
-      reconcileXcodebuildSimulatorSetRedirect({
-        xctestDeviceSetPath,
-        backupPath,
-      });
-    } catch (error) {
-      restoreFailure = error;
+    const handBack = await handBackDeviceSet(paths, releaseLock);
+    recordReleaseFailure(handBack.releaseFailure, lockDirPath);
+    if (handBack.restoreFailure !== null) {
+      throw handBack.restoreFailure;
     }
-    const releaseFailure = await giveLockBack();
-    recordHandBackFailure(releaseFailure, lockDirPath);
-    if (restoreFailure !== null) {
-      throw restoreFailure;
-    }
-    if (releaseFailure !== null && reportUnverifiedRelease) {
-      throw releaseFailure;
+    if (handBack.releaseFailure !== null && reportUnverifiedRelease) {
+      throw handBack.releaseFailure;
     }
   };
   return {
@@ -193,11 +165,45 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   };
 }
 
+type DeviceSetHandBack = {
+  /** The host's own `XCTestDevices` could not be put back, so the symlink is still in its place. */
+  restoreFailure: unknown;
+  /** The lock could not be given back, or could not be verified as ours when it was. */
+  releaseFailure: unknown;
+};
+
 /**
- * Records a hand-back failure that no caller is being made to throw. A release whose ownership could
- * not be verified is already recorded where the claim lives, so only the rest reaches the log.
+ * The one ordered hand-back, used by every path that leaves this redirect behind: restore the host's
+ * own device set, then release the lock. Neither step can hide the other, because a restore that could
+ * not run is a fact about this machine that outlives the request — every later `simctl` run sees the
+ * wrong devices — and the lock going back is what keeps the next acquire from waiting on a claim nobody
+ * is acting on. Deciding which of the two the caller hears is left to the caller that has a report to
+ * make: the redirect failure, the restore failure, or neither.
  */
-function recordHandBackFailure(error: unknown, lockDirPath: string): void {
+async function handBackDeviceSet(
+  paths: { xctestDeviceSetPath: string; backupPath: string },
+  releaseLock: () => Promise<void>,
+): Promise<DeviceSetHandBack> {
+  let restoreFailure: unknown = null;
+  let releaseFailure: unknown = null;
+  try {
+    reconcileXcodebuildSimulatorSetRedirect(paths);
+  } catch (error) {
+    restoreFailure = error;
+  }
+  try {
+    await releaseLock();
+  } catch (error) {
+    releaseFailure = error;
+  }
+  return { restoreFailure, releaseFailure };
+}
+
+/**
+ * Records a lock release that no caller is being made to throw. A release whose ownership could not be
+ * verified is already recorded where the claim lives, so only the rest reaches the log.
+ */
+function recordReleaseFailure(error: unknown, lockDirPath: string): void {
   if (error === null || isOwnerReleaseUnverified(error)) {
     return;
   }
