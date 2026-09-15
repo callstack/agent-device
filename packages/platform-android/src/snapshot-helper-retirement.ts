@@ -2,7 +2,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
-import { classifyAndroidAdbFailure } from './adb-failure.ts';
 import { findPidToken } from './perf-native-process.ts';
 import type { AndroidAdbProcess } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
@@ -179,13 +178,19 @@ async function readAndroidSnapshotHelperRuntimeRelease(params: {
       allowFailure: true,
       timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
     });
+    const stdout = result.stdout.trim();
+    const stderr = result.stderr.trim();
     // A process id for the helper package is the device naming whoever owns the runtime.
-    if (findPidToken(result.stdout)) return 'occupied';
-    // `pidof` prints nothing for "no such process", and adb prints nothing useful on stdout when the
-    // call never reached a device. On the transport this probe exists for, that shape is common: a
-    // stderr the adb failure classifier recognises as a device or transport fault is no answer at
-    // all, while an unclassified one (an older shell without `pidof`) is the device's own.
-    return classifyAndroidAdbFailure(result.stderr, result.stdout) ? 'unknown' : 'released';
+    if (findPidToken(stdout)) return 'occupied';
+    // `pidof` answers "no process" by exiting non-zero with nothing on either stream. Every other
+    // shape — a line of stderr, a zero exit that names nobody, output without a pid — is adb or the
+    // shell describing itself, and a transport describing itself says nothing about the runtime.
+    // Enumerating adb's failure texts is not an option either: the list is long, version-dependent
+    // and includes plain `error: closed`, and every missed entry would clear a pending release that
+    // was never proven.
+    return result.exitCode !== 0 && stdout.length === 0 && stderr.length === 0
+      ? 'released'
+      : 'unknown';
   } catch {
     return 'unknown';
   }
@@ -306,11 +311,15 @@ export async function stopAndroidSnapshotHelperHostProcess(params: {
 }
 
 /**
- * Settles a release the last teardown could not prove, from the other end of the device. Android
- * hands UiAutomation to one connection at a time, so a helper that has just reported itself ready
- * owns it now and whatever held it before no longer does. The session lifecycle calls this on the
- * way to ready: an unreadable `pidof` must not leave a pending entry that force-stops a live helper
- * on the next acquire.
+ * Settles a release the last teardown could not prove, from the other end of the device. The fact
+ * that settles it is Android's, not ours: `am instrument` for a package that is already instrumenting
+ * force-stops that process first, so a helper that reached ready — which it reports straight after
+ * binding its session socket, before it asks for UiAutomation — is the only helper process the device
+ * still has. Whatever the old process held is gone with it. The session lifecycle calls this on the
+ * way to ready; an unreadable `pidof` must not leave a pending entry that force-stops a live helper
+ * on the next acquire. Should the helper ever start sharing its package with another instrumentation
+ * target, or report readiness after acquiring UiAutomation instead of before, this settles on a
+ * process that may not be the only one, and the pending entry has to stay.
  */
 export function settleAndroidSnapshotHelperRetirement(deviceKey: string): void {
   pendingRetirements.delete(deviceKey);

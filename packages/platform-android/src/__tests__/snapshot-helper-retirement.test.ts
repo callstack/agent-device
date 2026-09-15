@@ -10,7 +10,7 @@ import {
   retireCanceledAndroidSnapshotHelperCapture,
   settleAndroidSnapshotHelperSessionCleanup,
 } from '../snapshot-helper-retirement.ts';
-import type { AndroidAdbProcess } from '../adb-executor.ts';
+import type { AndroidAdbExecutorResult, AndroidAdbProcess } from '../adb-executor.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import {
   androidHelperRuntimeProbeResult,
@@ -126,15 +126,37 @@ test('a device that cannot be read leaves the retirement pending without failing
   ]);
 });
 
-test('a shell that has no pidof still answers for its own processes', async () => {
-  // An older device image reports the missing command on stderr and exits non-zero. That is the
-  // device answering, not a transport fault, and reading it as `unknown` would keep every later
-  // acquire force-stopping a runtime that was never held.
-  const adb: AndroidAdbExecutor = async () => ({
-    exitCode: 1,
-    stdout: '',
-    stderr: '/system/bin/sh: pidof: not found',
-  });
+test('a read that names no process is released only when the shell itself said so', async () => {
+  // `pidof` answers "no such process" with a non-zero exit and nothing on either stream. Every other
+  // shape is adb or the shell describing itself, and a description of the transport cannot clear a
+  // pending release. Enumerating the ways a transport fails is not a fix either: that list is long,
+  // version-dependent, and includes plain `error: closed` and `cannot connect to daemon`.
+  const nonAnswers: AndroidAdbExecutorResult[] = [
+    { exitCode: 1, stdout: '', stderr: 'error: closed' },
+    { exitCode: 1, stdout: '', stderr: 'error: device offline' },
+    { exitCode: 1, stdout: '', stderr: 'adb: cannot connect to daemon' },
+    { exitCode: 1, stdout: '', stderr: 'failed to get feature set: device offline' },
+    { exitCode: 1, stdout: '/system/bin/sh: pidof: not found', stderr: '' },
+    { exitCode: 0, stdout: '', stderr: '' },
+  ];
+
+  for (const answer of nonAnswers) {
+    resetAndroidSnapshotHelperRetirements();
+    const adb: AndroidAdbExecutor = async () => answer;
+
+    const release = await recordAndroidSnapshotHelperRelease({
+      deviceKey: DEVICE_KEY,
+      packageName: PACKAGE_NAME,
+      adb,
+      cause: new Error('quit timed out'),
+    });
+
+    assert.equal(release, 'unknown', `answered ${JSON.stringify(answer)}`);
+  }
+});
+
+test('a device that answers with nothing at all is read as released', async () => {
+  const adb: AndroidAdbExecutor = async () => ({ exitCode: 1, stdout: '', stderr: '' });
 
   const release = await recordAndroidSnapshotHelperRelease({
     deviceKey: DEVICE_KEY,

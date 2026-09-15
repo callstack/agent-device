@@ -164,10 +164,14 @@ export type SessionProviderOptions = {
   runtimeRelease?: FakeAndroidHelperRuntimeRelease;
 };
 
-/** What a fake device says about the helper process, including a device that cannot be read. */
+/**
+ * What a fake device answers about the helper process. `unreadable` is a transport fault adb's own
+ * failure classifier recognises and `closed` is one it does not; the probe has to fail closed on both.
+ */
 export type FakeAndroidHelperRuntimeRelease =
   | Exclude<AndroidSnapshotHelperRuntimeRelease, 'unknown'>
-  | 'unreadable';
+  | 'unreadable'
+  | 'closed';
 
 export function createSessionProvider(options: SessionProviderOptions): AndroidAdbProvider {
   bindAndroidAdbTestHost();
@@ -297,9 +301,10 @@ export function androidHelperRuntimeProbeResult(
   release: FakeAndroidHelperRuntimeRelease = 'released',
 ): AndroidAdbExecutorResult {
   // A host whose adb cannot carry the call answers the way the executor really answers it: a non-zero
-  // exit with a transport fault on stderr, which is a different shape from a device that says "no
-  // such process" only by what it prints.
+  // exit, empty stdout and a fault on stderr. The shell's own "no such process" is that same shape
+  // with nothing at all on stderr, which is the only non-pid answer that means released.
   if (release === 'unreadable') return { exitCode: 1, stdout: '', stderr: 'error: device offline' };
+  if (release === 'closed') return { exitCode: 1, stdout: '', stderr: 'error: closed' };
   return release === 'occupied'
     ? { exitCode: 0, stdout: '4211\n', stderr: '' }
     : { exitCode: 1, stdout: '', stderr: '' };

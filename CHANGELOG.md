@@ -11,23 +11,26 @@
   outlive its budget while the device is healthy — the shape of #2553 — so the helper process was
   already gone and the command still failed with `Android automation helper is still holding device
   automation ownership`. Ownership is read off the device now: `adb shell pidof
-  com.callstack.agentdevice.snapshothelper` says `occupied` only while it names a process, `released`
-  when the device answers that nothing is running, and `unknown` when adb could not carry the call,
-  so a `device offline` stderr no longer counts as a release either. A refusal requires two reads that
-  both name the process, which keeps a helper still inside Android's exit path from costing a
-  command. Scripts that match the failure reason see `android_snapshot_helper_runtime_occupied`,
-  which replaces `android_snapshot_helper_retirement_unconfirmed`.
+  com.callstack.agentdevice.snapshothelper` says `occupied` while it names a process, and says
+  `released` only on the shell's own no-process answer — a non-zero exit with nothing on either
+  stream. Anything else, including `error: closed`, `cannot connect to daemon` and `device offline`,
+  is `unknown`: those describe the transport, not who holds the runtime, and a release is never
+  cleared on a description of the transport. A refusal requires two reads that both name the process,
+  which keeps a helper still inside Android's exit path from costing a command. Scripts that match the
+  failure reason see `android_snapshot_helper_runtime_occupied`, which replaces
+  `android_snapshot_helper_retirement_unconfirmed`.
 - Changed (android): a snapshot helper session that reaches ready settles a release the previous
-  teardown could not prove, because Android hands UiAutomation to one connection at a time and that
-  helper owns it now; the next command no longer force-stops the session it has just started while
-  `pidof` happens to be unreadable. A helper start that fails is also retried after a backoff scaled
-  to how long it spent failing (10 s to 60 s) instead of on every command, which had roughly doubled
-  command time on hosts where the helper never starts, and the wait for a started helper to announce
-  itself now takes a share of the caller's own helper-command budget — half of `--timeout`, never
-  less than one session command is worth — so a device that needs longer than a capture to bring the
-  helper up stays on the persistent path when the caller budgeted for it. On a host where the helper
-  took 12 s to announce itself, `--timeout 60000` used to answer with the one-shot transport and now
-  answers from the session.
+  teardown could not prove. `am instrument` force-stops whatever is already instrumenting the helper
+  package, so a session that reported itself ready is the only helper process the device has left,
+  and the unproven release went away with the process that owed it; the next command no longer
+  force-stops the session it has just started because `pidof` happens to be unreadable. A helper start
+  that fails is also retried after a backoff scaled to how long it spent failing (10 s to 60 s)
+  instead of on every command, which had roughly doubled command time on hosts where the helper never
+  starts. And the wait for a started helper to announce itself no longer uses a fixed 10 s: it takes
+  half of the helper-command budget the capture was built with, 15 s today, which is what had been
+  pushing devices slower than a capture off the persistent path. On a host where the helper took 12 s
+  to announce itself, the command used to answer with the one-shot transport and now answers from the
+  session. The CLI's `--timeout` reaches that wait as its deadline aborting it, not as the number.
 
 - Fixed: an iOS snapshot whose XCTest query-sweep tier cannot read the screen no longer ends the
   runner process. On a live React Native feed (Bluesky Home, images re-rendering) the AX server

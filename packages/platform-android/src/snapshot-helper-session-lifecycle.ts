@@ -282,8 +282,9 @@ async function startAndroidSnapshotHelperSession(params: {
   };
   try {
     // A helper that announces itself late is a slow `am instrument`, which the one-shot transport it
-    // falls back to pays too. The start gets its share of the caller's command budget instead of a
-    // fixed guess, so `--timeout` decides whether the persistent path is affordable at all.
+    // falls back to pays too, so the wait gets a share of the helper-command budget rather than a
+    // smaller guess. The caller's own deadline reaches it as an abort on `options.signal`, which is
+    // what bounds this below the budget when the command itself is short.
     await waitForAndroidSnapshotHelperSessionReady(
       childProcess,
       params.startBudgetMs,
@@ -291,9 +292,10 @@ async function startAndroidSnapshotHelperSession(params: {
     );
     sessions.set(params.deviceKey, session);
     failedStarts.delete(params.identity);
-    // This helper holds the device's one UiAutomation connection now, so a release the previous
-    // teardown could not prove is settled by the device itself. Leaving it pending would have the
-    // next acquire force-stop the session that just started.
+    // `am instrument` force-stops whatever is already instrumenting this package, so a helper that
+    // reported itself ready is the only helper process the device has left, and the release the
+    // previous teardown could not prove went away with the process that owed it. Leaving the entry
+    // pending would have the next acquire force-stop the session that just started.
     settleAndroidSnapshotHelperRetirement(params.deviceKey);
     emitDiagnostic({
       phase: 'android_snapshot_helper_session_ready',
@@ -373,10 +375,12 @@ function resolvePersistentSessionCaptureOptions(
 }
 
 /**
- * What a start gets out of the budget the caller allowed one helper command: half of it, so a helper
- * that announces itself later than a session capture takes is not pushed off the persistent path by
- * a capture-sized guess, while the one-shot transport that answers a failed start keeps the other
- * half. Never less than one session command is worth, never more than the caller allowed.
+ * What a start gets out of the helper-command budget it was built with: half of it, so a helper that
+ * announces itself later than a session capture takes is not pushed off the persistent path by a
+ * capture-sized guess, while the one-shot transport that answers a failed start keeps the other half.
+ * Never less than one session command is worth, never more than the budget. Production builds that
+ * budget from `ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS` (30 s today, so 15 s here) rather than
+ * from the CLI's `--timeout`, whose deadline reaches this wait as an abort instead.
  */
 export function resolveAndroidSnapshotHelperStartBudgetMs(commandTimeoutMs: number): number {
   return Math.min(

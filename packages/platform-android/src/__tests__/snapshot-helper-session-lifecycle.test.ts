@@ -137,13 +137,13 @@ test('a generous caller budget buys a slow start, and never more than the caller
 test('a session that reaches ready settles a release the device could not confirm', async () => {
   const calls: string[][] = [];
   const spawnArgs: string[][] = [];
-  // The device cannot be read at all, and the first command's session stalls, so that command's
-  // teardown records a release nothing could prove.
+  // The device answers every process read with an adb error no classifier lists, and the first
+  // command's session stalls, so that command's teardown records a release nothing could prove.
   const provider = createSessionProvider({
     calls,
     spawnArgs,
     stalledSnapshots: 1,
-    runtimeRelease: 'unreadable',
+    runtimeRelease: 'closed',
   });
 
   const stalled = await captureAndroidSnapshotWithHelperSession({
@@ -163,8 +163,9 @@ test('a session that reaches ready settles a release the device could not confir
   assert.equal(started?.metadata.sessionReused, false);
   const forceStopsWhilePending = calls.filter(isAndroidHelperRuntimeForceStop).length;
 
-  // Android hands UiAutomation to one connection, so the helper that just reported itself ready owns
-  // the runtime and the unreadable device has nothing left to hold the next command with.
+  // `am instrument` force-stops whatever is already instrumenting the helper package, so the helper
+  // that just reported itself ready is the only one the device has, and the pending release went
+  // away with the process that owed it.
   const reused = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
