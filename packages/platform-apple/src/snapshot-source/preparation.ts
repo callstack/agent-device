@@ -119,7 +119,7 @@ export function createSnapshotBridgePreparation(
         start: (signal) => build(runtime, signal),
         // Waiting inside the request's own deadline keeps a genuine client abort typed
         // `cancelled`: only a preparation that is simply still running is reported as `preparing`.
-        wait: (waitMs) => waitForSnapshotSourceDelay(deadline, waitMs, code),
+        wait: (waitMs, stop) => waitForSnapshotSourceDelay(deadline, waitMs, code, stop),
         pending: () => snapshotSourceError('preparing', 'bridge-preparation-pending'),
       });
     },

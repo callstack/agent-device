@@ -210,6 +210,45 @@ test('an attempt that throws before awaiting is reported as its own failure', as
   );
 });
 
+test('a caller answered by the attempt stops the wait it left running', async () => {
+  const attempts = createDetachedAttempts<string>({ waitMs: 60_000 });
+  let releaseBuild: (value: string) => void = () => {};
+  const building = new Promise<string>((resolve) => {
+    releaseBuild = resolve;
+  });
+  let stopSignal: AbortSignal | undefined;
+  let waitState: 'pending' | 'resolved' = 'pending';
+
+  const caller = attempts.value('bridge', {
+    start: () => building,
+    // Deliberately has no timer of its own: only the stop can end it, so a wait that is never
+    // stopped stays observable as `pending` instead of quietly expiring.
+    wait: (_waitMs, stop) => {
+      stopSignal = stop;
+      return new Promise<void>((resolve) => {
+        stop.addEventListener(
+          'abort',
+          () => {
+            waitState = 'resolved';
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    },
+    pending: () => PENDING,
+  });
+
+  await settle();
+  assert.equal(waitState, 'pending');
+  releaseBuild('binary');
+  assert.equal(await caller, 'binary');
+  await settle();
+
+  assert.ok(stopSignal?.aborted, 'the losing wait is stopped once the attempt settles');
+  assert.equal(waitState, 'resolved');
+});
+
 function identity(error: unknown): unknown {
   return error;
 }

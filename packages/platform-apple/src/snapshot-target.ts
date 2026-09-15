@@ -59,7 +59,7 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
         targets.set(key, target);
         return target;
       },
-      wait: (waitMs) => waitForDiscoveryAttempt(waitMs, signal),
+      wait: (waitMs, stop) => waitForDiscoveryAttempt(waitMs, signal, stop),
       pending: () => targetError('simulator-target-discovery-pending', device, appBundleId),
     });
   };
@@ -67,18 +67,27 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
 
 /**
  * One caller's wait for a discovery it did not start. Resolving is the wait being spent, not the
- * discovery failing: a client abort rejects with its own reason so it stays typed `cancelled`.
+ * discovery failing: a client abort rejects with its own reason so it stays typed `cancelled`, while
+ * `stop` means this caller already has its answer and is only letting go of the timer.
  */
-function waitForDiscoveryAttempt(waitMs: number, signal: AbortSignal): Promise<void> {
+function waitForDiscoveryAttempt(
+  waitMs: number,
+  signal: AbortSignal,
+  stop: AbortSignal,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const onAbort = () => finish(() => reject(signal.reason));
+    const onStop = () => finish(resolve);
     const timer = setTimeout(() => finish(resolve), waitMs);
     function finish(settle: () => void): void {
       clearTimeout(timer);
       signal.removeEventListener('abort', onAbort);
+      stop.removeEventListener('abort', onStop);
       settle();
     }
+    if (stop.aborted) return finish(resolve);
     signal.addEventListener('abort', onAbort, { once: true });
+    stop.addEventListener('abort', onStop, { once: true });
   });
 }
 

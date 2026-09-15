@@ -30,8 +30,11 @@ export type DetachedAttempts<Value> = Readonly<{
       /**
        * Sleeps inside the caller's own deadline, so a client abort rejects this call with the
        * caller's typed cancellation instead of reporting a fresh `pending`.
+       *
+       * `stop` is aborted as soon as this caller has its answer from somewhere else; the wait has to
+       * release its timer and listeners then and resolve, since nobody is racing it any more.
        */
-      wait: (waitMs: number) => Promise<void>;
+      wait: (waitMs: number, stop: AbortSignal) => Promise<void>;
       pending: () => Error;
     }>,
   ): Promise<Value>;
@@ -136,7 +139,16 @@ export function createDetachedAttempts<Value>(
       if (attempt.status === 'pending' && (waitGrant === 'every-caller' || !attempt.waitSpent)) {
         // Marked before waiting: two captures arriving together must not each spend the budget.
         attempt.waitSpent = true;
-        await Promise.race([attempt.settled, params.wait(deps.waitMs)]);
+        const stopWaiting = new AbortController();
+        const waiting = params.wait(deps.waitMs, stopWaiting.signal);
+        // A wait can still reject after it lost the race, e.g. a client aborting in the moment
+        // between the attempt settling and this call returning; nobody awaits it by then.
+        waiting.catch(() => {});
+        try {
+          await Promise.race([attempt.settled, waiting]);
+        } finally {
+          stopWaiting.abort();
+        }
       }
       if (attempt.status === 'ready') return attempt.value;
       if (attempt.status === 'failed') throw attempt.error;

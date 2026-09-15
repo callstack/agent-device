@@ -24,10 +24,16 @@ export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code
   return Math.max(1, Math.floor(remainingMs));
 }
 
+/**
+ * Sleeps inside the caller's own deadline. `stop` is for a caller that no longer needs the sleep
+ * because the work it was waiting on answered elsewhere: the delay resolves instead of burning its
+ * remaining budget, while an aborted `deadline` stays a typed `cancelled`.
+ */
 export async function waitForSnapshotSourceDelay(
   deadline: SnapshotSourceDeadline,
   requestedMs: number,
   code: string,
+  stop?: AbortSignal,
 ): Promise<void> {
   const delayMs = Math.min(requestedMs, remainingSnapshotSourceMs(deadline, code));
   await new Promise<void>((resolve, reject) => {
@@ -36,14 +42,18 @@ export async function waitForSnapshotSourceDelay(
     const onAbort = () => {
       finish(() => reject(snapshotSourceError('cancelled', 'abort-signal')));
     };
+    const onStop = () => finish(resolve);
     const finish = (action: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       deadline.signal?.removeEventListener('abort', onAbort);
+      stop?.removeEventListener('abort', onStop);
       action();
     };
+    if (stop?.aborted) return finish(resolve);
     deadline.signal?.addEventListener('abort', onAbort, { once: true });
     if (deadline.signal?.aborted) onAbort();
+    stop?.addEventListener('abort', onStop, { once: true });
   });
 }
