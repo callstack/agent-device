@@ -166,17 +166,17 @@ test.runIf(process.platform !== 'win32')(
 // question the callers answer, so both report to one settlement.
 //
 // The kill paths below address a process group whose leader this worker already reaped, and
-// the hermetic signal setup ends a worker's authority over a pid at that moment. So every
-// group write is answered by `guardGroupWrites` below, which is the seam that setup points a real
-// kill path at: it records what the kill aimed at and answers the way a real group would, either
-// a delivery nothing was reached for or the `ESRCH` a vanished group throws.
+// the hermetic signal setup ends a worker's authority over a pid at that moment. So every group
+// write is answered by `guardGroupWrites` below, which is the seam that setup points a real kill
+// path at: it records what the kill aimed at and answers the way `process.kill` does — `true` for a
+// write the kernel accepted, `ESRCH` for a group that is gone, `EPERM` for one that is not ours.
 
 type GroupWrite = { readonly pid: number; readonly signal: string | number };
 
-/** How a guarded group write answers, matching what a real group would do. */
-type GroupWriteAnswer = 'no-group-reached' | 'no-such-process';
+/** How a guarded group write answers, matching what `process.kill` does with a negative pid. */
+type GroupWriteAnswer = 'delivered' | 'no-such-process' | 'not-permitted';
 
-function guardGroupWrites(answer: GroupWriteAnswer = 'no-group-reached'): {
+function guardGroupWrites(answer: GroupWriteAnswer = 'delivered'): {
   restore: () => void;
   writes: GroupWrite[];
 } {
@@ -185,12 +185,14 @@ function guardGroupWrites(answer: GroupWriteAnswer = 'no-group-reached'): {
   process.kill = ((pid: number, signal: string | number = 'SIGTERM') => {
     if (pid < 0) {
       writes.push({ pid, signal });
-      if (answer === 'no-such-process') {
-        const error = new Error('no such process') as NodeJS.ErrnoException;
-        error.code = 'ESRCH';
+      if (answer === 'no-such-process' || answer === 'not-permitted') {
+        const error = new Error(
+          answer === 'no-such-process' ? 'no such process' : 'operation not permitted',
+        ) as NodeJS.ErrnoException;
+        error.code = answer === 'no-such-process' ? 'ESRCH' : 'EPERM';
         throw error;
       }
-      return false;
+      return true;
     }
     return original(pid, signal as NodeJS.Signals);
   }) as typeof process.kill;
@@ -228,6 +230,22 @@ test('group signaling reports a vanished group and never signals an invalid pid'
     assert.equal(killSpy.mock.calls.length, 1);
   } finally {
     killSpy.mockRestore();
+  }
+});
+
+test('a group that is gone and a group that is not ours to signal both report nothing reached', () => {
+  // `process.kill` answers a negative pid in exactly three ways: `true` once the kernel accepted the
+  // write, `ESRCH` when no member is left, and `EPERM` when a member belongs to another user. The
+  // second and third are the same answer to this seam — nothing was reached, so the caller must not
+  // keep waiting on a pipe holder it just asked to be killed — and only the first of them was tested.
+  for (const answer of ['no-such-process', 'not-permitted'] as const) {
+    const groupWrites = guardGroupWrites(answer);
+    try {
+      assert.equal(signalProcessGroupBestEffort(101, 'SIGKILL'), false);
+      assert.deepEqual(groupWrites.writes, [{ pid: -101, signal: 'SIGKILL' }]);
+    } finally {
+      groupWrites.restore();
+    }
   }
 });
 
