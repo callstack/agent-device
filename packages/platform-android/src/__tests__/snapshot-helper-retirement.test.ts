@@ -51,7 +51,9 @@ test('canceled capture answers for the device, not for the force-stop call that 
 
 test('unproven release stays pending until an acquire reads the device', async () => {
   let helperAlive = true;
+  const calls: string[][] = [];
   const adb: AndroidAdbExecutor = async (args) => {
+    calls.push(args);
     if (isAndroidHelperRuntimeProbe(args)) {
       return androidHelperRuntimeProbeResult(helperAlive ? 'occupied' : 'released');
     }
@@ -64,19 +66,39 @@ test('unproven release stays pending until an acquire reads the device', async (
     adb,
     cause: new Error('capture canceled'),
   });
+  assert.deepEqual(calls, [
+    ['shell', 'am', 'force-stop', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+  ]);
 
   await assert.rejects(
     recoverAndroidSnapshotHelperRetirement({ deviceKey: DEVICE_KEY, adb }),
     isAndroidSnapshotHelperRuntimeOccupiedError,
   );
+  // A refusal is the strongest thing an acquire does with this read, so it is earned by a force-stop
+  // and two reads that both name the process.
+  assert.deepEqual(calls.slice(2), [
+    ['shell', 'am', 'force-stop', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+  ]);
 
   helperAlive = false;
   await recoverAndroidSnapshotHelperRetirement({ deviceKey: DEVICE_KEY, adb });
+  assert.deepEqual(calls.slice(5), [
+    ['shell', 'am', 'force-stop', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+  ]);
+
+  // The release is proven, so the entry is gone and a further acquire has nothing to settle.
   await recoverAndroidSnapshotHelperRetirement({ deviceKey: DEVICE_KEY, adb });
+  assert.equal(calls.length, 7);
 });
 
 test('a device that cannot be read leaves the retirement pending without failing the command', async () => {
+  const calls: string[][] = [];
   const adb: AndroidAdbExecutor = async (args) => {
+    calls.push(args);
     if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult('unreadable');
     return { exitCode: 0, stdout: '', stderr: '' };
   };
@@ -88,7 +110,40 @@ test('a device that cannot be read leaves the retirement pending without failing
     cause: new Error('quit timed out'),
   });
   assert.equal(release, 'unknown');
+
+  // `adb` answered with its own transport fault, which says nothing about the helper process. The
+  // acquire stops the runtime and asks again, and keeps doing that on every command until the device
+  // can be read — unless a session reaches ready first, which settles it from the other end.
   await recoverAndroidSnapshotHelperRetirement({ deviceKey: DEVICE_KEY, adb });
+  assert.deepEqual(calls.slice(1), [
+    ['shell', 'am', 'force-stop', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+  ]);
+  await recoverAndroidSnapshotHelperRetirement({ deviceKey: DEVICE_KEY, adb });
+  assert.deepEqual(calls.slice(3), [
+    ['shell', 'am', 'force-stop', PACKAGE_NAME],
+    ['shell', 'pidof', PACKAGE_NAME],
+  ]);
+});
+
+test('a shell that has no pidof still answers for its own processes', async () => {
+  // An older device image reports the missing command on stderr and exits non-zero. That is the
+  // device answering, not a transport fault, and reading it as `unknown` would keep every later
+  // acquire force-stopping a runtime that was never held.
+  const adb: AndroidAdbExecutor = async () => ({
+    exitCode: 1,
+    stdout: '',
+    stderr: '/system/bin/sh: pidof: not found',
+  });
+
+  const release = await recordAndroidSnapshotHelperRelease({
+    deviceKey: DEVICE_KEY,
+    packageName: PACKAGE_NAME,
+    adb,
+    cause: new Error('quit timed out'),
+  });
+
+  assert.equal(release, 'released');
 });
 
 test('session cleanup stops the runtime even when the transport refuses the stop', async () => {

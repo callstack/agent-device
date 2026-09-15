@@ -296,7 +296,10 @@ export function isAndroidHelperRuntimeProbe(args: readonly string[]): boolean {
 export function androidHelperRuntimeProbeResult(
   release: FakeAndroidHelperRuntimeRelease = 'released',
 ): AndroidAdbExecutorResult {
-  if (release === 'unreadable') throw new Error('device offline');
+  // A host whose adb cannot carry the call answers the way the executor really answers it: a non-zero
+  // exit with a transport fault on stderr, which is a different shape from a device that says "no
+  // such process" only by what it prints.
+  if (release === 'unreadable') return { exitCode: 1, stdout: '', stderr: 'error: device offline' };
   return release === 'occupied'
     ? { exitCode: 0, stdout: '4211\n', stderr: '' }
     : { exitCode: 1, stdout: '', stderr: '' };

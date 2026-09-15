@@ -1,10 +1,17 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
+import { classifyAndroidAdbFailure } from './adb-failure.ts';
+import { findPidToken } from './perf-native-process.ts';
 import type { AndroidAdbProcess } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
 
 const RETIREMENT_RECOVERY_TIMEOUT_MS = 5_000;
+// A force-stopped helper can still be inside Android's process-teardown path when the next acquire
+// asks who owns the runtime. Refusing a command is a stronger claim than one read supports, so the
+// refusal reads the same fact again after this long.
+const RUNTIME_OCCUPANCY_RECHECK_MS = 250;
 // Host-process termination is local and should be nearly immediate. Device-side force-stop is an
 // adb round trip and needs its own budget; sharing the host grace caused healthy CI force-stops to
 // time out before Android could confirm UiAutomation release.
@@ -73,10 +80,20 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
     ...(params.signal ? { signal: params.signal } : {}),
   });
   params.signal?.throwIfAborted();
-  const release = await readAndroidSnapshotHelperRuntimeRelease({
+  let release = await readAndroidSnapshotHelperRuntimeRelease({
     adb: params.adb,
     packageName: retirement.packageName,
   });
+  if (release === 'occupied') {
+    // A helper that was force-stopped a moment ago can still be inside Android's exit path while
+    // `pidof` answers. Refusing a command is the strongest claim this function makes, so it is the
+    // one that asks the device twice.
+    await sleep(RUNTIME_OCCUPANCY_RECHECK_MS);
+    release = await readAndroidSnapshotHelperRuntimeRelease({
+      adb: params.adb,
+      packageName: retirement.packageName,
+    });
+  }
   if (release === 'occupied') {
     throw createAndroidSnapshotHelperRuntimeOccupiedError({
       deviceKey: params.deviceKey,
@@ -162,9 +179,13 @@ async function readAndroidSnapshotHelperRuntimeRelease(params: {
       allowFailure: true,
       timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
     });
-    // `pidof` exits non-zero and prints nothing when no process matches.
-    if (result.exitCode !== 0 || !/\b\d+\b/.test(result.stdout)) return 'released';
-    return 'occupied';
+    // A process id for the helper package is the device naming whoever owns the runtime.
+    if (findPidToken(result.stdout)) return 'occupied';
+    // `pidof` prints nothing for "no such process", and adb prints nothing useful on stdout when the
+    // call never reached a device. On the transport this probe exists for, that shape is common: a
+    // stderr the adb failure classifier recognises as a device or transport fault is no answer at
+    // all, while an unclassified one (an older shell without `pidof`) is the device's own.
+    return classifyAndroidAdbFailure(result.stderr, result.stdout) ? 'unknown' : 'released';
   } catch {
     return 'unknown';
   }
@@ -282,6 +303,17 @@ export async function stopAndroidSnapshotHelperHostProcess(params: {
     // A completed instrumentation process can reject or ignore the signal.
   }
   return await waitForAndroidSnapshotHelperProcessExit(params.processExit.ended, params.timeoutMs);
+}
+
+/**
+ * Settles a release the last teardown could not prove, from the other end of the device. Android
+ * hands UiAutomation to one connection at a time, so a helper that has just reported itself ready
+ * owns it now and whatever held it before no longer does. The session lifecycle calls this on the
+ * way to ready: an unreadable `pidof` must not leave a pending entry that force-stops a live helper
+ * on the next acquire.
+ */
+export function settleAndroidSnapshotHelperRetirement(deviceKey: string): void {
+  pendingRetirements.delete(deviceKey);
 }
 
 export function resetAndroidSnapshotHelperRetirements(): void {
