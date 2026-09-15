@@ -25,7 +25,6 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     prewarmIosRunnerSession: vi.fn(),
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     hasLiveIosRunnerSession: vi.fn(() => false),
-    scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });

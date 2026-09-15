@@ -27,7 +27,6 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
       healthCheckMs: 0,
     })),
     resolveRunnerAppBundleId: vi.fn(() => 'com.callstack.agentdevice.runner'),
-    scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
     stopAllIosRunnerSessions: vi.fn(async () => {}),
   };
