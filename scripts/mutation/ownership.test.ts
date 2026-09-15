@@ -38,9 +38,8 @@ test('a kernel is owned by tests that reach it indirectly', () => {
     'daemon-error.test.ts exercises normalizeError but does not own kernel-errors',
   );
   assert.ok(
-    deriver
-      .ownersOf('src/commands/interaction/runtime/gestures.test.ts')
-      .includes('scroll-edge-state'),
+    deriver.ownersOf('src/daemon/__tests__/back-runtime.test.ts').includes('scroll-edge-state'),
+    'back-runtime.test.ts exercises edge detection but does not own scroll-edge-state',
   );
 });
 
