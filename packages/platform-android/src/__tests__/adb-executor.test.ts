@@ -209,13 +209,7 @@ test('createLocalAndroidAdbProvider exposes local pull and install capabilities'
   });
 
   await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4', { allowFailure: true });
-  await provider.install?.('/tmp/app.apk', {
-    allowDowngrade: true,
-    allowTestPackages: true,
-    grantPermissions: true,
-    replace: true,
-    timeoutMs: 2000,
-  });
+  await provider.install?.('/tmp/app.apk', { replace: true, timeoutMs: 2000 });
 
   assert.deepEqual(mockRunCmd.mock.calls, [
     [
@@ -225,7 +219,7 @@ test('createLocalAndroidAdbProvider exposes local pull and install capabilities'
     ],
     [
       'adb',
-      ['-s', 'emulator-5554', 'install', '-r', '-t', '-d', '-g', '/tmp/app.apk'],
+      ['-s', 'emulator-5554', 'install', '-r', '/tmp/app.apk'],
       { timeoutMs: 2000, ...localAdbExecOptions },
     ],
   ]);

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Changed (android): the snapshot helper release manifest no longer carries `installArgs`, and the
+  helper installs with a fixed `adb install -r` like the IME helper. The array only ever spelled
+  `install -r` plus the `-t` that #2603 retired with the `testOnly` flag, so the manifest → flag →
+  option → flag round trip and its allowlist carried nothing. Older manifests that still contain
+  the field parse unchanged; the field is ignored. The adb provider `install` capability now takes
+  only `replace` (#2364).
 - Fixed: BrowserStack sessions honour `--provider-project`, `--provider-build`, and
   `--provider-session-name`. The capability builder emitted the legacy JSON Wire keys `device`,
   `os_version`, and `app` at the top level next to the W3C `bstack:options` block; the hub treats a

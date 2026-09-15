@@ -35,7 +35,6 @@ const manifest: AndroidSnapshotHelperManifest = {
   targetSdk: 36,
   outputFormat: 'uiautomator-xml',
   statusProtocol: 'android-snapshot-helper-v1',
-  installArgs: ['install', '-r'],
 };
 
 beforeEach(() => {
@@ -592,17 +591,11 @@ test('ensureAndroidSnapshotHelper uninstalls and retries when signatures differ'
   assert.deepEqual(calls[3], ['install', '-r', apkPath]);
 });
 
-test('ensureAndroidSnapshotHelper uses provider install capability and semantic install options', async () => {
+test('ensureAndroidSnapshotHelper uses provider install capability with a replace install', async () => {
   const tmpDir = await mkdtempForTest('snapshot-helper-provider-install-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
-  const installCalls: Array<{
-    apkPath: string;
-    replace?: boolean;
-    allowTestPackages?: boolean;
-    allowDowngrade?: boolean;
-    grantPermissions?: boolean;
-  }> = [];
+  const installCalls: Array<{ apkPath: string; replace?: boolean }> = [];
   const adb: AndroidAdbExecutor = async (args) => {
     if (args.includes('--show-versioncode')) {
       return { exitCode: 1, stdout: '', stderr: 'not found' };
@@ -612,13 +605,7 @@ test('ensureAndroidSnapshotHelper uses provider install capability and semantic 
   const adbProvider: AndroidAdbProvider = {
     exec: adb,
     install: async (path, options) => {
-      installCalls.push({
-        apkPath: path,
-        replace: options?.replace,
-        allowTestPackages: options?.allowTestPackages,
-        allowDowngrade: options?.allowDowngrade,
-        grantPermissions: options?.grantPermissions,
-      });
+      installCalls.push({ apkPath: path, replace: options?.replace });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   };
@@ -628,24 +615,12 @@ test('ensureAndroidSnapshotHelper uses provider install capability and semantic 
     adbProvider,
     artifact: {
       apkPath,
-      manifest: {
-        ...manifest,
-        installArgs: ['install', '-r', '-t', '-d', '-g'],
-        sha256: sha256Text('helper-apk'),
-      },
+      manifest: { ...manifest, sha256: sha256Text('helper-apk') },
     },
   });
 
   assert.equal(result.installed, true);
-  assert.deepEqual(installCalls, [
-    {
-      apkPath,
-      replace: true,
-      allowTestPackages: true,
-      allowDowngrade: true,
-      grantPermissions: true,
-    },
-  ]);
+  assert.deepEqual(installCalls, [{ apkPath, replace: true }]);
 });
 
 test('ensureAndroidSnapshotHelper retry install also uses provider install capability', async () => {
@@ -935,15 +910,11 @@ test('parseAndroidSnapshotHelperManifest validates manifest shape', () => {
   assert.throws(() => parseAndroidSnapshotHelperManifest({ ...manifest, outputFormat: 'json' }), {
     message: 'Android snapshot helper manifest outputFormat must be "uiautomator-xml".',
   });
-  assert.throws(() => parseAndroidSnapshotHelperManifest({ ...manifest, installArgs: ['shell'] }), {
-    message: 'Android snapshot helper manifest installArgs must start with "install".',
-  });
-  assert.throws(
-    () => parseAndroidSnapshotHelperManifest({ ...manifest, installArgs: ['install', '--user'] }),
-    {
-      message:
-        'Android snapshot helper manifest installArgs contains unsupported install flag "--user".',
-    },
+  // Release manifests up to 0.21.3 carried installArgs; it is ignored, never validated or kept.
+  assert.equal(
+    'installArgs' in
+      parseAndroidSnapshotHelperManifest({ ...manifest, installArgs: ['install', '-r', '-t'] }),
+    false,
   );
   assert.throws(() => parseAndroidSnapshotHelperManifest({ ...manifest, sha256: 'not-a-sha' }), {
     message: 'Android snapshot helper manifest sha256 must be a 64-character hex string.',

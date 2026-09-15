@@ -1,5 +1,4 @@
 import { asAppError, type AppError } from '@agent-device/kernel/errors';
-import { readAndroidSnapshotHelperInstallOptions } from './snapshot-helper-artifact.ts';
 import {
   inspectInstalledAndroidHelper,
   verifyAndroidHelperApkChecksum,
@@ -10,7 +9,6 @@ import {
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
 } from './adb-executor.ts';
-import type { AndroidSnapshotHelperInstallOptions } from './snapshot-helper-artifact.ts';
 import type {
   AndroidSnapshotHelperArtifact,
   AndroidSnapshotHelperInstallPolicy,
@@ -146,17 +144,11 @@ export async function ensureAndroidSnapshotHelper(options: {
 
   let result: Awaited<ReturnType<AndroidAdbExecutor>>;
   try {
-    result = await installAndroidSnapshotHelper(
-      adb,
-      options.adbProvider ?? adb,
-      artifact.apkPath,
-      readAndroidSnapshotHelperInstallOptions(artifact.manifest),
-      {
-        packageName,
-        timeoutMs: options.timeoutMs,
-        signal: options.signal,
-      },
-    );
+    result = await installAndroidSnapshotHelper(adb, options.adbProvider ?? adb, artifact.apkPath, {
+      packageName,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
   } catch (error) {
     forgetInstalledSnapshotHelper(installCacheKey);
     throw markAndroidSnapshotHelperInstallFailure(error, { packageName, versionCode });
@@ -231,14 +223,13 @@ async function installAndroidSnapshotHelper(
   adb: AndroidAdbExecutor,
   adbProvider: AndroidAdbProvider | AndroidAdbExecutor,
   apkPath: string,
-  installOptions: AndroidSnapshotHelperInstallOptions,
   options: { packageName: string; timeoutMs?: number; signal?: AbortSignal },
 ): Promise<Awaited<ReturnType<AndroidAdbExecutor>>> {
   const install = async () =>
     await installAndroidAdbPackage(apkPath, {
       allowFailure: true,
       provider: adbProvider,
-      ...installOptions,
+      replace: true,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });

@@ -8,7 +8,7 @@ if [ -z "$HELPER" ]; then
 fi
 
 # Only the snapshot helper publishes a GitHub release asset, so only it takes a release
-# tag and only it gets a releaseTag/apkUrl/checksumName/installArgs manifest.
+# tag and only it gets a releaseTag/apkUrl/checksumName manifest.
 case "$HELPER" in
   snapshot) HAS_RELEASE_TAG=1 ;;
   ime) HAS_RELEASE_TAG=0 ;;
@@ -102,8 +102,7 @@ case "$HELPER" in
       printf '  "minSdk": %s,\n' "$MIN_SDK"
       printf '  "targetSdk": %s,\n' "$TARGET_SDK"
       printf '  "outputFormat": "uiautomator-xml",\n'
-      printf '  "statusProtocol": "android-snapshot-helper-v1",\n'
-      printf '  "installArgs": ["install", "-r"]\n'
+      printf '  "statusProtocol": "android-snapshot-helper-v1"\n'
       printf '}\n'
     } > "$MANIFEST_PATH"
     ;;

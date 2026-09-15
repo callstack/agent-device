@@ -35,7 +35,6 @@ export type AndroidSnapshotHelperManifest = {
   targetSdk?: number;
   outputFormat: 'uiautomator-xml';
   statusProtocol: 'android-snapshot-helper-v1';
-  installArgs: string[];
 };
 
 export type AndroidSnapshotHelperArtifact = {

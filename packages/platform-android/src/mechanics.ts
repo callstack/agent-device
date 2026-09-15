@@ -255,11 +255,7 @@ export {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
 } from './snapshot-content-recovery.ts';
-export {
-  parseAndroidSnapshotHelperManifest,
-  readAndroidSnapshotHelperInstallOptions,
-  type AndroidSnapshotHelperInstallOptions,
-} from './snapshot-helper-artifact.ts';
+export { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 export {
   buildAndroidSnapshotHelperArgs,
   buildAndroidSnapshotHelperCaptureOptions,

@@ -10,24 +10,9 @@ import {
   type AndroidSnapshotHelperManifest,
 } from './snapshot-helper-types.ts';
 
-export type AndroidSnapshotHelperInstallOptions = {
-  replace?: boolean;
-  allowTestPackages?: boolean;
-  allowDowngrade?: boolean;
-  grantPermissions?: boolean;
-};
-
-type AndroidSnapshotHelperInstallOptionName = keyof AndroidSnapshotHelperInstallOptions;
-
-const ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS = {
-  '-r': 'replace',
-  '-t': 'allowTestPackages',
-  '-d': 'allowDowngrade',
-  '-g': 'grantPermissions',
-} as const satisfies Record<string, AndroidSnapshotHelperInstallOptionName>;
-
-type AndroidSnapshotHelperInstallFlag = keyof typeof ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS;
-
+// Release manifests up to 0.21.3 also carried `installArgs`; it only ever encoded the `-t` flag the
+// former `testOnly` helper needed, so the parser ignores it and the helper installs with a fixed
+// `adb install -r` like every other helper APK.
 export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnapshotHelperManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new AppError('INVALID_ARGS', 'Android snapshot helper manifest must be an object.');
@@ -57,7 +42,6 @@ export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnaps
       'statusProtocol',
       ANDROID_SNAPSHOT_HELPER_PROTOCOL,
     ),
-    installArgs: readAndroidSnapshotHelperManifestInstallArgs(record.installArgs),
   };
 }
 
@@ -71,54 +55,6 @@ function readLiteral<const Value extends string>(
   expected: Value,
 ): Value {
   return readAndroidHelperManifestLiteral(value, field, expected, 'snapshot helper');
-}
-
-export function readAndroidSnapshotHelperInstallOptions(
-  manifest: AndroidSnapshotHelperManifest,
-): AndroidSnapshotHelperInstallOptions {
-  const installArgs = readAndroidSnapshotHelperManifestInstallArgs(manifest.installArgs);
-  return installOptionsFromSnapshotHelperInstallArgs(installArgs);
-}
-
-function readAndroidSnapshotHelperManifestInstallArgs(value: unknown): string[] {
-  const installArgs = readStringArray(value, 'installArgs');
-  if (installArgs[0] !== 'install') {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Android snapshot helper manifest installArgs must start with "install".',
-    );
-  }
-  if (installArgs.some((arg) => arg.includes('\u0000'))) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Android snapshot helper manifest installArgs must not contain null bytes.',
-    );
-  }
-  const unsupportedArg = installArgs.slice(1).find((arg) => !isAllowedInstallFlag(arg));
-  if (unsupportedArg) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android snapshot helper manifest installArgs contains unsupported install flag "${unsupportedArg}".`,
-    );
-  }
-  return installArgs;
-}
-
-function installOptionsFromSnapshotHelperInstallArgs(
-  installArgs: string[],
-): AndroidSnapshotHelperInstallOptions {
-  const options: AndroidSnapshotHelperInstallOptions = {};
-  for (const arg of installArgs.slice(1)) {
-    const optionName = installOptionForSnapshotHelperInstallFlag(arg);
-    if (!optionName) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Android snapshot helper manifest installArgs contains unsupported install flag "${arg}".`,
-      );
-    }
-    options[optionName] = true;
-  }
-  return options;
 }
 
 function readSha256(value: unknown): string {
@@ -146,29 +82,6 @@ function readOptionalString(value: unknown): string | undefined {
 function readOptionalNullableString(value: unknown, field: string): string | null {
   if (value === null) return null;
   return readString(value, field);
-}
-
-function readStringArray(value: unknown, field: string): string[] {
-  if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string')) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android snapshot helper manifest ${field} must be a string array.`,
-    );
-  }
-  return value;
-}
-
-function isAllowedInstallFlag(arg: string): boolean {
-  return installOptionForSnapshotHelperInstallFlag(arg) !== undefined;
-}
-
-function installOptionForSnapshotHelperInstallFlag(
-  arg: string,
-): AndroidSnapshotHelperInstallOptionName | undefined {
-  if (!Object.hasOwn(ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS, arg)) {
-    return undefined;
-  }
-  return ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS[arg as AndroidSnapshotHelperInstallFlag];
 }
 
 function isLowerHex(value: string): boolean {

@@ -137,6 +137,6 @@ The final instrumentation result for the default `snapshot` mode includes:
 Failures return `ok=false`, `errorType`, and `message` in the final result.
 
 The release manifest is a stable provider contract for the current helper protocol. Providers should
-resolve the APK from `apkUrl`, verify `sha256`, install using `installArgs`, and run
-`instrumentationRunner`. `installArgs` must start with `install`; extra arguments are limited to the
-allowlisted adb install flags `-r`, `-t`, `-d`, and `-g`, and the consumer appends the APK path.
+resolve the APK from `apkUrl`, verify `sha256`, install it with `adb install -r <apk>`, and run
+`instrumentationRunner`. Manifests up to 0.21.3 also carried an `installArgs` array; it only ever
+spelled `install -r` (plus `-t` while the helper was `testOnly`), so consumers can ignore it.

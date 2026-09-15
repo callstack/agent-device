@@ -102,9 +102,6 @@ export type AndroidPortReverseProvider = {
 export type AndroidAdbTransferOptions = AndroidAdbExecutorOptions;
 export type AndroidAdbInstallOptions = AndroidAdbTransferOptions & {
   replace?: boolean;
-  allowTestPackages?: boolean;
-  allowDowngrade?: boolean;
-  grantPermissions?: boolean;
 };
 
 export type AndroidAdbPuller = (
@@ -114,8 +111,8 @@ export type AndroidAdbPuller = (
 ) => Promise<AndroidAdbExecutorResult>;
 
 /**
- * Installs an APK path. Implementations are responsible for honoring semantic
- * install options such as replace/test/downgrade/grant-permissions.
+ * Installs an APK path. Implementations are responsible for honoring the
+ * semantic `replace` option (`adb install -r`).
  */
 export type AndroidAdbInstaller = (
   apkPath: string,
@@ -196,12 +193,6 @@ export function normalizeAndroidAdbInstallOptions(options?: AndroidAdbInstallOpt
   installArgs: string[];
   execOptions: AndroidAdbTransferOptions;
 } {
-  const { replace, allowTestPackages, allowDowngrade, grantPermissions, ...execOptions } =
-    options ?? {};
-  const installArgs: string[] = [];
-  if (replace) installArgs.push('-r');
-  if (allowTestPackages) installArgs.push('-t');
-  if (allowDowngrade) installArgs.push('-d');
-  if (grantPermissions) installArgs.push('-g');
-  return { installArgs, execOptions };
+  const { replace, ...execOptions } = options ?? {};
+  return { installArgs: replace ? ['-r'] : [], execOptions };
 }
