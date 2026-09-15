@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { createDetachedAttempts } from './detached-attempt.ts';
+import { getEventListeners } from 'node:events';
+import { test, vi } from 'vitest';
+import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
 
 const PENDING = new Error('still-running');
 
@@ -247,6 +248,49 @@ test('a caller answered by the attempt stops the wait it left running', async ()
 
   assert.ok(stopSignal?.aborted, 'the losing wait is stopped once the attempt settles');
   assert.equal(waitState, 'resolved');
+});
+
+test('a wait that settles by its own timeout releases the stop listener it added', async () => {
+  vi.useFakeTimers();
+  try {
+    const stop = new AbortController();
+    const waiting = waitForDetachedAttempt({
+      waitMs: 20,
+      signal: undefined,
+      stop: stop.signal,
+      cancelled: () => new Error('unreachable'),
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await waiting;
+
+    assert.equal(getEventListeners(stop.signal, 'abort').length, 0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a caller signal already aborted rejects at once, without spending waitMs', async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const stop = new AbortController();
+    const reason = new Error('already-cancelled');
+    controller.abort(reason);
+
+    const waiting = waitForDetachedAttempt({
+      waitMs: 60_000,
+      signal: controller.signal,
+      stop: stop.signal,
+      cancelled: () => reason,
+    });
+
+    await assert.rejects(waiting, (error) => error === reason);
+    assert.equal(vi.getTimerCount(), 0);
+    assert.equal(getEventListeners(stop.signal, 'abort').length, 0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 function identity(error: unknown): unknown {

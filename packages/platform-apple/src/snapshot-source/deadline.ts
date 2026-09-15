@@ -25,9 +25,6 @@ export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code
   return Math.max(1, Math.floor(remainingMs));
 }
 
-/** A sleep nobody has asked to end early. */
-const NO_STOP = new AbortController().signal;
-
 /**
  * Sleeps inside the caller's own deadline, so a client abort stays a typed `cancelled` instead of
  * arriving as a fresh timeout. `stop` is for a caller that no longer needs the sleep because the work
@@ -43,7 +40,7 @@ export async function waitForSnapshotSourceDelay(
   await waitForDetachedAttempt({
     waitMs: delayMs,
     signal: deadline.signal,
-    stop: stop ?? NO_STOP,
+    stop,
     cancelled: () => snapshotSourceError('cancelled', 'abort-signal'),
   });
 }

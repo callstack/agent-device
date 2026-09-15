@@ -68,16 +68,16 @@ type Attempt<Value> = {
  * this module describes: sleeps `waitMs`, resolves when that sleep is spent or when `stop` says the
  * answer arrived elsewhere, and rejects only on the caller's own abort so that stays typed.
  *
- * `stop` needs neither cleanup nor an already-aborted check: `value()` creates it moments before
- * calling and aborts it in a `finally`, which releases the `{ once: true }` listener. The caller's
- * signal outlives the wait and does have its listener removed.
+ * Every listener this adds to a signal it did not create is removed once the wait settles, on every
+ * path (timeout, `stop`, or the caller's own abort) — `stop` is optional for a caller with no signal
+ * to end the wait early.
  */
 export function waitForDetachedAttempt(
   params: Readonly<{
     waitMs: number;
     /** The caller's own deadline signal; a wait inside it keeps a client abort a client abort. */
     signal: AbortSignal | undefined;
-    stop: AbortSignal;
+    stop: AbortSignal | undefined;
     /** The rejection for the caller aborting, so each owner keeps its own error type. */
     cancelled: () => unknown;
   }>,
@@ -90,11 +90,12 @@ export function waitForDetachedAttempt(
     function finish(settle: () => void): void {
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
+      stop?.removeEventListener('abort', onStop);
       settle();
     }
     signal?.addEventListener('abort', onAbort, { once: true });
+    stop?.addEventListener('abort', onStop, { once: true });
     if (signal?.aborted) onAbort();
-    stop.addEventListener('abort', onStop, { once: true });
   });
 }
 
