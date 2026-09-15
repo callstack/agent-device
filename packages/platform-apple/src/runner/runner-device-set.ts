@@ -125,34 +125,10 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   }
 
   try {
-    fs.mkdirSync(requestedSetPath, { recursive: true });
-    if (fs.existsSync(xctestDeviceSetPath)) {
-      fs.renameSync(xctestDeviceSetPath, backupPath);
-    }
-    installXcodebuildSimulatorSetSymlink({
-      requestedSetPath,
-      xctestDeviceSetPath,
-    });
+    installDeviceSetRedirect(paths, requestedSetPath);
   } catch (error) {
     const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
-    throw new AppError('COMMAND_FAILED', 'Failed to redirect XCTest device set path', {
-      requestedSetPath,
-      xctestDeviceSetPath,
-      backupPath,
-      error: String(error),
-      ...(handBack.restoreFailure === null
-        ? {}
-        : {
-            restoreError: String(handBack.restoreFailure),
-            ...(handBack.renamedAsidePath === null
-              ? {}
-              : {
-                  hint:
-                    `The host's own device set is still renamed aside at ${handBack.renamedAsidePath}: ` +
-                    'restore it, or remove that path, before another runner build redirects it.',
-                }),
-          }),
-    });
+    throw redirectFailure(error, handBack, { requestedSetPath, ...paths });
   }
 
   let givenBack = false;
@@ -175,6 +151,48 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   };
 }
 
+/** The two paths a redirect moves around: where the host keeps its set, and where this run put it. */
+type DeviceSetPaths = {
+  xctestDeviceSetPath: string;
+  backupPath: string;
+};
+
+/** The rename that gives this simulator the host's slot, and the symlink that occupies it. */
+function installDeviceSetRedirect(paths: DeviceSetPaths, requestedSetPath: string): void {
+  fs.mkdirSync(requestedSetPath, { recursive: true });
+  if (fs.existsSync(paths.xctestDeviceSetPath)) {
+    fs.renameSync(paths.xctestDeviceSetPath, paths.backupPath);
+  }
+  installXcodebuildSimulatorSetSymlink({
+    requestedSetPath,
+    xctestDeviceSetPath: paths.xctestDeviceSetPath,
+  });
+}
+
+/**
+ * Why this redirect did not happen, plus whatever the hand-back could not put right on the way out. A
+ * backup path is named only when that backup is really on disk: a reader sent to restore a path that
+ * does not exist learns the wrong lesson from this error.
+ */
+function redirectFailure(
+  cause: unknown,
+  handBack: DeviceSetHandBack,
+  paths: DeviceSetPaths & { requestedSetPath: string },
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Failed to redirect XCTest device set path', {
+    ...paths,
+    error: String(cause),
+    ...(handBack.restoreFailure === null ? {} : { restoreError: String(handBack.restoreFailure) }),
+    ...(handBack.renamedAsidePath === null
+      ? {}
+      : {
+          hint:
+            `The host's own device set is still renamed aside at ${handBack.renamedAsidePath}: ` +
+            'restore it, or remove that path, before another runner build redirects it.',
+        }),
+  });
+}
+
 /** What one ordered hand-back found, with neither failure able to hide the other. */
 type DeviceSetHandBack = {
   /** The host's own `XCTestDevices` could not be put back, so a symlink or nothing is in its place. */
@@ -194,7 +212,7 @@ type DeviceSetHandBack = {
  * the caller: a redirect that failed reports both, and one that merely ended reports the restore.
  */
 async function handBackDeviceSet(
-  paths: { xctestDeviceSetPath: string; backupPath: string },
+  paths: DeviceSetPaths,
   lockDirPath: string,
   releaseLock: () => Promise<void>,
 ): Promise<DeviceSetHandBack> {
@@ -224,7 +242,7 @@ async function handBackDeviceSet(
  * here that could read one half of its result and miss the other.
  */
 async function handBackOrRaise(
-  paths: { xctestDeviceSetPath: string; backupPath: string },
+  paths: DeviceSetPaths,
   lockDirPath: string,
   releaseLock: () => Promise<void>,
 ): Promise<void> {
