@@ -1,12 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { resolveMetroReloadEndpoints } from '../metro/metro-reload-endpoints.ts';
@@ -15,11 +14,12 @@ import { readMetroSessionHints } from '../metro/metro-session-hints.ts';
 import { resolveDaemonPaths } from '../daemon-resolution.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive, waitForProcessExit } from '@agent-device/host-kit/process';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 
 test('prepareMetroRuntime starts Metro, bridges through proxy, and writes runtime file when requested', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-metro-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-metro');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const runtimeFilePath = path.join(projectRoot, '.agent-device', 'metro-runtime.json');
@@ -178,7 +178,7 @@ for (const { configFileName, commandName } of [
   { configFileName: 'webpack.config.js', commandName: 'webpack-start' },
 ]) {
   test(`prepareMetroRuntime starts Re.Pack with ${commandName} for ${configFileName}`, async () => {
-    const tempRoot = path.join(os.tmpdir(), `agent-device-repack-${randomUUID()}`);
+    const tempRoot = mkdtempForTestSync('agent-device-repack');
     const projectRoot = path.join(tempRoot, 'project');
     const binDir = path.join(tempRoot, 'bin');
     const argsFile = path.join(tempRoot, 'npx-args.json');
@@ -240,7 +240,7 @@ for (const { configFileName, commandName } of [
 }
 
 test('prepareMetroRuntime maps kind=expo to the virtual-metro-entry bundle URL', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-expo-kind-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-expo-kind');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const metroPort = await findFreePort();
@@ -290,7 +290,7 @@ test('prepareMetroRuntime maps kind=expo to the virtual-metro-entry bundle URL',
 });
 
 test('prepareMetroRuntime keeps index.bundle for non-expo kinds', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-rn-kind-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-rn-kind');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const metroPort = await findFreePort();
@@ -334,7 +334,7 @@ test('prepareMetroRuntime keeps index.bundle for non-expo kinds', async () => {
 });
 
 test('prepareMetroRuntime detects the package manager from an ancestor lockfile in a monorepo', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-detect-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-pm-detect');
   const monorepoRoot = path.join(tempRoot, 'monorepo');
   const projectRoot = path.join(monorepoRoot, 'example');
   const binDir = path.join(tempRoot, 'bin');
@@ -383,7 +383,7 @@ test('prepareMetroRuntime detects the package manager from an ancestor lockfile 
 });
 
 test('prepareMetroRuntime install failure hints at --no-install-deps and the detected package manager', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-fail-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-pm-fail');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
 
@@ -425,7 +425,7 @@ test('prepareMetroRuntime install failure hints at --no-install-deps and the det
 });
 
 test('prepareMetroRuntime detects bun from the text bun.lock lockfile', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-bun-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-pm-bun');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
 
@@ -464,7 +464,7 @@ test('prepareMetroRuntime detects bun from the text bun.lock lockfile', async ()
 });
 
 test('prepareMetroRuntime lockfile walk-up stops at the repo root instead of adopting an outside lockfile', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-bound-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-pm-bound');
   const repoRoot = path.join(tempRoot, 'repo');
   const projectRoot = path.join(repoRoot, 'example');
   const binDir = path.join(tempRoot, 'bin');
@@ -758,7 +758,7 @@ test('resolveMetroReloadEndpoints keeps the bundle URL mount prefix instead of c
 });
 
 test('metro reload targets the dev server bound by metro prepare in the same session', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-metro-session-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-metro-session');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const stateDir = path.join(tempRoot, 'state');
@@ -837,7 +837,7 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
 });
 
 test('metro prepare --kind expo keeps a prefixed public base URL for session reload', async () => {
-  const tempRoot = path.join(os.tmpdir(), `agent-device-metro-expo-session-${randomUUID()}`);
+  const tempRoot = mkdtempForTestSync('agent-device-metro-expo-session');
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const stateDir = path.join(tempRoot, 'state');

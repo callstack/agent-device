@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {
   DEFAULT_TEST_ARTIFACTS_ROOT,
@@ -10,11 +10,7 @@ import {
   resolveReplayTestArtifactsDir,
 } from '../session-test-artifacts.ts';
 import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
-
-// Package tests compile within their own rootDir and cannot import the root test utility.
-function mkdtempForTestSync(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test('resolveReplayTestArtifactsDir falls back to the default root when artifactsDir is omitted', () => {
   const dir = resolveReplayTestArtifactsDir({ cwd: '/repo', suiteInvocationId: 'abc123' });
@@ -44,7 +40,7 @@ const passedOutcome = (
 });
 
 test('materializeReplayTestAttemptArtifacts writes replay and result manifests for passing attempts', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-artifacts-pass-'));
+  const root = mkdtempForTestSync('agent-device-test-artifacts-pass-');
   const replayPath = path.join(root, 'flow.ad');
   const screenshotPath = path.join(root, 'capture.png');
   const attemptDir = path.join(root, 'attempt-1');
@@ -73,7 +69,7 @@ test('materializeReplayTestAttemptArtifacts writes replay and result manifests f
 });
 
 test('prepareReplayTestAttemptArtifacts preserves original Maestro flow filename', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-artifacts-maestro-'));
+  const root = mkdtempForTestSync('agent-device-test-artifacts-maestro-');
   const replayPath = path.join(root, 'auth-flow.yml');
   const attemptDir = path.join(root, 'attempt-1');
   fs.writeFileSync(replayPath, 'appId: demo.app\n---\n- assertVisible: Welcome\n');
@@ -85,7 +81,7 @@ test('prepareReplayTestAttemptArtifacts preserves original Maestro flow filename
 });
 
 test('materializeReplayTestAttemptArtifacts writes failure manifest and copies log artifacts', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-artifacts-fail-'));
+  const root = mkdtempForTestSync('agent-device-test-artifacts-fail-');
   const replayPath = path.join(root, 'flow.ad');
   const screenshotPath = path.join(root, 'capture.png');
   const logPath = path.join(root, 'daemon.log');

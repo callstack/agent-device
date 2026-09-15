@@ -1,6 +1,6 @@
 import { test, expect, vi } from 'vitest';
 import path from 'node:path';
-import os from 'node:os';
+
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   LINUX_DEVICE,
@@ -31,6 +31,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../request-runtime-binding.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 /** The system leaves this owner refuses: the retired fallback listed them unconditionally. */
 const ANDROID_REFUSED_SYSTEM_COMMANDS = ['clipboard', 'alert', 'settings', 'app-switcher'];
@@ -67,7 +68,7 @@ async function projectAndroidCapabilities(sessionName: string) {
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     inspectFacts: runtime.inspectFacts,
     bindDevice: runtime.bindDevice,
@@ -149,7 +150,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     inspectFacts: runtime.inspectFacts,
     bindDevice: runtime.bindDevice,
@@ -192,7 +193,7 @@ test('capabilities excludes network when the runtime fact is unavailable', async
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     inspectFacts: runtime.inspectFacts,
     bindDevice: runtime.bindDevice,
@@ -236,7 +237,7 @@ test('capabilities includes apps for the available HarmonyOS runtime fact', asyn
           flags: {},
         },
         sessionName,
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         bindDevice: runtime.bindDevice,
         inspectFacts: runtime.inspectFacts,
@@ -314,7 +315,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
         flags: {},
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       bindDevice: runtime.bindDevice,
       inspectFacts: runtime.inspectFacts,
@@ -348,7 +349,7 @@ test('capabilities excludes appstate when its runtime fact is unavailable', asyn
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     bindDevice: runtime.bindDevice,
     inspectFacts: runtime.inspectFacts,
@@ -381,7 +382,7 @@ test('capabilities excludes appstate when its readiness fact is unavailable', as
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     bindDevice: runtime.bindDevice,
     inspectFacts: runtime.inspectFacts,
@@ -456,7 +457,7 @@ test.each([
             flags: {},
           },
           sessionName,
-          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
           sessionStore,
           inspectFacts,
           invoke: async () => ({ ok: true, data: {} }),
@@ -492,7 +493,7 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
           flags: { platform: 'android' },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async () => ({ ok: true, data: {} }),
       }),

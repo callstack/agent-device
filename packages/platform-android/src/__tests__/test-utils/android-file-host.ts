@@ -2,7 +2,6 @@ import { constants } from 'node:fs';
 import {
   access,
   mkdir,
-  mkdtemp,
   open,
   readFile,
   readdir,
@@ -12,9 +11,10 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { AndroidAdbFileHost } from '../../adb-host.ts';
+import { mkdtempForTest } from './tmp-dir.ts';
 
 export function createAndroidFileHost(): AndroidAdbFileHost {
   return {
@@ -30,7 +30,7 @@ export function createAndroidFileHost(): AndroidAdbFileHost {
         return false;
       }
     },
-    makeTempDirectory: async (prefix) => await mkdtemp(path.join(os.tmpdir(), prefix)),
+    makeTempDirectory: async (prefix) => await mkdtempForTest(prefix),
     readBytes: async (filePath) => await readFile(filePath),
     readDirectory: async (directory) => await readdir(directory),
     readText: async (filePath) => await readFile(filePath, 'utf8'),

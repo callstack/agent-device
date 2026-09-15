@@ -19,7 +19,6 @@
 // Maestro replay resolves a target device through core/dispatch. Gesture viewport reads re-enter
 // the admitted internal runtime command; the invoke fixture below returns its typed viewport.
 import { expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -37,7 +36,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
 });
 
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
@@ -50,6 +49,7 @@ import {
   runReplayTestReporters,
 } from '../reporters/registry.ts';
 import type { ReplayTestReporter, ReplayTestReporterContext } from '../reporters/types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 type RecordedHook = {
   hook: 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult' | 'onSuiteEnd';
@@ -121,7 +121,7 @@ async function runMaestroSuiteThroughReporter(params: {
           flags: { replayBackend: 'maestro', platform: 'android', ...params.flags },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore: makeSessionStore(params.root),
         invoke: params.invoke,
       }),

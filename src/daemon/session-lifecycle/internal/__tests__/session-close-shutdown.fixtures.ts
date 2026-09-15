@@ -1,12 +1,10 @@
 import { vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -86,6 +84,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '../../../screen-recording-resource-store.ts';
 import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };
 
@@ -146,7 +145,7 @@ function makeIosSimulatorRecordingSession(
     },
   );
   session.appBundleId = 'com.example.app';
-  const outPath = path.join(os.tmpdir(), name + '.mp4');
+  const outPath = path.join(mkdtempForTestSync('test'), name + '.mp4');
   const finish = vi.fn(async () =>
     options.recorderExitCode
       ? ({
@@ -262,7 +261,6 @@ export const sessionCloseShutdownFixture = Object.freeze({
   mockStopIosRunnerSession,
   narrowDeviceBinding,
   noopInvoke,
-  os,
   path,
   providerRuntimeOwner,
   recordingCleanupMock,

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -33,6 +32,7 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
 
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
 import { fetchWithTimeout, sendRunnerCommandOnce } from '../runner-transport.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 // The real `resolveIosPhysicalDeviceControl` resolves the CoreDevice tunnel IP
 // through root-level tooling this package cannot reach; a fake control backed
@@ -54,10 +54,7 @@ function fakeResolveIosPhysicalDeviceControl(device: {
   return {
     backend: device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice',
     resolveTunnel: async (resolvedDevice) => {
-      const jsonPath = path.join(
-        os.tmpdir(),
-        `runner-transport-test-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-      );
+      const jsonPath = path.join(mkdtempForTestSync('runner-transport-test'), 'tunnel.json');
       try {
         await mockRunCmd('xcrun', [
           'devicectl',

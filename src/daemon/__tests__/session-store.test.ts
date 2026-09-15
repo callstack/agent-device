@@ -11,6 +11,7 @@ import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
+
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
@@ -108,7 +109,9 @@ test('expandHome resolves tilde, relative-with-cwd, and absolute paths', () => {
 });
 
 test('defaultTracePath sanitizes session name', () => {
-  const store = new SessionStore(path.join(os.tmpdir(), 'agent-device-tests'));
+  const store = new SessionStore(
+    path.join(mkdtempForTestSync('agent-device-tests'), 'agent-device-tests'),
+  );
   const session = makeSession('session with spaces');
   const tracePath = store.defaultTracePath(session);
   assert.match(tracePath, /session_with_spaces/);
@@ -116,7 +119,11 @@ test('defaultTracePath sanitizes session name', () => {
 });
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
-  const sessionsDir = path.join(os.tmpdir(), 'agent-device-tests', 'sessions');
+  const sessionsDir = path.join(
+    mkdtempForTestSync('agent-device-tests'),
+    'agent-device-tests',
+    'sessions',
+  );
   const store = new SessionStore(sessionsDir);
   assert.equal(store.resolveSessionDir('a/b:c d'), path.join(sessionsDir, 'a_b_c_d'));
   // `.` and `..` survive `safeSessionName` unchanged, so without an explicit

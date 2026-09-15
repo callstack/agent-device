@@ -1,6 +1,5 @@
 import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
@@ -12,6 +11,7 @@ import {
 } from '../../../handlers/__tests__/session-test-harness.ts';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 // Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one
@@ -68,7 +68,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
   const response = await handleSessionCommands({
     req: { token: 't', session: 'default', command: 'session_list', positionals: [] },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -110,7 +110,7 @@ test('test filters replay scripts by context platform and skips untyped files', 
       meta: { cwd: root, requestId: 'suite-filter' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -179,7 +179,7 @@ test('test binds each replay script to its declared platform metadata', async ()
         meta: { cwd: root, requestId: 'suite-platforms' },
       },
       sessionName: 'default',
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: async (req) => {
         invoked.push(req);
@@ -217,7 +217,7 @@ test('test cleans up suite-owned sessions after each executed script', async () 
       meta: { cwd: root, requestId: 'suite-cleanup' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       sessionStore.set(
@@ -256,7 +256,7 @@ test('test retries failed scripts with fresh suite-owned sessions', async () => 
       meta: { cwd: root, requestId: 'suite-retries' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -309,7 +309,7 @@ test('test applies per-script timeout and writes attempt artifacts', async () =>
       meta: { cwd: root, requestId: 'suite-timeout' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (_req) => {
       invocationCount += 1;
@@ -377,7 +377,7 @@ test('open does not retain a session when the request was canceled before comple
         meta: { requestId },
       },
       sessionName: 'default',
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     });
@@ -408,7 +408,7 @@ test('test returns invalid args when no replay scripts match the platform filter
       meta: { cwd: root },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -433,7 +433,7 @@ test('test rejects duplicate replay test metadata in the context header', async 
       meta: { cwd: root },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

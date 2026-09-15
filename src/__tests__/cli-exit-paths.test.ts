@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
@@ -14,6 +14,7 @@ import { runWebCommand } from '../cli/commands/web.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '../daemon-resolution.ts';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -179,7 +180,7 @@ test("web command exits with runWebCommand's status code", async () => {
 // the daemon log itself is large — otherwise the dump risks the same
 // process.exit()-truncates-a-pipe-write failure exitAfterFlush exists to fix.
 test('a --debug failure caps the daemon-log-tail dump instead of printing it unbounded', async () => {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-cli-log-tail-'));
+  const tempRoot = mkdtempForTestSync('agent-device-cli-log-tail-');
   const stateDir = path.join(tempRoot, 'state');
   fs.mkdirSync(stateDir, { recursive: true });
   const { logPath } = resolveDaemonPaths(stateDir);

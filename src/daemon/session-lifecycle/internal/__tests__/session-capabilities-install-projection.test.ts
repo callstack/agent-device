@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
@@ -10,6 +10,7 @@ import type {
 } from '../../../request-runtime-binding.ts';
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
   const { sessionName, sessionStore } = createAndroidCapabilitiesSession('install-family');
@@ -160,7 +161,7 @@ async function dispatchCapabilities(params: {
       flags: {},
     },
     sessionName: params.sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore: params.sessionStore,
     bindDevice: params.bindDevice,
     inspectFacts: params.inspectFacts,

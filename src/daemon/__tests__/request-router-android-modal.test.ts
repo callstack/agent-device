@@ -1,6 +1,6 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -29,6 +29,7 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { androidObservation } from '../../platform-runtime.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -155,7 +156,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -207,7 +208,7 @@ test('generic Android gesture commands continue when recording dialog inspection
   vi.mocked(openAndroidApp).mockClear();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -266,7 +267,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

@@ -1,5 +1,4 @@
 import { test, expect } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   mockDispatch,
@@ -10,6 +9,7 @@ import {
 } from './session-test-harness.ts';
 import type { SessionState } from '../../session-state.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('appstate on iOS requires active session on selected device', async () => {
   const sessionStore = makeSessionStore();
@@ -44,7 +44,7 @@ test('appstate on iOS requires active session on selected device', async () => {
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -90,7 +90,7 @@ test('appstate returns session appName when bundle id is unavailable', async () 
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -139,7 +139,7 @@ test('appstate fails when iOS session has no tracked app', async () => {
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -172,7 +172,7 @@ test('appstate without session on iOS selector returns SESSION_NOT_FOUND', async
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -195,7 +195,7 @@ test('appstate with explicit missing session returns SESSION_NOT_FOUND', async (
       flags: { session: 'sim', platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'sim',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -220,7 +220,7 @@ test('clipboard requires an active session or explicit device selector', async (
       flags: {},
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -260,7 +260,7 @@ test('clipboard rejects unsupported iOS physical devices', async () => {
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

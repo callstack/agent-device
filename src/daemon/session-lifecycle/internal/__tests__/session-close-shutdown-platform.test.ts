@@ -4,6 +4,7 @@ import {
   type DeviceBinding,
   type PlatformRuntimeOperations,
 } from './session-close-shutdown.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   handleSessionCommands,
@@ -15,7 +16,6 @@ const {
   mockShutdownTargetRuntime,
   narrowDeviceBinding,
   noopInvoke,
-  os,
   path,
   providerRuntimeOwner,
   resetSessionCloseShutdownMocks,
@@ -79,7 +79,7 @@ test('close --shutdown calls shutdownSimulator for iOS simulator and includes re
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -144,7 +144,7 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -186,7 +186,7 @@ test('close --shutdown calls shutdownAndroidEmulator for Android emulator and in
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -229,7 +229,7 @@ test('close --shutdown is ignored for non-simulator iOS devices', async () => {
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -267,7 +267,7 @@ test('close --shutdown is ignored for Android devices', async () => {
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -313,7 +313,7 @@ test('close --shutdown returns success and failure payload when shutdownAndroidE
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -353,7 +353,7 @@ test('close --shutdown returns success and failure payload when shutdownSimulato
       flags: { shutdown: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

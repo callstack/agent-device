@@ -1,6 +1,5 @@
 import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 vi.mock('../../../materialized-path-registry.ts', async (importOriginal) => {
@@ -19,10 +18,11 @@ import { handleSessionCommands } from '../../../handlers/__tests__/session-comma
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+
 import { withTestDeviceInventory } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,
@@ -389,7 +389,7 @@ test('close clears retained materialized install paths bound to the session', as
   const response = await handleSessionCommands({
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

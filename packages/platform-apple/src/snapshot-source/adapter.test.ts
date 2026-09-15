@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
@@ -18,9 +17,10 @@ import {
   SNAPSHOT_SOURCE_VERSION,
 } from './protocol.ts';
 import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
+import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('the Simulator AX source returns raw acquisition facts and discloses unsupported facets', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-'));
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
@@ -95,7 +95,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
 });
 
 test('the Simulator AX source refuses a tree that ends at content another process owns', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-remote-'));
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-remote-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   for (const name of [
@@ -145,7 +145,7 @@ test('the Simulator AX source refuses a tree that ends at content another proces
 });
 
 test('preparation consumes the same acquisition deadline as bridge I/O', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-deadline-'));
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-deadline-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
@@ -175,7 +175,7 @@ test('preparation consumes the same acquisition deadline as bridge I/O', async (
 });
 
 test('the Simulator AX source learns a hint only from a validated acquisition', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-hints-'));
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-hints-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   for (const name of [
@@ -376,7 +376,7 @@ function expectedHint(hints: Readonly<Record<string, number | null>> | undefined
 }
 
 test('the Simulator AX source follows the shared hint contract', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-adapter-contract-'));
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-contract-');
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   for (const name of [

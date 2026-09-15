@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { test } from 'vitest';
 import type {
@@ -19,6 +19,7 @@ import {
   createDurableResourceEnvelope,
   encodeDurableDescriptor,
 } from './durable-resource-envelope.ts';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const device: DeviceInfo = {
   id: 'macos-host',
@@ -56,7 +57,7 @@ function envelopeWith(body: object) {
 }
 
 async function withStatusDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-probe-kit-'));
+  const dir = await mkdtempForTest('audio-probe-kit-');
   try {
     return await run(dir);
   } finally {

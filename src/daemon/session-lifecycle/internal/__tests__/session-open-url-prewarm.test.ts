@@ -1,5 +1,4 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -64,6 +63,7 @@ import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
 } from '@agent-device/platform-apple/app-resolution';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -102,7 +102,7 @@ function createHandler(
   deviceRuntimeGateway = lifecycleDeviceRuntimeGateway,
 ) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

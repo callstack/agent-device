@@ -9,7 +9,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
  */
 import { test, expect } from 'vitest';
 import path from 'node:path';
-import os from 'node:os';
+
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -21,6 +21,7 @@ import {
   captureSnapshotUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();
@@ -49,7 +50,7 @@ function handlerForDevice(device: DeviceInfo) {
     appBundleId: 'com.example.app',
   } as SessionState);
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

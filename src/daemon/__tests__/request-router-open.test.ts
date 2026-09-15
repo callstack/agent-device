@@ -2,10 +2,10 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
@@ -101,6 +101,7 @@ import {
   openRequest,
   storedClaimUpdatedAt,
 } from './request-router-open-harness.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -114,7 +115,7 @@ function createOpenHandler(
   leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,
@@ -438,7 +439,7 @@ test('close fails synchronously when root composition omits platform resource cl
     actions: [],
   });
   const handler = createProductionRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

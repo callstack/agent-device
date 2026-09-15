@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
@@ -11,6 +11,7 @@ import { resolveScreenshotGenericExecution } from '../screenshot-runtime.ts';
 import { screenshotRuntimeFixture } from './screenshot-runtime-fixture.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const unavailableCapture = Object.freeze({
   available: false,
@@ -36,7 +37,7 @@ function executionParams(
   return {
     session,
     sessionName: session.name,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     command: 'screenshot',
     request: req,
     positionals: req.positionals ?? [],
@@ -60,7 +61,10 @@ async function executeResult(
 test('admits one capture plan, binds once, and hands the runtime the resolved destination', async () => {
   const fixture = screenshotRuntimeFixture();
   const session = makeSession('default', { device: ANDROID_EMULATOR });
-  const outPath = path.join(os.tmpdir(), `agent-device-bound-capture-${Date.now()}.png`);
+  const outPath = path.join(
+    mkdtempForTestSync('agent-device-bound-capture'),
+    `agent-device-bound-capture-${Date.now()}.png`,
+  );
   const req = screenshotRequest({ positionals: [outPath] });
 
   const resolved = await resolveScreenshotGenericExecution({
@@ -82,7 +86,10 @@ test('admits one capture plan, binds once, and hands the runtime the resolved de
 test('an iOS simulator session capture skips the redundant boot probe', async () => {
   const fixture = screenshotRuntimeFixture();
   const session = makeSession('ios', { device: IOS_SIMULATOR });
-  const outPath = path.join(os.tmpdir(), `agent-device-ios-boot-probe-${Date.now()}.png`);
+  const outPath = path.join(
+    mkdtempForTestSync('agent-device-ios-boot-probe'),
+    `agent-device-ios-boot-probe-${Date.now()}.png`,
+  );
   const req = screenshotRequest({ positionals: [outPath] });
 
   const resolved = await resolveScreenshotGenericExecution({
@@ -241,7 +248,10 @@ test('the crop runs after the platform write and before the shared scale', async
     }),
   });
   const session = makeSession('default', { device: ANDROID_EMULATOR });
-  const outPath = path.join(os.tmpdir(), `agent-device-crop-order-${Date.now()}.png`);
+  const outPath = path.join(
+    mkdtempForTestSync('agent-device-crop-order'),
+    `agent-device-crop-order-${Date.now()}.png`,
+  );
   const req = screenshotRequest({
     positionals: [outPath],
     flags: { screenshotCropOn: 'label="Save"', screenshotScale: 0.5 },
@@ -286,7 +296,10 @@ test('a partial crop surfaces its warning once in the result record and annotate
     }),
   });
   const session = makeSession('default', { device: ANDROID_EMULATOR });
-  const outPath = path.join(os.tmpdir(), `agent-device-crop-warning-${Date.now()}.png`);
+  const outPath = path.join(
+    mkdtempForTestSync('agent-device-crop-warning'),
+    `agent-device-crop-warning-${Date.now()}.png`,
+  );
   const req = screenshotRequest({
     positionals: [outPath],
     flags: { screenshotCropOn: 'label="Save"' },

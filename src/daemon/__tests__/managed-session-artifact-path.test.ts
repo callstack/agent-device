@@ -1,8 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { requireManagedSessionArtifactPath } from '../managed-session-artifact-path.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 
@@ -81,7 +82,7 @@ test('accepts different lexical aliases for the same verified sessions root', ()
 });
 
 function temporaryRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-session-artifact-'));
+  const root = mkdtempForTestSync('agent-device-session-artifact-');
   roots.push(root);
   return root;
 }

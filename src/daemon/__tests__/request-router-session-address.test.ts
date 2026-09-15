@@ -1,10 +1,9 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -32,6 +31,7 @@ import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.t
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * The production route for the #2031/#1394 defect: a request without `--session` resolves the
@@ -61,7 +61,7 @@ function makeIosDevice(id: string): DeviceInfo {
 
 function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

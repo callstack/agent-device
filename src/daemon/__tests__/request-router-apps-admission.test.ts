@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -8,6 +8,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function createAppsAdmissionHarness(apps: readonly string[] = []) {
   const listProviderApps = vi.fn(async () => apps);
@@ -22,7 +23,7 @@ function createAppsAdmissionHarness(apps: readonly string[] = []) {
     throw new Error('apps catalog must not bind a device');
   });
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-apps-admission-'),
     leaseRegistry: new LeaseRegistry(),

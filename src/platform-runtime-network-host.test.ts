@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import { afterEach, test } from 'vitest';
 import { readRecentAppLogLines } from './platform-runtime-network-host.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
 const temporaryDirectories: string[] = [];
 
@@ -69,7 +70,7 @@ test('preserves absolute source line numbers after selecting a bounded suffix', 
 });
 
 function createTemporaryDirectory(): string {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-network-host-'));
+  const directory = mkdtempForTestSync('agent-device-network-host-');
   temporaryDirectories.push(directory);
   return directory;
 }

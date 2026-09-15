@@ -1,6 +1,6 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -39,6 +39,7 @@ import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const REPRESENTATIVE_PAYLOAD = { message: 'scroll-ok', items: [1, 2, 3] } as const;
 /** What the bound `app-switcher` leaf answers; this file's registered view digests it. */
@@ -67,7 +68,7 @@ function makeHandler() {
   return {
     sessionStore,
     handler: createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),

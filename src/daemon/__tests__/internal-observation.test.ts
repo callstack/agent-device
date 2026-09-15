@@ -1,4 +1,3 @@
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
@@ -13,6 +12,7 @@ import {
 } from '../ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { SessionStore } from '../session-store.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function snapshot(ref: string, label = ref): SnapshotState {
   return {
@@ -32,7 +32,10 @@ function snapshot(ref: string, label = ref): SnapshotState {
 }
 
 function scenario() {
-  const root = path.join(os.tmpdir(), `agent-device-internal-observation-${crypto.randomUUID()}`);
+  const root = path.join(
+    mkdtempForTestSync('agent-device-internal-observation'),
+    `agent-device-internal-observation-${crypto.randomUUID()}`,
+  );
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });

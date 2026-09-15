@@ -2,10 +2,9 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -44,6 +43,7 @@ import { ensureDeviceReady } from '../device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { createRequestPlatformProviders } from '../../platform-runtime.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -71,7 +71,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -109,7 +109,7 @@ test('replay routes session-changing actions through the full request path', asy
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -144,7 +144,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -210,7 +210,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,

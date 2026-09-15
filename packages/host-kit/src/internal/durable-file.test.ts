@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { isAtomicPublishTemporaryPath, publishDurableFileSync } from './atomic-file.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const roots: string[] = [];
 
@@ -109,7 +110,7 @@ test('preserves a file fsync error when descriptor cleanup also fails', () => {
 });
 
 function fixtureRoot(label: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-durable-file-${label}-`));
+  const root = mkdtempForTestSync(`agent-device-durable-file-${label}-`);
   roots.push(root);
   return root;
 }

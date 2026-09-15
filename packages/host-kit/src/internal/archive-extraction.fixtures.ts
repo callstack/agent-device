@@ -1,16 +1,17 @@
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import * as tar from 'tar-stream';
 import { runCmdSync } from './exec.ts';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 export async function createArchiveWorkspace(): Promise<{
   archivePath: string;
   outputRoot: string;
   root: string;
 }> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-archive-'));
+  const root = await mkdtempForTest('agent-device-archive-');
   const outputRoot = path.join(root, 'output');
   await fs.mkdir(outputRoot);
   return { archivePath: path.join(root, 'fixture.archive'), outputRoot, root };

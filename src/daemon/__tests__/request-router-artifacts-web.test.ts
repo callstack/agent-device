@@ -1,7 +1,7 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -9,8 +9,9 @@ import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/obser
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+
 import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // #1900: `artifacts` (`handlers/lease.ts`) lists daemon-tracked artifacts by tenant scope with no
 // device or platform involvement at all — `listArtifactsForRequest` never reads `device.platform`.
@@ -30,7 +31,7 @@ test('artifacts lists a daemon-tracked artifact produced during a web session', 
 
   try {
     const handler = createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),

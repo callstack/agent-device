@@ -10,6 +10,7 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   AppError,
@@ -21,7 +22,6 @@ const {
   mockDispatchCommand,
   mockStopAndroidSnapshotHelperSessionForDevice,
   noopInvoke,
-  os,
   path,
   resetSessionCloseShutdownMocks,
   WEB_DESKTOP_DEVICE,
@@ -53,7 +53,7 @@ test('close stops Android snapshot helper session before deleting session', asyn
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -66,7 +66,10 @@ test('close stops Android snapshot helper session before deleting session', asyn
 test('close stops active host audio probe before deleting session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-active-audio-probe-session';
-  const statusPath = path.join(os.tmpdir(), 'missing-audio-probe.json');
+  const statusPath = path.join(
+    mkdtempForTestSync('missing-audio-probe'),
+    'missing-audio-probe.json',
+  );
   const startedAt = Date.now() - 2000;
   const stoppedResult = {
     audio: 'probe' as const,
@@ -145,7 +148,7 @@ test('close stops active host audio probe before deleting session', async () => 
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -169,7 +172,7 @@ test('close dispatches web session cleanup without a positional target', async (
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -220,7 +223,7 @@ test('close preserves the session and lease when provider release fails so it ca
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     leaseRegistry,
     leaseLifecycleProvider: {

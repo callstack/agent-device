@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { parseArgs } from '../../cli/parser/args.ts';
@@ -9,13 +9,17 @@ import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { readMetroSessionHints, writeMetroSessionHints } from '../../metro/metro-session-hints.ts';
 import { openCommandFacet } from './app.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
 }
 
 function tempStateDir(): string {
-  const dir = path.join(os.tmpdir(), `agent-device-app-test-${randomUUID()}`);
+  const dir = path.join(
+    mkdtempForTestSync('agent-device-app-test'),
+    `agent-device-app-test-${randomUUID()}`,
+  );
   mkdirSync(dir, { recursive: true });
   return dir;
 }

@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
@@ -9,7 +9,6 @@ import {
   readSessionRuntimeRevision,
   refFrameState,
 } from '../../../ref-frame.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const runtimeHintsModule = vi.hoisted(() => ({
   evaluated: false,
@@ -28,6 +27,7 @@ import {
 } from '../../../handlers/__tests__/session-command-harness.ts';
 import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
@@ -65,7 +65,7 @@ async function close(params: {
   return await handleSessionCommands({
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
     sessionName: params.sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore: params.sessionStore,
     invoke: noopInvoke,
   });

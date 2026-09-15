@@ -2,9 +2,8 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
 // at the facts/bind seam below instead (ADR 0019).
@@ -31,6 +30,7 @@ import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession as makeBaseSession } from '../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeSession(name: string): SessionState {
   return makeBaseSession(name, { device: ANDROID_EMULATOR });
@@ -78,7 +78,7 @@ function screenshotRouter(
   sessionStore.set(session.name, session);
   const runtime = screenshotRuntimeFixture(options);
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -112,7 +112,7 @@ test('screenshot resolves relative positional path against request cwd', async (
 });
 
 test('screenshot keeps absolute positional path unchanged', async () => {
-  const absolutePath = path.join(os.tmpdir(), 'evidence/test.png');
+  const absolutePath = path.join(mkdtempForTestSync('evidence-test'), 'evidence/test.png');
   const { handler, sessionStore, runtime } = screenshotRouter(makeSession('default'));
 
   await handler({
@@ -236,7 +236,7 @@ test('router serializes concurrent commands for the same device across sessions'
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -285,7 +285,10 @@ test('router serializes concurrent commands for the same device across sessions'
 }, 15_000);
 
 test('iOS simulator screenshot response includes output dimensions and logical density metadata', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-ios-meta-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-ios-meta'),
+    `agent-device-ios-meta-${Date.now()}.png`,
+  );
   const { handler } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
   });
@@ -312,7 +315,10 @@ test('iOS simulator screenshot response includes output dimensions and logical d
 });
 
 test('non-iOS screenshot response tolerates malformed PNG metadata', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-android-truncated-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-android-truncated'),
+    `agent-device-android-truncated-${Date.now()}.png`,
+  );
   const { handler } = screenshotRouter(makeSession('default'), {
     onCapture: (input) => fs.writeFileSync(input.outPath, Buffer.alloc(0)),
   });
@@ -334,7 +340,10 @@ test('non-iOS screenshot response tolerates malformed PNG metadata', async () =>
 });
 
 test('iOS simulator screenshot omits logical density metadata after --scale downscale', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-ios-scale-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-ios-scale'),
+    `agent-device-ios-scale-${Date.now()}.png`,
+  );
   const { handler } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 804, 1748),
   });
@@ -397,7 +406,10 @@ test('screenshot --pixel-density is rejected outside iOS-family simulators', asy
 });
 
 test('screenshot --overlay-refs captures a fresh snapshot when the session has none', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-overlay'),
+    `agent-device-overlay-${Date.now()}.png`,
+  );
   const order: string[] = [];
   const { handler, runtime } = screenshotRouter(makeSession('default'), {
     onCapture: (input) => {
@@ -449,7 +461,10 @@ test('screenshot --overlay-refs captures a fresh snapshot when the session has n
 });
 
 test('screenshot --overlay-refs uses presented iOS runner rows for overlay refs', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-ios-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-overlay-ios'),
+    `agent-device-overlay-ios-${Date.now()}.png`,
+  );
   const { handler, sessionStore, runtime } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
     snapshotResult: () => ({
@@ -546,7 +561,10 @@ test('screenshot --overlay-refs uses a fresh snapshot instead of stale session s
     ]),
     createdAt: Date.now(),
   };
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-overlay'),
+    `agent-device-overlay-${Date.now()}.png`,
+  );
   const { handler, sessionStore } = screenshotRouter(session, {
     snapshotResult: () => ({
       backend: 'android',
@@ -592,7 +610,10 @@ test('screenshot --overlay-refs uses a fresh snapshot instead of stale session s
 });
 
 test('screenshot --pixel-density keeps overlay refs aligned to scaled iOS simulator output', async () => {
-  const screenshotPath = path.join(os.tmpdir(), `agent-device-overlay-2x-${Date.now()}.png`);
+  const screenshotPath = path.join(
+    mkdtempForTestSync('agent-device-overlay-2x'),
+    `agent-device-overlay-2x-${Date.now()}.png`,
+  );
   const { handler } = screenshotRouter(makeIosSession('default'), {
     onCapture: (input) => writeSolidPng(input.outPath, 804, 1748),
     snapshotResult: () => ({

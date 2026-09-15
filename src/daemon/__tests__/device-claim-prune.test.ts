@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { deviceClaimIdentity, reconcileOrphanedDeviceClaims } from '../device-claims.ts';
@@ -10,6 +10,7 @@ import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
+
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
@@ -84,7 +85,7 @@ test('reconciles claims whose owner is gone and keeps every other claim', async 
 
 test('reconciles nothing when the claim store does not exist', async () => {
   process.env.AGENT_DEVICE_CLAIMS_DIR = path.join(
-    os.tmpdir(),
+    mkdtempForTestSync('agent-device-reconciliation-absent-store'),
     'agent-device-reconciliation-absent-store',
   );
   assert.deepEqual(

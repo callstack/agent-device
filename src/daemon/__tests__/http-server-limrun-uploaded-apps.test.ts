@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import os from 'node:os';
+
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
@@ -19,6 +19,7 @@ import {
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const limrunIo = vi.hoisted(() => ({
   listAssets: vi.fn(),
@@ -51,7 +52,10 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   const token = 'limrun-http-test-token';
   const leaseRegistry = new LeaseRegistry();
   const handleRequest = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'agent-device-limrun-http-access.log'),
+    logPath: path.join(
+      mkdtempForTestSync('agent-device-limrun-http-access'),
+      'agent-device-limrun-http-access.log',
+    ),
     token,
     sessionStore: makeSessionStore('agent-device-limrun-http-access-'),
     leaseRegistry,

@@ -1,6 +1,5 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { test, expect, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 // ADR 0012 migration step 2: every replay step failure now attempts a
 // post-failure screen digest capture + suggestion re-resolution through the
@@ -15,7 +14,7 @@ vi.mock('../../../snapshot-interactor-capture.ts', () => ({
 }));
 
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {
   handleSessionCommands,
@@ -37,6 +36,7 @@ import {
   makeAndroidSession,
   makeMacOsSession,
 } from '../../../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',
@@ -71,7 +71,7 @@ test('test does not retry infrastructure startup failures and stops the suite', 
       flags: { retries: 3 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -120,7 +120,7 @@ test('test --fail-fast stops the suite after the first failure and leaves the re
       flags: { failFast: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -164,7 +164,7 @@ test('test surfaces a suite-level failure when a source fails to parse', async (
       flags: {},
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -198,7 +198,7 @@ test('test discovers Maestro YAML suites when replay backend is set', async () =
       meta: { cwd: root, requestId: 'maestro-suite' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -233,7 +233,7 @@ test('test emits progress when attempts retry and pass', async () => {
           flags: { retries: 1 },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async () => {
           attempts += 1;
@@ -340,7 +340,7 @@ test('test stops before retrying when a rejected close leaves the prior macOS se
       flags: { retries: 2 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     inspectFacts: async (device) => {
       const facts = await mockInspectDeviceRuntimeFacts(device);
@@ -387,7 +387,7 @@ test('test stops retrying after maxAttempts when every attempt fails', async () 
       flags: { retries: 2 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => {
       attemptCount += 1;
@@ -430,7 +430,7 @@ test('test emits skip progress without synthetic duration', async () => {
           flags: { platform: 'android' },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
       }),
@@ -482,7 +482,7 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
       flags: { platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       const session =
@@ -540,7 +540,7 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
       flags: { platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       const session =
@@ -611,7 +611,7 @@ test('test stops the suite when the parent request is canceled during an active 
             meta: { cwd: root, requestId: parentRequestId },
           },
           sessionName: 'default',
-          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
           sessionStore,
           invoke: async (req) => {
             const nestedRequestId = req.meta?.requestId;
@@ -681,7 +681,7 @@ test('test --shard-all runs each runnable entry on each selected device', async 
           },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async (req) => {
           invoked.push(req);
@@ -752,7 +752,7 @@ test('test --shard-split distributes runnable entries by modulo and keeps skips 
           flags: { platform: 'android', shardSplit: 2 },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async (req) => {
           invoked.push(req);
@@ -800,7 +800,7 @@ test('test sharding rejects mutually exclusive shard modes', async () => {
       flags: { platform: 'android', shardAll: 2, shardSplit: 2 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
   });
@@ -826,7 +826,7 @@ test('test sharding rejects non-positive shard counts', async () => {
       flags: { platform: 'android', shardAll: 0 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
   });
@@ -855,7 +855,7 @@ test('test sharding rejects fewer matched devices than requested shards', async 
           flags: { platform: 'android', shardAll: 2 },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
       }),
@@ -889,7 +889,7 @@ test('test sharding does not require devices when every entry is skipped', async
           flags: { platform: 'android', shardAll: 2 },
         },
         sessionName: 'default',
-        logPath: path.join(os.tmpdir(), 'daemon.log'),
+        logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
         sessionStore,
         invoke: async () => ({ ok: true, data: { replayed: 1, healed: 0 } }),
       }),

@@ -2,7 +2,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -30,6 +30,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 
@@ -58,7 +59,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-
   return {
     sessionStore,
     handler: createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -206,7 +207,7 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
   const { sessionStore, handler } = makeHandler();
   const session = makeAuthoringSession('typed-error', TENANT_SESSION_DEFAULTS);
   const targetPath = path.join(
-    os.tmpdir(),
+    mkdtempForTestSync('agent-device-router-typed-error'),
     `agent-device-router-typed-error-${Date.now()}-${Math.random().toString(36).slice(2)}.ad`,
   );
   fs.writeFileSync(targetPath, 'pre-existing\n');

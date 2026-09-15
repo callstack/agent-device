@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+
 import path from 'node:path';
 import { test } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
@@ -8,9 +8,10 @@ import { ensureSnapshotBridgeBinary } from './cache.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
+import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt or stale entries', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-source-'));
+  const root = await mkdtempForTest('agent-device-snapshot-source-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await writeFile(path.join(root, 'placeholder'), 'unused');
@@ -122,7 +123,7 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
 });
 
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-source-concurrent-'));
+  const root = await mkdtempForTest('agent-device-snapshot-source-concurrent-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
@@ -160,7 +161,7 @@ test('concurrent snapshot bridge preparation publishes one cache entry', async (
 });
 
 test('an aborted cache waiter does not cancel an independent preparation', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-snapshot-source-abort-'));
+  const root = await mkdtempForTest('agent-device-snapshot-source-abort-');
   const sourceRoot = path.join(root, 'source');
   const cacheRoot = path.join(root, 'cache');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);

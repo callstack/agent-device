@@ -12,12 +12,12 @@ import type {
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from '../screenshot-crop.ts';
 import { writeSolidPng } from './screenshot-runtime-fixture.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('the warning composition is the single owner: partial intersection and only', () => {
   expect(buildScreenshotCropWarnings(undefined)).toEqual([]);
@@ -88,10 +88,7 @@ type CropSeam = Readonly<{
 
 function cropSeam(params: CropSeamParams): CropSeam {
   const session = makeSession('default', { device: params.device, surface: params.surface });
-  const screenshotPath = path.join(
-    os.tmpdir(),
-    `agent-device-crop-on-${Date.now()}-${Math.random().toString(36).slice(2)}.png`,
-  );
+  const screenshotPath = path.join(mkdtempForTestSync('agent-device-crop-on'), 'screenshot.png');
   writeSolidPng(screenshotPath, params.png.width, params.png.height);
   const captureSnapshot = vi.fn(async (): Promise<SnapshotResult> => ({
     nodes: params.nodes,
@@ -110,7 +107,10 @@ function cropSeam(params: CropSeamParams): CropSeam {
         surface: params.surface,
         cropOn: params.cropOn ?? 'label="Save"',
         screenshotPath,
-        logPath: path.join(os.tmpdir(), 'agent-device-crop-on-daemon.log'),
+        logPath: path.join(
+          mkdtempForTestSync('agent-device-crop-on-daemon'),
+          'agent-device-crop-on-daemon.log',
+        ),
         dispatchContext: {},
         captureSnapshot,
       }),

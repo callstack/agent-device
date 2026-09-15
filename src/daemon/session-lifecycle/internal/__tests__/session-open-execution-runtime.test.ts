@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -71,6 +71,7 @@ import {
   makeSessionStore,
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
@@ -129,7 +130,7 @@ test('open runtime payload replaces stored session runtime atomically', async ()
       },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -207,7 +208,7 @@ test('open runtime payload clears stale applied transport hints before launch', 
       },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -259,7 +260,7 @@ test('open runtime payload rejects invalid metro port before app launch', async 
       },
     },
     sessionName: 'runtime-open-invalid-port',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -296,7 +297,7 @@ test('open runtime payload rejects malformed runtime objects without mutating se
       runtime: 'not-an-object' as unknown as DaemonRequest['runtime'],
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -342,7 +343,7 @@ test('open runtime payload does not persist replacement when launch fails', asyn
         },
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     }),
@@ -379,7 +380,7 @@ test('a first open keeps both positionals so the deep link still reaches the app
       flags: { platform: 'android' },
     },
     sessionName: 'deep-link-open',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

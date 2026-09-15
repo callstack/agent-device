@@ -1,13 +1,14 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-');
@@ -20,7 +21,7 @@ test('events reads the daemon-owned session timeline without appending poll nois
   const eventLogPath = sessionStore.resolveEventLogPath('events-session');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -64,7 +65,7 @@ test('events accepts a blank limit placeholder for cursor-only reads', async () 
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -103,7 +104,7 @@ test('events returns structured errors for invalid limit and cursor', async () =
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -150,7 +151,7 @@ test('events flushes pending event writes before reading', async () => {
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -187,7 +188,7 @@ test('events reads the daemon-owned session timeline for a web-backed session', 
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -220,7 +221,7 @@ test('request timeline records thrown request failures after scope creation', as
   sessionStore.set('events-session', makeIosSession('events-session'));
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -259,7 +260,7 @@ test('request timeline records setup failures after start is appended', async ()
   const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

@@ -24,7 +24,7 @@
 
 import net from 'node:net';
 import http from 'node:http';
-import os from 'node:os';
+
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
@@ -43,6 +43,7 @@ import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '../../daemon-resolution.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const TIMEOUT_MS = 120;
 
@@ -53,7 +54,10 @@ const TIMEOUT_MS = 120;
 const SNAPSHOT_COMMAND = 'snapshot';
 
 function dummyStatePaths(): DaemonPaths {
-  const baseDir = path.join(os.tmpdir(), 'agent-device-timeout-route-test');
+  const baseDir = path.join(
+    mkdtempForTestSync('agent-device-timeout-route-test'),
+    'agent-device-timeout-route-test',
+  );
   return {
     baseDir,
     infoPath: path.join(baseDir, 'daemon.json'),

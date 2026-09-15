@@ -1,12 +1,12 @@
 import { test, expect } from 'vitest';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { makeSessionStore } from './session-test-harness.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('replay parses open --relaunch flag and replays open with relaunch semantics', async () => {
   const sessionStore = makeSessionStore();
@@ -24,7 +24,7 @@ test('replay parses open --relaunch flag and replays open with relaunch semantic
       flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -63,7 +63,7 @@ test('replay parses runtime set flags and replays runtime command', async () => 
       meta: { cwd: replayRoot },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (request) => {
       invoked.push(request);
@@ -102,7 +102,7 @@ test('replay parses inline open runtime flags and replays open with runtime payl
       meta: { cwd: replayRoot },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (request) => {
       invoked.push(request);
@@ -143,7 +143,7 @@ test('replay inherits parent device selectors for each invoked step', async () =
       },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -180,7 +180,7 @@ test('replay inherits the parent web platform selector for each invoked step', a
       },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
       invoked.push(req);
@@ -221,7 +221,7 @@ test('test --platform web reports no matching scripts, typed or untyped, because
       meta: { cwd: root, requestId: 'suite-web-excluded' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => {
       throw new Error('test must not invoke any step when --platform web matches nothing');

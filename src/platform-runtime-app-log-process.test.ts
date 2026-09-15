@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -28,6 +28,7 @@ import {
   createManagedAppLogProcesses,
   recoverLegacyAppLogMarkersAfterDaemonLock,
 } from './platform-runtime-app-log-process.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 
@@ -226,7 +227,7 @@ describe('managed app-log process host', () => {
   });
 
   test('recovers only complete owned legacy markers and retains untrusted evidence', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-legacy-'));
+    const root = mkdtempForTestSync('agent-device-app-log-legacy-');
     roots.push(root);
     const sessionsDir = path.join(root, 'sessions');
     const recoveredPath = legacyMarker(sessionsDir, 'recovered', {
@@ -263,7 +264,7 @@ describe('managed app-log process host', () => {
   });
 
   test('scopes ownership-lost legacy markers to the device encoded by their command', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-legacy-identity-'));
+    const root = mkdtempForTestSync('agent-device-app-log-legacy-identity-');
     roots.push(root);
     const sessionsDir = path.join(root, 'sessions');
     const markerPath = legacyMarker(sessionsDir, 'android', {
@@ -300,7 +301,7 @@ function legacyMarker(sessionsDir: string, sessionId: string, marker: unknown): 
 }
 
 function processFixture(options: { settled?: boolean; rejectOutput?: boolean } = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-process-'));
+  const root = mkdtempForTestSync('agent-device-app-log-process-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const sessionDir = path.join(sessionsDir, 'one');

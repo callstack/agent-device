@@ -1,5 +1,4 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import {
@@ -77,6 +76,7 @@ import {
 } from '@agent-device/platform-apple/runner/operations';
 import { runMacOsAlertAction } from '@agent-device/platform-apple/macos';
 import { refFrameState } from '../../ref-frame.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -121,7 +121,7 @@ function createHandler(
   leaseRegistry: LeaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,

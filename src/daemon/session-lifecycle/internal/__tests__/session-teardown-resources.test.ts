@@ -4,6 +4,7 @@ import {
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
 import { installFakeManagedAgentBrowser } from '../../../../__tests__/test-utils/web-managed-agent-browser.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   AppError,
@@ -17,7 +18,6 @@ const {
   mockStopIosRunnerSession,
   mockStopIosRunnerSession: stopIosRunnerSession,
   noopInvoke,
-  os,
   path,
   recordingCleanupMock,
   recordingFinishMock,
@@ -49,7 +49,7 @@ test('close finalizes an active iOS simulator recording before deleting the sess
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -87,7 +87,7 @@ test('close surfaces a recording finalization failure through the cleanup-failur
         flags: {},
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     }),

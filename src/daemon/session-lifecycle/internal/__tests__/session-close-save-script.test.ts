@@ -1,5 +1,6 @@
 import { beforeEach, expect, test } from 'vitest';
 import { sessionCloseShutdownFixture } from './session-close-shutdown.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const {
   fs,
@@ -10,7 +11,6 @@ const {
   mockReleaseRunnerOnClose,
   mockStopIosRunnerSession,
   noopInvoke,
-  os,
   path,
   recordingFinishMock,
   resetSessionCloseShutdownMocks,
@@ -21,7 +21,10 @@ beforeEach(resetSessionCloseShutdownMocks);
 test('close --save-script on a never-armed session is rejected before teardown, with no script written', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-unarmed-close-save-script-session';
-  const scriptPath = path.join(os.tmpdir(), `agent-device-unarmed-close-${Date.now()}.ad`);
+  const scriptPath = path.join(
+    mkdtempForTestSync('agent-device-unarmed-close'),
+    `agent-device-unarmed-close-${Date.now()}.ad`,
+  );
   // The fixture must carry real cleanup-bearing state (here: an active recording, like
   // `makeIosSimulatorRecordingSession`'s other consumers) so this test can actually prove the
   // guard runs *before* `stopBestEffortSessionResources` — not just that the response rejects.
@@ -41,7 +44,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
         flags: { saveScript: scriptPath },
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     }),
@@ -75,7 +78,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -114,7 +117,7 @@ test('close --save-script on a session with an active .ad repair transaction is 
       flags: { saveScript: true },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

@@ -1,11 +1,10 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -71,6 +70,7 @@ import type { DeviceBootObservation } from '@agent-device/contracts/device-boot'
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -82,7 +82,7 @@ function createOpenHandler(
   leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,

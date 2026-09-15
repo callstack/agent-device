@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
@@ -35,6 +35,7 @@ import {
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { corroborateIosTapFailure } from '../interaction-ios-tap-outcome.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -675,7 +676,7 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
 });
 
 test('corroborated runtime taps retain target evidence through save and replay', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-tap-replay-'));
+  const root = mkdtempForTestSync('agent-device-ios-tap-replay-');
   const sessionName = 'ios-recorded-tap';
   const sessionStore = makeSessionStore();
   sessionStore.set(

@@ -1,5 +1,4 @@
 import { test, expect } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   mockResolveTargetDevice,
@@ -11,6 +10,7 @@ import {
 } from './session-test-harness.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('open --relaunch rejects URL targets', async () => {
   const sessionStore = makeSessionStore();
@@ -23,7 +23,7 @@ test('open --relaunch rejects URL targets', async () => {
       flags: { relaunch: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -47,7 +47,7 @@ test('open --relaunch fails without app when no session exists', async () => {
       flags: { relaunch: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -71,7 +71,7 @@ test('open --relaunch rejects Android app binary paths', async () => {
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -93,7 +93,7 @@ test('open --relaunch rejects bare Android app binary filenames', async () => {
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -126,7 +126,7 @@ test('open --relaunch rejects Android app binary paths for active sessions', asy
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -159,7 +159,7 @@ test('open --relaunch rejects Android app binary paths for active sessions befor
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -181,7 +181,7 @@ test('open --relaunch rejects Android app binary paths before resolving a new de
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -223,7 +223,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
       flags: { platform: 'ios' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -277,7 +277,7 @@ test('open on device owned by recording session returns recording recovery hint'
       flags: { platform: 'ios' },
     },
     sessionName: 'test-attempt',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

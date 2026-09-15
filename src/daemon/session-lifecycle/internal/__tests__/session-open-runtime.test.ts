@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
@@ -82,6 +82,7 @@ import {
   makeSessionStore,
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
@@ -130,7 +131,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
       flags: { platform: 'android' },
     },
     sessionName: 'runtime-open',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -194,7 +195,7 @@ test('open rejects a false runtime-hints fact before its one implementation bind
       runtime: { metroHost: '10.0.0.10', metroPort: 8081 },
     },
     sessionName: 'runtime-open-false-fact',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -212,7 +213,7 @@ test('open rejects a false runtime-hints fact before its one implementation bind
 
 test('open applies launch-only flags only to the direct app launch before runtime launchUrl', async () => {
   const sessionStore = makeSessionStore();
-  const launchConsolePath = path.join(os.tmpdir(), 'launch-console.log');
+  const launchConsolePath = path.join(mkdtempForTestSync('launch-console'), 'launch-console.log');
   const dispatchCalls: Array<{
     command: string;
     positionals: string[];
@@ -244,7 +245,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
       flags: { platform: 'ios', launchConsole: launchConsolePath, launchArgs: ['-Flag', 'YES'] },
     },
     sessionName: 'launch-console-runtime',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -287,7 +288,7 @@ test('open --metro-port alone defaults the host to 10.0.2.2 on an Android emulat
       runtime: { metroPort: 8084 },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -318,7 +319,7 @@ test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator
       runtime: { metroPort: 8084 },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -349,7 +350,7 @@ test('open --metro-port alone stays host-ambiguous on a physical Android device'
       runtime: { metroPort: 8084 },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -379,7 +380,7 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
       flags: { relaunch: true, platform: 'android' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {
@@ -22,7 +23,7 @@ test('test --fail-fast continues after passing scripts', async () => {
       flags: { failFast: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore: makeSessionStore('agent-device-test-fail-fast-pass-store-'),
     invoke: async (request) => {
       invokedPaths.push(String(request.positionals?.[0]));

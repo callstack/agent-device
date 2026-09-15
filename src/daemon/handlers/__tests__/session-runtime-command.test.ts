@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import {
@@ -20,6 +20,7 @@ import {
   gestureRuntimeSpies,
 } from '../../__tests__/test-device-runtime-gateway.ts';
 import { refFrameState } from '../../ref-frame.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('runtime set/show/clear manages session-scoped runtime hints before open', async () => {
   const sessionStore = makeSessionStore();
@@ -41,7 +42,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
       },
     },
     sessionName: 'remote-runtime',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -55,7 +56,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
       flags: {},
     },
     sessionName: 'remote-runtime',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -79,7 +80,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
       flags: {},
     },
     sessionName: 'remote-runtime',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -115,7 +116,7 @@ test('runtime clear removes applied transport hints for the active app', async (
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -164,7 +165,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -217,7 +218,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -242,7 +243,10 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
 test('runtime gesture-viewport admits and binds the exact viewport operation once', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'runtime-gesture-viewport';
-  const logPath = path.join(os.tmpdir(), 'runtime-gesture-viewport.log');
+  const logPath = path.join(
+    mkdtempForTestSync('runtime-gesture-viewport'),
+    'runtime-gesture-viewport.log',
+  );
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {

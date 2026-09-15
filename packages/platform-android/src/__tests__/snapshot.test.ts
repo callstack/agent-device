@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -114,31 +113,29 @@ afterEach(async () => {
 
 test('screenshotAndroid waits for transient UI to settle before capture', async () => {
   const events: string[] = [];
-  const outPath = path.join(os.tmpdir(), `agent-device-android-screenshot-${Date.now()}.png`);
+  await withTempScreenshot('screenshot-settle-', async (outPath) => {
+    mockScreenshotEvents(events);
+    await screenshotAndroid(device, outPath);
 
-  mockScreenshotEvents(events);
-
-  await screenshotAndroid(device, outPath);
-
-  const relevantEvents = events.filter((event, index) => {
-    if (event !== 'enable') {
-      return true;
-    }
-    return index === 0;
+    const relevantEvents = events.filter((event, index) => {
+      if (event !== 'enable') {
+        return true;
+      }
+      return index === 0;
+    });
+    assert.deepEqual(relevantEvents, ['enable', 'settle:1000', 'capture', 'disable']);
   });
-  assert.deepEqual(relevantEvents, ['enable', 'settle:1000', 'capture', 'disable']);
 });
 
 test('screenshotAndroid skips stabilization when requested', async () => {
   const events: string[] = [];
-  const outPath = path.join(os.tmpdir(), `agent-device-android-screenshot-${Date.now()}.png`);
+  await withTempScreenshot('screenshot-stabilize-', async (outPath) => {
+    mockScreenshotEvents(events);
+    await screenshotAndroid(device, outPath, { stabilize: false });
 
-  mockScreenshotEvents(events);
-
-  await screenshotAndroid(device, outPath, { stabilize: false });
-
-  assert.deepEqual(events, ['capture']);
-  assert.equal(mockSleep.mock.calls.length, 0);
+    assert.deepEqual(events, ['capture']);
+    assert.equal(mockSleep.mock.calls.length, 0);
+  });
 });
 
 test('screenshotAndroid writes a valid PNG when output is clean', async () => {

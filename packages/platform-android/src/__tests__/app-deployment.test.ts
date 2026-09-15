@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { installAndroidInstallablePath } from '../app-deployment.ts';
@@ -14,7 +14,8 @@ import { withAndroidAdbProvider } from '../adb-executor.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
-import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+
+import { mkdtempForTest, mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
@@ -32,7 +33,10 @@ test('inferAndroidAppName derives readable names from package ids', () => {
 });
 
 test('installAndroidInstallablePath installs .apk via adb install -r', async () => {
-  const apkPath = path.join(os.tmpdir(), `agent-device-test-${Date.now()}.apk`);
+  const apkPath = path.join(
+    mkdtempForTestSync('agent-device-test'),
+    `agent-device-test-${Date.now()}.apk`,
+  );
   await fs.writeFile(apkPath, 'placeholder', 'utf8');
   await withFakeAdb(
     () => undefined,
@@ -49,7 +53,10 @@ test('installAndroidInstallablePath installs .apk via adb install -r', async () 
 });
 
 test('installAndroidInstallablePath uses provider install capability when available', async () => {
-  const apkPath = path.join(os.tmpdir(), `agent-device-provider-install-${Date.now()}.apk`);
+  const apkPath = path.join(
+    mkdtempForTestSync('agent-device-provider-install'),
+    `agent-device-provider-install-${Date.now()}.apk`,
+  );
   await fs.writeFile(apkPath, 'placeholder', 'utf8');
   const installCalls: Array<{ source: string; replace: boolean | undefined }> = [];
   const device: DeviceInfo = {
@@ -84,7 +91,10 @@ test('installAndroidInstallablePath uses provider install capability when availa
 test('an app install timeout keeps the generic adb-server advice', async () => {
   // The OEM install dialog can hold an app install too, but the helper-specific advice names an
   // agent-device helper package, so it must not leak onto the app-under-test install path.
-  const apkPath = path.join(os.tmpdir(), `agent-device-app-install-timeout-${Date.now()}.apk`);
+  const apkPath = path.join(
+    mkdtempForTestSync('agent-device-app-install-timeout'),
+    `agent-device-app-install-timeout-${Date.now()}.apk`,
+  );
   await fs.writeFile(apkPath, 'placeholder', 'utf8');
   const device: DeviceInfo = {
     platform: 'android',

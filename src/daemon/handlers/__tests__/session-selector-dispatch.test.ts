@@ -1,5 +1,4 @@
 import { test, expect, vi } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -28,6 +27,7 @@ import {
 import type { SessionState } from '../../session-state.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { refFrameState } from '../../ref-frame.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const available = Object.freeze({ available: true } as const);
 const keyboardFamilyDenial = Object.freeze({
@@ -83,7 +83,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   };
   mockResolveTargetDevice.mockResolvedValue(device);
   mockDispatch.mockResolvedValue({});
-  const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const logPath = path.join(mkdtempForTestSync('daemon'), 'daemon.log');
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device);
 
   // dismiss mutates the device → frame expires.
@@ -140,7 +140,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
     booted: true,
   };
   mockResolveTargetDevice.mockResolvedValue(device);
-  const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const logPath = path.join(mkdtempForTestSync('daemon'), 'daemon.log');
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device, {
     keyboardDismiss: () => {
       expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
@@ -180,7 +180,7 @@ test('keyboard requires an active session or explicit device selector', async ()
       flags: {},
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -207,7 +207,7 @@ test('keyboard dismiss requires active iOS session for explicit selectors', asyn
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

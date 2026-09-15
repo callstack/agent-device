@@ -1,11 +1,11 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { runReplayTestCase } from '../session-test-attempt.ts';
 import type { ReplayTestRunEntry } from '../session-test-discovery.ts';
 import type { ReplayTestAttemptOutcome } from '../session-test-types.ts';
 import type { ReplaySuiteTestFailed } from '@agent-device/contracts/replay';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 const FAILED_WITH_WARNINGS: ReplayTestAttemptOutcome = {
   status: 'failed',
@@ -27,7 +27,7 @@ const FAILED_WITHOUT_WARNINGS: ReplayTestAttemptOutcome = {
 };
 
 function makeEntry(): ReplayTestRunEntry {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-attempt-'));
+  const root = mkdtempForTestSync('agent-device-test-attempt-');
   const filePath = path.join(root, '01-flow.ad');
   fs.writeFileSync(filePath, 'context platform=ios\nopen "Demo"\n');
   return {
@@ -45,7 +45,7 @@ async function runFailedCase(outcome: ReplayTestAttemptOutcome): Promise<ReplayS
     suiteInvocationId: 'suite-attempt',
     caseIndex: 0,
     retries: 0,
-    suiteArtifactsDir: fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-attempt-suite-')),
+    suiteArtifactsDir: mkdtempForTestSync('agent-device-test-attempt-suite-'),
     suiteIndex: 1,
     suiteTotal: 1,
     runReplay: async () => outcome,

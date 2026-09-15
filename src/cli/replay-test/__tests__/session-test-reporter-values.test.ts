@@ -11,7 +11,6 @@
 // ADR 0012 attempts a post-failure screen digest through the narrow snapshot interactor seam;
 // these fixtures model no runner, so reject that leaf capture deterministically.
 import { expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
@@ -20,7 +19,7 @@ vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
 }));
 
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
@@ -35,6 +34,7 @@ import {
   runReplayTestReporters,
 } from '../reporters/registry.ts';
 import type { ReplayTestReporter, ReplayTestReporterContext } from '../reporters/types.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 type RecordedHook = {
   hook: 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult' | 'onSuiteEnd';
@@ -111,7 +111,7 @@ async function runSuiteThroughReporter(params: {
             flags: params.flags,
           },
           sessionName: 'default',
-          logPath: path.join(os.tmpdir(), 'daemon.log'),
+          logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
           sessionStore: makeSessionStore(),
           invoke: params.invoke,
         }),

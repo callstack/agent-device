@@ -1,5 +1,4 @@
 import { test, expect } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
 import { AppError } from '@agent-device/kernel/errors';
@@ -16,6 +15,7 @@ import {
 } from '../../../handlers/__tests__/session-test-harness.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();
@@ -46,7 +46,7 @@ test('open web URL on iOS device session without active app falls back to Safari
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -91,7 +91,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -138,7 +138,7 @@ test('open app on existing macOS session resolves and stores bundle id', async (
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -173,7 +173,7 @@ test('open rejects --surface on non-macOS devices', async () => {
       },
     },
     sessionName: 'ios-surface',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -223,7 +223,7 @@ test('open on existing macOS frontmost-app session preserves surface without --s
         },
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     });
@@ -289,7 +289,7 @@ test('open on existing iOS session refreshes unavailable simulator by name', asy
         flags: {},
       },
       sessionName,
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     }),
@@ -338,7 +338,7 @@ test('open app on existing Android session resolves and stores package id', asyn
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -382,7 +382,7 @@ test('open intent target on existing Android session clears stale package contex
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -435,7 +435,7 @@ test('open on existing Android session preserves a comparable freshness baseline
       flags: {},
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

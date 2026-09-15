@@ -1,11 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { expect, test, vi } from 'vitest';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { bindWebScreenRecordingRuntime } from './runtime.ts';
+import { mkdtempForTestSync } from '../__tests__/test-utils.ts';
 
 const device = {
   platform: 'web' as const,
@@ -106,7 +106,7 @@ test('does not stop a browser recorder that failed before acquisition', async ()
 });
 
 test('validates options before destructive output preparation', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'agent-device-web-recording-'));
+  const directory = mkdtempForTestSync('agent-device-web-recording-');
   const outputPath = join(directory, 'capture.webm');
   await writeFile(outputPath, 'existing recording');
   let preparations = 0;

@@ -1,11 +1,12 @@
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
@@ -29,7 +30,7 @@ test('test --json marks a typed live device claim as infrastructure without retr
       flags: { retries: 3 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => {
       attempts += 1;
@@ -76,7 +77,7 @@ test('test --json retries DEVICE_IN_USE without typed device-claim provenance', 
       flags: { retries: 3 },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async () => {
       attempts += 1;

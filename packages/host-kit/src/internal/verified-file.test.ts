@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
@@ -17,6 +17,7 @@ import {
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
 } from './verified-file.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const roots: string[] = [];
 
@@ -111,7 +112,7 @@ test('returns absent for a missing read without creating the file', () => {
 });
 
 function fixturePath(label: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-verified-${label}-`));
+  const root = mkdtempForTestSync(`agent-device-verified-${label}-`);
   roots.push(root);
   return path.join(root, 'artifact');
 }

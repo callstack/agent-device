@@ -1,6 +1,6 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -22,6 +22,7 @@ import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // A representative, structurally rich owner payload so the parity assertions exercise nested
 // objects/arrays rather than a trivial flat record. `scroll` is the subject because it reaches a
@@ -53,7 +54,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-cost-'
   return {
     sessionStore,
     handler: createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
