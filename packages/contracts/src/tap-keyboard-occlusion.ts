@@ -14,7 +14,7 @@ import { normalizeType } from './snapshot-text.ts';
  * while the touch activated a key (#2589).
  *
  * The band is derived from the captured tree every acting path already holds, so the guard costs no
- * round trip. Derivation, the two rules that decide whether reported geometry may be measured at all,
+ * round trip. Derivation, the rules that decide whether reported geometry may be measured at all,
  * and the verdict on a point are proven against
  * `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule only through that table.
  */
@@ -112,19 +112,18 @@ function isKeyboardSurfaceNode(node: RawSnapshotNode): boolean {
  */
 function isKeyboardOwnedNode(
   node: RawSnapshotNode,
-  nodesByIndex: ReadonlyMap<number, RawSnapshotNode>,
+  parents: ReadonlyMap<number, number | undefined>,
+  surfaceIndices: ReadonlySet<number>,
 ): boolean {
-  if (isKeyboardSurfaceNode(node)) return true;
-  const visited = new Set<number>();
-  let current =
-    typeof node.parentIndex === 'number' ? nodesByIndex.get(node.parentIndex) : undefined;
-  while (current && !visited.has(current.index)) {
-    visited.add(current.index);
-    if (isKeyboardSurfaceNode(current)) return true;
-    current =
-      typeof current.parentIndex === 'number' ? nodesByIndex.get(current.parentIndex) : undefined;
-  }
-  return false;
+  return (
+    surfaceIndices.has(node.index) ||
+    collectAncestorSurfaceIndices(parents, surfaceIndices, node.index).length > 0
+  );
+}
+
+/** The band needs an edge to run to, which an absent or zero-area viewport does not report. */
+function isMeasurableViewport(viewport: Rect | null): viewport is Rect {
+  return viewport !== null && isPositiveFiniteRect(viewport);
 }
 
 /** Zero-area placeholders (iOS reports `Padding-Left` keys this way) are not geometry. */
@@ -133,27 +132,40 @@ function usableRects(nodes: readonly RawSnapshotNode[]): Rect[] {
 }
 
 /**
- * The surface indices that have a keyboard node of their own below them — the plane containers. The
- * walk climbs from every surface node through its ancestors, so a projection that flattens keys
- * beside app chrome leaves each key a leaf.
+ * The surface indices that have a keyboard node of their own below them — the plane containers. Each
+ * surface climbs the projection's parent links, so a projection that flattens keys beside app chrome
+ * leaves each key a leaf.
  */
 function collectKeyboardPlaneIndices(
   nodes: readonly RawSnapshotNode[],
   surfaces: readonly RawSnapshotNode[],
 ): Set<number> {
-  const parentByIndex = new Map(nodes.map((node) => [node.index, node.parentIndex] as const));
+  const parents = new Map(nodes.map((node) => [node.index, node.parentIndex] as const));
   const surfaceIndices = new Set(surfaces.map((node) => node.index));
   const planes = new Set<number>();
   for (const surface of surfaces) {
-    const visited = new Set<number>();
-    let parent = parentByIndex.get(surface.index);
-    while (typeof parent === 'number' && !visited.has(parent)) {
-      visited.add(parent);
-      if (surfaceIndices.has(parent)) planes.add(parent);
-      parent = parentByIndex.get(parent);
+    for (const ancestor of collectAncestorSurfaceIndices(parents, surfaceIndices, surface.index)) {
+      planes.add(ancestor);
     }
   }
   return planes;
+}
+
+/** The keyboard nodes above `index`, each visited once however the projection loops its ancestry. */
+function collectAncestorSurfaceIndices(
+  parents: ReadonlyMap<number, number | undefined>,
+  surfaceIndices: ReadonlySet<number>,
+  index: number,
+): number[] {
+  const ancestors: number[] = [];
+  const visited = new Set<number>();
+  let parent = parents.get(index);
+  while (typeof parent === 'number' && !visited.has(parent)) {
+    visited.add(parent);
+    if (surfaceIndices.has(parent)) ancestors.push(parent);
+    parent = parents.get(parent);
+  }
+  return ancestors;
 }
 
 /**
@@ -163,44 +175,117 @@ function collectKeyboardPlaneIndices(
  * the reported key plane bottoms out at 816 of an 874 pt portrait viewport, 58 pt short, and at 402 of
  * a 402 pt landscape viewport, exactly on the edge. A surface stopping further up than this budget is
  * not docked — an iPad floating or split keyboard, or an app-drawn keypad — and its geometry says
- * nothing about the bottom of the screen. Height is no proxy for docking: the same keyboard measures
+ * nothing about the bottom of the screen. The budget counts in the units the rects arrive in, and that
+ * is what Android asks for rather than what a dp table would: with three-button navigation on Pixel 7
+ * (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at
+ * 2400 and the 126 px navigation bar sits inside it at 2274..2400, so the bar costs the band nothing.
+ * An IME that did stop above its own bar would simply stop being measured, the way every other
+ * unmeasurable geometry fails open. Height is no proxy for docking: the same keyboard measures
  * 233 pt against an 874 pt viewport in portrait and 327 pt against a 402 pt one in landscape, so the
  * fraction that admits the first is the fraction that refuses to look at the second.
  */
 const KEYBOARD_BOTTOM_ANCHOR_TOLERANCE = 80;
 
 /**
- * The band the visible keyboard owns, or null when the tree holds no keyboard or the band cannot be
- * measured. Fails open on an unusable frame, mirroring `clipScrollViewportAboveKeyboard`: a keyboard
- * the platform cannot measure is not evidence that a surface is blocked.
+ * How far two reported keys may sit apart and still be one keyboard's worth of columns. Reported seams
+ * are zero on measured trees — iPhone 17 Pro (26.2) keys adjoin across 395 pt, iPad Pro 11-inch (M4)
+ * across 743.5 pt, and Gboard's across 1070 px, none with a gap above a point — so this absorbs
+ * projection rounding, not layout.
  */
-function resolveVisibleKeyboardSurface(
-  nodes: readonly RawSnapshotNode[],
-  viewport: Rect | null,
-): KeyboardSurface | null {
-  const anchorRects = usableRects(nodes.filter(isKeyboardAnchorNode));
-  if (anchorRects.length === 0) return null;
-  const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
-  if (!viewport || viewport.width <= 0 || viewport.height <= 0) return null;
-  const reportedRects = usableRects(surfaceNodes);
-  if (reportedRects.length === 0) return null;
-  const minY = Math.min(...anchorRects.map((rect) => rect.y));
-  const minX = Math.min(...anchorRects.map((rect) => rect.x));
-  const maxRight = Math.max(...anchorRects.map((rect) => rect.x + rect.width));
-  const bottomEdge = viewport.y + viewport.height;
-  const reportedBottom = Math.max(...reportedRects.map((rect) => rect.y + rect.height));
-  if (reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
+const KEYBOARD_KEY_SEAM_ALLOWANCE = 2;
+
+/**
+ * Whether these rects tile a width instead of claiming one. A split iPad keyboard docks its two
+ * clusters at the bottom edge while its surface container still spans the whole screen, so the docking
+ * and width rules above both pass and the band would run across the middle of the screen, where the
+ * app content between the clusters is visible and tappable. Only the keys report where the keyboard's
+ * controls are, and a gap that wide is not a reporting seam. Nothing in the tree says where either
+ * cluster ends, so a gap cannot be measured around: the band stays unmeasured and the tap fails open,
+ * the way it does for geometry that arrived rotated.
+ */
+function tilesMeasuredWidth(rects: readonly Rect[]): boolean {
+  const columns = rects
+    .map((rect) => [rect.x, rect.x + rect.width] as const)
+    .sort((left, right) => left[0] - right[0]);
+  let reach = columns[0]?.[1] ?? 0;
+  for (const [start, end] of columns) {
+    if (start - reach > KEYBOARD_KEY_SEAM_ALLOWANCE) return false;
+    reach = Math.max(reach, end);
+  }
+  return true;
+}
+
+/**
+ * The band a docked keyboard owns: its own columns, from its topmost reported node down to the bottom
+ * of the viewport. Null when the reported geometry is not a keyboard a band can be measured from.
+ */
+function measureDockedKeyboardFrame(params: {
+  anchorRects: readonly Rect[];
+  reportedBottom: number;
+  viewport: Rect;
+}): Rect | null {
+  const minY = Math.min(...params.anchorRects.map((rect) => rect.y));
+  const minX = Math.min(...params.anchorRects.map((rect) => rect.x));
+  const maxRight = Math.max(...params.anchorRects.map((rect) => rect.x + rect.width));
+  const bottomEdge = params.viewport.y + params.viewport.height;
+  // The keyboard's own geometry stops above the edge the band would run to: not docked.
+  if (params.reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
   // Geometry that arrives taller than it is wide is not in the app's orientation space. iOS gives up
   // the landscape iPhone keyboard's rects in the keyboard's own rotated space: measured on iPhone 17
   // Pro, its key plane is 162 x 327 and its dock button reports y 8 of a 402 pt viewport, while the
   // screenshot shows the keyboard full width across the bottom 327 pt. A band from that would refuse
   // app content the keyboard is nowhere near while missing the keyboard itself, which is worse than
   // not measuring — see the landscape cases in the golden table.
-  if (maxRight - minX <= reportedBottom - minY) return null;
-  const planes = collectKeyboardPlaneIndices(nodes, surfaceNodes);
+  if (maxRight - minX <= params.reportedBottom - minY) return null;
+  return { x: minX, y: minY, width: maxRight - minX, height: bottomEdge - minY };
+}
+
+/**
+ * Whether the keys form one unbroken run of columns across the width the anchors claim. The container
+ * says where the platform thinks the keyboard is; only the keys say where its controls are, so this
+ * reads keys and falls back to every anchor when the projection nests nothing.
+ *
+ * Blunt both ways on purpose, and both costs are table rows: a sparse layout — the iOS emoji panel,
+ * corner keys over a wide container — does not tile, so the guard abstains rather than decide which
+ * gaps are app content; and a container reported with no keys has nothing left to check, so the band is
+ * the container's own claim.
+ */
+function keysFormOneColumnRun(params: {
+  anchorNodes: readonly RawSnapshotNode[];
+  anchorRects: readonly Rect[];
+  planeIndices: ReadonlySet<number>;
+}): boolean {
+  const keyRects = usableRects(
+    params.anchorNodes.filter((node) => !params.planeIndices.has(node.index)),
+  );
+  return tilesMeasuredWidth(keyRects.length > 0 ? keyRects : params.anchorRects);
+}
+
+/** The band the keyboard reports, or null when the tree holds no keyboard or the band cannot be
+ * measured. Fails open on an unusable frame, mirroring `clipScrollViewportAboveKeyboard`: a keyboard
+ * the platform cannot measure is not evidence that a surface is blocked. */
+function resolveVisibleKeyboardSurface(
+  nodes: readonly RawSnapshotNode[],
+  viewport: Rect | null,
+): KeyboardSurface | null {
+  const anchorNodes = nodes.filter(isKeyboardAnchorNode);
+  const anchorRects = usableRects(anchorNodes);
+  if (anchorRects.length === 0) return null;
+  if (!isMeasurableViewport(viewport)) return null;
+  const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
+  const reportedRects = usableRects(surfaceNodes);
+  if (reportedRects.length === 0) return null;
+  const frame = measureDockedKeyboardFrame({
+    anchorRects,
+    reportedBottom: Math.max(...reportedRects.map((rect) => rect.y + rect.height)),
+    viewport,
+  });
+  if (!frame) return null;
+  const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
+  if (!keysFormOneColumnRun({ anchorNodes, anchorRects, planeIndices })) return null;
   return {
-    frame: { x: minX, y: minY, width: maxRight - minX, height: bottomEdge - minY },
-    controlRects: usableRects(surfaceNodes.filter((node) => !planes.has(node.index))),
+    frame,
+    controlRects: usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index))),
   };
 }
 
@@ -228,8 +313,11 @@ export function resolveKeyboardTapOcclusion(params: {
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:
   // the caller named the element, and behind the keyboard a tap does not reach it.
-  const nodesByIndex = new Map(params.nodes.map((node) => [node.index, node]));
-  if (isKeyboardOwnedNode(params.node, nodesByIndex)) return { kind: 'clear', surface };
+  const parents = new Map(params.nodes.map((node) => [node.index, node.parentIndex] as const));
+  const surfaceIndices = new Set(
+    params.nodes.filter(isKeyboardSurfaceNode).map((node) => node.index),
+  );
+  if (isKeyboardOwnedNode(params.node, parents, surfaceIndices)) return { kind: 'clear', surface };
   return containsPoint(surface.frame, params.point.x, params.point.y)
     ? { kind: 'occluded', surface }
     : { kind: 'clear', surface };

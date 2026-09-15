@@ -1,5 +1,5 @@
 {
-  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. The band is derived only from keyboard geometry that is docked to the viewport bottom edge: measured on iPhone 17 Pro (iOS 26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, so an 80 pt docking budget is what separates a docked keyboard from an iPad floating or split keyboard, whose band stays unmeasured and fails open. A docked keyboard is also wide: geometry that comes back taller than it is wide did not arrive in the app orientation space — iOS reports the landscape iPhone keyboard in the keyboard's own rotated space — and is refused measurement for the same reason. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence.",
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units — measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport — so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space — iOS reports the landscape iPhone keyboard in the keyboard's own rotated space — and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree — iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px — so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` — the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape — the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up.",
   "constants": {
     "occlusionReason": "tap_keyboard_occludes_target"
   },
@@ -53,14 +53,122 @@
           "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 4,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 4,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 13,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -78,11 +186,79 @@
       "expected": {
         "kind": "occluded",
         "frame": {
-          "x": 4,
+          "x": 4.67,
           "y": 590,
           "width": 395,
           "height": 284
-        }
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -133,7 +309,21 @@
         "index": 1
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 752,
+          "width": 402,
+          "height": 122
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 752,
+            "width": 402,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -173,14 +363,122 @@
           "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 4,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 3,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -196,7 +494,81 @@
         "index": 1
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -259,7 +631,27 @@
         "index": 1
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 590,
+          "width": 402,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -309,7 +701,21 @@
         "index": 2
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -359,7 +765,21 @@
         "index": 1
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -422,7 +842,27 @@
         "index": 1
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 590,
+          "width": 402,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -480,7 +920,15 @@
           "y": 1500,
           "width": 1080,
           "height": 900
-        }
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
+        ]
       }
     },
     {
@@ -533,7 +981,21 @@
         "index": 2
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 1500,
+          "width": 1080,
+          "height": 900
+        },
+        "controlRects": [
+          {
+            "x": 800,
+            "y": 2200,
+            "width": 240,
+            "height": 160
+          }
+        ]
       }
     },
     {
@@ -579,7 +1041,15 @@
           "y": 1600,
           "width": 1080,
           "height": 520
-        }
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 1600,
+            "width": 1080,
+            "height": 520
+          }
+        ]
       }
     },
     {
@@ -630,7 +1100,21 @@
         "index": 1
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 257,
+          "y": 1058,
+          "width": 60,
+          "height": 54
+        },
+        "controlRects": [
+          {
+            "x": 257,
+            "y": 1058,
+            "width": 60,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -658,14 +1142,122 @@
           "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 4,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -684,7 +1276,81 @@
         }
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -738,7 +1404,27 @@
         }
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -791,7 +1477,21 @@
         }
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 40,
+            "y": 730,
+            "width": 240,
+            "height": 60
+          }
+        ]
       }
     },
     {
@@ -845,7 +1545,27 @@
         }
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -908,7 +1628,27 @@
         "index": 1
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -1105,17 +1845,125 @@
         {
           "index": 1,
           "type": "Key",
-          "label": "q",
+          "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 5,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -1127,7 +1975,7 @@
           }
         },
         {
-          "index": 3,
+          "index": 12,
           "type": "Button",
           "role": "UIKeyboardDockItemButton",
           "label": "Next keyboard",
@@ -1141,7 +1989,7 @@
           }
         },
         {
-          "index": 4,
+          "index": 13,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
@@ -1154,10 +2002,90 @@
         }
       ],
       "target": {
-        "index": 3
+        "index": 12
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
       }
     },
     {
@@ -1182,17 +2110,125 @@
         {
           "index": 1,
           "type": "Key",
-          "label": "q",
+          "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 5,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -1204,7 +2240,7 @@
           }
         },
         {
-          "index": 3,
+          "index": 12,
           "type": "Button",
           "role": "UIKeyboardDockItemButton",
           "label": "Next keyboard",
@@ -1218,7 +2254,7 @@
           }
         },
         {
-          "index": 4,
+          "index": 13,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
@@ -1231,10 +2267,90 @@
         }
       ],
       "target": {
-        "index": 4
+        "index": 13
       },
       "expected": {
-        "kind": "occluded"
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
       }
     },
     {
@@ -1259,17 +2375,125 @@
         {
           "index": 1,
           "type": "Key",
-          "label": "q",
+          "label": "Q",
           "parentIndex": 0,
           "rect": {
-            "x": 5,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
           "type": "Key",
           "label": "return",
           "parentIndex": 0,
@@ -1281,7 +2505,7 @@
           }
         },
         {
-          "index": 3,
+          "index": 12,
           "type": "Button",
           "role": "UIKeyboardDockItemButton",
           "label": "Next keyboard",
@@ -1295,7 +2519,7 @@
           }
         },
         {
-          "index": 4,
+          "index": 13,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
@@ -1314,7 +2538,87 @@
         }
       },
       "expected": {
-        "kind": "clear"
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
       }
     },
     {
@@ -1473,7 +2777,15 @@
           "y": 700,
           "width": 2400,
           "height": 380
-        }
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 700,
+            "width": 2400,
+            "height": 380
+          }
+        ]
       }
     },
     {
@@ -1513,14 +2825,122 @@
           "label": "Q",
           "parentIndex": 1,
           "rect": {
-            "x": 5,
+            "x": 4.67,
             "y": 590,
-            "width": 39,
+            "width": 39.33,
             "height": 54
           }
         },
         {
           "index": 3,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 1,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 1,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 1,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 1,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 1,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 1,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 1,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 1,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 1,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
           "type": "Key",
           "label": "return",
           "parentIndex": 1,
@@ -1532,7 +2952,7 @@
           }
         },
         {
-          "index": 4,
+          "index": 13,
           "type": "Button",
           "label": "Form",
           "parentIndex": 0,
@@ -1545,7 +2965,7 @@
         }
       ],
       "target": {
-        "index": 4
+        "index": 13
       },
       "expected": {
         "kind": "occluded",
@@ -1554,7 +2974,75 @@
           "y": 583,
           "width": 402,
           "height": 291
-        }
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
       }
     },
     {
@@ -1633,7 +3121,7 @@
       }
     },
     {
-      "name": "an iPad split keyboard is not docked either, and its two clusters keep the band unmeasured",
+      "name": "an iPad split keyboard whose clusters stop above the docking budget is refused measurement by the docking rule first",
       "viewport": {
         "x": 0,
         "y": 0,
@@ -1749,7 +3237,15 @@
           "y": 740,
           "width": 362,
           "height": 134
-        }
+        },
+        "controlRects": [
+          {
+            "x": 20,
+            "y": 740,
+            "width": 362,
+            "height": 60
+          }
+        ]
       }
     },
     {
@@ -1801,6 +3297,700 @@
       },
       "expected": {
         "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a measured iPad keyboard docked at the bottom owns the strip below its reported keys",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1210
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1210
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Continue",
+          "parentIndex": 0,
+          "rect": {
+            "x": 297,
+            "y": 1000,
+            "width": 240,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Tab",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 925,
+            "width": 834,
+            "height": 282
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "q",
+          "parentIndex": 2,
+          "rect": {
+            "x": 88.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "w",
+          "parentIndex": 2,
+          "rect": {
+            "x": 154.5,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "e",
+          "parentIndex": 2,
+          "rect": {
+            "x": 221,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "r",
+          "parentIndex": 2,
+          "rect": {
+            "x": 287,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "t",
+          "parentIndex": 2,
+          "rect": {
+            "x": 353,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "y",
+          "parentIndex": 2,
+          "rect": {
+            "x": 419,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "u",
+          "parentIndex": 2,
+          "rect": {
+            "x": 485,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "i",
+          "parentIndex": 2,
+          "rect": {
+            "x": 551,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "o",
+          "parentIndex": 2,
+          "rect": {
+            "x": 617,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "p",
+          "parentIndex": 2,
+          "rect": {
+            "x": 683.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 13,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 749.5,
+            "y": 932,
+            "width": 82.5,
+            "height": 64.5
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 925,
+          "width": 834,
+          "height": 285
+        },
+        "controlRects": [
+          {
+            "x": 88.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 154.5,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          },
+          {
+            "x": 221,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 287,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 353,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 419,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 485,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 551,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 617,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          },
+          {
+            "x": 683.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 749.5,
+            "y": 932,
+            "width": 82.5,
+            "height": 64.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "a split iPad keyboard docked at the bottom reports two clusters, and the gap between them is not the keyboard's to measure",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1210
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1210
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 317,
+            "y": 1000,
+            "width": 200,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Tab",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 925,
+            "width": 834,
+            "height": 282
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "q",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "w",
+          "parentIndex": 2,
+          "rect": {
+            "x": 66,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "z",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 1142.5,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 702,
+            "y": 932,
+            "width": 132,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 2,
+          "rect": {
+            "x": 702,
+            "y": 1142.5,
+            "width": 132,
+            "height": 64.5
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "Gboard reports its region down to the physical display bottom, across a 126 px three-button navigation bar",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 3,
+          "type": "android.widget.Button",
+          "label": "q",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 5,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 4,
+          "type": "android.widget.Button",
+          "label": "w",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 112,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 5,
+          "type": "android.widget.Button",
+          "label": "e",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 219,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 6,
+          "type": "android.widget.Button",
+          "label": "r",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 326,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 7,
+          "type": "android.widget.Button",
+          "label": "t",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 433,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 5,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 112,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 219,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 326,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 433,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sparse emoji layout is not one run of columns, so the guard abstains instead of guessing a band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Emoji",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 748,
+            "width": 402,
+            "height": 126
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "smiley",
+          "parentIndex": 2,
+          "rect": {
+            "x": 8,
+            "y": 756,
+            "width": 44,
+            "height": 44
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "heart",
+          "parentIndex": 2,
+          "rect": {
+            "x": 350,
+            "y": 756,
+            "width": 44,
+            "height": 44
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 300,
+            "y": 822,
+            "width": 94,
+            "height": 44
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a projection that reports only the keyboard container falls back to the container width it claims",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        ]
       }
     }
   ]

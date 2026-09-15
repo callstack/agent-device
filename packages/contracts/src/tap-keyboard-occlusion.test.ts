@@ -26,7 +26,7 @@ type FixtureCase = {
   viewport: Rect | null;
   nodes: FixtureNode[];
   target: { index: number } | { point: { x: number; y: number } };
-  expected: { kind: string; frame?: Rect };
+  expected: { kind: string; frame?: Rect; controlRects?: readonly Rect[] };
 };
 
 const TABLE_PATH = path.resolve(
@@ -72,9 +72,33 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
       node,
     });
     assert.equal(occlusion.kind, fixture.expected.kind, fixture.name);
-    if (fixture.expected.frame && occlusion.kind === 'occluded') {
-      assert.deepEqual(occlusion.surface.frame, fixture.expected.frame, fixture.name);
+    const surface =
+      occlusion.kind === 'clear' || occlusion.kind === 'occluded' ? occlusion.surface : null;
+    if (!surface) {
+      assert.equal(fixture.expected.frame, undefined, `${fixture.name}: no band to declare`);
+      assert.equal(
+        fixture.expected.controlRects,
+        undefined,
+        `${fixture.name}: no controls to declare`,
+      );
+      continue;
     }
+    // A case that reaches a band owes its whole shape: the frame both the refusal and the disclosure
+    // quote, and the controls that excuse a bare coordinate. Plane exclusion hides in the second one.
+    assert.ok(
+      fixture.expected.frame,
+      `${fixture.name}: a verdict carrying a band must declare its frame`,
+    );
+    assert.ok(
+      fixture.expected.controlRects,
+      `${fixture.name}: a verdict carrying a band must declare its control rects`,
+    );
+    assert.deepEqual(surface.frame, fixture.expected.frame, `${fixture.name}: band frame`);
+    assert.deepEqual(
+      [...surface.controlRects],
+      fixture.expected.controlRects,
+      `${fixture.name}: keyboard control rects`,
+    );
   }
 });
 
