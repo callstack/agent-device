@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
+import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 import { createSnapshotSourceDeadline, type SnapshotSourceDeadline } from './deadline.ts';
 import { createSnapshotSourceHost } from './host.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
@@ -193,7 +193,7 @@ test('closing the preparation stops a build that is still running', async () => 
 });
 
 async function writeBridgeSource(prefix: string): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), `agent-device-bridge-${prefix}`));
+  const root = await mkdtempForTest(`agent-device-bridge-${prefix}`);
   const sourceRoot = path.join(root, 'source');
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
   for (const name of BRIDGE_SOURCES) {
