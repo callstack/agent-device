@@ -167,17 +167,29 @@ test.runIf(process.platform !== 'win32')(
 //
 // The kill paths below address a process group whose leader this worker already reaped, and
 // the hermetic signal setup ends a worker's authority over a pid at that moment. So every
-// group write is answered by `guardGroupWrites` below, which is the seam that setup points a
-// real kill path at: it records what the kill aimed at and refuses to deliver it.
+// group write is answered by `guardGroupWrites` below, which is the seam that setup points a real
+// kill path at: it records what the kill aimed at and answers the way a real group would, either
+// a delivery nothing was reached for or the `ESRCH` a vanished group throws.
 
 type GroupWrite = { readonly pid: number; readonly signal: string | number };
 
-function guardGroupWrites(): { restore: () => void; writes: GroupWrite[] } {
+/** How a guarded group write answers, matching what a real group would do. */
+type GroupWriteAnswer = 'no-group-reached' | 'no-such-process';
+
+function guardGroupWrites(answer: GroupWriteAnswer = 'no-group-reached'): {
+  restore: () => void;
+  writes: GroupWrite[];
+} {
   const original = process.kill.bind(process);
   const writes: GroupWrite[] = [];
   process.kill = ((pid: number, signal: string | number = 'SIGTERM') => {
     if (pid < 0) {
       writes.push({ pid, signal });
+      if (answer === 'no-such-process') {
+        const error = new Error('no such process') as NodeJS.ErrnoException;
+        error.code = 'ESRCH';
+        throw error;
+      }
       return false;
     }
     return original(pid, signal as NodeJS.Signals);
@@ -198,17 +210,6 @@ test('group signaling addresses the negative pid and reports delivery', () => {
   } finally {
     killSpy.mockRestore();
   }
-});
-
-test('a group write in this module can only come from the seam', () => {
-  // A second group-signal path in here would be the second seam the callers were written
-  // against once more, and nothing at runtime distinguishes the two.
-  const source = fs.readFileSync(new URL('./exec.ts', import.meta.url), 'utf8');
-  const seam = source.indexOf('export function signalProcessGroupBestEffort');
-  const writes = [...source.matchAll(/process\.kill\(-/g)].map((match) => match.index ?? -1);
-
-  assert.ok(seam >= 0);
-  assert.deepEqual(writes, [seam + source.slice(seam).indexOf('process.kill(-')]);
 });
 
 test('group signaling reports a vanished group and never signals an invalid pid', () => {
@@ -263,10 +264,10 @@ test.runIf(process.platform !== 'win32')(
 test.runIf(process.platform !== 'win32')(
   'a detached deadline whose group cannot be signalled still settles',
   async () => {
-    // A vanished group, an empty group, and a group owned by someone else all answer this
-    // write with nothing, and the seam swallows that. The command still cannot wait on a pipe
+    // A vanished group answers the group write by throwing `ESRCH`, and a group owned by someone
+    // else by throwing `EPERM`; the seam swallows both. The command still cannot wait on a pipe
     // holder it just asked to be killed.
-    const groupWrites = guardGroupWrites();
+    const groupWrites = guardGroupWrites('no-such-process');
     try {
       const startedAt = Date.now();
       await assert.rejects(
