@@ -300,8 +300,8 @@ extension RunnerTests {
   /// The real bounding/hook machinery used by `boundedBlockingSystemAlertSnapshot` above: the
   /// probe closure it's given always calls `self.blockingSystemAlertSnapshot` in production, and
   /// in unit-test builds may first consult `systemModalProbeOverrideForTesting`. Keeping this in
-  /// one place means the `runMainThreadWork` wrap and the `onAbandoned`/`onDrained` hooks can
-  /// never drift between what production runs and what the unit tests exercise.
+  /// one place means the main-thread dispatch and its penalty hook can never drift between what
+  /// production runs and what the unit tests exercise.
   private func boundedBlockingSystemAlertSnapshotBody(
     deadline: Date,
     probe: @escaping (Date) -> DataPayload?
@@ -321,6 +321,7 @@ extension RunnerTests {
     let startedAt = Date()
     do {
       return try runMainThreadWork(
+        "system_modal_probe",
         timeout: slice,
         timeoutError: {
           SnapshotCaptureFailure(
@@ -330,16 +331,10 @@ extension RunnerTests {
           )
         },
         onAbandoned: {
-          self.retainAbandonedXCTestChannelWork()
-          NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_TIMEOUT slice=%.1f", slice)
           self.penalizeSnapshotXCTestChannel(
             bundleId: self.currentBundleId,
             reason: "system_modal_probe_timeout"
           )
-        },
-        onDrained: {
-          self.releaseAbandonedXCTestChannelWork()
-          NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DRAINED")
         }
       ) {
         probe(probeDeadline)
@@ -621,13 +616,13 @@ extension RunnerTests {
   ///   - if the entry point reverted to calling the unbounded `blockingSystemAlertSnapshot`
   ///     directly (or dropped the `runMainThreadWork` wrap), nothing here would ever time out,
   ///     so the mid-flight busy/penalty assertions below would never be met;
-  ///   - if the `onAbandoned`/`onDrained` retain/release hooks were dropped, the timeout would
-  ///     still fire, but the busy/penalty accounting and the drain assertion would not hold.
+  ///   - if the `onAbandoned` penalty hook or the abandoned-work accounting were dropped, the
+  ///     timeout would still fire, but the busy/penalty and drain assertions would not hold.
   ///
   /// The drain assertion is synchronized on the *real* release rather than raced: after
-  /// signaling the probe to finish, the background queue polls `hasAbandonedTreeCapture()`
+  /// signaling the probe to finish, the background queue polls `hasAbandonedMainThreadWork()`
   /// (bounded) and only then fulfills `drained`, which the test `wait(for:timeout:)`s on before
-  /// asserting `.idle`/`hasAbandonedTreeCapture() == false` below -- so a slow drain fails that
+  /// asserting `.idle`/`hasAbandonedMainThreadWork() == false` below -- so a slow drain fails that
   /// assertion instead of racing a fixed-timing guess.
   private func assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(
     entryPointName: String,
@@ -677,7 +672,7 @@ extension RunnerTests {
       if case .busy = self.currentMainThreadBusyState() {
         box.wasBusyBeforeDrain = true
       }
-      box.hadAbandonedCaptureBeforeDrain = self.hasAbandonedTreeCapture()
+      box.hadAbandonedCaptureBeforeDrain = self.hasAbandonedMainThreadWork()
       box.wasPenalizedBeforeDrain = self.isSnapshotXCTestChannelPenalized(bundleId: self.currentBundleId)
 
       // 2) `box.payload` above was already produced -- through the capture plan's recovery
@@ -686,13 +681,12 @@ extension RunnerTests {
       completion.fulfill()
 
       // 3) Only now let the abandoned probe finish, then block this queue (never the test's
-      // main-thread wait) on the *real* drain signal -- `onDrained`'s
-      // `releaseAbandonedXCTestChannelWork` -- bounded so a revert that never drains fulfills
-      // `drained` anyway and lets the assertions below report the regression explicitly instead
-      // of just timing out.
+      // main-thread wait) on the *real* drain signal -- the abandoned-work count reaching zero
+      // -- bounded so a revert that never drains fulfills `drained` anyway and lets the
+      // assertions below report the regression explicitly instead of just timing out.
       probeReleaseGate.signal()
       let drainDeadline = Date().addingTimeInterval(5)
-      while self.hasAbandonedTreeCapture(), Date() < drainDeadline {
+      while self.hasAbandonedMainThreadWork(), Date() < drainDeadline {
         self.sleepFor(0.002)
       }
       drained.fulfill()
@@ -726,8 +720,8 @@ extension RunnerTests {
       return XCTFail("expected the runner to be idle once the abandoned \(entryPointName) probe drained")
     }
     XCTAssertFalse(
-      hasAbandonedTreeCapture(),
-      "onDrained must release the abandoned XCTest channel work for \(entryPointName)"
+      hasAbandonedMainThreadWork(),
+      "the drained probe must release the main thread for \(entryPointName)"
     )
   }
 
@@ -758,8 +752,8 @@ extension RunnerTests {
     )
     let recovered = Response(ok: false, error: ErrorPayload(message: "target is not available"))
 
-    setAbandonedXCTestWork(1)
-    defer { setAbandonedXCTestWork(0) }
+    setAbandonedMainThreadWork(1)
+    defer { setAbandonedMainThreadWork(0) }
     guard case .busy = currentMainThreadBusyState() else {
       return XCTFail("expected RUNNER_BUSY while abandoned XCTest work is outstanding")
     }
@@ -772,7 +766,7 @@ extension RunnerTests {
     XCTAssertEqual(occupiedCalls, 1, "recovered response must not retry behind abandoned XCTest work")
     XCTAssertEqual(occupied.ok, false)
 
-    setAbandonedXCTestWork(0)
+    setAbandonedMainThreadWork(0)
     guard case .idle = currentMainThreadBusyState() else {
       return XCTFail("runner should be idle once the abandoned work drained")
     }
@@ -784,8 +778,7 @@ extension RunnerTests {
     XCTAssertEqual(drainedCalls, 2, "with the channel free the read-only retry runs once")
   }
 
-  private func setAbandonedXCTestWork(_ count: Int) {
-    treeCaptureLock.lock(); abandonedTreeCaptureCount = count; treeCaptureLock.unlock()
+  private func setAbandonedMainThreadWork(_ count: Int) {
     mainThreadWorkLock.lock()
     abandonedMainThreadWorkCount = count
     abandonedMainThreadWorkSince = count > 0 ? Date(timeIntervalSinceNow: -1) : nil
@@ -839,6 +832,7 @@ extension RunnerTests {
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
     let viewport = try runMainThreadWork(
+      "snapshot_viewport",
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
     ) {
@@ -860,31 +854,12 @@ extension RunnerTests {
 
   static let xCTestSnapshotTimeoutCode = "IOS_TREE_CAPTURE_TIMEOUT"
 
-  func hasAbandonedTreeCapture() -> Bool {
-    treeCaptureLock.lock()
-    defer { treeCaptureLock.unlock() }
-    return abandonedTreeCaptureCount > 0
-  }
-
-  /// The watchdog abandoned one unit of XCTest main-thread capture work that is still draining on
-  /// main; XCTest-backed snapshot tiers skip (`hasAbandonedTreeCapture`) until a matching release.
-  func retainAbandonedXCTestChannelWork() {
-    treeCaptureLock.lock()
-    abandonedTreeCaptureCount += 1
-    treeCaptureLock.unlock()
-  }
-
-  func releaseAbandonedXCTestChannelWork() {
-    treeCaptureLock.lock()
-    abandonedTreeCaptureCount -= 1
-    treeCaptureLock.unlock()
-  }
-
   /// Runs the blocking tree-snapshot XPC on the main thread bounded by `sliceSeconds`. On
   /// timeout the XPC keeps running on main (it cannot be cancelled); the capture is marked
-  /// abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is penalized
-  /// for this bundle, and the plan moves to the platform's independent recovery tier when one
-  /// exists (#1105/#1122).
+  /// abandoned so plans avoid XCTest-backed tiers until it drains, the timed-out attempt
+  /// penalizes the tree backend for this bundle (unless the fresh-process warmup exemption
+  /// applies), and the plan moves to the platform's independent recovery tier when one exists
+  /// (#1105/#1122).
   private func captureSnapshotRootBounded(
     _ element: XCUIElement,
     sliceSeconds: TimeInterval
@@ -893,20 +868,9 @@ extension RunnerTests {
       return try captureSnapshotRoot(element)
     }
     return try runMainThreadWork(
+      "tree_capture",
       timeout: sliceSeconds,
-      timeoutError: treeCaptureTimeoutError(sliceSeconds: sliceSeconds),
-      onAbandoned: {
-        self.retainAbandonedXCTestChannelWork()
-        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
-        self.penalizeSnapshotXCTestChannel(
-          bundleId: self.currentBundleId,
-          reason: "tree_capture_slice_timeout"
-        )
-      },
-      onDrained: {
-        self.releaseAbandonedXCTestChannelWork()
-        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_DRAINED")
-      }
+      timeoutError: treeCaptureTimeoutError(sliceSeconds: sliceSeconds)
     ) {
       try self.captureSnapshotRoot(element)
     }

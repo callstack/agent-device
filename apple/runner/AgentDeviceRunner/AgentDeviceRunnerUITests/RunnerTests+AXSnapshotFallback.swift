@@ -266,7 +266,7 @@ extension RunnerTests {
   /// falls back anyway (~1s added to every private AX capture on the Bluesky bench feed),
   /// so honor the penalty here the same way capture plans do.
   func shouldReadPrivateAXViewportViaXCTest() -> Bool {
-    !hasAbandonedTreeCapture() && !isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+    !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
   }
 
   private func privateAXSnapshotViewport(app: XCUIApplication, rootFrame: CGRect) -> CGRect {
@@ -276,6 +276,7 @@ extension RunnerTests {
     }
     do {
       let viewport = try runMainThreadWork(
+        "private_ax_viewport",
         timeout: 1,
         timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
       ) {
@@ -438,7 +439,7 @@ extension RunnerTests {
     defer {
       currentBundleId = nil
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      abandonedTreeCaptureCount = 0
+      abandonedMainThreadWorkCount = 0
     }
 
     XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest())
@@ -449,7 +450,7 @@ extension RunnerTests {
     clearSnapshotXCTestChannelPenalty(reason: "test")
     XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest())
 
-    abandonedTreeCaptureCount = 1
+    abandonedMainThreadWorkCount = 1
     XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest())
   }
 

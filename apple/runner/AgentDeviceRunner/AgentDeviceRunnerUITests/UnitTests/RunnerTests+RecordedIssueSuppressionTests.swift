@@ -18,10 +18,28 @@ extension RunnerTests {
         "Failed to get matching snapshot: Error kAXErrorCannotComplete getting snapshot for element"
       )
     )
-    // The hung-query timeout variant must keep recording.
+    // ...and the query-resolution fetch the query-sweep tier records once per element type. On
+    // the Bluesky feed 19 of these per capture ended the runner after every hostile snapshot.
+    XCTAssertTrue(
+      Self.isSuppressedAxSnapshotIssueDescription(
+        "Failed to resolve query: Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x600001060090> {pid=34802} {uid=[ID:1 hash:0x0]}"
+      )
+    )
+    // The hung-query timeout variant must keep recording, in either fetch context.
     XCTAssertFalse(
       Self.isSuppressedAxSnapshotIssueDescription(
         "Failed to get matching snapshot: Timed out while evaluating UI query."
+      )
+    )
+    XCTAssertFalse(
+      Self.isSuppressedAxSnapshotIssueDescription(
+        "Failed to resolve query: Timed out while evaluating UI query."
+      )
+    )
+    // A target that is gone is not an AX-server rejection and must keep recording.
+    XCTAssertFalse(
+      Self.isSuppressedAxSnapshotIssueDescription(
+        "Failed to resolve query: Application xyz.blueskyweb.app is not running"
       )
     )
     // Unrelated issues must keep recording.

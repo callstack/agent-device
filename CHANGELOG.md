@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Fixed: an iOS snapshot whose XCTest query-sweep tier cannot read the screen no longer ends the
+  runner process. On a live React Native feed (Bluesky Home, images re-rendering) the AX server
+  rejects each of the sweep's 19 element-type queries with `kAXErrorIllegalArgument`, and XCTest
+  records every rejection as a test failure worded `Failed to resolve query: ...`. The runner muted
+  the sibling `Failed to get matching snapshot: ... kAXError...` wording and not this one, and XCTest
+  ends the test case as soon as the main-thread block that recorded an unmuted failure returns, so
+  the runner died right after (or in the middle of) every hostile snapshot and the next command
+  paid a full `xcodebuild` boot. Both wordings are now muted when they carry an AX server code; the
+  timeout and `Application X is not running` variants keep recording. The sweep also no longer runs
+  behind an abandoned read: every bounded main-thread dispatch that outlives its slice now counts
+  as occupying the main thread (one counter, where the tree XPC and the system-modal probe used a
+  second one of their own), so once the tree tier's viewport read grinds past its 1 s slice the plan
+  goes straight to private AX and answers instead of queueing the sweep, the post-snapshot mark, and
+  its own bookkeeping behind seconds of main-thread work. A capture that fails outright while that
+  work is still grinding queues its cached-target drop behind it instead of waiting a second for it,
+  and a fresh process's first capture is no longer penalized by the tree slice timeout, which had
+  bypassed the warmup exemption every other penalty honors. The per-bundle penalty and
+  accepted-depth memory that make later captures of the same screen cheap now survive, because the
+  runner does.
 - Changed (android): the snapshot helper release manifest no longer carries `installArgs`, and the
   helper installs with a fixed `adb install -r` like the IME helper. The array only ever spelled
   `install -r` plus the `-t` that #2603 retired with the `testOnly` flag, so the manifest → flag →

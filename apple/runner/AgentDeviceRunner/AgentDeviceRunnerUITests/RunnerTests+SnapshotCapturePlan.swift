@@ -248,8 +248,8 @@ extension RunnerTests {
     )
   }
 
-  func shouldSkipSnapshotBackendForAbandonedTreeCapture(_ kind: SnapshotBackendKind) -> Bool {
-    kind.usesXCTestAccessibilityChannel && hasAbandonedTreeCapture()
+  func shouldSkipSnapshotBackendForAbandonedMainThreadWork(_ kind: SnapshotBackendKind) -> Bool {
+    kind.usesXCTestAccessibilityChannel && hasAbandonedMainThreadWork()
   }
 
   // MARK: Plan runner
@@ -314,13 +314,13 @@ extension RunnerTests {
         }
         break
       }
-      // While an abandoned tree capture is still grinding inside testmanagerd, XCTest-backed
-      // tiers would block behind it; only independent backends stay responsive (#1105).
-      if shouldSkipSnapshotBackendForAbandonedTreeCapture(kind) {
+      // While abandoned main-thread work is still grinding inside testmanagerd, XCTest-backed
+      // tiers would queue behind it; only independent backends stay responsive (#1105).
+      if shouldSkipSnapshotBackendForAbandonedMainThreadWork(kind) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TIER_SKIPPED_XCTEST_OCCUPIED tier=%@", kind.rawValue)
         if firstFailure == nil {
           firstFailure = (
-            "the XCTest capture channel is occupied by an abandoned tree capture",
+            "the XCTest capture channel is occupied by abandoned main-thread work",
             "budget"
           )
         }
@@ -431,6 +431,7 @@ extension RunnerTests {
             return nil
           }
           return try self.runMainThreadWork(
+            "tree_processing",
             timeout: min(self.treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
             timeoutError: self.snapshotMainThreadTimeoutError("processing tree snapshot")
           ) {
@@ -440,6 +441,7 @@ extension RunnerTests {
           }
         case .querySweep:
           return try self.runMainThreadWork(
+            "query_sweep",
             timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
             timeoutError: self.snapshotMainThreadTimeoutError("running query-sweep snapshot")
           ) {
@@ -1132,13 +1134,13 @@ extension RunnerTests {
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
   }
 
-  func testAbandonedTreeCaptureSkipsOnlyXCTestBackedSnapshotTiers() {
-    abandonedTreeCaptureCount = 1
-    defer { abandonedTreeCaptureCount = 0 }
+  func testAbandonedMainThreadWorkSkipsOnlyXCTestBackedSnapshotTiers() {
+    abandonedMainThreadWorkCount = 1
+    defer { abandonedMainThreadWorkCount = 0 }
 
-    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedTreeCapture(.recursiveTree))
-    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedTreeCapture(.querySweep))
-    XCTAssertFalse(shouldSkipSnapshotBackendForAbandonedTreeCapture(.privateAX))
+    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedMainThreadWork(.recursiveTree))
+    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedMainThreadWork(.querySweep))
+    XCTAssertFalse(shouldSkipSnapshotBackendForAbandonedMainThreadWork(.privateAX))
   }
 
 #if os(iOS)

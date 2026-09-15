@@ -187,6 +187,16 @@ they run a short XCTest probe instead of the full tree slice so healthy screens 
 repeating the hostile-screen grind. The raw diagnostic plan is exempt — it keeps tree-first error
 propagation.
 
+A third shape followed on the same app class once the plan recovered reliably. The query-sweep
+tier's 19 `allElementsBoundByIndex` reads each fail with `kAXErrorIllegalArgument`, and XCTest
+records every one as a test failure worded `Failed to resolve query: ...`. Any recorded failure the
+runner does not mute ends `testCommand` as soon as the main-thread block that recorded it returns,
+whatever `continueAfterFailure` says, so the runner died after (or during) every hostile snapshot
+and the per-bundle penalty and depth memory died with it. The runner now mutes AX-server rejections
+in both XCTest fetch wordings, and every bounded main-thread dispatch that outlives its slice counts
+as occupying the main thread (the tree XPC and the system-modal probe previously kept a second count
+of their own), so a viewport read that grinds makes the plan skip the sweep instead of queueing it.
+
 ## Recovery conformance and depth hints
 
 The host AX bridge and the XCTest runner's private AX bridge recover rejected deep requests with

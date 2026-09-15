@@ -685,16 +685,16 @@ extension RunnerTests {
       if case .busy = self.currentMainThreadBusyState() {
         box.wasBusyBeforeRelease = true
       }
-      box.hadAbandonedProbeBeforeRelease = self.hasAbandonedTreeCapture()
+      box.hadAbandonedProbeBeforeRelease = self.hasAbandonedMainThreadWork()
 
       // The XCTest main thread is blocked inside the injected probe, so this verifier owns the
       // ordered release after recording the command result and abandoned-work state above.
       probeReleaseGate.signal()
       let deadline = Date().addingTimeInterval(5)
-      while self.hasAbandonedTreeCapture(), Date() < deadline {
+      while self.hasAbandonedMainThreadWork(), Date() < deadline {
         self.sleepFor(0.002)
       }
-      box.drained = !self.hasAbandonedTreeCapture()
+      box.drained = !self.hasAbandonedMainThreadWork()
       verificationFinished.fulfill()
     }
 
@@ -709,7 +709,7 @@ extension RunnerTests {
     guard case .idle = currentMainThreadBusyState() else {
       return XCTFail("expected the runner to become idle after the routing probe drained")
     }
-    XCTAssertFalse(hasAbandonedTreeCapture())
+    XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
@@ -825,10 +825,10 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
   }
 
-  func testPostSnapshotDelayMarkDoesNotQueueBehindAbandonedTreeCapture() {
-    abandonedTreeCaptureCount = 1
+  func testPostSnapshotDelayMarkDoesNotQueueBehindAbandonedMainThreadWork() {
+    abandonedMainThreadWorkCount = 1
     defer {
-      abandonedTreeCaptureCount = 0
+      abandonedMainThreadWorkCount = 0
       needsPostSnapshotInteractionDelay = false
     }
 
@@ -842,7 +842,8 @@ extension RunnerTests {
     mainThreadWorkLock.lock()
     let abandonedWorkCount = abandonedMainThreadWorkCount
     mainThreadWorkLock.unlock()
-    XCTAssertEqual(abandonedWorkCount, 0)
+    XCTAssertEqual(abandonedWorkCount, 1, "the skipped mark must not add an abandoned unit")
+    XCTAssertFalse(needsPostSnapshotInteractionDelay)
   }
 #endif
 
@@ -987,6 +988,7 @@ extension RunnerTests {
     }
     if command.command == .alert, let deadline = alertDeadline {
       return try runMainThreadWork(
+        "command_execution",
         timeout: max(0.001, deadline.timeIntervalSinceNow),
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -998,6 +1000,7 @@ extension RunnerTests {
       }
     }
     return try runMainThreadWork(
+      "command_execution",
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
@@ -1106,6 +1109,7 @@ extension RunnerTests {
     var hasRetried = false
     while true {
       let failureCountBefore = try runMainThreadWork(
+        "recorded_failure_count",
         timeout: mainThreadExecutionTimeout,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1114,7 +1118,7 @@ extension RunnerTests {
       let response = try perform()
       // Recovered independently — re-entering main for bookkeeping would queue behind the still-
       // abandoned XCTest query and re-stall the command (#1244), so skip it until that work drains.
-      if hasAbandonedTreeCapture() {
+      if hasAbandonedMainThreadWork() {
         NSLog(
           "AGENT_DEVICE_RUNNER_DISPATCH_RECOVERY_SKIPPED_XCTEST_OCCUPIED command=%@",
           command.command.rawValue
@@ -1122,6 +1126,7 @@ extension RunnerTests {
         return response
       }
       let recordedFailureResponse = try runMainThreadWork(
+        "recorded_failure_count",
         timeout: mainThreadExecutionTimeout,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1131,6 +1136,7 @@ extension RunnerTests {
       }
       if let recordedFailureResponse {
         try runMainThreadWork(
+          "target_invalidation",
           timeout: mainThreadExecutionTimeout,
           timeoutError: mainThreadExecutionTimeoutError
         ) {
@@ -1145,6 +1151,7 @@ extension RunnerTests {
         )
         hasRetried = true
         try runMainThreadWork(
+          "target_invalidation",
           timeout: mainThreadExecutionTimeout,
           timeoutError: mainThreadExecutionTimeoutError
         ) {
@@ -1159,6 +1166,7 @@ extension RunnerTests {
 
   private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
     let preparation = try runMainThreadWork(
+      "command_preparation",
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
@@ -1233,12 +1241,13 @@ extension RunnerTests {
       needsPostSnapshotInteractionDelay = true
       return
     }
-    guard !hasAbandonedTreeCapture() else {
+    guard !hasAbandonedMainThreadWork() else {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_SKIPPED_XCTEST_OCCUPIED")
       return
     }
     do {
       try runMainThreadWork(
+        "post_snapshot_delay_mark",
         timeout: 1,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
@@ -1256,6 +1265,7 @@ extension RunnerTests {
     }
     do {
       try runMainThreadWork(
+        "target_invalidation",
         timeout: 1,
         timeoutError: mainThreadExecutionTimeoutError
       ) {
