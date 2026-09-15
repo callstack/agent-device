@@ -15,6 +15,27 @@ const PRODUCT_TEST_FILES = PRODUCT_TEST_ROOTS.flatMap((root) =>
   PRODUCT_TEST_SHAPES.map((shape) => `${root}/${shape}`),
 );
 
+// The last matching override replaces `no-restricted-imports` options instead of merging them,
+// so each override restates every ban that applies to the files it matches.
+const CHILD_PROCESS_PATH = {
+  message:
+    'Use process helpers from @agent-device/host-kit/command instead of importing node:child_process directly.',
+  name: 'node:child_process',
+};
+const PROVIDER_IMPORT_PATTERN = {
+  group: ['@agent-device/provider-*'],
+  message:
+    'Command implementations must ask src/cli/connection/provider-policy.ts for provider capabilities.',
+};
+const NODE_OS_PATH = {
+  message:
+    'Create test scratch with mkdtempForTest()/mkdtempForTestSync() from the package tmp-dir helper instead of reading node:os.',
+  name: 'node:os',
+};
+
+const CHILD_PROCESS_BAN_ROOTS = ['src', 'packages/host-kit/src'];
+const PROVIDER_BAN_ROOTS = ['src/commands', 'src/cli/commands'];
+
 export default defineConfig({
   env: {
     builtin: true,
@@ -69,55 +90,21 @@ export default defineConfig({
       },
     },
     {
-      files: ['src/**/*.ts', 'packages/host-kit/src/**/*.ts'],
+      files: CHILD_PROCESS_BAN_ROOTS.map((root) => `${root}/**/*.ts`),
+      rules: {
+        'no-restricted-imports': ['error', { paths: [CHILD_PROCESS_PATH] }],
+      },
+    },
+    {
+      files: PROVIDER_BAN_ROOTS.map((root) => `${root}/**/*.ts`),
       rules: {
         'no-restricted-imports': [
           'error',
           {
-            paths: [
-              {
-                name: 'node:child_process',
-                message:
-                  'Use process helpers from @agent-device/host-kit/command instead of importing node:child_process directly.',
-              },
-            ],
+            paths: [CHILD_PROCESS_PATH],
+            patterns: [PROVIDER_IMPORT_PATTERN],
           },
         ],
-      },
-    },
-    {
-      files: ['src/commands/**/*.ts', 'src/cli/commands/**/*.ts'],
-      rules: {
-        'no-restricted-imports': [
-          'error',
-          {
-            paths: [
-              {
-                name: 'node:child_process',
-                message:
-                  'Use process helpers from @agent-device/host-kit/command instead of importing node:child_process directly.',
-              },
-            ],
-            patterns: [
-              {
-                group: ['@agent-device/provider-*'],
-                message:
-                  'Command implementations must ask src/cli/connection/provider-policy.ts for provider capabilities.',
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      files: [
-        'packages/host-kit/src/internal/exec.ts',
-        'packages/host-kit/src/**/*.test.ts',
-        'src/**/*.test.ts',
-        'src/**/__tests__/**/*.ts',
-      ],
-      rules: {
-        'no-restricted-imports': ['error', { paths: [] }],
       },
     },
     {
@@ -167,23 +154,57 @@ export default defineConfig({
       // oxlint-disables its one import line with a reason instead of widening this list.
       files: PRODUCT_TEST_FILES,
       rules: {
+        'no-restricted-imports': ['error', { paths: [NODE_OS_PATH] }],
+      },
+    },
+    {
+      files: CHILD_PROCESS_BAN_ROOTS.flatMap((root) =>
+        PRODUCT_TEST_SHAPES.map((shape) => `${root}/${shape}`),
+      ),
+      rules: {
+        'no-restricted-imports': ['error', { paths: [CHILD_PROCESS_PATH, NODE_OS_PATH] }],
+      },
+    },
+    {
+      files: PROVIDER_BAN_ROOTS.flatMap((root) =>
+        PRODUCT_TEST_SHAPES.map((shape) => `${root}/${shape}`),
+      ),
+      rules: {
         'no-restricted-imports': [
           'error',
           {
-            paths: [
-              {
-                name: 'node:os',
-                message:
-                  'Create test scratch with mkdtempForTest()/mkdtempForTestSync() from the package tmp-dir helper instead of reading node:os.',
-              },
-            ],
+            paths: [CHILD_PROCESS_PATH, NODE_OS_PATH],
+            patterns: [PROVIDER_IMPORT_PATTERN],
           },
         ],
       },
     },
     {
+      // Tests may import node:child_process and provider packages directly.
+      files: ['packages/host-kit/src/**/*.test.ts', 'src/**/*.test.ts', 'src/**/__tests__/**/*.ts'],
+      rules: {
+        'no-restricted-imports': ['error', { paths: [NODE_OS_PATH] }],
+      },
+    },
+    {
       // The tmp-dir helper modules are the sanctioned os.tmpdir() readers.
       files: ['**/tmp-dir.ts', '**/tmp-dir.fixtures.ts'],
+      rules: {
+        'no-restricted-imports': ['error', { paths: [] }],
+      },
+    },
+    {
+      files: CHILD_PROCESS_BAN_ROOTS.flatMap((root) => [
+        `${root}/**/tmp-dir.ts`,
+        `${root}/**/tmp-dir.fixtures.ts`,
+      ]),
+      rules: {
+        'no-restricted-imports': ['error', { paths: [CHILD_PROCESS_PATH] }],
+      },
+    },
+    {
+      // The host-kit process helpers are the sanctioned node:child_process importer.
+      files: ['packages/host-kit/src/internal/exec.ts'],
       rules: {
         'no-restricted-imports': ['error', { paths: [] }],
       },
