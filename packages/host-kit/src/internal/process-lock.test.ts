@@ -365,6 +365,47 @@ test('release reports a lock whose owner record it cannot read instead of cleari
   assert.equal(fs.existsSync(lockDirPath), true);
 });
 
+// A release that cannot verify ownership leaves its record standing under a claim this process has
+// spent. The pid inside that record is this live process, so a reclaim that reads only the pid and
+// its start time waits for a restart nothing is going to perform while every contender in here
+// times out on a lock that is already free.
+test('a release that could not verify ownership does not wedge the next acquire from this process', async () => {
+  const lockDirPath = path.join(tmpDir, 'spent-claim.lock');
+  const ownerFilePath = path.join(lockDirPath, 'owner.json');
+  const release = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+
+  // The unlink the release needs is refused, which is what an EACCES or EMFILE looks like here.
+  const realUnlink = fs.unlinkSync;
+  const unlinkSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(((target: fs.PathLike) => {
+    if (String(target) === ownerFilePath) {
+      throw Object.assign(new Error('EACCES: permission denied, unlink'), { code: 'EACCES' });
+    }
+    return realUnlink(target as string);
+  }) as typeof fs.unlinkSync);
+  try {
+    await assert.rejects(
+      () => release(),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.ownerReleaseUnverified, true);
+        return true;
+      },
+    );
+  } finally {
+    unlinkSpy.mockRestore();
+  }
+  assert.equal(fs.existsSync(ownerFilePath), true);
+
+  const next = await acquireProcessLock({
+    lockDirPath,
+    owner: currentProcessOwner(),
+    timeoutMs: 1_000,
+    pollMs: 5,
+  });
+  await next();
+  assert.equal(fs.existsSync(lockDirPath), false);
+});
+
 test('acquireProcessLock reclaims a stray path in place of the lock directory', async () => {
   const lockDirPath = path.join(tmpDir, 'stray.lock');
   fs.writeFileSync(lockDirPath, 'not a lock');
@@ -409,7 +450,14 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
     fs.mkdirSync(lockDirPath);
     fs.writeFileSync(
       ownerFilePath,
-      JSON.stringify({ ...currentProcessOwner(), claimToken: 'contender-claim' }),
+      // A contender is another live process, and the pid has to say so: a record naming this
+      // process with a token this process never issued is a spent claim, not a rival.
+      JSON.stringify({
+        pid: process.ppid,
+        startTime: null,
+        acquiredAtMs: Date.now(),
+        claimToken: 'contender-claim',
+      }),
     );
     return realMkdir(target as string, options as fs.MakeDirectoryOptions);
   }) as typeof fs.mkdirSync);
@@ -426,7 +474,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.ownerLiveness, 'live');
-        assert.equal(error.details?.ownerPid, process.pid);
+        assert.equal(error.details?.ownerPid, process.ppid);
         return true;
       },
     );
@@ -435,7 +483,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
       pid: number;
       claimToken: string;
     };
-    assert.equal(record.pid, process.pid);
+    assert.equal(record.pid, process.ppid);
     assert.equal(record.claimToken, 'contender-claim');
   } finally {
     mkdirSpy.mockRestore();
@@ -466,7 +514,13 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
     published = true;
     fs.writeFileSync(
       ownerFilePath,
-      JSON.stringify({ ...currentProcessOwner(), claimToken: 'late-claim' }),
+      // See the contender above: another process's claim names another pid.
+      JSON.stringify({
+        pid: process.ppid,
+        startTime: null,
+        acquiredAtMs: Date.now(),
+        claimToken: 'late-claim',
+      }),
     );
     return realMkdir(target as string, options as fs.MakeDirectoryOptions);
   }) as typeof fs.mkdirSync);

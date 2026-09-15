@@ -139,6 +139,12 @@
   against the instant that attempt signalled the recorder rather than the time of the retry. A stop
   that fails and is then abandoned keeps the pulled set on the host beside `--out`. Chunk paths and
   `--client-output-path` naming are unchanged.
+- Fixed: a process lock that could not be given back no longer waits for the daemon to restart. A
+  release that cannot verify ownership — a refused `unlink`, an unreadable record — left its record
+  standing and naming the live daemon, and the next acquire read that as a live owner and timed out
+  after 30 s on every runner build or launch until the process restarted. The claim inside is spent
+  the moment the release is asked for, so a reclaim here now reads it as dead and takes the path
+  back, and the failed release is recorded in the request log as `process_lock_release_unverified`.
 - Changed (sessions): the implicit session is now keyed by workspace **and platform**, so one checkout
 
   can drive iOS and Android without inventing a `--session` name for every command (#2580). An

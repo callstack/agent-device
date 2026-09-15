@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-file.ts';
+import { emitDiagnostic } from './diagnostics.ts';
 import { classifyOwnerLiveness, ownerIdentityMatches } from './owner-identity.ts';
 import { sleep } from './timeouts.ts';
 
@@ -36,9 +37,10 @@ export type ProcessLockRelease = () => Promise<void>;
  * caller otherwise answers by hand: which of two failures to report.
  *
  * A task that failed is the reportable fact, and an unverified release afterwards only says the
- * lock is still standing, which the stale-clear path resolves on its own. On the success path
- * the release is not best effort: a lock this process could not give back is not a completed
- * task, and swallowing it would report success while the next contender waits.
+ * lock is still standing under a claim this process has spent, which the next reclaim here reads
+ * as dead. On the success path the release is not best effort: a lock this process could not give
+ * back is not a completed task, and swallowing it would report success while the next contender
+ * waits.
  */
 export async function withProcessLock<Task>(params: {
   acquire: () => Promise<ProcessLockRelease>;
@@ -60,6 +62,16 @@ type ProcessLockOwnerReading =
   | { kind: 'unwritten' }
   | { kind: 'unreadable' };
 
+/**
+ * The claims this process is holding right now, by token. A record naming this pid is not
+ * evidence that this process holds the lock: a release that could not verify ownership leaves its
+ * record standing, and a handle dropped without a release does too. Both name a claim nobody here
+ * is acting on, and only a token absent from this set can say so — the pid and start time outlive
+ * the claim, so a reclaim that waited on those would wait until this process restarts while every
+ * contender inside it times out on a lock that is already free.
+ */
+const liveClaimTokens = new Set<string>();
+
 export async function acquireProcessLock(params: {
   lockDirPath: string;
   owner: ProcessLockOwner;
@@ -76,15 +88,19 @@ export async function acquireProcessLock(params: {
   const description = params.description ?? 'process lock';
 
   fs.mkdirSync(path.dirname(lockDirPath), { recursive: true });
-  const claim: ProcessLockOwnerRecord = { ...owner, claimToken: crypto.randomUUID() };
+  const claimToken = crypto.randomUUID();
+  const claim: ProcessLockOwnerRecord = { ...owner, claimToken };
 
   while (Date.now() < deadline) {
     try {
       fs.mkdirSync(lockDirPath);
       writeProcessLockOwner(ownerFilePath, claim);
+      liveClaimTokens.add(claimToken);
       let released = false;
       return async () => {
         if (released) return;
+        // Asking to give the lock back ends the claim, whatever the removal below concludes.
+        liveClaimTokens.delete(claimToken);
         const outcome = releaseProcessLock(lockDirPath, ownerFilePath, claim);
         if (outcome !== 'unverified') {
           released = true;
@@ -92,6 +108,15 @@ export async function acquireProcessLock(params: {
         }
         // The record still names us as far as we can tell and we could not read far
         // enough to be sure, so the lock stays in place and the caller hears why.
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'process_lock_release_unverified',
+          data: {
+            lockDirPath,
+            description,
+            ownerReleaseUnverified: true,
+          },
+        });
         throw new AppError('COMMAND_FAILED', `Cannot verify ownership of ${description}`, {
           lockDirPath,
           ownerReleaseUnverified: true,
@@ -193,9 +218,10 @@ function clearStaleProcessLock(
   const reading = readProcessLockOwner(ownerFilePath);
   if (reading.kind === 'owner') {
     // A record identifies the acquisition that wrote it, so the directory around a claim judged
-    // dead is that claim's property.
+    // dead is that claim's property. The claim can be dead while the process that wrote it is
+    // live, which is what the token says and the pid cannot.
     return (
-      !isLiveProcessLockOwner(reading.owner) &&
+      (!isLiveProcessLockOwner(reading.owner) || isSpentOwnClaim(reading.owner)) &&
       reclaimLockUnderMutex(lockDirPath, ownerFilePath, ownerGraceMs, {
         kind: 'dead-claim',
         claimToken: reading.owner.claimToken,
@@ -439,4 +465,15 @@ function readProcessLockDiagnostics(
 function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
   const liveness = classifyOwnerLiveness({ owner });
   return liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused';
+}
+
+/**
+ * This process wrote the record and nothing inside it is acting on that claim any more: a release
+ * that could not verify ownership left it standing, or a handle was dropped without one. Waiting
+ * for the pid would be waiting for this process to restart.
+ */
+function isSpentOwnClaim(owner: ProcessLockOwnerRecord): boolean {
+  return (
+    owner.pid === process.pid && owner.claimToken !== null && !liveClaimTokens.has(owner.claimToken)
+  );
 }
