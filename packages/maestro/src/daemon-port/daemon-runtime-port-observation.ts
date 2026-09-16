@@ -21,7 +21,7 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame,
-} from '../../touch-reference-frame.ts';
+} from '@agent-device/capture-kit/touch-reference-frame';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';

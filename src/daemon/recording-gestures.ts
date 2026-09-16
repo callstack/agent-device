@@ -17,7 +17,7 @@ import {
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,
-} from './touch-reference-frame.ts';
+} from '@agent-device/capture-kit/touch-reference-frame';
 import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 

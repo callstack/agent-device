@@ -23,7 +23,7 @@ import {
   type InteractionRouteInput,
 } from '../interaction/index.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { readSnapshotNodesReferenceFrame } from '../touch-reference-frame.ts';
+import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 
 export async function handleReactNativeCommands(
   params: InteractionRouteInput,

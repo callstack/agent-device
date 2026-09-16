@@ -1,4 +1,4 @@
-import type { MaestroFailedAction } from '@agent-device/maestro';
+import { collectMaestroFailureSuggestions, type MaestroFailedAction } from '@agent-device/maestro';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -28,7 +28,6 @@ import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
-import { adaptMaestroFailureSnapshot } from '../../adapters/maestro/failure-snapshot.ts';
 
 export type MaestroFailureReportAction = Pick<
   ReplayReportAction,
@@ -170,7 +169,7 @@ function collectTypedMaestroSuggestions(params: {
 }) {
   const snapshot = { createdAt: Date.now(), nodes: params.nodes };
   return rankAndDedupeReplaySuggestions(
-    adaptMaestroFailureSnapshot(params.failure, snapshot).map(({ node, basis }) => ({
+    collectMaestroFailureSuggestions(params.failure, snapshot).map(({ node, basis }) => ({
       node,
       nodeIndex: node.index,
       basis,

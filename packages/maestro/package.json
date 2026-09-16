@@ -6,17 +6,29 @@
   "type": "module",
   "description": "Private Maestro compatibility engine for agent-device.",
   "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*",
     "@agent-device/selectors": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./daemon-runtime-port": {
+      "types": "./src/daemon-port/daemon-runtime-port.ts",
+      "default": "./src/daemon-port/daemon-runtime-port.ts"
+    },
+    "./run-script-http": {
+      "types": "./src/daemon-port/run-script-http.ts",
+      "default": "./src/daemon-port/run-script-http.ts"
     }
   },
   "devDependencies": {
+    "undici": "7.29.0",
     "yaml": "^2.9.0"
   }
 }

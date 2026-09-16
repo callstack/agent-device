@@ -1,13 +1,13 @@
 import { expect, test, vi } from 'vitest';
 import { invokeMaestroPublicOperation } from '../daemon-runtime-port-support.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('composes operation-specific Maestro flags with the runtime envelope', async () => {
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
 
   await invokeMaestroPublicOperation(
     {
-      baseReq: makeBaseRequest({
+      ...makeRuntimeEnvelope({
         flags: {
           platform: 'ios',
           maestro: { prewarmRunnerBeforeOpen: true },
@@ -43,7 +43,7 @@ test('marks Maestro hierarchy captures as daemon-private observations', async ()
 
   await invokeMaestroPublicOperation(
     {
-      baseReq: makeBaseRequest(),
+      ...makeRuntimeEnvelope(),
       invoke,
       dependencies: makeDependencies(),
       platform: 'ios',
@@ -54,7 +54,7 @@ test('marks Maestro hierarchy captures as daemon-private observations', async ()
   expect(invoke).toHaveBeenCalledWith(
     expect.objectContaining({
       command: 'snapshot',
-      internal: expect.objectContaining({ observationOnly: true }),
+      dispatch: expect.objectContaining({ observationOnly: true }),
     }),
   );
 });
@@ -66,7 +66,7 @@ test('decodes gesture viewport data without imposing a new positive-size policy'
   await expect(
     invokeMaestroPublicOperation(
       {
-        baseReq: makeBaseRequest(),
+        ...makeRuntimeEnvelope(),
         invoke,
         dependencies: makeDependencies(),
         platform: 'ios',
@@ -85,7 +85,7 @@ test('rejects malformed gesture viewport data at the public-operation seam', asy
   await expect(
     invokeMaestroPublicOperation(
       {
-        baseReq: makeBaseRequest(),
+        ...makeRuntimeEnvelope(),
         invoke,
         dependencies: makeDependencies(),
         platform: 'ios',
@@ -111,7 +111,7 @@ test('preserves diagnostic metadata carried inside daemon error details', async 
   await expect(
     invokeMaestroPublicOperation(
       {
-        baseReq: makeBaseRequest(),
+        ...makeRuntimeEnvelope(),
         invoke,
         dependencies: makeDependencies(),
         platform: 'ios',

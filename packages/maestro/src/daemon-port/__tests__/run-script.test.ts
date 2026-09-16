@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { executeRunScriptFile } from '../run-script-execution.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test('executeRunScriptFile exposes env and serializes output values', () => {
   const root = mkdtempForTestSync('agent-device-maestro-run-script-');

@@ -285,16 +285,28 @@ importers:
 
   packages/maestro:
     dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/provision-kit':
+        specifier: workspace:*
+        version: link:../provision-kit
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
     devDependencies:
+      undici:
+        specifier: 7.29.0
+        version: 7.29.0
       yaml:
         specifier: ^2.9.0
         version: 2.9.0

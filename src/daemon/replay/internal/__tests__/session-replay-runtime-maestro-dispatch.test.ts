@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonResponse } from '../../../daemon-request.ts';
+import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
@@ -272,4 +272,31 @@ test('runReplayCommand applies CLI env overrides before Maestro compat mapping',
       ['click', ['80', '62']],
     ],
   );
+});
+
+test('every nested Maestro request keeps the replay envelope and the resolved device flags', async () => {
+  const nested: DaemonRequest[] = [];
+  const { response } = await runReplayFixture({
+    label: 'maestro-nested-envelope',
+    script: ['appId: demo.app', '---', '- launchApp', '- back', ''].join('\n'),
+    flags: { replayBackend: 'maestro', platform: 'android' },
+    invoke: async (req) => {
+      nested.push(req);
+      if (req.command === 'snapshot') return { ok: true, data: { createdAt: 0, nodes: [] } };
+      return { ok: true, data: {} };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  assert.ok(nested.length >= 2);
+  for (const req of nested) {
+    assert.equal(req.token, 't');
+    assert.equal(req.session, 's');
+    assert.equal(req.meta?.cwd, nested[0]?.meta?.cwd);
+    assert.equal(req.flags?.platform, 'android');
+    assert.equal(req.flags?.target, 'mobile');
+    assert.equal(req.flags?.noRecord, true);
+  }
+  assert.equal(nested[0]?.command, 'open');
+  assert.equal(nested[0]?.flags?.relaunch, true);
 });

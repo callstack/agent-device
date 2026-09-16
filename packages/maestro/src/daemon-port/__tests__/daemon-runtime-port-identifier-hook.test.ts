@@ -1,9 +1,13 @@
 import { expect, test } from 'vitest';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+import {
+  makeRuntimeEnvelope,
+  makeDependencies,
+  makeSnapshot,
+  noMaestroIncludeSources,
+} from './daemon-runtime-port-fixtures.ts';
 
 const ON_SCREEN = { x: 18, y: 62, width: 366, height: 144 };
 const BELOW_VIEWPORT = { x: 18, y: 2000, width: 366, height: 144 };
@@ -36,7 +40,7 @@ async function replay(
   rect: typeof ON_SCREEN,
 ) {
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) =>
       request.command === 'snapshot'
         ? { ok: true, data: makeSnapshot(hookCapture(rect, hittable)) }

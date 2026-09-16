@@ -1,15 +1,15 @@
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('retries typed transient snapshot failures within the observation budget', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -59,7 +59,7 @@ test('includes initial snapshot recovery in the selector timeout', async () => {
   const clock = { value: 0 };
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       if (request.command !== 'snapshot') return { ok: true, data: {} };
       snapshots += 1;
@@ -106,7 +106,7 @@ test('includes initial snapshot recovery in the selector timeout', async () => {
 test('bounds initial typed snapshot recovery by the authored observation timeout', async () => {
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async () => ({
       ok: false,
       error: {
@@ -131,10 +131,10 @@ test('bounds initial typed snapshot recovery by the authored observation timeout
 });
 
 test('does not retry deterministic snapshot failures', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return {

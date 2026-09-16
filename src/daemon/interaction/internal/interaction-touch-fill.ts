@@ -15,7 +15,7 @@ import type {
 } from './types.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
-import { readSnapshotNodesReferenceFrame } from '../../touch-reference-frame.ts';
+import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import {
   buildInteractionResponseData,
   maestroFallbackDisclosure,

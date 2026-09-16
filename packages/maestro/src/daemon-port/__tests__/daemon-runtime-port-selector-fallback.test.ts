@@ -1,16 +1,16 @@
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 function makeSelectorDispatchPort(firstClickError: DaemonError) {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   let clicks = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'click') {

@@ -5,7 +5,7 @@ import http from 'node:http';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { executeRunScriptHttpRequest } from '../daemon/adapters/maestro/run-script-http.ts';
+import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,

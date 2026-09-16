@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationInvoke } from '../daemon-runtime-port-support.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
   emitDiagnostic,
@@ -12,15 +12,20 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
-import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import {
+  makeRuntimeEnvelope,
+  makeDependencies,
+  makeSnapshot,
+  noMaestroIncludeSources,
+} from './daemon-runtime-port-fixtures.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test('registers Maestro inputText as sensitive before nested platform work', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-input-diagnostics-');
   const logPath = path.join(root, 'request.ndjson');
   const text = 'opaque-maestro-input';
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       if (request.command === 'type') {
         emitDiagnostic({
@@ -52,8 +57,8 @@ test('registers Maestro inputText as sensitive before nested platform work', asy
 });
 
 test('delegates lifecycle and coordinate gestures through public daemon commands', async () => {
-  const requests: DaemonRequest[] = [];
-  const invoke: DaemonInvokeFn = async (request) => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     return request.command === 'snapshot'
       ? {
@@ -71,7 +76,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
       : { ok: true, data: {} };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(),
     platform: 'android',
@@ -130,13 +135,13 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
 });
 
 test('projects standalone clearState to settings without opening the app', async () => {
-  const requests: DaemonRequest[] = [];
-  const invoke: DaemonInvokeFn = async (request) => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     return { ok: true, data: {} };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(),
     platform: 'android',
@@ -169,10 +174,10 @@ test('projects standalone clearState to settings without opening the app', async
 });
 
 test('uses the direct viewport without snapshot and pairs it with the nested gesture request', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const viewport = { x: 10, y: 20, width: 400, height: 800 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'snapshot') throw new Error('gesture viewport must not snapshot');
@@ -207,7 +212,7 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
       delta: { x: -320, y: 0 },
       durationMs: 300,
     },
-    internal: {
+    dispatch: {
       gestureExecutionProfile: 'endpoint-hold',
       gestureViewport: viewport,
     },
@@ -216,10 +221,10 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
 });
 
 test('uses an observation as the baseline for a later mutation barrier', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -295,10 +300,10 @@ test('uses an observation as the baseline for a later mutation barrier', async (
 });
 
 test('settles a gesture before dispatching another gesture', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return request.command === 'snapshot'
@@ -348,33 +353,16 @@ test('settles a gesture before dispatching another gesture', async () => {
   expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
-test('preserves the resolved nested-command request context', async () => {
-  const requests: DaemonRequest[] = [];
-  const baseReq = {
-    ...makeBaseRequest({
-      token: 'nested-token',
-      session: 'maestro-nested',
-      meta: {
-        debug: true,
-        includeCost: true,
-        responseLevel: 'full',
-        sessionIsolation: 'tenant',
-      },
+test('carries the runtime envelope flags into every projected operation', async () => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    ...makeRuntimeEnvelope({
       flags: {
         platform: 'android',
         target: 'mobile',
         noRecord: true,
       },
     }),
-    runtime: {
-      platform: 'android' as const,
-      metroHost: '127.0.0.1',
-      metroPort: 8081,
-      bundleUrl: 'http://127.0.0.1:8081/index.bundle',
-    },
-  };
-  const port = createDaemonMaestroRuntimePort({
-    baseReq,
     invoke: async (request) => {
       requests.push(request);
       return request.command === 'snapshot'
@@ -411,10 +399,6 @@ test('preserves the resolved nested-command request context', async () => {
 
   expect(requests).toHaveLength(4);
   expect(requests[0]).toMatchObject({
-    token: 'nested-token',
-    session: 'maestro-nested',
-    runtime: baseReq.runtime,
-    meta: baseReq.meta,
     flags: {
       platform: 'android',
       target: 'mobile',
@@ -424,10 +408,6 @@ test('preserves the resolved nested-command request context', async () => {
   });
   for (const request of requests.slice(1)) {
     expect(request).toMatchObject({
-      token: 'nested-token',
-      session: 'maestro-nested',
-      runtime: baseReq.runtime,
-      meta: baseReq.meta,
       flags: {
         platform: 'android',
         target: 'mobile',
@@ -438,9 +418,9 @@ test('preserves the resolved nested-command request context', async () => {
 });
 
 test('preserves native Enter dispatch failures', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return request.command === 'keyboard'
@@ -467,9 +447,9 @@ test('preserves native Enter dispatch failures', async () => {
 });
 
 test('does not repeat Enter after an ambiguous keyboard failure', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return {
@@ -497,7 +477,7 @@ test('keeps absent negative observations, script output, and artifacts typed', a
   const sourcePath = path.join(root, 'flow.yaml');
   fs.writeFileSync(sourcePath, '---\n- runScript: setup.js\n');
   fs.writeFileSync(path.join(root, 'setup.js'), 'output.token = PREFIX + "-ready";\n');
-  const invoke: DaemonInvokeFn = async (request) => {
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     if (request.command === 'snapshot') {
       return {
         ok: true,
@@ -519,7 +499,7 @@ test('keeps absent negative observations, script output, and artifacts typed', a
     return { ok: true, data: {} };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(),
     platform: 'ios',
@@ -556,7 +536,7 @@ test('takes one final observation when polling wakes after the deadline', async 
   const now = { value: 0 };
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       if (request.command !== 'snapshot') return { ok: true, data: {} };
       snapshots += 1;
@@ -606,10 +586,10 @@ test('takes one final observation when polling wakes after the deadline', async 
 });
 
 test('waitForAnimationToEnd uses two unstabilized screenshot captures', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'screenshot') {
@@ -637,10 +617,10 @@ test('waitForAnimationToEnd uses two unstabilized screenshot captures', async ()
 });
 
 test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'screenshot') {
@@ -667,7 +647,7 @@ test('waitForAnimationToEnd uses the persistent runner capture backend on iOS', 
 });
 
 test('waitForAnimationToEnd between two taps does not throw a stability-generation mismatch', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const snapshot = makeSnapshot([
     { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
@@ -690,7 +670,7 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
   ]);
 
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'snapshot') return { ok: true, data: snapshot };
@@ -730,7 +710,7 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
 });
 
 test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const firstScreenshot = new PNG({ width: 1, height: 1 });
   firstScreenshot.data[3] = 255;
@@ -760,7 +740,7 @@ test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', asy
   ]);
 
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'snapshot') return { ok: true, data: snapshot };

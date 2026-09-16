@@ -1,12 +1,12 @@
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('resolves the Email input below its caption through the runtime port', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return request.command === 'snapshot'

@@ -1,13 +1,13 @@
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('uses canonical iOS presentation only for atomic selector uniqueness', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const duplicateRect = { x: 0, y: 298, width: 393, height: 48 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -63,9 +63,9 @@ test('uses canonical iOS presentation only for atomic selector uniqueness', asyn
 });
 
 test('uses exact iOS representative geometry when presentation suppresses the semantic target', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -138,9 +138,9 @@ test('uses exact iOS representative geometry when presentation suppresses the se
 });
 
 test('uses the selected iOS node interactive bounds without changing raw target matching', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -222,9 +222,9 @@ test('uses the selected iOS node interactive bounds without changing raw target 
 });
 
 test('atomically dispatches canonical iOS geometry with the same tap point', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -287,10 +287,10 @@ test('atomically dispatches canonical iOS geometry with the same tap point', asy
 });
 
 test('does not collapse distinct nested iOS controls with identical frames', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const duplicateRect = { x: 16, y: 298, width: 180, height: 48 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -342,11 +342,11 @@ test('does not collapse distinct nested iOS controls with identical frames', asy
 });
 
 test('does not atomically dispatch distinct iOS matches with identical frames', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const duplicateRect = { x: 16, y: 298, width: 180, height: 48 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };

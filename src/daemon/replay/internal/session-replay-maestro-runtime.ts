@@ -9,20 +9,20 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { stripUndefined } from '@agent-device/kernel/record';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
 } from '@agent-device/ad-script';
-import { createDaemonMaestroRuntimePort } from '../../adapters/maestro/daemon-runtime-port.ts';
+import { createDaemonMaestroRuntimePort } from '@agent-device/maestro/daemon-runtime-port';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { assertSessionSelectorMatches } from '../../session-selector.ts';
 import { errorResponse } from '../../response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
+import { maestroOperationDaemonRequest } from './session-replay-maestro-request.ts';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
@@ -323,21 +323,11 @@ function createMaestroReplayPort(params: {
   sourcePath: string;
 }) {
   const { req, invoke, device, platform, runtimeHints, sourcePath } = params;
-  const {
-    command: _command,
-    positionals: _positionals,
-    input: _input,
-    flags: _flags,
-    ...requestBase
-  } = req;
-  const baseReq = stripUndefined({
-    ...requestBase,
-    flags: maestroRuntimeDeviceFlags(device, platform, req.flags),
-    runtime: runtimeHints,
-  });
+  const replay = { ...req, runtime: runtimeHints };
   return createDaemonMaestroRuntimePort({
-    baseReq,
-    invoke,
+    invoke: (operation) => invoke(maestroOperationDaemonRequest(replay, operation)),
+    flags: maestroRuntimeDeviceFlags(device, platform, req.flags),
+    publicNetworkOnly: req.internal?.publicNetworkOnly === true,
     platform,
     sourcePath,
     dependencies: {

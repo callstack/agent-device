@@ -3,7 +3,7 @@ import type { AndroidObservationAdapter } from '@agent-device/contracts/android-
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../session-store.ts';
-import { getSnapshotReferenceFrame } from '../../touch-reference-frame.ts';
+import { getSnapshotReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import type { SessionState } from '../../session-state.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
 import { isActiveProviderDevice } from '../../provider-device-admission.ts';

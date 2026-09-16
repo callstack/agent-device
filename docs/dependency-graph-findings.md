@@ -248,8 +248,9 @@ becomes generic over the request type, or the request shape itself moves down.
 
 > **Status after #1435:** the inventory below is historical. `SessionAction`, replay-suite results,
 > `DaemonLockPolicy`, and the public daemon response/artifact/runtime-hint shapes now live below
-> daemon. Four production files outside daemon still import `daemon/types.ts`; two are
-> daemon-specific Maestro adapters scheduled to move back under daemon. `DaemonRequest` itself
+> daemon. Four production files outside daemon still import `daemon/types.ts`; two were
+> the daemon-side Maestro adapters, since moved into `packages/maestro` (#2544) behind a
+> package-owned operation request that the daemon folds into `DaemonRequest`. `DaemonRequest` itself
 > intentionally remains server-private because it carries admitted leases, callbacks, replay
 > guards, and narrowed flags. Remove the remaining external imports through neutral caller-specific
 > contracts; do not move `DaemonRequest` wholesale.

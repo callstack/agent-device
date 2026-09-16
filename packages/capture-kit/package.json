@@ -213,6 +213,10 @@
     "./text-surface": {
       "types": "./src/snapshot/snapshot-presentation/text-surface.ts",
       "default": "./src/snapshot/snapshot-presentation/text-surface.ts"
+    },
+    "./touch-reference-frame": {
+      "types": "./src/snapshot/touch-reference-frame.ts",
+      "default": "./src/snapshot/touch-reference-frame.ts"
     }
   },
   "devDependencies": {

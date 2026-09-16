@@ -2,15 +2,19 @@ import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { PNG } from '@agent-device/capture-kit/png';
 import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
-import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationInvoke } from '../daemon-runtime-port-support.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import {
+  makeRuntimeEnvelope,
+  makeDependencies,
+  noMaestroIncludeSources,
+} from './daemon-runtime-port-fixtures.ts';
 
 test('waits for a delayed input target using fresh snapshots', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
-  const invoke: DaemonInvokeFn = async (request) => {
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     if (request.command !== 'snapshot') return { ok: true, data: {} };
     snapshots += 1;
@@ -40,7 +44,7 @@ test('waits for a delayed input target using fresh snapshots', async () => {
     };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(),
     platform: 'android',
@@ -70,10 +74,10 @@ test('waits for a delayed input target using fresh snapshots', async () => {
 });
 
 test('atomically dispatches a unique exact iOS target from same-generation evidence', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   let clicked = false;
-  const invoke: DaemonInvokeFn = async (request) => {
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     if (request.command !== 'snapshot') {
       clicked = true;
@@ -121,7 +125,7 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
     };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(),
     platform: 'ios',
@@ -158,11 +162,11 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
 });
 
 test('retries an iOS non-hittable coordinate fallback when the hierarchy does not change', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let clicks = 0;
   const screenshot = solidPng(0);
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'click') {
@@ -243,10 +247,10 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
 });
 
 test('does not retry an iOS tap when only the rendered surface changes', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let clicks = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'click') {
@@ -308,9 +312,9 @@ test('does not retry an iOS tap when only the rendered surface changes', async (
 });
 
 test('uses screenshot evidence without a redundant hierarchy baseline for iOS point taps', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'screenshot') {
@@ -359,7 +363,7 @@ test('records an exhausted inline tap settle', async () => {
   const clock = { value: 0 };
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       if (request.command !== 'snapshot') return { ok: true, data: {} };
       snapshots += 1;
@@ -412,7 +416,7 @@ test('the differential settle flow excludes a slow launch boundary from tap metr
   let clicked = false;
   const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     platform: 'ios',
     dependencies: makeDependencies(clock),
     invoke: async (request) => {

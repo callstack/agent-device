@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
 import type { MaestroRuntimeCommand } from '@agent-device/maestro';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test.each([
   {
@@ -25,10 +25,10 @@ test.each([
 ] satisfies { name: string; command: MaestroRuntimeCommand }[])(
   'settles $name before a following gesture',
   async ({ command }) => {
-    const requests: DaemonRequest[] = [];
+    const requests: MaestroDaemonOperationRequest[] = [];
     const clock = { value: 0 };
     const port = createDaemonMaestroRuntimePort({
-      baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+      ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
       invoke: async (request) => {
         requests.push(request);
         return request.command === 'snapshot'
@@ -83,11 +83,11 @@ test.each([
 );
 
 test('preserves mutation ordering after a failed dispatch is continued', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   let swipeAttempts = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'gesture' && swipeAttempts++ === 0) {
@@ -141,10 +141,10 @@ test('preserves mutation ordering after a failed dispatch is continued', async (
 });
 
 test('defers a pending mutation boundary across non-mutating runtime commands', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return request.command === 'snapshot'

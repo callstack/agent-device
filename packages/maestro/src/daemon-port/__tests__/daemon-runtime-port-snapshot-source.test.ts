@@ -3,13 +3,13 @@ import {
   attachSnapshotClickabilityEvidence,
   readSnapshotClickabilityEvidence,
 } from '@agent-device/contracts/capture';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { createDaemonMaestroSnapshotSource } from '../daemon-runtime-port-snapshot-source.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('carries clickability sidecar through one public snapshot capture without wire fields', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const data = {
     nodes: [{ index: 0, identifier: 'save', rect: { x: 0, y: 0, width: 20, height: 20 } }],
   };
@@ -20,7 +20,7 @@ test('carries clickability sidecar through one public snapshot capture without w
   };
   attachSnapshotClickabilityEvidence(data, evidence);
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return { ok: true, data };
@@ -37,10 +37,10 @@ test('carries clickability sidecar through one public snapshot capture without w
 });
 
 test('reuses bound observations and seeds a pending stability comparison', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return {
@@ -79,10 +79,10 @@ test('reuses bound observations and seeds a pending stability comparison', async
 });
 
 test('retains invalidated target evidence only as a mutation stability baseline', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return {
@@ -111,10 +111,10 @@ test('retains invalidated target evidence only as a mutation stability baseline'
 });
 
 test('retains a pending stability boundary when settling is canceled', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   const clock = { value: 0 };
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       return {
@@ -144,7 +144,7 @@ test('retains a pending stability boundary when settling is canceled', async () 
 
 test('rejects a deferred stability baseline consumed by another generation', async () => {
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async () => ({ ok: true, data: { nodes: [] } }),
     dependencies: makeDependencies(),
     platform: 'ios',
@@ -159,7 +159,7 @@ test('rejects a deferred stability baseline consumed by another generation', asy
 
 test('consumes deferred hierarchy stability after a same-generation visual wait', async () => {
   const source = createDaemonMaestroSnapshotSource({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async () => ({ ok: true, data: { nodes: [] } }),
     dependencies: makeDependencies(),
     platform: 'ios',

@@ -1,11 +1,10 @@
-import { noMaestroIncludeSources } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { expect, test } from 'vitest';
 import {
   executeMaestroFlow,
   inspectMaestroFlow,
   type MaestroObservation,
 } from '@agent-device/maestro';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
@@ -14,13 +13,18 @@ import {
   resolveTypedMaestroTarget,
   waitForTypedSnapshotStability,
 } from '../daemon-runtime-port-observation.ts';
-import { makeBaseRequest, makeDependencies, makeSnapshot } from './daemon-runtime-port-fixtures.ts';
+import {
+  makeRuntimeEnvelope,
+  makeDependencies,
+  makeSnapshot,
+  noMaestroIncludeSources,
+} from './daemon-runtime-port-fixtures.ts';
 
 test('replaces pre-mutation evidence with the stable post-mutation snapshot', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -427,7 +431,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
   ]);
 
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       if (request.command === 'snapshot') return { ok: true, data: snapshot };
       return { ok: true, data: {} };

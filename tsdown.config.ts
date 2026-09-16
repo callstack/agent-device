@@ -108,7 +108,7 @@ export default defineConfig({
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
-    'internal/run-script-http-child': 'src/daemon/adapters/maestro/run-script-http-child.ts',
+    'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
     'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
     'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   },

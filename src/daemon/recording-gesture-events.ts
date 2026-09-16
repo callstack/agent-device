@@ -1,5 +1,5 @@
 import type { RecordingGestureEvent } from '@agent-device/contracts/screen-recording-runtime';
-import type { TouchReferenceFrame as ReferenceFrame } from './touch-reference-frame.ts';
+import type { TouchReferenceFrame as ReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 
 const DEFAULT_GESTURE_TRAVEL_DURATION_MS = 250;

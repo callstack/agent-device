@@ -1,14 +1,15 @@
 import { expect, test } from 'vitest';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationInvoke } from '../daemon-runtime-port-support.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off-screen', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   let clicks = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command === 'click') {
@@ -89,10 +90,10 @@ test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off
 test.each(['ios', 'android'] as const)(
   'refreshes filtered %s target geometry instead of reusing an observation rectangle',
   async (platform) => {
-    const requests: DaemonRequest[] = [];
+    const requests: MaestroDaemonOperationRequest[] = [];
     let snapshots = 0;
     const port = createDaemonMaestroRuntimePort({
-      baseReq: makeBaseRequest({ flags: { platform, replayBackend: 'maestro' } }),
+      ...makeRuntimeEnvelope({ flags: { platform, replayBackend: 'maestro' } }),
       invoke: async (request) => {
         requests.push(request);
         if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -167,9 +168,9 @@ test.each(['ios', 'android'] as const)(
 );
 
 test('captures fresh target state immediately after a same-generation observation', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
-  const invoke: DaemonInvokeFn = async (request) => {
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     if (request.command !== 'snapshot') return { ok: true, data: {} };
     snapshots += 1;
@@ -207,7 +208,7 @@ test('captures fresh target state immediately after a same-generation observatio
   };
   const now = { value: 0 };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(now),
     platform: 'ios',

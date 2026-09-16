@@ -1,12 +1,13 @@
 import { expect, test } from 'vitest';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import type { MaestroDaemonOperationInvoke } from '../daemon-runtime-port-support.ts';
+import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
+import { makeRuntimeEnvelope, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('fails scrollUntilVisible when the target stays absent', async () => {
   const clock = { value: 0 };
-  const requests: DaemonRequest[] = [];
-  const invoke: DaemonInvokeFn = async (request) => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
     requests.push(request);
     if (request.command === 'scroll') {
       clock.value += Number(request.input?.durationMs ?? 0);
@@ -29,7 +30,7 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
       : { ok: true, data: {} };
   };
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
     dependencies: makeDependencies(clock),
     platform: 'ios',
@@ -57,10 +58,10 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
 });
 
 test('scrolls until the target is fully visible in the screen viewport', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -113,10 +114,10 @@ test('scrolls until the target is fully visible in the screen viewport', async (
 });
 
 test('uses Maestro swipeFromCenter semantics inside the visible vertical container', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -173,16 +174,16 @@ test('uses Maestro swipeFromCenter semantics inside the visible vertical contain
       delta: { x: 0, y: -260 },
       durationMs: 601,
     },
-    internal: { gestureViewport: { x: 0, y: 100, width: 402, height: 650 } },
+    dispatch: { gestureViewport: { x: 0, y: 100, width: 402, height: 650 } },
   });
   expect(requests.some(({ command }) => command === 'scroll')).toBe(false);
 });
 
 test('ignores a larger scroll container that does not intersect the application viewport', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -239,15 +240,15 @@ test('ignores a larger scroll container that does not intersect the application 
 
   expect(requests.find(({ command }) => command === 'gesture')).toMatchObject({
     input: { origin: { x: 201, y: 425 }, delta: { x: 0, y: -260 } },
-    internal: { gestureViewport: { x: 0, y: 100, width: 402, height: 650 } },
+    dispatch: { gestureViewport: { x: 0, y: 100, width: 402, height: 650 } },
   });
 });
 
 test("prefers the target's visible nested scroll container over its visible ancestor", async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };
@@ -303,15 +304,15 @@ test("prefers the target's visible nested scroll container over its visible ance
 
   expect(requests.find(({ command }) => command === 'gesture')).toMatchObject({
     input: { origin: { x: 201, y: 425 }, delta: { x: 0, y: -180 } },
-    internal: { gestureViewport: { x: 40, y: 200, width: 322, height: 450 } },
+    dispatch: { gestureViewport: { x: 40, y: 200, width: 322, height: 450 } },
   });
 });
 
 test('does not treat a target larger than the viewport as fully visible', async () => {
-  const requests: DaemonRequest[] = [];
+  const requests: MaestroDaemonOperationRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
-    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke: async (request) => {
       requests.push(request);
       if (request.command !== 'snapshot') return { ok: true, data: {} };

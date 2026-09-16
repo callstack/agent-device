@@ -9,7 +9,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../../__tests__/test-utils/loopback.ts';
+} from './loopback.fixtures.ts';
 
 const approveDownloadSourceUrl = vi.hoisted(() => vi.fn());
 

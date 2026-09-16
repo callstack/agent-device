@@ -7,26 +7,30 @@ import type {
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from '@agent-device/maestro';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-  DaemonResponseData,
-} from '../../daemon-request.ts';
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import {
   projectMaestroPublicOperation,
+  type MaestroDaemonOperationRequest,
   type MaestroPublicOperation,
 } from './daemon-runtime-public-operation.ts';
 
-export type DaemonMaestroRuntimeBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
+export type MaestroDaemonOperationInvoke = (
+  request: MaestroDaemonOperationRequest,
+) => Promise<DaemonResponse>;
 
 export type CreateDaemonMaestroRuntimeOperationsOptions = {
-  readonly baseReq: DaemonMaestroRuntimeBaseRequest;
-  readonly invoke: DaemonInvokeFn;
+  readonly invoke: MaestroDaemonOperationInvoke;
+  /** The runtime envelope every operation carries: platform, target, device, and recording flags. */
+  readonly flags?: CommandFlags;
+  /**
+   * Whether the flow arrived over the daemon's public network surface, in which case `runScript`
+   * HTTP calls may not reach private addresses.
+   */
+  readonly publicNetworkOnly: boolean;
   readonly dependencies: DaemonMaestroRuntimeDependencies;
   readonly sourcePath?: string;
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
@@ -43,27 +47,8 @@ export async function invokeMaestroPublicOperation<Operation extends MaestroPubl
   operation: Operation,
 ): Promise<MaestroPublicOperationResult<Operation>> {
   const projected = projectMaestroPublicOperation(operation);
-  const {
-    input: _baseInput,
-    flags: baseFlags,
-    internal: baseInternal,
-    ...baseReq
-  } = options.baseReq;
-  const effectiveFlags = flagsWith(baseFlags, projected.flags ?? {});
-  const effectiveInternal = stripUndefined({
-    ...baseInternal,
-    ...projected.internal,
-    ...(operation.kind === 'snapshot' ? { observationOnly: true as const } : {}),
-  });
   const response = await options.invoke(
-    stripUndefined({
-      ...baseReq,
-      command: projected.command,
-      positionals: projected.positionals,
-      input: projected.input,
-      flags: effectiveFlags,
-      internal: Object.keys(effectiveInternal).length > 0 ? effectiveInternal : undefined,
-    }),
+    stripUndefined({ ...projected, flags: flagsWith(options.flags, projected.flags ?? {}) }),
   );
   if (!response.ok) throw daemonResponseError(response);
   if (operation.kind === 'gestureViewport') {

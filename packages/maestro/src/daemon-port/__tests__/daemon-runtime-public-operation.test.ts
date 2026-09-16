@@ -41,12 +41,12 @@ describe('Maestro public operation projection', () => {
       expected: {
         command: 'close',
         positionals: ['com.example'],
-        internal: { closeAppOnly: true },
+        dispatch: { closeAppOnly: true },
       },
     },
     {
       operation: { kind: 'stopApp' },
-      expected: { command: 'close', positionals: [], internal: { closeAppOnly: true } },
+      expected: { command: 'close', positionals: [], dispatch: { closeAppOnly: true } },
     },
     {
       operation: { kind: 'clearState', appId: 'com.example' },
@@ -120,7 +120,7 @@ describe('Maestro public operation projection', () => {
           durationMs: 400,
         },
         flags: { postGestureStabilization: false },
-        internal: {
+        dispatch: {
           gestureExecutionProfile: 'endpoint-hold',
           gestureViewport: { x: 0, y: 0, width: 100, height: 200 },
         },
@@ -181,6 +181,7 @@ describe('Maestro public operation projection', () => {
         command: 'snapshot',
         positionals: [],
         flags: { noRecord: true },
+        dispatch: { observationOnly: true },
       },
     },
   ])('projects $operation.kind', ({ operation, expected }) => {
@@ -195,7 +196,7 @@ describe('Maestro public operation projection', () => {
       }),
     ).toMatchObject({
       command: 'gesture',
-      internal: { gestureExecutionProfile: 'endpoint-hold' },
+      dispatch: { gestureExecutionProfile: 'endpoint-hold' },
     });
     expect(projectMaestroPublicOperation({ kind: 'scroll', direction: 'up' })).not.toHaveProperty(
       'input',
@@ -211,12 +212,12 @@ describe('Maestro public operation projection', () => {
     });
     const input = readGesturePayload(projected.input);
     const normalized = normalizePublicGesture(input);
-    if (normalized.gesture.intent === 'pan' && projected.internal?.gestureExecutionProfile) {
-      normalized.gesture.executionProfile = projected.internal.gestureExecutionProfile;
+    if (normalized.gesture.intent === 'pan' && projected.dispatch?.gestureExecutionProfile) {
+      normalized.gesture.executionProfile = projected.dispatch.gestureExecutionProfile;
     }
     const plan = buildGesturePlan(
       normalized.gesture,
-      projected.internal?.gestureViewport ?? viewport,
+      projected.dispatch?.gestureViewport ?? viewport,
     );
     assert.equal(plan.topology, 'single');
     assert.equal(plan.intent, 'pan');

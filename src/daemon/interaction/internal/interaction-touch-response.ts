@@ -20,7 +20,7 @@ import type { RecordedTargetCapture } from '../../session-target-evidence.ts';
 import type { SessionState } from '../../session-state.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { resolveDirectTouchReferenceFrameSafely } from './interaction-touch-reference-frame.ts';
-import { readSnapshotNodesReferenceFrame } from '../../touch-reference-frame.ts';
+import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import { buildTouchPayload } from './interaction-touch-payload.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
