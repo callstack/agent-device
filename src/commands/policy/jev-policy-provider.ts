@@ -1,18 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { buildJevRequest, readJevDecision } from './jev-composer.ts';
+import { POLICY_FALLBACK_HINT } from './policy-fallback.ts';
 import type { PolicyDecision, PolicyProvider, PolicyRequest } from './policy-contract.ts';
 
 export const JEV_PROVIDER_NAME = 'jev';
 const JEV_DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_TIMEOUT_MS = 20_000;
-
-/**
- * The documented recovery when the policy head is unreachable. It names the agent's own loop
- * because that loop is always available: the policy head is an accelerator, never a dependency.
- */
-export const POLICY_FALLBACK_HINT =
-  'Fall back to agent-driven policy: snapshot, choose an element yourself, then press or fill it.';
 
 export type JevProviderOptions = {
   apiKey: string;
@@ -69,7 +63,11 @@ async function callJev(
     throw new AppError(
       'COMMAND_FAILED',
       `Jev unavailable: ${error instanceof Error ? error.message : 'request failed'}`,
-      { reason: 'policy-provider-transport', retriable: true, hint: POLICY_FALLBACK_HINT },
+      {
+        reason: 'policy-provider-transport',
+        retriable: true,
+        hint: `Retry, or ${POLICY_FALLBACK_HINT}`,
+      },
       error,
     );
   }
@@ -102,13 +100,13 @@ function reasonForStatus(status: number): string {
 
 function hintForStatus(status: number): string {
   if (status === 401 || status === 403) {
-    return `TYPESAFE_API_KEY is missing or rejected. ${POLICY_FALLBACK_HINT}`;
+    return `TYPESAFE_API_KEY is missing or rejected; ${POLICY_FALLBACK_HINT}`;
   }
-  if (status === 402) return `The TypeSafe account has no credit. ${POLICY_FALLBACK_HINT}`;
+  if (status === 402) return `The TypeSafe account has no credit; ${POLICY_FALLBACK_HINT}`;
   if (status === 429) {
-    return `Rate limited; keep policy concurrency at or below 4. ${POLICY_FALLBACK_HINT}`;
+    return `Rate limited; keep policy concurrency at or below 4, or ${POLICY_FALLBACK_HINT}`;
   }
-  return POLICY_FALLBACK_HINT;
+  return `Retry, or ${POLICY_FALLBACK_HINT}`;
 }
 
 async function readErrorText(response: Response): Promise<string> {

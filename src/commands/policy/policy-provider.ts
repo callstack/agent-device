@@ -1,9 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  createJevPolicyProvider,
-  JEV_PROVIDER_NAME,
-  POLICY_FALLBACK_HINT,
-} from './jev-policy-provider.ts';
+import { createJevPolicyProvider, JEV_PROVIDER_NAME } from './jev-policy-provider.ts';
+import { POLICY_FALLBACK_HINT } from './policy-fallback.ts';
 import type { PolicyProvider } from './policy-contract.ts';
 
 /** Every policy head the CLI can resolve. One ships today. */
@@ -47,7 +44,7 @@ export function createPolicyProvider(
       `${JEV_API_KEY_ENV} is not set, so policy ${name} cannot decide`,
       {
         reason: 'policy-provider-unconfigured',
-        hint: `Export ${JEV_API_KEY_ENV} to enable the policy head. Without it, ${POLICY_FALLBACK_HINT}`,
+        hint: `Export ${JEV_API_KEY_ENV} to enable the policy head, or ${POLICY_FALLBACK_HINT}`,
       },
     );
   }

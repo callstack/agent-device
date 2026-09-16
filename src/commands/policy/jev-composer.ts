@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { isTextEntryRole, selectableCandidates } from './candidate-elements.ts';
+import { POLICY_FALLBACK_HINT } from './policy-fallback.ts';
 import type { PolicyCandidate, PolicyDecision, PolicyRequest } from './policy-contract.ts';
 
 /**
@@ -167,6 +168,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function providerFault(message: string): AppError {
   return new AppError('COMMAND_FAILED', `Jev returned an unusable decision: ${message}`, {
     reason: 'policy-provider-response',
-    hint: 'Fall back to agent-driven policy: snapshot, choose an element yourself, then press or fill it.',
+    hint: `Retry, or ${POLICY_FALLBACK_HINT}`,
   });
 }
