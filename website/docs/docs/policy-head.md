@@ -13,8 +13,11 @@ A policy head answers only the narrow question — which of these elements advan
 typed decision with calibrated probabilities. It does not write text, plan, or explain. `suggest`
 asks it once. `act` puts it in a loop.
 
-The feature is optional and off by default. Without `TYPESAFE_API_KEY` in the environment both
-commands refuse before touching the device, and nothing else in the CLI behaves differently.
+The feature is optional. Both commands are always listed by `agent-device help commands` and always
+offered over MCP, because the command catalog is the same with or without a credential. What the
+credential changes is whether they run: without `TYPESAFE_API_KEY` in the environment each refuses
+with a typed `INVALID_ARGS` naming the variable and the fallback, before any snapshot, press or fill
+reaches the device. Nothing else in the CLI behaves differently.
 
 ## Asking once
 

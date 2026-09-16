@@ -374,7 +374,7 @@ const gestureCommandFacet = defineCommandFacet({
 const SUGGEST_COMMAND_NAME = 'suggest';
 const ACT_COMMAND_NAME = 'act';
 
-const POLICY_PREAMBLE = `A policy head answers one question — which visible element advances the goal — as a typed decision with calibrated probabilities, in roughly the time a snapshot takes. It is optional: with no ${POLICY_API_KEY_ENV} in the environment both commands refuse before touching the device, and nothing else changes.`;
+const POLICY_PREAMBLE = `A policy head answers one question — which visible element advances the goal — as a typed decision with calibrated probabilities, in roughly the time a snapshot takes. It is optional: with no ${POLICY_API_KEY_ENV} in the environment this command refuses before touching the device, and nothing else changes.`;
 
 const suggestDescription = `Ask a policy head which element to act on next, and print the decision without acting. ${POLICY_PREAMBLE}`;
 

@@ -603,8 +603,10 @@ agent-device act "open the first item" --min-confidence 0.6 --json
 - A policy head answers one question — which visible element advances the goal — as a typed
   decision with calibrated probabilities. `suggest` prints that decision; `act` loops
   snapshot, decide, press or fill until the goal is done, blocked, or the policy loses confidence.
-- Both commands are gated on `TYPESAFE_API_KEY`. Without it they refuse before touching the
-  device, and nothing else in the CLI changes.
+- Both commands are always listed and always offered over MCP. Without `TYPESAFE_API_KEY` in the
+  environment they refuse to run, with a typed `INVALID_ARGS` naming the variable and the fallback,
+  before any snapshot, press or fill reaches the device. Nothing else in the CLI changes: neither
+  command owns a daemon route, and no existing command's schema moves.
 - `--policy <name>` selects the head; `jev` is the only one today and the default.
 - `act` never generates text. A field the policy chooses is filled from `--input key=value`, or
   from `AGENT_DEVICE_INPUT_<KEY>` in the environment when the value is a secret. A field with no

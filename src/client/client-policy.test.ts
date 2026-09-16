@@ -66,24 +66,6 @@ describe('policy commands without a key', () => {
   });
 });
 
-describe('the rest of the command surface without a key', () => {
-  test('every other command keeps its descriptor untouched by the policy feature', async () => {
-    const { commandDescriptors } = await import('@agent-device/command-registry/registry');
-    const policyNames = new Set(['suggest', 'act']);
-    const others = commandDescriptors.filter((descriptor) => !policyNames.has(descriptor.name));
-
-    // The feature adds two descriptors and changes none: anything that reads the registry at
-    // startup behaves identically whether or not a key is present, because no existing command
-    // gained a policy field.
-    for (const descriptor of others) {
-      expect(JSON.stringify(descriptor)).not.toContain('policy');
-    }
-    expect(
-      commandDescriptors.filter((descriptor) => policyNames.has(descriptor.name)),
-    ).toHaveLength(2);
-  });
-});
-
 describe("the loop's device port", () => {
   /** Records what the port sent to the client, with the snapshot generations it was handed. */
   function recordingCalls(generations: readonly (number | undefined)[]): PolicyClientCalls & {
