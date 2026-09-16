@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added (limrun): `record start` and `record stop` on Limrun iOS and Android direct sessions. The
+  runtime declared recording unavailable although the Limrun SDK exposes a server-side recorder;
+  start now asks the instance to record (`--quality medium` maps to Limrun quality 5, `high` to 8)
+  and stop downloads the finished MP4 to the output path. The capture is always the whole simulator
+  or emulator screen; `--fps` and `--hide-touches` are refused, and a recording cannot be reattached
+  after a daemon restart.
 - Fixed (android): `clipboard read` and `clipboard write` stop reporting success on a build whose
   clipboard service has no shell command. Android 16 (API 36) answers every `adb shell cmd clipboard …`
   with the framework default `Binder.handleShellCommand` — `No shell command implementation.` on

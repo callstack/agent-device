@@ -47,11 +47,6 @@ const elementTextUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun-owned devices read element text from the captured tree only.',
 } as const);
-const recordingUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun does not expose an exact-owner screen-recording runtime.',
-} as const);
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -176,9 +171,9 @@ export function limrunAppLogFacts(
       ...deployment,
       appState: isAndroid ? available : iosAppStateUnavailable,
       networkDump: available,
-      screenRecordingStart: recordingUnavailable,
-      screenRecordingReattach: recordingUnavailable,
-      screenRecordingCleanup: recordingUnavailable,
+      screenRecordingStart: available,
+      screenRecordingReattach: available,
+      screenRecordingCleanup: available,
       ...snapshotRuntimeOperationFacts({
         capture: available,
         customActions: customSnapshotFact,
