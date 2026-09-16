@@ -31,6 +31,8 @@ export type LimrunIosSession = {
   instanceId: string;
   device: DeviceInfo;
   client: LimrunIosClient;
+  /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
+  readonly token: string;
   readonly dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>;
 };
 
@@ -67,6 +69,7 @@ export async function createLimrunIosSession(
     instanceId: options.instanceId,
     device: options.device,
     client,
+    token: options.token,
     dependencies,
   };
 }

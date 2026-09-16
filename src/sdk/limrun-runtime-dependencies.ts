@@ -80,6 +80,10 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
     },
     host: {
       runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
+      downloadFile: async (options) => {
+        const { downloadLimrunFile } = await import('./limrun-download-file.ts');
+        await downloadLimrunFile(options);
+      },
       archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
         const args = ['-qr', archivePath, entryName];
         const result = await runCmd('zip', args, {

@@ -310,6 +310,7 @@ function createContractFixture() {
         return { stdout: '', stderr: '', exitCode: 0 };
       },
       archiveDirectory: async () => undefined,
+      downloadFile: async () => undefined,
     },
     ios: {
       resolveAppAlias: async (app: string) => app,

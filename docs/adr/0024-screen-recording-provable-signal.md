@@ -316,7 +316,8 @@ rotation stays. This lands after 2.1–2.7 and is not required by them.
 | Android | probe `/proc`, then `kill -2` → `-9`; `unconfirmed` when `/proc` is unreadable | same, from the pid triple in the descriptor | `adb pull` of every chunk, playability sniff | reattach through the device manifest; five ownership states |
 | HarmonyOS | one `aa start` toggle, tracked by the handle | **no signal**; `mediatool query` by file name; `unconfirmed` if found, `lost` if not | stage + `hdc file recv` | `cleanup-pending`, manual |
 | Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | local copy of the WebM; native file retained while the browser is not proven gone | `cleanup-pending`, manual |
-| Limrun, WebDriver providers, Vega | unavailable | — | — | unchanged |
+| Limrun (iOS, Android) | provider stop RPC on the live session; the served download URL is memoized so a stop is never repeated | **no signal**: the recording lives and dies with the instance; `unreattachable` | bounded, cancellable HTTP download of the served MP4 to the output path; retriable from the memoized URL while the instance lives | `cleanup-pending`, manual; the instance (and its file) is deleted on lease release |
+| WebDriver providers, Vega | unavailable | — | — | unchanged |
 
 Two traps stay visible: a blind HarmonyOS toggle **starts** a recording, so only the live handle
 may toggle; and the Apple runner recording dies with the runner process, so `lost` after a keep-hot
