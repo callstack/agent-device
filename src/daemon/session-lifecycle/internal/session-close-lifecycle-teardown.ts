@@ -1,7 +1,7 @@
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {
@@ -37,8 +37,7 @@ export type SessionCloseTeardownResult = Readonly<{
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
 export async function runSessionCloseTeardown(params: {
   req: DaemonRequest;
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
@@ -56,8 +55,7 @@ export async function runSessionCloseTeardown(params: {
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
-    session,
-    sessionName,
+    ref,
     logPath,
     sessionStore,
     lifecycle,
@@ -67,6 +65,8 @@ export async function runSessionCloseTeardown(params: {
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
   } = params;
+  const session = ref.session;
+  const sessionName = ref.address;
   const attemptCleanup = async <Result>(
     step: string,
     run: () => Promise<Result>,
@@ -86,7 +86,7 @@ export async function runSessionCloseTeardown(params: {
   });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   await stopBestEffortSessionResources(
-    session,
+    ref,
     sessionStore,
     attemptCleanup,
     params.platformResourceCleanup,
@@ -129,30 +129,32 @@ export async function runSessionCloseTeardown(params: {
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
 
 async function stopBestEffortSessionResources(
-  session: SessionState,
+  ref: SessionRef,
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
   platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
-  // Recording overlay finalization needs the Apple runner.
-  const currentSession = sessionStore.get(session.name) ?? session;
+  const { address, session } = ref;
+  // Recording overlay finalization needs the Apple runner, which is still alive here: this runs
+  // before `runSessionCloseTeardown` dispatches the platform close that stops it.
+  const currentSession = sessionStore.get(address) ?? session;
   if (currentSession.screenRecording) {
     await attemptCleanup('recording', () =>
       finishSessionScreenRecording({
         session: currentSession,
-        sessionName: session.name,
+        sessionName: address,
         sessionStore,
       }),
     );
   }
   await attemptCleanup('app_log', () =>
-    stopSessionAppLog({ session, sessionName: session.name, sessionStore }),
+    stopSessionAppLog({ session, sessionName: address, sessionStore }),
   );
   await attemptCleanup('audio_probe', () =>
-    finishSessionAudioProbe({ session, sessionName: session.name, sessionStore }),
+    finishSessionAudioProbe({ session, sessionName: address, sessionStore }),
   );
   await attemptCleanup('perf_capture', () =>
-    stopSessionPerfCapture({ session, sessionName: session.name, sessionStore }),
+    stopSessionPerfCapture({ session, sessionName: address, sessionStore }),
   );
   await attemptCleanup('platform_snapshot_helper', () =>
     stopSessionSnapshotHelper(session, platformCleanup),

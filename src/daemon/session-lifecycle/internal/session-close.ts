@@ -2,7 +2,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 import { resolveCommandDevice } from '../../session-device-resolution.ts';
@@ -193,8 +193,8 @@ export async function handleSessionCloseCommands(
   params: SessionCloseCommandInput,
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, leaseRegistry, leaseLifecycleProvider } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
+  const ref = sessionStore.lookup(sessionName);
+  if (!ref) {
     return await closeWithoutSession({
       req,
       logPath,
@@ -202,6 +202,7 @@ export async function handleSessionCloseCommands(
       bindDevice: params.bindDevice,
     });
   }
+  const { session } = ref;
   assertTerminalRecordingCloseAllowed(req, session);
   const app = req.positionals?.[0];
   if (req.internal?.closeAppOnly === true && !app) {
@@ -246,8 +247,7 @@ export async function handleSessionCloseCommands(
   if ('response' in repair) return repair.response;
   const closed = await runCloseTeardownAndRelease({
     req,
-    session,
-    sessionName,
+    ref,
     logPath,
     sessionStore,
     leaseRegistry,
@@ -281,8 +281,7 @@ type SessionCloseFinalization =
 // lease release keeps the session retryable instead (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
   req: DaemonRequest;
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -294,8 +293,7 @@ async function runCloseTeardownAndRelease(params: {
 }): Promise<SessionCloseFinalization> {
   const {
     req,
-    session,
-    sessionName,
+    ref,
     logPath,
     sessionStore,
     leaseRegistry,
@@ -303,11 +301,12 @@ async function runCloseTeardownAndRelease(params: {
     lifecycle,
     clearRuntimeHints,
   } = params;
+  const session = ref.session;
+  const sessionName = ref.address;
   const cleanupFailures: SessionCleanupFailure[] = [];
   const { platformCloseError, saveScriptError, shutdownResult } = await runSessionCloseTeardown({
     req,
-    session,
-    sessionName,
+    ref,
     logPath,
     sessionStore,
     lifecycle,
