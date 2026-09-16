@@ -316,6 +316,14 @@ export const limrunTestDependencies = {
       dismissed: false,
     }),
     readLogs: async () => '',
+    deviceAdbInvocation: (serial: string, command: readonly string[]) => ({
+      target: { selector: { kind: 'serial', serial }, server: { kind: 'ambient' } },
+      command,
+    }),
+    hostAdbInvocation: (command: readonly string[]) => ({
+      target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
+      command,
+    }),
     adbError: async () => {
       throw new Error('unused');
     },

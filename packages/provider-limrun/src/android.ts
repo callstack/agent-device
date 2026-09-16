@@ -137,33 +137,13 @@ export async function configureLimrunAndroidPortReverse(
   });
 }
 
-/**
- * Addresses one command to the tunnel's persistent serial on whatever adb the host resolves. The
- * serial is this provider's own addressing decision, so it belongs to the target and never to the
- * command array the Android cluster handed over.
- */
-export function limrunDeviceAdbInvocation(serial: string, args: string[]): AndroidAdbInvocation {
-  return {
-    target: { selector: { kind: 'serial', serial }, server: { kind: 'ambient' } },
-    command: args,
-  };
-}
-
-/** Addresses one server-level command, which selects no device. */
-export function limrunHostAdbInvocation(args: string[]): AndroidAdbInvocation {
-  return {
-    target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
-    command: args,
-  };
-}
-
 export async function cleanupLimrunAndroidAdbTunnel(session: LimrunAndroidSession): Promise<void> {
   await session.adbTunnelPromise?.catch(() => {});
   const serial = session.adbSerial;
   if (serial) {
     await cleanupAndroidPortReverse(session);
     await session.dependencies.host
-      .runAdb(limrunHostAdbInvocation(['disconnect', serial]), {
+      .runAdb(session.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
         allowFailure: true,
         timeoutMs: 10_000,
       })
@@ -215,7 +195,7 @@ async function executeLimrunAndroidAdb(
   options?: LimrunAdbCommandOptions,
 ): Promise<{ invocation: AndroidAdbInvocation; result: LimrunAdbCommandResult }> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
-  const invocation = limrunDeviceAdbInvocation(serial, args);
+  const invocation = session.dependencies.android.deviceAdbInvocation(serial, args);
   const result = await session.dependencies.host.runAdb(invocation, {
     allowFailure: options?.allowFailure,
     binaryStdout: options?.binaryStdout,

@@ -4,6 +4,7 @@ import {
   ADB_MANAGED_FORBIDDEN_COMMANDS,
   ADB_WAIT_STATES,
   ADB_WAIT_TRANSPORTS,
+  androidAdbHostTarget,
   androidAdbInvocation,
   androidAdbPayloadWithoutSerial,
   androidAdbSerialTarget,
@@ -252,6 +253,20 @@ describe('requireAndroidAdbServerPort', () => {
     const invocation = parseAndroidAdbArgv(['shell', 'id']);
     expect(requireAndroidAdbServerPort(invocation, { serverPort: 9_999 })).toBe(9_999);
     expect(requireAndroidAdbServerPort(invocation)).toBeUndefined();
+  });
+});
+
+describe('androidAdbHostTarget', () => {
+  it('addresses a server-level command without any device option', () => {
+    const invocation = androidAdbInvocation(androidAdbHostTarget(), [
+      'disconnect',
+      '127.0.0.1:5037',
+    ]);
+    expect(serializeAndroidAdbInvocation(invocation)).toEqual(['disconnect', '127.0.0.1:5037']);
+  });
+
+  it('is what an argv naming neither device nor server reads as', () => {
+    expect(parseAndroidAdbArgv(['devices']).target).toEqual(androidAdbHostTarget());
   });
 });
 

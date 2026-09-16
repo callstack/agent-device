@@ -4,6 +4,11 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  androidAdbHostTarget,
+  androidAdbInvocation,
+  androidAdbSerialTarget,
+} from '@agent-device/platform-android/mechanics';
 import type {
   LimrunAdbExecutor,
   LimrunAdbProvider,
@@ -44,6 +49,9 @@ const TEST_DEPENDENCIES = {
       dismissed: false,
     }),
     readLogs: async () => 'log line\n',
+    deviceAdbInvocation: (serial, command) =>
+      androidAdbInvocation(androidAdbSerialTarget(serial), command),
+    hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),
     adbError: async (message) => new AppError('COMMAND_FAILED', message),
   },
   host: {

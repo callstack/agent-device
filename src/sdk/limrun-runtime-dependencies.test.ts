@@ -204,3 +204,38 @@ test('adbError names the failed command with the platform serializer', async () 
   });
   assert.equal(addressless.details?.command, undefined);
 });
+
+test('the adb invocation adapters address through the platform builders', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const {
+    androidAdbHostTarget,
+    androidAdbInvocation,
+    androidAdbSerialTarget,
+    serializeAndroidAdbInvocation,
+  } = await import('@agent-device/platform-android/mechanics');
+  const dependencies = createLimrunRuntimeDependencies();
+
+  const device = dependencies.android.deviceAdbInvocation('127.0.0.1:62001', [
+    'shell',
+    'pm',
+    'list',
+    'packages',
+  ]);
+  assert.deepEqual(
+    device,
+    androidAdbInvocation(androidAdbSerialTarget('127.0.0.1:62001'), device.command),
+  );
+  assert.deepEqual(device.command, ['shell', 'pm', 'list', 'packages']);
+  assert.deepEqual(serializeAndroidAdbInvocation(device), [
+    '-s',
+    '127.0.0.1:62001',
+    'shell',
+    'pm',
+    'list',
+    'packages',
+  ]);
+
+  const host = dependencies.android.hostAdbInvocation(['disconnect', '127.0.0.1:62001']);
+  assert.deepEqual(host, androidAdbInvocation(androidAdbHostTarget(), host.command));
+  assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
+});

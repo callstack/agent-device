@@ -6,6 +6,7 @@
  * the root composition module.
  */
 export {
+  androidAdbHostTarget,
   androidAdbInvocation,
   androidAdbSerialTarget,
   lowerAndroidAdbInvocation,

@@ -24,6 +24,9 @@ vi.mock('@limrun/api/instance-client', () => ({
 }));
 
 import {
+  androidAdbHostTarget,
+  androidAdbInvocation,
+  androidAdbSerialTarget,
   serializeAndroidAdbInvocation,
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
@@ -170,6 +173,10 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
         },
       },
       android: {
+        deviceAdbInvocation: (serial: string, command: readonly string[]) =>
+          androidAdbInvocation(androidAdbSerialTarget(serial), command),
+        hostAdbInvocation: (command: readonly string[]) =>
+          androidAdbInvocation(androidAdbHostTarget(), command),
         readLogs: async (adb: LimrunAdbExecutor) => {
           await adb(['shell', 'logcat', '-d', '-T', '20']);
           return 'line\n';

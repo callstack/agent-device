@@ -4,6 +4,9 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
+  androidAdbHostTarget,
+  androidAdbInvocation,
+  androidAdbSerialTarget,
   serializeAndroidAdbInvocation,
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
@@ -295,6 +298,10 @@ function createContractFixture() {
         dismissed: false,
       }),
       readLogs: async () => 'log line\n',
+      deviceAdbInvocation: (serial: string, command: readonly string[]) =>
+        androidAdbInvocation(androidAdbSerialTarget(serial), command),
+      hostAdbInvocation: (command: readonly string[]) =>
+        androidAdbInvocation(androidAdbHostTarget(), command),
       adbError: async (message: string) => new AppError('COMMAND_FAILED', message),
     },
     host: {

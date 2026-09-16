@@ -1,46 +1,22 @@
 import { expect, test, vi } from 'vitest';
 import {
+  androidAdbHostTarget,
+  androidAdbInvocation,
   serializeAndroidAdbInvocation,
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
-import {
-  cleanupLimrunAndroidAdbTunnel,
-  limrunDeviceAdbInvocation,
-  limrunHostAdbInvocation,
-  type LimrunAndroidSession,
-} from './android.ts';
+import { cleanupLimrunAndroidAdbTunnel, type LimrunAndroidSession } from './android.ts';
 import type { LimrunAdbCommandOptions, LimrunAdbProvider } from './runtime-dependencies.ts';
 
 const ok = { exitCode: 0, stdout: '', stderr: '' };
 
-test('carries the tunnel serial on the invocation target and never in the command', () => {
-  const device = limrunDeviceAdbInvocation('127.0.0.1:62001', ['shell', 'pm', 'list', 'packages']);
-  expect(device.target).toEqual({
-    selector: { kind: 'serial', serial: '127.0.0.1:62001' },
-    server: { kind: 'ambient' },
-  });
-  expect(device.command).toEqual(['shell', 'pm', 'list', 'packages']);
-  expect(device.rawArgv).toBeUndefined();
-  expect(serializeAndroidAdbInvocation(device)).toEqual([
-    '-s',
-    '127.0.0.1:62001',
-    'shell',
-    'pm',
-    'list',
-    'packages',
-  ]);
-});
-
-test('addresses a server-level command to no device', () => {
-  const host = limrunHostAdbInvocation(['disconnect', '127.0.0.1:62001']);
-  expect(host.target.selector).toEqual({ kind: 'unspecified' });
-  expect(serializeAndroidAdbInvocation(host)).toEqual(['disconnect', '127.0.0.1:62001']);
-});
-
-test('cleanup disconnects the tunnel serial as a server-level command and drops it', async () => {
+test('cleanup asks the platform to address the disconnect as a server-level command and hands it over unchanged', async () => {
   const calls: Array<{ argv: string[]; options: LimrunAdbCommandOptions | undefined }> = [];
   const close = vi.fn();
   const provider: LimrunAdbProvider = { exec: async () => ok };
+  const hostAdbInvocation = vi.fn((command: readonly string[]) =>
+    androidAdbInvocation(androidAdbHostTarget(), command),
+  );
   const session = {
     platform: 'android',
     adbProvider: provider,
@@ -48,6 +24,7 @@ test('cleanup disconnects the tunnel serial as a server-level command and drops 
     adbTunnel: { close },
     adbTunnelPromise: Promise.resolve(),
     dependencies: {
+      android: { hostAdbInvocation },
       host: {
         runAdb: async (invocation: AndroidAdbInvocation, options?: LimrunAdbCommandOptions) => {
           calls.push({ argv: serializeAndroidAdbInvocation(invocation), options });
@@ -59,6 +36,7 @@ test('cleanup disconnects the tunnel serial as a server-level command and drops 
 
   await cleanupLimrunAndroidAdbTunnel(session);
 
+  expect(hostAdbInvocation).toHaveBeenCalledWith(['disconnect', '127.0.0.1:62001']);
   expect(calls).toEqual([
     {
       argv: ['disconnect', '127.0.0.1:62001'],

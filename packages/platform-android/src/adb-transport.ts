@@ -319,6 +319,11 @@ export function androidAdbSerialTarget(
   };
 }
 
+/** Addressing for a server-level command: it selects no device and names no private adb server. */
+export function androidAdbHostTarget(): Readonly<AndroidAdbTarget> {
+  return { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } };
+}
+
 export function androidAdbInvocation(
   target: AndroidAdbTarget,
   command: readonly string[],
@@ -428,9 +433,10 @@ function applyAndroidAdbOptionEffect(
  * accept (ambient adb) or refuse (managed transport).
  */
 export function parseAndroidAdbArgv(args: readonly string[]): AndroidAdbInvocation {
+  const host = androidAdbHostTarget();
   const read: AndroidAdbAddressingRead = {
-    selector: { kind: 'unspecified' },
-    server: { kind: 'ambient' },
+    selector: host.selector,
+    server: host.server,
     waitFor: undefined,
     hostGlobals: [],
   };
