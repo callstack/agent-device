@@ -132,6 +132,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
     },
     host: {
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      downloadFile: async () => undefined,
       archiveDirectory: async () => {},
     },
     ios: {

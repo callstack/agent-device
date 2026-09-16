@@ -110,6 +110,15 @@ export type LimrunAndroidRuntimeAdapter = {
   ): Promise<AppError>;
 };
 
+/** One authenticated HTTP download the host performs on the provider's behalf, bounded and cancellable. */
+export type LimrunFileDownload = Readonly<{
+  url: string;
+  headers: Readonly<Record<string, string>>;
+  destinationPath: string;
+  timeoutMs: number;
+  signal?: AbortSignal;
+}>;
+
 export type LimrunHostAdapter = {
   runAdb(
     invocation: AndroidAdbInvocation,
@@ -120,6 +129,7 @@ export type LimrunHostAdapter = {
     entryName: string;
     archivePath: string;
   }): Promise<void>;
+  downloadFile(options: LimrunFileDownload): Promise<void>;
 };
 
 export type LimrunIosRuntimeAdapter = {
