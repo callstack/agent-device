@@ -139,7 +139,7 @@ function foldedHittability(
   options: IosSnapshotFoldOptions,
 ): Partial<Pick<RawSnapshotNode, 'hittable'>> {
   if (options.hittabilityAvailable === false) {
-    return sourceHittable === false ? { hittable: false } : {};
+    return sourceHittable === false || !enabled ? { hittable: false } : {};
   }
   return {
     hittable:

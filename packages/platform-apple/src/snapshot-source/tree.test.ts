@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { SnapshotSourceError } from './errors.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 
@@ -169,9 +170,11 @@ test('the bridge tree reads enabled from the NotEnabled trait', () => {
   assert.equal(decode(toggleButtonTrait)?.enabled, true, 'a switch reads past the safe range');
   assert.equal(decode(toggleButtonTrait + notEnabledTrait)?.enabled, false, 'a disabled switch');
   assert.equal(decode()?.enabled, undefined, 'no traits word leaves enabled unknown');
-  assert.throws(() => decode('256'), /traits-invalid/);
-  assert.throws(() => decode(1.5), /traits-invalid/);
-  assert.throws(() => decode(-1), /traits-invalid/);
+  const traitsInvalid = (error: unknown) =>
+    error instanceof SnapshotSourceError && error.failureCode === 'traits-invalid';
+  assert.throws(() => decode('256'), traitsInvalid);
+  assert.throws(() => decode(1.5), traitsInvalid);
+  assert.throws(() => decode(-1), traitsInvalid);
 });
 
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {

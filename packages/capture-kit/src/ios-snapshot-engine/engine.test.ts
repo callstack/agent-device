@@ -324,6 +324,22 @@ test('unavailable hittability never becomes regular actionability', () => {
   );
 });
 
+test('a source-declared disabled node is not actionable without hittability evidence', () => {
+  const request = createIosSnapshotRequest();
+  const nodes = nestedNodes().map((entry) =>
+    entry.label === 'Partially visible' ? { ...entry, enabled: false } : entry,
+  );
+  const unavailable = {
+    ...acquisition(request, nodes),
+    residue: [{ kind: 'unavailable-fact' as const, fact: 'hittability' as const }],
+  } satisfies IosSnapshotAcquisition;
+  const acquired = publishIosSnapshot({ stage: 'acquired', acquisition: unavailable }, request);
+  const disabled = acquired.payload.nodes.find((node) => node.label === 'Partially visible');
+  assert.ok(disabled);
+  assert.equal(disabled.enabled, false);
+  assert.equal(disabled.hittable, false);
+});
+
 test('interactive compaction stays available through the engine boundary', () => {
   const rowRect = { x: 16, y: 80, width: 288, height: 52 };
   const compacted = presentIosInteractiveSnapshot([
