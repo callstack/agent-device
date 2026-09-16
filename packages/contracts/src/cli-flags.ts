@@ -160,6 +160,12 @@ export type CliFlags = CloudProviderProfileFields &
       runtime?: SessionRuntimeHints;
     }>;
     out?: string;
+    /** suggest/act: which policy head answers "what next". */
+    policy?: string;
+    /** act: escalate instead of acting below this confidence. */
+    minConfidence?: number;
+    /** act: repeated `key=value` text the loop may enter; it never generates text itself. */
+    policyInput?: string[];
     help: boolean;
     version: boolean;
   };
