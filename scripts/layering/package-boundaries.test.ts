@@ -436,6 +436,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/screen-recording-resource-store',
     '@agent-device/capture-kit/screen-recording-session-resource',
     '@agent-device/capture-kit/screen-recording-stop-recovery',
+    '@agent-device/capture-kit/screen-recording-transport',
     '@agent-device/capture-kit/screenshot-density',
     '@agent-device/capture-kit/screenshot-diff-pixels',
     '@agent-device/capture-kit/screenshot-overlay',
