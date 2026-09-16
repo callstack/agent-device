@@ -28,10 +28,12 @@ function collectNavigationTitleAffordances(
     );
     if (candidates.length !== 1) continue;
     const { field, title, image, label } = candidates[0]!;
+    // The affordance is the whole row, so the disabled field's own actionability does not carry.
     mergeReplacement(context.replacements, field, {
       type: 'Button',
       label,
       enabled: true,
+      hittable: undefined,
       rect: unionRects([image.rect!, field.rect!, title.rect!]),
     });
     context.semanticRepresentativeIndexes.add(field.index);

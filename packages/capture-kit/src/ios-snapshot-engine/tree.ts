@@ -187,12 +187,13 @@ export function isRepeatedStaticNode(node: RawSnapshotNode, parentLabel: string)
   return type === 'other' || type === 'statictext' || type === 'link';
 }
 
+/** A patch key set to `undefined` retracts that fact from the presented node. */
 export function mergeReplacement(
   replacements: Map<number, RawSnapshotNode>,
   node: RawSnapshotNode,
   patch: Partial<RawSnapshotNode>,
 ): void {
-  replacements.set(node.index, { ...currentReplacement(replacements, node), ...patch });
+  replacements.set(node.index, patched(currentReplacement(replacements, node), patch));
 }
 
 export function updateReplacement(
@@ -201,7 +202,15 @@ export function updateReplacement(
   update: (current: RawSnapshotNode) => Partial<RawSnapshotNode>,
 ): void {
   const current = currentReplacement(replacements, node);
-  replacements.set(node.index, { ...current, ...update(current) });
+  replacements.set(node.index, patched(current, update(current)));
+}
+
+function patched(current: RawSnapshotNode, patch: Partial<RawSnapshotNode>): RawSnapshotNode {
+  const next: Record<string, unknown> = { ...current, ...patch };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete next[key];
+  }
+  return next as RawSnapshotNode;
 }
 
 function currentReplacement(

@@ -529,6 +529,60 @@ test('buildSnapshotState keeps React Native warning banner instead of full-scree
   ]);
 });
 
+test('buildSnapshotState promotes a disabled navigation title field without its hittability', () => {
+  const nodes: RawSnapshotNode[] = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Demo',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'NavigationBar',
+      label: 'Team Standup',
+      rect: { x: 0, y: 56, width: 390, height: 44 },
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Image',
+      identifier: 'RoomDetailsIconImageView',
+      rect: { x: 81, y: 80, width: 14, height: 14 },
+    },
+    {
+      index: 3,
+      depth: 2,
+      parentIndex: 1,
+      type: 'TextField',
+      label: 'Team Standup',
+      value: 'Team Standup',
+      identifier: 'DisplayNameTextField',
+      enabled: false,
+      hittable: false,
+      rect: { x: 100, y: 67, width: 113, height: 22 },
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 1,
+      type: 'StaticText',
+      label: 'Team Standup',
+      rect: { x: 219, y: 58, width: 85, height: 40 },
+    },
+  ];
+
+  const presented = presentIosInteractiveSnapshot(nodes);
+  const affordance = presented.find((node) => node.identifier === 'DisplayNameTextField');
+
+  expect(affordance).toMatchObject({ type: 'Button', label: 'Team Standup', enabled: true });
+  expect(affordance && 'hittable' in affordance).toBe(false);
+});
+
 test('buildSnapshotState collapses iOS backdrop dismiss wrappers', () => {
   const nodes = [
     { index: 0, depth: 0, type: 'Application', label: 'New Expensify Dev' },
