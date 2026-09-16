@@ -14,6 +14,7 @@ const ATTRIBUTE = Object.freeze({
   identifier: 'XC_kAXXCAttributeIdentifier',
   frame: 'XC_kAXXCAttributeFrame',
   automationType: 'XC_kAXXCAttributeAutomationType',
+  traits: 'XC_kAXXCAttributeTraits',
   children: 'XC_kAXXCAttributeChildren',
 });
 
@@ -109,6 +110,12 @@ const CLASS_PROMOTED_TYPES: Readonly<Record<string, string>> = {
 };
 
 const NODE_KEYS = new Set<string>(Object.values(ATTRIBUTE));
+
+/**
+ * `UIAccessibilityTraitNotEnabled`, the trait UIKit sets on a disabled control. The runner path
+ * answers `enabled: false` for the same node, so the bridge derives the fact from this bit.
+ */
+const NOT_ENABLED_TRAIT = 1n << 8n;
 
 /**
  * A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
@@ -211,6 +218,7 @@ function nodeFacts(
   const baseClass = optionalString(value[ATTRIBUTE.elementBaseType]);
   const automationType = optionalInteger(value[ATTRIBUTE.automationType]);
   const frame = frameFromGuest(value[ATTRIBUTE.frame]);
+  const enabled = enabledFromTraits(value[ATTRIBUTE.traits]);
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
@@ -229,6 +237,7 @@ function nodeFacts(
       ? { identifier: optionalString(value[ATTRIBUTE.identifier]) }
       : {}),
     ...(frame ? { rect: frame } : {}),
+    ...(enabled === undefined ? {} : { enabled }),
     depth,
   };
 }
@@ -293,6 +302,14 @@ function optionalScalar(value: unknown): string | undefined {
     throw snapshotSourceError('malformed-tree', 'scalar-invalid');
   }
   return undefined;
+}
+
+function enabledFromTraits(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw snapshotSourceError('malformed-tree', 'traits-invalid');
+  }
+  return (BigInt(value) & NOT_ENABLED_TRAIT) === 0n;
 }
 
 function optionalInteger(value: unknown): number | undefined {

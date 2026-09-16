@@ -17,6 +17,7 @@ const frame = 'XC_kAXXCAttributeFrame';
 const children = 'XC_kAXXCAttributeChildren';
 const label = 'XC_kAXXCAttributeLabel';
 const automationType = 'XC_kAXXCAttributeAutomationType';
+const traits = 'XC_kAXXCAttributeTraits';
 
 test('the bridge tree becomes one depth-first raw snapshot with viewport evidence', () => {
   const result = decodeSnapshotBridgeTree(
@@ -142,6 +143,35 @@ test('the bridge tree counts web-hosted remote leaves that reach the viewport', 
     0,
     'a crossed boundary is not opaque',
   );
+});
+
+test('the bridge tree reads enabled from the NotEnabled trait', () => {
+  const button = (word?: unknown) => ({
+    [automationType]: 9,
+    [label]: 'Place order',
+    [frame]: { X: 20, Y: 700, Width: 120, Height: 48 },
+    ...(word === undefined ? {} : { [traits]: word }),
+    [children]: [],
+  });
+  const decode = (word?: unknown) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'Application', [children]: [button(word)] },
+      { truncated: false },
+      limits,
+    ).nodes[1];
+
+  const buttonTrait = 1;
+  const notEnabledTrait = 256;
+  const toggleButtonTrait = 2 ** 53;
+  assert.equal(decode(buttonTrait)?.enabled, true);
+  assert.equal(decode(buttonTrait + notEnabledTrait)?.enabled, false);
+  assert.equal(decode(0)?.enabled, true);
+  assert.equal(decode(toggleButtonTrait)?.enabled, true, 'a switch reads past the safe range');
+  assert.equal(decode(toggleButtonTrait + notEnabledTrait)?.enabled, false, 'a disabled switch');
+  assert.equal(decode()?.enabled, undefined, 'no traits word leaves enabled unknown');
+  assert.throws(() => decode('256'), /traits-invalid/);
+  assert.throws(() => decode(1.5), /traits-invalid/);
+  assert.throws(() => decode(-1), /traits-invalid/);
 });
 
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {

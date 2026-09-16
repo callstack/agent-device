@@ -18,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.5.5";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.6.0";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -32,6 +32,7 @@ static NSString *const kAttributeValue = @"XC_kAXXCAttributeValue";
 static NSString *const kAttributeIdentifier = @"XC_kAXXCAttributeIdentifier";
 static NSString *const kAttributeFrame = @"XC_kAXXCAttributeFrame";
 static NSString *const kAttributeAutomationType = @"XC_kAXXCAttributeAutomationType";
+static NSString *const kAttributeTraits = @"XC_kAXXCAttributeTraits";
 static NSString *const kAttributeChildren = @"XC_kAXXCAttributeChildren";
 static NSString *const kSnapshotAttributes = @"UIAccessibilitySnapshotKeyAttributes";
 static NSString *const kSnapshotChildren = @"UIAccessibilitySnapshotKeyChildren";
@@ -291,6 +292,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     kAttributeIdentifier,
     kAttributeFrame,
     kAttributeAutomationType,
+    kAttributeTraits,
     kAttributeChildren,
   ];
   NSArray<NSNumber *> *numbers = _attributeNumbersForNames(names);
