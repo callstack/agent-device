@@ -19,11 +19,18 @@ describe('@agent-device/maestro facade', () => {
     expect(exports).not.toContain('rankMaestroFailureCandidates');
   });
 
-  test('publishes no implementation subpaths and declares pure modules', () => {
+  test('keeps the daemon-side port off the engine entry and declares pure modules', () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(import.meta.dirname, '../package.json'), 'utf8'),
     ) as { exports: Record<string, unknown>; sideEffects?: boolean };
-    expect(Object.keys(manifest.exports)).toEqual(['.']);
+    // The daemon-side runtime port (#2544) and its runScript HTTP helper are subpaths, not part
+    // of the engine entry. This pins the surface; scripts/__tests__/eager-closure-budgets.test.ts
+    // is what keeps `.` from starting to evaluate host-kit, capture-kit, or provision-kit.
+    expect(Object.keys(manifest.exports)).toEqual([
+      '.',
+      './daemon-runtime-port',
+      './run-script-http',
+    ]);
     expect(manifest.sideEffects).toBe(false);
   });
 });
