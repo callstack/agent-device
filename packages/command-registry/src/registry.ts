@@ -1538,6 +1538,35 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
 
   // -- local client-backed CLI/MCP commands (no daemon route/capability) --
+  // The policy commands compose `snapshot`, `press`, and `fill` from the client process, so they
+  // own no daemon route of their own and stay out of the public catalog, which requires one.
+  {
+    name: 'suggest',
+    deviceClaimPolicy: 'none',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/policy/index.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
+  },
+  {
+    name: 'act',
+    deviceClaimPolicy: 'none',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/policy/index.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    // A run is a sequence of ordinary commands, each already under its own envelope; a client
+    // envelope over the whole loop would abort a run that is still making progress. `--max-steps`
+    // is the budget that bounds it.
+    timeoutPolicy: {
+      ...DEFAULT_TIMEOUT_POLICY,
+      envelopeMs: 'unbounded',
+      onTimeout: 'preserve-daemon',
+    },
+    batchable: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
+  },
   {
     name: 'debug',
     deviceClaimPolicy: 'none',

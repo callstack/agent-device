@@ -8,6 +8,7 @@ import { metroCommandFamily } from '../metro/index.ts';
 import { observabilityCommandFamily } from '../observability/index.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
 import { perfCommandFamily } from '../perf/index.ts';
+import { policyCommandFamily } from '../policy/index.ts';
 import { reactNativeCommandFamily } from '../react-native/index.ts';
 import { recordingCommandFamily } from '../recording/index.ts';
 import { replayCommandFamily } from '../replay/index.ts';
@@ -35,6 +36,7 @@ export const commandFamilies = [
   recordingCommandFamily,
   metroCommandFamily,
   batchCommandFamily,
+  policyCommandFamily,
 ] as const satisfies readonly CommandFamilyFacet[];
 
 export type CommandFamilyCommandName = (typeof commandFamilies)[number]['metadata'][number]['name'];

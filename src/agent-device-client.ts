@@ -55,6 +55,11 @@ import {
   resolveSessionName,
 } from './client/client-normalizers.ts';
 import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
+import {
+  runPolicyAct,
+  suggestPolicyAction,
+  type PolicyClientCalls,
+} from './client/client-policy.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
@@ -134,6 +139,24 @@ export function createAgentDeviceClient(
 
   const resolveRequestSession = (options: InternalRequestOptions = {}) =>
     resolveSessionName(mergeClientOptions(config, options).session);
+
+  /**
+   * The three commands the policy loop composes. They are the ordinary daemon commands, so a
+   * policy-driven run carries the same claims, ref frames, and recording behaviour as a run an
+   * agent drives by hand.
+   */
+  const policyClientCalls: PolicyClientCalls = {
+    snapshot: async (options) => {
+      const session = resolveRequestSession(options);
+      const data = await executeCommand<Record<string, unknown>>('snapshot', options);
+      const result = normalizeSnapshotResult(data, session);
+      return { nodes: result.nodes, refsGeneration: result.refsGeneration };
+    },
+    press: async ({ ref, ...options }) =>
+      await executeCommand('press', { ...options, ...refTarget(ref) }),
+    fill: async ({ ref, text, ...options }) =>
+      await executeCommand('fill', { ...options, ...refTarget(ref, { text }) }),
+  };
 
   return {
     command: {
@@ -423,6 +446,11 @@ export function createAgentDeviceClient(
         return symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options });
       },
     },
+    policy: {
+      suggest: async (options) =>
+        await suggestPolicyAction(policyClientCalls, options, process.env),
+      act: async (options) => await runPolicyAct(policyClientCalls, options, process.env),
+    },
     recording: {
       record: async (options) => await executeCommand<CommandResult<'record'>>('record', options),
       trace: async (options) => await executeCommand<CommandResult<'trace'>>('trace', options),
@@ -431,6 +459,15 @@ export function createAgentDeviceClient(
       update: async (options) => await executeCommand('settings', options),
     },
   };
+}
+
+/**
+ * An `@ref` interaction target plus any command-specific fields, in the shape `executeCommand`
+ * forwards to the daemon. The request options type is deliberately narrow; interaction fields
+ * reach the wire through the same untyped bag every other interaction call uses.
+ */
+function refTarget(ref: string, extra: Record<string, unknown> = {}): InternalRequestOptions {
+  return { ref, ...extra } as InternalRequestOptions;
 }
 
 function panGestureInput(options: PanOptions): InternalRequestOptions & Record<string, unknown> {

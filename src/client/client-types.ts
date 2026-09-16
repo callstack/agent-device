@@ -139,6 +139,8 @@ import type {
 } from '@agent-device/contracts/remote';
 
 import type { BatchRunResult } from '@agent-device/command-registry/batch';
+import type { PolicyActClientOptions, PolicySuggestClientOptions } from './client-policy.ts';
+import type { PolicyActResult, PolicySuggestResult } from '../commands/policy/policy-contract.ts';
 
 import type {
   AgentArtifactsResult,
@@ -286,6 +288,10 @@ export type AgentDeviceClient = {
   };
   debug: {
     symbols: (options: DebugSymbolsOptions) => Promise<DebugSymbolsResult>;
+  };
+  policy: {
+    suggest: (options: PolicySuggestClientOptions) => Promise<PolicySuggestResult>;
+    act: (options: PolicyActClientOptions) => Promise<PolicyActResult>;
   };
   recording: {
     record: (options: RecordOptions) => Promise<CommandResult<'record'>>;
