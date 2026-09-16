@@ -38,6 +38,10 @@ import {
 } from './deployment-runtime.ts';
 import { createLimrunRequestOperationDrain } from './request-cancellation.ts';
 import {
+  createLimrunScreenRecordingOperations,
+  type LimrunScreenRecordingSession,
+} from './recording-runtime.ts';
+import {
   deploymentOptions,
   limrunAppLogFacts,
   limrunAppLogRecoveryFacts,
@@ -59,6 +63,7 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     runtimeInstance: string;
     ownsDevice(device: DeviceInfo): boolean;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    getDeviceSession(device: DeviceInfo): LimrunScreenRecordingSession | undefined;
     resolveAppReference?(device: DeviceInfo, app: string): string;
     openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
     hasLiveSession(device: DeviceInfo): boolean;
@@ -301,6 +306,13 @@ function bindLimrunAppLogs(
       signal,
       deploymentOperationDrain,
     ),
+    ...createLimrunScreenRecordingOperations({
+      host: options.host,
+      device,
+      owner,
+      signal,
+      getDeviceSession: options.getDeviceSession,
+    }),
   } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,
