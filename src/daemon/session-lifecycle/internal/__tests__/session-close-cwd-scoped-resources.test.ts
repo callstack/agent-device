@@ -35,8 +35,12 @@ beforeEach(resetSessionCloseShutdownMocks);
 
 // An implicitly cwd-scoped session is *named* `default` but *stored* under `cwd:<hash>:default`
 // (`SessionRef`). Each durable-capture record lives in the address's directory, so close teardown
-// must address every resource by the store address. Each test below fails with
-// "<Kind> resource record is missing" if its step goes back to `session.name`.
+// must address every resource by the store address. If a step goes back to `session.name`:
+// - app_log, audio_probe, perf_capture fail with "<Kind> resource record is missing", because
+//   the record is read from the bare-name directory, which holds none.
+// - recording fails on `finish` not being called for the addressed session, because
+//   `finishSessionScreenRecording` re-reads the store by name and finishes the decoy stored
+//   under `default` instead.
 const ADDRESS = 'cwd:0f803c4542a46e92:default';
 const NAME = 'default';
 const IOS_SIM: SessionState['device'] = {
