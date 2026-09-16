@@ -87,6 +87,7 @@ export async function runSessionCloseTeardown(params: {
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   await stopBestEffortSessionResources(
     session,
+    sessionName,
     sessionStore,
     attemptCleanup,
     params.platformResourceCleanup,
@@ -128,31 +129,36 @@ export async function runSessionCloseTeardown(params: {
 
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
 
+// `sessionName` is the store address (`cwd:<hash>:default` for an implicit
+// session), not `session.name` (`default`). Every durable-capture record lives
+// under the address's directory, so addressing it by `session.name` reports the
+// app-log record as missing and leaks the `log stream` child (see `SessionRef`).
 async function stopBestEffortSessionResources(
   session: SessionState,
+  sessionName: string,
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
   platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
   // Recording overlay finalization needs the Apple runner.
-  const currentSession = sessionStore.get(session.name) ?? session;
+  const currentSession = sessionStore.get(sessionName) ?? session;
   if (currentSession.screenRecording) {
     await attemptCleanup('recording', () =>
       finishSessionScreenRecording({
         session: currentSession,
-        sessionName: session.name,
+        sessionName,
         sessionStore,
       }),
     );
   }
   await attemptCleanup('app_log', () =>
-    stopSessionAppLog({ session, sessionName: session.name, sessionStore }),
+    stopSessionAppLog({ session, sessionName, sessionStore }),
   );
   await attemptCleanup('audio_probe', () =>
-    finishSessionAudioProbe({ session, sessionName: session.name, sessionStore }),
+    finishSessionAudioProbe({ session, sessionName, sessionStore }),
   );
   await attemptCleanup('perf_capture', () =>
-    stopSessionPerfCapture({ session, sessionName: session.name, sessionStore }),
+    stopSessionPerfCapture({ session, sessionName, sessionStore }),
   );
   await attemptCleanup('platform_snapshot_helper', () =>
     stopSessionSnapshotHelper(session, platformCleanup),

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed (daemon): `close` now stops an active app-log stream (and audio probe / perf capture /
+  recording) on an implicitly cwd-scoped session. Teardown addressed those resources by
+  `session.name` (`default`) instead of the store address (`cwd:<hash>:default`), so the record
+  read as missing, the `log stream` child leaked, and the next `logs start` on that device failed
+  with "has not reached a confirmed terminal state" (#2647).
 - Added (limrun): `longpress` on Limrun iOS direct sessions. The interactor refused it as
   unsupported although the SDK exposes the HID primitives; it now holds one touch as a
   `performActions` batch of `touchDown`, `wait`, `touchUp`, defaulting to the 800 ms the Android
