@@ -265,6 +265,59 @@ test('an interrupted build that left the symlink is redirected again, not read a
   });
 });
 
+test('a restore that only works on the second look still ends the acquire', async () => {
+  await withTempDir('device-set-restore-retried-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(paths.backupPath, { recursive: true });
+    fs.writeFileSync(path.join(paths.backupPath, 'host-device.txt'), 'the host owns this');
+    fs.symlinkSync(paths.requestedSetPath, paths.xctestDeviceSetPath, 'dir');
+
+    // A first rename that fails and a retry that would succeed. What the acquire must not do is decide
+    // from the state the failed restore left and then move the device set around without the lock.
+    let restoreAttempts = 0;
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+      if (String(to) === paths.xctestDeviceSetPath) {
+        restoreAttempts += 1;
+        if (restoreAttempts === 1) {
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+
+    try {
+      await assert.rejects(
+        () =>
+          acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), {
+            ...redirectOptions(paths),
+            backupPath: paths.backupPath,
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'Failed to redirect XCTest device set path');
+          assert.match(String(error.details?.error), /EACCES/);
+          return true;
+        },
+      );
+      assert.equal(
+        fs.existsSync(paths.lockDirPath),
+        false,
+        'the lock must not outlive the failure',
+      );
+      // The retry put the host's set back, and nothing renamed it aside again on the way out.
+      assert.equal(
+        fs.readFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'utf8'),
+        'the host owns this',
+      );
+      assert.equal(fs.existsSync(paths.backupPath), false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+  });
+});
+
 test('a restore that was refused on the way in is not reported as a simulator that needs no redirect', async () => {
   await withTempDir('device-set-leftover-restore-failed-', async (root) => {
     const paths = makeRedirectPaths(root);
@@ -291,7 +344,14 @@ test('a restore that was refused on the way in is not reported as a simulator th
             ...redirectOptions(paths),
             backupPath: paths.backupPath,
           }),
-        /EACCES/,
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'Failed to redirect XCTest device set path');
+          assert.match(String(error.details?.error), /EACCES/);
+          assert.match(String(error.details?.restoreError), /EACCES/);
+          assert.ok(String(error.details?.hint).includes(paths.backupPath));
+          return true;
+        },
       );
       // The host's set is still renamed aside, which is the fact the caller needs, and the lock went
       // back anyway so the next acquire does not wait on this one.
