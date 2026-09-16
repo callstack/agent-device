@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed (limrun): `screenshot` on Limrun iOS direct sessions writes a PNG. Limrun serves its capture
+  as JPEG and the interactor wrote those bytes straight to the `.png` path, so every capture failed
+  downstream with "Screenshot file is not a valid PNG". The bytes are now sniffed and a JPEG is
+  transcoded to PNG before it is written; a PNG passes through unchanged.
 - Changed (ios): a regular `snapshot --depth N` on the XCTest runner is a presentation cut over a
   full acquisition, not a bound on the walk. Acquisition publishes the frames the platform reported,
   one normalization pass turns geometry into the app's orientation space and recomputes `hittable`,

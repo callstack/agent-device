@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 type LimrunSelector = { key: 'id' | 'label' | 'text' | 'value'; value: string };
@@ -110,9 +108,4 @@ export function toIosSelector(selector: LimrunSelector) {
   // The Limrun iOS tree exposes visible text through AXLabel, so both
   // agent-device label and text selectors target the provider's label field.
   return { AXLabel: selector.value };
-}
-
-export async function writeBase64File(filePath: string, base64: string): Promise<void> {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
 }

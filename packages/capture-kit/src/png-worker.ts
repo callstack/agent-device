@@ -4,6 +4,7 @@ import { cropPngBytes } from './png-crop-bytes.ts';
 import { decodePng, PNG } from './png.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
 import { computePngRgbDifference } from './png-rgb-difference.ts';
+import { transcodeScreenshotToPng } from './png-transcode.ts';
 import {
   toBuffer,
   type PngWorkerJobResult,
@@ -41,6 +42,12 @@ function runJob(request: PngWorkerRequest): PngWorkerJobResult {
     }
     case 'diff-pixels': {
       return { kind: 'diff-pixels', ...computeScreenshotDiffPixels(request) };
+    }
+    case 'jpeg-to-png': {
+      return {
+        kind: 'jpeg-to-png',
+        png: transcodeScreenshotToPng(toBuffer(request.image), request.label),
+      };
     }
   }
 }
@@ -81,6 +88,8 @@ function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
       return [];
     case 'diff-pixels':
       return [result.diffData, result.diffMask];
+    case 'jpeg-to-png':
+      return [result.png];
   }
 }
 

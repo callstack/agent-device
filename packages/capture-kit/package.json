@@ -126,6 +126,10 @@
       "types": "./src/png-crop.ts",
       "default": "./src/png-crop.ts"
     },
+    "./png-transcode": {
+      "types": "./src/png-transcode.ts",
+      "default": "./src/png-transcode.ts"
+    },
     "./png-resize": {
       "types": "./src/png-resize.ts",
       "default": "./src/png-resize.ts"
@@ -290,6 +294,7 @@
   "devDependencies": {
     "@types/pngjs": "^6.0.5",
     "fast-check": "^4.9.0",
+    "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0"
   }
 }

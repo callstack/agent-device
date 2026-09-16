@@ -127,6 +127,7 @@ export default defineConfig({
       'https-proxy-agent',
       'ignore',
       'ipaddr.js',
+      'jpeg-js',
       'ms',
       'pend',
       'pngjs',

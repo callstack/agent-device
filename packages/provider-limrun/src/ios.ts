@@ -17,7 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { toIosSelector, writeBase64File } from './snapshot.ts';
+import { toIosSelector } from './snapshot.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -296,9 +296,18 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.scroll(direction, options?.pixels ?? 300);
   }
 
+  /** Limrun serves its capture as JPEG; the PNG-only readers behind `outPath` get a PNG. */
   async screenshot(outPath: string): Promise<void> {
+    // Loaded on the screenshot path to keep this provider's declared import-time closure budget.
+    const { transcodeScreenshotToPngAsync } =
+      await import('@agent-device/capture-kit/png-worker-client');
     const screenshot = await this.session.client.screenshot();
-    await writeBase64File(outPath, screenshot.base64);
+    const png = await transcodeScreenshotToPngAsync(
+      Buffer.from(screenshot.base64, 'base64'),
+      'Limrun iOS screenshot',
+    );
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    await fs.promises.writeFile(outPath, png);
   }
 
   async snapshot() {

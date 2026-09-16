@@ -9,7 +9,7 @@ import type { PngRgbDifferenceResult } from './png-rgb-difference.ts';
 /**
  * Message contract between the daemon-side PNG worker client
  * (`png-worker-client.ts`) and the worker thread entry (`png-worker.ts`).
- * One message = one decode, encode, crop, or diff job. Binary payloads cross the
+ * One message = one decode, encode, crop, diff, or transcode job. Binary payloads cross the
  * thread boundary via structured clone (or transfer), so `Buffer` fields
  * arrive as plain `Uint8Array` views on the receiving side.
  */
@@ -19,7 +19,9 @@ export type PngWorkerJob =
   | { kind: 'encode'; width: number; height: number; data: Uint8Array }
   | { kind: 'crop'; png: Uint8Array; label: string; box: Rect }
   | { kind: 'rgb-difference'; firstPng: Uint8Array; secondPng: Uint8Array; label: string }
-  | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsJob);
+  | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsJob)
+  // A provider screenshot in whatever container it arrived in; answers PNG bytes.
+  | { kind: 'jpeg-to-png'; image: Uint8Array; label: string };
 
 export type PngWorkerJobResult =
   | { kind: 'decode'; width: number; height: number; data: Uint8Array }
@@ -27,7 +29,8 @@ export type PngWorkerJobResult =
   // A crop answers `null` when the box already covers the image, so the caller keeps the file.
   | { kind: 'crop'; png: Uint8Array | null }
   | ({ kind: 'rgb-difference' } & PngRgbDifferenceResult)
-  | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsResult);
+  | ({ kind: 'diff-pixels' } & ScreenshotDiffPixelsResult)
+  | { kind: 'jpeg-to-png'; png: Uint8Array };
 
 export type PngWorkerJobKind = PngWorkerJob['kind'];
 
