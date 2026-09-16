@@ -13,6 +13,7 @@ import type {
   PolicyCandidate,
   PolicyDecision,
   PolicyProvider,
+  PolicyStepOutcome,
 } from './policy-contract.ts';
 import { resolveTextInput, type PolicyTextInputs, type ResolvedTextInput } from './text-inputs.ts';
 
@@ -54,130 +55,141 @@ const ESCALATION_LIMIT = 3;
 /** How long to wait before re-reading a screen that has not changed yet. */
 const TRANSITION_GRACE_MS = 800;
 
+/** The per-step inputs a step decision and action both read. */
+type StepContext = {
+  decision: PolicyDecision;
+  candidates: PolicyCandidate[];
+  digestBefore: string;
+  history: string[];
+};
+
+/** What one step concluded, before the loop turns it into a recorded step. */
+type StepResult = { outcome: PolicyStepOutcome; extra?: Partial<PolicyActStep> };
+
 export async function runPolicyActLoop(options: PolicyActOptions): Promise<PolicyActResult> {
   const steps: PolicyActStep[] = [];
   const history: string[] = [];
   let status: PolicyActStatus = 'max-steps';
-  let consecutiveUnproductive = 0;
+  let unproductive = 0;
 
   for (let index = 0; index < options.maxSteps; index++) {
     const before = await options.device.snapshot();
     const candidates = toPolicyCandidates(before.nodes);
     const screen = screenLabel(candidates);
-    const digestBefore = screenDigest(candidates);
-
-    const decision = await options.provider.decide({
-      goal: options.goal,
-      candidates,
-      // Copied, not shared: a provider that holds the request must not observe later steps.
-      history: [...history],
-      screen,
-      textReadyRefs: textReadyRefs(candidates, options.inputs, options.env),
-    });
-
-    const record = (
-      outcome: PolicyActStep['outcome'],
-      extra: Partial<PolicyActStep> = {},
-    ): PolicyActStep => {
-      const step: PolicyActStep = {
-        step: index + 1,
+    const context: StepContext = {
+      decision: await options.provider.decide({
+        goal: options.goal,
+        candidates,
+        // Copied, not shared: a provider that holds the request must not observe later steps.
+        history: [...history],
         screen,
-        decision,
-        outcome,
-        snapshotMs: before.ms,
-        decideMs: decision.decideMs,
-        actionMs: 0,
-        ...extra,
-      };
-      steps.push(step);
-      options.onStep?.(step);
-      return step;
+        textReadyRefs: textReadyRefs(candidates, options.inputs, options.env),
+      }),
+      candidates,
+      digestBefore: screenDigest(candidates),
+      history,
     };
 
-    if (decision.done) {
-      record('done');
-      status = 'done';
-      break;
-    }
+    const result = await resolveStep(options, context);
+    const step: PolicyActStep = {
+      step: index + 1,
+      screen,
+      decision: context.decision,
+      outcome: result.outcome,
+      snapshotMs: before.ms,
+      decideMs: context.decision.decideMs,
+      actionMs: 0,
+      ...result.extra,
+    };
+    steps.push(step);
+    options.onStep?.(step);
 
-    const halt = haltReason(decision, options.minConfidence);
-    if (halt) {
-      record(halt.outcome, { reason: halt.reason });
-      if (halt.outcome === 'blocked') {
-        status = 'blocked';
-        break;
-      }
-      if (++consecutiveUnproductive >= ESCALATION_LIMIT) {
-        status = 'escalated';
-        break;
-      }
-      continue;
-    }
-
-    const target = decision.target as string;
-    const candidate = candidates.find((entry) => entry.ref === target);
-    const textEntry = resolveTextEntry(candidate, options.inputs, options.env);
-
-    if (textEntry.kind === 'unsupplied') {
-      record('escalated', {
-        reason: `no text supplied for ${candidate?.identifier ?? candidate?.name ?? target}`,
-      });
-      if (++consecutiveUnproductive >= ESCALATION_LIMIT) {
-        status = 'escalated';
-        break;
-      }
-      continue;
-    }
-
-    if (textEntry.kind === 'write') {
-      const input = textEntry.input;
-      const filled = await enterText(options.device, target, input.text, candidate);
-      // A digit-box widget never reflects its value, so a confirmed value is sufficient evidence
-      // but not necessary: a screen that moved on is the other half of it.
-      const landed = filled.valueConfirmed || (await screenChanged(options, digestBefore));
-      history.push(
-        landed
-          ? `filled ${candidate?.name ?? target} from input ${input.key}`
-          : `could not write into ${candidate?.name ?? target}`,
-      );
-      record(landed ? 'acted' : 'dead-action', {
-        actionMs: filled.ms,
-        performed: {
-          action: 'fill',
-          target,
-          entry: filled.entry,
-          inputKey: input.key,
-        },
-        ...(landed
-          ? {}
-          : {
-              reason: `the field did not take the supplied text (${filled.failure ?? 'value unchanged'})`,
-            }),
-      });
-      consecutiveUnproductive = landed ? 0 : consecutiveUnproductive + 1;
-      if (consecutiveUnproductive >= ESCALATION_LIMIT) {
-        status = 'escalated';
-        break;
-      }
-      continue;
-    }
-
-    const actionMs = await options.device.press(target);
-    history.push(`pressed ${candidate?.name ?? target}`);
-    const changed = await screenChanged(options, digestBefore);
-    record(changed ? 'acted' : 'dead-action', {
-      actionMs,
-      performed: { action: 'press', target },
-      ...(changed ? {} : { reason: 'screen unchanged after press' }),
-    });
-    consecutiveUnproductive = changed ? 0 : consecutiveUnproductive + 1;
-    if (consecutiveUnproductive >= ESCALATION_LIMIT) {
-      status = 'escalated';
+    unproductive = result.outcome === 'acted' ? 0 : unproductive + 1;
+    const ended = endStatus(result.outcome, unproductive);
+    if (ended) {
+      status = ended;
       break;
     }
   }
 
   return { goal: options.goal, status, steps, totals: totalsFor(steps) };
+}
+
+/** The status a run ends with after this outcome, or undefined to keep going. */
+function endStatus(outcome: PolicyStepOutcome, unproductive: number): PolicyActStatus | undefined {
+  if (outcome === 'done') return 'done';
+  if (outcome === 'blocked') return 'blocked';
+  return unproductive >= ESCALATION_LIMIT ? 'escalated' : undefined;
+}
+
+/** Judge the decision, and act on it when it is actionable. */
+async function resolveStep(options: PolicyActOptions, context: StepContext): Promise<StepResult> {
+  if (context.decision.done) return { outcome: 'done' };
+
+  const halt = haltReason(context.decision, options.minConfidence);
+  if (halt) return { outcome: halt.outcome, extra: { reason: halt.reason } };
+
+  const target = context.decision.target as string;
+  const candidate = context.candidates.find((entry) => entry.ref === target);
+  const textEntry = resolveTextEntry(candidate, options.inputs, options.env);
+
+  if (textEntry.kind === 'unsupplied') {
+    return {
+      outcome: 'escalated',
+      extra: {
+        reason: `no text supplied for ${candidate?.identifier ?? candidate?.name ?? target}`,
+      },
+    };
+  }
+  if (textEntry.kind === 'write') {
+    return await writeStep(options, context, target, candidate, textEntry.input);
+  }
+  return await pressStep(options, context, target, candidate);
+}
+
+async function writeStep(
+  options: PolicyActOptions,
+  context: StepContext,
+  target: string,
+  candidate: PolicyCandidate | undefined,
+  input: ResolvedTextInput,
+): Promise<StepResult> {
+  const name = candidate?.name ?? target;
+  const filled = await enterText(options.device, target, input.text, candidate);
+  // A digit-box widget never reflects its value, so a confirmed value is sufficient evidence but
+  // not necessary: a screen that moved on is the other half of it.
+  const landed = filled.valueConfirmed || (await screenChanged(options, context.digestBefore));
+  context.history.push(
+    landed ? `filled ${name} from input ${input.key}` : `could not write into ${name}`,
+  );
+  const reason = `the field did not take the supplied text (${filled.failure ?? 'value unchanged'})`;
+  return {
+    outcome: landed ? 'acted' : 'dead-action',
+    extra: {
+      actionMs: filled.ms,
+      performed: { action: 'fill', target, entry: filled.entry, inputKey: input.key },
+      ...(landed ? {} : { reason }),
+    },
+  };
+}
+
+async function pressStep(
+  options: PolicyActOptions,
+  context: StepContext,
+  target: string,
+  candidate: PolicyCandidate | undefined,
+): Promise<StepResult> {
+  const actionMs = await options.device.press(target);
+  context.history.push(`pressed ${candidate?.name ?? target}`);
+  const changed = await screenChanged(options, context.digestBefore);
+  return {
+    outcome: changed ? 'acted' : 'dead-action',
+    extra: {
+      actionMs,
+      performed: { action: 'press', target },
+      ...(changed ? {} : { reason: 'screen unchanged after press' }),
+    },
+  };
 }
 
 /** Refs of text fields the caller has text for that is not already in them. */
@@ -299,21 +311,30 @@ async function enterText(
     return { ms: filledMs, entry: 'fill', valueConfirmed: false, ...(failure ? { failure } : {}) };
   }
 
-  let keypadMs = 0;
+  const keypad = await enterDigitsOnKeypad(device, digits);
+  return {
+    ms: filledMs + keypad.ms,
+    entry: keypad.entered > 0 ? 'keypad' : 'fill',
+    valueConfirmed: keypad.entered === digits.length,
+    ...(failure ? { failure } : {}),
+  };
+}
+
+/** Tap each digit on the on-screen keypad, re-reading because refs are reissued per press. */
+async function enterDigitsOnKeypad(
+  device: PolicyDevicePort,
+  digits: string,
+): Promise<{ ms: number; entered: number }> {
+  let ms = 0;
   let entered = 0;
   for (const digit of digits) {
     const snapshot = await device.snapshot();
     const key = findKeypadDigit(snapshot.nodes, digit);
     if (!key?.ref) break;
-    keypadMs += await device.press(key.ref.startsWith('@') ? key.ref : `@${key.ref}`);
+    ms += await device.press(key.ref.startsWith('@') ? key.ref : `@${key.ref}`);
     entered++;
   }
-  return {
-    ms: filledMs + keypadMs,
-    entry: entered > 0 ? 'keypad' : 'fill',
-    valueConfirmed: entered === digits.length,
-    ...(failure ? { failure } : {}),
-  };
+  return { ms, entered };
 }
 
 /**

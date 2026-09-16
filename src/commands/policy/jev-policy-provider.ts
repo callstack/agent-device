@@ -3,8 +3,8 @@ import { buildJevRequest, readJevDecision } from './jev-composer.ts';
 import type { PolicyDecision, PolicyProvider, PolicyRequest } from './policy-contract.ts';
 
 export const JEV_PROVIDER_NAME = 'jev';
-export const JEV_DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
-export const JEV_DEFAULT_MODEL = 'jev-latest';
+const JEV_DEFAULT_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
+const JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_TIMEOUT_MS = 20_000;
 
 /**

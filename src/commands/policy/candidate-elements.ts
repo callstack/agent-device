@@ -57,6 +57,40 @@ export function isTextEntryRole(role: string): boolean {
  * what distinguishes "Enter the code" from "Welcome" when every button on both screens is generic.
  */
 export function toPolicyCandidates(nodes: readonly PolicySnapshotNode[]): PolicyCandidate[] {
+  const childrenOf = groupByParent(nodes);
+  const candidates: PolicyCandidate[] = [];
+  for (const node of nodes) {
+    const role = roleForNode(node, childrenOf);
+    if (role === undefined || !node.ref) continue;
+    candidates.push({
+      ref: node.ref.startsWith('@') ? node.ref : `@${node.ref}`,
+      role,
+      name: node.label || node.identifier || node.type || 'element',
+      ...(node.identifier === undefined ? {} : { identifier: node.identifier }),
+      ...(node.value === undefined ? {} : { value: node.value }),
+      ...(node.enabled === false ? { disabled: true } : {}),
+    });
+  }
+  return candidates;
+}
+
+/** The candidate role for one node, or undefined when it carries no decision value. */
+function roleForNode(
+  node: PolicySnapshotNode,
+  childrenOf: ReadonlyMap<number, PolicySnapshotNode[]>,
+): string | undefined {
+  const type = node.type ?? '';
+  if (!node.ref || STRUCTURAL_TYPES.has(type)) return undefined;
+  const leafRole = LEAF_ROLES[type];
+  if (leafRole) return leafRole;
+  if (type === 'StaticText') return TEXT_ROLE;
+  if (type !== 'Cell') return undefined;
+  // A row wrapping its own control would make the policy choose between the two.
+  if (node.index !== undefined && hasActionableDescendant(childrenOf, node.index)) return undefined;
+  return 'button';
+}
+
+function groupByParent(nodes: readonly PolicySnapshotNode[]): Map<number, PolicySnapshotNode[]> {
   const childrenOf = new Map<number, PolicySnapshotNode[]>();
   for (const node of nodes) {
     if (node.parentIndex === undefined) continue;
@@ -64,34 +98,7 @@ export function toPolicyCandidates(nodes: readonly PolicySnapshotNode[]): Policy
     if (siblings) siblings.push(node);
     else childrenOf.set(node.parentIndex, [node]);
   }
-
-  const candidates: PolicyCandidate[] = [];
-  for (const node of nodes) {
-    const type = node.type ?? '';
-    if (!node.ref || STRUCTURAL_TYPES.has(type)) continue;
-
-    let role: string;
-    if (LEAF_ROLES[type]) {
-      role = LEAF_ROLES[type];
-    } else if (type === 'Cell') {
-      if (node.index !== undefined && hasActionableDescendant(childrenOf, node.index)) continue;
-      role = 'button';
-    } else if (type === 'StaticText') {
-      role = TEXT_ROLE;
-    } else {
-      continue;
-    }
-
-    candidates.push({
-      ref: node.ref.startsWith('@') ? node.ref : `@${node.ref}`,
-      role,
-      name: node.label || node.identifier || type,
-      ...(node.identifier === undefined ? {} : { identifier: node.identifier }),
-      ...(node.value === undefined ? {} : { value: node.value }),
-      ...(node.enabled === false ? { disabled: true } : {}),
-    });
-  }
-  return candidates;
+  return childrenOf;
 }
 
 /** The subset a policy may choose: actionable, enabled, and not plain text. */

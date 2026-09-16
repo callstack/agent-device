@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { buildJevRequest, DECLINE_LABEL, readJevDecision } from './jev-composer.ts';
+import {
+  buildJevRequest,
+  DECLINE_LABEL,
+  JEV_USD_PER_INPUT_TOKEN,
+  readJevDecision,
+} from './jev-composer.ts';
 import type { PolicyCandidate, PolicyRequest } from './policy-contract.ts';
 
 const candidates: PolicyCandidate[] = [
@@ -82,7 +87,7 @@ describe('jev decision parsing', () => {
       model: 'jev-1.13.0',
       decideMs: 187,
       inputTokens: 500,
-      costUsd: 500 * (42 / 1e9),
+      costUsd: 500 * JEV_USD_PER_INPUT_TOKEN,
     });
   });
 

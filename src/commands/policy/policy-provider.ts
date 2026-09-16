@@ -13,12 +13,12 @@ export const DEFAULT_POLICY_PROVIDER: PolicyProviderName = JEV_PROVIDER_NAME;
 
 /** Environment keys the jev provider reads. The key is never accepted as a CLI flag. */
 export const JEV_API_KEY_ENV = 'TYPESAFE_API_KEY';
-export const JEV_MODEL_ENV = 'AGENT_DEVICE_POLICY_MODEL';
-export const JEV_ENDPOINT_ENV = 'AGENT_DEVICE_POLICY_ENDPOINT';
+const JEV_MODEL_ENV = 'AGENT_DEVICE_POLICY_MODEL';
+const JEV_ENDPOINT_ENV = 'AGENT_DEVICE_POLICY_ENDPOINT';
 
 export type PolicyProviderEnvironment = Readonly<Record<string, string | undefined>>;
 
-export function isPolicyProviderName(value: string): value is PolicyProviderName {
+function isPolicyProviderName(value: string): value is PolicyProviderName {
   return (POLICY_PROVIDER_NAMES as readonly string[]).includes(value);
 }
 
