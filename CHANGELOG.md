@@ -160,7 +160,7 @@
   handed back, so a build or a publish that failed keeps its own error instead of being replaced by
   `Timed out waiting for …`, and work that succeeded still reports the lock it could not give back.
   The Apple runner's artifact, cache, lease and disposal paths, the managed-allocation store, the
-  device-claim store, atomic file publishes, the Swift recording cache and the agent-browser setup
+  device-claim store, the iOS snapshot bridge cache, the Swift recording cache and the agent-browser setup
   moved onto it, replacing hand-written try/catch pairs that each chose differently.
 - Fixed: the redirect of `~/Library/Developer/XCTestDevices` gives itself back in one order — restore
   the host's own device set, then release the lock — and a restore that was refused is what the caller

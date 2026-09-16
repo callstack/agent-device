@@ -6,7 +6,6 @@ import {
   readProcessStartTime,
   acquireProcessLock,
   withProcessLock,
-  type ProcessLockOwner,
   isEnvTruthy,
   findProjectRoot,
 } from './host.ts';
@@ -119,30 +118,17 @@ export async function markRunnerXctestrunArtifactBadForRun(
 export async function acquireRunnerXctestrunCacheLock(
   derived: string,
 ): Promise<() => Promise<void>> {
-  return await acquireRunnerCacheProcessLock({
+  return await acquireProcessLock({
     lockDirPath: resolveRunnerXctestrunCacheLockPath(derived),
     owner: {
       pid: process.pid,
       startTime: readProcessStartTime(process.pid),
       acquiredAtMs: Date.now(),
     },
-    description: 'iOS runner cache lock',
-  });
-}
-
-async function acquireRunnerCacheProcessLock(params: {
-  lockDirPath: string;
-  owner: ProcessLockOwner;
-  timeoutMs?: number;
-  description?: string;
-}): Promise<() => Promise<void>> {
-  return await acquireProcessLock({
-    lockDirPath: params.lockDirPath,
-    owner: params.owner,
-    timeoutMs: params.timeoutMs ?? RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS,
+    timeoutMs: RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS,
     pollMs: RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS,
     ownerGraceMs: RUNNER_XCTESTRUN_CACHE_LOCK_OWNER_GRACE_MS,
-    description: params.description ?? 'iOS runner cache lock',
+    description: 'iOS runner cache lock',
   });
 }
 

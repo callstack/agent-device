@@ -203,29 +203,6 @@ test('a reacquired lock publishes a claim that its predecessor cannot reuse', as
   assert.notEqual(firstToken, secondToken);
 });
 
-test('acquireProcessLock does not evict a live owner whose owner.json is malformed', async () => {
-  const lockDirPath = path.join(tmpDir, 'malformed.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(path.join(lockDirPath, 'owner.json'), '{ pid: ');
-  stampDirectoryAbandoned(lockDirPath);
-
-  await assert.rejects(
-    () =>
-      acquireProcessLock({
-        lockDirPath,
-        owner: currentProcessOwner(),
-        timeoutMs: 50,
-        pollMs: 1,
-      }),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.ownerRecordUnreadable, true);
-      return true;
-    },
-  );
-  assert.equal(fs.existsSync(lockDirPath), true);
-});
-
 test('acquireProcessLock does not evict an owner record it cannot read', async () => {
   const lockDirPath = path.join(tmpDir, 'unreadable.lock');
   fs.mkdirSync(lockDirPath);
@@ -311,6 +288,7 @@ function listReclaimSiblings(directory: string): string[] {
 }
 
 const UNINFORMATIVE_OWNER_RECORDS = [
+  '{ pid: ',
   'null',
   '"999999999"',
   '{"pid":"999999999","startTime":null,"acquiredAtMs":1}',
