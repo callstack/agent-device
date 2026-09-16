@@ -125,15 +125,22 @@ function makeSession(name: string, device: SessionState['device']): SessionState
   };
 }
 
+/**
+ * `address` is the store key the record lives under; `options.name` is the session's own name.
+ * They differ for an implicitly cwd-scoped session (`default` under `cwd:<hash>:default`, see
+ * `SessionRef`), and default to the same string otherwise.
+ */
 function makeIosSimulatorRecordingSession(
   sessionStore: SessionStore,
-  name: string,
+  address: string,
   options: {
+    name?: string;
     recorderExitCode?: number;
     cleanupConfirmed?: boolean;
     device?: SessionState['device'];
   } = {},
 ): SessionState {
+  const name = options.name ?? address;
   const session = makeSession(
     name,
     options.device ?? {
@@ -195,7 +202,7 @@ function makeIosSimulatorRecordingSession(
   };
   const envelope = createDurableResourceEnvelope({
     resourceKind: 'screen-recording',
-    sessionId: name,
+    sessionId: address,
     device: { id: session.device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
     owner: localRuntimeOwner('apple'),
     fence: { token: name + '-fence', generation: 1 },
@@ -208,7 +215,7 @@ function makeIosSimulatorRecordingSession(
     envelope,
   };
   screenRecordingResourceStore.write(
-    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(name)),
+    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(address)),
     envelope,
   );
   return session;

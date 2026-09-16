@@ -1,7 +1,7 @@
 import type { CloseApplicationFinalizationResult } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../../materialized-path-registry.ts';
 import {
@@ -86,8 +86,7 @@ export async function runSessionCloseTeardown(params: {
   });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   await stopBestEffortSessionResources(
-    session,
-    sessionName,
+    { address: sessionName, session },
     sessionStore,
     attemptCleanup,
     params.platformResourceCleanup,
@@ -129,17 +128,13 @@ export async function runSessionCloseTeardown(params: {
 
 type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
 
-// `sessionName` is the store address (`cwd:<hash>:default` for an implicit
-// session), not `session.name` (`default`). Every durable-capture record lives
-// under the address's directory, so addressing it by `session.name` reports the
-// app-log record as missing and leaks the `log stream` child (see `SessionRef`).
 async function stopBestEffortSessionResources(
-  session: SessionState,
-  sessionName: string,
+  ref: SessionRef,
   sessionStore: SessionStore,
   attemptCleanup: CleanupRunner,
   platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
+  const { address: sessionName, session } = ref;
   // Recording overlay finalization needs the Apple runner.
   const currentSession = sessionStore.get(sessionName) ?? session;
   if (currentSession.screenRecording) {
