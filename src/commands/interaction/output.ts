@@ -88,6 +88,7 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
 // #1652: settle-capable entries (click, press, fill, longpress, hover, scroll)
 // get the warning/settle notes appended by the trait-derived wrapper; the rest
 // of the map is returned untouched.
+// The policy commands sit outside the settle-note wrapper: their results carry no settle diff.
 export const interactionCliOutputFormatters = {
   ...withSettleCapableNotes({
     click: resultOutput(tapCliOutput),
@@ -103,7 +104,6 @@ export const interactionCliOutputFormatters = {
       }),
     is: resultOutput(isCliOutput),
     find: resultOutput(findCliOutput),
-    // Policy results carry no settle diff, so they are added outside the settle-note wrapper.
   } satisfies Record<string, CliOutputFormatter>),
   suggest: resultOutput(suggestCliOutput),
   act: resultOutput(actCliOutput),
