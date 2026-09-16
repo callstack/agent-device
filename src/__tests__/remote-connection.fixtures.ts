@@ -116,6 +116,7 @@ export function createTestClient(
     batch: createThrowingMethodGroup<AgentDeviceClient['batch']>(),
     observability: createThrowingMethodGroup<AgentDeviceClient['observability']>(),
     debug: createThrowingMethodGroup<AgentDeviceClient['debug']>(),
+    policy: createThrowingMethodGroup<AgentDeviceClient['policy']>(),
     recording: createThrowingMethodGroup<AgentDeviceClient['recording']>(),
     settings: createThrowingMethodGroup<AgentDeviceClient['settings']>(),
   };

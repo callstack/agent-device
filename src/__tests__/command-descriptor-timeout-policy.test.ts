@@ -67,10 +67,14 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // sessions the daemon owns, so a client-side timeout must not SIGKILL the
   // daemon mid-create/mid-release and orphan them (and every other provider
   // session held).
+  // `act` joined with the policy head: a run is a sequence of ordinary commands, each already
+  // under its own envelope, so a client-side timeout over the whole loop must not reset the
+  // daemon and destroy the session the remaining steps still need.
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
   assert.deepEqual(preserving.sort(), [
+    'act',
     'back',
     'click',
     'fill',
@@ -146,6 +150,9 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     // #1774: base allocation budget (300s) + client/daemon race margin (30s).
     lease_allocate: 330_000,
     test: 'unbounded',
+    // A policy run is bounded by --max-steps, not by wall clock; each step it issues carries its
+    // own envelope, and an outer one would abort a run that is still making progress.
+    act: 'unbounded',
   };
   for (const descriptor of commandDescriptors) {
     const expected = EXPECTED_ENVELOPES[descriptor.name] ?? 90_000;

@@ -1272,6 +1272,7 @@ function createStubClient(params: {
       events: params.events ?? unexpectedCommandCall,
     },
     debug: createThrowingMethodGroup<AgentDeviceClient['debug']>(),
+    policy: createThrowingMethodGroup<AgentDeviceClient['policy']>(),
     recording: createThrowingMethodGroup<AgentDeviceClient['recording']>(),
     settings: {
       update: params.updateSettings ?? unexpectedCommandCall,
