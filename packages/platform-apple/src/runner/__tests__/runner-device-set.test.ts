@@ -404,6 +404,76 @@ test('the host’s device set is back before the lock is', async () => {
   });
 });
 
+test('a restore that half-finished names the backup it was refused, not an older leftover', async () => {
+  await withTempDir('device-set-half-restored-legacy-', async (root) => {
+    const paths = makeRedirectPaths(root);
+    // The default backup path, so the older version's leftover prefix is the one a real host sees.
+    const backupPath = `${paths.xctestDeviceSetPath}.agent-device-backup`;
+    const legacyBackupPath = path.join(
+      path.dirname(backupPath),
+      '.agent-device-xctestdevices-backup-1600000000000',
+    );
+    fs.mkdirSync(paths.requestedSetPath, { recursive: true });
+    fs.mkdirSync(backupPath, { recursive: true });
+    fs.writeFileSync(path.join(backupPath, 'host-device.txt'), 'the host owns this');
+    fs.mkdirSync(legacyBackupPath, { recursive: true });
+    fs.writeFileSync(path.join(legacyBackupPath, 'stale-device.txt'), 'an older interruption');
+    fs.symlinkSync(paths.requestedSetPath, paths.xctestDeviceSetPath, 'dir');
+
+    // An interrupted build left the symlink, this run's backup holds the host's set, and an older
+    // version's leftover sits beside it. The first restore is refused after it took the symlink down, so
+    // the hand-back is the one that puts the host's set back — and it is refused while deleting the
+    // leftover. The report must name what is still renamed aside, which by then is nothing: sending the
+    // reader to the older leftover would have them copy a stale set over the one now in place.
+    const realRename = fs.renameSync;
+    let restoreAttempts = 0;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(((from, to) => {
+      if (String(to) === paths.xctestDeviceSetPath) {
+        restoreAttempts += 1;
+        if (restoreAttempts === 1) {
+          throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        }
+      }
+      return realRename(from, to);
+    }) as typeof fs.renameSync);
+    const realRm = fs.rmSync;
+    const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation(((target, options) => {
+      if (String(target) === legacyBackupPath) {
+        throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+      }
+      return realRm(target as Parameters<typeof fs.rmSync>[0], options);
+    }) as typeof fs.rmSync);
+
+    try {
+      await assert.rejects(
+        () =>
+          acquireXcodebuildSimulatorSetRedirect(makeScopedSimulator(paths), redirectOptions(paths)),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.message, 'Failed to redirect XCTest device set path');
+          assert.match(String(error.details?.error), /EACCES/);
+          assert.match(String(error.details?.restoreError), /EPERM/);
+          assert.equal(error.details?.hint, undefined);
+          return true;
+        },
+      );
+      assert.equal(fs.existsSync(legacyBackupPath), true, 'the leftover stays where it is');
+      assert.equal(
+        fs.readFileSync(path.join(paths.xctestDeviceSetPath, 'host-device.txt'), 'utf8'),
+        'the host owns this',
+      );
+      assert.equal(
+        fs.existsSync(paths.lockDirPath),
+        false,
+        'the lock must not outlive the failure',
+      );
+    } finally {
+      rmSpy.mockRestore();
+      renameSpy.mockRestore();
+    }
+  });
+});
+
 test('a redirect that failed before it moved anything names no backup that is not there', async () => {
   await withTempDir('device-set-failed-before-rename-', async (root) => {
     const paths = makeRedirectPaths(root);
