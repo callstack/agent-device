@@ -151,9 +151,7 @@ async function stopBestEffortSessionResources(
       }),
     );
   }
-  await attemptCleanup('app_log', () =>
-    stopSessionAppLog({ session, sessionName, sessionStore }),
-  );
+  await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionName, sessionStore }));
   await attemptCleanup('audio_probe', () =>
     finishSessionAudioProbe({ session, sessionName, sessionStore }),
   );
