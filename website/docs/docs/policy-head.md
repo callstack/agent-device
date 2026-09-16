@@ -45,7 +45,8 @@ agent-device act "sign in and reach the main list" \
 ```
 
 Each step snapshots, asks the policy, presses or fills, and snapshots again. The run ends when the
-policy reports the goal done, reports it blocked, or three unproductive steps happen in a row.
+policy reports the goal done, reports it blocked with no element worth acting on, or three
+unproductive steps happen in a row.
 
 | Flag | Meaning |
 | --- | --- |
@@ -94,10 +95,15 @@ element inherited the ref.
 
 ## Blocked is about the screen, not the goal
 
-A head asked "is progress blocked" will say yes on any sign-in screen, because an unauthenticated
-screen is literally a login wall. It says so while also naming the phone field at very high
-confidence. The loop acts on a target named at 0.9 confidence or above even when `blocked` is set,
-and takes the flag at face value below that. Without this a sign-in flow stalls on step one.
+A policy asked whether progress is blocked says yes on anything that looks like a wall. An
+unauthenticated sign-in screen is literally a login wall. An onboarding page offering to import a
+file is blocked on a file. In live runs the flag was set twice while the policy also named the one
+element that led onward: the phone field, and an "I'll start fresh" button.
+
+So the flag is terminal only together with nothing worth acting on: no target, or one below
+`--min-confidence`. A named target above the floor is acted on. The cost of being wrong there is one
+step, which the same-screen check catches and the step budget bounds. The cost of believing the flag
+is the whole run.
 
 ## When the head is unreachable
 

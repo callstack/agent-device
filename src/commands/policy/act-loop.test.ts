@@ -154,18 +154,31 @@ describe('policy act loop', () => {
     expect(result.steps[0]?.reason).toContain('below --min-confidence');
   });
 
-  test('acts through a blocked flag only when confidence is very high', async () => {
+  test('acts on a named target even when the policy flags the screen blocked', async () => {
     const acting = await runPolicyActLoop({
       ...baseOptions,
       maxSteps: 1,
-      provider: providerOf(decision({ blocked: true, confidence: 0.99 })),
+      provider: providerOf(decision({ blocked: true, confidence: 0.52 })),
       device: deviceOf([welcome, codeScreen]),
     });
     expect(acting.steps[0]?.outcome).toBe('acted');
+  });
 
+  test('stops as blocked when the policy flags the screen and names no way on', async () => {
     const halted = await runPolicyActLoop({
       ...baseOptions,
-      provider: providerOf(decision({ blocked: true, confidence: 0.7 })),
+      provider: providerOf(decision({ blocked: true, target: null, action: 'none' })),
+      device: deviceOf([welcome]),
+    });
+    expect(halted.status).toBe('blocked');
+    expect(halted.steps[0]?.reason).toBe('policy reports progress blocked and names no way on');
+  });
+
+  test('stops as blocked when the flag comes with a target below the floor', async () => {
+    const halted = await runPolicyActLoop({
+      ...baseOptions,
+      minConfidence: 0.6,
+      provider: providerOf(decision({ blocked: true, confidence: 0.2 })),
       device: deviceOf([welcome]),
     });
     expect(halted.status).toBe('blocked');

@@ -41,14 +41,6 @@ export type PolicyActOptions = {
 export const DEFAULT_POLICY_MAX_STEPS = 12;
 export const DEFAULT_POLICY_MIN_CONFIDENCE = 0.4;
 
-/**
- * A provider that reports `blocked` while also naming a concrete target at very high confidence is
- * describing the screen, not the goal: an unauthenticated sign-in screen is literally a login wall,
- * and every credential it needs is on it. Acting on that target is what keeps the loop from
- * stalling on step one of any sign-in flow. Below this confidence the flag is taken at face value.
- */
-const ACT_DESPITE_BLOCKED_CONFIDENCE = 0.9;
-
 /** Consecutive unproductive steps tolerated before the loop hands back. */
 const ESCALATION_LIMIT = 3;
 
@@ -255,23 +247,34 @@ function sameText(value: string | undefined, text: string): boolean {
   return current === wanted || (wanted.length > 0 && current.endsWith(wanted));
 }
 
+/**
+ * Whether to stop instead of acting.
+ *
+ * `blocked` answers a question about the screen, not about the goal, and a policy asked it says yes
+ * on anything that looks like a wall: an unauthenticated sign-in screen, or an onboarding page
+ * offering to import a file. Twice in live runs it was set while the policy also named the one
+ * element that led onward. So `blocked` is terminal only together with nothing worth acting on —
+ * no target, or one below the confidence floor. A named target above the floor is acted on, because
+ * the cost of being wrong is one step the same-screen check catches and the step budget bounds,
+ * while the cost of believing the flag is the whole run.
+ */
 function haltReason(
   decision: PolicyDecision,
   minConfidence: number,
 ): { outcome: 'blocked' | 'escalated'; reason: string } | undefined {
+  const usable =
+    decision.target !== null && decision.confidence >= minConfidence ? decision.target : undefined;
+  if (usable !== undefined) return undefined;
+  if (decision.blocked) {
+    return { outcome: 'blocked', reason: 'policy reports progress blocked and names no way on' };
+  }
   if (decision.target === null) {
     return { outcome: 'escalated', reason: 'policy chose no element on this screen' };
   }
-  if (decision.blocked && decision.confidence < ACT_DESPITE_BLOCKED_CONFIDENCE) {
-    return { outcome: 'blocked', reason: 'policy reports progress blocked on this screen' };
-  }
-  if (decision.confidence < minConfidence) {
-    return {
-      outcome: 'escalated',
-      reason: `confidence ${decision.confidence.toFixed(2)} below --min-confidence ${minConfidence}`,
-    };
-  }
-  return undefined;
+  return {
+    outcome: 'escalated',
+    reason: `confidence ${decision.confidence.toFixed(2)} below --min-confidence ${minConfidence}`,
+  };
 }
 
 /**
