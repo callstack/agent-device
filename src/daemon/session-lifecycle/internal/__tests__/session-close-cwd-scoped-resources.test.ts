@@ -75,6 +75,17 @@ test('close finishes the recording of a cwd-scoped session by store address', as
   const resourcePath = screenRecordingResourceStore.resolvePath(
     sessionStore.resolveSessionDir(ADDRESS),
   );
+  // `--session default` addresses a *different* session stored under the bare name. Give it
+  // its own live recording so a `currentSession` lookup by `session.name` would finish the
+  // wrong one instead of falling back to `session` and staying green.
+  const decoy = makeIosSimulatorRecordingSession(sessionStore, NAME, {
+    device: { ...IOS_SIM, id: 'decoy-udid', name: 'iPhone 15' },
+  });
+  const decoyFinish = recordingFinishMock(decoy);
+  sessionStore.set(NAME, decoy);
+  const decoyResourcePath = screenRecordingResourceStore.resolvePath(
+    sessionStore.resolveSessionDir(NAME),
+  );
 
   const response = await closeAtAddress(sessionStore);
 
@@ -82,6 +93,12 @@ test('close finishes the recording of a cwd-scoped session by store address', as
   expect(finish).toHaveBeenCalledOnce();
   expectCompleted(screenRecordingResourceStore, resourcePath);
   expect(sessionStore.get(ADDRESS)).toBeUndefined();
+  // The decoy is untouched: not finished, record still open, session still stored.
+  expect(decoyFinish).not.toHaveBeenCalled();
+  const decoyRecord = screenRecordingResourceStore.read(decoyResourcePath);
+  expect(decoyRecord.status).toBe('decoded');
+  if (decoyRecord.status === 'decoded') expect(decoyRecord.envelope.lifecycle).toBe('open');
+  expect(sessionStore.get(NAME)).toBeDefined();
 });
 
 test('close stops the app log of a cwd-scoped session by store address', async () => {
