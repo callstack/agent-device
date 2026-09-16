@@ -309,3 +309,118 @@ describe('longpress CLI output', () => {
     );
   });
 });
+
+describe('policy command output', () => {
+  const decision = {
+    action: 'fill' as const,
+    target: '@e7',
+    done: false,
+    blocked: true,
+    needsText: true,
+    confidence: 0.99,
+    probabilities: { '@e7': 0.99, '@e9': 0.006, __none__: 0.004 },
+    provider: 'jev',
+    model: 'jev-1.13.0',
+    decideMs: 198,
+    inputTokens: 412,
+    costUsd: 0.000017304,
+  };
+
+  const formatSuggest = (result: unknown) =>
+    interactionCliOutputFormatters.suggest({ input: {}, result } as never);
+  const formatAct = (result: unknown) =>
+    interactionCliOutputFormatters.act({ input: {}, result } as never);
+
+  test('suggest prints the decision, its top probabilities, timing, and cost', async () => {
+    const output = await formatSuggest({
+      goal: 'sign in',
+      decision,
+      candidates: [],
+      snapshotMs: 412,
+      screen: 'Phone number | Send code',
+    });
+    expect(output.text).toBe(
+      [
+        'Goal: sign in',
+        'Screen: Phone number | Send code',
+        'Next: fill @e7 at confidence 0.99 (blocked)',
+        'Probabilities: @e7 99.0%, @e9 0.6%, __none__ 0.4%',
+        'Timing: snapshot 412ms decide 198ms',
+        'Cost: $0.000017 for 412 input tokens',
+      ].join('\n'),
+    );
+  });
+
+  test('suggest names both flags when the policy calls the goal done and blocked', async () => {
+    const output = await formatSuggest({
+      goal: 'sign in',
+      decision: { ...decision, done: true, blocked: true },
+      candidates: [],
+      snapshotMs: 1,
+      screen: 'Shelf',
+    });
+    expect(output.text).toContain('(done blocked)');
+  });
+
+  test('suggest reports a decline as no target', async () => {
+    const output = await formatSuggest({
+      goal: 'sign in',
+      decision: { ...decision, action: 'none', target: null, blocked: false },
+      candidates: [],
+      snapshotMs: 1,
+      screen: 'Shelf',
+    });
+    expect(output.text).toContain('Next: none none at confidence 0.99');
+  });
+
+  test('act prints one line per step, the reason for a step that stalled, and the totals', async () => {
+    const output = await formatAct({
+      goal: 'sign in',
+      status: 'escalated',
+      steps: [
+        {
+          step: 1,
+          screen: 'Phone number',
+          decision,
+          outcome: 'acted',
+          performed: { action: 'fill', target: '@e7', entry: 'keypad', inputKey: 'phone' },
+          snapshotMs: 400,
+          decideMs: 198,
+          actionMs: 900,
+        },
+        {
+          step: 2,
+          screen: 'Phone number',
+          decision,
+          outcome: 'escalated',
+          snapshotMs: 400,
+          decideMs: 198,
+          actionMs: 0,
+          reason: 'policy chose no element on this screen',
+        },
+      ],
+      totals: {
+        steps: 2,
+        snapshotMs: 800,
+        decideMs: 396,
+        actionMs: 900,
+        inputTokens: 824,
+        costUsd: 0.000034608,
+        deadActions: 0,
+        escalations: 1,
+      },
+    });
+    expect(output.text).toBe(
+      [
+        'Goal: sign in',
+        'Status: escalated',
+        ' 1 acted        fill @e7 via keypad conf 0.99 | Phone number',
+        ' 2 escalated    conf 0.99 | Phone number',
+        '   policy chose no element on this screen',
+        'Steps: 2, dead actions 0, escalations 1',
+        'Timing: snapshot 800ms decide 396ms action 900ms',
+        'Cost: $0.000035 for 824 input tokens',
+      ].join('\n'),
+    );
+  });
+});

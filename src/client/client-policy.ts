@@ -98,9 +98,11 @@ export async function runPolicyAct(
  *
  * Every mutation is pinned to the generation of the snapshot that issued its ref (ADR 0014), so a
  * decision made against a screen that has since changed is refused by the daemon rather than
- * landing on whatever element inherited the ref.
+ * landing on whatever element inherited the ref. Exported because that pinning rule is the seam
+ * worth testing on its own: a run that loses it fails silently, on whichever element inherited
+ * the ref.
  */
-function createPolicyDevicePort(
+export function createPolicyDevicePort(
   calls: PolicyClientCalls,
   common: PolicyCommonOptions,
 ): PolicyDevicePort {
