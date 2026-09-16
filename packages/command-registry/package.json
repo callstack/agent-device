@@ -83,6 +83,10 @@
       "types": "./src/flag-groups.ts",
       "default": "./src/flag-groups.ts"
     },
+    "./flag-definitions-workflow": {
+      "types": "./src/flag-definitions-workflow.ts",
+      "default": "./src/flag-definitions-workflow.ts"
+    },
     "./command-text": {
       "types": "./src/command-text.ts",
       "default": "./src/command-text.ts"

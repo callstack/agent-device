@@ -1,6 +1,12 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CliOutput } from '../command-contract.ts';
+// Type-only, so the startup closure never reaches the policy runtime through this module.
+import type {
+  PolicyActResult,
+  PolicyDecision,
+  PolicySuggestResult,
+} from '../policy/policy-contract.ts';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import {
@@ -82,22 +88,83 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
 // #1652: settle-capable entries (click, press, fill, longpress, hover, scroll)
 // get the warning/settle notes appended by the trait-derived wrapper; the rest
 // of the map is returned untouched.
-export const interactionCliOutputFormatters = withSettleCapableNotes({
-  click: resultOutput(tapCliOutput),
-  press: resultOutput(tapCliOutput),
-  fill: messageOutput,
-  longpress: messageOutput,
-  hover: messageOutput,
-  scroll: messageOutput,
-  get: ({ input, result }) =>
-    getCliOutput({
-      result: result as CommandRequestResult,
-      format: input.format as Parameters<typeof getCliOutput>[0]['format'],
-    }),
-  is: resultOutput(isCliOutput),
-  find: resultOutput(findCliOutput),
-} satisfies Record<string, CliOutputFormatter>);
+export const interactionCliOutputFormatters = {
+  ...withSettleCapableNotes({
+    click: resultOutput(tapCliOutput),
+    press: resultOutput(tapCliOutput),
+    fill: messageOutput,
+    longpress: messageOutput,
+    hover: messageOutput,
+    scroll: messageOutput,
+    get: ({ input, result }) =>
+      getCliOutput({
+        result: result as CommandRequestResult,
+        format: input.format as Parameters<typeof getCliOutput>[0]['format'],
+      }),
+    is: resultOutput(isCliOutput),
+    find: resultOutput(findCliOutput),
+    // Policy results carry no settle diff, so they are added outside the settle-note wrapper.
+  } satisfies Record<string, CliOutputFormatter>),
+  suggest: resultOutput(suggestCliOutput),
+  act: resultOutput(actCliOutput),
+} satisfies Record<string, CliOutputFormatter>;
 
 function defaultCommandCliOutput(result: CommandRequestResult): CliOutput {
   return messageCliOutput(result as Record<string, unknown>);
+}
+
+function suggestCliOutput(result: PolicySuggestResult): CliOutput {
+  const lines = [
+    `Goal: ${result.goal}`,
+    `Screen: ${result.screen}`,
+    decisionLine(result.decision),
+    topProbabilities(result.decision),
+    `Timing: snapshot ${ms(result.snapshotMs)} decide ${ms(result.decision.decideMs)}`,
+    `Cost: ${usd(result.decision.costUsd)} for ${result.decision.inputTokens} input tokens`,
+  ];
+  return { data: result, text: lines.filter(Boolean).join('\n') };
+}
+
+function actCliOutput(result: PolicyActResult): CliOutput {
+  const lines = [`Goal: ${result.goal}`, `Status: ${result.status}`];
+  for (const step of result.steps) {
+    const performed = step.performed
+      ? ` ${step.performed.action} ${step.performed.target}${step.performed.entry === 'keypad' ? ' via keypad' : ''}`
+      : '';
+    lines.push(
+      `${String(step.step).padStart(2)} ${step.outcome.padEnd(12)}${performed} conf ${step.decision.confidence.toFixed(2)} | ${step.screen}`,
+    );
+    if (step.reason) lines.push(`   ${step.reason}`);
+  }
+  const totals = result.totals;
+  lines.push(
+    `Steps: ${totals.steps}, dead actions ${totals.deadActions}, escalations ${totals.escalations}`,
+    `Timing: snapshot ${ms(totals.snapshotMs)} decide ${ms(totals.decideMs)} action ${ms(totals.actionMs)}`,
+    `Cost: ${usd(totals.costUsd)} for ${totals.inputTokens} input tokens`,
+  );
+  return { data: result, text: lines.join('\n') };
+}
+
+function decisionLine(decision: PolicyDecision): string {
+  const target = decision.target ?? 'none';
+  const flags = [decision.done ? 'done' : '', decision.blocked ? 'blocked' : '']
+    .filter(Boolean)
+    .join(' ');
+  return `Next: ${decision.action} ${target} at confidence ${decision.confidence.toFixed(2)}${flags ? ` (${flags})` : ''}`;
+}
+
+function topProbabilities(decision: PolicyDecision): string {
+  const ranked = Object.entries(decision.probabilities)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([label, probability]) => `${label} ${(probability * 100).toFixed(1)}%`);
+  return ranked.length > 0 ? `Probabilities: ${ranked.join(', ')}` : '';
+}
+
+function ms(value: number): string {
+  return `${Math.round(value)}ms`;
+}
+
+function usd(value: number): string {
+  return `$${value.toFixed(6)}`;
 }

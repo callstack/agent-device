@@ -1,6 +1,24 @@
 import { SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS } from '@agent-device/contracts/capture';
 import type { FlagDefinition } from './flag-types.ts';
 
+/**
+ * The policy head's CLI vocabulary and defaults.
+ *
+ * They live beside the flags that publish them so the prose and the runtime read one declaration:
+ * `--max-steps` and `--min-confidence` state these numbers in their help, and the act loop applies
+ * them. Kept here rather than in the policy modules because the CLI surface is evaluated at
+ * startup while the policy runtime loads on demand, and a constant may not drag the second into
+ * the first.
+ */
+export const POLICY_PROVIDER_NAMES = ['jev'] as const;
+export const DEFAULT_POLICY_PROVIDER: (typeof POLICY_PROVIDER_NAMES)[number] = 'jev';
+export const DEFAULT_POLICY_MAX_STEPS = 12;
+export const DEFAULT_POLICY_MIN_CONFIDENCE = 0.4;
+/** Environment entry the jev provider reads its credential from; never a flag. */
+export const POLICY_API_KEY_ENV = 'TYPESAFE_API_KEY';
+/** Prefix for per-key text entries, so a secret never has to appear in argv. */
+export const POLICY_INPUT_ENV_PREFIX = 'AGENT_DEVICE_INPUT_';
+
 export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   {
     key: 'replayUpdate',
@@ -195,7 +213,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 1000,
     usageLabel: '--max-steps <n>',
-    usageDescription: 'Batch: maximum allowed steps; act: stop the loop after this many steps',
+    usageDescription: `Batch: maximum allowed steps; act: stop the loop after this many steps (default ${DEFAULT_POLICY_MAX_STEPS})`,
     projectConfig: true,
     recorded: false,
   },
@@ -327,7 +345,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--policy'],
     type: 'string',
     usageLabel: '--policy <name>',
-    usageDescription: 'suggest/act: policy head that decides the next element (default jev)',
+    usageDescription: `suggest/act: policy head that decides the next element (default ${DEFAULT_POLICY_PROVIDER})`,
     projectConfig: true,
     recorded: false,
   },
@@ -336,7 +354,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--min-confidence'],
     type: 'number',
     usageLabel: '--min-confidence <n>',
-    usageDescription: 'act: escalate instead of acting below this policy confidence (default 0.4)',
+    usageDescription: `act: escalate instead of acting below this policy confidence (default ${DEFAULT_POLICY_MIN_CONFIDENCE})`,
     projectConfig: false,
     recorded: false,
   },

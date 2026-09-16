@@ -5,9 +5,9 @@ import type {
 import {
   DEFAULT_POLICY_MAX_STEPS,
   DEFAULT_POLICY_MIN_CONFIDENCE,
-  runPolicyActLoop,
-  type PolicyDevicePort,
-} from '../commands/policy/act-loop.ts';
+  DEFAULT_POLICY_PROVIDER,
+} from '@agent-device/command-registry/flag-definitions-workflow';
+import { runPolicyActLoop, type PolicyDevicePort } from '../commands/policy/act-loop.ts';
 import {
   screenLabel,
   toPolicyCandidates,
@@ -18,10 +18,7 @@ import type {
   PolicyActStep,
   PolicySuggestResult,
 } from '../commands/policy/policy-contract.ts';
-import {
-  createPolicyProvider,
-  DEFAULT_POLICY_PROVIDER,
-} from '../commands/policy/policy-provider.ts';
+import { createPolicyProvider } from '../commands/policy/policy-provider.ts';
 import { parsePolicyTextInputs } from '../commands/policy/text-inputs.ts';
 
 type PolicyCommonOptions = AgentDeviceRequestOverrides & AgentDeviceSelectionOptions;

@@ -1,3 +1,4 @@
+import { POLICY_INPUT_ENV_PREFIX } from '@agent-device/command-registry/flag-definitions-workflow';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PolicyCandidate } from './policy-contract.ts';
 
@@ -6,9 +7,6 @@ import type { PolicyCandidate } from './policy-contract.ts';
  * text: a field with no matching entry escalates instead of being filled with a guess.
  */
 export type PolicyTextInputs = ReadonlyMap<string, string>;
-
-/** Prefix for per-key environment entries, so a secret never has to appear in argv. */
-export const POLICY_INPUT_ENV_PREFIX = 'AGENT_DEVICE_INPUT_';
 
 /** Parse repeated `--input key=value` tokens. An empty value is allowed; an empty key is not. */
 export function parsePolicyTextInputs(tokens: readonly string[]): Map<string, string> {

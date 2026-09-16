@@ -38,9 +38,6 @@ export type PolicyActOptions = {
   sleep?: (ms: number) => Promise<void>;
 };
 
-export const DEFAULT_POLICY_MAX_STEPS = 12;
-export const DEFAULT_POLICY_MIN_CONFIDENCE = 0.4;
-
 /** Consecutive unproductive steps tolerated before the loop hands back. */
 const ESCALATION_LIMIT = 3;
 

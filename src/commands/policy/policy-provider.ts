@@ -1,15 +1,15 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { createJevPolicyProvider, JEV_PROVIDER_NAME } from './jev-policy-provider.ts';
+import {
+  POLICY_API_KEY_ENV,
+  POLICY_PROVIDER_NAMES,
+} from '@agent-device/command-registry/flag-definitions-workflow';
+import { createJevPolicyProvider } from './jev-policy-provider.ts';
 import { POLICY_FALLBACK_HINT } from './policy-fallback.ts';
 import type { PolicyProvider } from './policy-contract.ts';
 
-/** Every policy head the CLI can resolve. One ships today. */
-export const POLICY_PROVIDER_NAMES = [JEV_PROVIDER_NAME] as const;
 export type PolicyProviderName = (typeof POLICY_PROVIDER_NAMES)[number];
-export const DEFAULT_POLICY_PROVIDER: PolicyProviderName = JEV_PROVIDER_NAME;
 
-/** Environment keys the jev provider reads. The key is never accepted as a CLI flag. */
-export const JEV_API_KEY_ENV = 'TYPESAFE_API_KEY';
+/** Environment keys the jev provider reads beyond its credential. */
 const JEV_MODEL_ENV = 'AGENT_DEVICE_POLICY_MODEL';
 const JEV_ENDPOINT_ENV = 'AGENT_DEVICE_POLICY_ENDPOINT';
 
@@ -37,14 +37,14 @@ export function createPolicyProvider(
       `Unknown policy provider ${name}; available: ${POLICY_PROVIDER_NAMES.join(', ')}`,
     );
   }
-  const apiKey = env[JEV_API_KEY_ENV]?.trim();
+  const apiKey = env[POLICY_API_KEY_ENV]?.trim();
   if (!apiKey) {
     throw new AppError(
       'INVALID_ARGS',
-      `${JEV_API_KEY_ENV} is not set, so policy ${name} cannot decide`,
+      `${POLICY_API_KEY_ENV} is not set, so policy ${name} cannot decide`,
       {
         reason: 'policy-provider-unconfigured',
-        hint: `Export ${JEV_API_KEY_ENV} to enable the policy head, or ${POLICY_FALLBACK_HINT}`,
+        hint: `Export ${POLICY_API_KEY_ENV} to enable the policy head, or ${POLICY_FALLBACK_HINT}`,
       },
     );
   }

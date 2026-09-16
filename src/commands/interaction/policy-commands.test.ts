@@ -6,7 +6,7 @@ import {
   suggestCliReader,
   suggestCommandMetadata,
 } from './index.ts';
-import { createPolicyProvider } from './policy-provider.ts';
+import { createPolicyProvider } from '../policy/policy-provider.ts';
 
 describe('policy command interface', () => {
   test('owns suggest and act public metadata', () => {
