@@ -1543,7 +1543,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'suggest',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/policy/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -1553,7 +1553,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'act',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/policy/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? {
+          ownerFiles: [
+            'src/commands/interaction/index.ts',
+            'src/commands/policy/act-loop.ts',
+          ] as const,
+        }
+      : {}),
     catalog: { group: 'local-cli' },
     recordsSessionAction: false,
     // A run is a sequence of ordinary commands, each already under its own envelope; a client

@@ -449,7 +449,7 @@ type ActInput = SuggestInput & {
   inputs?: string[];
 };
 
-export const suggestCommandFacet = defineCommandFacet({
+const suggestCommandFacet = defineCommandFacet({
   name: SUGGEST_COMMAND_NAME,
   text: {
     summary: 'Ask a policy head for the next element to act on',
@@ -468,7 +468,7 @@ export const suggestCommandFacet = defineCommandFacet({
   cliOutputFormatter: interactionCliOutputFormatters.suggest,
 });
 
-export const actCommandFacet = defineCommandFacet({
+const actCommandFacet = defineCommandFacet({
   name: ACT_COMMAND_NAME,
   text: {
     summary: 'Drive a goal with a policy head until it is done or blocked',
