@@ -58,6 +58,11 @@
       },
       {
         "type": "custom-link",
+        "label": "Policy head",
+        "link": "/docs/policy-head"
+      },
+      {
+        "type": "custom-link",
         "label": "Snapshots",
         "link": "/docs/snapshots"
       },

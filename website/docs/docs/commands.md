@@ -592,6 +592,33 @@ agent-device batch --steps '[{"command":"open","input":{"app":"settings"}}]'
 
 See [Batching](/docs/batching) for payload format, response shape, and usage guidelines.
 
+## Policy head (optional)
+
+```bash
+agent-device suggest "sign in and reach the main list"
+agent-device act "sign in and reach the main list" --input phone=5555550100 --max-steps 10
+agent-device act "open the first item" --min-confidence 0.6 --json
+```
+
+- A policy head answers one question — which visible element advances the goal — as a typed
+  decision with calibrated probabilities. `suggest` prints that decision; `act` loops
+  snapshot, decide, press or fill until the goal is done, blocked, or the policy loses confidence.
+- Both commands are gated on `TYPESAFE_API_KEY`. Without it they refuse before touching the
+  device, and nothing else in the CLI changes.
+- `--policy <name>` selects the head; `jev` is the only one today and the default.
+- `act` never generates text. A field the policy chooses is filled from `--input key=value`, or
+  from `AGENT_DEVICE_INPUT_<KEY>` in the environment when the value is a secret. A field with no
+  matching entry escalates instead of being filled with a guess.
+- After every action the loop re-snapshots and compares a content digest of the screen. An action
+  that changed nothing is recorded as a dead action, and three unproductive steps in a row end the
+  run as `escalated`.
+- A code or PIN field that ignores `fill` is entered digit by digit on the on-screen keypad.
+- When the head is unreachable the error names the status and the recovery: `Jev unavailable:
+  <status>; fall back to agent-driven policy`. The agent's own snapshot-and-choose loop is always
+  available; the policy head is an accelerator, not a dependency.
+
+See [Policy head](/docs/policy-head) for the decision shape, timings, and limitations.
+
 ## App install (in-place)
 
 ```bash
