@@ -7,7 +7,7 @@ import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../daemon-request.ts';
-import { expandSessionPath } from '../../session-paths.ts';
+import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { ReplayTestCommand } from './command-types.ts';
 import {
   runReplayTestSuite,

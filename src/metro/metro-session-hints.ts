@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { safeSessionName } from '../daemon/session-paths.ts';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
 /**
  * The session's local dev-server binding — the single store `metro reload` resolves against.

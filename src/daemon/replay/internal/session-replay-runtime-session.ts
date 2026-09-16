@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { ReplaySessionStore } from './command-types.ts';
-import { expandSessionPath } from '../../session-paths.ts';
+import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import { errorResponse, noActiveSessionError } from '../../response.ts';
 import {
   NO_SCRIPT_PUBLICATION,

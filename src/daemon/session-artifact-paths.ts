@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { safeSessionName } from './session-paths.ts';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
 /** Path to session-scoped platform subprocess output, such as Apple runner xcodebuild logs. */
 export function resolveSessionRunnerLogPath(sessionDir: string): string {

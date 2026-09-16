@@ -3,12 +3,12 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
-import { perfCaptureResourceStore } from '../perf-capture-resource-store.ts';
 import {
   adoptStartedPerfCapture,
+  createPerfCaptureAdmissionLedger,
   finishLivePerfCapture,
-} from '../perf-capture-session-resource.ts';
+  perfCaptureResourceStore,
+} from '@agent-device/capture-kit/capture-admission';
 import { startAndroidPerfCapture } from '../../platform-runtime-perf-capture-host.ts';
 import type { SessionState } from '../session-state.ts';
 

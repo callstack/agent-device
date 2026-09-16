@@ -13,8 +13,10 @@ import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../../app-log.ts';
 import type { AppLogAdmissionLedger } from '../../app-log-admission-ledger.ts';
-import type { AudioProbeAdmissionLedger } from '../../audio-probe-admission-ledger.ts';
-import type { PerfCaptureAdmissionLedger } from '../../perf-capture-admission-ledger.ts';
+import {
+  type AudioProbeAdmissionLedger,
+  type PerfCaptureAdmissionLedger,
+} from '@agent-device/capture-kit/capture-admission';
 import { appLogResourceStore } from '../../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,

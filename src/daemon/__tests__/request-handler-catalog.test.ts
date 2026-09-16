@@ -24,9 +24,11 @@ import {
 } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import {
+  createAudioProbeAdmissionLedger,
+  createPerfCaptureAdmissionLedger,
+  createScreenRecordingAdmissionLedger,
+} from '@agent-device/capture-kit/capture-admission';
 
 const SPECIALIZED_ROUTES = [
   'humanControl',

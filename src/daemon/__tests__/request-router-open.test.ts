@@ -94,7 +94,7 @@ import {
 } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { screenRecordingDurableResource } from '../screen-recording-session-resource.ts';
+import { screenRecordingDurableResource } from '@agent-device/capture-kit/capture-admission';
 import {
   makeAndroidDevice,
   makeIosDevice,

@@ -13,6 +13,7 @@ export type {
   DurableCaptureFinishIntent,
   DurableCaptureRecordDefinition,
   DurableCaptureResourceDefinition,
+  DurableCaptureSessionResource,
   DurableCaptureSessionStore,
 } from './definition.ts';
 export type { FinishRecoveredDurableCaptureParams } from './finish-recovered.ts';

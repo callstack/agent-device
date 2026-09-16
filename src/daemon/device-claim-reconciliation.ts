@@ -10,14 +10,16 @@ import { recoverAppLogResourceAfterDaemonLock } from './app-log-resource-recover
 import type { DeviceClaim } from './device-claim-record.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { DurableCaptureRecoveryOutcome } from '@agent-device/capture-kit/durable-capture';
-import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
-import { safeSessionName } from './session-paths.ts';
-import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
-import { recoverScreenRecordingResourceAfterDaemonLock } from './screen-recording-resource-recovery.ts';
-import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
-import { recoverAudioProbeResourceAfterDaemonLock } from './audio-probe-resource-recovery.ts';
-import { perfCaptureDurableResource } from './perf-capture-session-resource.ts';
-import { recoverPerfCaptureResourceAfterDaemonLock } from './perf-capture-resource-recovery.ts';
+import {
+  audioProbeDurableResource,
+  type DurableSessionResourceKind,
+  perfCaptureDurableResource,
+  recoverAudioProbeResourceAfterDaemonLock,
+  recoverPerfCaptureResourceAfterDaemonLock,
+  recoverScreenRecordingResourceAfterDaemonLock,
+  screenRecordingDurableResource,
+} from '@agent-device/capture-kit/capture-admission';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
 export function createDeviceClaimReconciler(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;

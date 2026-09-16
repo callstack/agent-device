@@ -9,8 +9,10 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { recoverScreenRecordingResourceAfterDaemonLock } from '../screen-recording-resource-recovery.ts';
-import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
+import {
+  recoverScreenRecordingResourceAfterDaemonLock,
+  screenRecordingResourceStore,
+} from '@agent-device/capture-kit/capture-admission';
 
 const device = {
   platform: 'android' as const,

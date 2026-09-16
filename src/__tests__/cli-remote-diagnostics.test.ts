@@ -12,7 +12,7 @@ import path from 'node:path';
 import { normalizeError, AppError } from '@agent-device/kernel/errors';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../daemon/session-artifact-paths.ts';
-import { safeSessionName } from '../daemon/session-paths.ts';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {

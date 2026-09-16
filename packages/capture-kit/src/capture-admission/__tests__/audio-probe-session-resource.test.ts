@@ -7,8 +7,7 @@ import type {
 } from '@agent-device/contracts/audio-probe-runtime-host';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { createHostAudioProbeCaptureOperations } from '../../audio-probe-runtime.ts';
 import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
 import { audioProbeResourceStore } from '../audio-probe-resource-store.ts';
 import {
@@ -16,7 +15,11 @@ import {
   audioProbeDurableResource,
   finishLiveAudioProbe,
 } from '../audio-probe-session-resource.ts';
-import type { SessionState } from '../session-state.ts';
+import type { DurableCaptureSessionState } from '../session-state-slice.ts';
+import {
+  makeCaptureAdmissionSessionStore,
+  type CaptureAdmissionSessionStore,
+} from './session-store.fixtures.ts';
 
 const device = {
   platform: 'apple' as const,
@@ -36,13 +39,10 @@ const marker = { pid: 4242, startTime: 'boot+1', command: 'helper' };
  */
 test('audio-probe disposes on a failed finish because terminating the helper is what remains and the status file survives it', async () => {
   const sessionName = 'session';
-  const sessionStore = makeSessionStore('audio-probe-failed-finish-');
-  const session: SessionState = {
-    name: sessionName,
-    device,
-    createdAt: 1,
-    actions: [],
-  };
+  const sessionStore = makeCaptureAdmissionSessionStore<DurableCaptureSessionState>(
+    'audio-probe-failed-finish-',
+  );
+  const session: DurableCaptureSessionState = {};
   sessionStore.set(sessionName, session);
   const statusPath = path.join(sessionStore.resolveSessionDir(sessionName), 'audio-probe.json');
   const terminate = vi.fn(async () => {});
@@ -122,6 +122,9 @@ test('audio-probe disposes on a failed finish because terminating the helper is 
   ).not.toThrow();
 });
 
-function resourcePath(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
+function resourcePath(
+  sessionStore: CaptureAdmissionSessionStore<DurableCaptureSessionState>,
+  sessionName: string,
+) {
   return audioProbeResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
 }

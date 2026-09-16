@@ -5,9 +5,9 @@ import type { SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
-import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
-import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
-import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
+import { finishLiveAudioProbe } from '@agent-device/capture-kit/audio-probe-session-resource';
+import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-session-resource';
+import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 

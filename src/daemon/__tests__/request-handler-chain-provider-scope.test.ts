@@ -18,9 +18,11 @@ import {
   unavailableBindExactDevice,
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import {
+  createAudioProbeAdmissionLedger,
+  createPerfCaptureAdmissionLedger,
+  createScreenRecordingAdmissionLedger,
+} from '@agent-device/capture-kit/capture-admission';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 

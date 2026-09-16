@@ -9,17 +9,18 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DurableCaptureSessionStore } from '../durable-capture/index.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger.ts';
 import { perfCaptureResourceStore } from './perf-capture-resource-store.ts';
-import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './session-state.ts';
+import type { DurableCaptureSessionState } from './session-state-slice.ts';
 
 export const perfCaptureDurableResource = createDurableCaptureResource<
   'perf-capture',
   PerfNativeCaptureLiveHandle,
-  PerfNativeCaptureCompletion
+  PerfNativeCaptureCompletion,
+  DurableCaptureSessionState
 >({
   resourceKind: 'perf-capture',
   displayName: 'perf capture',
@@ -45,9 +46,9 @@ export const perfCaptureDurableResource = createDurableCaptureResource<
 
 export function adoptStartedPerfCapture(params: {
   admissionLedger: PerfCaptureAdmissionLedger;
-  session: SessionState;
+  session: DurableCaptureSessionState;
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
@@ -59,9 +60,9 @@ export function adoptStartedPerfCapture(params: {
 }
 
 export function finishLivePerfCapture(params: {
-  session: SessionState;
+  session: DurableCaptureSessionState;
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
   intent: DurableCaptureFinishIntent;
 }): Promise<PerfNativeCaptureCompletion> {
   return perfCaptureDurableResource.finishLive(params);

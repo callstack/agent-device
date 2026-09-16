@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   capitalizeDurableCaptureLabel,
   type DurableCaptureRecordDefinition,
-} from '@agent-device/capture-kit/durable-capture';
+} from '../durable-capture/index.ts';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 
 export function createNextDurableCaptureFence<K extends string, C>(

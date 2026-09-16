@@ -21,9 +21,11 @@ import {
   unavailableDeviceRuntimeGateway,
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import {
+  createAudioProbeAdmissionLedger,
+  createPerfCaptureAdmissionLedger,
+  createScreenRecordingAdmissionLedger,
+} from '@agent-device/capture-kit/capture-admission';
 import { eagerClosureOf } from '../../__tests__/eager-import-closure.fixtures.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {

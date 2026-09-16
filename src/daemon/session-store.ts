@@ -4,7 +4,11 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
-import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
+import {
+  expandSessionPath,
+  isSafeSessionSegment,
+  safeSessionName,
+} from '@agent-device/host-kit/session-paths';
 import {
   readRepairTombstoneFile,
   resolveRepairTombstonePath,

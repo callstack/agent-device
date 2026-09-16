@@ -67,6 +67,10 @@
       "types": "./src/runtime-transport-hints.ts",
       "default": "./src/runtime-transport-hints.ts"
     },
+    "./session-paths": {
+      "types": "./src/session-paths.ts",
+      "default": "./src/session-paths.ts"
+    },
     "./transport": {
       "types": "./src/transport.ts",
       "default": "./src/transport.ts"

@@ -1,3 +1,9 @@
+import type {
+  PerfNativeCaptureCompletion,
+  PerfNativeCaptureLiveHandle,
+  PerfNativeCaptureRecoveryInput,
+} from '@agent-device/contracts/perf-runtime';
+import { perfNativeCaptureRecoveryUse } from './perf-runtime-plan.ts';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import {
   type BoundDeviceRuntime,
@@ -7,20 +13,15 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type {
-  ScreenRecordingCompletion,
-  ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/screen-recording-runtime';
-import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
-import type {
   DurableCaptureRecoveryControl,
   DurableCaptureRecoveryDiagnostic,
-} from '@agent-device/capture-kit/durable-capture';
+} from '../durable-capture/index.ts';
+import { perfCaptureDurableResource } from './perf-capture-session-resource.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
 
-type ScreenRecordingRecoveryRuntime = BoundDeviceRuntime<typeof screenRecordingRecoveryUse>;
+type PerfCaptureRecoveryRuntime = BoundDeviceRuntime<typeof perfNativeCaptureRecoveryUse>;
 
-export function recoverScreenRecordingResourceAfterDaemonLock(params: {
+export function recoverPerfCaptureResourceAfterDaemonLock(params: {
   sessionsDir: string;
   resourcePath: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
@@ -28,28 +29,28 @@ export function recoverScreenRecordingResourceAfterDaemonLock(params: {
   perRecordDeadlineMs?: number;
   onDiagnostic?: (diagnostic: DurableCaptureRecoveryDiagnostic) => void;
 }) {
-  return screenRecordingDurableResource.recoverOne(
+  return perfCaptureDurableResource.recoverOne(
     {
       sessionsDir: params.sessionsDir,
       scope: params.scope,
       perRecordDeadlineMs: params.perRecordDeadlineMs,
       onDiagnostic: params.onDiagnostic,
       acquireControl: async (envelope, scope) =>
-        await acquireScreenRecordingRecoveryControl(params.gateway, envelope, scope),
+        await acquirePerfCaptureRecoveryControl(params.gateway, envelope, scope),
     },
     params.resourcePath,
   );
 }
 
-async function acquireScreenRecordingRecoveryControl(
+async function acquirePerfCaptureRecoveryControl(
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>,
-  envelope: DurableResourceEnvelope<'screen-recording'>,
+  envelope: DurableResourceEnvelope<'perf-capture'>,
   scope: PlatformRequestScope,
 ): Promise<
   DurableCaptureRecoveryControl<
-    'screen-recording',
-    ScreenRecordingLiveHandle,
-    ScreenRecordingCompletion
+    'perf-capture',
+    PerfNativeCaptureLiveHandle,
+    PerfNativeCaptureCompletion
   >
 > {
   return await acquireExactDurableCaptureRecoveryControl({
@@ -57,26 +58,26 @@ async function acquireScreenRecordingRecoveryControl(
     envelope,
     scope,
     create: (binding) =>
-      createScreenRecordingRecoveryControl({
-        runtime: narrowDeviceBinding(binding, screenRecordingRecoveryUse),
+      createPerfCaptureRecoveryControl({
+        runtime: narrowDeviceBinding(binding, perfNativeCaptureRecoveryUse),
         dispose: async () => await binding[Symbol.asyncDispose](),
       }),
   });
 }
 
-export function createScreenRecordingRecoveryControl(params: {
-  runtime: ScreenRecordingRecoveryRuntime;
+function createPerfCaptureRecoveryControl(params: {
+  runtime: PerfCaptureRecoveryRuntime;
   dispose(): Promise<void>;
 }): DurableCaptureRecoveryControl<
-  'screen-recording',
-  ScreenRecordingLiveHandle,
-  ScreenRecordingCompletion
+  'perf-capture',
+  PerfNativeCaptureLiveHandle,
+  PerfNativeCaptureCompletion
 > {
   return Object.freeze({
-    reattach: async (resource: DurableResourceEnvelope<'screen-recording'>) =>
-      await params.runtime.operations.screenRecordingReattach({ envelope: resource }),
-    cleanup: async (resource: DurableResourceEnvelope<'screen-recording'>) =>
-      await params.runtime.operations.screenRecordingCleanup({ envelope: resource }),
+    reattach: async (resource: PerfNativeCaptureRecoveryInput['envelope']) =>
+      await params.runtime.operations.perfNativeCaptureReattach({ envelope: resource }),
+    cleanup: async (resource: PerfNativeCaptureRecoveryInput['envelope']) =>
+      await params.runtime.operations.perfNativeCaptureCleanup({ envelope: resource }),
     [Symbol.asyncDispose]: params.dispose,
   });
 }

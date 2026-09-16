@@ -2,17 +2,24 @@ import { vi } from 'vitest';
 import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
-import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
-import { createDurableCaptureResource } from '../durable-capture-resource.ts';
+import { createAppLogLiveHandle } from '../../app-log-live-handle.ts';
+import { createAppLogStartResult } from '../../app-log-runtime.ts';
+import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
 import {
   createDurableCaptureResourceStore,
   type DurableCaptureResourceStore,
-} from '@agent-device/capture-kit/durable-capture';
-import type { SessionState } from '../session-state.ts';
+  type DurableCaptureSessionResource,
+} from '../../durable-capture/index.ts';
+import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
+import { createDurableCaptureResource } from '../durable-capture-resource.ts';
+import { makeCaptureAdmissionSessionStore } from './session-store.fixtures.ts';
+
+/** The session record these tests hand the coordinator: the one slot it replaces, plus its twin. */
+export type TestCaptureSession = Readonly<{
+  appLog?: DurableCaptureSessionResource<'app-log', AppLogLiveHandle>;
+  appLogFailure?: unknown;
+}>;
 
 export const testCaptureStore = createDurableCaptureResourceStore({
   resourceKind: 'app-log',
@@ -23,7 +30,12 @@ export const testCaptureStore = createDurableCaptureResourceStore({
 export function createTestCaptureResource(
   store: DurableCaptureResourceStore<'app-log'> = testCaptureStore,
 ) {
-  return createDurableCaptureResource<'app-log', AppLogLiveHandle, AppLogCompletion>({
+  return createDurableCaptureResource<
+    'app-log',
+    AppLogLiveHandle,
+    AppLogCompletion,
+    TestCaptureSession
+  >({
     resourceKind: 'app-log',
     displayName: 'test capture',
     store,
@@ -53,14 +65,11 @@ export function makeDurableCaptureContext(
     kind: 'emulator',
   },
 ) {
-  const sessionStore = makeSessionStore('durable-capture-resource-');
+  const sessionStore = makeCaptureAdmissionSessionStore<TestCaptureSession>(
+    'durable-capture-resource-',
+  );
   const sessionName = 'session';
-  const session: SessionState = {
-    name: sessionName,
-    device,
-    createdAt: 1,
-    actions: [],
-  };
+  const session: TestCaptureSession = {};
   sessionStore.set(sessionName, session);
   return {
     admissionLedger: createDurableCaptureAdmissionLedger({ displayName: 'test capture' }),
@@ -97,7 +106,7 @@ export function makeDurableCaptureStartResult(
       } as const)
     );
   });
-  const handle = createTestAppLogLiveHandle({
+  const handle = createAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish,
     forceCleanup,

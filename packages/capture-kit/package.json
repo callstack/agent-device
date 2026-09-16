@@ -18,6 +18,30 @@
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
     },
+    "./capture-admission": {
+      "types": "./src/capture-admission/index.ts",
+      "default": "./src/capture-admission/index.ts"
+    },
+    "./audio-probe-session-resource": {
+      "types": "./src/capture-admission/audio-probe-session-resource.ts",
+      "default": "./src/capture-admission/audio-probe-session-resource.ts"
+    },
+    "./durable-capture-admission-ledger": {
+      "types": "./src/capture-admission/durable-capture-admission-ledger.ts",
+      "default": "./src/capture-admission/durable-capture-admission-ledger.ts"
+    },
+    "./perf-capture-session-resource": {
+      "types": "./src/capture-admission/perf-capture-session-resource.ts",
+      "default": "./src/capture-admission/perf-capture-session-resource.ts"
+    },
+    "./screen-recording-session-resource": {
+      "types": "./src/capture-admission/screen-recording-session-resource.ts",
+      "default": "./src/capture-admission/screen-recording-session-resource.ts"
+    },
+    "./durable-capture-resource": {
+      "types": "./src/capture-admission/durable-capture-resource.ts",
+      "default": "./src/capture-admission/durable-capture-resource.ts"
+    },
     "./durable-capture": {
       "types": "./src/durable-capture/index.ts",
       "default": "./src/durable-capture/index.ts"

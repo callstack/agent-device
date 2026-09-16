@@ -8,12 +8,12 @@ import {
 } from '@agent-device/contracts/audio-runtime-plan';
 import { emptyAudioProbeResult } from '@agent-device/contracts/audio-probe-result';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import type { AudioProbeAdmissionLedger } from '../../audio-probe-admission-ledger.ts';
 import {
   adoptStartedAudioProbe,
+  type AudioProbeAdmissionLedger,
   audioProbeDurableResource,
   finishLiveAudioProbe,
-} from '../../audio-probe-session-resource.ts';
+} from '@agent-device/capture-kit/capture-admission';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

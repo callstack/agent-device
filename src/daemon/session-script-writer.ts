@@ -16,7 +16,7 @@ import {
   isTouchTargetCommand,
   stripRecordedRefGeneration,
 } from '@agent-device/ad-script';
-import { expandSessionPath, safeSessionName } from './session-paths.ts';
+import { expandSessionPath, safeSessionName } from '@agent-device/host-kit/session-paths';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import type { SessionState } from './session-state.ts';
 import {

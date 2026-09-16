@@ -14,8 +14,10 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
-import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
+import {
+  createScreenRecordingAdmissionLedger,
+  screenRecordingResourceStore,
+} from '@agent-device/capture-kit/capture-admission';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../request-runtime-binding.ts';
 import type { SessionState } from '../../session-state.ts';
 import { handleRecordCommand } from '../record-runtime.ts';
