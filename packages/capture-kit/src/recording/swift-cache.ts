@@ -6,7 +6,11 @@ import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import { acquireProcessLock } from '@agent-device/host-kit/file';
+import {
+  acquireProcessLock,
+  withProcessLock,
+  type ProcessLockRelease,
+} from '@agent-device/host-kit/file';
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;
@@ -98,50 +102,44 @@ async function ensureSwiftExecutable(params: {
 
   const executableDir = path.dirname(params.executablePath);
   fs.mkdirSync(executableDir, { recursive: true });
-  const lockDir = `${params.executablePath}.lock`;
-  const releaseLock = await acquireSwiftCacheLock(
-    lockDir,
-    params.executablePath,
-    params.timeoutMs ?? 120_000,
-  );
-  if (!releaseLock) {
-    return;
-  }
-
-  const tempDir = fs.mkdtempSync(
-    path.join(executableDir, `.${path.basename(params.executablePath)}.${process.pid}.`),
-  );
-  const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
-  try {
-    if (isExecutableFile(params.executablePath)) {
-      return;
-    }
-    const [primarySourcePath] = params.sourcePaths;
-    if (params.sourceText !== undefined && primarySourcePath && !fs.existsSync(primarySourcePath)) {
-      fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
-      fs.writeFileSync(primarySourcePath, params.sourceText);
-    }
-    await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
-      timeoutMs: params.timeoutMs ?? 120_000,
-      env: buildSwiftToolEnv(),
-    });
-    fs.renameSync(tempExecutablePath, params.executablePath);
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    // The build's own failure is the reportable fact; an unverified release leaves the
-    // lock to the stale-clear path rather than displacing it.
-    await releaseLock().catch(() => undefined);
-  }
+  const timeoutMs = params.timeoutMs ?? 120_000;
+  await withProcessLock({
+    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs),
+    task: async () => {
+      // Another process may have published the executable while this one waited for the lock.
+      if (isExecutableFile(params.executablePath)) {
+        return;
+      }
+      const tempDir = fs.mkdtempSync(
+        path.join(executableDir, `.${path.basename(params.executablePath)}.${process.pid}.`),
+      );
+      const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
+      try {
+        const [primarySourcePath] = params.sourcePaths;
+        if (
+          params.sourceText !== undefined &&
+          primarySourcePath &&
+          !fs.existsSync(primarySourcePath)
+        ) {
+          fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
+          fs.writeFileSync(primarySourcePath, params.sourceText);
+        }
+        await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
+          timeoutMs,
+          env: buildSwiftToolEnv(),
+        });
+        fs.renameSync(tempExecutablePath, params.executablePath);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  });
 }
 
 async function acquireSwiftCacheLock(
   lockDir: string,
-  executablePath: string,
   timeoutMs: number,
-): Promise<(() => Promise<void>) | null> {
-  if (isExecutableFile(executablePath)) {
-    return null;
-  }
+): Promise<ProcessLockRelease> {
   try {
     return await acquireProcessLock({
       lockDirPath: lockDir,

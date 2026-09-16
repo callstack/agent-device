@@ -3,6 +3,7 @@ import type { ExecResult } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
+import type { XcodebuildSimulatorSetRedirectHandle } from './runner-device-set.ts';
 
 // The runner process seen through the session: pid for liveness/kill-tree and
 // exitCode for early-exit detection. A spawned ChildProcess satisfies this
@@ -50,11 +51,7 @@ export type RunnerSession = {
   startupTimings?: Record<string, number>;
   startupTimingsReported?: boolean;
   logicalLeaseContext?: RunnerLogicalLeaseContext;
-  /** `XcodebuildSimulatorSetRedirectHandle`, seen through the two operations a session performs. */
-  simulatorSetRedirect?: {
-    release: () => Promise<void>;
-    releaseBestEffort: () => Promise<void>;
-  };
+  simulatorSetRedirect?: XcodebuildSimulatorSetRedirectHandle;
   lease?: RunnerLease;
 };
 

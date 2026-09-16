@@ -9,7 +9,7 @@ import {
   readProcessStartTime,
   acquireProcessLock,
   withProcessLock,
-  type ProcessLockOwner,
+  type ProcessLockRelease,
 } from './host.ts';
 
 const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
@@ -38,9 +38,6 @@ type XcodebuildSimulatorSetRedirectOptions = {
   xctestDeviceSetPath?: string;
   backupPath?: string;
   lockDirPath?: string;
-  ownerPid?: number;
-  ownerStartTime?: string | null;
-  nowMs?: number;
 };
 
 export function resolveXcodebuildSimulatorDeviceSetPath(homeDir: string = os.homedir()): string {
@@ -94,14 +91,17 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   const lockDirPath = path.resolve(
     options.lockDirPath ?? resolveXcodebuildSimulatorDeviceSetLockPath(),
   );
-  const ownerStartTime = options.ownerStartTime ?? readProcessStartTime(process.pid);
-  const releaseLock = await acquireXcodebuildSimulatorSetLock({
+  const releaseLock = await acquireProcessLock({
     lockDirPath,
     owner: {
-      pid: options.ownerPid ?? process.pid,
-      startTime: ownerStartTime,
-      acquiredAtMs: options.nowMs ?? Date.now(),
+      pid: process.pid,
+      startTime: readProcessStartTime(process.pid),
+      acquiredAtMs: Date.now(),
     },
+    timeoutMs: XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS,
+    pollMs: XCTEST_DEVICE_SET_LOCK_POLL_MS,
+    ownerGraceMs: XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS,
+    description: 'XCTest device set lock',
   });
 
   const paths = { xctestDeviceSetPath, backupPath };
@@ -217,7 +217,7 @@ type DeviceSetHandBack = {
 async function handBackDeviceSet(
   paths: DeviceSetPaths,
   lockDirPath: string,
-  releaseLock: () => Promise<void>,
+  releaseLock: ProcessLockRelease,
 ): Promise<DeviceSetHandBack> {
   let restoreFailure: unknown = null;
   let renamedAsidePath: string | null = null;
@@ -389,21 +389,4 @@ function sameResolvedPath(left: string, right: string): boolean {
   } catch {
     return false;
   }
-}
-
-async function acquireXcodebuildSimulatorSetLock(params: {
-  lockDirPath: string;
-  owner: ProcessLockOwner;
-  timeoutMs?: number;
-  pollMs?: number;
-  description?: string;
-}): Promise<() => Promise<void>> {
-  return await acquireProcessLock({
-    lockDirPath: params.lockDirPath,
-    owner: params.owner,
-    timeoutMs: params.timeoutMs ?? XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS,
-    pollMs: params.pollMs ?? XCTEST_DEVICE_SET_LOCK_POLL_MS,
-    ownerGraceMs: XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS,
-    description: params.description ?? 'XCTest device set lock',
-  });
 }
