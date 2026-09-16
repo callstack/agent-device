@@ -127,7 +127,14 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({});
+> = Object.freeze({
+  'packages/capture-kit/src/capture-admission/index.ts': {
+    issue: '#2544',
+    reason:
+      'Durable-capture admission family relocated from src/daemon behind one cohesive façade; its closure is the durable-capture machinery plus the four durable session-resource kinds it binds. The eager-closure-sensitive hub (session-teardown) reaches the same modules through the narrow per-kind subpaths instead.',
+    owner: 'thymikee',
+  },
+});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

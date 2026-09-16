@@ -10,15 +10,6 @@ export {
   finishLiveAudioProbe,
 } from './audio-probe-session-resource.ts';
 export {
-  createDurableCaptureAdmissionLedger,
-  type DurableCaptureAdmissionLedger,
-} from './durable-capture-admission-ledger.ts';
-export {
-  createDurableCaptureResource,
-  type DurableCaptureFinishIntent,
-} from './durable-capture-resource.ts';
-export { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-export {
   createPerfCaptureAdmissionLedger,
   type PerfCaptureAdmissionLedger,
 } from './perf-capture-admission-ledger.ts';
@@ -31,7 +22,6 @@ export {
 } from './perf-capture-session-resource.ts';
 export {
   parsePerfRuntimeRequest,
-  perfNativeCaptureRecoveryUse,
   resolvePerfRuntimePlan,
   type PerfRuntimePlan,
   type PerfRuntimeRequest,
@@ -47,16 +37,13 @@ export {
 export { screenRecordingResourceStore } from './screen-recording-resource-store.ts';
 export {
   adoptStartedScreenRecording,
-  encodeScreenRecordingCompletionMetadata,
   finishLiveScreenRecording,
   finishRecoveredScreenRecording,
-  SCREEN_RECORDING_COMPLETION_METADATA_KEY,
   screenRecordingDurableResource,
 } from './screen-recording-session-resource.ts';
 export {
   resolveScreenRecordingStopRecovery,
   screenRecordingManifestIsTerminal,
-  type ScreenRecordingStopRecovery,
 } from './screen-recording-stop-recovery.ts';
+export { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 export { type DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
-export { type DurableCaptureSessionState } from './session-state-slice.ts';
