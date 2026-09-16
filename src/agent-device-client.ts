@@ -55,11 +55,7 @@ import {
   resolveSessionName,
 } from './client/client-normalizers.ts';
 import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
-import {
-  runPolicyAct,
-  suggestPolicyAction,
-  type PolicyClientCalls,
-} from './client/client-policy.ts';
+import type { PolicyClientCalls } from './client/client-policy.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
@@ -447,9 +443,16 @@ export function createAgentDeviceClient(
       },
     },
     policy: {
-      suggest: async (options) =>
-        await suggestPolicyAction(policyClientCalls, options, process.env),
-      act: async (options) => await runPolicyAct(policyClientCalls, options, process.env),
+      // Loaded on demand: the policy head is optional, and nothing about it belongs in the
+      // module closure every CLI invocation evaluates at startup.
+      suggest: async (options) => {
+        const { suggestPolicyAction } = await import('./client/client-policy.ts');
+        return await suggestPolicyAction(policyClientCalls, options, process.env);
+      },
+      act: async (options) => {
+        const { runPolicyAct } = await import('./client/client-policy.ts');
+        return await runPolicyAct(policyClientCalls, options, process.env);
+      },
     },
     recording: {
       record: async (options) => await executeCommand<CommandResult<'record'>>('record', options),

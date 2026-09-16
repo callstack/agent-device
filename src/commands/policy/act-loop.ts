@@ -118,10 +118,12 @@ function endStatus(outcome: PolicyStepOutcome, unproductive: number): PolicyActS
 async function resolveStep(options: PolicyActOptions, context: StepContext): Promise<StepResult> {
   if (context.decision.done) return { outcome: 'done' };
 
-  const halt = haltReason(context.decision, options.minConfidence);
-  if (halt) return { outcome: halt.outcome, extra: { reason: halt.reason } };
+  const judgment = judge(context.decision, options.minConfidence);
+  if (judgment.kind === 'halt') {
+    return { outcome: judgment.outcome, extra: { reason: judgment.reason } };
+  }
 
-  const target = context.decision.target as string;
+  const target = judgment.target;
   const candidate = context.candidates.find((entry) => entry.ref === target);
   const textEntry = resolveTextEntry(candidate, options.inputs, options.env);
 
@@ -258,20 +260,31 @@ function sameText(value: string | undefined, text: string): boolean {
  * the cost of being wrong is one step the same-screen check catches and the step budget bounds,
  * while the cost of believing the flag is the whole run.
  */
-function haltReason(
+function judge(
   decision: PolicyDecision,
   minConfidence: number,
-): { outcome: 'blocked' | 'escalated'; reason: string } | undefined {
-  const usable =
-    decision.target !== null && decision.confidence >= minConfidence ? decision.target : undefined;
-  if (usable !== undefined) return undefined;
+):
+  | { kind: 'act'; target: string }
+  | { kind: 'halt'; outcome: 'blocked' | 'escalated'; reason: string } {
+  if (decision.target !== null && decision.confidence >= minConfidence) {
+    return { kind: 'act', target: decision.target };
+  }
   if (decision.blocked) {
-    return { outcome: 'blocked', reason: 'policy reports progress blocked and names no way on' };
+    return {
+      kind: 'halt',
+      outcome: 'blocked',
+      reason: 'policy reports progress blocked and names no way on',
+    };
   }
   if (decision.target === null) {
-    return { outcome: 'escalated', reason: 'policy chose no element on this screen' };
+    return {
+      kind: 'halt',
+      outcome: 'escalated',
+      reason: 'policy chose no element on this screen',
+    };
   }
   return {
+    kind: 'halt',
     outcome: 'escalated',
     reason: `confidence ${decision.confidence.toFixed(2)} below --min-confidence ${minConfidence}`,
   };
