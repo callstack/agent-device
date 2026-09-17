@@ -162,6 +162,32 @@ test('compileSwiftSourceText falls back to swift-helper when the cache name sani
   expect(fs.statSync(executablePath).mode & 0o111).not.toBe(0);
 });
 
+test('a compile that failed is reported over a cache lock that could not be given back', async () => {
+  const sourcePath = writeSourceFile();
+  const buildFailure = new Error('swiftc: error: build failed');
+  let lockDir = '';
+  mockRunCmd.mockImplementationOnce(async (_cmd: string, args: string[]) => {
+    // The temp executable sits one directory under the cache entry, and the lock beside it.
+    const outputPath = args[args.indexOf('-o') + 1]!;
+    const executablePath = path.join(
+      path.dirname(path.dirname(outputPath)),
+      path.basename(outputPath),
+    );
+    lockDir = `${executablePath}.lock`;
+    // A record that cannot be read is a release that cannot prove ownership.
+    const ownerFile = path.join(lockDir, 'owner.json');
+    fs.rmSync(ownerFile);
+    fs.mkdirSync(ownerFile);
+    throw buildFailure;
+  });
+
+  await expect(compileSwiftSourceFile({ sourcePath, cacheName: 'recording-overlay' })).rejects.toBe(
+    buildFailure,
+  );
+  // The release really could not verify itself: the lock is still standing.
+  expect(fs.existsSync(lockDir)).toBe(true);
+});
+
 function writeSourceFile(source = 'print("recording")'): string {
   const sourcePath = path.join(tmpDir, 'recording-overlay.swift');
   fs.writeFileSync(sourcePath, source);

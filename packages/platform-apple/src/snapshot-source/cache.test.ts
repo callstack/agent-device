@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 
 import path from 'node:path';
 import { test } from 'vitest';
 import { createSnapshotSourceHost } from './host.ts';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
+import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
@@ -207,6 +208,58 @@ test('an aborted cache waiter does not cancel an independent preparation', async
     const result = await survivor;
     assert.equal(await readFile(result.path, 'utf8'), 'binary-2');
     assert.equal(builds, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a bridge build that failed is reported over a cache lock that could not be given back', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-source-build-failure-');
+  const sourceRoot = path.join(root, 'source');
+  const cacheRoot = path.join(root, 'cache');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
+  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
+  const buildHost = createFakeBuildHost('unused');
+  const host: SnapshotSourceHost = {
+    ...buildHost,
+    run: async (command, args, options) => {
+      if (command !== 'xcrun' || !args.includes('clang')) {
+        return await buildHost.run(command, args, options);
+      }
+      // The lock beside the cache entry loses its record while the build runs, so the release
+      // that follows cannot prove ownership; the build itself fails.
+      const lockDir = (await readdir(cacheRoot)).find((entry) => entry.endsWith('.lock'));
+      assert.ok(lockDir, 'the build runs under the cache lock');
+      const ownerFile = path.join(cacheRoot, lockDir, 'owner.json');
+      await rm(ownerFile);
+      await mkdir(ownerFile);
+      return { stdout: '', stderr: 'clang: error: build failed', exitCode: 1 };
+    },
+  };
+
+  try {
+    await assert.rejects(
+      ensureSnapshotBridgeBinary({
+        host,
+        runtime: 'iOS 26.2',
+        limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
+        deadline: testDeadline(),
+        sourceRoot,
+        cacheRoot,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SnapshotSourceError);
+        assert.equal(error.failureKind, 'unsupported');
+        assert.equal(error.failureCode, 'native-build-failed');
+        return true;
+      },
+    );
+    // The release really could not verify itself: the lock is still standing.
+    assert.ok((await readdir(cacheRoot)).some((entry) => entry.endsWith('.lock')));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
