@@ -161,20 +161,33 @@ test('the bridge tree reads enabled from the NotEnabled trait', () => {
       limits,
     ).nodes[1];
 
-  const buttonTrait = 1;
-  const notEnabledTrait = 256;
-  const toggleButtonTrait = 2 ** 53;
-  assert.equal(decode(buttonTrait)?.enabled, true);
-  assert.equal(decode(buttonTrait + notEnabledTrait)?.enabled, false);
-  assert.equal(decode(0)?.enabled, true);
-  assert.equal(decode(toggleButtonTrait)?.enabled, true, 'a switch reads past the safe range');
-  assert.equal(decode(toggleButtonTrait + notEnabledTrait)?.enabled, false, 'a disabled switch');
+  const buttonTrait = 1n;
+  const notEnabledTrait = 1n << 8n;
+  const toggleButtonTrait = 1n << 53n;
+  const privateHighTrait = 1n << 60n;
+  const word = (traits: bigint) => traits.toString();
+  assert.equal(decode(word(buttonTrait))?.enabled, true);
+  assert.equal(decode(word(buttonTrait | notEnabledTrait))?.enabled, false);
+  assert.equal(decode(word(0n))?.enabled, true);
+  assert.equal(decode(word(toggleButtonTrait))?.enabled, true, 'a switch reads past 2^53');
+  assert.equal(
+    decode(word(toggleButtonTrait | notEnabledTrait))?.enabled,
+    false,
+    'a disabled switch',
+  );
+  assert.equal(
+    decode(word(privateHighTrait | notEnabledTrait))?.enabled,
+    false,
+    'a word past double precision keeps bit 8',
+  );
+  assert.equal(decode(word(privateHighTrait | 255n))?.enabled, true, 'no carry into bit 8');
   assert.equal(decode()?.enabled, undefined, 'no traits word leaves enabled unknown');
   const traitsInvalid = (error: unknown) =>
     error instanceof SnapshotSourceError && error.failureCode === 'traits-invalid';
-  assert.throws(() => decode('256'), traitsInvalid);
-  assert.throws(() => decode(1.5), traitsInvalid);
-  assert.throws(() => decode(-1), traitsInvalid);
+  assert.throws(() => decode(256), traitsInvalid);
+  assert.throws(() => decode('1.5'), traitsInvalid);
+  assert.throws(() => decode('-1'), traitsInvalid);
+  assert.throws(() => decode(''), traitsInvalid);
 });
 
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {

@@ -18,3 +18,23 @@ test('replacement updates derive patches from the composed node', () => {
     hiddenContentBelow: true,
   });
 });
+
+test('a retracted fact stays retracted when a later rule patches the same node', () => {
+  const heading: RawSnapshotNode = {
+    index: 3,
+    depth: 3,
+    parentIndex: 2,
+    type: 'Other',
+    label: 'Welcome',
+    value: '1',
+    rect: { x: 0, y: 700, width: 390, height: 300 },
+  };
+  const replacements = new Map<number, RawSnapshotNode>();
+  mergeReplacement(replacements, heading, { type: 'Heading', value: undefined });
+  mergeReplacement(replacements, heading, { rect: { x: 0, y: 700, width: 390, height: 144 } });
+  updateReplacement(replacements, heading, () => ({ label: 'Welcome!' }));
+
+  const presented = replacements.get(heading.index);
+  expect(presented).toMatchObject({ type: 'Heading', label: 'Welcome!' });
+  expect(presented && 'value' in presented).toBe(false);
+});

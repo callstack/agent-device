@@ -10,9 +10,15 @@
 - Fixed (ios): Simulator AX bridge snapshots report `enabled`. The bridge requested no state
   attribute, so a disabled control — a React Native `Pressable` with `disabled`, for example — read
   as a plain button while the XCTest runner answered the same screen with `enabled: false`. The
-  bridge now reads the element's accessibility traits and derives `enabled` from
-  `UIAccessibilityTraitNotEnabled`; disabled controls are no longer presented as tappable. Source
-  version `agent-device-simulator-ax-v1.6.0` rebuilds the cached bridge on first use.
+  bridge now reads the element's accessibility traits (sent as a decimal string, since the word has
+  bits past 2^53) and derives `enabled` from `UIAccessibilityTraitNotEnabled`. Source version
+  `agent-device-simulator-ax-v1.6.0` rebuilds the cached bridge on first use.
+- Changed (ios): a node the source declares disabled is presented `hittable: false` even when the
+  capture has no hittability evidence, so on the Simulator bridge a disabled control stops counting
+  as an interactive node and as a Maestro atomic-dispatch candidate. The navigation title affordance
+  (a disabled title field presented as an enabled Button for the whole row) no longer carries the
+  field's `hittable: false`; on the XCTest runner path that Button now counts as interactive and
+  becomes a Maestro atomic-dispatch candidate where it was excluded before.
 - Added (limrun): `longpress` on Limrun iOS direct sessions. The interactor refused it as
   unsupported although the SDK exposes the HID primitives; it now holds one touch as a
   `performActions` batch of `touchDown`, `wait`, `touchUp`, defaulting to the 800 ms the Android

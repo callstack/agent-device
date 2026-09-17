@@ -217,7 +217,7 @@ function currentReplacement(
   replacements: ReadonlyMap<number, RawSnapshotNode>,
   node: RawSnapshotNode,
 ): RawSnapshotNode {
-  return { ...node, ...replacements.get(node.index) };
+  return replacements.get(node.index) ?? node;
 }
 
 export function findLargestViewportRect(nodes: Iterable<RawSnapshotNode>): RawSnapshotNode['rect'] {

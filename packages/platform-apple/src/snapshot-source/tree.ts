@@ -304,9 +304,10 @@ function optionalScalar(value: unknown): string | undefined {
   return undefined;
 }
 
+/** The guest sends the uint64 traits word as a decimal string so no bit is lost to a double. */
 function enabledFromTraits(value: unknown): boolean | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+  if (typeof value !== 'string' || !/^\d{1,20}$/.test(value)) {
     throw snapshotSourceError('malformed-tree', 'traits-invalid');
   }
   return (BigInt(value) & NOT_ENABLED_TRAIT) === 0n;

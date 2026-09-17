@@ -186,6 +186,11 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
 - (nullable id)jsonValue:(id)value name:(NSString *)name
 {
   if (!value || value == [NSNull null]) return nil;
+  // The traits word is a uint64 bit set; JSON numbers lose its high bits past 2^53, a decimal
+  // string keeps every bit for the host to parse exactly.
+  if ([name isEqualToString:kAttributeTraits] && [value isKindOfClass:NSNumber.class]) {
+    return ((NSNumber *)value).stringValue;
+  }
   if ([value isKindOfClass:NSString.class] || [value isKindOfClass:NSNumber.class]) return value;
 
   const void *raw = (__bridge const void *)value;
