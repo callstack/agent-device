@@ -8,10 +8,8 @@ import {
 } from './index.ts';
 import { createPolicyProvider } from '../policy/policy-provider.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import {
-  commandDescriptors,
-  listMcpExposedCommandNames,
-} from '@agent-device/command-registry/registry';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
+import { listMcpCommandMetadata } from '../command-metadata.ts';
 import { POLICY_API_KEY_ENV } from '@agent-device/command-registry/flag-definitions-workflow';
 
 describe('policy command interface', () => {
@@ -103,10 +101,28 @@ describe('the command surface does not depend on the key', () => {
   });
 
   test('both commands are offered over MCP whether or not the key is set', () => {
-    const withoutKey = withKey(undefined, listMcpExposedCommandNames);
-    const withKeySet = withKey('a-key', listMcpExposedCommandNames);
-    expect(withoutKey).toEqual(withKeySet);
-    for (const command of POLICY_COMMANDS) expect(withoutKey).toContain(command);
+    const toolNames = () => listMcpCommandMetadata().map((tool) => tool.name);
+    expect(withKey(undefined, toolNames)).toEqual(withKey('a-key', toolNames));
+    for (const command of POLICY_COMMANDS) {
+      expect(withKey(undefined, toolNames)).toContain(command);
+    }
+  });
+
+  test('each MCP tool takes a goal and never takes the credential', () => {
+    for (const command of POLICY_COMMANDS) {
+      const tool = withKey(undefined, () =>
+        listMcpCommandMetadata().find((entry) => entry.name === command),
+      );
+      const schema = tool?.inputSchema;
+      expect(Object.keys(schema?.properties ?? {}), `${command} must accept a goal`).toContain(
+        'goal',
+      );
+      // The credential is environment-only: the description may name the variable so a model
+      // knows what to set, but no input may ever carry its value.
+      expect(JSON.stringify(schema)).not.toContain(POLICY_API_KEY_ENV);
+      expect(JSON.stringify(schema).toLowerCase()).not.toContain('apikey');
+      expect(tool?.description).toContain(POLICY_API_KEY_ENV);
+    }
   });
 
   test('neither command owns a daemon route', () => {
