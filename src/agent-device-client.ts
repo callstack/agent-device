@@ -1,5 +1,4 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -72,7 +71,7 @@ import {
   writeMetroSessionHints,
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
-import { isRecord } from '@agent-device/kernel/record';
+import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
@@ -534,7 +533,7 @@ function optionalSnapshotResponseFields(
 > {
   const visibility = readObject(data.visibility);
   const unchanged = readObject(data.unchanged);
-  const keyboard = readKeyboardBandFact(data.keyboard);
+  const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   return {
     ...(keyboard ? { keyboard } : {}),
@@ -552,36 +551,11 @@ function optionalSnapshotResponseFields(
 }
 
 /**
- * The keyboard band the capture's producer measured (#2660), read from the wire by shape: a fact the
- * client cannot place is dropped rather than half-carried, because a `visible` with no frame would
- * tell the tap guard more than any producer claimed.
+ * The keyboard band the capture's producer measured (#2660). The reader is the shared one the Apple
+ * runner's wire reader uses, so the same payload cannot be read one way on each seam: a fact that
+ * cannot be placed keeps its `unmeasurable` reason here too instead of going silent, because silence
+ * would read downstream as a producer that never looked.
  */
-function readKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
-  const fact = readObject(value);
-  if (!fact) return undefined;
-  if (fact.kind === 'absent') return { kind: 'absent' };
-  if (fact.kind === 'unmeasurable') {
-    return typeof fact.reason === 'string' && fact.reason.length > 0
-      ? { kind: 'unmeasurable', reason: fact.reason }
-      : undefined;
-  }
-  if (fact.kind !== 'visible') return undefined;
-  const frame = readObject(fact.frame);
-  if (!frame) return undefined;
-  const numbers = [frame.x, frame.y, frame.width, frame.height];
-  if (!numbers.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) {
-    return undefined;
-  }
-  return {
-    kind: 'visible',
-    frame: {
-      x: numbers[0] as number,
-      y: numbers[1] as number,
-      width: numbers[2] as number,
-      height: numbers[3] as number,
-    },
-  };
-}
 
 function readObject(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;

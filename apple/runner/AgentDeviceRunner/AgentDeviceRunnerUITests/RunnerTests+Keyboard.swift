@@ -137,11 +137,11 @@ extension RunnerTests {
   /// including the ones where looking failed: a missing field would leave the daemon guessing which
   /// tier answered, while a published `unmeasurable` names the reason where the band would have been.
   ///
-  /// Its own main-thread hop with its own slice, taken immediately after the viewport/orientation hop
-  /// and before the tree is captured, so band and tree describe one moment while a keyboard this
-  /// capture cannot afford to measure costs the capture nothing: a timeout abandons the fact and leaves
-  /// the tree tier standing, the same trade `boundedBlockingSystemAlertSnapshot` makes for the probe it
-  /// bounds (#2660).
+  /// Its own main-thread hop with its own slice, taken after the tree so the fact is never older than
+  /// the tree it is compared against, and so a keyboard this capture cannot afford to measure costs the
+  /// capture nothing: a timeout abandons the fact and leaves the tree tier standing, the same trade
+  /// `boundedBlockingSystemAlertSnapshot` makes for the probe it bounds (#2660). The elapsed time rides
+  /// the stamp so the cost of the extra query stays checkable in the field.
   func captureKeyboardBandFact(app: XCUIApplication, deadline: Date) -> RunnerKeyboardBandFact? {
 #if os(iOS)
     let slice = min(Self.keyboardBandProbeBudget, max(0, deadline.timeIntervalSinceNow))

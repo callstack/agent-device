@@ -908,17 +908,18 @@ extension RunnerTests {
     }
     let viewport = geometry.viewport
     let interfaceOrientation = geometry.interfaceOrientation
-    // The band is read here, immediately after the pair above and before the tree is captured, so the
-    // geometry the band is compared against is the geometry this capture publishes. It keeps its own
-    // hop and its own slice rather than joining that one: a keyboard this capture cannot measure must
-    // cost the fact and not the tree tier behind it (#2660).
-    let keyboardBand = captureKeyboardBandFact(app: app, deadline: captureDeadline)
-
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
     guard let rootSnapshot = try captureSnapshotRootBounded(app, sliceSeconds: slice) else {
       return nil
     }
+
+    // Read after the tree, so the band is never older than the tree it will be compared against: a
+    // keyboard that appeared while the tree was being captured would otherwise publish `absent`
+    // beside key nodes that the tap guard would then have to trust less than the absence (#2660).
+    // It keeps its own hop and slice rather than joining the geometry pair above, because a keyboard
+    // this capture cannot measure must cost the fact and not the tree tier behind it.
+    let keyboardBand = captureKeyboardBandFact(app: app, deadline: captureDeadline)
 
     return SnapshotTraversalContext(
       queryRoot: app,

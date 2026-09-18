@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceKind, DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
-import type { Point, Rect } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import type { Point, Rect, SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
 
 function readRequired<T>(
   record: Record<string, unknown>,
@@ -81,6 +82,37 @@ export function parseRect(value: unknown): Rect | undefined {
     return undefined;
   }
   return { x, y, width, height };
+}
+
+/**
+ * Reads a producer-declared keyboard band (#2660) out of an undtyped payload, shared by every seam
+ * that receives one: the Apple runner's wire reader, the daemon's Node client reader. `undefined`
+ * means the producer published no fact at all, which is how a tier that never reads the keyboard is
+ * distinguished from one that measured and reported.
+ *
+ * A payload that cannot be placed is restated as `unmeasurable` naming where it failed, never dropped
+ * and never trusted: silence would tell the tap guard the producer never looked. The reasons resolve
+ * in a fixed order, least to most trusted: a value that is not an object is `malformed-fact`; an
+ * unrecognized `kind` is `unrecognized-kind`; an `unmeasurable` that never named its failure is
+ * `unreported-reason`; a `visible` whose frame is not a positive finite rect is
+ * `invalid-visible-frame`.
+ */
+export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return { kind: 'unmeasurable', reason: 'malformed-fact' };
+  if (value.kind === 'absent') return { kind: 'absent' };
+  if (value.kind === 'unmeasurable') {
+    return typeof value.reason === 'string' && value.reason.trim().length > 0
+      ? { kind: 'unmeasurable', reason: value.reason }
+      : { kind: 'unmeasurable', reason: 'unreported-reason' };
+  }
+  if (value.kind === 'visible') {
+    const frame = parseRect(value.frame);
+    return isPositiveFiniteRect(frame)
+      ? { kind: 'visible', frame }
+      : { kind: 'unmeasurable', reason: 'invalid-visible-frame' };
+  }
+  return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
 }
 
 export function parsePoint(value: unknown): Point | undefined {
