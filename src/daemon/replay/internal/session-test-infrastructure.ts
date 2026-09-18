@@ -1,6 +1,6 @@
 import { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
-import { isDeviceClaimConflictReason } from '../../device-claim-conflict.ts';
+import { isDeviceClaimConflictReason } from '@agent-device/contracts/device';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 const REPLAY_INFRASTRUCTURE_FAILURE_MESSAGE_PATTERNS = [

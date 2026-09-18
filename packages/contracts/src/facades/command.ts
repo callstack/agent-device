@@ -10,6 +10,11 @@ export {
 export type { DaemonBatchStep } from '../batch-step.ts';
 export type { CliFlags, DaemonExcludedCliFlag } from '../cli-flags.ts';
 export type { CommandFlags, MaestroRuntimeFlags } from '../command-flags.ts';
+export type {
+  DaemonInstallSource,
+  DaemonWireRequest,
+  DaemonWireRequestMeta,
+} from '../daemon-wire-request.ts';
 export type { DispatchedCommand } from '../dispatched-command.ts';
 export { readOptionalInteger, readOptionalNumber } from '../input-validation.ts';
 export {

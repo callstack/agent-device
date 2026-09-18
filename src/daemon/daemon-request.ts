@@ -12,11 +12,11 @@ import type {
   DaemonResponseData as PublicDaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import type { DaemonWireRequest } from './daemon-request-wire.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { SessionState } from './session-state.ts';
 
 /**
- * The daemon's own request and response vocabulary: the wire shape from `daemon-request-wire.ts`
+ * The daemon's own request and response vocabulary: the wire shape from `@agent-device/contracts/command` (`DaemonWireRequest`)
  * plus what only the daemon may see. A consumer that must stay free of live session state takes
  * `DaemonWireRequest` directly.
  */

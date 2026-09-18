@@ -15,7 +15,7 @@ import type {
   LeaseBackend,
 } from '@agent-device/kernel/contracts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
-import type { DaemonInstallSource } from '../daemon-request-wire.ts';
+import type { DaemonInstallSource } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest } from '../daemon-request.ts';
 import { normalizeTenantId } from '../config.ts';
 import {

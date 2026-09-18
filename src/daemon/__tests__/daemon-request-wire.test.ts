@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../daemon-request.ts';
-import type { DaemonWireRequest } from '../daemon-request-wire.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { SessionState } from '../session-state.ts';
 
 /**

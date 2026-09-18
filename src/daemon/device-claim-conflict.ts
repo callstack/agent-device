@@ -17,21 +17,8 @@ import {
 } from './device-claim-inspection.ts';
 import type { DaemonResponse } from './daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
 
-export type DeviceClaimConflictReason =
-  | 'DEVICE_CLAIM_LIVE_OWNER'
-  | 'DEVICE_CLAIM_RECOVERY_PENDING'
-  | 'DEVICE_CLAIM_OWNER_UNCERTAIN';
-
-const DEVICE_CLAIM_CONFLICT_REASONS = new Set<DeviceClaimConflictReason>([
-  'DEVICE_CLAIM_LIVE_OWNER',
-  'DEVICE_CLAIM_RECOVERY_PENDING',
-  'DEVICE_CLAIM_OWNER_UNCERTAIN',
-]);
-
-export function isDeviceClaimConflictReason(value: unknown): value is DeviceClaimConflictReason {
-  return DEVICE_CLAIM_CONFLICT_REASONS.has(value as DeviceClaimConflictReason);
-}
 
 /**
  * The reason of the allocator-held arm's refusal when no allocator-held claim
