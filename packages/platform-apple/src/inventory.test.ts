@@ -51,6 +51,35 @@ test('Apple inventory rejects unsupported hosts and missing tools with typed err
   );
 });
 
+test('the non-macOS refusal names what this host can drive instead', async () => {
+  const refusal = await createAppleInventorySource(createInventoryHost({ hostOs: 'linux' }))
+    .discover({ platform: 'ios' }, inventoryScope)
+    .catch((error: unknown) => error);
+
+  assert.ok(refusal instanceof AppError);
+  assert.equal(refusal.code, 'UNSUPPORTED_PLATFORM');
+  assert.equal(refusal.details?.supportedOn, 'macOS');
+  assert.equal(refusal.details?.hostOs, 'linux');
+  assert.equal(refusal.details?.retriable, false);
+  const hint = String(refusal.details?.hint);
+  assert.match(hint, /runs Linux/);
+  assert.match(hint, /agent-device devices --platform android/);
+  assert.match(hint, /agent-device open <app\.apk> --platform android/);
+  assert.match(hint, /--daemon-base-url/);
+});
+
+// The label is what makes the refusal readable, and an unmapped host must still refuse
+// rather than render `undefined`.
+test('every host operating system renders a readable refusal', async () => {
+  for (const hostOs of ['win32', 'other'] as const) {
+    const refusal = await createAppleInventorySource(createInventoryHost({ hostOs }))
+      .discover({ platform: 'ios' }, inventoryScope)
+      .catch((error: unknown) => error);
+    assert.ok(refusal instanceof AppError);
+    assert.match(String(refusal.details?.hint), /runs (Windows|a non-macOS host),/);
+  }
+});
+
 test('simulator-only inventory avoids physical discovery and observes fresh booted devices', async () => {
   const calls: string[][] = [];
   const observed: string[] = [];
