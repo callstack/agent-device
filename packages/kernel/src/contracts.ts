@@ -171,6 +171,41 @@ export type DaemonResponse =
       error: DaemonError;
     };
 
+export type DaemonFailureResponse = Extract<DaemonResponse, { ok: false }>;
+
+/**
+ * The one `DaemonResponse` failure constructor. Declared beside the response type so a
+ * command-side port that returns — rather than throws — a dispatch failure builds the same
+ * wire shape as a daemon handler without importing the daemon.
+ */
+export function errorResponse(
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+  options?: { hint?: string; retriable?: boolean },
+): DaemonFailureResponse {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(options?.hint ? { hint: options.hint } : {}),
+      ...(options?.retriable === undefined ? {} : { retriable: options.retriable }),
+      ...(details ? { details } : {}),
+    },
+  };
+}
+
+export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
+
+/**
+ * Shared "No active session. Run open first." failure used by handlers that require
+ * an open session before dispatching.
+ */
+export function noActiveSessionError(): DaemonFailureResponse {
+  return errorResponse('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
+}
+
 export type JsonRpcId = string | number | null;
 
 export type JsonRpcRequestEnvelope<TParams = unknown> = {

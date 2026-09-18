@@ -10,9 +10,9 @@ import {
 } from '@agent-device/ad-replay/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
@@ -28,6 +28,7 @@ import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type MaestroFailureReportAction = Pick<
   ReplayReportAction,
@@ -66,13 +67,12 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly failure: MaestroFailedAction;
   readonly replayPath: string;
   readonly req: DaemonRequest;
-  readonly sessionName: string;
   readonly sessionStore: ReplaySessionStore;
-  readonly observationStore: ReplaySessionObservationStore;
+  readonly observationStore: ReplaySessionObservation;
   readonly logPath: string;
   readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): Promise<DaemonResponse> {
-  const { failure, replayPath, req, sessionName, sessionStore, observationStore, logPath } = params;
+  const { failure, replayPath, req, sessionStore, observationStore, logPath } = params;
   const requestSignal = getRequestSignal(req.meta?.requestId);
   const report = buildTypedMaestroFailureReportProjection(failure, req);
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
@@ -87,7 +87,6 @@ export async function buildTypedMaestroFailureResponse(params: {
   const observation = session
     ? await captureDivergenceObservation({
         session,
-        sessionName,
         observationStore,
         logPath,
         action: report.action,
@@ -139,7 +138,6 @@ export async function buildTypedMaestroFailureResponse(params: {
   const bounded = boundReplayDivergenceForSession({
     sessionStore,
     observationStore,
-    sessionName,
     divergence,
     responseLevel: req.meta?.responseLevel,
     evidence: observation.state === 'available' ? observation.evidence : undefined,

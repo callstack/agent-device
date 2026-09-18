@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
+import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
@@ -104,7 +105,12 @@ export function createReplaySession(
     },
     observationStore: {
       get: () => store.get(name),
-      update: updateSession,
+      bindAuthority: (signal) =>
+        bindInternalObservationAuthority({
+          sessionStore: { get: () => store.get(name), update: updateSession },
+          sessionName: name,
+          ...(signal ? { signal } : {}),
+        }),
     },
   };
 }

@@ -1,31 +1,12 @@
-import type { DaemonResponse } from './daemon-request.ts';
-
-export type DaemonFailureResponse = Extract<DaemonResponse, { ok: false }>;
-
-export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
-
-export function errorResponse(
-  code: string,
-  message: string,
-  details?: Record<string, unknown>,
-  options?: { hint?: string; retriable?: boolean },
-): DaemonFailureResponse {
-  return {
-    ok: false,
-    error: {
-      code,
-      message,
-      ...(options?.hint ? { hint: options.hint } : {}),
-      ...(options?.retriable === undefined ? {} : { retriable: options.retriable }),
-      ...(details ? { details } : {}),
-    },
-  };
-}
-
 /**
- * Shared "No active session. Run open first." failure used by handlers that require
- * an open session before dispatching.
+ * Daemon-local alias for the failure constructors, which live in
+ * `@agent-device/kernel/contracts` beside the `DaemonResponse` shape they build. Handlers keep
+ * importing them from here; a command-side port imports the owning specifier directly, which is
+ * why the implementation cannot stay in this file.
  */
-export function noActiveSessionError(): DaemonFailureResponse {
-  return errorResponse('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
-}
+export {
+  errorResponse,
+  noActiveSessionError,
+  NO_ACTIVE_SESSION_MESSAGE,
+  type DaemonFailureResponse,
+} from '@agent-device/kernel/contracts';

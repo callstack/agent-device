@@ -1,18 +1,15 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  ReplayObservationAuthority,
+  ReplayObservationCapture,
+  ReplayObservationEvidence,
+  ReplayRefPublicationProjection,
+  ReplayRefPublicationResult,
+} from '@agent-device/contracts/replay';
 import { readSessionRuntimeRevision, refFrame } from './ref-frame.ts';
 import type { RefFrame } from './ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
 import type { SessionState } from './session-state.ts';
-
-declare const INTERNAL_OBSERVATION_EVIDENCE: unique symbol;
-
-/**
- * Opaque capture lineage that engines may carry as data but cannot use to
- * publish refs. Only the daemon-owned finalizer in this module can resolve it.
- */
-export type InternalObservationEvidence = {
-  readonly [INTERNAL_OBSERVATION_EVIDENCE]: true;
-};
 
 type InternalObservationLineage = Readonly<{
   sessionName: string;
@@ -25,31 +22,6 @@ type InternalObservationLineage = Readonly<{
 }>;
 
 const evidenceLineage = new WeakMap<object, InternalObservationLineage>();
-
-type StoredInternalObservation = Readonly<{
-  evidence: InternalObservationEvidence;
-  refsGeneration: number;
-}>;
-
-type ClientRefPublicationProjection = Readonly<{
-  refsGeneration: number | undefined;
-  refs: readonly string[];
-}>;
-
-type ClientRefPublicationResult =
-  | Readonly<{ published: true; refsGeneration: number; refCount: number }>
-  | Readonly<{
-      published: false;
-      reason: 'empty' | 'cancelled' | 'stale-capture' | 'invalid-projection';
-    }>;
-
-type InternalObservationAuthority = Readonly<{
-  store(snapshot: SnapshotState): StoredInternalObservation;
-  finalize(
-    evidence: InternalObservationEvidence,
-    projection: ClientRefPublicationProjection,
-  ): ClientRefPublicationResult;
-}>;
 
 type BoundInternalObservationSession = Readonly<{
   sessionStore: InternalObservationSessionStore;
@@ -69,7 +41,7 @@ type InternalObservationSessionStore = Readonly<{
  */
 export function bindInternalObservationAuthority(
   params: BoundInternalObservationSession,
-): InternalObservationAuthority {
+): ReplayObservationAuthority {
   return {
     store: (snapshot) => storeInternalObservation(params, snapshot),
     finalize: (evidence, projection) =>
@@ -88,7 +60,7 @@ export function bindInternalObservationAuthority(
 function storeInternalObservation(
   params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
   snapshot: SnapshotState,
-): StoredInternalObservation {
+): ReplayObservationCapture {
   const { sessionStore, sessionName } = params;
   let storedSession: SessionState | undefined;
   if (
@@ -106,7 +78,7 @@ function storeInternalObservation(
     throw new Error('Internal observation did not establish a snapshot generation.');
   }
 
-  const evidence = {} as InternalObservationEvidence;
+  const evidence = {} as ReplayObservationEvidence;
   evidenceLineage.set(evidence, {
     sessionName,
     session,
@@ -130,10 +102,10 @@ function storeInternalObservation(
 function finalizeClientRefPublication(params: {
   sessionStore: InternalObservationSessionStore;
   sessionName: string;
-  evidence: InternalObservationEvidence;
-  projection: ClientRefPublicationProjection;
+  evidence: ReplayObservationEvidence;
+  projection: ReplayRefPublicationProjection;
   signal?: AbortSignal;
-}): ClientRefPublicationResult {
+}): ReplayRefPublicationResult {
   const lineage = evidenceLineage.get(params.evidence);
   // Evidence is a one-shot capability. Consume it before every outcome,
   // including empty, cancelled, invalid, and stale attempts, so request-end

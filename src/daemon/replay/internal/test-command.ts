@@ -6,7 +6,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../daemon-request.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { ReplayTestCommand } from './command-types.ts';
 import {
@@ -17,7 +17,6 @@ import {
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
-import { errorResponse } from '../../response.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   emitRequestProgress,
@@ -51,6 +50,11 @@ import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from './session-replay-test-policy.t
  * canceled suite stops its in-flight attempt, and clearing the entry — is host work and lives
  * here, next to the rest of the daemon adapter.
  */
+import {
+  errorResponse,
+  type DaemonResponse,
+  type DaemonResponseData,
+} from '@agent-device/kernel/contracts';
 export const bindReplayTestAttemptCancellation: ReplayTestBindAttemptCancellation = ({
   attemptId,
   parentAttemptId,

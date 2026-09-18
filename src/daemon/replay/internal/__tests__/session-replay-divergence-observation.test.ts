@@ -67,7 +67,6 @@ test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retr
 
     const observation = await captureDivergenceObservation({
       session: replayDivergenceForTest(sessionStore, sessionName).session!,
-      sessionName,
       observationStore: replayDivergenceForTest(sessionStore, sessionName).observationStore,
       logPath: path.join(root, 'daemon.log'),
       action,

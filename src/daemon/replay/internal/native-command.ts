@@ -1,7 +1,5 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import { errorResponse } from '../../response.ts';
 import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
@@ -55,6 +53,7 @@ import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
  * so a handler that opened `req.positionals[0]` could only ever work when the
  * two happened to be the same host.
  */
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 export async function runReplayCommand(command: ReplayCommand): Promise<DaemonResponse> {
   const {
     request: req,

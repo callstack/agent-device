@@ -1,8 +1,11 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { errorResponse } from '../../response.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 import { readReplaySelectorDisplayValue } from '@agent-device/selectors';
-import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import {
+  type DaemonResponse,
+  errorResponse,
+  type ResponseLevel,
+} from '@agent-device/kernel/contracts';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 import type { ReplayCoordinator } from '../../session-replay-coordinator.ts';
@@ -27,7 +30,7 @@ import {
   type TargetBindingDivergenceContext,
 } from './session-replay-target-verification.ts';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
 
 /**
  * #1555 P5 (decomposition): the daemon's `AdReplayStepRuntime` adapter — extracted verbatim out
@@ -169,7 +172,6 @@ export function createAdReplayStepRuntime(params: {
       const observation: DivergenceObservation = session
         ? await captureDivergenceObservation({
             session,
-            sessionName: ctx.sessionName,
             observationStore: ctx.observationStore,
             logPath: ctx.logPath,
             action,
@@ -330,7 +332,7 @@ export type ReplayStepContext = {
   replayReq: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
-  observationStore: ReplaySessionObservationStore;
+  observationStore: ReplaySessionObservation;
   logPath: string;
   resolved: string;
   actions: SessionAction[];

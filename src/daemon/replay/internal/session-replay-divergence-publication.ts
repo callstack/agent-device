@@ -4,11 +4,8 @@ import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { type ReplayDivergence } from '@agent-device/contracts/divergence';
 import { boundReplayDivergence } from '@agent-device/ad-replay/divergence';
-import {
-  bindInternalObservationAuthority,
-  type InternalObservationEvidence,
-} from '../../internal-observation.ts';
-import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
+import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
+import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
 
 /**
  * Daemon-owned replay projection and publication boundary. The response or
@@ -17,14 +14,13 @@ import type { ReplaySessionObservationStore, ReplaySessionStore } from './comman
  */
 export function boundReplayDivergenceForSession(params: {
   sessionStore: ReplaySessionStore;
-  observationStore: ReplaySessionObservationStore;
-  sessionName: string;
+  observationStore: ReplaySessionObservation;
   divergence: ReplayDivergence;
   responseLevel: ResponseLevel | undefined;
-  evidence: InternalObservationEvidence | undefined;
+  evidence: ReplayObservationEvidence | undefined;
   signal?: AbortSignal;
 }): ReplayDivergence {
-  const { sessionStore, observationStore, sessionName, divergence, responseLevel } = params;
+  const { sessionStore, observationStore, divergence, responseLevel } = params;
   let overflowProjection: ReplayDivergence | undefined;
   let overflowArtifactPath: string | undefined;
   const bounded = boundReplayDivergence({
@@ -44,11 +40,7 @@ export function boundReplayDivergenceForSession(params: {
   const screen = projection.screen;
   if (screen.state !== 'available' || screen.refs.length === 0) {
     if (params.evidence) {
-      bindInternalObservationAuthority({
-        sessionStore: observationStore,
-        sessionName,
-        ...(params.signal ? { signal: params.signal } : {}),
-      }).finalize(params.evidence, {
+      observationStore.bindAuthority(params.signal).finalize(params.evidence, {
         refsGeneration: screen.state === 'available' ? screen.refsGeneration : undefined,
         refs: [],
       });
@@ -60,11 +52,7 @@ export function boundReplayDivergenceForSession(params: {
     return suppressUnpublishedDivergenceRefs(bounded, 'missing-evidence');
   }
 
-  const observationAuthority = bindInternalObservationAuthority({
-    sessionStore: observationStore,
-    sessionName,
-    ...(params.signal ? { signal: params.signal } : {}),
-  });
+  const observationAuthority = observationStore.bindAuthority(params.signal);
   const publication = observationAuthority.finalize(params.evidence, {
     refsGeneration: screen.refsGeneration,
     refs: screen.refs.map((entry) => entry.ref),

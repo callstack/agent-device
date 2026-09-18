@@ -68,7 +68,6 @@ async function buildFailureScenario(
     failure: options.warnings ? { ...failure, warnings: options.warnings } : failure,
     replayPath: path.join(root, 'flow.yaml'),
     req: baseReq({ flags: { replayBackend: 'maestro', platform: 'ios' } }),
-    sessionName,
     sessionStore: replaySession.store,
     observationStore: replaySession.observationStore,
     logPath: path.join(root, 'daemon.log'),

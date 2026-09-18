@@ -1,4 +1,5 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
   LocalIdentity,
@@ -174,3 +175,49 @@ export type ReplayScriptSourceBundle = Readonly<{
   entry: string;
   files: Readonly<Record<string, string>>;
 }>;
+
+declare const REPLAY_OBSERVATION_EVIDENCE: unique symbol;
+
+/**
+ * Opaque capture lineage a replay engine may carry as data but cannot use to publish refs.
+ * Only the daemon-owned finalizer behind {@link ReplayObservationAuthority} can resolve it.
+ */
+export type ReplayObservationEvidence = {
+  readonly [REPLAY_OBSERVATION_EVIDENCE]: true;
+};
+
+export type ReplayObservationCapture = Readonly<{
+  evidence: ReplayObservationEvidence;
+  refsGeneration: number;
+}>;
+
+export type ReplayRefPublicationProjection = Readonly<{
+  refsGeneration: number | undefined;
+  refs: readonly string[];
+}>;
+
+export type ReplayRefPublicationResult =
+  | Readonly<{ published: true; refsGeneration: number; refCount: number }>
+  | Readonly<{
+      published: false;
+      reason: 'empty' | 'cancelled' | 'stale-capture' | 'invalid-projection';
+    }>;
+
+/**
+ * The daemon-owned authority a replay run uses to record an operational capture and, once its
+ * own projection is exact, to activate exactly the refs that projection exposed. The capability is
+ * already bound to one admitted session: a holder cannot name or reacquire another one.
+ */
+export type ReplayObservationAuthority = Readonly<{
+  store(snapshot: SnapshotState): ReplayObservationCapture;
+  finalize(
+    evidence: ReplayObservationEvidence,
+    projection: ReplayRefPublicationProjection,
+  ): ReplayRefPublicationResult;
+}>;
+
+/**
+ * Binds that authority for one request scope. A replay run receives the binder, never the
+ * session-store pair the binding is drawn from.
+ */
+export type ReplayObservationAuthorityBinder = (signal?: AbortSignal) => ReplayObservationAuthority;

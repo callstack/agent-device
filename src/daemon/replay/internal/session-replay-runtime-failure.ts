@@ -6,14 +6,15 @@ import {
   type SnapshotTimingSample,
 } from '@agent-device/contracts/capture';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
-import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import {
   buildReplayDivergenceFailureResponse,
   hoistReplayFailureCauseDiagnosticMeta,
 } from './session-replay-runtime-failure-response.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { ReplaySessionObservationStore, ReplaySessionStore } from './command-types.ts';
+import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export async function withReplayFailureDiagnostics(params: {
   response: DaemonResponse;
@@ -29,7 +30,7 @@ export async function withReplayFailureDiagnostics(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
-  observationStore: ReplaySessionObservationStore;
+  observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   logPath: string;
@@ -56,7 +57,7 @@ async function withReplayFailureContext(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
-  observationStore: ReplaySessionObservationStore;
+  observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
   resumeStamper: ReplayResumeStamper;
   logPath: string;

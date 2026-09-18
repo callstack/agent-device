@@ -17,9 +17,8 @@ import {
 } from '@agent-device/ad-script';
 import { createDaemonMaestroRuntimePort } from '@agent-device/maestro/daemon-runtime-port';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 import { assertSessionSelectorMatches } from '../../session-selector.ts';
-import { errorResponse } from '../../response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
 import { maestroOperationDaemonRequest } from './session-replay-maestro-request.ts';
@@ -35,6 +34,7 @@ import {
 } from '../../replay-script-source.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 type TypedMaestroReplayState = {
   snapshotStart: number;

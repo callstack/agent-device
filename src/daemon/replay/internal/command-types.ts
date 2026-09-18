@@ -1,16 +1,23 @@
+import type { ReplayObservationAuthorityBinder } from '@agent-device/contracts/replay';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import type {
   ReplaySessionMutationStore as ReplaySessionMutationStoreCapability,
   ReplaySessionStore as ReplaySessionStoreCapability,
 } from '../../session-replay-coordinator.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type ReplaySessionStore = ReplaySessionStoreCapability;
 export type ReplaySessionMutationStore = ReplaySessionMutationStoreCapability;
-export type ReplaySessionObservationStore = Readonly<{
+/**
+ * The replay side of the ref-publication owner: the operational capture it reads, and a binder for
+ * the daemon-side authority that records a capture and publishes exactly its own projection. The
+ * session-store pair the authority is drawn from stays in the daemon.
+ */
+export type ReplaySessionObservation = Readonly<{
   get: () => SessionState | undefined;
-  update: (mutate: (session: SessionState) => void) => boolean;
+  bindAuthority: ReplayObservationAuthorityBinder;
 }>;
 
 export type ReplayTestSessionFactory = (sessionName: string, logPath: string) => ReplaySession;
@@ -23,7 +30,7 @@ export type ReplaySession = Readonly<{
   /** Bound repair writes; replay internals never receive an unbound SessionStore setter. */
   mutationStore: ReplaySessionMutationStore;
   /** Bound observation writes used only by the existing ref-publication owner. */
-  observationStore: ReplaySessionObservationStore;
+  observationStore: ReplaySessionObservation;
 }>;
 
 export type ReplayCommand = Readonly<{

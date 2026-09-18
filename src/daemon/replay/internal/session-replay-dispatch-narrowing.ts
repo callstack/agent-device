@@ -1,4 +1,4 @@
-import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import type {
   AdReplayDispatchGuard,
   AdReplayDispatchOutcome,
@@ -39,6 +39,7 @@ import {
  */
 
 /** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 export function applyReplayDispatchGuard(
   replayReq: DaemonRequest,
   guard: AdReplayDispatchGuard | undefined,

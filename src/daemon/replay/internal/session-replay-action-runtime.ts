@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -12,6 +12,7 @@ import { appendReplayTraceEvent } from './session-replay-trace.ts';
 import { inferFillText } from '../../action-utils.ts';
 import { readRecordedInputVariableName } from '@agent-device/ad-script';
 import { resolveSessionScope } from '../../session-routing.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 

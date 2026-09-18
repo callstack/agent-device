@@ -2,9 +2,9 @@ import type { ReplayCommandResult } from '@agent-device/contracts/replay';
 import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
-import type { DaemonResponse } from '../../daemon-request.ts';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 type TypedMaestroSuccessResponseParams = Readonly<{
   command: ReplayCommand;
@@ -53,7 +53,7 @@ export async function buildTypedMaestroReplayErrorResponse(
   const { command, replayPath, state, outcome } = params;
   const {
     request: req,
-    session: { name: sessionName, store: sessionStore, observationStore, logPath },
+    session: { store: sessionStore, observationStore, logPath },
   } = command;
   const { failure } = outcome;
   const normalizedError = normalizeError(outcome.error);
@@ -63,7 +63,6 @@ export async function buildTypedMaestroReplayErrorResponse(
       failure,
       replayPath,
       req,
-      sessionName,
       sessionStore,
       observationStore,
       logPath,
