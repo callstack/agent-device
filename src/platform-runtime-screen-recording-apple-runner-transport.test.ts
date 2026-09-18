@@ -11,7 +11,7 @@ const runner = vi.hoisted(() => ({
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   runAppleRunnerCommand: runner.run,
-  getRunnerSessionSnapshot: runner.snapshot,
+  readRunnerSessionLiveness: runner.snapshot,
 }));
 
 const device = {
@@ -51,7 +51,7 @@ test('scopes an unavailable runner authority instead of falling back to a local 
 });
 
 test('passes the recorded session identity into the runner stop dispatch boundary', async () => {
-  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', alive: true });
+  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', liveness: 'ready' });
   runner.run.mockResolvedValue({});
   const transport = resolveAppleRunnerScreenRecordingTransport();
 
@@ -70,7 +70,7 @@ test('cancellation after runner acquisition stops only the acquired session', as
   runner.run.mockResolvedValue({});
   runner.snapshot.mockImplementation(() => {
     controller.abort(reason);
-    return { sessionId: 'runner-session-2', alive: true };
+    return { sessionId: 'runner-session-2', liveness: 'ready' };
   });
   const transport = resolveAppleRunnerScreenRecordingTransport();
 
@@ -107,7 +107,7 @@ test('does not issue an unowned stop when runner acquisition exposes no session 
 });
 
 test('keeps macOS runner recording ownership local to the requested output path', async () => {
-  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', alive: true });
+  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', liveness: 'ready' });
   runner.run.mockResolvedValue({ recorderStartUptimeMs: 42 });
   const transport = resolveAppleRunnerScreenRecordingTransport();
 

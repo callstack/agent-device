@@ -200,7 +200,7 @@ function makeRunnerSession(
     jsonPath: `/tmp/${device.id}.json`,
     testPromise,
     child: { pid: 42, exitCode: null },
-    ready: true,
+    state: 'ready',
     ...overrides,
   };
 }

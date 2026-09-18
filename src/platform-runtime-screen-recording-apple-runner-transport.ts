@@ -58,7 +58,7 @@ async function startLocalAppleRunnerRecording({
   fps,
   signal,
 }: AppleRunnerScreenRecordingStartRequest): Promise<AppleRunnerScreenRecordingStartResult> {
-  const { getRunnerSessionSnapshot, runAppleRunnerCommand } =
+  const { readRunnerSessionLiveness, runAppleRunnerCommand } =
     await import('@agent-device/platform-apple/runner/operations');
   const recordingFileName = `agent-device-recording-${Date.now()}.mp4`;
   const remotePath =
@@ -73,8 +73,8 @@ async function startLocalAppleRunnerRecording({
     },
     { signal },
   );
-  const session = await getRunnerSessionSnapshot(device.id);
-  if (!session?.alive) {
+  const session = readRunnerSessionLiveness(device.id);
+  if (!session || session.liveness !== 'ready') {
     throw new Error('Apple runner recording did not expose a durable runner session identity');
   }
   try {
@@ -143,11 +143,11 @@ async function inspectLocalRunner(
   device: DeviceInfo,
   runnerSessionId: string,
 ): Promise<ManagedProcessOwnership> {
-  const { getRunnerSessionSnapshot, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
+  const { readRunnerSessionLiveness, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
     await import('@agent-device/platform-apple/runner/operations');
-  const active = await getRunnerSessionSnapshot(device.id);
+  const active = readRunnerSessionLiveness(device.id);
   if (active) {
-    if (!active.alive) return 'missing';
+    if (active.liveness === 'gone') return 'missing';
     return active.sessionId === runnerSessionId ? 'owned-alive' : 'ownership-lost';
   }
   const lease = await readStaleRunnerLease(device.id);

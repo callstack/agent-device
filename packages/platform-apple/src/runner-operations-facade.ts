@@ -1,12 +1,12 @@
 export {
   applyXctestRunnerAppIconFromDerivedPath,
   detachIosSimulatorRunnerSessionsForShutdown,
-  getRunnerSessionSnapshot,
   hasLiveIosRunnerSession,
   notifyIosRunnerAppRelaunched,
   prepareIosRunner,
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
+  readRunnerSessionLiveness,
   readStaleRunnerLease,
   releaseIosRunnerOnClose,
   releaseSpeculativeIosRunnerSessionFor,

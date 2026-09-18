@@ -26,7 +26,7 @@ function sessionFailingWith(stdout: string, stderr: string): RunnerSession {
     jsonPath: '/tmp/runner.json',
     testPromise: Promise.resolve({ exitCode: 1, stdout, stderr }),
     child: { pid: 4242, exitCode: 1 } as ExecBackgroundResult['child'],
-    ready: false,
+    state: 'starting',
   };
 }
 

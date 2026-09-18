@@ -104,7 +104,7 @@ import {
   abortAllIosRunnerSessions,
   ensureRunnerSession,
   executeRunnerCommandWithSession,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   releaseIosRunnerOnClose,
 } from '../runner-session.ts';
 
@@ -164,7 +164,7 @@ beforeEach(async () => {
 });
 
 test('a RUNNER_BUSY refusal records the runner as still draining main-thread work', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
     runnerError({
@@ -187,7 +187,7 @@ test('a RUNNER_BUSY refusal records the runner as still draining main-thread wor
 });
 
 test('a healthy response stamped with busy main-thread work keeps the session marked busy', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
     runnerResponse({ tapped: true, runnerMainThreadBusy: true }),
@@ -219,7 +219,7 @@ test('a healthy response stamped with busy main-thread work keeps the session ma
 test('an unstamped healthy response leaves a busy main-thread report intact', async () => {
   // Recovered and journal-replayed responses are written without the occupancy stamp; their
   // absence must not be read as "the runner drained" (#2552).
-  const session = makeRunnerSession({ ready: true, runnerMainThreadBusy: true });
+  const session = makeRunnerSession({ state: 'ready', runnerMainThreadBusy: true });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
 
@@ -237,7 +237,7 @@ test('an unstamped healthy response leaves a busy main-thread report intact', as
 test("the stalling command's MAIN_THREAD_TIMEOUT error records the runner as busy", async () => {
   // The direct #2552 repro: the command that stalls answers with the watchdog timeout, not
   // RUNNER_BUSY, so this is the only occupancy signal available before any refusal.
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   // A read-only snapshot on a ready session answers over the startup transport (uptime preflight,
   // then the command), both via waitForRunner.
   mockWaitForRunner
@@ -262,7 +262,7 @@ test("the stalling command's MAIN_THREAD_TIMEOUT error records the runner as bus
 test('a served non-busy error clears a stale busy report so close keeps a drained runner', async () => {
   // After the abandoned work drains, a later failure that reached the main thread (element not
   // found) proves it drained; leaving the flag set would make close kill a healthy runner (#2552).
-  const session = makeRunnerSession({ ready: true, runnerMainThreadBusy: true });
+  const session = makeRunnerSession({ state: 'ready', runnerMainThreadBusy: true });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
     runnerError({ code: 'ELEMENT_NOT_FOUND', message: 'element not found' }),
@@ -292,7 +292,7 @@ test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and t
 
   // Idle + retain: warm reuse, same session comes back for the next open.
   await releaseIosRunnerOnClose(device.id, { retain: true });
-  assert.ok(getRunnerSessionSnapshot(device.id));
+  assert.ok(readRunnerSessionLiveness(device.id));
   assert.equal((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
 
   // Busy + retain: a command that stalls answers MAIN_THREAD_TIMEOUT, so the stalled runner is
@@ -312,10 +312,10 @@ test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and t
     ),
   );
   await releaseIosRunnerOnClose(device.id, { retain: true });
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.notEqual((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
 
   // Non-retained close: stops regardless of occupancy.
   await releaseIosRunnerOnClose(device.id, { retain: false });
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });

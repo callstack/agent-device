@@ -11,14 +11,14 @@ const {
   mockEnsureRunnerSession,
   mockExecuteRunnerCommandWithSession,
   mockEmitDiagnostic,
-  mockGetRunnerSessionSnapshot,
+  mockReadRunnerSessionLiveness,
   mockInvalidateRunnerSession,
   mockMarkRunnerXctestrunArtifactBadForRun,
 } = vi.hoisted(() => ({
   mockEnsureRunnerSession: vi.fn(),
   mockExecuteRunnerCommandWithSession: vi.fn(),
   mockEmitDiagnostic: vi.fn(),
-  mockGetRunnerSessionSnapshot: vi.fn(),
+  mockReadRunnerSessionLiveness: vi.fn(),
   mockInvalidateRunnerSession: vi.fn(),
   mockMarkRunnerXctestrunArtifactBadForRun: vi.fn(),
 }));
@@ -30,7 +30,7 @@ vi.mock('../runner-session.ts', async () => {
     ...actual,
     ensureRunnerSession: mockEnsureRunnerSession,
     executeRunnerCommandWithSession: mockExecuteRunnerCommandWithSession,
-    getRunnerSessionSnapshot: mockGetRunnerSessionSnapshot,
+    readRunnerSessionLiveness: mockReadRunnerSessionLiveness,
     invalidateRunnerSession: mockInvalidateRunnerSession,
   };
 });
@@ -54,7 +54,7 @@ const { markRequestCanceled, clearRequestCanceled, isRequestCanceled } = request
 beforeEach(() => {
   vi.resetAllMocks();
   resetRunnerRecycleLedgerForTests();
-  mockGetRunnerSessionSnapshot.mockReturnValue(null);
+  mockReadRunnerSessionLiveness.mockReturnValue(null);
   mockMarkRunnerXctestrunArtifactBadForRun.mockResolvedValue(undefined);
   requestCancellation.reset();
   appleRunnerTestHost.update({
@@ -298,8 +298,8 @@ test('prepareIosRunner does not relaunch after request cancellation', async () =
 });
 
 test('mutating commands restart stale ready sessions when the preflight probe never reaches the runner', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
@@ -321,8 +321,8 @@ test('mutating commands restart stale ready sessions when the preflight probe ne
 });
 
 test('mutating commands retry startup sessions with stale bundle cleanup', async () => {
-  const startupSession = makeRunnerSession({ port: 8100, ready: false });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const startupSession = makeRunnerSession({ port: 8100, state: 'starting' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(startupSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
@@ -343,8 +343,8 @@ test('mutating commands retry startup sessions with stale bundle cleanup', async
 });
 
 test('mutating commands emit readiness recovery diagnostics after failed preflight restart succeeds', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
@@ -365,7 +365,7 @@ test('mutating commands emit readiness recovery diagnostics after failed preflig
 });
 
 test('mutating commands do not restart or replay after command send failure', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -400,7 +400,7 @@ test('mutating commands do not restart or replay after command send failure', as
 });
 
 test('mutating commands recover cached responses before invalidating after command send failure', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -427,7 +427,7 @@ test('mutating commands recover cached responses before invalidating after comma
 });
 
 test('mutating commands keep invalidating when status cannot find the command', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -461,7 +461,7 @@ test('mutating commands keep invalidating when status cannot find the command', 
 });
 
 test('mutating commands keep invalidating when status recovery probe fails', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -490,7 +490,7 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
 });
 
 test('mutating commands keep invalidating when status reports an unknown lifecycle state', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -522,7 +522,7 @@ test('mutating commands keep invalidating when status reports an unknown lifecyc
 });
 
 test('read-only commands retry when completed status has no retained response', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValue(session);
   mockExecuteRunnerCommandWithSession
@@ -547,7 +547,7 @@ test('read-only commands retry when completed status has no retained response', 
 test('read-only startup commands use the session startup timeout override', async () => {
   const session = makeRunnerSession({
     port: 8100,
-    ready: false,
+    state: 'starting',
     startupTimeoutMs: 240_000,
   });
 
@@ -565,7 +565,7 @@ test('read-only startup commands use the session startup timeout override', asyn
 });
 
 test('read-only commands retry when status shows in-flight work', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValue(session);
   mockExecuteRunnerCommandWithSession
@@ -583,7 +583,7 @@ test('read-only commands retry when status shows in-flight work', async () => {
 });
 
 test('mutating commands report recovery guidance when completed status has no retained response', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -614,7 +614,7 @@ test('mutating commands report recovery guidance when completed status has no re
 });
 
 test('mutating commands run status recovery after transport failure when readiness preflight was skipped', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -645,7 +645,7 @@ test('mutating commands run status recovery after transport failure when readine
 });
 
 test('mutating commands include skipped readiness context in lost-response guidance', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -674,7 +674,7 @@ test('mutating commands include skipped readiness context in lost-response guida
 });
 
 test('mutating commands keep conservative invalidation for skipped-preflight failures with unknown lifecycle', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -711,7 +711,7 @@ test('mutating commands keep conservative invalidation for skipped-preflight fai
 });
 
 test('mutating commands preserve runner failure details from status recovery', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -746,7 +746,7 @@ test('mutating commands preserve runner failure details from status recovery', a
 });
 
 test('mutating commands use recovery guidance when failed status has no runner hint', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -776,7 +776,7 @@ test('mutating commands use recovery guidance when failed status has no runner h
 });
 
 test('mutating commands report wait-and-inspect guidance when status shows in-flight work', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -806,8 +806,8 @@ test('mutating commands report wait-and-inspect guidance when status shows in-fl
 });
 
 test('mutating commands invalidate the retry session without replaying again', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
@@ -843,7 +843,7 @@ test('mutating commands invalidate the retry session without replaying again', a
 });
 
 test('sequence recovers retained per-step results without resending', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
   const sequenceData = {
     message: 'sequence',
     completedSteps: 3,
@@ -884,7 +884,7 @@ test('sequence recovers retained per-step results without resending', async () =
 });
 
 test('sequence surfaces a lifecycle failure without replaying', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -922,7 +922,7 @@ test('sequence surfaces a lifecycle failure without replaying', async () => {
 });
 
 test('sequence in-flight after lost response reports no-replay guidance', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -953,7 +953,7 @@ test('sequence in-flight after lost response reports no-replay guidance', async 
 });
 
 test('sequence invalidates the session when the status probe fails', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(session);
   mockExecuteRunnerCommandWithSession
@@ -1100,7 +1100,7 @@ function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSessio
     jsonPath: '/tmp/runner.json',
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null },
-    ready: true,
+    state: 'ready',
     ...overrides,
   } as RunnerSession;
 }
@@ -1129,7 +1129,7 @@ test('a request pays for at most one runner recycle, then fails fast with a pres
   // request must stop after ONE recycle instead of stacking ~25s xcodebuild boots until the
   // client envelope kills the daemon.
   const requestId = 'req-recycle-cap';
-  mockEnsureRunnerSession.mockImplementation(async () => makeRunnerSession({ ready: true }));
+  mockEnsureRunnerSession.mockImplementation(async () => makeRunnerSession({ state: 'ready' }));
   mockExecuteRunnerCommandWithSession.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'fetch failed'),
   );
@@ -1152,9 +1152,9 @@ test('a request pays for at most one runner recycle, then fails fast with a pres
 test('a failed replacement boot does not consume the request recycle budget', async () => {
   const requestId = 'req-recycle-transient-boot-failure';
   mockEnsureRunnerSession
-    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, ready: true }))
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, state: 'ready' }))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner did not accept connection'))
-    .mockResolvedValueOnce(makeRunnerSession({ port: 8101, ready: true }));
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8101, state: 'ready' }));
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
@@ -1166,16 +1166,16 @@ test('a failed replacement boot does not consume the request recycle budget', as
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 3);
 });
 
-test('alive session reuse in the same request does not consume recycle budget', async () => {
+test('a live session reused in the same request does not consume the recycle budget', async () => {
   const requestId = 'req-alive-reuse-before-recycle';
-  mockGetRunnerSessionSnapshot
+  mockReadRunnerSessionLiveness
     .mockReturnValueOnce(null)
-    .mockReturnValueOnce({ alive: true })
+    .mockReturnValueOnce({ sessionId: 'runner-1', liveness: 'ready' })
     .mockReturnValueOnce(null);
   mockEnsureRunnerSession
-    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, ready: true }))
-    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, ready: true }))
-    .mockResolvedValueOnce(makeRunnerSession({ port: 8101, ready: true }));
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, state: 'ready' }))
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, state: 'ready' }))
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8101, state: 'ready' }));
   mockExecuteRunnerCommandWithSession
     .mockResolvedValueOnce({ message: 'first tap' })
     .mockResolvedValueOnce({ message: 'second tap' })
@@ -1199,8 +1199,8 @@ test('alive session reuse in the same request does not consume recycle budget', 
 
 test('a later command in the same request cannot pay for a second recycle boot', async () => {
   const requestId = 'req-restart-cap';
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession

@@ -14,14 +14,14 @@ const {
   mockEnsureRunnerSession,
   mockExecuteRunnerCommandWithSession,
   mockEmitDiagnostic,
-  mockGetRunnerSessionSnapshot,
+  mockReadRunnerSessionLiveness,
   mockInvalidateRunnerSession,
   mockMarkRunnerXctestrunArtifactBadForRun,
 } = vi.hoisted(() => ({
   mockEnsureRunnerSession: vi.fn(),
   mockExecuteRunnerCommandWithSession: vi.fn(),
   mockEmitDiagnostic: vi.fn(),
-  mockGetRunnerSessionSnapshot: vi.fn(),
+  mockReadRunnerSessionLiveness: vi.fn(),
   mockInvalidateRunnerSession: vi.fn(),
   mockMarkRunnerXctestrunArtifactBadForRun: vi.fn(),
 }));
@@ -33,7 +33,7 @@ vi.mock('../runner-session.ts', async () => {
     ...actual,
     ensureRunnerSession: mockEnsureRunnerSession,
     executeRunnerCommandWithSession: mockExecuteRunnerCommandWithSession,
-    getRunnerSessionSnapshot: mockGetRunnerSessionSnapshot,
+    readRunnerSessionLiveness: mockReadRunnerSessionLiveness,
     invalidateRunnerSession: mockInvalidateRunnerSession,
   };
 });
@@ -61,7 +61,7 @@ const { isRequestCanceled } = requestCancellation;
 beforeEach(() => {
   vi.resetAllMocks();
   resetRunnerRecycleLedgerForTests();
-  mockGetRunnerSessionSnapshot.mockReturnValue(null);
+  mockReadRunnerSessionLiveness.mockReturnValue(null);
   mockMarkRunnerXctestrunArtifactBadForRun.mockResolvedValue(undefined);
   requestCancellation.reset();
   appleRunnerTestHost.update({
@@ -86,8 +86,8 @@ function makeRunnerArtifact(
 }
 
 test('mutating commands restart stale sessions when readiness preflight fails before command send', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
@@ -111,8 +111,8 @@ test('mutating commands restart stale sessions when readiness preflight fails be
 });
 
 test('a readiness preflight that runs out a post deadline restarts the session and replays', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   // The simulator and usbmux routes post to the runner themselves, and `fetchWithTimeout` reports
   // an expiry as "Runner command deadline exceeded" with the budget it ran out. Neither of the two
@@ -137,8 +137,8 @@ test('a readiness preflight that runs out a post deadline restarts the session a
 });
 
 test('a readiness preflight refusal restarts the session like any other preflight failure', async () => {
-  const staleSession = makeRunnerSession({ port: 8100, ready: true });
-  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+  const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
+  const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
 
   // This is the shape no message check could have been written for: the runner answered the probe
   // and the answer was no, which says nothing about whether the command was written. The marker
@@ -162,7 +162,7 @@ test('a readiness preflight refusal restarts the session like any other prefligh
 });
 
 test('a failed readiness probe without the marker does not restart the session', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   // Without the marker the failure is just a transport shape, and the one that says the command
   // was never written is the reason this restart is safe at all.
@@ -183,7 +183,7 @@ test('a failed readiness probe without the marker does not restart the session',
 });
 
 test('a cancellation during the readiness preflight does not restart the session it canceled', async () => {
-  const session = makeRunnerSession({ port: 8100, ready: true });
+  const session = makeRunnerSession({ port: 8100, state: 'ready' });
 
   // The preflight's catch marks whatever it was waiting on when it gave up, and one of the things
   // it waits on is a caller that stopped waiting. That mark describes a walkaway, not a wedged

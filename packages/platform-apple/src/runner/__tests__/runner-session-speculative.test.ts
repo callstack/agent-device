@@ -88,7 +88,7 @@ vi.mock('../runner-startup-transport.ts', async () => {
 import {
   abortAllIosRunnerSessions,
   ensureRunnerSession,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   markRunnerSessionServed,
   releaseSpeculativeIosRunnerSession,
 } from '../runner-session.ts';
@@ -161,7 +161,7 @@ test('a prewarm-started session is speculative until a command other than a read
   markRunnerSessionServed(session, withRunnerCommandId({ command: 'tap', x: 1, y: 1 }));
   assert.equal(session.speculative, false);
   assert.equal(await releaseSpeculativeIosRunnerSession(device.id), false);
-  assert.notEqual(getRunnerSessionSnapshot(device.id), null, 'a served runner stays');
+  assert.notEqual(readRunnerSessionLiveness(device.id), null, 'a served runner stays');
 });
 
 test('releasing a speculative session stops it; a session a command asked for is kept', async () => {
@@ -172,9 +172,9 @@ test('releasing a speculative session stops it; a session a command asked for is
   await ensureRunnerSession(demanded, {});
 
   assert.equal(await releaseSpeculativeIosRunnerSession(speculative.id), true);
-  assert.equal(getRunnerSessionSnapshot(speculative.id), null);
+  assert.equal(readRunnerSessionLiveness(speculative.id), null);
   assert.equal(await releaseSpeculativeIosRunnerSession(demanded.id), false);
-  assert.notEqual(getRunnerSessionSnapshot(demanded.id), null);
+  assert.notEqual(readRunnerSessionLiveness(demanded.id), null);
   assert.equal(await releaseSpeculativeIosRunnerSession('no-such-device'), false);
 });
 
@@ -198,12 +198,12 @@ test('a release that arrives while the speculative start is still in flight stop
     new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), 50)),
   ]);
   assert.equal(settledEarly, 'pending', 'the release waits for the start it cannot yet see');
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 
   openGate();
   await starting;
   assert.equal(await releasing, true);
-  assert.equal(getRunnerSessionSnapshot(device.id), null, 'the completed start was stopped');
+  assert.equal(readRunnerSessionLiveness(device.id), null, 'the completed start was stopped');
 });
 
 test('a release that waits out a demanded start leaves that runner alone', async () => {
@@ -222,5 +222,5 @@ test('a release that waits out a demanded start leaves that runner alone', async
   openGate();
   await starting;
   assert.equal(await releasing, false);
-  assert.notEqual(getRunnerSessionSnapshot(device.id), null);
+  assert.notEqual(readRunnerSessionLiveness(device.id), null);
 });

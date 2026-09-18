@@ -24,7 +24,7 @@ export function makeRunnerSession(overrides: Partial<RunnerSession> = {}): Runne
     jsonPath: '/tmp/runner.json',
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null },
-    ready: true,
+    state: 'ready',
     ...overrides,
   } as RunnerSession;
 }

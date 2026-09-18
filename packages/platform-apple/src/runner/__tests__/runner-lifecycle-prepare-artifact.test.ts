@@ -11,14 +11,14 @@ const {
   mockEnsureRunnerSession,
   mockExecuteRunnerCommandWithSession,
   mockEmitDiagnostic,
-  mockGetRunnerSessionSnapshot,
+  mockReadRunnerSessionLiveness,
   mockInvalidateRunnerSession,
   mockMarkRunnerXctestrunArtifactBadForRun,
 } = vi.hoisted(() => ({
   mockEnsureRunnerSession: vi.fn(),
   mockExecuteRunnerCommandWithSession: vi.fn(),
   mockEmitDiagnostic: vi.fn(),
-  mockGetRunnerSessionSnapshot: vi.fn(),
+  mockReadRunnerSessionLiveness: vi.fn(),
   mockInvalidateRunnerSession: vi.fn(),
   mockMarkRunnerXctestrunArtifactBadForRun: vi.fn(),
 }));
@@ -30,7 +30,7 @@ vi.mock('../runner-session.ts', async () => {
     ...actual,
     ensureRunnerSession: mockEnsureRunnerSession,
     executeRunnerCommandWithSession: mockExecuteRunnerCommandWithSession,
-    getRunnerSessionSnapshot: mockGetRunnerSessionSnapshot,
+    readRunnerSessionLiveness: mockReadRunnerSessionLiveness,
     invalidateRunnerSession: mockInvalidateRunnerSession,
   };
 });
@@ -67,7 +67,7 @@ const { isRequestCanceled } = requestCancellation;
 beforeEach(() => {
   vi.resetAllMocks();
   resetRunnerRecycleLedgerForTests();
-  mockGetRunnerSessionSnapshot.mockReturnValue(null);
+  mockReadRunnerSessionLiveness.mockReturnValue(null);
   mockMarkRunnerXctestrunArtifactBadForRun.mockResolvedValue(undefined);
   requestCancellation.reset();
   appleRunnerTestHost.update({

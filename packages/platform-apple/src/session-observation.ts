@@ -8,9 +8,13 @@ export function createAppleSessionObservation(
 ): AppleSessionObservation {
   return Object.freeze({
     async observeRunnerSession(deviceId) {
-      const { getRunnerSessionSnapshot } = await import('./core/runner-client.ts');
-      const snapshot = await getRunnerSessionSnapshot(deviceId);
-      return snapshot ? { alive: snapshot.alive, sessionId: snapshot.sessionId } : undefined;
+      const { readRunnerSessionLiveness } = await import('./core/runner-client.ts');
+      const snapshot = readRunnerSessionLiveness(deviceId);
+      // `alive` keeps its contract meaning: a registered session whose runner is going away is
+      // still a runner the caller can find, and only `gone` means there is none.
+      return snapshot
+        ? { alive: snapshot.liveness !== 'gone', sessionId: snapshot.sessionId }
+        : undefined;
     },
     async resolveSoleForegroundApp(options = {}) {
       try {

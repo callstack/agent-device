@@ -192,7 +192,7 @@ function buildAdoptedRunnerSession(
     testPromise: wait,
     child,
     // The probe already proved the runner answers commands.
-    ready: true,
+    state: 'ready',
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
       requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
     ),

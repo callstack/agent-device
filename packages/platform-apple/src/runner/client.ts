@@ -18,7 +18,7 @@ import { runnerLeaseCleanupAdapter } from './runner-disposal.ts';
 import { runApplePressSeries } from './runner-sequence.ts';
 import {
   detachIosSimulatorRunnerSessionsForShutdown,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   releaseIosRunnerOnClose,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
@@ -43,7 +43,7 @@ export type AppleRunnerClient = {
   resolveRunnerAppBundleId: typeof resolveRunnerAppBundleId;
   hasCachedAppleRunnerArtifact: typeof hasCachedAppleRunnerArtifact;
   detachIosSimulatorRunnerSessionsForShutdown: typeof detachIosSimulatorRunnerSessionsForShutdown;
-  getRunnerSessionSnapshot: typeof getRunnerSessionSnapshot;
+  readRunnerSessionLiveness: typeof readRunnerSessionLiveness;
   releaseIosRunnerOnClose: typeof releaseIosRunnerOnClose;
   stopIosRunnerSession: typeof stopIosRunnerSession;
   stopAllIosRunnerSessions: typeof stopAllIosRunnerSessions;
@@ -74,7 +74,7 @@ export function createAppleRunnerClient(host: AppleRunnerHost): AppleRunnerClien
     resolveRunnerAppBundleId,
     hasCachedAppleRunnerArtifact,
     detachIosSimulatorRunnerSessionsForShutdown,
-    getRunnerSessionSnapshot,
+    readRunnerSessionLiveness,
     releaseIosRunnerOnClose,
     stopIosRunnerSession,
     stopAllIosRunnerSessions,

@@ -140,7 +140,7 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
 
   expect(session).not.toBeNull();
   expect(session?.port).toBe(lease.port);
-  expect(session?.ready).toBe(true);
+  expect(session?.state).toBe('ready');
   expect(session?.child.pid).toBe(424242);
   expect(session?.sessionId).toBe(lease.sessionId);
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
@@ -252,7 +252,7 @@ test('adoption accepts a legacy lease whose live pid is runner-shaped', async ()
 
   const session = await tryAdoptRunnerSessionFromLease(simulator, {});
 
-  expect(session?.ready).toBe(true);
+  expect(session?.state).toBe('ready');
   expect(session?.child.pid).toBe(424242);
 });
 

@@ -237,7 +237,7 @@ async function tryReadySimulatorEndpoint(params: {
   attemptDeadline?: Deadline;
   setLastError: (error: unknown) => void;
 }): Promise<Response | null> {
-  if (params.device.kind !== 'simulator' || !params.session?.ready) return null;
+  if (params.device.kind !== 'simulator' || params.session?.state !== 'ready') return null;
   return await tryRunnerSimulatorEndpoint(params.device, params.port, params.command, {
     signal: params.signal,
     attemptDeadline: params.attemptDeadline,

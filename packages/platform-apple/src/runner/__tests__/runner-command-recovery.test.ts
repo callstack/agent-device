@@ -34,7 +34,7 @@ function makeRunnerSession(port: number): RunnerSession {
     jsonPath: '/tmp/fake.json',
     testPromise: new Promise<ExecResult>(() => {}),
     child: { pid: process.pid, exitCode: null },
-    ready: true,
+    state: 'ready',
   };
 }
 

@@ -24,7 +24,7 @@ import {
   abortAllIosRunnerSessions,
   ensureRunnerSession,
   executeRunnerCommandWithSession,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   releaseIosRunnerOnClose,
   stopIosRunnerSession,
   type RunnerSession,
@@ -195,7 +195,7 @@ test('a retained close over an idle runner keeps that runner warm for the next o
   assert.deepEqual(events, ['release', 'released', 'alerts']);
   assert.match(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
   assert.doesNotMatch(diagnostics, /ios_runner_retain_skipped_busy/);
-  assert.equal(getRunnerSessionSnapshot(device.id)?.sessionId, session.sessionId);
+  assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
   assert.ok(runnerLeaseExists(device.id));
   // The next open gets the same runner and launches nothing.
   assert.equal((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
@@ -216,7 +216,7 @@ test('a retained close disposes a runner still draining so the next open boots a
   assert.deepEqual(events, ['release', 'released', 'alerts']);
   assert.match(diagnostics, /"phase":"ios_runner_retain_skipped_busy"/);
   assert.doesNotMatch(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(runnerLeaseExists(device.id), false);
   assert.notEqual((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
   assert.equal(mockRunCmdBackground.mock.calls.length, 2);
@@ -238,7 +238,7 @@ test('a non-retained close stops the runner and cancels the idle stop a retained
 
   assert.match(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
   assert.doesNotMatch(diagnostics, /"phase":"ios_runner_idle_stop"/);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(runnerLeaseExists(device.id), false);
 });
 
@@ -267,7 +267,7 @@ test('a retained close with no runner in memory starts none and claims no lease 
   await lifecycle.finalizeApplicationClose(closeInput(true));
 
   assert.deepEqual(events, ['release', 'released', 'alerts']);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(mockRunCmdBackground.mock.calls.length, 0);
   assert.equal(runnerLeaseExists(device.id), false);
 });
@@ -281,7 +281,7 @@ test('a daemon-shutdown close never issues the ordinary close release (#2615)', 
   await lifecycle.finalizeApplicationClose({ ...closeInput(true), daemonShutdown: true });
 
   assert.deepEqual(events, ['alerts']);
-  assert.equal(getRunnerSessionSnapshot(device.id)?.sessionId, session.sessionId);
+  assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
   assert.ok(runnerLeaseExists(device.id));
 });
 
@@ -331,7 +331,7 @@ test('a drain that lands after close is issued cannot return a busy runner to re
   assert.equal(session.runnerMainThreadBusy, false);
   assert.match(diagnostics, /"phase":"ios_runner_retain_skipped_busy"/);
   assert.doesNotMatch(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 /** The close path's Apple tools, composed exactly as the root's lazy tools compose them. */

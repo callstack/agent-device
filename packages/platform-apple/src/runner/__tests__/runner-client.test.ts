@@ -497,7 +497,7 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
       },
     }),
   );
-  const session = { ready: false };
+  const session = { state: 'starting' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -523,7 +523,7 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint naming the occlusio
       },
     }),
   );
-  const session = { ready: false };
+  const session = { state: 'starting' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -552,7 +552,7 @@ test('parseRunnerResponse preserves iOS AX snapshot failure code and hint', asyn
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -581,7 +581,7 @@ test('parseRunnerResponse preserves XCTest recorded failure code and hint', asyn
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -608,7 +608,7 @@ test('parseRunnerResponse maps RUNNER_BUSY to retriable command failure', async 
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -635,7 +635,7 @@ test('parseRunnerResponse preserves RUNNER_WEDGED as a fatal runner code', async
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, '/tmp/runner.log'),
@@ -667,7 +667,7 @@ Thread 0 Crashed::  Dispatch queue: com.apple.main-thread
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, logPath),
@@ -697,7 +697,7 @@ The application under test terminated unexpectedly.
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, logPath),
@@ -726,7 +726,7 @@ AGENT_DEVICE_RUNNER_COMMAND_FAILED command=snapshot error=fetch failed
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, logPath),
@@ -754,7 +754,7 @@ test('parseRunnerResponse hints when XCTest main-thread execution times out', as
       },
     }),
   );
-  const session = { ready: true };
+  const session = { state: 'ready' } as const;
 
   await assert.rejects(
     () => parseRunnerResponse(response, session, logPath),
@@ -782,14 +782,14 @@ test('parseRunnerResponse emits diagnostics for runner gesture fallbacks', async
       },
     }),
   );
-  const session = { ready: false };
+  const session = { state: 'starting' } as const;
   const diagnosticEvents: DiagnosticEventInput[] = [];
   appleRunnerTestHost.update({ emitDiagnostic: (event) => diagnosticEvents.push(event) });
 
   const data = await parseRunnerResponse(response, session, '/tmp/runner.log');
   assert.equal(data.gestureFallback, 'xctest-coordinate-drag');
 
-  assert.equal(session.ready, true);
+  assert.equal(session.state, 'ready');
   const diagnostics = JSON.stringify(diagnosticEvents);
   assert.match(diagnostics, /ios_runner_gesture_fallback/);
   assert.match(diagnostics, /xctest-coordinate-drag/);

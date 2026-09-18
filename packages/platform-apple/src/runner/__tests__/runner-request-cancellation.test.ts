@@ -73,7 +73,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
 });
 
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { abortAllIosRunnerSessions, getRunnerSessionSnapshot } from '../runner-session.ts';
+import { abortAllIosRunnerSessions, readRunnerSessionLiveness } from '../runner-session.ts';
 import type { RunnerLease } from '../runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
 
@@ -180,7 +180,7 @@ test('direct command cancellation reaches runner launch without a registered req
     (error: unknown) => isRequestCanceledError(error),
   );
 
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 test('prepare cancellation stops only its runner and preserves unrelated prep', async () => {
@@ -197,7 +197,7 @@ test('prepare cancellation stops only its runner and preserves unrelated prep', 
       logPath: '/tmp/runner.log',
       healthTimeoutMs: 30_000,
     });
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
 
     mockWaitForRunner.mockImplementation(async () => {
       markRequestCanceled(canceledRequestId);
@@ -215,8 +215,8 @@ test('prepare cancellation stops only its runner and preserves unrelated prep', 
     const canceledSignal = getRequestSignal(canceledRequestId);
     assert.ok(mockRunCmdBackground.mock.calls.some((call) => call[2]?.signal === canceledSignal));
     assert.equal(canceledSignal?.aborted, true);
-    assert.equal(getRunnerSessionSnapshot(canceledDevice.id), null);
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(canceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
   } finally {
     clearRequestCanceled(survivorRequestId);
     clearRequestCanceled(canceledRequestId);
@@ -243,7 +243,7 @@ test('normal command cancellation during launch or initial readiness retains no 
       { command: 'snapshot', appBundleId: 'com.example.demo' },
       { requestId: survivorRequestId, logPath: '/tmp/runner.log' },
     );
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
 
     const canceledSignal = getRequestSignal(launchCanceledRequestId);
     mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
@@ -275,9 +275,9 @@ test('normal command cancellation during launch or initial readiness retains no 
       (error: unknown) => isRequestCanceledError(error),
     );
 
-    assert.equal(getRunnerSessionSnapshot(launchCanceledDevice.id), null);
-    assert.equal(getRunnerSessionSnapshot(readinessCanceledDevice.id), null);
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(launchCanceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(readinessCanceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
     assert.deepEqual(readRetainedLeaseDeviceIds(), [survivorDevice.id]);
   } finally {
     clearRequestCanceled(survivorRequestId);

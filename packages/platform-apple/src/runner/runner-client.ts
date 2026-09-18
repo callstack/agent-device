@@ -2,7 +2,7 @@ import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   stopIosRunnerSession,
   validateRunnerDevice,
   releaseSpeculativeIosRunnerSession,
@@ -184,10 +184,11 @@ function resolveAppleRunnerRuntime(
 }
 
 /**
- * Whether asking this device's runner now would be answered without a startup wait. A session
- * that is registered but has not answered yet is still starting, so it does not count: sending it
- * a command would queue behind its connection retries, and a failed reset would even invalidate it.
- * Observation paths use this to stay runner-free until the runner is ready.
+ * Whether asking this device's runner now would be answered without a startup wait. Only a
+ * session in the `ready` state counts: one that is registered but has not answered yet is still
+ * starting, so sending it a command would queue behind its connection retries, and one already
+ * going away would be asked to work while it is being taken down. Observation paths use this to
+ * stay runner-free until the runner is ready.
  */
 export function hasLiveIosRunnerSession(
   device: DeviceInfo,
@@ -209,10 +210,7 @@ export async function releaseSpeculativeIosRunnerSessionFor(
 
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
-  hasLiveSession: (device) => {
-    const session = getRunnerSessionSnapshot(device.id);
-    return session !== null && session.alive && session.ready;
-  },
+  hasLiveSession: (device) => readRunnerSessionLiveness(device.id)?.liveness === 'ready',
   releaseSpeculativeSession: async (device) => await releaseSpeculativeIosRunnerSession(device.id),
   prewarm: async (device, options) => {
     const { healthCheck, ...runnerOptions } = options;

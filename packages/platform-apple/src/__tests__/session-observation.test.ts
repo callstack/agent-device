@@ -6,7 +6,7 @@ const { snapshot, runningApp } = vi.hoisted(() => ({
   snapshot: vi.fn(),
   runningApp: vi.fn(),
 }));
-vi.mock('../core/runner-client.ts', () => ({ getRunnerSessionSnapshot: snapshot }));
+vi.mock('../core/runner-client.ts', () => ({ readRunnerSessionLiveness: snapshot }));
 vi.mock('../core/app-resolution.ts', () => ({ detectSoleRunningIosSimulatorApp: runningApp }));
 
 const host = {
@@ -19,22 +19,19 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-test.each([true, false])(
-  'runner observation preserves liveness %s and session identity',
-  async (alive) => {
-    snapshot.mockResolvedValue({ sessionId: 'runner-1', alive, ready: false });
+test('runner observation reports a registered runner, whatever lifecycle state it is in', async () => {
+  snapshot.mockReturnValue({ sessionId: 'runner-1', liveness: 'starting' });
 
-    await expect(observation.observeRunnerSession('sim-1')).resolves.toEqual({
-      alive,
-      sessionId: 'runner-1',
-    });
-    expect(snapshot).toHaveBeenCalledWith('sim-1');
-    expect(host.listLocalDevices).not.toHaveBeenCalled();
-  },
-);
+  await expect(observation.observeRunnerSession('sim-1')).resolves.toEqual({
+    alive: true,
+    sessionId: 'runner-1',
+  });
+  expect(snapshot).toHaveBeenCalledWith('sim-1');
+  expect(host.listLocalDevices).not.toHaveBeenCalled();
+});
 
 test('a missing runner session has no observation', async () => {
-  snapshot.mockResolvedValue(null);
+  snapshot.mockReturnValue(null);
   await expect(observation.observeRunnerSession('sim-1')).resolves.toBeUndefined();
 });
 

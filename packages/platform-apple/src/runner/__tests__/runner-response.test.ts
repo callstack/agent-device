@@ -8,6 +8,7 @@ import {
   readRunnerResponseData,
 } from '../runner-contract.ts';
 import { parseRunnerResponse } from '../runner-session.ts';
+import type { RunnerSessionState } from '../runner-session-types.ts';
 
 // A body cut off mid-write: the shape a runner that died while answering leaves behind.
 const TRUNCATED_BODY = '{"ok":true,"data":{"nodes":[{"label":"Sign In"';
@@ -104,7 +105,7 @@ describe('buildRunnerResponseError', () => {
 
 describe('parseRunnerResponse', () => {
   test('refuses a body whose ok is not the boolean true', async () => {
-    const session = { ready: false };
+    const session: { state: RunnerSessionState } = { state: 'starting' };
 
     await assert.rejects(
       () => parseRunnerResponse(new Response(STRINGLY_TYPED_BODY), session),
@@ -116,11 +117,11 @@ describe('parseRunnerResponse', () => {
       },
     );
 
-    assert.equal(session.ready, false);
+    assert.equal(session.state, 'starting');
   });
 
   test('refuses a body that is not readable JSON', async () => {
-    const session = { ready: false };
+    const session: { state: RunnerSessionState } = { state: 'starting' };
 
     await assert.rejects(
       () => parseRunnerResponse(new Response(TRUNCATED_BODY), session),
@@ -134,6 +135,6 @@ describe('parseRunnerResponse', () => {
       },
     );
 
-    assert.equal(session.ready, false);
+    assert.equal(session.state, 'starting');
   });
 });

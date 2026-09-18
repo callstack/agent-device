@@ -21,7 +21,7 @@ import {
   type RunnerLeaseCleanupAdapter,
 } from './runner-lease.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS, runnerPrepProcesses } from './runner-xctestrun.ts';
-import type { RunnerSession } from './runner-session-types.ts';
+import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
 
 export const RUNNER_INVALIDATE_WAIT_TIMEOUT_MS = 1_000;
 
@@ -53,6 +53,9 @@ export async function disposeRunnerSession(
   session: RunnerSession,
   options: RunnerDisposalOptions = {},
 ): Promise<void> {
+  // From here the session is going away: it still owns the lease and the process is still up, so
+  // it can answer a request, and it must not be chosen for new work while it is being taken down.
+  advanceRunnerSessionState(session, 'draining');
   let processExitHandled = false;
   if (options.graceful !== false) {
     processExitHandled = await shutdownRunnerSessionGracefully(session);
@@ -83,6 +86,9 @@ export async function abortRunnerSessionsAndPrepProcesses(
   const prepProcesses = Array.from(runnerPrepProcesses);
   const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
   const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
+  for (const session of activeSessions) {
+    advanceRunnerSessionState(session, 'draining');
+  }
   await signalRunnerSessions(otherSessions, 'SIGINT');
   await signalRunnerPrepProcesses(prepProcesses, 'SIGINT');
   await signalRunnerSessions(otherSessions, 'SIGTERM');
@@ -162,19 +168,23 @@ async function interruptMacOsRunnerSessions(sessions: readonly RunnerSession[]):
   // restores it during xcodebuild teardown. Give SIGINT time to complete that teardown before
   // escalating; revisit only if XCTest exposes a separate public cleanup acknowledgement.
   await signalRunnerSessions(sessions, 'SIGINT');
-  const afterInterrupt = await runnerSessionsStillAlive(
+  const afterInterrupt = await runnerSessionsWithRunningProcesses(
     sessions,
     MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS,
   );
   await signalRunnerSessions(afterInterrupt, 'SIGTERM');
-  const afterTerm = await runnerSessionsStillAlive(
+  const afterTerm = await runnerSessionsWithRunningProcesses(
     afterInterrupt,
     MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS,
   );
   await signalRunnerSessions(afterTerm, 'SIGKILL');
 }
 
-async function runnerSessionsStillAlive(
+/**
+ * The sessions whose runner process is still there after each waited up to `waitTimeoutMs` for its
+ * exit — the escalation step signals exactly these.
+ */
+async function runnerSessionsWithRunningProcesses(
   sessions: readonly RunnerSession[],
   waitTimeoutMs: number,
 ): Promise<RunnerSession[]> {
@@ -192,6 +202,8 @@ async function cleanupRunnerSessionResources(
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
   await session.simulatorSetRedirect?.releaseBestEffort();
+  // The session's own resources are gone: no lease, no temp files, no redirect to settle.
+  advanceRunnerSessionState(session, 'stopped');
 }
 
 /**
