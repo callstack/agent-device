@@ -100,10 +100,12 @@ export function beginOpenDeviceWait(params: {
   deviceId: string | undefined;
 }): OpenDeviceWait | undefined {
   const { req, sessionName, sessionStore, deviceId } = params;
-  if (req.command !== 'open' || deviceId === undefined) return undefined;
-  if (sessionStore.get(sessionName)) return undefined;
+  if (req.command !== 'open') return undefined;
+  // The budget is read before anything else, so a request carrying a budget it may not spend is
+  // refused whether or not its device turned out to be resolvable.
   const budgetMs = readOpenWaitBudgetMs(req);
   if (budgetMs === undefined) return undefined;
+  if (deviceId === undefined || sessionStore.get(sessionName)) return undefined;
   return createOpenDeviceWait({ req, sessionName, sessionStore, deviceId, budgetMs });
 }
 

@@ -102,6 +102,18 @@ test('the daemon holds a budget to the bounds its own option declares', () => {
       code: 'INVALID_ARGS',
     });
   }
+
+  // A budget that cannot be spent is refused before the device it was meant for is even in play.
+  expect(
+    thrownBy(() =>
+      beginOpenDeviceWait({
+        req: openRequest({ waitMs: (max ?? 0) + 1 }),
+        sessionName: OPENER_ADDRESS,
+        sessionStore: new SessionStore('/tmp/ad-wait-unresolved'),
+        deviceId: undefined,
+      }),
+    ),
+  ).toMatchObject({ code: 'INVALID_ARGS' });
 });
 
 test('a refusal offers the flag only to a caller that did not arrive carrying it', () => {
