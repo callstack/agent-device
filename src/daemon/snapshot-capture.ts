@@ -25,7 +25,7 @@ import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcom
 import { createInteractionRetryTap } from './interaction-retry-tap.ts';
 import type { SessionState } from './session-state.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 type CaptureSnapshotParams = {
   device: SessionState['device'];

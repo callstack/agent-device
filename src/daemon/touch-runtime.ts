@@ -24,13 +24,13 @@ import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
-import type { DaemonFailureResponse } from './response.ts';
 import {
   admitRuntimeOperations,
   type RuntimeAdmissionBindings,
   type UnavailableRuntimeResponse,
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 export type TouchRuntimeCommand = 'click' | 'press' | 'fill' | 'longpress' | 'hover';
 

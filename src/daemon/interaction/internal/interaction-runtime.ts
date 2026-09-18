@@ -10,7 +10,6 @@ import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
-import { NO_ACTIVE_SESSION_MESSAGE } from '../../response.ts';
 import { buildAppleRunnerRequestOptions } from '../../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
@@ -31,6 +30,7 @@ import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
+import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
 
 export function createInteractionRuntimeForRoute(
   params: InteractionRouteInput & {

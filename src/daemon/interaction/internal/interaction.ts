@@ -7,7 +7,6 @@ import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
-import { errorResponse, noActiveSessionError } from '../../response.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -19,6 +18,7 @@ import {
   resolveBoundTypeTextRuntime,
   type BoundTypeTextExecutor,
 } from '../../type-text-runtime.ts';
+import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },

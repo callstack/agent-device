@@ -17,12 +17,12 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
 import { successText } from '@agent-device/kernel/success-text';
-import { errorResponse, type DaemonFailureResponse } from '../response.ts';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
 } from '../session-device-resolution.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 type ClipboardAction = 'read' | 'write';
 

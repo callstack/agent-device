@@ -29,8 +29,8 @@ import {
   type RuntimeAdmissionRequest,
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DaemonFailureResponse } from './response.ts';
 import type { DeviceReadyOptions } from './device-ready.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type KeyboardRuntimeAction = 'status' | 'dismiss' | 'enter';
 

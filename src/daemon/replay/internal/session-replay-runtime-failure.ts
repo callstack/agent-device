@@ -28,7 +28,6 @@ export async function withReplayFailureDiagnostics(params: {
   /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
   scrubVars: readonly AdReplayScrubValue[];
   req: DaemonRequest;
-  sessionName: string;
   sessionStore: ReplaySessionStore;
   observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
@@ -55,7 +54,6 @@ async function withReplayFailureContext(params: {
   /** The engine's own live `${VAR}` scrub list, as of this point in the run — never recomputed here from a second scope object. */
   scrubVars: readonly AdReplayScrubValue[];
   req: DaemonRequest;
-  sessionName: string;
   sessionStore: ReplaySessionStore;
   observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
@@ -75,7 +73,6 @@ async function withReplayFailureContext(params: {
     snapshotDiagnostics,
     scrubVars,
     req,
-    sessionName,
     sessionStore,
     observationStore,
     resumeStamper,
@@ -93,7 +90,6 @@ async function withReplayFailureContext(params: {
     sourcePath: failureSource?.path ?? sourcePath,
     sourceLine: failureSource?.line ?? sourceLine,
     session: observationStore.get(),
-    sessionName,
     sessionStore,
     observationStore,
     resumeStamper,

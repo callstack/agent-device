@@ -3,10 +3,10 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
-import { errorResponse } from './response.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type WaitCurrentSurfaceParams = {
   req: DaemonRequest;

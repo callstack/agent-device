@@ -36,9 +36,9 @@ import {
   finalizeTouchInteraction,
 } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
-import { noActiveSessionError } from '../../response.ts';
 import type { RecordedTargetCapture } from '../../session-target-evidence.ts';
 import { gestureResponseData } from './interaction-gesture-response.ts';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 type GestureHandlerParams = InteractionRouteInput & {
   captureSnapshotForSession: CaptureSnapshotForSession;

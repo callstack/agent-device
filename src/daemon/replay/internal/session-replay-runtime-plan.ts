@@ -20,6 +20,7 @@ import {
 } from '@agent-device/ad-script';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
 import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**
  * #1555 P5 (decomposition): `runReplayCommand`'s (`native-command.ts`) plan-side
@@ -37,7 +38,6 @@ import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
  * extracted from the replay command itself (fallow complexity) rather than
  * split further, since every branch here is this one routing decision.
  */
-import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 export async function routeMaestroReplay(params: {
   resolved: string;
   keepSession: boolean;

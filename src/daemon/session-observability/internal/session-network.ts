@@ -3,12 +3,16 @@ import {
   networkAdmissionUse,
   resolveNetworkRuntimePlan,
 } from '@agent-device/contracts/network-runtime-plan';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
+import {
+  type DaemonFailureResponse,
+  NETWORK_INCLUDE_MODES,
+  type NetworkIncludeMode,
+  errorResponse,
+} from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { errorResponse, type DaemonFailureResponse } from '../../response.ts';
 
 const NETWORK_ACTIONS = ['dump', 'log'] as const;
 const NETWORK_ACTIONS_MESSAGE = `network requires ${NETWORK_ACTIONS.join(' or ')}`;

@@ -17,13 +17,13 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonFailureResponse } from './response.ts';
 import {
   admitRuntimeOperations,
   admitRuntimeUse,
   type RuntimeAdmissionBindings,
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 /**
  * One request's bound gesture authority. `gesture` and `swipe` both build their plans inside the

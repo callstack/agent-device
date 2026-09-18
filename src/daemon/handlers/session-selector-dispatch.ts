@@ -8,7 +8,6 @@ import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
 } from '../session-device-resolution.ts';
-import { errorResponse } from '../response.ts';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
@@ -18,6 +17,7 @@ import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
 import type { DeviceReadyOptions } from '../device-ready.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
  * What `runSessionOrSelectorDispatch`'s `prepare` thunk reports: either the early-exit response an

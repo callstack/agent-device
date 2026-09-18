@@ -32,7 +32,6 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
-import { errorResponse } from '../../response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
@@ -40,6 +39,7 @@ import {
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
 } from '../../session-runtime-admission.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;

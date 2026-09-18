@@ -24,8 +24,8 @@ import {
 } from './interaction-touch-response.ts';
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { parseFillTarget } from './interaction-touch-targets.ts';
-import { noActiveSessionError } from '../../response.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 /**
  * How `fill` is admitted, parameterized, executed, and projected: surface and

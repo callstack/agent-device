@@ -7,7 +7,6 @@ import type { WaitParsed } from '@agent-device/command-registry/wait-positionals
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import { parseVersionedRefPositional } from './ref-positionals.ts';
-import { errorResponse } from './response.ts';
 import { resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import { recordIfSession, stripResolutionPayload, toDaemonWaitData } from './selector-recording.ts';
@@ -30,6 +29,7 @@ import {
   createSelectorRuntimeForDevice,
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type DispatchWaitParams = SelectorRuntimeParams &
   Readonly<{ inspectFacts?: InspectDeviceRuntimeFacts; bindDevice?: BindDeviceRuntime }>;

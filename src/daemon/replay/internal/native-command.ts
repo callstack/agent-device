@@ -21,6 +21,7 @@ import {
 } from '../../replay-script-source.ts';
 import { prepareReplaySession } from './session-replay-runtime-session.ts';
 import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
+import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**
  * #1555 P5 (decomposition): the replay request's own orchestration — routing, plan resolution,
@@ -53,7 +54,6 @@ import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
  * so a handler that opened `req.positionals[0]` could only ever work when the
  * two happened to be the same host.
  */
-import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 export async function runReplayCommand(command: ReplayCommand): Promise<DaemonResponse> {
   const {
     request: req,

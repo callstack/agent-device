@@ -53,7 +53,6 @@ export async function buildReplayFailureDivergence(params: {
   sourcePath: string;
   sourceLine: number;
   session: SessionState | undefined;
-  sessionName: string;
   sessionStore: ReplaySessionStore;
   observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */

@@ -31,8 +31,8 @@ import {
   pointPositionals,
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
-import { noActiveSessionError } from '../../response.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 /**
  * The lifecycle every tree-resolved touch dispatch shares: Android readiness

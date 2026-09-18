@@ -11,8 +11,8 @@ import {
 } from '@agent-device/selectors/interaction-positionals';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
-import { errorResponse } from '../../response.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type ParsedTouchTarget =
   | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: never }

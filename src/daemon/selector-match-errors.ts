@@ -3,7 +3,7 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { formatSnapshotLine } from '@agent-device/capture-kit/snapshot-lines';
 import type { ElementMatchCandidateDetails } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from './daemon-request.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 // #1597: an agent reading an ambiguous-match error must be able to act on the
 // right @ref immediately, without a follow-up snapshot round trip. Candidate

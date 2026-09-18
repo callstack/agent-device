@@ -5,8 +5,8 @@ import {
   type BoundTouchExecutor,
   type TouchRuntimeCommand,
 } from '../../touch-runtime.ts';
-import type { DaemonFailureResponse } from '../../response.ts';
 import type { InteractionRouteInput } from './types.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 export type PreparedTouchDispatch =
   | Readonly<{ ok: false; response: DaemonFailureResponse }>

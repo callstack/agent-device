@@ -4,14 +4,17 @@ import {
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
-import { isSessionRuntimePlatform } from '@agent-device/kernel/contracts';
+import {
+  type DaemonFailureResponse,
+  errorResponse,
+  isSessionRuntimePlatform,
+} from '@agent-device/kernel/contracts';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
 import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
 
 type SessionRuntimeHintsStore = Readonly<{
   getRuntimeHints: SessionStore['getRuntimeHints'];

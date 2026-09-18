@@ -22,7 +22,6 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
-import { errorResponse } from '../response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   admitRuntimeOperations,
@@ -30,6 +29,7 @@ import {
   type UnavailableRuntimeResponse,
 } from '../runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';

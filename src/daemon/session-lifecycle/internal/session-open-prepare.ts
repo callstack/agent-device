@@ -17,9 +17,9 @@ import {
   tryResolveOpenRuntimeHints,
 } from '../../session-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { errorResponse } from '../../response.ts';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { resolveRunnerLogicalLeaseContext } from '../../lease-context.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type OpenCommandDetails = {
   appBundleId?: string;

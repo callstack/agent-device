@@ -74,7 +74,6 @@ test.each([
     sourcePath: path.join(root, 'flow.ad'),
     sourceLine: 1,
     session: replaySessionForTest(sessionStore, sessionName).observationStore.get(),
-    sessionName,
     sessionStore: replaySessionForTest(sessionStore, sessionName).store,
     observationStore: replaySessionForTest(sessionStore, sessionName).observationStore,
     resumeStamper: replayCoordinatorForTest(sessionStore, sessionName).resumeStamper,

@@ -30,10 +30,10 @@ import { formatScrollUntilMessage, runScrollUntilVisible } from './scroll-until.
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
-import { errorResponse } from './response.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type ScrollTarget = Readonly<{
   direction: ScrollDirection;

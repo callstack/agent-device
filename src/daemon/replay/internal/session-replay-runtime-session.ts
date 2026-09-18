@@ -12,6 +12,11 @@ import {
   healedScriptSiblingPath,
   type ReplayCoordinator,
 } from '../../session-replay-coordinator.ts';
+import {
+  errorResponse,
+  noActiveSessionError,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 /**
  * #1555 P5 (decomposition): `runReplayCommand`'s (`native-command.ts`) session
@@ -21,11 +26,6 @@ import {
  * everything else here is its own private decomposition (R2's repair-preflight, R6's arm-time
  * EEXIST preflight, and the actual arming closure).
  */
-import {
-  errorResponse,
-  noActiveSessionError,
-  type DaemonResponse,
-} from '@agent-device/kernel/contracts';
 
 export function prepareReplaySession(params: {
   req: DaemonRequest;

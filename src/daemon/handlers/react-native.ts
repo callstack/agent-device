@@ -16,7 +16,6 @@ import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { errorResponse, noActiveSessionError } from '../response.ts';
 import {
   captureSnapshotForSession,
   finalizeTouchInteraction,
@@ -24,6 +23,7 @@ import {
 } from '../interaction/index.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
+import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export async function handleReactNativeCommands(
   params: InteractionRouteInput,

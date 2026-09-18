@@ -16,7 +16,6 @@ import { resolvePayloadInput } from '../payload-input.ts';
 import { resolveDeployResultTarget } from '../../core/deploy-result-target.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from '../session-action-recorder.ts';
-import { errorResponse } from '../response.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
@@ -27,6 +26,7 @@ import {
   type RuntimeCommandHandlerParams,
   unavailableRuntimeOperationResponse,
 } from '../session-runtime-admission.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type DeployCommand = 'install' | 'reinstall';
 

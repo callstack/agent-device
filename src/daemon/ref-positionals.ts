@@ -1,6 +1,6 @@
 import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from './daemon-request.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
  * Daemon boundary for the versioned-ref suffix (#1076): a pinned `@e12~s3`

@@ -12,6 +12,7 @@ import {
   isReplayTargetGuardMismatchResponse,
   isWaitLandmarkMismatchResponse,
 } from './session-replay-target-verification.ts';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**
  * #1555 structural-quality review ("split step-loop.ts per the maestro
@@ -39,7 +40,6 @@ import {
  */
 
 /** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
-import { type DaemonResponse } from '@agent-device/kernel/contracts';
 export function applyReplayDispatchGuard(
   replayReq: DaemonRequest,
   guard: AdReplayDispatchGuard | undefined,

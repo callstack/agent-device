@@ -2,7 +2,6 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { SessionStore } from '../session-store.ts';
-import { errorResponse } from '../response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import {
@@ -17,6 +16,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { handlePortReverseCommand } from './session-runtime-port-reverse.ts';
 import { contextFromFlags } from '../context.ts';
 import { resolveBoundGestureViewportRuntime } from '../gesture-runtime.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type RuntimeAction = 'set' | 'show' | 'clear';
 type RuntimeCommandDevice = NonNullable<ReturnType<SessionStore['get']>>['device'];

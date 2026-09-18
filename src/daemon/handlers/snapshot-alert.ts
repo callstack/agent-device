@@ -19,10 +19,10 @@ import { recordIfSession } from '../snapshot-session.ts';
 import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import type { DaemonFailureResponse } from '../response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;

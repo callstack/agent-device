@@ -10,8 +10,8 @@ import { isRootInteractionContainer } from '@agent-device/selectors/interaction-
 import { preferOnscreenMatches } from './find-match-ranking.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import { errorResponse } from '../../response.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type FindMatchResult =
   | { ok: true; node: SnapshotState['nodes'][number] }

@@ -16,7 +16,7 @@ import {
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
 import type { DaemonResponse } from './daemon-request.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type DeviceClaimConflictReason =
   | 'DEVICE_CLAIM_LIVE_OWNER'

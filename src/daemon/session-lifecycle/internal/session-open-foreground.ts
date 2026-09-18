@@ -6,8 +6,8 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
-import { errorResponse } from '../../response.ts';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type ForegroundOpenResolution =
   | { type: 'not-requested' }

@@ -6,7 +6,6 @@ import type {
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { noActiveSessionError } from './response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
@@ -29,6 +28,7 @@ import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
 import { checkIsArgs } from '@agent-device/selectors';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;

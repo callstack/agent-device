@@ -131,7 +131,6 @@ export function createAdReplayStepRuntime(params: {
     sourceLine: ctx.actionLines[index] ?? 1,
     replayPath: ctx.resolved,
     artifactPaths: [...stepArtifactPaths],
-    sessionName: ctx.sessionName,
     sessionStore: ctx.sessionStore,
     observationStore: ctx.observationStore,
     resumeStamper: ctx.coordinator.resumeStamper,
@@ -236,7 +235,6 @@ export function createAdReplayStepRuntime(params: {
         buildDivergenceContext(action, index, stepArtifactPaths, scrubVars),
         {
           session: ctx.observationStore.get(),
-          sessionName: ctx.sessionName,
           observationStore: ctx.observationStore,
           logPath: ctx.logPath,
           action,
@@ -271,7 +269,6 @@ export function createAdReplayStepRuntime(params: {
         evidence,
         {
           session: ctx.observationStore.get(),
-          sessionName: ctx.sessionName,
           observationStore: ctx.observationStore,
           logPath: ctx.logPath,
           action,
@@ -391,7 +388,6 @@ async function buildReplayActionFailure(
       snapshotDiagnosticSamples,
       scrubVars,
       req,
-      sessionName: ctx.sessionName,
       sessionStore: ctx.sessionStore,
       observationStore: ctx.observationStore,
       resumeStamper: ctx.coordinator.resumeStamper,

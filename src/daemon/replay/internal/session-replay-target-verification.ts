@@ -109,7 +109,6 @@ export type TargetBindingDivergenceContext = {
   sourceLine: number;
   replayPath: string;
   artifactPaths: string[];
-  sessionName: string;
   sessionStore: ReplaySessionStore;
   observationStore: ReplaySessionObservation;
   /** #1478 P4b: the request's bound resume-stamping capability — never a second-constructed coordinator. */
@@ -297,7 +296,6 @@ export async function buildRecordedUnverifiableFailureResponse(
   context: TargetBindingDivergenceContext,
   params: {
     session: SessionState | undefined;
-    sessionName: string;
     observationStore: ReplaySessionObservation;
     logPath: string;
     action: SessionAction;
@@ -334,7 +332,6 @@ export async function buildPostDispatchTargetBindingFailureResponse(
   evidence: AdReplayTargetBindingEvidence,
   params: {
     session: SessionState | undefined;
-    sessionName: string;
     observationStore: ReplaySessionObservation;
     logPath: string;
     action: SessionAction;

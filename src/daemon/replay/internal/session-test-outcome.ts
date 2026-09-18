@@ -2,6 +2,7 @@ import { readSnapshotDiagnosticsSummary } from '@agent-device/contracts/capture'
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts';
 import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-device/replay-test';
+import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**
  * The one place a `DaemonResponse` becomes a neutral replay-test attempt outcome (#1478 P3).
@@ -12,7 +13,6 @@ import type { ReplayTestAttemptFailed, ReplayTestAttemptOutcome } from '@agent-d
  * pulled out here into an explicit tagged value, including the infrastructure verdict, which
  * needs platform boot-diagnostic vocabulary the scheduler may not import.
  */
-import { type DaemonResponse } from '@agent-device/kernel/contracts';
 export function toReplayTestAttemptOutcome(response: DaemonResponse): ReplayTestAttemptOutcome {
   if (!response.ok) {
     return {

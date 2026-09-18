@@ -7,7 +7,7 @@ import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import { listSessionSelectorConflicts } from './session-selector.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export function requireSessionOrExplicitSelector(
   command: string,

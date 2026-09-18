@@ -41,6 +41,11 @@ import {
   startReplayTestVideoRecordingIfReady,
 } from './session-replay-video-recording.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from './session-replay-test-policy.ts';
+import {
+  errorResponse,
+  type DaemonResponse,
+  type DaemonResponseData,
+} from '@agent-device/kernel/contracts';
 
 /**
  * Binds one replay-test attempt to daemon request cancellation (#1478 P3b).
@@ -50,11 +55,6 @@ import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from './session-replay-test-policy.t
  * canceled suite stops its in-flight attempt, and clearing the entry — is host work and lives
  * here, next to the rest of the daemon adapter.
  */
-import {
-  errorResponse,
-  type DaemonResponse,
-  type DaemonResponseData,
-} from '@agent-device/kernel/contracts';
 export const bindReplayTestAttemptCancellation: ReplayTestBindAttemptCancellation = ({
   attemptId,
   parentAttemptId,

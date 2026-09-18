@@ -23,11 +23,11 @@ import type {
   InspectDeviceRuntimeFacts,
   RuntimeAdmissionBindings,
 } from '../request-runtime-binding.ts';
-import type { DaemonFailureResponse } from '../response.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type RuntimeOperation = RuntimeOperationKey<PlatformRuntimeOperations>;
 

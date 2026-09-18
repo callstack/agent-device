@@ -2,7 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SessionRecoveryContext = 'device-in-use' | 'selector-conflict';
 

@@ -1,5 +1,4 @@
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
-import { errorResponse } from './response.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';
@@ -13,6 +12,7 @@ import { resolveBoundHomeRuntime } from './home-runtime.ts';
 import { resolveBoundAppSwitcherRuntime } from './app-switcher-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
  * The generic route's runtime-owned leaves (ADR 0019). Each one admits its own exact owner facts

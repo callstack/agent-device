@@ -4,11 +4,11 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
-import { errorResponse } from '../response.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
 } from '../session-device-resolution.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type PortReverseParseResult =
   | { ok: true; options: ProviderPortReverseOptions }

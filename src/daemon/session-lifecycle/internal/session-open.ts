@@ -26,7 +26,6 @@ import {
   composeOpenWithInitialSnapshot,
   resolveForegroundOpenRequest,
 } from './session-open-foreground.ts';
-import { errorResponse } from '../../response.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { DeviceClaimReconciler } from '../../device-claims.ts';
 import type {
@@ -44,6 +43,7 @@ import {
   type RuntimeHintApplyOperation,
   type RuntimeHintClearOperation,
 } from './session-open-execution.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SessionOpenCommandInput = Readonly<{
   req: DaemonRequest;

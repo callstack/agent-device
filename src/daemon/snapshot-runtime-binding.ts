@@ -28,7 +28,6 @@ import {
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
 } from './session-runtime-admission.ts';
-import { errorResponse } from './response.ts';
 import { resolveSnapshotScope } from './snapshot-capture.ts';
 import { resolveSessionDevice } from './snapshot-session.ts';
 import {
@@ -38,6 +37,7 @@ import {
   type BoundElementRead,
   type BoundNativeTextRead,
 } from './selector-operation-binding.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SnapshotRuntimeRouteParams = {
   req: DaemonRequest;

@@ -1,7 +1,7 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import { errorResponse } from '../../response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export function unsupportedMacOsDesktopSurfaceInteraction(
   session: SessionState,

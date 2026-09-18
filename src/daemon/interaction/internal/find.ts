@@ -14,7 +14,6 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
-import { errorResponse, noActiveSessionError } from '../../response.ts';
 import { withSystemSurfaceDisclosure } from '../../system-surface-disclosure.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
@@ -32,6 +31,7 @@ import type { TypeTextRuntimeOperations } from '@agent-device/contracts/type-tex
 import type { FindRouteInput } from './types.ts';
 import { createFindTargetCapture, sparseFindSnapshotResponse } from './find-target-capture.ts';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
 type FindContext = {
   req: DaemonRequest;

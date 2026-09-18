@@ -13,7 +13,6 @@ import type {
   SnapshotRuntimeOperations,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { errorResponse } from './response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
@@ -23,6 +22,7 @@ import {
 } from './session-runtime-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { DaemonResponse } from './daemon-request.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type ScreenshotRuntimeBindings = Readonly<{
   inspectFacts?: InspectDeviceRuntimeFacts;

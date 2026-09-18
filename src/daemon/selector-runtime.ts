@@ -3,7 +3,6 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import { errorResponse } from './response.ts';
 import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import {
   checkElementTargetArgs,
@@ -33,6 +32,7 @@ import {
   createBoundSelectorRuntime,
   type SelectorRuntimeParams,
 } from './selector-runtime-backend.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export async function dispatchFindReadOnlyViaRuntime(
   params: SelectorRuntimeParams,

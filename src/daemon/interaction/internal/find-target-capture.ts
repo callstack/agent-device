@@ -5,7 +5,7 @@ import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts'
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import { errorResponse } from '../../response.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */
 export type FindTargetTree = {

@@ -6,7 +6,6 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 import { resolveCommandDevice } from '../../session-device-resolution.ts';
-import { errorResponse } from '../../response.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { LeaseRegistry } from '../../lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
@@ -38,6 +37,7 @@ import {
 } from './session-close-runtime-admission.ts';
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
 import type { PlatformResourceCleanup } from '../../platform-resource-cleanup.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SessionCloseCommandInput = Readonly<{
   req: DaemonRequest;
