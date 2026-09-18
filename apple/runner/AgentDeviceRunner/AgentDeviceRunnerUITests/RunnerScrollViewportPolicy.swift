@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 // The scroll viewport rule the runner shares with the TS runtime (#2500).
 //

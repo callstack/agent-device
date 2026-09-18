@@ -57,6 +57,12 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
     collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
       : undefined,
+    // A zero is not a disclosure; the runner omits it, and a reader that emitted it would make the
+    // warning below key off a value instead of a fact.
+    ...(typeof raw.unresolvedCoordinateSpaceWindows === 'number' &&
+    raw.unresolvedCoordinateSpaceWindows > 0
+      ? { unresolvedCoordinateSpaceWindows: raw.unresolvedCoordinateSpaceWindows }
+      : {}),
     ...(timing ? { timing } : {}),
   };
 }

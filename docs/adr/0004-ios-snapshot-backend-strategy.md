@@ -405,11 +405,15 @@ oriented frame, so an address and the permission to tap it cannot disagree. Wher
 named — no usable app frame, an interface orientation the platform did not report, or an app frame
 square enough to be indistinguishable from its own quarter turn — the capture publishes what the
 platform reported rather than guessing at a rotation, and consumers fail open on that geometry the
-way they do on any missing platform fact. Detection and the way back share one rotation table with
-synthesized dispatch, and both languages replay it against
-`contracts/fixtures/window-coordinate-space.json` in the ADR 0011 parity-table shape, which is what
-stops capture from turning back with anything other than the exact inverse of what dispatch turns
-forward.
+way they do on any missing platform fact. It does not do so silently: a published tree that still
+carries a surface host reporting the viewport quarter-turned is counted after every tier's
+acquisition and stamped on the quality verdict as `unresolvedCoordinateSpaceWindows`, which the
+daemon renders as a warning, so a tree holding two spaces never looks like one. Detection, the way
+back and that count share one rotation table with synthesized dispatch — the pure geometry lives in
+the `AgentDeviceSnapshotPresentation` package (`SnapshotCoordinateSpace.swift`), not in the XCTest
+bundle — and both languages replay it against `contracts/fixtures/window-coordinate-space.json` in
+the ADR 0011 parity-table shape, which is what stops capture from turning back with anything other
+than the exact inverse of what dispatch turns forward.
 
 Decision. A producer that cannot name the app's interface orientation refuses the screen rather
 than publishing two spaces in one tree. The Simulator AX bridge's attribute set carries no
@@ -427,8 +431,9 @@ hybrid app, so its screens keep the runner until it relaunches. A rotated surfac
 the screen in front of the reader and about nothing else — it is up now and gone after the next
 keystroke — so retiring the generation would move every later portrait capture of a healthy app
 onto the runner to work around one landscape keyboard, the cost #2491 settled for a bridge that was
-merely still being prepared. Which side of that line a failure falls on is a declared property of
-its code rather than a judgment made at the call site.
+merely still being prepared. Which side of that line a failure falls on is declared where the
+failure is thrown — `SnapshotSourceFailure.scope` is `capture` or `generation`, and the route reads
+the field — rather than judged at the route from the failure's kind or code.
 
 What stays unnormalized, and why the consumer rule stays: the runner's query-sweep tier has no
 window ancestry, so no node in its tree can declare a space, and the provider producers

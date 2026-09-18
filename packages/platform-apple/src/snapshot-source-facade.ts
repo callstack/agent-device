@@ -34,7 +34,7 @@ export function createSimulatorSnapshotSource(): SimulatorSnapshotSource {
       if (closed) {
         return {
           stage: 'failed',
-          failure: { kind: 'unsupported', code: 'source-closed' },
+          failure: { kind: 'unsupported', code: 'source-closed', scope: 'generation' },
         };
       }
       return await (await load()).acquire(request);

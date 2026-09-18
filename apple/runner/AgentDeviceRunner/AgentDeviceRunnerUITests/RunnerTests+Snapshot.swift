@@ -1069,7 +1069,7 @@ extension RunnerTests {
   ) -> SnapshotGeometrySpace {
     SnapshotGeometrySpace.space(
       reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(
-        elementType: snapshot.elementType,
+        isWindow: isWindowElement(snapshot.elementType),
         parentIsWindow: parentIsWindow
       ),
       reportedFrame: snapshot.frame,

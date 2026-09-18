@@ -10,9 +10,9 @@ import {
 
 // ADR 0011 Layer 2 golden parity table (#2612): the SAME JSON is asserted against the Swift twin
 // (SnapshotGeometrySpace and CoordinateSpaceRotation in
-// apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerCoordinateSpace.swift, gated XCTest in
-// that file), so drift between the host's decoder and the runner's capture turns CI red on whichever
-// side changed.
+// apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift,
+// replayed by that package's CoordinateSpaceTests), so drift between the host's decoder and the
+// runner's capture turns CI red on whichever side changed.
 
 type FixtureFrame =
   | {

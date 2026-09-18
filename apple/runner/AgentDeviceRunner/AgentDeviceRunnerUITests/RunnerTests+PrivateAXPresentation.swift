@@ -44,7 +44,7 @@ extension RunnerTests {
     let fields = privateAXFields(raw)
     let nodeSpace = SnapshotGeometrySpace.space(
       reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(
-        elementType: fields.elementType,
+        isWindow: isWindowElement(fields.elementType),
         parentIsWindow: parentIsWindow
       ),
       reportedFrame: fields.rect,

@@ -1,5 +1,5 @@
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import type { SnapshotSourceFailureKind } from './types.ts';
+import type { SnapshotSourceFailureKind, SnapshotSourceFailureScope } from './types.ts';
 
 const APP_ERROR_CODE_BY_KIND: Readonly<Record<SnapshotSourceFailureKind, string>> = {
   unsupported: 'UNSUPPORTED_OPERATION',
@@ -15,6 +15,7 @@ const APP_ERROR_CODE_BY_KIND: Readonly<Record<SnapshotSourceFailureKind, string>
 export class SnapshotSourceError extends AppError {
   readonly failureKind: SnapshotSourceFailureKind;
   readonly failureCode: string;
+  readonly failureScope: SnapshotSourceFailureScope;
 
   constructor(
     kind: SnapshotSourceFailureKind,
@@ -22,6 +23,7 @@ export class SnapshotSourceError extends AppError {
     message = `iOS Simulator snapshot source ${kind}: ${code}`,
     details: Readonly<Record<string, unknown>> = {},
     cause?: unknown,
+    scope: SnapshotSourceFailureScope = 'generation',
   ) {
     super(
       APP_ERROR_CODE_BY_KIND[kind],
@@ -37,9 +39,11 @@ export class SnapshotSourceError extends AppError {
     this.name = 'SnapshotSourceError';
     this.failureKind = kind;
     this.failureCode = code;
+    this.failureScope = scope;
   }
 }
 
+/** A failure that is evidence about the app generation the bridge served. */
 export function snapshotSourceError(
   kind: SnapshotSourceFailureKind,
   code: string,
@@ -47,6 +51,19 @@ export function snapshotSourceError(
   cause?: unknown,
 ): SnapshotSourceError {
   return new SnapshotSourceError(kind, code, undefined, details, cause);
+}
+
+/**
+ * A failure that is evidence about this capture only. The route keeps the generation on the bridge,
+ * so a throw site reaches for this constructor exactly when the next capture must be able to use the
+ * bridge again (#2491, #2612).
+ */
+export function snapshotSourceCaptureError(
+  kind: SnapshotSourceFailureKind,
+  code: string,
+  details: Readonly<Record<string, unknown>> = {},
+): SnapshotSourceError {
+  return new SnapshotSourceError(kind, code, undefined, details, undefined, 'capture');
 }
 
 export function asSnapshotSourceError(error: unknown): SnapshotSourceError {

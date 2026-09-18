@@ -23,7 +23,7 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * The same rule is enforced in Swift for the capture that produces these trees, and one table proves
  * they are one rule: `contracts/fixtures/window-coordinate-space.json` is replayed here and against
  * `SnapshotGeometrySpace` in
- * `apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerCoordinateSpace.swift`. The table also
+ * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`. The table also
  * pins the way back (`CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`, Swift-only
  * today); change either rule only through that table.
  */

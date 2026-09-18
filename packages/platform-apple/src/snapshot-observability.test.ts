@@ -32,7 +32,7 @@ const failed = (
   kind: SnapshotSourceFailure['kind'] = 'unsupported',
 ): SnapshotSourceOutcome => ({
   stage: 'failed',
-  failure: { kind, code },
+  failure: { kind, code, scope: 'generation' },
 });
 const acquired = (): SnapshotSourceOutcome => ({
   stage: 'acquired',

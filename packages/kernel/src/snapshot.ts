@@ -51,6 +51,12 @@ export type SnapshotQualityVerdict = {
    * pass has to be disclosed rather than left to look complete.
    */
   customActions?: { read: number; candidates: number; truncated: number; blocked: boolean };
+  /**
+   * Surface hosts the published tree still carries in the device's native orientation space: the
+   * capture could not name the app's interface orientation to turn them back (#2612). Rects under
+   * those hosts are not in the space the rest of the tree publishes. Present only when non-zero.
+   */
+  unresolvedCoordinateSpaceWindows?: number;
   /** Response-level phase timing for the backend named by `backend`. */
   timing?: SnapshotQualityTiming;
 };
