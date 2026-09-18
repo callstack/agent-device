@@ -22,6 +22,10 @@
     "./device-inventory-context": {
       "types": "./src/device-inventory-context.ts",
       "default": "./src/device-inventory-context.ts"
+    },
+    "./open-target": {
+      "types": "./src/open-target.ts",
+      "default": "./src/open-target.ts"
     }
   }
 }

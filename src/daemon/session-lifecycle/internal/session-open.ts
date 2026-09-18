@@ -12,7 +12,7 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../session-device-resolution.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { buildOpenTargetDeviceResolutionOptions } from '../../open-device-selection.ts';
+import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import {
   invalidOpenArgs,
   prepareOpenCommandDetails,

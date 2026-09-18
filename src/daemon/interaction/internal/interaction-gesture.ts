@@ -36,7 +36,7 @@ import {
   finalizeTouchInteraction,
 } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
-import type { RecordedTargetCapture } from '../../session-target-evidence.ts';
+import type { RecordedTargetCapture } from '@agent-device/ad-script/target-evidence';
 import { gestureResponseData } from './interaction-gesture-response.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 

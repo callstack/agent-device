@@ -9,7 +9,7 @@ import {
 } from '@agent-device/contracts/gesture-normalization';
 import { buildDisplayPositionals } from '@agent-device/session-journal/session-event-action';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
-import { inferFillText } from '../../action-utils.ts';
+import { inferFillText } from '@agent-device/ad-script';
 import { readRecordedInputVariableName } from '@agent-device/ad-script';
 import { resolveSessionScope } from '../../session-routing.ts';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';

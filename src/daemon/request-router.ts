@@ -54,7 +54,7 @@ import {
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { isWebSession } from './web-session-names.ts';
-import { inferFillText } from './action-utils.ts';
+import { inferFillText } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 import {

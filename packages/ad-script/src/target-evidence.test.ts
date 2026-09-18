@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
-import { computeTargetEvidence } from '../session-target-evidence.ts';
+import { computeTargetEvidence } from './target-evidence.ts';
 import {
   parseTargetAnnotationV1Payload,
   serializeTargetAnnotationV1,

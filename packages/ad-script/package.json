@@ -6,6 +6,7 @@
   "type": "module",
   "description": "Private canonical .ad replay script codec (read + write) for agent-device.",
   "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
@@ -13,6 +14,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./target-evidence": {
+      "types": "./src/target-evidence.ts",
+      "default": "./src/target-evidence.ts"
     }
   }
 }

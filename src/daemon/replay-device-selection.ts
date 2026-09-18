@@ -8,7 +8,7 @@ import {
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { isDeepLinkTarget, type CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from './replay-script-source.ts';
-import { appleSimulatorAppTargetForOpenTarget } from './open-device-selection.ts';
+import { appleSimulatorAppTargetForOpenTarget } from '@agent-device/device-selection/open-target';
 import type { DaemonRequest } from './daemon-request.ts';
 
 export type ReplayTargetDeviceResolution = {

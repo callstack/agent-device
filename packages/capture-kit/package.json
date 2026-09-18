@@ -106,6 +106,10 @@
       "types": "./src/ios-snapshot-engine/index.ts",
       "default": "./src/ios-snapshot-engine/index.ts"
     },
+    "./ios-snapshot-tree": {
+      "types": "./src/ios-snapshot-engine/tree.ts",
+      "default": "./src/ios-snapshot-engine/tree.ts"
+    },
     "./ios-snapshot-planning": {
       "types": "./src/ios-snapshot-planning.ts",
       "default": "./src/ios-snapshot-planning.ts"

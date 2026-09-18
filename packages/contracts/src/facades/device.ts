@@ -7,9 +7,11 @@ export {
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
   filterDeviceInventoryProjection,
+  isDeviceClaimConflictReason,
   projectProviderDeviceInventoryRequest,
 } from '../device-inventory.ts';
 export type {
+  DeviceClaimConflictReason,
   DeviceInventoryGroup,
   DeviceInventoryGroupCounts,
   DeviceInventoryRequest,
@@ -35,8 +37,6 @@ export {
 } from '../device-rotation.ts';
 export type { DeviceRotation } from '../device-rotation.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../device.ts';
-export { isDeviceClaimConflictReason } from '../device-claim-conflict.ts';
-export type { DeviceClaimConflictReason } from '../device-claim-conflict.ts';
 export type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,

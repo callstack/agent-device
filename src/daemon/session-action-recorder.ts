@@ -7,7 +7,7 @@ import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { inferFillText } from './action-utils.ts';
+import { inferFillText } from '@agent-device/ad-script';
 import {
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
@@ -19,7 +19,7 @@ import {
   parameterizeTargetEvidenceEcho,
   targetEvidenceCarriesAnyLiteral,
 } from '@agent-device/selectors/parameterized-recorded-fill';
-import type { TargetEvidenceMode } from './session-target-evidence.ts';
+import type { TargetEvidenceMode } from '@agent-device/ad-script/target-evidence';
 
 export type RecordActionEntry = {
   command: string;

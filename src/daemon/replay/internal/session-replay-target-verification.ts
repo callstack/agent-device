@@ -32,7 +32,7 @@ import { resolveTargetIdentityVerification } from '@agent-device/command-registr
 import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import type { SessionState } from '../../session-state.ts';
 import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
-import { boundedLocalIdentity } from '../../session-target-evidence.ts';
+import { boundedLocalIdentity } from '@agent-device/ad-script/target-evidence';
 import {
   buildDivergenceScreen,
   captureDivergenceObservation,

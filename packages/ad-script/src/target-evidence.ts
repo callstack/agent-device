@@ -22,28 +22,28 @@
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
-import { findNearestScrollableContainer } from '@agent-device/capture-kit/ios-snapshot-engine';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  classifyTargetBindingMatch,
-  demoteNonUniqueLocalIdentity,
-  filterIdentitySet,
-  matchesLocalIdentity,
-  readNodeLocalIdentity,
-  serializeTargetAnnotationV1,
-  siblingOrdinal,
-  utf8ByteLength,
-  type LocalIdentity,
-  TARGET_ANNOTATION_MAX_ANCESTRY,
-  TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-} from '@agent-device/ad-script';
+import { findNearestScrollableContainer } from '@agent-device/capture-kit/ios-snapshot-tree';
 import type {
   TargetAncestryEntry,
   TargetAnnotationV1,
   TargetScrollRegion,
   TargetVerification,
 } from '@agent-device/contracts/replay';
+import { classifyTargetBindingMatch } from './internal/target-annotation-classification.ts';
+import {
+  demoteNonUniqueLocalIdentity,
+  matchesLocalIdentity,
+  readNodeLocalIdentity,
+  siblingOrdinal,
+} from './internal/target-annotation-identity.ts';
+import {
+  serializeTargetAnnotationV1,
+  utf8ByteLength,
+  TARGET_ANNOTATION_MAX_ANCESTRY,
+  TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+} from './internal/target-annotation-serde.ts';
+import { buildAncestryChain, buildIndexMap, filterIdentitySet } from './internal/target-evidence-tree.ts';
+import type { LocalIdentity } from './internal/target-annotation-identity.ts';
 
 /** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
 export type RecordedTargetCapture = {
