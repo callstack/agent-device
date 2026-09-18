@@ -37,7 +37,11 @@ import {
   prepareOpenCommandDetails,
   type ResolvedOpenRuntimeHintPlan,
 } from './session-open-prepare.ts';
-import { buildDeviceInUseBySessionError } from '../../session-recovery-hints.ts';
+import {
+  buildDeviceInUseBySessionError,
+  buildForeignWorkspaceSessionConflict,
+} from '../../session-recovery-hints.ts';
+import { readOpenWaitAttempt } from '../../open-device-contention-wait.ts';
 import {
   isImplicitSessionScopeConflict,
   resolveSessionScope,
@@ -381,26 +385,26 @@ function createProvisionalOpenDispatchSession(params: {
   return provisionalSession;
 }
 
+/**
+ * The refusal an open gets when another session already holds the device. The wait an expired
+ * `--wait` budget spent is carried into the recovery text, because a caller that waited is not
+ * helped by being told to wait.
+ */
 function findNewSessionDeviceConflict(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   sessionStore: SessionStore;
-}): DaemonResponse | undefined {
+}): DaemonFailureResponse | undefined {
   const { req, device, sessionStore } = params;
   const inUse = sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
+  // `offersDeviceWait` belongs to this producer alone: an interaction that hits the same busy
+  // device cannot wait for it, and would be sent off with a flag its own command rejects.
+  const attempt = { ...readOpenWaitAttempt(req), offersDeviceWait: true } as const;
   if (isImplicitSessionScopeConflict(req, inUse.session)) {
-    return errorResponse(
-      'DEVICE_IN_USE',
-      'Device is already in use by another workspace session.',
-      {
-        deviceId: device.id,
-        deviceName: device.name,
-        hint: 'Use a different device selector, wait for the other workspace to close its session, or run agent-device devices to choose another target.',
-      },
-    );
+    return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
-  return buildDeviceInUseBySessionError(inUse, device);
+  return buildDeviceInUseBySessionError(inUse, device, attempt);
 }
 
 async function acquireDeviceClaimForOwner(params: {

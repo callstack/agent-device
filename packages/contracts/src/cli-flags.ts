@@ -145,6 +145,7 @@ export type CliFlags = CloudProviderProfileFields &
     record?: boolean;
     retainPaths?: boolean;
     retentionMs?: number;
+    waitMs?: number;
     replayMaestro?: boolean;
     reporter?: string[];
     reportJunit?: string;

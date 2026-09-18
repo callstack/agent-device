@@ -46,7 +46,7 @@ type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
 type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
 type RequestTimeoutInput = Readonly<{
   positionals?: string[];
-  flags?: Readonly<{ timeoutMs?: number; settle?: boolean }>;
+  flags?: Readonly<{ timeoutMs?: number; settle?: boolean; waitMs?: number }>;
 }>;
 
 /** Resolves the request envelope from its declared policy and user-supplied budget. */
@@ -81,11 +81,28 @@ function resolveFlagBudgetTimeoutMs(
     return resolveWideningFlagBudget(policy, policy.budget, flags);
   }
   if (policy.budget.envelope === 'margin') {
-    return typeof flags?.timeoutMs === 'number'
-      ? widenToUserBudget(policy, flags.timeoutMs)
-      : policy.envelopeMs;
+    return resolveMarginEnvelopeTimeoutBudget(policy, flags);
   }
   return typeof flags?.timeoutMs === 'number' ? flags.timeoutMs : policy.envelopeMs;
+}
+
+/**
+ * The `--timeout` budget, widened again for a `--wait` budget. A wait is work the command does
+ * before its own startup budget can even begin — the device is still somebody else's — so it
+ * extends the envelope rather than eating into it. With no wait this is exactly the margin
+ * envelope `--timeout` has always produced.
+ */
+function resolveMarginEnvelopeTimeoutBudget(
+  policy: BoundedTimeoutPolicy,
+  flags: RequestTimeoutInput['flags'],
+): number {
+  const startupEnvelopeMs =
+    typeof flags?.timeoutMs === 'number'
+      ? widenToUserBudget(policy, flags.timeoutMs)
+      : policy.envelopeMs;
+  return typeof flags?.waitMs === 'number'
+    ? widenPastBaseEnvelope({ ...policy, envelopeMs: startupEnvelopeMs }, flags.waitMs)
+    : startupEnvelopeMs;
 }
 
 function resolveWideningFlagBudget(

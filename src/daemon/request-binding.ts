@@ -4,6 +4,7 @@ import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from './session-store.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef } from './session-state.ts';
 
@@ -76,6 +77,26 @@ function resolveFreshSessionDeviceLock(req: DaemonRequest):
   if (req.command === 'open') return resolveOpenDeviceLock(req);
   if (req.command === 'replay') return resolveReplayDeviceLock(req);
   return resolveExplicitDeviceLock(req);
+}
+
+/**
+ * The device an `open` is expected to bind, resolved the same advisory way its device execution
+ * lock is chosen — before the lock is held, and never as an authority on what happens next. A
+ * caller that must not hold the device lock uses this to look at contention; the locked open path
+ * still resolves and binds the target device itself.
+ */
+export async function resolveAdvisoryOpenDevice(
+  req: DaemonRequest,
+): Promise<DeviceInfo | undefined> {
+  if (req.command !== 'open') return undefined;
+  const resolution = resolveOpenDeviceLock(resolveFreshSessionBindingRequest(req));
+  if (!resolution) return undefined;
+  try {
+    return await resolveTargetDevice(resolution.flags, resolution.options);
+  } catch {
+    // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
+    return undefined;
+  }
 }
 
 function resolveOpenDeviceLock(req: DaemonRequest) {

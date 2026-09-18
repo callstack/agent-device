@@ -53,6 +53,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
       { min: 1 },
     ),
+    waitMs: optionField('waitMs'),
     foreground: optionField('foreground'),
     saveScript: jsonSchemaField<boolean | string>({
       oneOf: [booleanSchema(), stringSchema()],
@@ -123,6 +124,7 @@ const openCliSchema = {
     'relaunch',
     'foreground',
     'timeoutMs',
+    'waitMs',
     'surface',
     ...METRO_RELOAD_FLAGS,
     'launchUrl',
@@ -150,6 +152,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   relaunch: flags.relaunch,
   foreground: flags.foreground,
   timeoutMs: flags.timeoutMs,
+  waitMs: flags.waitMs,
   saveScript: flags.saveScript,
   force: flags.force,
   deviceHub: flags.deviceHub,
@@ -195,7 +198,7 @@ export const openCommandFacet = defineCommandFacet({
   text: {
     summary: 'Open an app, deep link or URL, save replays',
     cliDetail:
-      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it.',
+      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it. A device another session is holding refuses at once; add --wait <ms> to block up to that budget for it and only then fail with DEVICE_IN_USE naming the owning session.',
     mcpDetail:
       "Metro and debug runtime hints given here are recorded as the session's dev-server binding, so a later reload reuses them; a fresh open without them clears any binding left by a previous same-name session.",
   },

@@ -90,6 +90,20 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'waitMs',
+    names: ['--wait'],
+    type: 'int',
+    min: 100,
+    max: 120000,
+    usageLabel: '--wait <ms>',
+    usageDescription:
+      'Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE',
+    inputDescription:
+      "Block this open for up to n milliseconds while another session holds the device, then fail with DEVICE_IN_USE naming that session. Only session contention is waited for: a device claim held by another workspace is refused at once with its recovery command. A device that never frees costs the full budget, which extends this command's timeout envelope rather than eating into it.",
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'retries',
     names: ['--retries'],
     type: 'int',

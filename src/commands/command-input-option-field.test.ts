@@ -186,6 +186,7 @@ test('the two audiences of one option are declared side by side and stay distinc
  */
 const SDK_DOCUMENTED_OPTIONS = [
   { key: 'foreground', file: 'packages/contracts/src/client-app.ts', field: 'foreground' },
+  { key: 'waitMs', file: 'packages/contracts/src/client-app.ts', field: 'waitMs' },
   {
     key: 'snapshotCustomActions',
     file: 'packages/contracts/src/client-capture.ts',

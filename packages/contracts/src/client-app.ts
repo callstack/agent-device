@@ -68,6 +68,14 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     relaunch?: boolean;
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
     timeoutMs?: number;
+    /**
+     * Block this open for up to n milliseconds while another session holds the device, then fail
+     * with DEVICE_IN_USE naming that session. Only session contention is waited for: a device
+     * claim held by another workspace is refused at once with its recovery command. A device that
+     * never frees costs the full budget, which extends this command's timeout envelope rather
+     * than eating into it.
+     */
+    waitMs?: number;
     // Editor documentation for a public type: a `.d.ts` is read where no
     // FlagDefinition resolves, and nothing generates these docs. It is not a second
     // statement of what the option does — it is the option's ONE declaration (the

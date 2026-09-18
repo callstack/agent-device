@@ -29,6 +29,13 @@ export type DaemonOpenLifecycle = {
 };
 
 type DaemonRequestInternal = {
+  /**
+   * What an `open` spent from its `--wait` budget while it waited for this device outside the
+   * device execution lock. The refusal the open ends with has to say the budget was spent, and
+   * only the daemon that spent it can know that; `internal` never crosses the transport, so no
+   * client can claim a wait it did not perform.
+   */
+  openDeviceWait?: { waitedMs: number };
   publicNetworkOnly?: true;
   openLifecycle?: DaemonOpenLifecycle;
   /**

@@ -348,6 +348,14 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['foreground'],
     },
     {
+      // Contention is this daemon's session store and this host's device-claim files. A
+      // provider scenario allocates a device of its own, so no provider-backed flow can be
+      // refused as busy and there is nothing for a scenario lane to observe.
+      name: 'local device contention waiting',
+      owner: 'daemon session-open contention unit tests',
+      keys: ['waitMs'],
+    },
+    {
       name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
       keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity'],

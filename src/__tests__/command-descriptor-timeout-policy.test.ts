@@ -364,4 +364,38 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), { ...base }),
     90_000,
   );
+
+  // A --wait budget is spent before the startup budget can begin, so it extends the envelope
+  // instead of being consumed by it; otherwise a 60s wait would leave a cold boot 30s of envelope
+  // and end in a client-side daemon reset rather than the open's own refusal.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), {
+      ...base,
+      flags: { waitMs: 60_000 },
+    }),
+    180_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), {
+      ...base,
+      flags: { timeoutMs: 600_000, waitMs: 60_000 },
+    }),
+    720_000,
+  );
+  // Even a small wait keeps the margin over the base, so the open's own refusal wins the race.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('open'), {
+      ...base,
+      flags: { waitMs: 1_000 },
+    }),
+    121_000,
+  );
+  // Only `open` reads a wait budget; other commands' envelopes ignore it.
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('press'), {
+      ...base,
+      flags: { waitMs: 60_000 },
+    }),
+    90_000,
+  );
 });
