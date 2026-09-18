@@ -1,5 +1,7 @@
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { getFlagDefinitions } from '../../cli-schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
 
 /**
  * Curated guess -> canonical command mapping for unknown CLI command names.
@@ -51,7 +53,7 @@ export function listCommandAliasSuggestionEntries(): Array<[string, CommandAlias
   return Object.entries(COMMAND_ALIAS_SUGGESTIONS);
 }
 
-const NEAREST_COMMAND_SUGGESTION_LIMIT = 3;
+const NEAREST_SUGGESTION_LIMIT = 3;
 
 /**
  * Nearest registered command names for an unrecognized (lowercased) command
@@ -68,30 +70,40 @@ function getNearestCommandNames(command: string): string[] {
   const names = listCliCommandNames();
   const prefixMatches = names.filter((name) => name.startsWith(command));
   if (prefixMatches.length > 0) {
-    return prefixMatches
-      .sort((a, b) => a.length - b.length || a.localeCompare(b))
-      .slice(0, NEAREST_COMMAND_SUGGESTION_LIMIT);
+    return prefixMatches.sort(shortestThenAlpha).slice(0, NEAREST_SUGGESTION_LIMIT);
   }
-  const threshold = nearestMatchThreshold(command);
-  const scored = names
-    .map((name) => ({ name, distance: commandNameDistance(command, name) }))
-    .filter((entry) => entry.distance <= threshold);
+  return getClosestNames(command, names);
+}
+
+function shortestThenAlpha(a: string, b: string): number {
+  return a.length - b.length || a.localeCompare(b);
+}
+
+/**
+ * The shared nearest-name rule: keep only the closest candidates within a
+ * length-derived threshold, so a strong match is never bundled with a
+ * coincidental weak one.
+ */
+function getClosestNames(token: string, candidates: readonly string[]): string[] {
+  const scored = candidates
+    .map((name) => ({ name, distance: nameDistance(token, name) }))
+    .filter((entry) => entry.distance <= nearestMatchThreshold(token));
   if (scored.length === 0) return [];
   const best = Math.min(...scored.map((entry) => entry.distance));
   return scored
     .filter((entry) => entry.distance === best)
     .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, NEAREST_COMMAND_SUGGESTION_LIMIT)
+    .slice(0, NEAREST_SUGGESTION_LIMIT)
     .map((entry) => entry.name);
 }
 
-function nearestMatchThreshold(command: string): number {
-  if (command.length < 4) return 1;
-  if (command.length <= 6) return 2;
+function nearestMatchThreshold(token: string): number {
+  if (token.length < 4) return 1;
+  if (token.length <= 6) return 2;
   return 3;
 }
 
-function commandNameDistance(a: string, b: string): number {
+function nameDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (a.startsWith(b) || b.startsWith(a)) {
     return Math.abs(a.length - b.length);
@@ -156,15 +168,91 @@ const POSITIONAL_APP_FLAG_GUESSES = new Set([
 // "Unknown flag" error.
 const REMOVED_SESSION_LOCK_ALIASES = new Set(['--session-locked', '--session-lock-conflicts']);
 
-export function formatUnknownFlagMessage(token: string): string {
-  if (POSITIONAL_APP_FLAG_GUESSES.has(token.toLowerCase())) {
+/**
+ * Curated guess -> canonical flag name for unknown CLI flag names.
+ *
+ * Agents reach for the conventional spellings of an output path before reading the
+ * synopsis, and the nearest-name fallback below cannot bridge `--path` to `--out` at
+ * edit distance 4. An entry is offered only when the command in scope accepts the
+ * named flag, so a guess that means something else there — `trace --path`, whose
+ * path is positional and `--out`-less — falls through instead of being pushed at it.
+ * Keys must be lowercase and are matched case-insensitively.
+ */
+const FLAG_NAME_SUGGESTIONS: Record<string, string> = {
+  '--output': '--out',
+  '--path': '--out',
+};
+
+/**
+ * @internal Exposes the curated flag-name map for drift tests.
+ */
+export function listFlagNameSuggestionEntries(): Array<[string, string]> {
+  return Object.entries(FLAG_NAME_SUGGESTIONS);
+}
+
+/**
+ * Builds the "Did you mean ...?" fragment for an unknown flag under the command
+ * in scope, or `undefined` when neither the curated guess map nor the nearest-name
+ * fallback has a confident suggestion. Candidates come from the live flag registry
+ * filtered by what that command actually accepts, so the suggestion cannot drift
+ * from the accepted surface and never names a flag the command would refuse.
+ */
+export function suggestFlagFor(token: string, command: string | null): string | undefined {
+  const normalized = token.toLowerCase();
+  const curated = FLAG_NAME_SUGGESTIONS[normalized];
+  if (curated && isFlagTokenSupportedForCommand(curated, command)) return curated;
+  const nearest = getNearestFlagNames(normalized, command);
+  if (nearest.length === 0) return undefined;
+  if (nearest.length === 1) return nearest[0];
+  return `one of: ${nearest.join(', ')}`;
+}
+
+function isFlagTokenSupportedForCommand(token: string, command: string | null): boolean {
+  const definition = getFlagDefinitions().find((candidate) => candidate.names.includes(token));
+  return definition ? isFlagSupportedForCommand(definition.key, command) : false;
+}
+
+function getNearestFlagNames(token: string, command: string | null): string[] {
+  const bareToken = stripFlagDashes(token);
+  if (bareToken.length <= 2) return [];
+  const names = listSupportedFlagNames(command);
+  const prefixMatches = names.filter((name) => stripFlagDashes(name).startsWith(bareToken));
+  if (prefixMatches.length > 0) {
+    return prefixMatches.sort(shortestThenAlpha).slice(0, NEAREST_SUGGESTION_LIMIT);
+  }
+  const closest = getClosestNames(
+    bareToken,
+    names.map((name) => stripFlagDashes(name)),
+  );
+  return closest.map((name) => `--${name}`);
+}
+
+function listSupportedFlagNames(command: string | null): string[] {
+  const names = new Set<string>();
+  for (const definition of getFlagDefinitions()) {
+    if (!isFlagSupportedForCommand(definition.key, command)) continue;
+    const primary = definition.names[0];
+    if (primary) names.add(primary);
+  }
+  return [...names];
+}
+
+function stripFlagDashes(token: string): string {
+  return token.replace(/^--?/, '');
+}
+
+export function formatUnknownFlagMessage(token: string, command: string | null): string {
+  const normalized = token.toLowerCase();
+  if (POSITIONAL_APP_FLAG_GUESSES.has(normalized)) {
     return `Unknown flag: ${token}. The app or bundle id is a positional argument, e.g. ${OPEN_RELAUNCH_EXAMPLE}.`;
   }
-  if (REMOVED_SESSION_LOCK_ALIASES.has(token.toLowerCase())) {
+  if (REMOVED_SESSION_LOCK_ALIASES.has(normalized)) {
     return `Unknown flag: ${token}. Use --session-lock reject|strip instead.`;
   }
-  if (token.toLowerCase() === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
+  if (normalized === RETIRED_SCREENSHOT_MAX_SIZE.cliToken) {
     return `Unknown flag: ${token}. ${RETIRED_SCREENSHOT_MAX_SIZE.migration.screenshot}. ${RETIRED_SCREENSHOT_MAX_SIZE.migration.record}.`;
   }
+  const suggestion = suggestFlagFor(token, command);
+  if (suggestion) return `Unknown flag: ${token}. Did you mean ${suggestion}?`;
   return `Unknown flag: ${token}`;
 }

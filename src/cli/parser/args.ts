@@ -101,7 +101,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
         else positionals.push(arg);
         continue;
       }
-      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token));
+      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token, command));
     }
 
     const parsed = parseFlagValue(definition, token, inlineValue, argv[i + 1]);

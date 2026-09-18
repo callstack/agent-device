@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
+import { isKnownCliCommandName, listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseArgs } from '../args.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { listCommandAliasSuggestionEntries, suggestCommandFor } from '../command-suggestions.ts';
+import { getFlagDefinitions } from '../../../cli-schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../../cli-schema/option-schema.ts';
+import {
+  listCommandAliasSuggestionEntries,
+  listFlagNameSuggestionEntries,
+  suggestCommandFor,
+  suggestFlagFor,
+} from '../command-suggestions.ts';
 
 // Guards against the curated alias map drifting to a command that no longer
 // exists (renamed, removed, gated) in the live command registry.
@@ -221,4 +228,63 @@ test('unrelated unknown flags are unaffected', () => {
       error.code === 'INVALID_ARGS' &&
       error.message === 'Unknown flag: --not-a-real-flag',
   );
+});
+
+// Guards against the curated flag map drifting to a flag that no longer exists, or to
+// one no command accepts — a suggestion the parser would then refuse itself.
+test('every curated flag suggestion names a registered flag at least one command accepts', () => {
+  const commands = listCliCommandNames();
+  for (const [guess, canonical] of listFlagNameSuggestionEntries()) {
+    const definition = getFlagDefinitions().find((entry) => entry.names.includes(canonical));
+    assert.ok(definition, `flag suggestion for "${guess}" names unregistered flag "${canonical}"`);
+    assert.ok(
+      definition && commands.some((command) => isFlagSupportedForCommand(definition.key, command)),
+      `flag suggestion "${canonical}" for "${guess}" is accepted by no command`,
+    );
+  }
+});
+
+for (const guess of ['--output', '--path', '--Output']) {
+  test(`a guessed output-path flag on screenshot names ${guess} -> --out`, () => {
+    assert.throws(
+      () => parseArgs(['screenshot', guess, './shot.png']),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === `Unknown flag: ${guess}. Did you mean --out?`,
+    );
+  });
+}
+
+// The closest negative: `--path` means nothing to `trace`, whose path is positional and
+// which accepts no `--out` at all. A suggestion map applied without the per-command gate
+// would push a flag this command refuses.
+test('a guessed flag the command does not accept is not pushed at it', () => {
+  assert.throws(
+    () => parseArgs(['trace', 'start', '--path', './trace.log']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown flag: --path',
+  );
+});
+
+// The registry-derived fallback, not the curated map: `--pixel-densityy` is one edit from
+// a flag screenshot accepts, and the candidate list comes from that command's own surface.
+test('a mistyped flag the command accepts is suggested by nearest name', () => {
+  assert.throws(
+    () => parseArgs(['screenshot', '--pixel-densityy', '2']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown flag: --pixel-densityy. Did you mean --pixel-density?',
+  );
+});
+
+test('suggestFlagFor never throws for arbitrary input', () => {
+  for (const input of ['', '-', '--', '@#$%', '--a'.repeat(200), '--JSON']) {
+    for (const command of ['screenshot', 'open', null]) {
+      assert.doesNotThrow(() => suggestFlagFor(input, command));
+    }
+  }
 });
