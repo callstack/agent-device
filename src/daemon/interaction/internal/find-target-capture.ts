@@ -1,6 +1,10 @@
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
-import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  SnapshotKeyboardBandFact,
+  SnapshotQualityVerdict,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
@@ -13,6 +17,8 @@ export type FindTargetTree = {
   snapshotQuality?: SnapshotQualityVerdict;
   systemSurfaceOnly?: boolean;
   iosSystemSurfaceBundleId?: string;
+  /** The keyboard band this capture's producer measured, when it measured one (#2660). */
+  keyboard?: SnapshotKeyboardBandFact;
 };
 
 /**
@@ -67,6 +73,7 @@ export function createFindTargetCapture(
       snapshotQuality: snapshot.snapshotQuality,
       systemSurfaceOnly: snapshot.systemSurfaceOnly,
       iosSystemSurfaceBundleId: snapshot.iosSystemSurfaceBundleId,
+      ...(snapshot.keyboard ? { keyboard: snapshot.keyboard } : {}),
     };
   };
 }

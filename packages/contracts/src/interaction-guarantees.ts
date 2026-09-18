@@ -166,7 +166,8 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   },
   // #2589: one guard for every acting node path, run at the shared pipeline door
   // (`runInteractionPipelineStages`), so the native-ref fast path cannot succeed on a target the
-  // shared rule refuses. Its band is derived from the tree the path already holds: the keyboard is
+  // shared rule refuses. Its band is the one the capture's producer measured, or the one derived
+  // from the tree the path already holds when the producer measured none (#2660): the keyboard is
   // never a covering sibling of app content and never leaves the app window rect, so neither
   // `occlusion` nor `offscreen` can reach it.
   keyboardOcclusion: {

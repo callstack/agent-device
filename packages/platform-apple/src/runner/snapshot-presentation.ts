@@ -20,7 +20,12 @@ import {
   buildIosSnapshotPresentationKey,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RawSnapshotNode, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotKeyboardBandFact,
+  SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 import {
   iosSystemSurfaceHost,
   type IosSystemSurfaceProvenance,
@@ -34,18 +39,21 @@ export type AppleRunnerSnapshotResult = Readonly<{
   qualityPayload?: IosRunnerQualityPayloadFacts;
   runnerFatal?: boolean;
   systemSurface?: IosSystemSurfaceProvenance;
+  keyboard?: SnapshotKeyboardBandFact;
 }>;
 
 export function readAppleSnapshotResult(
   result: Record<string, unknown>,
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
+  const keyboard = readKeyboardBandFact(result.keyboard);
   return {
     nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
     qualityPayload: readQualityPayload(result.qualityPayload, systemSurface),
     runnerFatal: result.runnerFatal === true,
+    ...(keyboard ? { keyboard } : {}),
     ...(systemSurface ? { systemSurface } : {}),
     message:
       typeof result.message === 'string' && result.message.trim().length > 0
@@ -61,6 +69,45 @@ function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance
   // read from the registry rather than trusted from the wire.
   const host = iosSystemSurfaceHost(value.bundleId);
   return host && { bundleId: host.bundleId, kind: host.kind };
+}
+
+/**
+ * The keyboard band the runner measured for this capture (#2660), read from the wire by shape. The
+ * recursive-tree tier answers with the band `app.keyboards` gave it in the app's own orientation
+ * space; the query sweep and private-AX tiers answer with no key at all, which is how the daemon
+ * keeps deriving the band from that tree instead of being told the screen is clear. A payload that
+ * cannot be placed is restated as `unmeasurable` naming where it failed here, never as a band and
+ * never as silence: a half-carried `visible` would tell the tap guard more than the runner claimed.
+ */
+function readKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return { kind: 'unmeasurable', reason: 'malformed-fact' };
+  if (value.kind === 'absent') return { kind: 'absent' };
+  if (value.kind === 'unmeasurable') {
+    return typeof value.reason === 'string' && value.reason.trim().length > 0
+      ? { kind: 'unmeasurable', reason: value.reason }
+      : { kind: 'unmeasurable', reason: 'unreported-reason' };
+  }
+  if (value.kind === 'visible') {
+    const frame = readKeyboardBandFrame(value.frame);
+    return frame
+      ? { kind: 'visible', frame }
+      : { kind: 'unmeasurable', reason: 'invalid-visible-frame' };
+  }
+  return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
+}
+
+function readKeyboardBandFrame(value: unknown): Rect | undefined {
+  if (!isRecord(value)) return undefined;
+  const { x, y, width, height } = value;
+  if (
+    ![x, y, width, height].every((axis) => typeof axis === 'number' && Number.isFinite(axis)) ||
+    !((width as number) > 0) ||
+    !((height as number) > 0)
+  ) {
+    return undefined;
+  }
+  return { x: x as number, y: y as number, width: width as number, height: height as number };
 }
 
 export function presentAppleRunnerSnapshot(

@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -523,6 +524,7 @@ function optionalSnapshotResponseFields(
     | 'androidSnapshot'
     | 'unchanged'
     | 'visibility'
+    | 'keyboard'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -532,8 +534,10 @@ function optionalSnapshotResponseFields(
 > {
   const visibility = readObject(data.visibility);
   const unchanged = readObject(data.unchanged);
+  const keyboard = readKeyboardBandFact(data.keyboard);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   return {
+    ...(keyboard ? { keyboard } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
@@ -544,6 +548,38 @@ function optionalSnapshotResponseFields(
     // ADR 0014: keep the response-level ref-frame generation on Node.js results
     // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
+  };
+}
+
+/**
+ * The keyboard band the capture's producer measured (#2660), read from the wire by shape: a fact the
+ * client cannot place is dropped rather than half-carried, because a `visible` with no frame would
+ * tell the tap guard more than any producer claimed.
+ */
+function readKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
+  const fact = readObject(value);
+  if (!fact) return undefined;
+  if (fact.kind === 'absent') return { kind: 'absent' };
+  if (fact.kind === 'unmeasurable') {
+    return typeof fact.reason === 'string' && fact.reason.length > 0
+      ? { kind: 'unmeasurable', reason: fact.reason }
+      : undefined;
+  }
+  if (fact.kind !== 'visible') return undefined;
+  const frame = readObject(fact.frame);
+  if (!frame) return undefined;
+  const numbers = [frame.x, frame.y, frame.width, frame.height];
+  if (!numbers.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) {
+    return undefined;
+  }
+  return {
+    kind: 'visible',
+    frame: {
+      x: numbers[0] as number,
+      y: numbers[1] as number,
+      width: numbers[2] as number,
+      height: numbers[3] as number,
+    },
   };
 }
 

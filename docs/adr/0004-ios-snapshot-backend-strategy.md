@@ -435,10 +435,17 @@ onto the runner to work around one landscape keyboard, the cost #2491 settled fo
 merely still being prepared. Which side of that line a failure falls on is a declared property of
 its code rather than a judgment made at the call site.
 
-What stays unnormalized, and why the consumer rule stays: the runner's query-sweep tier has no
-window ancestry, so no node in its tree can declare a space, and the provider producers
-(`appium-source`, `limrun-ios-tree`) never see the app's windows either. Those paths publish what
-the platform reported, so the last reader that can still refuse geometry it cannot place is the
-tap-path keyboard guard, and its width rule therefore remains. The rule detects un-normalized
+What stays unnormalized, and why the consumer rule stays: the runner's recursive-tree capture now
+answers the keyboard with a measured band instead of a rebuilt one, because the same run that owns
+the tree can ask `app.keyboards` and gets an answer in the app's own orientation space (#2660). That
+closes the keyboard question on the path that used to lean on this ADR's geometry most, and it is why
+the guard's landscape refusals no longer depend on whether the tree arrived turned.
+
+What did not move is the rest of the sentence. The runner's query-sweep tier still has no window
+ancestry, so no node in its tree can declare a space, and the provider producers (`appium-source`,
+`limrun-ios-tree`) never see the app's windows either; a capture from any of them publishes no
+keyboard fact, and a consumer reads that silence as "this producer did not measure". Those paths
+publish what the platform reported, so the last reader that can still refuse geometry it cannot place
+is the tap-path keyboard guard, and its width rule therefore remains. The rule detects un-normalized
 arrival, not a standing fact about iOS: the producers above do normalize, and a band taller than it
 is wide is what one that did not looks like.

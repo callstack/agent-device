@@ -1,5 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  SnapshotKeyboardBandFact,
+  SnapshotNode,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
@@ -208,7 +213,8 @@ async function resolvePointTargetWarning(
   target: PointTarget,
 ): Promise<string | undefined> {
   const session = await runtime.sessions.get(options.session ?? 'default');
-  const nodes = session?.snapshot?.nodes;
+  const snapshot = session?.snapshot;
+  const nodes = snapshot?.nodes;
   if (!nodes) return undefined;
   const point = { x: target.x, y: target.y };
 
@@ -222,7 +228,12 @@ async function resolvePointTargetWarning(
   if (viewport && !containsPoint(viewport, point.x, point.y)) {
     return `Coordinates (${point.x}, ${point.y}) are outside the last-known viewport (${viewport.width}x${viewport.height}). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.`;
   }
-  return describeKeyboardOccludedPointWarning({ nodes, point, viewport });
+  return describeKeyboardOccludedPointWarning({
+    nodes,
+    point,
+    viewport,
+    ...(snapshot?.keyboard ? { keyboard: snapshot.keyboard } : {}),
+  });
 }
 
 async function resolvePointInteractionTarget(
@@ -267,6 +278,8 @@ async function tryCaptureEvidenceBaseline(
 type RefResolution = {
   tree: SurfaceScopedNodes;
   resolved: ResolvedRefNode;
+  /** The keyboard band the capture of `tree.nodes` measured, when it measured one (#2660). */
+  keyboard?: SnapshotKeyboardBandFact;
 };
 
 /**
@@ -300,6 +313,7 @@ function adoptPreresolvedRefTarget(
         ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
         : {}),
     },
+    ...(preresolved.keyboard ? { keyboard: preresolved.keyboard } : {}),
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),
   };
 }
@@ -310,7 +324,11 @@ async function readRefResolution(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
 ): Promise<RefResolution> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
-  return { tree: surfaceScopedNodes(capture.snapshot), resolved: capture.resolved };
+  return {
+    tree: surfaceScopedNodes(capture.snapshot),
+    ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
+    resolved: capture.resolved,
+  };
 }
 
 async function resolveRefInteractionTarget(
@@ -319,7 +337,7 @@ async function resolveRefInteractionTarget(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const { tree, resolved } = params.preresolvedTarget
+  const { tree, keyboard, resolved } = params.preresolvedTarget
     ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
     : await readRefResolution(runtime, options, target);
   const nodes = tree.nodes;
@@ -327,6 +345,7 @@ async function resolveRefInteractionTarget(
   const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
     policy: params.pipeline,
     nodes,
+    ...(keyboard ? { keyboard } : {}),
     node: resolved.node,
     action: params.action,
     label: `Ref ${target.ref}`,
@@ -393,6 +412,7 @@ async function resolveSelectorInteractionTarget(
   const { node: visibleNode, tapPoint: point } = await runInteractionPipelineStages({
     policy: params.pipeline,
     nodes: capture.snapshot.nodes,
+    ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
     node: selected.node,
     action: params.action,
     label: `Selector ${selected.selector}`,
@@ -655,6 +675,8 @@ function describeNonHittableTarget(
 async function runInteractionPipelineStages<TPoint extends Point | null>(params: {
   policy: SelectorPipelinePolicy;
   nodes: SnapshotState['nodes'];
+  /** The keyboard band `nodes`' capture measured, when it measured one (#2660). */
+  keyboard?: SnapshotKeyboardBandFact;
   node: SnapshotNode;
   action: InteractionAction;
   label: string;
@@ -680,6 +702,7 @@ async function runInteractionPipelineStages<TPoint extends Point | null>(params:
     node: target.node,
     action: params.action,
     label: params.label,
+    ...(params.keyboard ? { keyboard: params.keyboard } : {}),
     tapPoint,
   });
   return { node: target.node, tapPoint };

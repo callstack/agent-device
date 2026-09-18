@@ -7,7 +7,11 @@ import {
 } from '@agent-device/selectors';
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import { centerOfRect, type SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  type SnapshotKeyboardBandFact,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
@@ -57,6 +61,8 @@ type ResolvedMatch = {
   nodes: SnapshotState['nodes'];
   /** The in-place iOS system surface the target capture described (#2438), if any. */
   iosSystemSurfaceBundleId?: string;
+  /** The keyboard band that capture's producer measured, when it measured one (#2660). */
+  keyboard?: SnapshotKeyboardBandFact;
   actionFlags: Record<string, unknown>;
   /**
    * Set when find's row refuses this match as covered. Only the focus/type
@@ -177,6 +183,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     ...(snapshotResult.iosSystemSurfaceBundleId
       ? { iosSystemSurfaceBundleId: snapshotResult.iosSystemSurfaceBundleId }
       : {}),
+    ...(snapshotResult.keyboard ? { keyboard: snapshotResult.keyboard } : {}),
     actionFlags,
     ...(target.kind === 'occluded' ? { occludedNode: target.node } : {}),
   };
@@ -231,6 +238,8 @@ function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
     ...(match.iosSystemSurfaceBundleId
       ? { iosSystemSurfaceBundleId: match.iosSystemSurfaceBundleId }
       : {}),
+    // #2660: the leaf's keyboard guard measures the band this capture measured, not one it re-derives.
+    ...(match.keyboard ? { keyboard: match.keyboard } : {}),
   };
 }
 

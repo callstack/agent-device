@@ -24,6 +24,7 @@ import type {
 import type {
   Point,
   Rect,
+  SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotOptions,
   SnapshotState,
@@ -51,6 +52,12 @@ export type BackendSnapshotResult = {
   appName?: string;
   appBundleId?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * The keyboard band this capture's producer measured (#2660), carried beside the tree it measured.
+   * A backend that publishes nothing measured nothing, and the tap-path keyboard guard keeps deriving
+   * the band from `nodes`.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
 } & SnapshotCaptureAnnotations;
 
 export type BackendSnapshotOptions = SnapshotOptions & {

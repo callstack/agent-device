@@ -1,4 +1,4 @@
-import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
 import type { FillUnconfirmedVerification } from './interactor-types.ts';
@@ -127,6 +127,11 @@ export type PreresolvedInteractionTarget = {
    * its baseline came from.
    */
   iosSystemSurfaceBundleId?: string;
+  /**
+   * The keyboard band the capture of `nodes` measured, carried so the adopting consumer's keyboard
+   * guard reads the same band the tree was captured with instead of re-deriving one (#2660).
+   */
+  keyboard?: SnapshotKeyboardBandFact;
 };
 
 /**

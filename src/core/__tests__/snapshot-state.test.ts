@@ -628,3 +628,22 @@ test('buildSnapshotState preserves macOS helper scope behavior', () => {
   expect(state.nodes.map((node) => node.label)).toEqual(['Desktop surface', 'Target']);
   expect(state.nodes.every((node) => node.ref)).toBe(true);
 });
+
+// The measured keyboard band rides the capture into the state the tap guards read (#2660), and a
+// producer that never looked has to leave it unasked rather than publishing an empty answer.
+
+test('buildSnapshotState carries the keyboard band the producer measured', () => {
+  const band = { kind: 'visible', frame: { x: 0, y: 583, width: 402, height: 291 } } as const;
+  const state = buildSnapshotState(
+    { nodes: [{ index: 0, type: 'Application' }], keyboard: band },
+    undefined,
+  );
+
+  expect(state.keyboard).toEqual(band);
+});
+
+test('buildSnapshotState leaves an unmeasured keyboard unclaimed instead of absent', () => {
+  const state = buildSnapshotState({ nodes: [{ index: 0, type: 'Application' }] }, undefined);
+
+  expect('keyboard' in state).toBe(false);
+});

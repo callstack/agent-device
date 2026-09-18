@@ -2,8 +2,13 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 import {
+  deriveKeyboardBandFactFromTree,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -108,4 +113,143 @@ test('the refusal reason belongs to the table, not this file', () => {
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /keyboard enter/);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /dismiss key/);
   assert.match(TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS.hint, /snapshot -i/);
+});
+
+// The producer-measured band (#2660). Every case here is a golden-table tree, because the point is
+// what changes about a decision the table already pins — not a new geometry to believe.
+
+function tableCase(name: string): FixtureCase {
+  const found = loadTable().cases.find((fixture) => fixture.name === name);
+  assert.ok(found, `parity table has no case named ${name}`);
+  return found;
+}
+
+function resolveWithFact(
+  fixture: FixtureCase,
+  keyboard: SnapshotKeyboardBandFact,
+): ReturnType<typeof resolveKeyboardTapOcclusion> {
+  const nodes = fixture.nodes as RawSnapshotNode[];
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const node = 'index' in fixture.target ? (byIndex.get(fixture.target.index) ?? null) : null;
+  const point =
+    'point' in fixture.target
+      ? fixture.target.point
+      : resolveCenter(byIndex.get(fixture.target.index));
+  return resolveKeyboardTapOcclusion({
+    nodes,
+    viewport: fixture.viewport,
+    point,
+    node,
+    keyboard,
+  });
+}
+
+test('a measured band decides the tap the unnormalized landscape tree could not', () => {
+  // The #2612 shape: a landscape keyboard whose capture normalized no coordinate space, which the
+  // width rule refuses to measure at all. `visibleKeyboardFrame` answers that screen as a 874 x 204
+  // band docked at y 198, and that is the whole of what the guard needs — no rule about the tree's
+  // geometry runs, because a band the producer measured did not come from the tree.
+  const fixture = tableCase(
+    'a landscape keyboard from a capture that normalized no coordinate space cannot be measured',
+  );
+  const landscapeBand: SnapshotKeyboardBandFact = {
+    kind: 'visible',
+    frame: { x: 0, y: 198, width: 874, height: 204 },
+  };
+
+  assert.equal(resolveWithFact(fixture, landscapeBand).kind, 'occluded');
+  assert.deepEqual(
+    (resolveWithFact(fixture, landscapeBand) as { surface: { frame: Rect } }).surface.frame,
+    landscapeBand.frame,
+  );
+});
+
+test('a measured band is the band, even in a tree that reports no keyboard at all', () => {
+  // The tree rule's answer here is `no-keyboard`. A refusal off a tree with no key nodes can only
+  // have come from the fact, which is the assertion that the rule was not consulted at all.
+  const fixture = tableCase('no keyboard in the tree means nothing to refuse');
+  assert.equal(fixture.expected.kind, 'no-keyboard');
+  const band: SnapshotKeyboardBandFact = {
+    kind: 'visible',
+    frame: { x: 0, y: 583, width: 402, height: 291 },
+  };
+
+  const occlusion = resolveWithFact(fixture, band);
+  assert.equal(occlusion.kind, 'occluded');
+  assert.deepEqual(
+    (occlusion as { surface: { frame: Rect } }).surface,
+    // With no keyboard in the tree there is no reported control to excuse a bare coordinate, and no
+    // band to invent either: the frame is the producer's, verbatim.
+    { frame: band.frame, controlRects: [] },
+  );
+});
+
+test('a producer that found no keyboard settles it over the stale key nodes its tree still holds', () => {
+  // A dismissal can leave key nodes in a tree captured around the same moment. The producer that
+  // asked the keyboard afterwards is the one that knows.
+  const fixture = tableCase('iPhone tab-bar item whose center is under the key plane is refused');
+  assert.equal(fixture.expected.kind, 'occluded');
+  assert.equal(resolveWithFact(fixture, { kind: 'absent' }).kind, 'no-keyboard');
+});
+
+test('a measured band still excuses the keyboard that the tree says the caller named', () => {
+  const fixture = tableCase(
+    'a key the caller named is the tap they meant, so the keyboard never blocks its own keys',
+  );
+  const occlusion = resolveWithFact(fixture, {
+    kind: 'visible',
+    frame: fixture.expected.frame ?? fixture.nodes[0]!.rect!,
+  });
+  assert.equal(occlusion.kind, 'clear');
+});
+
+test('a measured band still reads a coordinate on a reported key as the keyboard asked for', () => {
+  const fixture = tableCase(
+    'a bare coordinate landing on a key is the keyboard the caller asked for',
+  );
+  const occlusion = resolveWithFact(fixture, {
+    kind: 'visible',
+    frame: fixture.expected.frame ?? fixture.nodes[0]!.rect!,
+  });
+  assert.equal(occlusion.kind, 'clear');
+});
+
+test('an unmeasurable fact leaves every golden-table decision exactly as the tree rule made it', () => {
+  // The fallback has to be total: a producer that could not look must not shift one verdict, on
+  // either side of the refusal, or the table would stop describing this guard.
+  for (const fixture of loadTable().cases) {
+    const withFact = resolveWithFact(fixture, {
+      kind: 'unmeasurable',
+      reason: 'keyboard-frame-query-timeout',
+    });
+    assert.equal(withFact.kind, fixture.expected.kind, `${fixture.name}: kind`);
+  }
+});
+
+test('the fact a producer derives from its own tree is the band the rule measures', () => {
+  // The bridge publishes exactly this (#2660), so the guard's preferred path and the rule it
+  // replaces have to agree case by case — including the cases where the honest answer is that the
+  // tree cannot be measured.
+  for (const fixture of loadTable().cases) {
+    const fact = deriveKeyboardBandFactFromTree({
+      nodes: fixture.nodes as RawSnapshotNode[],
+      viewport: fixture.viewport,
+    });
+    if (fixture.expected.frame) {
+      assert.equal(fact.kind, 'visible', `${fixture.name}: expected a measured band`);
+      assert.deepEqual(
+        (fact as { frame: Rect }).frame,
+        fixture.expected.frame,
+        `${fixture.name}: band frame`,
+      );
+    } else if (fixture.expected.kind === 'no-keyboard') {
+      assert.equal(fact.kind, 'absent', `${fixture.name}: a tree with no keyboard proves absence`);
+    } else {
+      assert.equal(
+        fact.kind,
+        'unmeasurable',
+        `${fixture.name}: a keyboard this tree cannot measure is not an absent one`,
+      );
+    }
+  }
 });

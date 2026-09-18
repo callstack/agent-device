@@ -1,4 +1,10 @@
-import type { Point, Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  Rect,
+  SnapshotKeyboardBandFact,
+  SnapshotNode,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
@@ -20,9 +26,10 @@ import type { InteractionAction } from './resolution.ts';
  */
 
 /**
- * Refuses an acting target whose tap point sits behind the visible keyboard. Fails open whenever the
- * tree cannot name the keyboard's band, which is the same stance the scroll keyboard policy takes:
- * an unmeasurable keyboard is not evidence that a surface is blocked.
+ * Refuses an acting target whose tap point sits behind the visible keyboard. Prefers the band the
+ * capture's producer measured, and fails open whenever the tree cannot name the keyboard's band
+ * either, which is the same stance the scroll keyboard policy takes: an unmeasurable keyboard is not
+ * evidence that a surface is blocked.
  */
 export function assertTapTargetClearOfVisibleKeyboard(params: {
   nodes: SnapshotState['nodes'];
@@ -30,6 +37,11 @@ export function assertTapTargetClearOfVisibleKeyboard(params: {
   action: InteractionAction;
   /** How the caller named the target, e.g. `Ref @e40` or `Selector text=Form`. */
   label: string;
+  /**
+   * The band the capture's producer measured, carried beside the tree it measured. Absent when the
+   * producer could not measure one, which leaves the tree-derived rule.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
   /**
    * The point this interaction taps with: the one a coordinate-dispatching path resolved through the
    * same resolver it dispatches with, or the rect center for the native-ref fast path, which hands the
@@ -44,6 +56,7 @@ export function assertTapTargetClearOfVisibleKeyboard(params: {
     viewport: createSnapshotVisibility(params.nodes).resolveViewport(targetRect),
     point: params.tapPoint,
     node: params.node,
+    ...(params.keyboard ? { keyboard: params.keyboard } : {}),
   });
   if (occlusion.kind !== 'occluded') return;
   throw buildKeyboardOcclusionError({
@@ -67,11 +80,14 @@ export function describeKeyboardOccludedPointWarning(params: {
   point: Point;
   /** The caller's own viewport lookup for this point, shared with the viewport warning above it. */
   viewport: Rect | null;
+  /** The band the last-known capture's producer measured, when it measured one. */
+  keyboard?: SnapshotKeyboardBandFact;
 }): string | undefined {
   const occlusion = resolveKeyboardTapOcclusion({
     nodes: params.nodes,
     viewport: params.viewport,
     point: params.point,
+    ...(params.keyboard ? { keyboard: params.keyboard } : {}),
   });
   if (occlusion.kind !== 'occluded') return undefined;
   return keyboardOcclusionWarning(params.point, occlusion.surface);

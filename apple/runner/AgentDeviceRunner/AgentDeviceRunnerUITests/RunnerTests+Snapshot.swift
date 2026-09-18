@@ -18,6 +18,12 @@ extension RunnerTests {
     let viewport: CGRect
     /** Which way the app's interface is turned from the device's native space (#2612). */
     let interfaceOrientation: Int
+    /**
+     * The keyboard band this capture measured, published beside the tree so the daemon's tap guard
+     * measures against the producer's own reading rather than a band it derives from these rects
+     * (#2660). Nil only where the platform has no iOS keyboard to measure.
+     */
+    let keyboardBand: RunnerKeyboardBandFact?
   }
 
   private struct SnapshotEvaluation {
@@ -114,6 +120,13 @@ extension RunnerTests {
   ]
 
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
+
+  /// What one capture may spend reading the keyboard band before it gives up on the fact and lets the
+  /// tap guard fall back to the tree rule. The scroll path pays this query per gesture and stays well
+  /// inside a second; the number here is a ceiling for a read that normally returns in milliseconds,
+  /// sized so a hostile keyboard surface cannot extend a capture the way the unbounded read it
+  /// replaced would have (#2660).
+  static let keyboardBandProbeBudget: TimeInterval = 0.3
 
   // The single production entry point -- always compiled, no unit-test overload. A unit test
   // exercises this exact function; the only injectable seam lives inside
@@ -895,6 +908,11 @@ extension RunnerTests {
     }
     let viewport = geometry.viewport
     let interfaceOrientation = geometry.interfaceOrientation
+    // The band is read here, immediately after the pair above and before the tree is captured, so the
+    // geometry the band is compared against is the geometry this capture publishes. It keeps its own
+    // hop and its own slice rather than joining that one: a keyboard this capture cannot measure must
+    // cost the fact and not the tree tier behind it (#2660).
+    let keyboardBand = captureKeyboardBandFact(app: app, deadline: captureDeadline)
 
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
@@ -906,7 +924,8 @@ extension RunnerTests {
       queryRoot: app,
       rootSnapshot: rootSnapshot,
       viewport: viewport,
-      interfaceOrientation: interfaceOrientation
+      interfaceOrientation: interfaceOrientation,
+      keyboardBand: keyboardBand
     )
   }
 

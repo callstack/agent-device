@@ -253,6 +253,10 @@ struct DataPayload: Codable {
   var snapshotQuality: SnapshotQuality?
   /// Set when the capture describes an in-place system surface, not the app itself (#2438).
   var systemSurface: SystemSurfaceProvenancePayload?
+  /// The keyboard band this capture measured, when the tier that answered reads keyboards at all
+  /// (#2660). Absent means the query-sweep or private-AX tier answered, and the daemon's tap guard
+  /// keeps deriving the band from the tree.
+  var keyboard: KeyboardBandFactPayload?
   var gestureStartUptimeMs: Double?
   var gestureEndUptimeMs: Double?
   var x: Double?
@@ -294,6 +298,16 @@ struct DataPayload: Codable {
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
+}
+
+/// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"
+/// carries `reason`, and "absent" carries nothing because there is nothing to say. `frame` is in the
+/// app's own orientation space — the same space `SnapshotGeometrySpace` publishes every node rect in
+/// — so the daemon compares it against node rects without transforming either side (#2660).
+struct KeyboardBandFactPayload: Codable, Equatable {
+  let kind: String
+  let frame: SnapshotRect?
+  let reason: String?
 }
 
 /// `kind` mirrors the TS `IosSystemSurfaceKind` (e.g. "web-auth").

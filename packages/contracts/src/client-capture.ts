@@ -5,6 +5,7 @@ import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annota
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
   SnapshotCommandOptionFields,
+  SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotUnchanged,
   SnapshotVisibility,
@@ -56,6 +57,13 @@ export type CaptureSnapshotResult = {
   visibility?: SnapshotVisibility;
   unchanged?: SnapshotUnchanged;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * The keyboard band this capture's producer measured (#2660), in the same orientation space as the
+   * node rects. The acting commands read it off the session state they act with; it is published so a
+   * caller can see the band a `tap_keyboard_occludes_target` refusal measured against. Absent means
+   * the producer measured no band and the tap guard derived one from the tree.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
   /**
    * Screenshot captured automatically when the semantic snapshot was sparse.
    * Remote clients receive a materialized local path through the daemon artifact channel.

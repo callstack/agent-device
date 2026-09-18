@@ -62,6 +62,10 @@ struct SnapshotBackendCapture {
   var customActions: SnapshotCustomActionCoverage? = nil
   var qualityPayload: DataPayload? = nil
   var timing: SnapshotCaptureTiming? = nil
+  /// The keyboard band this capture measured, carried beside the tree it came with (#2660). Only the
+  /// tree tier reads the keyboard, so only that tier has one; the daemon reads a missing band as "this
+  /// producer could not measure", which is exactly what the query-sweep and private-AX tiers did.
+  var keyboardBand: KeyboardBandFactPayload? = nil
 }
 
 extension RunnerTests {
@@ -416,6 +420,9 @@ extension RunnerTests {
     let hint = SnapshotPresentation.captureHint(for: options)
     var timer = SnapshotPhaseTimer()
     let acquisition: SnapshotAcquisition?
+    // The band is read inside the tree tier's own bounded work, so it has to be lifted out of the
+    // acquisition phase and carried to the stamping step, where the payload is assembled (#2660).
+    var keyboardBand: RunnerKeyboardBandFact?
     do {
       acquisition = try timer.measure(.acquisition) {
         switch kind {
@@ -430,6 +437,7 @@ extension RunnerTests {
           else {
             return nil
           }
+          keyboardBand = context.keyboardBand
           return try self.runMainThreadWork(
             "tree_processing",
             timeout: min(self.treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
@@ -503,6 +511,7 @@ extension RunnerTests {
 
     var capture = presented
     capture.timing = timer.timing
+    capture.keyboardBand = keyboardBand?.payload
     return SnapshotBackendAttempt(
       outcome: .captured(capture),
       timing: timer.timing
@@ -641,6 +650,7 @@ extension RunnerTests {
         return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)
       },
       snapshotQuality: quality,
+      keyboard: capture.keyboardBand,
       runnerFatal: payload.runnerFatal,
       runnerFatalReason: payload.runnerFatalReason
     )

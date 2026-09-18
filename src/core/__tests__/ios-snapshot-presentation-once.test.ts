@@ -139,3 +139,18 @@ test.each(PRODUCERS)(
     expect(shape(state.nodes)).toEqual(shape(nodes));
   },
 );
+
+// The measured keyboard band (#2660) crosses the same two hops as the tree, and the last one is
+// where a dropped field would hide: a guard reading the published state would silently fall back to
+// the tree rule while everyone believed the producer's measurement was in force.
+test('the keyboard band a producer measured reaches the state the tap guard reads', () => {
+  const band = { kind: 'visible', frame: { x: 0, y: 300, width: 320, height: 180 } } as const;
+  const base = acquired('simulator-ax-bridge', collapsibleNodes());
+  const result = presentIosSnapshotAcquisition(
+    { ...base, acquisition: { ...base.acquisition, keyboard: band } },
+    { interactiveOnly: true },
+  );
+
+  expect(result.keyboard).toEqual(band);
+  expect(buildSnapshotState(result, { snapshotInteractiveOnly: true }).keyboard).toEqual(band);
+});

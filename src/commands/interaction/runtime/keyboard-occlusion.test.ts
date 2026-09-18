@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  Rect,
+  SnapshotKeyboardBandFact,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { keyboardCoveredTabBarSnapshot } from '../../../../test/integration/interaction-contract/fixtures.ts';
 import { ref, selector } from './selector-read-utils.ts';
@@ -215,4 +220,148 @@ test('the out-of-viewport disclosure still wins on a stale-tree coordinate', asy
   );
 
   assert.match(result.warning ?? '', /outside the last-known viewport/);
+});
+
+// The producer-measured band (#2660). These run the acting paths, because the guarantee is that the
+// fast path and the shared rule enter through the same door — a unit test on the resolver alone would
+// leave the ref path free to consult the tree again on its way to the tap.
+
+/** The runner's own reading of the #2589 fixture's keyboard, in the app's orientation space. */
+const MEASURED_BAND: SnapshotKeyboardBandFact = {
+  kind: 'visible',
+  frame: { x: 0, y: 583, width: 402, height: 291 },
+};
+
+function captured(params: {
+  nodes: SnapshotState['nodes'];
+  keyboard?: SnapshotKeyboardBandFact;
+}): SnapshotState {
+  return makeSnapshotState(
+    params.nodes,
+    params.keyboard ? { keyboard: params.keyboard } : undefined,
+  );
+}
+
+test('a measured band refuses the target the tree rule would have refused', async () => {
+  const calls: Point[] = [];
+  const device = tappedDevice(
+    captured({ nodes: keyboardTree().nodes, keyboard: MEASURED_BAND }),
+    calls,
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.equal(
+        (error as { details?: Record<string, unknown> }).details?.reason,
+        'tap_keyboard_occludes_target',
+      );
+      assert.deepEqual((error as { details?: Record<string, unknown> }).details?.keyboardFrame, {
+        x: 0,
+        y: 583,
+        width: 402,
+        height: 291,
+      });
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('the tree rule is not consulted once the capture published a band', async () => {
+  // The same screen with its keyboard hoisted off the bottom edge: the tree rule refuses to measure
+  // that geometry and lets the tap through, which is what makes this pair the assertion that the
+  // band came from the fact and not from the tree.
+  const lifted = makeSnapshotState(liftKeyboardOffBottomEdge(keyboardTree().nodes));
+  const withoutFact: Point[] = [];
+  await tappedDevice(lifted, withoutFact).interactions.click(ref('@e2'), { session: 'default' });
+  assert.equal(withoutFact.length, 1, 'the tree rule fails open on geometry it cannot measure');
+
+  const withFact: Point[] = [];
+  await assert.rejects(
+    () =>
+      tappedDevice(
+        captured({ nodes: lifted.nodes, keyboard: MEASURED_BAND }),
+        withFact,
+      ).interactions.click(ref('@e2'), { session: 'default' }),
+    /Ref @e2 is behind the visible keyboard/,
+  );
+  assert.deepEqual(withFact, []);
+});
+
+test('a target above the measured band still presses', async () => {
+  const calls: Point[] = [];
+  const above = { x: 148, y: 470, width: 104, height: 110 };
+  const device = tappedDevice(
+    captured({ nodes: keyboardTree({ tabRect: above }).nodes, keyboard: MEASURED_BAND }),
+    calls,
+  );
+
+  await device.interactions.click(ref('@e2'), { session: 'default' });
+
+  assert.deepEqual(calls, [{ x: 200, y: 525 }]);
+});
+
+test('a measured band still excuses the keyboard key the caller named', async () => {
+  const calls: Point[] = [];
+  const device = tappedDevice(
+    captured({ nodes: keyboardTree().nodes, keyboard: MEASURED_BAND }),
+    calls,
+  );
+
+  await device.interactions.click(ref('@e6'), { session: 'default' });
+
+  assert.deepEqual(calls, [{ x: 202, y: 779 }]);
+});
+
+test('a measured band still reads a coordinate on a reported key as the keyboard asked for', async () => {
+  const calls: Point[] = [];
+  const result = await tappedDevice(
+    captured({ nodes: keyboardTree().nodes, keyboard: MEASURED_BAND }),
+    calls,
+  ).interactions.press({ kind: 'point', x: 160, y: 760 }, { session: 'default' });
+
+  assert.deepEqual(calls, [{ x: 160, y: 760 }]);
+  assert.equal(result.warning, undefined);
+});
+
+test('a producer that found no keyboard lets the tap the stale tree would refuse', async () => {
+  const calls: Point[] = [];
+  const device = tappedDevice(
+    captured({ nodes: keyboardTree().nodes, keyboard: { kind: 'absent' } }),
+    calls,
+  );
+
+  await device.interactions.click(ref('@e2'), { session: 'default' });
+
+  assert.deepEqual(calls, [{ x: 200, y: 833 }]);
+});
+
+test('an unmeasurable fact leaves the acting path on the tree rule unchanged', async () => {
+  const calls: Point[] = [];
+  const device = tappedDevice(
+    captured({
+      nodes: keyboardTree().nodes,
+      keyboard: { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+    }),
+    calls,
+  );
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    /Ref @e2 is behind the visible keyboard/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("a coordinate behind the measured band discloses the producer's frame", async () => {
+  const result = await tappedDevice(
+    captured({
+      nodes: liftKeyboardOffBottomEdge(keyboardTree().nodes),
+      keyboard: MEASURED_BAND,
+    }),
+    [],
+  ).interactions.press({ kind: 'point', x: 200, y: 810 }, { session: 'default' });
+
+  assert.match(result.warning ?? '', /keyboard frame 583\.\.874/);
 });

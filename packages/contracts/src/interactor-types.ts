@@ -18,6 +18,7 @@ import type {
   RawSnapshotNode,
   Point,
   Rect,
+  SnapshotKeyboardBandFact,
   SnapshotOptions as BaseSnapshotOptions,
   SnapshotProvenance,
 } from '@agent-device/kernel/snapshot';
@@ -262,6 +263,12 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    * over the session app rather than the app itself (#2438).
    */
   systemSurface?: IosSystemSurfaceProvenance;
+  /**
+   * The keyboard band the producer measured while capturing, when it can measure one (#2660). A
+   * producer that publishes nothing measured nothing, so the tap-path guard keeps deriving the band
+   * from `nodes`; see {@link SnapshotKeyboardBandFact}.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
 } & SnapshotProvenance;
 
 export type SnapshotRuntimeAcquiredResult = Readonly<{

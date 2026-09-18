@@ -732,3 +732,31 @@ test('runtime snapshot discloses a cut capture the same way on every backend', a
     false,
   );
 });
+
+// The measured keyboard band is public output (#2660): `snapshot --json` is how a caller learns which
+// band the tap guard measured, and a backend that measured nothing has to leave the key off rather
+// than answer for a keyboard it never looked at.
+
+test('runtime snapshot publishes the keyboard band its capture measured', async () => {
+  const band = { kind: 'visible', frame: { x: 0, y: 583, width: 402, height: 291 } } as const;
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'xctest',
+    keyboard: band,
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(result.keyboard, band);
+});
+
+test('runtime snapshot leaves the keyboard band off when the backend measured none', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'xctest',
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal('keyboard' in result, false);
+});

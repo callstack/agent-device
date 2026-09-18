@@ -206,3 +206,54 @@ test('a healthy payload with valid viewport roots still presents', () => {
     [0, 1],
   );
 });
+
+// The keyboard band the runner measured for a capture (#2660). The reader is the only place a wire
+// fact becomes a daemon fact, so it owns the whole strictness budget: what cannot be placed is
+// restated as `unmeasurable` with a reason, never as a band and never as silence.
+
+test('a measured keyboard band is read as the band the guard will measure against', () => {
+  // The landscape band #2653 confirmed on iPhone 17 Pro: the runner answers `app.keyboards` in the
+  // app's own orientation space, so the daemon reads these numbers beside node rects unchanged.
+  const result = readAppleSnapshotResult({
+    keyboard: { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
+  });
+
+  assert.deepEqual(result.keyboard, {
+    kind: 'visible',
+    frame: { x: 0, y: 198, width: 874, height: 204 },
+  });
+});
+
+test('a proven absence and a stated failure both survive the wire as themselves', () => {
+  assert.deepEqual(readAppleSnapshotResult({ keyboard: { kind: 'absent' } }).keyboard, {
+    kind: 'absent',
+  });
+  assert.deepEqual(
+    readAppleSnapshotResult({
+      keyboard: { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+    }).keyboard,
+    { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+  );
+});
+
+test('a capture from a tier that never reads the keyboard publishes no fact at all', () => {
+  // The query sweep and private-AX tiers answer with no `keyboard` key, which is how the daemon
+  // learns to keep deriving the band from that tree instead of being told the screen is clear.
+  assert.equal(readAppleSnapshotResult({ nodes: [] }).keyboard, undefined);
+});
+
+test('a band that cannot be placed is restated as unmeasurable rather than dropped or trusted', () => {
+  const cases: ReadonlyArray<readonly [unknown, string]> = [
+    [{ kind: 'visible' }, 'invalid-visible-frame'],
+    [{ kind: 'visible', frame: { x: 0, y: 198, width: 0, height: 204 } }, 'invalid-visible-frame'],
+    [{ kind: 'visible', frame: { x: 0, y: 198 } }, 'invalid-visible-frame'],
+    [{ kind: 'unmeasurable' }, 'unreported-reason'],
+    [{ kind: 'measured' }, 'unrecognized-kind'],
+    ['visible', 'malformed-fact'],
+  ];
+
+  for (const [payload, reason] of cases) {
+    const read = readAppleSnapshotResult({ keyboard: payload }).keyboard;
+    assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
+  }
+});

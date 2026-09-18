@@ -1,4 +1,9 @@
-import type { Point, RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  RawSnapshotNode,
+  Rect,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { isAndroidInputMethodNode } from './android-input-ownership.ts';
 import { normalizeType } from './snapshot-text.ts';
@@ -13,10 +18,18 @@ import { normalizeType } from './snapshot-text.ts';
  * too. The result was a silent misfire: pressing an element behind the keyboard reported success
  * while the touch activated a key (#2589).
  *
- * The band is derived from the captured tree every acting path already holds, so the guard costs no
- * round trip. Derivation, the rules that decide whether reported geometry may be measured at all,
- * and the verdict on a point are proven against
- * `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule only through that table.
+ * Two producers answer this question, in this order. A capture whose producer measured the band
+ * directly publishes a {@link SnapshotKeyboardBandFact} beside its tree, and the guard measures the
+ * tap point against that band — a point-in-rect check with no geometry to believe. The Apple runner
+ * does this from `app.keyboards.firstMatch`, which answers in the app's own orientation space, and
+ * the Simulator AX bridge does it for the portrait trees it is willing to serve (#2660).
+ *
+ * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
+ * costs no round trip. This is the path for Android's input method nodes and for the producers that
+ * never see the app's windows (`appium-source`, `limrun-ios-tree`, the runner's own query-sweep tier).
+ * Derivation, the rules that decide whether reported geometry may be measured at all, and the verdict
+ * on a point are proven against `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule
+ * only through that table.
  */
 
 /** The one reason a tap refuses because the visible keyboard owns its tap point. */
@@ -235,8 +248,9 @@ function measureDockedKeyboardFrame(params: {
   // rects arrive quarter-turned, and only a producer that can name the app's interface orientation
   // can turn them back: the runner's tree tiers publish the app's own space through
   // `SnapshotGeometrySpace`, and the Simulator AX bridge refuses the capture so the runner answers it
-  // (ADR 0004). What still reaches this rule is a capture that declares no space at all — the
-  // runner's query-sweep tier, whose flat query has no window ancestry to read one from, and the
+  // (ADR 0004). A capture from either of those now answers this question from its own measured band
+  // and never reaches here (#2660), so what still does is a capture that declares no space at all:
+  // the runner's query-sweep tier, whose flat query has no window ancestry to read one from, and the
   // `appium-source` and `limrun-ios-tree` producers. Unnormalized landscape geometry measured on
   // iPhone 17 Pro reports a 162 x 327 key plane and a dock button at y 8 of a 402 pt viewport while
   // the screenshot shows the keyboard full width across the bottom 327 pt. A band from that would
@@ -265,6 +279,13 @@ function keysFormOneColumnRun(params: {
     params.anchorNodes.filter((node) => !params.planeIndices.has(node.index)),
   );
   return tilesMeasuredWidth(keyRects.length > 0 ? keyRects : params.anchorRects);
+}
+
+/** The keyboard's own controls as the tree reports them, without deciding where its band is. */
+function collectKeyboardControlRects(nodes: readonly RawSnapshotNode[]): Rect[] {
+  const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
+  const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
+  return usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index)));
 }
 
 /** The band the keyboard reports, or null when the tree holds no keyboard or the band cannot be
@@ -296,12 +317,40 @@ function resolveVisibleKeyboardSurface(
 }
 
 /**
+ * The fact a producer publishes when the tree it decoded is the only evidence it has (#2660): the
+ * band this module's rule measures, or an honest statement that this tree cannot be measured.
+ *
+ * This is the bridge's answer, and it deliberately reuses the tree rule rather than inventing a
+ * second one — the bridge reads the app's own process, so in portrait the keyboard window's subtree
+ * is already in the app's space and the rule computes the band it always did. A landscape capture
+ * with the keyboard up is refused by the bridge and served by the runner, which measures the band
+ * itself, so the bridge never has to answer that case (#2612, #2653).
+ */
+export function deriveKeyboardBandFactFromTree(params: {
+  nodes: readonly RawSnapshotNode[];
+  viewport: Rect | null;
+}): SnapshotKeyboardBandFact {
+  const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
+  if (surface) return { kind: 'visible', frame: surface.frame };
+  return params.nodes.some(isKeyboardAnchorNode)
+    ? { kind: 'unmeasurable', reason: 'tree-keyboard-band-unmeasurable' }
+    : { kind: 'absent' };
+}
+
+/**
  * Whether this tap point belongs to the visible keyboard rather than to app content behind it.
  *
  * The point is the rect center an interaction would activate — the same point
  * `isTapPointInsideViewport` guards — so an element only partly under the keyboard whose center is
  * still above the key plane keeps tapping. Callers choose the consequence: an acting element path
  * refuses, while a coordinate path that never captured this tree discloses instead of refusing.
+ *
+ * A producer that measured the band publishes it in `keyboard`, and its frame IS the band: no rule
+ * about docking, column runs, or which way the tree was turned is consulted, because the producer
+ * that measured does not need them to answer (#2660). The keyboard's own controls still come from the
+ * tree — which node the keyboard rather than the app is responsible for is a different question from
+ * where the band is, and only the tree can answer it. Without a fact, or with one that measured
+ * nothing, every rule below applies exactly as it did.
  */
 export function resolveKeyboardTapOcclusion(params: {
   nodes: readonly RawSnapshotNode[];
@@ -309,8 +358,16 @@ export function resolveKeyboardTapOcclusion(params: {
   point: Point;
   /** The resolved element, when the caller named one; absent for a bare coordinate. */
   node?: RawSnapshotNode | null;
+  /** The band this capture's producer measured, when it measured one (#2660). */
+  keyboard?: SnapshotKeyboardBandFact;
 }): KeyboardTapOcclusion {
-  const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
+  // A producer that looked for the keyboard and found none settles the question the tree rule would
+  // otherwise be guessing about, stale key nodes in the captured tree included.
+  if (params.keyboard?.kind === 'absent') return { kind: 'no-keyboard' };
+  const surface =
+    params.keyboard?.kind === 'visible'
+      ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }
+      : resolveVisibleKeyboardSurface(params.nodes, params.viewport);
   if (!surface) {
     return params.nodes.some(isKeyboardAnchorNode)
       ? { kind: 'undetermined' }

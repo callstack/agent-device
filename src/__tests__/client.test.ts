@@ -1122,6 +1122,74 @@ test('client capture.snapshot preserves snapshot quality annotation from daemon 
   assert.deepEqual(result.snapshotQuality, snapshotQuality);
 });
 
+test('client capture.snapshot preserves the measured keyboard band fact from daemon responses', async () => {
+  const keyboard = { kind: 'visible', frame: { x: 0, y: 583, width: 402, height: 291 } } as const;
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      nodes: [],
+      truncated: false,
+      keyboard,
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot();
+
+  assert.deepEqual(result.keyboard, keyboard);
+});
+
+test('client capture.snapshot preserves absence and unmeasurability of the keyboard band', async () => {
+  for (const [keyboard, expected] of [
+    [{ kind: 'absent' }, { kind: 'absent' }],
+    [
+      { kind: 'unmeasurable', reason: 'tree-keyboard-band-unmeasurable' },
+      { kind: 'unmeasurable', reason: 'tree-keyboard-band-unmeasurable' },
+    ],
+  ] as const) {
+    const setup = createTransport(async () => ({
+      ok: true,
+      data: { nodes: [], truncated: false, keyboard },
+    }));
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+    const result = await client.capture.snapshot();
+
+    assert.deepEqual(result.keyboard, expected);
+  }
+});
+
+test('client capture.snapshot drops a keyboard band fact it cannot place', async () => {
+  for (const keyboard of [
+    { kind: 'visible' },
+    { kind: 'visible', frame: { x: 0, y: 583, width: 402 } },
+    { kind: 'unmeasurable' },
+    { kind: 'present', frame: { x: 0, y: 583, width: 402, height: 291 } },
+  ]) {
+    const setup = createTransport(async () => ({
+      ok: true,
+      data: { nodes: [], truncated: false, keyboard },
+    }));
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+    const result = await client.capture.snapshot();
+
+    assert.equal('keyboard' in result, false, JSON.stringify(keyboard));
+  }
+});
+
+test('client capture.snapshot omits the keyboard band fact a producer did not measure', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: { nodes: [], truncated: false },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot();
+
+  assert.equal('keyboard' in result, false);
+});
+
 test('client capture.snapshot forwards force-full as snapshotForceFull flag', async () => {
   const setup = createTransport(async () => ({
     ok: true,

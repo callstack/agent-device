@@ -231,11 +231,7 @@ async function captureAppleRunnerSnapshot(
       { backend: 'xctest' },
     ),
   );
-  const nodes = result.nodes ?? [];
-  const isValidEmptyScope = acceptsEmptyScopedSnapshot(options, result.quality);
-  if (nodes.length === 0 && device.kind === 'simulator' && !isValidEmptyScope) {
-    throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
-  }
+  assertReportedRunnerSnapshotNodes(device, options, result);
   const warnings = runnerSnapshotWarnings(result);
   return {
     nodes: presentRunnerSnapshotForDevice(device, options, result),
@@ -244,8 +240,24 @@ async function captureAppleRunnerSnapshot(
     producer: 'apple-runner' as const,
     ...(result.quality ? { quality: result.quality } : {}),
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+/**
+ * A runner capture reporting no nodes is a failure unless the caller's own scope justifies it: an
+ * empty scoped capture is what `--scope` asked for, and a sparse-quality capture already says so.
+ */
+function assertReportedRunnerSnapshotNodes(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  result: AppleRunnerSnapshotResult,
+) {
+  if ((result.nodes?.length ?? 0) > 0) return;
+  if (acceptsEmptyScopedSnapshot(options, result.quality)) return;
+  if (device.kind !== 'simulator') return;
+  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
 }
 
 /**

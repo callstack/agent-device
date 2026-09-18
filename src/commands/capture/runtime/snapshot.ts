@@ -10,6 +10,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
+  SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
   SnapshotUnchanged,
@@ -48,6 +49,12 @@ export type SnapshotCommandResult = {
   visibility?: SnapshotVisibility;
   unchanged?: SnapshotUnchanged;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * The keyboard band this capture's producer measured (#2660). The acting commands read it off the
+   * session state they act with; it is published here so a caller can see why a tap behind the
+   * keyboard was refused without reconstructing the band from the tree.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
 } & PublicSnapshotCaptureAnnotations;
 
 type SnapshotCapture = {
@@ -90,6 +97,7 @@ export const snapshotCommand: RuntimeCommand<
     ...(capture.result.snapshotDiagnostics
       ? { snapshotDiagnostics: capture.result.snapshotDiagnostics }
       : {}),
+    ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
     ...snapshotAppFields(capture),
   });
 };
@@ -195,6 +203,7 @@ function normalizeBackendSnapshot(
     truncated: result.truncated,
     backend: result.backend as SnapshotState['backend'],
     createdAt: now(runtime),
+    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
   };
 }
 
