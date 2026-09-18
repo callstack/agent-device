@@ -1,7 +1,7 @@
 // Production lock-plan + device bindings for the concurrency torture lane (#1416).
 //
 // The lane does NOT hand-write which locks an operation takes. It derives the
-// plan from the REAL router primitive `resolveRequestExecutionLockKeys`
+// plan from the REAL router primitive `resolveRequestExecutionLockPlan`
 // (src/daemon/request-binding.ts), driven with a fake in-memory device
 // inventory via the production `withDeviceInventoryProvider` seam. This is what
 // makes the same-device serialization invariant revert-sensitive: if production
@@ -12,7 +12,7 @@
 // The plan is built the SAME way the daemon builds it in
 // `createRequestExecutionScope`: gate on the production decision
 // `shouldLockSessionExecution(command)`, and only then resolve keys via
-// `resolveRequestExecutionLockKeys`. So the lane is revert-sensitive to BOTH
+// `resolveRequestExecutionLockPlan`. So the lane is revert-sensitive to BOTH
 // production decision points — exempting a command from execution locking, or
 // dropping the device key — even though the mutex GRANT itself stays modeled
 // (by the deterministic scheduler) because `withKeyedLock`'s native microtask
@@ -22,7 +22,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
 import type { SessionStore } from '../../../../src/daemon/session-store.ts';
-import { resolveRequestExecutionLockKeys } from '../../../../src/daemon/request-binding.ts';
+import { resolveRequestExecutionLockPlan } from '../../../../src/daemon/request-binding.ts';
 import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
@@ -131,9 +131,10 @@ async function resolveExecutionLockPlan(
   sessionStore: SessionStore,
 ): Promise<LockKey[]> {
   if (!shouldLockSessionExecution(req.command)) return [];
-  return (await withPool(() =>
-    resolveRequestExecutionLockKeys({ req, sessionName, sessionStore }),
-  )) as LockKey[];
+  const plan = await withPool(() =>
+    resolveRequestExecutionLockPlan({ req, sessionName, sessionStore }),
+  );
+  return plan.keys as LockKey[];
 }
 
 /**

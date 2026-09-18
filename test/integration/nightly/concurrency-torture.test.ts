@@ -6,7 +6,7 @@
 // `SessionStore` + `LeaseRegistry`, an in-memory device-claim model), with ALL
 // concurrency routed through a deterministic scheduler so a seed fully
 // determines execution order. Each operation's lock plan is derived from the
-// production router primitive `resolveRequestExecutionLockKeys`, so reverting
+// production router primitive `resolveRequestExecutionLockPlan`, so reverting
 // the router's same-device serialization trips the overlap invariant. After
 // every run the harness asserts:
 //   - no leaked leases or claims,

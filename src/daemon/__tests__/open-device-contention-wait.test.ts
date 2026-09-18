@@ -1,23 +1,28 @@
 import { test, expect, vi, afterEach } from 'vitest';
-import path from 'node:path';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
 import {
+  beginOpenDeviceWait,
+  describeOpenWaitForRefusal,
   readOpenWaitAttempt,
   readOpenWaitBudgetMs,
-  waitForOpenDeviceContention,
 } from '../open-device-contention-wait.ts';
 
-// `--wait <ms>` is the one answer to a device another session is holding. What makes this wait
-// safe is where it runs: outside the device execution lock, because every operation that could
-// free the device needs that lock too. These tests pin the loop's accounting and the one case it
-// must never wait on — its own session.
+// `--wait <ms>` is the one answer to a device another session is holding. Two things make that
+// wait trustworthy, and both are pinned here: it runs outside the device execution lock, because
+// every operation that could free the device needs that lock too; and the open re-looks at the
+// device under the locks, so a device taken in the window between the last look and the lock is
+// waited for again instead of refused with budget still unspent.
 
 const HOLDER_ADDRESS = 'cwd:8bea844ab16aa9b3:default';
+const OPENER_ADDRESS = 'cwd:1d9b7c2f4a6e8b03:default';
 
 function openRequest(flags: CommandFlags): DaemonRequest {
   return {
@@ -30,30 +35,47 @@ function openRequest(flags: CommandFlags): DaemonRequest {
   };
 }
 
-function storeWithHolder(deviceId = IOS_SIMULATOR.id): SessionStore {
-  const store = new SessionStore(
-    path.join('/tmp', `ad-wait-${Math.random().toString(36).slice(2)}`),
-  );
-  const holder: SessionState = {
+function session(address: string): SessionState {
+  return {
     name: 'default',
-    sessionScope: { kind: 'cwd', id: '8bea844ab16aa9b3' },
-    device: { ...IOS_SIMULATOR, id: deviceId },
+    sessionScope: { kind: 'cwd', id: address.split(':')[1] ?? '' },
+    device: IOS_SIMULATOR,
     createdAt: 0,
     actions: [],
   };
-  store.set(HOLDER_ADDRESS, holder);
+}
+
+function storeWithHolder(): SessionStore {
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.set(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
   return store;
 }
 
-function resolved(device: typeof IOS_SIMULATOR | undefined) {
-  let calls = 0;
+/** Drives {@link OpenDeviceWait.runWhenDeviceIsUnheld} the way the request scope does, and keeps
+ * the order the locks, the open, and any re-wait actually happened in. */
+function lockTrace(params: { onAcquire?: (pass: number) => void }) {
+  const order: string[] = [];
+  let passes = 0;
   return {
-    calls: () => calls,
-    resolve: async () => {
-      calls += 1;
-      return device;
+    order,
+    acquireLocks: async <T>(task: () => Promise<T>): Promise<T> => {
+      passes += 1;
+      order.push('acquire');
+      params.onAcquire?.(passes);
+      const outcome = await task();
+      order.push('release');
+      return outcome;
     },
   };
+}
+
+function thrownBy(build: () => unknown): unknown {
+  try {
+    build();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('Expected the request to be refused.');
 }
 
 afterEach(() => {
@@ -61,122 +83,218 @@ afterEach(() => {
   clearRequestCanceled('req-open-wait');
 });
 
-test('the budget is read from the request, and a non-positive one is no budget', () => {
-  expect(readOpenWaitBudgetMs(openRequest({ waitMs: 5000 }))).toBe(5000);
+// The CLI parser refuses a `--wait` outside the option's declared bounds and the tool input derived
+// from it refuses the same. A budget assembled by the Node client or posted straight to the wire
+// reaches the daemon with neither check applied, so the reader that spends it applies the bounds of
+// the same declaration rather than a copy of them.
+test('the daemon holds a budget to the bounds its own option declares', () => {
+  const [waitFlag] = getFlagDefinitionsForKey('waitMs');
+  const { min, max } = waitFlag ?? {};
+  expect({ min, max }).toEqual({ min: expect.any(Number), max: expect.any(Number) });
+
+  expect(readOpenWaitBudgetMs(openRequest({ waitMs: 5_000 }))).toBe(5_000);
+  expect(readOpenWaitBudgetMs(openRequest({ waitMs: min }))).toBe(min);
+  expect(readOpenWaitBudgetMs(openRequest({ waitMs: max }))).toBe(max);
   expect(readOpenWaitBudgetMs(openRequest({}))).toBeUndefined();
-  expect(readOpenWaitBudgetMs(openRequest({ waitMs: 0 }))).toBeUndefined();
+
+  for (const waitMs of [(min ?? 0) - 1, (max ?? 0) + 1, 0, 1.5]) {
+    expect(thrownBy(() => readOpenWaitBudgetMs(openRequest({ waitMs })))).toMatchObject({
+      code: 'INVALID_ARGS',
+    });
+  }
 });
 
-test('a free device costs nothing and records no wait', async () => {
-  const req = openRequest({ waitMs: 30_000 });
-  const device = resolved(IOS_SIMULATOR);
+test('a refusal offers the flag only to a caller that did not arrive carrying it', () => {
+  expect(describeOpenWaitForRefusal(openRequest({}))).toEqual({ offersDeviceWait: true });
 
-  await waitForOpenDeviceContention({
-    req,
-    sessionName: 'cwd:1d9b7c2f4a6e8b03:default',
-    sessionStore: new SessionStore('/tmp/ad-wait-free'),
-    budgetMs: 30_000,
-    resolveDevice: device.resolve,
-  });
+  // The open that passed `--wait` and still hit a busy device is not being sent off to run the
+  // same open with the flag it used.
+  const carried = openRequest({ waitMs: 1_000 });
+  expect(describeOpenWaitForRefusal(carried)).toEqual({ offersDeviceWait: false });
 
-  expect(device.calls()).toBe(1);
-  expect(readOpenWaitAttempt(req)).toEqual({});
+  const spent: DaemonRequest = { ...carried, internal: { openDeviceWait: { waitedMs: 1_000 } } };
+  expect(describeOpenWaitForRefusal(spent)).toEqual({ waitedMs: 1_000, offersDeviceWait: false });
 });
 
-// An open onto the device its own session already holds is not contention: waiting there would
-// spend the whole budget on itself.
-test('the session that already holds the device is not waited for', async () => {
-  const req = openRequest({ waitMs: 30_000 });
-  const store = storeWithHolder();
+test('only a fresh open with a budget and a resolved device gets a wait', () => {
+  const sessionStore = new SessionStore('/tmp/ad-wait-none');
+  const budget = openRequest({ waitMs: 5_000 });
 
-  await waitForOpenDeviceContention({
+  expect(
+    beginOpenDeviceWait({
+      req: { ...budget, command: 'tap' },
+      sessionName: OPENER_ADDRESS,
+      sessionStore,
+      deviceId: IOS_SIMULATOR.id,
+    }),
+  ).toBeUndefined();
+  expect(
+    beginOpenDeviceWait({
+      req: budget,
+      sessionName: OPENER_ADDRESS,
+      sessionStore,
+      deviceId: undefined,
+    }),
+  ).toBeUndefined();
+  expect(
+    beginOpenDeviceWait({
+      req: openRequest({}),
+      sessionName: OPENER_ADDRESS,
+      sessionStore,
+      deviceId: IOS_SIMULATOR.id,
+    }),
+  ).toBeUndefined();
+
+  // An open onto a session that already exists is bound to a device nobody else is refused for.
+  sessionStore.set(OPENER_ADDRESS, session(OPENER_ADDRESS));
+  expect(
+    beginOpenDeviceWait({
+      req: budget,
+      sessionName: OPENER_ADDRESS,
+      sessionStore,
+      deviceId: IOS_SIMULATOR.id,
+    }),
+  ).toBeUndefined();
+});
+
+test('a free device is read once in the store and records no wait', async () => {
+  const req = openRequest({ waitMs: 30_000 });
+  const store = makeSessionStore('agent-device-open-wait-');
+  const looks = vi.spyOn(store, 'findByDevice');
+
+  const wait = beginOpenDeviceWait({
     req,
-    sessionName: HOLDER_ADDRESS,
+    sessionName: OPENER_ADDRESS,
     sessionStore: store,
-    budgetMs: 30_000,
-    resolveDevice: resolved(IOS_SIMULATOR).resolve,
-  });
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+  await wait.waitForDeviceOutsideLocks();
 
+  expect(looks).toHaveBeenCalledTimes(1);
   expect(readOpenWaitAttempt(req)).toEqual({});
 });
 
-test('a device that frees up ends the wait and records what it cost', async () => {
+test('a device that frees up ends the wait without claiming a spent budget', async () => {
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 30_000 });
   const store = storeWithHolder();
-  let looks = 0;
+  const release = setTimeout(() => store.delete(HOLDER_ADDRESS), 600);
 
-  let settled = false;
-  const running = waitForOpenDeviceContention({
+  await waitUntil(
+    () =>
+      beginOpenDeviceWait({
+        req,
+        sessionName: OPENER_ADDRESS,
+        sessionStore: store,
+        deviceId: IOS_SIMULATOR.id,
+      })!.waitForDeviceOutsideLocks(),
+    30_000,
+  );
+  clearTimeout(release);
+
+  // The open this wait hands off to succeeds, and only a refusal may report a wait.
+  expect(readOpenWaitAttempt(req)).toEqual({});
+});
+
+test('an open yields the device lock to a session that took the device after the last look', async () => {
+  vi.useFakeTimers();
+  const req = openRequest({ waitMs: 30_000 });
+  const store = makeSessionStore('agent-device-open-wait-');
+  const wait = beginOpenDeviceWait({
     req,
-    sessionName: 'cwd:1d9b7c2f4a6e8b03:default',
+    sessionName: OPENER_ADDRESS,
     sessionStore: store,
-    budgetMs: 30_000,
-    resolveDevice: async () => {
-      looks += 1;
-      if (looks > 2) store.delete(HOLDER_ADDRESS);
-      return IOS_SIMULATOR;
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+  // A competing open puts its session on the device in the window between this open's look at the
+  // free store and its first pass under the locks, and hands it back 300ms later.
+  setTimeout(() => store.delete(HOLDER_ADDRESS), 300);
+  const trace = lockTrace({
+    onAcquire: (pass) => {
+      if (pass === 1) store.set(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
     },
-  }).then(() => {
-    settled = true;
   });
+
+  let opened = 0;
+  const running = wait
+    .runWhenDeviceIsUnheld({
+      acquireLocks: trace.acquireLocks,
+      task: async () => {
+        opened += 1;
+        return 'opened';
+      },
+    })
+    .then((outcome) => {
+      expect(outcome).toBe('opened');
+    });
   await vi.advanceTimersByTimeAsync(1_000);
   await running;
 
-  expect(settled).toBe(true);
-  expect(readOpenWaitAttempt(req).waitedMs).toBeGreaterThan(0);
+  // Two passes at the locks with one wait between them, and the open ran only while it held them.
+  expect(trace.order).toEqual(['acquire', 'release', 'acquire', 'release']);
+  expect(opened).toBe(1);
+  expect(readOpenWaitAttempt(req)).toEqual({});
 });
 
-test('a budget that runs out busy records the spend and lets the open refuse', async () => {
+test('a budget that runs out busy costs the whole budget, then lets the open refuse', async () => {
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 1000 });
-  const device = resolved(IOS_SIMULATOR);
-
-  const running = waitForOpenDeviceContention({
+  const store = storeWithHolder();
+  const looks = vi.spyOn(store, 'findByDevice');
+  const wait = beginOpenDeviceWait({
     req,
-    sessionName: 'cwd:1d9b7c2f4a6e8b03:default',
-    sessionStore: storeWithHolder(),
-    budgetMs: 1000,
-    resolveDevice: device.resolve,
-  });
+    sessionName: OPENER_ADDRESS,
+    sessionStore: store,
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+  const trace = lockTrace({});
+
+  let opened = 0;
+  const running = wait
+    .runWhenDeviceIsUnheld({
+      acquireLocks: trace.acquireLocks,
+      task: async () => {
+        opened += 1;
+        return 'refused';
+      },
+    })
+    .then((outcome) => {
+      expect(outcome).toBe('refused');
+    });
   await vi.advanceTimersByTimeAsync(10_000);
   await running;
 
   expect(readOpenWaitAttempt(req).waitedMs).toBe(1000);
-  // 250ms polls across a 1000ms budget: never an unbounded spin.
-  expect(device.calls()).toBe(5);
-});
-
-test('a device that cannot be resolved yet is not waited for', async () => {
-  const req = openRequest({ waitMs: 30_000 });
-  const device = resolved(undefined);
-
-  await waitForOpenDeviceContention({
-    req,
-    sessionName: 'cwd:1d9b7c2f4a6e8b03:default',
-    sessionStore: storeWithHolder(),
-    budgetMs: 30_000,
-    resolveDevice: device.resolve,
-  });
-
-  expect(device.calls()).toBe(1);
-  expect(readOpenWaitAttempt(req)).toEqual({});
+  // The refusal is the open's own, so the task ran — once, under the locks, after the budget that
+  // bought the second pass was gone.
+  expect(opened).toBe(1);
+  expect(trace.order).toEqual(['acquire', 'release', 'acquire', 'release']);
+  // 250ms polls across a 1000ms budget, plus one look per pass at the locks: never a spin.
+  expect(looks.mock.calls.length).toBeLessThanOrEqual(7);
 });
 
 test('a request the client gave up on stops waiting at its next poll', async () => {
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 60_000 });
   markRequestCanceled('req-open-wait');
-
-  const running = waitForOpenDeviceContention({
+  const wait = beginOpenDeviceWait({
     req,
-    sessionName: 'cwd:1d9b7c2f4a6e8b03:default',
+    sessionName: OPENER_ADDRESS,
     sessionStore: storeWithHolder(),
-    budgetMs: 60_000,
-    resolveDevice: resolved(IOS_SIMULATOR).resolve,
-  });
-  const rejection = expect(running).rejects.toThrow();
+    deviceId: IOS_SIMULATOR.id,
+  })!;
+
+  const rejection = expect(wait.waitForDeviceOutsideLocks()).rejects.toSatisfy(
+    isRequestCanceledError,
+  );
   await vi.advanceTimersByTimeAsync(250);
 
   await rejection;
 });
+
+/** Runs `start()` under fake timers and advances the clock until it settles. */
+async function waitUntil(start: () => Promise<void>, budgetMs: number): Promise<void> {
+  const running = start();
+  await vi.advanceTimersByTimeAsync(budgetMs);
+  await running;
+}

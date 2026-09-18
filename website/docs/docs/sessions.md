@@ -79,7 +79,7 @@ When the device is held by a session that will let go soon — a parallel agent 
 agent-device open Demo --platform android --wait 60000
 ```
 
-If the budget runs out the device is still busy, the open fails with `DEVICE_IN_USE` naming the owning session address, which `close --session <address>` releases.
+If the budget runs out with the device still busy, the open fails with `DEVICE_IN_USE` naming the owning session address, which `close --session <address>` releases. Every open waiting on a device gets its whole budget: when the holder lets go, the waiting open that did not get the device waits again for what is left of its own budget rather than refusing early, so several agents can queue on one device.
 
 Notes:
 

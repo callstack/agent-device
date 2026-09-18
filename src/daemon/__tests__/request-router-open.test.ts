@@ -72,7 +72,7 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
-import { resolveRequestExecutionLockKeys } from '../request-binding.ts';
+import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import {
@@ -216,7 +216,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
     options?.appleSimulatorAppTarget === 'com.example.demo' ? appDevice : genericDevice,
   );
 
-  const keys = await resolveRequestExecutionLockKeys({
+  const { keys } = await resolveRequestExecutionLockPlan({
     req: {
       token: 'test-token',
       session: 'fresh-replay',
@@ -245,7 +245,7 @@ test('fresh replay leaves a first deep-link open unbound when a later app target
   );
   const sessionStore = makeSessionStore('agent-device-router-replay-deep-link-lock-');
 
-  const keys = await resolveRequestExecutionLockKeys({
+  const { keys } = await resolveRequestExecutionLockPlan({
     req: {
       token: 'test-token',
       session: 'fresh-replay-deep-link',
@@ -273,7 +273,7 @@ test('fresh replay preserves an authored Android platform before advisory lockin
   const androidDevice = makeAndroidDevice('ANDROID-EMULATOR');
   mockResolveTargetDevice.mockResolvedValue(androidDevice);
 
-  const keys = await resolveRequestExecutionLockKeys({
+  const { keys } = await resolveRequestExecutionLockPlan({
     req: {
       token: 'test-token',
       session: 'fresh-replay-android',

@@ -41,7 +41,7 @@ import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,
 } from '../../session-recovery-hints.ts';
-import { readOpenWaitAttempt } from '../../open-device-contention-wait.ts';
+import { describeOpenWaitForRefusal } from '../../open-device-contention-wait.ts';
 import {
   isImplicitSessionScopeConflict,
   resolveSessionScope,
@@ -398,9 +398,9 @@ function findNewSessionDeviceConflict(params: {
   const { req, device, sessionStore } = params;
   const inUse = sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
-  // `offersDeviceWait` belongs to this producer alone: an interaction that hits the same busy
+  // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
   // device cannot wait for it, and would be sent off with a flag its own command rejects.
-  const attempt = { ...readOpenWaitAttempt(req), offersDeviceWait: true } as const;
+  const attempt = describeOpenWaitForRefusal(req);
   if (isImplicitSessionScopeConflict(req, inUse.session)) {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }

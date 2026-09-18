@@ -99,7 +99,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription:
       'Open: wait up to n ms for a device another session is holding before failing with DEVICE_IN_USE',
     inputDescription:
-      "Block this open for up to n milliseconds while another session holds the device, then fail with DEVICE_IN_USE naming that session. Only session contention is waited for: a device claim held by another workspace is refused at once with its recovery command. A device that never frees costs the full budget, which extends this command's timeout envelope rather than eating into it.",
+      "Block this open for up to n milliseconds (100-120000) while another session holds the device, then fail with DEVICE_IN_USE naming that session. Only session contention is waited for: a device claim held by another workspace is refused at once with its recovery command. A device that never frees, or is taken again while this open waits, costs the full budget, which extends this command's timeout envelope rather than eating into it.",
     projectConfig: false,
     recorded: false,
   },

@@ -21,13 +21,10 @@ import {
 } from './lease-lifecycle.ts';
 import {
   prepareLockedRequestBinding,
-  resolveAdvisoryOpenDevice,
-  resolveRequestExecutionLockKeys,
+  resolveRequestExecutionLockPlan,
+  type RequestExecutionLockPlan,
 } from './request-binding.ts';
-import {
-  readOpenWaitBudgetMs,
-  waitForOpenDeviceContention,
-} from './open-device-contention-wait.ts';
+import { beginOpenDeviceWait } from './open-device-contention-wait.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
 import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -120,30 +117,6 @@ export type LockedRequestScopeResult =
   | { type: 'scope'; scope: LockedRequestScope }
   | { type: 'response'; response: DaemonResponse };
 
-/**
- * Spend an `--wait <ms>` budget on a contended device while the request still has no locks. Must
- * run before {@link resolveRequestExecutionLockKeys}: the device's execution lock is what every
- * operation that could free the device also needs, so waiting after taking it would have an open
- * block its own recovery. A fresh open only — an open onto a session that already exists is bound
- * to a device nobody else is being refused.
- */
-async function waitForOpenDeviceBeforeLock(
-  req: DaemonRequest,
-  sessionName: string,
-  sessionStore: SessionStore,
-): Promise<void> {
-  if (req.command !== 'open' || sessionStore.get(sessionName)) return;
-  const budgetMs = readOpenWaitBudgetMs(req);
-  if (budgetMs === undefined) return;
-  await waitForOpenDeviceContention({
-    req,
-    sessionName,
-    sessionStore,
-    budgetMs,
-    resolveDevice: () => resolveAdvisoryOpenDevice(req),
-  });
-}
-
 export async function createRequestExecutionScope(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
@@ -203,14 +176,23 @@ export async function createRequestExecutionScope(params: {
   }
   try {
     assertLockedLeaseAdmissionPreflight(scopedReq);
-    await waitForOpenDeviceBeforeLock(scopedReq, sessionName, sessionStore);
-    const executionLockKeys = shouldLockSessionExecution(command)
-      ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
-      : [];
+    const lockPlan: RequestExecutionLockPlan = shouldLockSessionExecution(command)
+      ? await resolveRequestExecutionLockPlan({ req: scopedReq, sessionName, sessionStore })
+      : { keys: [], deviceId: undefined };
+    // An `--wait <ms>` open spends the first of its budget here, while the request holds no locks
+    // yet: the device execution lock is what every operation that could free the device also
+    // needs, so waiting after taking it would have an open block its own recovery.
+    const openWait = beginOpenDeviceWait({
+      req: scopedReq,
+      sessionName,
+      sessionStore,
+      deviceId: lockPlan.deviceId,
+    });
+    await openWait?.waitForDeviceOutsideLocks();
     const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
     const requestExecutionLocks = createRequestExecutionLocks({
       locks: executionLocks,
-      initialKeys: executionLockKeys,
+      initialKeys: lockPlan.keys,
     });
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       command,
@@ -285,7 +267,13 @@ export async function createRequestExecutionScope(params: {
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
-        return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
+        if (!openWait) {
+          return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
+        }
+        return await openWait.runWhenDeviceIsUnheld({
+          acquireLocks: requestExecutionLocks.run,
+          task: async () => await scope.runAdmitted(task),
+        });
       },
       // Claims outlive the bindings they guard: release only once no device
       // operation from this request can still run.
