@@ -67,7 +67,7 @@ import {
 } from '../../device-claim-conflict.ts';
 import { requireAllocatorHeldDeviceClaim } from '../../device-claim-allocator.ts';
 import { deviceClaimRuleForOwner } from '../../device-claim-rule.ts';
-import { errorResponse } from '@agent-device/kernel/contracts';
+import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type OpenTiming = {
   totalDurationMs?: number;

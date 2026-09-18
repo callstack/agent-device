@@ -24,7 +24,7 @@ import {
   resolveRequestExecutionLockPlan,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
-import { beginOpenDeviceWait } from './open-device-contention-wait.ts';
+import { beginOpenDeviceWait, readOpenWaitBudgetMs } from './open-device-contention-wait.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
 import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -176,6 +176,12 @@ export async function createRequestExecutionScope(params: {
   }
   try {
     assertLockedLeaseAdmissionPreflight(scopedReq);
+    // An out-of-range `--wait` is refused before resolving the target device or taking any lock.
+    // `beginOpenDeviceWait` still needs the device id from the lock plan, but validating the budget
+    // is independent of that lookup.
+    if (scopedReq.command === 'open') {
+      readOpenWaitBudgetMs(scopedReq);
+    }
     const lockPlan: RequestExecutionLockPlan = shouldLockSessionExecution(command)
       ? await resolveRequestExecutionLockPlan({ req: scopedReq, sessionName, sessionStore })
       : { keys: [], deviceId: undefined };
