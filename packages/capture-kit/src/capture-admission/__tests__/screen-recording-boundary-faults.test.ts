@@ -1,9 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import {
-  createDurableResourceEnvelope,
-  createScreenRecordingLiveHandle,
-} from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
+import { createScreenRecordingLiveHandle } from '../../screen-recording-live-handle.ts';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { CleanupOutcome, ReattachOutcome } from '@agent-device/contracts/durable-resource';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -13,16 +11,16 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { createDurableCaptureAdmissionLedger } from '../durable-capture-admission-ledger.ts';
 import { createDurableCaptureResource } from '../durable-capture-resource.ts';
-import type { DurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
+import type { DurableCaptureResourceStore } from '../../durable-capture/index.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
-import type { SessionState } from '../session-state.ts';
+import type { DurableCaptureSessionState } from '../session-state-slice.ts';
+import { makeCaptureAdmissionSessionStore } from './session-store.fixtures.ts';
 
 type ScreenRecordingStore = DurableCaptureResourceStore<'screen-recording'>;
 
@@ -189,7 +187,8 @@ function createScreenRecordingTestResource(
   return createDurableCaptureResource<
     'screen-recording',
     ScreenRecordingLiveHandle,
-    ScreenRecordingCompletion
+    ScreenRecordingCompletion,
+    DurableCaptureSessionState
   >({
     resourceKind: 'screen-recording',
     displayName: 'screen recording',
@@ -212,14 +211,11 @@ function createScreenRecordingTestResource(
 }
 
 function makeContext(resource: ReturnType<typeof createScreenRecordingTestResource>) {
-  const sessionStore = makeSessionStore('screen-recording-boundary-fault-');
+  const sessionStore = makeCaptureAdmissionSessionStore<DurableCaptureSessionState>(
+    'screen-recording-boundary-fault-',
+  );
   const sessionName = 'recording';
-  const session: SessionState = {
-    name: sessionName,
-    device,
-    createdAt: 1,
-    actions: [],
-  };
+  const session: DurableCaptureSessionState = {};
   sessionStore.set(sessionName, session);
   return {
     admissionLedger: createDurableCaptureAdmissionLedger({ displayName: 'screen recording' }),

@@ -19,7 +19,7 @@ import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.t
 import { createDaemonProxyServer } from '../../../src/remote/daemon-proxy.ts';
 import { localizeRemoteDaemonError } from '../../../src/remote/remote-request-diagnostics.ts';
 import { resolveSessionRequestLogPath } from '../../../src/daemon/session-artifact-paths.ts';
-import { safeSessionName } from '../../../src/daemon/session-paths.ts';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '../../../src/daemon/daemon-request.ts';
 import {

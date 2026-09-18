@@ -12,12 +12,15 @@ import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-devi
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DurableCaptureResourceRecord } from '@agent-device/capture-kit/durable-capture';
+import type {
+  DurableCaptureResourceRecord,
+  DurableCaptureSessionStore,
+} from '../durable-capture/index.ts';
 import {
   SCREEN_RECORDING_COMPLETION_METADATA_KEY,
   screenRecordingDurableResource,
 } from './screen-recording-session-resource.ts';
-import type { SessionStore } from './session-store.ts';
+import type { DurableCaptureSessionState } from './session-state-slice.ts';
 
 /**
  * What a `record stop` owes a session, decided from the durable recording manifest alone.
@@ -42,7 +45,7 @@ const OPTIONAL_RESPONSE_FIELDS = [
 
 type ScreenRecordingManifestParams = Readonly<{
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
 }>;
 
 export function resolveScreenRecordingStopRecovery(

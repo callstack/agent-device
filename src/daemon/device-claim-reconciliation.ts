@@ -10,14 +10,14 @@ import { recoverAppLogResourceAfterDaemonLock } from './app-log-resource-recover
 import type { DeviceClaim } from './device-claim-record.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { DurableCaptureRecoveryOutcome } from '@agent-device/capture-kit/durable-capture';
-import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
-import { safeSessionName } from './session-paths.ts';
-import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
-import { recoverScreenRecordingResourceAfterDaemonLock } from './screen-recording-resource-recovery.ts';
-import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
-import { recoverAudioProbeResourceAfterDaemonLock } from './audio-probe-resource-recovery.ts';
-import { perfCaptureDurableResource } from './perf-capture-session-resource.ts';
-import { recoverPerfCaptureResourceAfterDaemonLock } from './perf-capture-resource-recovery.ts';
+import { recoverAudioProbeResourceAfterDaemonLock } from '@agent-device/capture-kit/audio-probe-recovery';
+import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
+import { type DurableSessionResourceKind } from '@agent-device/capture-kit/durable-capture-resource';
+import { recoverPerfCaptureResourceAfterDaemonLock } from '@agent-device/capture-kit/perf-capture-recovery';
+import { perfCaptureDurableResource } from '@agent-device/capture-kit/perf-capture-session-resource';
+import { recoverScreenRecordingResourceAfterDaemonLock } from '@agent-device/capture-kit/screen-recording-recovery';
+import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 
 export function createDeviceClaimReconciler(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;

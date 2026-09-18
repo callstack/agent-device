@@ -43,7 +43,9 @@ import {
 } from '../device-claims.ts';
 import { createOwnerScopedDeviceClaimReconciler } from '../device-claim-owner-recovery.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -84,8 +86,6 @@ import {
 } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;

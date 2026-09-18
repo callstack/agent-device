@@ -20,7 +20,7 @@ import {
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { screenRecordingDurableResource } from '../daemon/screen-recording-session-resource.ts';
+import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 
 import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';

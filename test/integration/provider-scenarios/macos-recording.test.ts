@@ -19,7 +19,7 @@ import {
   createAppleRunnerProviderFromTranscript,
   createAppleRunnerScreenRecordingTransportFromTranscript,
 } from './providers.ts';
-import { screenRecordingResourceStore } from '../../../src/daemon/screen-recording-resource-store.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { createProviderTranscript } from './transcript.ts';
 
 test('Provider-backed integration macOS recording uses focused exact runner authority', async () => {

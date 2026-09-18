@@ -9,9 +9,9 @@ import {
   hostAudioProbeDescriptorCodec,
 } from '@agent-device/capture-kit';
 import { appLogResourceStore } from '../../../app-log-resource-store.ts';
-import { audioProbeResourceStore } from '../../../audio-probe-resource-store.ts';
-import { perfCaptureResourceStore } from '../../../perf-capture-resource-store.ts';
-import { screenRecordingResourceStore } from '../../../screen-recording-resource-store.ts';
+import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
+import { perfCaptureResourceStore } from '@agent-device/capture-kit/perf-capture-resource-store';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { DurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import {
   sessionCloseShutdownFixture,

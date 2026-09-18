@@ -14,7 +14,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type {
   DurableCaptureRecoveryControl,
   DurableCaptureRecoveryDiagnostic,
-} from '@agent-device/capture-kit/durable-capture';
+} from '../durable-capture/index.ts';
 import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 

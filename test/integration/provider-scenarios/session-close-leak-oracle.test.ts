@@ -9,7 +9,7 @@ import {
 import { createAndroidRecordingProvider } from './android-recording-provider-fixtures.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
-import { screenRecordingResourceStore } from '../../../src/daemon/screen-recording-resource-store.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { assertNoDaemonLeaks } from '../support/daemon-leak-oracle.ts';
 
 // The `after-close` half of the #1781 B1 leak oracle, on a real daemon route.

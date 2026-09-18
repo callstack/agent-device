@@ -58,18 +58,18 @@ import {
   type AppLogAdmissionLedger,
 } from './app-log-admission-ledger.ts';
 import {
-  createAudioProbeAdmissionLedger,
   type AudioProbeAdmissionLedger,
-} from './audio-probe-admission-ledger.ts';
+  createAudioProbeAdmissionLedger,
+} from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import {
   createPerfCaptureAdmissionLedger,
   type PerfCaptureAdmissionLedger,
-} from './perf-capture-admission-ledger.ts';
-import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
+} from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import {
   createScreenRecordingAdmissionLedger,
   type ScreenRecordingAdmissionLedger,
-} from './screen-recording-admission-ledger.ts';
+} from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';

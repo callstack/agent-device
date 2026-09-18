@@ -15,7 +15,7 @@ import type {
   DurableCaptureRecoverySummary,
 } from '@agent-device/capture-kit/durable-capture';
 import { appLogDurableResource } from './app-log-session-resource.ts';
-import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
+import { acquireExactDurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture-runtime-recovery';
 
 const appLogRecoveryUse = defineUse({
   required: ['appLogReattach', 'appLogCleanup'],

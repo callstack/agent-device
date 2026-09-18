@@ -14,18 +14,18 @@ import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureBoundDeviceReady } from '../request-runtime-binding.ts';
-import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
   finishRecoveredScreenRecording,
   screenRecordingDurableResource,
-} from '../screen-recording-session-resource.ts';
-import { createScreenRecordingRecoveryControl } from '../screen-recording-resource-recovery.ts';
+} from '@agent-device/capture-kit/screen-recording-session-resource';
 import {
   resolveScreenRecordingStopRecovery,
   screenRecordingManifestIsTerminal,
-} from '../screen-recording-stop-recovery.ts';
+} from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import { resolveSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';

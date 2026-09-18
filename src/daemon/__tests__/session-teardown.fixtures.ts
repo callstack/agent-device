@@ -3,7 +3,7 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
-import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../session-state.ts';
 

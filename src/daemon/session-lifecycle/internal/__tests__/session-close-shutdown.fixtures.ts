@@ -81,7 +81,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { screenRecordingResourceStore } from '../../../screen-recording-resource-store.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';

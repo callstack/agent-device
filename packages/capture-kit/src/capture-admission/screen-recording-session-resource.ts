@@ -14,18 +14,21 @@ import type {
 import type { RecordingAppIdentity } from '@agent-device/contracts/recording';
 import type { StopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture';
+import type {
+  DurableCaptureRecoveryControl,
+  DurableCaptureSessionStore,
+} from '../durable-capture/index.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import { screenRecordingResourceStore } from './screen-recording-resource-store.ts';
-import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './session-state.ts';
+import type { DurableCaptureSessionState } from './session-state-slice.ts';
 
 export const screenRecordingDurableResource = createDurableCaptureResource<
   'screen-recording',
   ScreenRecordingLiveHandle,
-  ScreenRecordingCompletion
+  ScreenRecordingCompletion,
+  DurableCaptureSessionState
 >({
   resourceKind: 'screen-recording',
   displayName: 'screen recording',
@@ -47,9 +50,9 @@ export const screenRecordingDurableResource = createDurableCaptureResource<
 
 export function adoptStartedScreenRecording(params: {
   admissionLedger: ScreenRecordingAdmissionLedger;
-  session: SessionState;
+  session: DurableCaptureSessionState;
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
@@ -61,9 +64,9 @@ export function adoptStartedScreenRecording(params: {
 }
 
 export function finishLiveScreenRecording(params: {
-  session: SessionState;
+  session: DurableCaptureSessionState;
   sessionName: string;
-  sessionStore: SessionStore;
+  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
   intent: DurableCaptureFinishIntent;
 }): Promise<ScreenRecordingCompletion> {
   return screenRecordingDurableResource.finishLive(params);

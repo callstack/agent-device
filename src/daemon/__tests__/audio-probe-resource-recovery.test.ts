@@ -17,8 +17,8 @@ import {
 } from '@agent-device/capture-kit';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { recoverAudioProbeResourceAfterDaemonLock } from '../audio-probe-resource-recovery.ts';
-import { audioProbeResourceStore } from '../audio-probe-resource-store.ts';
+import { recoverAudioProbeResourceAfterDaemonLock } from '@agent-device/capture-kit/audio-probe-recovery';
+import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 
 const device = {
   platform: 'apple' as const,

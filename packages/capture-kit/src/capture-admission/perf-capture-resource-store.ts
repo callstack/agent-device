@@ -1,4 +1,4 @@
-import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
+import { createDurableCaptureResourceStore } from '../durable-capture/index.ts';
 
 export const perfCaptureResourceStore = createDurableCaptureResourceStore({
   resourceKind: 'perf-capture',

@@ -10,7 +10,7 @@ import {
   repairBoundary,
   repairSourcePath,
 } from './session-script-publication-state.ts';
-import { expandSessionPath } from './session-paths.ts';
+import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 
 /**
  * `ReplaySessionTransaction` (#1478 P4a): the daemon-private projection through which the ADR

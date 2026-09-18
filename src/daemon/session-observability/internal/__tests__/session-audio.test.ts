@@ -28,8 +28,8 @@ import {
   unavailableApplicationLifecycleOperationFacts,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
-import { createAudioProbeAdmissionLedger } from '../../../audio-probe-admission-ledger.ts';
-import { audioProbeDurableResource } from '../../../audio-probe-session-resource.ts';
+import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import type { SessionStore } from '../../../session-store.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';

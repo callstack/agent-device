@@ -1,6 +1,6 @@
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
-import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';

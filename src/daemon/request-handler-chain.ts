@@ -16,10 +16,10 @@ import type {
 } from './request-runtime-binding.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
-import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
-import type { PerfCaptureAdmissionLedger } from './perf-capture-admission-ledger.ts';
+import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
-import type { ScreenRecordingAdmissionLedger } from './screen-recording-admission-ledger.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';

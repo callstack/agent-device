@@ -12,21 +12,19 @@ import {
   type DurableCaptureResourceDefinition,
   type DurableCaptureSessionStore,
   type FinishRecoveredDurableCaptureParams,
-} from '@agent-device/capture-kit/durable-capture';
+} from '../durable-capture/index.ts';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureAdmissionLedger } from './durable-capture-admission-ledger.ts';
 import { createNextDurableCaptureFence } from './durable-capture-start-preflight.ts';
-import { safeSessionName } from './session-paths.ts';
-import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './session-state.ts';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DurableSessionResourceKind } from './durable-session-resource-kinds.ts';
 
-export type { DurableCaptureFinishIntent };
+export type { DurableCaptureFinishIntent, DurableSessionResourceKind };
 
-type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<
-  AdoptStartedDurableCaptureParams<K, H, SessionState>,
+type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable, S> = Omit<
+  AdoptStartedDurableCaptureParams<K, H, S>,
   'reportUndurableCleanup'
 > &
   Readonly<{ admissionLedger: DurableCaptureAdmissionLedger }>;
@@ -37,18 +35,20 @@ type SessionCaptureRecoveryParams<K extends string, H extends LiveResourceHandle
 >;
 
 /**
- * Where the shared durable-capture mechanics meet the two authorities that stay daemon policy:
- * the admission ledger, which decides whether a failed adoption blocks a replacement start, and
- * the session store, whose naming rule turns a session id into the one directory its records
- * may occupy.
+ * Where the shared durable-capture mechanics meet the two authorities that stay with the session
+ * owner: the admission ledger, which decides whether a failed adoption blocks a replacement start,
+ * and the session store, whose naming rule turns a session id into the one directory its records
+ * may occupy. The session record itself stays opaque behind `S`; only the definition's own
+ * `sessionSlot` looks inside it.
  */
 export function createDurableCaptureResource<
   K extends DurableSessionResourceKind,
   H extends LiveResourceHandle<C>,
   C,
->(definition: DurableCaptureResourceDefinition<K, H, C, SessionState>) {
+  S,
+>(definition: DurableCaptureResourceDefinition<K, H, C, S>) {
   const sessionResourcePath = (
-    sessionStore: DurableCaptureSessionStore<SessionState>,
+    sessionStore: DurableCaptureSessionStore<S>,
     sessionName: string,
   ): string => definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
   const recoveryParams = (
@@ -70,7 +70,7 @@ export function createDurableCaptureResource<
     }): ResourceOwnershipFence {
       return createNextDurableCaptureFence(definition, params);
     },
-    adoptStarted(params: AdoptStartedSessionCaptureParams<K, H>): Promise<void> {
+    adoptStarted(params: AdoptStartedSessionCaptureParams<K, H, S>): Promise<void> {
       return adoptStartedDurableCapture(
         definition,
         {
@@ -84,9 +84,9 @@ export function createDurableCaptureResource<
       );
     },
     finishLive(params: {
-      session: SessionState;
+      session: S;
       sessionName: string;
-      sessionStore: SessionStore;
+      sessionStore: DurableCaptureSessionStore<S>;
       intent: DurableCaptureFinishIntent;
     }): Promise<C> {
       return finishLiveDurableCapture(
@@ -99,9 +99,9 @@ export function createDurableCaptureResource<
       return finishRecoveredDurableCapture(definition, params);
     },
     forceCleanupLive(params: {
-      session: SessionState;
+      session: S;
       sessionName?: string;
-      sessionStore?: SessionStore;
+      sessionStore?: DurableCaptureSessionStore<S>;
       resourcePath: string;
     }): Promise<void> {
       return forceCleanupLiveDurableCapture(definition, params);

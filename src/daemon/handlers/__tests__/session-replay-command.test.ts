@@ -5,7 +5,7 @@ import {
   unavailableBindDevice,
   unavailableBindExactDevice,
 } from '../../__tests__/test-device-runtime-gateway.ts';
-import { createScreenRecordingAdmissionLedger } from '../../screen-recording-admission-ledger.ts';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';

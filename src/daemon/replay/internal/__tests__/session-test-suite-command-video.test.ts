@@ -13,7 +13,7 @@ import {
   unavailableBindDevice,
   unavailableBindExactDevice,
 } from '../../../__tests__/test-device-runtime-gateway.ts';
-import { createScreenRecordingAdmissionLedger } from '../../../screen-recording-admission-ledger.ts';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { RecordRuntimeHandlerParams } from '../../../handlers/record-runtime.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';

@@ -9,8 +9,10 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
-import { createDurableCaptureResource } from './durable-capture-resource.ts';
-import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
+import {
+  createDurableCaptureResource,
+  type DurableCaptureFinishIntent,
+} from '@agent-device/capture-kit/durable-capture-resource';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './session-state.ts';
@@ -28,7 +30,8 @@ export type AppLogSessionSnapshot = Readonly<{
 export const appLogDurableResource = createDurableCaptureResource<
   'app-log',
   AppLogLiveHandle,
-  AppLogCompletion
+  AppLogCompletion,
+  SessionState
 >({
   resourceKind: 'app-log',
   displayName: 'app-log',

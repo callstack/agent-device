@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { screenRecordingResourceStore } from '../../screen-recording-resource-store.ts';
+import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
   expectDecodedCompletedRecording,
   makeRecordRuntimeHarness,

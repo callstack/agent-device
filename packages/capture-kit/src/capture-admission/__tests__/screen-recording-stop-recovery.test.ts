@@ -4,18 +4,21 @@ import { expect, test } from 'vitest';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import { encodeScreenRecordingCompletionMetadata } from '../screen-recording-session-resource.ts';
 import {
   resolveScreenRecordingStopRecovery,
   screenRecordingManifestIsTerminal,
 } from '../screen-recording-stop-recovery.ts';
-import type { SessionStore } from '../session-store.ts';
+import type { DurableCaptureSessionState } from '../session-state-slice.ts';
+import {
+  makeCaptureAdmissionSessionStore,
+  type CaptureAdmissionSessionStore,
+} from './session-store.fixtures.ts';
 
 const SESSION_NAME = 'recording';
 const SESSION_DEVICE: DeviceInfo = {
@@ -153,7 +156,9 @@ function withStoredCompletion(metadata: JsonObject, patch: JsonObject): JsonObje
 }
 
 function makeHarness() {
-  const sessionStore = makeSessionStore('screen-recording-stop-recovery-');
+  const sessionStore = makeCaptureAdmissionSessionStore<DurableCaptureSessionState>(
+    'screen-recording-stop-recovery-',
+  );
   const outputDir = mkdtempForTestSync('screen-recording-stop-recovery-output-');
   return {
     sessionStore,
@@ -164,7 +169,9 @@ function makeHarness() {
 
 type Harness = ReturnType<typeof makeHarness>;
 
-function manifestPath(sessionStore: SessionStore): string {
+function manifestPath(
+  sessionStore: CaptureAdmissionSessionStore<DurableCaptureSessionState>,
+): string {
   return screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(SESSION_NAME));
 }
 

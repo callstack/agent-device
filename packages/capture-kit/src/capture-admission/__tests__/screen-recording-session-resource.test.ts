@@ -2,29 +2,38 @@ import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import {
-  createDurableResourceEnvelope,
-  createScreenRecordingLiveHandle,
-} from '@agent-device/capture-kit';
-import { stopAndExportScreenRecording } from '@agent-device/capture-kit/recording-stop-sequence';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
+import { createScreenRecordingLiveHandle } from '../../screen-recording-live-handle.ts';
+import { stopAndExportScreenRecording } from '../../recording/stop-sequence.ts';
 import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
 } from '../screen-recording-session-resource.ts';
 import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
-import type { SessionState } from '../session-state.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DurableCaptureSessionState } from '../session-state-slice.ts';
+import {
+  makeCaptureAdmissionSessionStore,
+  type CaptureAdmissionSessionStore,
+} from './session-store.fixtures.ts';
+
+const device: DeviceInfo = {
+  platform: 'android',
+  id: 'emulator-5554',
+  name: 'Pixel',
+  kind: 'emulator',
+};
+/** The recording slot the family owns, plus the device this test reads back off the record. */
+type TestRecordingSession = DurableCaptureSessionState &
+  Readonly<{ name: string; device: DeviceInfo }>;
 
 test('screen recording persists durable truth before adopting only handle and envelope', async () => {
-  const sessionStore = makeSessionStore('screen-recording-session-resource-');
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(
+    'screen-recording-session-resource-',
+  );
   const sessionName = 'recording';
-  const session: SessionState = {
-    name: sessionName,
-    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
-    createdAt: 1,
-    actions: [],
-  };
+  const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
@@ -100,14 +109,11 @@ test('screen recording persists durable truth before adopting only handle and en
 });
 
 test('a failed recording finish keeps the record open and never disposes the recording', async () => {
-  const sessionStore = makeSessionStore('screen-recording-failed-finish-');
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(
+    'screen-recording-failed-finish-',
+  );
   const sessionName = 'recording';
-  const session: SessionState = {
-    name: sessionName,
-    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
-    createdAt: 1,
-    actions: [],
-  };
+  const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
@@ -170,14 +176,11 @@ test('a failed recording finish keeps the record open and never disposes the rec
 });
 
 test('a record stop that fails after collecting resumes through the fence without a second signal', async () => {
-  const sessionStore = makeSessionStore('screen-recording-resumed-stop-');
+  const sessionStore = makeCaptureAdmissionSessionStore<TestRecordingSession>(
+    'screen-recording-resumed-stop-',
+  );
   const sessionName = 'recording';
-  const session: SessionState = {
-    name: sessionName,
-    device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
-    createdAt: 1,
-    actions: [],
-  };
+  const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
@@ -266,6 +269,9 @@ test('a record stop that fails after collecting resumes through the fence withou
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
 
-function resourcePath(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
+function resourcePath(
+  sessionStore: CaptureAdmissionSessionStore<TestRecordingSession>,
+  sessionName: string,
+) {
   return screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
 }

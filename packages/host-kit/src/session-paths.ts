@@ -1,4 +1,4 @@
-import { resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserPath } from './file.ts';
 
 export function safeSessionName(name: string): string {
   return name.replaceAll(/[^a-zA-Z0-9._-]/g, '_');
