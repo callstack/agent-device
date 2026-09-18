@@ -29,6 +29,7 @@ import {
   type RunnerProcessHandle,
   type RunnerSession,
 } from './runner-session-types.ts';
+import { decodeRunnerResponseBody, isRunnerResponseOk } from './runner-response.ts';
 
 // A healthy localhost runner answers uptime in tens of milliseconds and a dead
 // port refuses immediately; the timeout only bounds the wedged-runner case,
@@ -137,8 +138,7 @@ async function probeRunnerAnswersUptime(device: DeviceInfo, port: number): Promi
       withRunnerCommandId({ command: 'uptime' }),
       RUNNER_ADOPTION_PROBE_TIMEOUT_MS,
     );
-    const payload = JSON.parse(await response.text()) as { ok?: unknown };
-    return payload?.ok === true;
+    return isRunnerResponseOk(decodeRunnerResponseBody(await response.text()));
   } catch {
     return false;
   }

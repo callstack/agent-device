@@ -1,0 +1,100 @@
+import assert from 'node:assert/strict';
+import { describe, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  buildRunnerResponseError,
+  decodeRunnerResponseBody,
+  isRunnerResponseOk,
+  readRunnerResponseData,
+} from '../runner-response.ts';
+
+// A body cut off mid-write, the shape a runner that died while answering leaves behind.
+const TRUNCATED_BODY = '{"ok":true,"data":{"nodes":[{"label":"Sign In"';
+
+describe('decodeRunnerResponseBody', () => {
+  test('decodes the runner envelope', () => {
+    assert.deepEqual(decodeRunnerResponseBody('{"ok":true,"data":{"tapped":true}}'), {
+      ok: true,
+      data: { tapped: true },
+    });
+  });
+
+  test('rejects a truncated body instead of reading a reply out of it', () => {
+    assert.throws(
+      () => decodeRunnerResponseBody(TRUNCATED_BODY),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.message === 'Invalid runner response' &&
+        error.details?.text === TRUNCATED_BODY,
+    );
+  });
+
+  test('never reads a JSON body that is not an envelope as an answer', () => {
+    for (const body of ['null', '42', '"ok"']) {
+      assert.equal(isRunnerResponseOk(decodeRunnerResponseBody(body)), false, body);
+    }
+  });
+
+  test('carries a bare-array body through unread rather than inventing an envelope', () => {
+    const payload = decodeRunnerResponseBody('[]');
+    assert.equal(isRunnerResponseOk(payload), false);
+    assert.deepEqual(readRunnerResponseData(payload), {});
+  });
+});
+
+describe('isRunnerResponseOk', () => {
+  test('accepts only the boolean true the runner sends', () => {
+    assert.equal(isRunnerResponseOk({ ok: true }), true);
+    assert.equal(isRunnerResponseOk({ ok: false }), false);
+    assert.equal(isRunnerResponseOk({}), false);
+    // Stringly-typed truthiness would let a proxy or a wedged socket answer for the runner.
+    assert.equal(isRunnerResponseOk({ ok: 'true' }), false);
+    assert.equal(isRunnerResponseOk({ ok: 1 }), false);
+  });
+});
+
+describe('readRunnerResponseData', () => {
+  test('reads only an object data payload', () => {
+    assert.deepEqual(readRunnerResponseData({ ok: true, data: { tapped: true } }), {
+      tapped: true,
+    });
+    assert.deepEqual(readRunnerResponseData({ ok: true }), {});
+    assert.deepEqual(readRunnerResponseData({ ok: true, data: null }), {});
+    assert.deepEqual(readRunnerResponseData({ ok: true, data: [] }), {});
+    assert.deepEqual(readRunnerResponseData({ ok: true, data: 'tapped' }), {});
+  });
+});
+
+describe('buildRunnerResponseError', () => {
+  test('carries the payload, the runner hint, and the classified code', () => {
+    const error = buildRunnerResponseError(
+      {
+        ok: false,
+        error: {
+          code: 'RUNNER_BUSY',
+          message: 'Main thread is busy',
+          hint: 'Retry after it drains',
+        },
+      },
+      '/tmp/runner.log',
+    );
+
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.message, 'Main thread is busy');
+    assert.equal(error.details?.hint, 'Retry after it drains');
+    assert.equal(error.details?.logPath, '/tmp/runner.log');
+    assert.equal(error.details?.retriable, true);
+    assert.deepEqual((error.details as { runner?: unknown }).runner, {
+      ok: false,
+      error: { code: 'RUNNER_BUSY', message: 'Main thread is busy', hint: 'Retry after it drains' },
+    });
+  });
+
+  test('keeps a missing runner message as a generic runner error', () => {
+    const error = buildRunnerResponseError({ ok: false, error: {} });
+    assert.equal(error.message, 'Runner error');
+    assert.equal(error.details?.hint, undefined);
+  });
+});

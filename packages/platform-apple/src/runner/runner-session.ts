@@ -28,7 +28,6 @@ import {
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
 import {
-  classifyRunnerReportedError,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -61,6 +60,12 @@ import {
   type RunnerDisposalOptions,
 } from './runner-disposal.ts';
 import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
+import {
+  buildRunnerResponseError,
+  decodeRunnerResponseBody,
+  isRunnerResponseOk,
+  readRunnerResponseData,
+} from './runner-response.ts';
 import {
   buildRunnerSessionId,
   normalizeRunnerStartupTimeoutMs,
@@ -946,62 +951,20 @@ function emitRunnerReadinessPreflightSkipped(
   });
 }
 
-type RunnerResponsePayload = {
-  ok?: unknown;
-  error?: { code?: unknown; message?: unknown; hint?: unknown };
-  data?: unknown;
-};
-
 export async function parseRunnerResponse(
   response: Response,
   session: Pick<RunnerSession, 'ready'>,
   logPath?: string,
 ): Promise<Record<string, unknown>> {
-  const json = parseRunnerResponsePayload(await response.text());
-  if (!json.ok) {
+  const payload = decodeRunnerResponseBody(await response.text());
+  if (!isRunnerResponseOk(payload)) {
     throw await enrichRunnerFailureFromLog({
-      error: buildRunnerResponseError(json, logPath),
+      error: buildRunnerResponseError(payload, logPath),
       logPath,
     });
   }
   session.ready = true;
-  return readRunnerResponseData(json);
-}
-
-function parseRunnerResponsePayload(text: string): RunnerResponsePayload {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed && typeof parsed === 'object' ? (parsed as RunnerResponsePayload) : {};
-  } catch {
-    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
-  }
-}
-
-function buildRunnerResponseError(json: RunnerResponsePayload, logPath?: string): AppError {
-  const runnerErrorCode = readRunnerErrorCode(json.error?.code);
-  const errorMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
-  const hint = typeof json.error?.hint === 'string' ? json.error.hint : undefined;
-  const classification = classifyRunnerReportedError(runnerErrorCode);
-  return new AppError(classification.code, errorMessage ?? 'Runner error', {
-    runner: json,
-    ...classification.details,
-    xcodebuild: {
-      exitCode: 1,
-      stdout: '',
-      stderr: '',
-    },
-    hint,
-    logPath,
-  });
-}
-
-function readRunnerErrorCode(rawCode: unknown): string | undefined {
-  return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
-}
-
-function readRunnerResponseData(json: RunnerResponsePayload): Record<string, unknown> {
-  if (!json.data || typeof json.data !== 'object' || Array.isArray(json.data)) return {};
-  const data = json.data as Record<string, unknown>;
+  const data = readRunnerResponseData(payload);
   emitRunnerResponseDiagnostics(data);
   return data;
 }

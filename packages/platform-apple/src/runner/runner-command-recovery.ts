@@ -3,13 +3,13 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from './host.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
+import {
+  decodeRunnerResponseBody,
+  isRunnerResponseOk,
+  readRunnerResponseData,
+} from './runner-response.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
-
-type LifecycleResponsePayload = {
-  ok?: unknown;
-  data?: unknown;
-};
 
 type RunnerTransportRecovery =
   | { type: 'recovered'; data: Record<string, unknown>; reason: string; lifecycleState?: string }
@@ -340,20 +340,15 @@ function runnerStatusInFlightError(
 
 function parseLifecycleResponseJson(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) return undefined;
-  const parsed = parseLifecycleResponsePayload(value);
-  if (!parsed.ok) return undefined;
-  if (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)) {
-    return parsed.data as Record<string, unknown>;
-  }
-  return {};
-}
-
-function parseLifecycleResponsePayload(value: string): LifecycleResponsePayload {
   try {
-    const raw: unknown = JSON.parse(value);
-    if (raw && typeof raw === 'object') return raw as LifecycleResponsePayload;
-  } catch {}
-  return {};
+    const payload = decodeRunnerResponseBody(value);
+    return isRunnerResponseOk(payload) ? readRunnerResponseData(payload) : undefined;
+  } catch {
+    // A retained body the one decoder refuses is not a recoverable result; the
+    // caller keeps the session and reports the retained response as unreadable
+    // instead of returning a truncated command result (#2662).
+    return undefined;
+  }
 }
 
 function completedWithoutRetainedResponseHint(

@@ -204,3 +204,55 @@ test('a journaled RUNNER_WEDGED keeps its fatal code and stays unretriable', asy
     return true;
   });
 });
+
+/**
+ * #2662: the `status` read has no decoder of its own, so it accepts what the one
+ * decoder accepts. A stringly-typed `ok` used to be the seam: a private truthiness
+ * rule read this retained body as the command's own result.
+ */
+test('a retained response whose ok is not the boolean true is not recovered', async () => {
+  const { result, invalidate } = await runRecovery({
+    script: [
+      {
+        kind: 'ok',
+        data: {
+          lifecycleState: 'completed',
+          lifecycleResponseJson: '{"ok":"true","data":{"tapped":true}}',
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.recovery, 'completed_without_retained_response');
+    return true;
+  });
+  assert.equal(invalidate.mock.calls.length, 0);
+});
+
+/**
+ * A retained body cut off mid-write answers nothing. The session is kept — the
+ * runner is reachable, it proved that by serving `status` — but the truncated
+ * command result is not handed back.
+ */
+test('a truncated retained response is not recovered', async () => {
+  const { result, invalidate } = await runRecovery({
+    script: [
+      {
+        kind: 'ok',
+        data: {
+          lifecycleState: 'completed',
+          lifecycleResponseJson: '{"ok":true,"data":{"nodes":[{"label":"Sign In"',
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.recovery, 'completed_without_retained_response');
+    return true;
+  });
+  assert.equal(invalidate.mock.calls.length, 0);
+});
