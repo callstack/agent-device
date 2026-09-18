@@ -1,9 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import path from 'node:path';
-import {
-  type ReplayDivergenceResume,
-  type ReplayRepairHint,
-} from '@agent-device/contracts/divergence';
+import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import type { DaemonResponse } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
@@ -14,6 +10,18 @@ import {
   repairSessionBoundary,
   resetRepairCompletionForRerun,
 } from './session-replay-transaction.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetForce,
+  scriptTargetPath,
+  type SessionScriptPublicationState,
+} from './session-script-publication-state.ts';
+import {
+  healedScriptSiblingPath,
+  type ReplayCoordinator,
+  type ReplayResumeStamper,
+  type ReplaySessionView,
+} from './replay/index.ts';
 
 /**
  * `ReplayCoordinator` (#1478 P4b): the single daemon-owned gateway a native `.ad` replay request
@@ -33,66 +41,6 @@ import {
  * replay request — and remains a direct `ReplaySessionTransaction` caller by design; see the
  * P4b PR description for the ownership split.
  */
-
-/** Immutable read projection of the repair-transaction fields this coordinator's writers touch. */
-export type ReplaySessionView = Readonly<{
-  /** The R6 boundary watermark, or `undefined` when the session carries no repair transaction. */
-  repairBoundary: number | undefined;
-  /** #1262's corrective-resume watermark, or `undefined` when none is pending. */
-  pendingRecordAndHeal:
-    | Readonly<{ expectedFrom: number; actionsCountAtDivergence: number }>
-    | undefined;
-}>;
-
-/**
- * The one capability the divergence-report chain (`session-replay-resume.ts`,
- * `session-replay-divergence.ts`, `session-replay-target-verification.ts`) needs from a
- * `ReplayCoordinator`, bound to the SAME instance the owning replay command call
- * created — never a second construction from a bare session name. Carries no `SessionStore`
- * and cannot name or reacquire a different session.
- */
-export type ReplayResumeStamper = Readonly<{
-  /** Whether the request's session currently exists (gates the empty-tail `alternateFrom`). */
-  sessionExists(): boolean;
-  /** Stamps the corrective-resume watermark for a divergence; a no-op before step 1 creates the session. */
-  stampCorrectiveWatermark(params: {
-    resume: ReplayDivergenceResume;
-    repairHint: ReplayRepairHint;
-    failedIndex: number;
-    actions: SessionAction[];
-  }): void;
-}>;
-
-export type ReplayCoordinator = {
-  /** Reads the request's current session state, or `undefined` before step 1 creates it. */
-  view(): ReplaySessionView | undefined;
-
-  /** ADR 0012 R1/R6: arms (or re-arms, per step) the repair transaction. A no-op before step 1 creates the session. */
-  armStep(params: {
-    saveScript: boolean | string;
-    force: boolean | undefined;
-    sourcePath: string;
-    firstArm: boolean;
-  }): void;
-
-  /** ADR 0012 R2: demotes a completed transaction back to `armed` for a `--from` rerun; a no-op outside repair. */
-  demoteForRerunIfArmed(): void;
-
-  /** ADR 0012 C2: flips an armed repair transaction to `complete`; a no-op outside repair. */
-  markCompleteIfArmed(): void;
-
-  /** ADR 0012 R7 (C1): stamps `resume.repairSessionHeld` on a divergence whose transaction is uncommitted. */
-  markSessionHeldIfArmed(response: DaemonResponse): DaemonResponse;
-
-  /** ADR 0012 R7 (C5a): clears this session key's reap tombstone. */
-  clearTombstone(): void;
-
-  /** Retires the watermark once a `--from` matching `expectedFrom` has actually been entered. */
-  clearCorrectiveWatermarkIfExpected(expectedFrom: number | undefined): void;
-
-  /** The narrow capability threaded into the divergence-report chain. */
-  readonly resumeStamper: ReplayResumeStamper;
-};
 
 export type ReplaySessionStore = Readonly<{
   get: () => Readonly<SessionState> | undefined;
@@ -134,6 +82,9 @@ export function createReplayCoordinator(params: {
       return {
         repairBoundary: repairSessionBoundary(session),
         pendingRecordAndHeal: session.pendingRecordAndHeal,
+        scriptPublication: projectScriptPublication(
+          session.scriptPublication ?? NO_SCRIPT_PUBLICATION,
+        ),
       };
     },
 
@@ -189,11 +140,16 @@ export function createReplayCoordinator(params: {
   };
 }
 
-/** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */
-export function healedScriptSiblingPath(sourcePath: string): string {
-  const dir = path.dirname(sourcePath);
-  const base = path.basename(sourcePath, path.extname(sourcePath));
-  return path.join(dir, `${base}.healed.ad`);
+/** The publication state as replay's arming preflight reads it: kind, status, target, force. */
+function projectScriptPublication(
+  state: SessionScriptPublicationState,
+): ReplaySessionView['scriptPublication'] {
+  return {
+    kind: state.kind,
+    status: state.kind === 'none' ? undefined : state.status,
+    targetPath: scriptTargetPath(state),
+    targetForce: scriptTargetForce(state),
+  };
 }
 
 /**

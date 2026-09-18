@@ -9,7 +9,7 @@ import {
   computeTargetEvidence,
   type RecordedTargetCapture,
   type TargetEvidenceMode,
-} from '@agent-device/ad-script/target-evidence';
+} from '@agent-device/selectors/target-evidence';
 
 export function buildFindRecordResult(
   result: Record<string, unknown>,

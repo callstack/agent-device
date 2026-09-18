@@ -1,9 +1,9 @@
 import path from 'node:path';
-import type { DaemonRequest } from '../../daemon-request.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 
 export function buildReplayBuiltinVars(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   sessionName: string;
   metadata: ReplayScriptMetadata;
   resolvedPath: string;
@@ -24,12 +24,12 @@ export function buildReplayBuiltinVars(params: {
   return builtins;
 }
 
-function resolveReplayFilename(req: DaemonRequest, resolvedPath: string): string {
+function resolveReplayFilename(req: DaemonWireRequest, resolvedPath: string): string {
   const cwd = req.meta?.cwd ?? process.cwd();
   return path.relative(cwd, resolvedPath) || resolvedPath;
 }
 
-function resolveReplayDeviceId(flags: NonNullable<DaemonRequest['flags']>): unknown {
+function resolveReplayDeviceId(flags: NonNullable<DaemonWireRequest['flags']>): unknown {
   return typeof flags.serial === 'string' ? flags.serial : flags.udid;
 }
 

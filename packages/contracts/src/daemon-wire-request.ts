@@ -14,7 +14,10 @@ export type DaemonInstallSource = PublicDaemonInstallSource;
  * wire can express and the lease coordinates the router reads. Public throughout: nothing here
  * names live session state.
  */
-export type DaemonWireRequestMeta = Omit<PublicDaemonRequestMeta, 'installSource' | 'lockPlatform'> & {
+export type DaemonWireRequestMeta = Omit<
+  PublicDaemonRequestMeta,
+  'installSource' | 'lockPlatform'
+> & {
   installSource?: DaemonInstallSource;
   lockPlatform?: PlatformSelector;
   leaseBackend?: LeaseBackend;

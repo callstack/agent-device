@@ -30,9 +30,8 @@ import {
 } from '@agent-device/contracts/replay';
 import { resolveTargetIdentityVerification } from '@agent-device/command-registry/registry';
 import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
-import type { SessionState } from '../../session-state.ts';
-import type { ReplayResumeStamper } from '../../session-replay-coordinator.ts';
-import { boundedLocalIdentity } from '@agent-device/ad-script/target-evidence';
+
+import { boundedLocalIdentity } from '@agent-device/selectors/target-evidence';
 import {
   buildDivergenceScreen,
   captureDivergenceObservation,
@@ -41,7 +40,12 @@ import {
   type DivergenceObservation,
 } from './session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
+import type {
+  ReplayResumeStamper,
+  ReplaySessionObservation,
+  ReplaySessionState,
+  ReplaySessionStore,
+} from './command-types.ts';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
@@ -269,7 +273,7 @@ export function buildTargetBindingFailureResponse(
 }
 
 async function captureFreshObservation(params: {
-  session: SessionState | undefined;
+  session: ReplaySessionState | undefined;
   observationStore: ReplaySessionObservation;
   logPath: string;
   action: SessionAction;
@@ -295,7 +299,7 @@ async function captureFreshObservation(params: {
 export async function buildRecordedUnverifiableFailureResponse(
   context: TargetBindingDivergenceContext,
   params: {
-    session: SessionState | undefined;
+    session: ReplaySessionState | undefined;
     observationStore: ReplaySessionObservation;
     logPath: string;
     action: SessionAction;
@@ -331,7 +335,7 @@ export async function buildPostDispatchTargetBindingFailureResponse(
   context: TargetBindingDivergenceContext,
   evidence: AdReplayTargetBindingEvidence,
   params: {
-    session: SessionState | undefined;
+    session: ReplaySessionState | undefined;
     observationStore: ReplaySessionObservation;
     logPath: string;
     action: SessionAction;

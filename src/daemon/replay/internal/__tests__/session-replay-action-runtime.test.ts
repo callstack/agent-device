@@ -4,6 +4,7 @@ import { makeIosSession } from '../../../../__tests__/test-utils/session-factori
 import { recordActionEntry } from '../../../session-action-recorder.ts';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { invokeReplayAction } from '../session-replay-action-runtime.ts';
+import { replayDaemonDependencies } from '../../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 
 const REPLAY_REQUEST: DaemonRequest = {
@@ -38,6 +39,8 @@ test.each(['', '   '])(
       filePath: 'login.ad',
       line: 1,
       step: 1,
+      resolvedSessionScope: undefined,
+      dependencies: replayDaemonDependencies,
       invoke: async (request) => {
         recordActionEntry(session, {
           command: request.command,

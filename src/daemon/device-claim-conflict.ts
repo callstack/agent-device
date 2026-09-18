@@ -19,7 +19,6 @@ import type { DaemonResponse } from './daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
 
-
 /**
  * The reason of the allocator-held arm's refusal when no allocator-held claim
  * exists. Deliberately not a {@link DeviceClaimConflictReason}: replay retries

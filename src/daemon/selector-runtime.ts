@@ -26,7 +26,7 @@ import {
   toDaemonFindData,
   toDaemonGetData,
 } from './selector-recording.ts';
-import type { RecordedTargetCapture } from '@agent-device/ad-script/target-evidence';
+import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
 import {
   createBoundSelectorRuntime,

@@ -1,6 +1,10 @@
-import type { SessionAction } from '@agent-device/contracts/session';
+import type { SessionAction, SessionScope } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
+import type {
+  ReplayDaemonDependencies,
+  ReplayDispatchRequest,
+  ReplayInvoke,
+} from './command-types.ts';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -9,12 +13,10 @@ import {
 } from '@agent-device/contracts/gesture-normalization';
 import { buildDisplayPositionals } from '@agent-device/session-journal/session-event-action';
 import { appendReplayTraceEvent } from './session-replay-trace.ts';
-import { inferFillText } from '@agent-device/ad-script';
-import { readRecordedInputVariableName } from '@agent-device/ad-script';
-import { resolveSessionScope } from '../../session-routing.ts';
+import { inferFillText, readRecordedInputVariableName } from '@agent-device/ad-script';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
-type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
+type ReplayBaseRequest = Omit<ReplayDispatchRequest, 'command' | 'positionals'>;
 
 /**
  * #1555 review P1 (second pass, "move variable semantics/planning behind the
@@ -27,7 +29,8 @@ type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
  * text.
  */
 export async function invokeReplayAction(params: {
-  req: DaemonRequest;
+  /** The plan's request, carrying the dispatch options every step inherits (guards included). */
+  req: ReplayDispatchRequest;
   sessionName: string;
   action: SessionAction;
   resolved: SessionAction;
@@ -37,7 +40,10 @@ export async function invokeReplayAction(params: {
   /** Resolved source file when it differs from `filePath` (a `runFlow` include's path). */
   sourcePath?: string;
   tracePath?: string;
-  invoke: DaemonInvokeFn;
+  invoke: ReplayInvoke;
+  /** The isolation scope the daemon already resolved for the request, when it did. */
+  resolvedSessionScope: SessionScope | undefined;
+  dependencies: ReplayDaemonDependencies;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -50,6 +56,8 @@ export async function invokeReplayAction(params: {
     sourcePath,
     tracePath,
     invoke,
+    resolvedSessionScope,
+    dependencies,
   } = params;
   const startedAt = Date.now();
   appendReplayTraceEvent(tracePath, {
@@ -75,6 +83,8 @@ export async function invokeReplayAction(params: {
       resolved,
       sourceAction: action,
       invoke,
+      resolvedSessionScope,
+      dependencies,
     });
   } catch (error) {
     // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
@@ -125,13 +135,16 @@ function withReplayFailureSource(
 }
 
 async function invokeResolvedReplayAction(params: {
-  req: DaemonRequest;
+  req: ReplayDispatchRequest;
   sessionName: string;
   resolved: SessionAction;
   sourceAction: SessionAction;
-  invoke: DaemonInvokeFn;
+  invoke: ReplayInvoke;
+  resolvedSessionScope: SessionScope | undefined;
+  dependencies: ReplayDaemonDependencies;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, resolved, sourceAction, invoke } = params;
+  const { req, sessionName, resolved, sourceAction, invoke, resolvedSessionScope, dependencies } =
+    params;
   const flags = buildReplayActionFlags(req.flags, resolved.flags);
   const recordedInputVariable =
     sourceAction.command === 'fill'
@@ -151,13 +164,11 @@ async function invokeResolvedReplayAction(params: {
     // `session-action-recorder.ts`) reads it to keep an authored
     // `get`/`is`/`find`/`snapshot` step in its own healed script while still
     // excluding an interactive diagnostic read of the same command.
-    internal: {
-      ...req.internal,
+    dispatch: {
+      ...req.dispatch,
       replayPlanStep: true,
       ...(resolved.command === 'open'
-        ? {
-            resolvedSessionScope: req.internal?.resolvedSessionScope ?? resolveSessionScope(req),
-          }
+        ? { resolvedSessionScope: resolvedSessionScope ?? dependencies.resolveSessionScope(req) }
         : {}),
     },
   };
@@ -167,7 +178,7 @@ async function invokeResolvedReplayAction(params: {
 function buildReplayInteractionRequest(
   baseReq: ReplayBaseRequest,
   action: SessionAction,
-): DaemonRequest {
+): ReplayDispatchRequest {
   const positionals = action.positionals ?? [];
   if (action.command === 'gesture') {
     return {

@@ -1,4 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import {
   type RuntimeHintValues,
   hasRuntimeTransportHintValues,
@@ -10,7 +10,6 @@ import {
   isSessionRuntimePlatform,
 } from '@agent-device/kernel/contracts';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
@@ -236,7 +235,7 @@ function resolveSessionRuntimeHints(
 }
 
 function resolveOpenRuntimeHints(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   sessionStore: SessionRuntimeHintsStore;
   sessionName: string;
   device?: DeviceInfo;

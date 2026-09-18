@@ -406,6 +406,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/ios-snapshot-engine',
     '@agent-device/capture-kit/ios-snapshot-planning',
     '@agent-device/capture-kit/ios-snapshot-runtime',
+    '@agent-device/capture-kit/ios-snapshot-tree',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
     '@agent-device/capture-kit/perf-capture-admission-ledger',
     '@agent-device/capture-kit/perf-capture-recovery',
@@ -690,6 +691,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/selector-pipeline',
     '@agent-device/selectors/selector-pipeline-policy',
     '@agent-device/selectors/snapshot-geometry-fixtures',
+    '@agent-device/selectors/target-evidence',
     '@agent-device/selectors/touch-semantics',
   ]);
   assert.deepEqual([...selectorsPackage.workspaceDependencies].sort(), [

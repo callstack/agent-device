@@ -29,21 +29,21 @@ import type {
   TargetScrollRegion,
   TargetVerification,
 } from '@agent-device/contracts/replay';
-import { classifyTargetBindingMatch } from './internal/target-annotation-classification.ts';
 import {
+  buildAncestryChain,
+  buildIndexMap,
+  classifyTargetBindingMatch,
   demoteNonUniqueLocalIdentity,
+  filterIdentitySet,
   matchesLocalIdentity,
   readNodeLocalIdentity,
-  siblingOrdinal,
-} from './internal/target-annotation-identity.ts';
-import {
   serializeTargetAnnotationV1,
+  siblingOrdinal,
   utf8ByteLength,
+  type LocalIdentity,
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
-} from './internal/target-annotation-serde.ts';
-import { buildAncestryChain, buildIndexMap, filterIdentitySet } from './internal/target-evidence-tree.ts';
-import type { LocalIdentity } from './internal/target-annotation-identity.ts';
+} from '@agent-device/ad-script';
 
 /** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
 export type RecordedTargetCapture = {

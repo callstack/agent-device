@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { readSelectorExpression } from '@agent-device/selectors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
@@ -90,4 +91,11 @@ function readTargetSelectorPositionals(action: ReplayReportAction): readonly str
 function isFiniteNumberString(value: string | undefined): boolean {
   if (value === undefined || value.trim() === '') return false;
   return Number.isFinite(Number(value));
+}
+
+/** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */
+export function healedScriptSiblingPath(sourcePath: string): string {
+  const dir = path.dirname(sourcePath);
+  const base = path.basename(sourcePath, path.extname(sourcePath));
+  return path.join(dir, `${base}.healed.ad`);
 }

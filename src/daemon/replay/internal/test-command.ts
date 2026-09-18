@@ -2,13 +2,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
-import type { DaemonRequest } from '../../daemon-request.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
-import type { ReplayTestCommand } from './command-types.ts';
+import type { ReplayCommand, ReplayDispatchOptions, ReplayTestCommand } from './command-types.ts';
 import {
   runReplayTestSuite,
   type ReplayTestBindAttemptCancellation,
@@ -228,25 +227,20 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         ? buildReplayTestVideoOpenLifecycle(videoRecordingParams)
         : undefined;
       const replayResponse = await runReplayCommand({
-        request: {
-          ...req,
-          command: 'replay',
-          session: testSessionName,
-          positionals: [filePath],
-          flags: nestedFlags,
-          meta: {
-            ...(req.meta ?? {}),
-            ...(requestId ? { requestId } : {}),
+        ...nestedReplayCommand(command, {
+          request: {
+            ...req,
+            command: 'replay',
+            session: testSessionName,
+            positionals: [filePath],
+            flags: nestedFlags,
+            meta: {
+              ...(req.meta ?? {}),
+              ...(requestId ? { requestId } : {}),
+            },
           },
-          ...(req.internal || openLifecycle
-            ? {
-                internal: {
-                  ...(req.internal ?? {}),
-                  ...(openLifecycle ? { openLifecycle } : {}),
-                },
-              }
-            : {}),
-        },
+          openLifecycle,
+        }),
         session: attemptSession,
         tracePath,
         onStep,
@@ -316,7 +310,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
  */
 export function attachRemoteReplayTestArtifacts(
   data: ReplaySuiteResult,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
 ): DaemonResponseData {
   const clientRoot = req.meta?.clientArtifactPaths?.artifactsDir;
   const daemonRoot = data.artifactsDir;
@@ -381,13 +375,46 @@ export function attachRemoteReplayTestArtifacts(
  * `AppError` so it travels the same translation-failure path the shard/flag rejections already
  * take, rather than adding a second refusal shape to the handler.
  */
-function requireReplayTestScriptSources(req: DaemonRequest): readonly ReplayScriptSourceBundle[] {
+/**
+ * One attempt's replay command inherits the suite command's admission facts and dispatch options;
+ * the video open-lifecycle hook, when recording, rides beside the inherited options.
+ */
+function nestedReplayCommand(
+  command: ReplayTestCommand,
+  attempt: {
+    request: DaemonWireRequest;
+    openLifecycle: NonNullable<ReplayDispatchOptions['openLifecycle']> | undefined;
+  },
+): Pick<
+  ReplayCommand,
+  'request' | 'publicNetworkOnly' | 'resolvedSessionScope' | 'dispatch' | 'dependencies'
+> {
+  const { publicNetworkOnly, resolvedSessionScope, dispatch, dependencies } = command;
+  const nestedDispatch =
+    dispatch || attempt.openLifecycle
+      ? { ...dispatch, ...(attempt.openLifecycle ? { openLifecycle: attempt.openLifecycle } : {}) }
+      : undefined;
+  return {
+    request: attempt.request,
+    ...(publicNetworkOnly ? { publicNetworkOnly } : {}),
+    ...(resolvedSessionScope ? { resolvedSessionScope } : {}),
+    ...(nestedDispatch ? { dispatch: nestedDispatch } : {}),
+    dependencies,
+  };
+}
+
+function requireReplayTestScriptSources(
+  req: DaemonWireRequest,
+): readonly ReplayScriptSourceBundle[] {
   const sources = req.flags?.replayScriptSources;
   if (!sources) throw new AppError('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
   return sources;
 }
 
-function toReplayTestSuiteRequest(req: DaemonRequest, sessionName: string): ReplayTestSuiteRequest {
+function toReplayTestSuiteRequest(
+  req: DaemonWireRequest,
+  sessionName: string,
+): ReplayTestSuiteRequest {
   const flags = req.flags ?? {};
   const cwd = req.meta?.cwd;
   const artifactsDir = stringFlag(flags.artifactsDir);

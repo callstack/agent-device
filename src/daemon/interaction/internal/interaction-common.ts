@@ -5,10 +5,9 @@ import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.
 import {
   computeTargetEvidence,
   type RecordedTargetCapture,
-} from '@agent-device/ad-script/target-evidence';
+} from '@agent-device/selectors/target-evidence';
 import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { inferFillText } from '@agent-device/ad-script';
-import { recordedInputPlaceholder } from '@agent-device/ad-script';
+import { inferFillText, recordedInputPlaceholder } from '@agent-device/ad-script';
 import { parameterizeRecordedFillPayload } from '@agent-device/selectors/parameterized-recorded-fill';
 import type { InteractionFinalizationOperations } from './types.ts';
 
