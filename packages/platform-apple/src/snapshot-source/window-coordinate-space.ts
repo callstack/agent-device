@@ -26,6 +26,14 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`. The table also
  * pins the way back (`CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`, Swift-only
  * today); change either rule only through that table.
+ *
+ * Why this is a detector and not a repair: the bridge guest cannot read the app's interface
+ * orientation. Measured in the #2659 spike (verdict on the issue, write-up in the diff of #2667):
+ * AX attribute `XC_kAXXCAttributeApplicationOrientation` (id 1503) resolves but reads 0 through the
+ * guest's snapshot channel, and the cheap BackBoard read is device orientation, which turns a
+ * rotation-locked app's screen that never turned. The bar for retiring this file is a guest read
+ * that names the foreground app's orientation and survives a rotation-locked app; attribute 1503 is
+ * the handle to watch.
  */
 
 /**

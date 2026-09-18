@@ -416,8 +416,12 @@ the ADR 0011 parity-table shape, which is what stops capture from turning back w
 than the exact inverse of what dispatch turns forward.
 
 Decision. A producer that cannot name the app's interface orientation refuses the screen rather
-than publishing two spaces in one tree. The Simulator AX bridge's attribute set carries no
-orientation fact, so its decoder counts window roots reporting the app's box quarter-turned and
+than publishing two spaces in one tree. The Simulator AX bridge cannot name it: the #2659 spike
+(verdict on that issue, write-up in the diff of #2667) measured that the one AX attribute for it,
+`XC_kAXXCAttributeApplicationOrientation` (id 1503), resolves but reads 0 through the guest's
+snapshot channel and errors `kAXErrorServerNotFound` through XCTest's own reader, and that the only
+cheap service read is *device* orientation, which diverges from the app's on a rotation-locked app.
+So its decoder counts window roots reporting the app's box quarter-turned and
 fails that capture (`window-coordinate-space-unresolved`, kind `unsupported`) — the same refusal
 shape as `remote-content-boundary` above — and the route serves the runner, which reads the
 orientation. A mixed tree is not half-usable: a published rect is an address, and once some rects
