@@ -468,6 +468,66 @@ export function classifyRunnerReportedError(
   });
 }
 
+export type RunnerResponsePayload = {
+  ok?: unknown;
+  error?: { code?: unknown; message?: unknown; hint?: unknown };
+  data?: unknown;
+};
+
+/**
+ * The one decoding of a runner response body (#2662). The envelope arrives at three readers — a
+ * command's own response, the lifecycle journal a status probe reads back after the transport
+ * response was lost, and the adoption `uptime` probe — and all three must agree on what is
+ * readable, or a body one of them refuses becomes an answer for another. A body that is not JSON
+ * at all is transport-shaped failure: a runner that died mid-write must not be read as having
+ * answered.
+ */
+export function decodeRunnerResponseBody(text: string): RunnerResponsePayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+  }
+  return parsed && typeof parsed === 'object' ? (parsed as RunnerResponsePayload) : {};
+}
+
+/** The runner's `ok` is a Swift `Bool`, so only the literal `true` is an answer. */
+export function isRunnerResponseOk(payload: RunnerResponsePayload): boolean {
+  return payload.ok === true;
+}
+
+export function readRunnerResponseData(payload: RunnerResponsePayload): Record<string, unknown> {
+  if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) return {};
+  return payload.data as Record<string, unknown>;
+}
+
+export function buildRunnerResponseError(
+  payload: RunnerResponsePayload,
+  logPath?: string,
+): AppError {
+  const runnerErrorCode = readRunnerErrorCode(payload.error?.code);
+  const errorMessage =
+    typeof payload.error?.message === 'string' ? payload.error.message : undefined;
+  const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
+  const classification = classifyRunnerReportedError(runnerErrorCode);
+  return new AppError(classification.code, errorMessage ?? 'Runner error', {
+    runner: payload,
+    ...classification.details,
+    xcodebuild: {
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+    },
+    hint,
+    logPath,
+  });
+}
+
+function readRunnerErrorCode(rawCode: unknown): string | undefined {
+  return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
+}
+
 export function resolveRunnerEarlyExitHint(
   message: string,
   stdout: string,

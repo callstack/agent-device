@@ -6,10 +6,13 @@ import {
   decodeRunnerResponseBody,
   isRunnerResponseOk,
   readRunnerResponseData,
-} from '../runner-response.ts';
+} from '../runner-contract.ts';
+import { parseRunnerResponse } from '../runner-session.ts';
 
-// A body cut off mid-write, the shape a runner that died while answering leaves behind.
+// A body cut off mid-write: the shape a runner that died while answering leaves behind.
 const TRUNCATED_BODY = '{"ok":true,"data":{"nodes":[{"label":"Sign In"';
+// `ok` is a Swift `Bool`, so this is what a private truthiness rule used to accept as an answer.
+const STRINGLY_TYPED_BODY = '{"ok":"true","data":{"tapped":true}}';
 
 describe('decodeRunnerResponseBody', () => {
   test('decodes the runner envelope', () => {
@@ -96,5 +99,41 @@ describe('buildRunnerResponseError', () => {
     const error = buildRunnerResponseError({ ok: false, error: {} });
     assert.equal(error.message, 'Runner error');
     assert.equal(error.details?.hint, undefined);
+  });
+});
+
+describe('parseRunnerResponse', () => {
+  test('refuses a body whose ok is not the boolean true', async () => {
+    const session = { ready: false };
+
+    await assert.rejects(
+      () => parseRunnerResponse(new Response(STRINGLY_TYPED_BODY), session),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.deepEqual(error.details?.runner, { ok: 'true', data: { tapped: true } });
+        return true;
+      },
+    );
+
+    assert.equal(session.ready, false);
+  });
+
+  test('refuses a body that is not readable JSON', async () => {
+    const session = { ready: false };
+
+    await assert.rejects(
+      () => parseRunnerResponse(new Response(TRUNCATED_BODY), session),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.text, TRUNCATED_BODY);
+        // Transport-shaped: no `runner` detail, so the session keeps its recency bets (#2552).
+        assert.equal(error.details?.runner, undefined);
+        return true;
+      },
+    );
+
+    assert.equal(session.ready, false);
   });
 });

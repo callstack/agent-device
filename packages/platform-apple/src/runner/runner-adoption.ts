@@ -9,7 +9,11 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
-import { withRunnerCommandId } from './runner-contract.ts';
+import {
+  decodeRunnerResponseBody,
+  isRunnerResponseOk,
+  withRunnerCommandId,
+} from './runner-contract.ts';
 import {
   buildRunnerLease,
   readStaleRunnerLease,
@@ -29,7 +33,6 @@ import {
   type RunnerProcessHandle,
   type RunnerSession,
 } from './runner-session-types.ts';
-import { decodeRunnerResponseBody, isRunnerResponseOk } from './runner-response.ts';
 
 // A healthy localhost runner answers uptime in tens of milliseconds and a dead
 // port refuses immediately; the timeout only bounds the wedged-runner case,

@@ -28,6 +28,10 @@ import {
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
 import {
+  buildRunnerResponseError,
+  decodeRunnerResponseBody,
+  isRunnerResponseOk,
+  readRunnerResponseData,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -60,12 +64,6 @@ import {
   type RunnerDisposalOptions,
 } from './runner-disposal.ts';
 import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
-import {
-  buildRunnerResponseError,
-  decodeRunnerResponseBody,
-  isRunnerResponseOk,
-  readRunnerResponseData,
-} from './runner-response.ts';
 import {
   buildRunnerSessionId,
   normalizeRunnerStartupTimeoutMs,

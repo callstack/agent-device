@@ -340,64 +340,6 @@ test('runner session probes readiness before mutating commands', async () => {
   });
 });
 
-test('runner session refuses a command response whose ok is not the boolean true', async () => {
-  // The runner's `ok` is a Swift `Bool`, so a stringly-typed one is not an answer
-  // the session may mark itself ready on (#2662).
-  const session = makeRunnerSession({ ready: false });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(
-    new Response('{"ok":"true","data":{"tapped":true}}'),
-  );
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.deepEqual(error.details?.runner, { ok: 'true', data: { tapped: true } });
-      return true;
-    },
-  );
-
-  // Refused is not the same as served: a body that is not an answer cannot be
-  // recorded as the healthy mutation that lets the next command skip preflight.
-  assert.equal(session.lastHealthyMutation, undefined);
-});
-
-test('runner session refuses a command response body that is not readable JSON', async () => {
-  const truncatedBody = '{"ok":true,"data":{"nodes":[{"label":"Sign In"';
-  const session = makeRunnerSession({ ready: false });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(new Response(truncatedBody));
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.details?.text, truncatedBody);
-      assert.equal(error.details?.runner, undefined);
-      return true;
-    },
-  );
-
-  assert.equal(session.lastHealthyMutation, undefined);
-});
-
 test('runner session emits reason diagnostics when readiness preflight is used', async () => {
   const session = makeRunnerSession({ ready: false });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
