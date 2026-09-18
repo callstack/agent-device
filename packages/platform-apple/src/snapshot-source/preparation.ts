@@ -6,7 +6,7 @@ import {
   waitForSnapshotSourceDelay,
   type SnapshotSourceDeadline,
 } from './deadline.ts';
-import { asSnapshotSourceError, snapshotSourceCaptureError } from './errors.ts';
+import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import type {
   SnapshotSourceBridgeBinary,
   SnapshotSourceHost,
@@ -120,7 +120,7 @@ export function createSnapshotBridgePreparation(
         // Waiting inside the request's own deadline keeps a genuine client abort typed
         // `cancelled`: only a preparation that is simply still running is reported as `preparing`.
         wait: (waitMs, stop) => waitForSnapshotSourceDelay(deadline, waitMs, code, stop),
-        pending: () => snapshotSourceCaptureError('preparing', 'bridge-preparation-pending'),
+        pending: () => snapshotSourceError('preparing', 'bridge-preparation-pending'),
       });
     },
     close: () => {

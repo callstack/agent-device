@@ -154,7 +154,7 @@ test('a sheet that appears after an absent probe is identified by the surface, n
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
     source: sourceReturning({
       stage: 'failed',
-      failure: { kind: 'transport-failure', code: 'bridge-disconnected', scope: 'generation' },
+      failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
     }),
     resolveTarget: vi.fn(async () => target),
     systemSurfacePresent: async () => 'absent',
@@ -275,7 +275,7 @@ test('a probe that cannot answer discloses the skipped bridge and stays incompar
 test('typed bridge failure falls back once and disables retries for that app generation', async () => {
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'transport-failure', code: 'bridge-disconnected', scope: 'generation' },
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
   });
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
@@ -305,7 +305,7 @@ test('typed bridge failure falls back once and disables retries for that app gen
 test('a bridge still being prepared sends only that capture to the runner', async () => {
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'preparing', code: 'bridge-preparation-pending', scope: 'capture' },
+    failure: { kind: 'preparing', code: 'bridge-preparation-pending' },
   });
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
@@ -335,7 +335,6 @@ test('a window in an unresolved coordinate space sends only that capture to the 
     failure: {
       kind: 'unsupported',
       code: 'window-coordinate-space-unresolved',
-      scope: 'capture',
       details: { windows: 1 },
     },
   });
@@ -363,7 +362,7 @@ test('a window in an unresolved coordinate space sends only that capture to the 
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'transport-failure', code: 'bridge-disconnected', scope: 'generation' },
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
   });
   const resolveTarget = vi
     .fn()
@@ -387,7 +386,7 @@ test('stale bridge acquisition resolves the current generation before XCTest fal
   const currentTarget = { ...target, pid: 84, generation: '84:launch-b' };
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'stale-target', code: 'target-generation-changed', scope: 'generation' },
+    failure: { kind: 'stale-target', code: 'target-generation-changed' },
   });
   const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValueOnce(currentTarget);
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
@@ -464,14 +463,11 @@ test('cancelled acquisition does not start a fallback after the request aborts',
   const controller = new AbortController();
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'cancelled', code: 'abort-signal', scope: 'generation' },
+    failure: { kind: 'cancelled', code: 'abort-signal' },
   });
   vi.mocked(source.acquire).mockImplementation(async () => {
     controller.abort(new DOMException('request ended', 'AbortError'));
-    return {
-      stage: 'failed',
-      failure: { kind: 'cancelled', code: 'abort-signal', scope: 'generation' },
-    };
+    return { stage: 'failed', failure: { kind: 'cancelled', code: 'abort-signal' } };
   });
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
@@ -560,7 +556,7 @@ test.each([
   // gave up on — ~33 acquisitions per `open`, each a fresh connect.
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'transport-failure', code, scope: 'generation' },
+    failure: { kind: 'transport-failure', code },
   });
   const route = createAppleSnapshotRoute(
     { ...platformRuntimeHostFixture(), clock: steppingClock() },
@@ -578,10 +574,7 @@ test.each([
 
 test('a relaunched generation rebaselines the circuit and observes the launch', async () => {
   const outcomes: SnapshotSourceOutcome[] = [
-    {
-      stage: 'failed',
-      failure: { kind: 'transport-failure', code: 'bridge-disconnected', scope: 'generation' },
-    },
+    { stage: 'failed', failure: { kind: 'transport-failure', code: 'bridge-disconnected' } },
     bridgeAcquisition(),
   ];
   let acquisitions = 0;

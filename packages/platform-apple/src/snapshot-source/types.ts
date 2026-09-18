@@ -47,19 +47,9 @@ export type SnapshotSourceFailureKind =
   /** The bridge binary is still being prepared by a detached attempt; nothing failed. */
   | 'preparing';
 
-/**
- * What a bridge failure is evidence about. `generation`: the app generation the bridge served, so
- * the route retires it from the bridge until it relaunches. `capture`: this capture only — a bridge
- * still being prepared (#2491), or a screen holding a surface in another coordinate space (#2612) —
- * so the next capture asks the bridge again. Declared where the failure is thrown, never judged at
- * the route.
- */
-export type SnapshotSourceFailureScope = 'capture' | 'generation';
-
 export type SnapshotSourceFailure = Readonly<{
   kind: SnapshotSourceFailureKind;
   code: string;
-  scope: SnapshotSourceFailureScope;
   details?: Readonly<Record<string, unknown>>;
 }>;
 

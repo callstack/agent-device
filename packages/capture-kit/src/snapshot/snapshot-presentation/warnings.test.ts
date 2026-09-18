@@ -20,23 +20,6 @@ test("the runner-wire 'deferred' reasonCode survives parsing into warning suppre
   assert.deepEqual(renderSnapshotQualityWarnings(verdict!, []), []);
 });
 
-test('a capture that could not place a turned surface host discloses it through the wire verdict', () => {
-  // End-to-end through the raw wire parser, like the deferred case above: the count has to be a
-  // member of the read verdict or the disclosure is silently stripped.
-  const verdict = readSnapshotQualityVerdict({
-    state: 'healthy',
-    backend: 'tree',
-    unresolvedCoordinateSpaceWindows: 1,
-  });
-  const warnings = renderSnapshotQualityWarnings(verdict!, []);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /^1 window\(s\) on this screen/);
-  assert.match(warnings[0]!, /could not read the app's interface orientation/);
-
-  const placed = readSnapshotQualityVerdict({ state: 'healthy', backend: 'tree' });
-  assert.deepEqual(renderSnapshotQualityWarnings(placed!, []), []);
-});
-
 test('penalty-deferred recovered captures suppress the fallback warning but keep depth copy', () => {
   // Every capture of a hostile screen re-stamps recovered/deferred; the capture that armed the
   // penalty already carried the full warning, so repeating it each capture is context noise.

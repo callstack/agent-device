@@ -7,23 +7,8 @@ export function renderSnapshotQualityWarnings(
   return [
     ...stateWarning(verdict),
     ...customActionCoverageWarning(verdict),
-    ...unplacedGeometryWarning(verdict),
     ...depthWarning(verdict),
     ...collapsedLeafWarnings(verdict, nodes),
-  ];
-}
-
-/**
- * The capture publishes one coordinate space, and says so when it could not: a system surface
- * hosted in the device's native orientation space that the runner could not turn back, because the
- * app's interface orientation was unreadable (#2612). Without this line the tree would hold two
- * spaces and look like one.
- */
-function unplacedGeometryWarning(verdict: SnapshotQualityVerdict): string[] {
-  const windows = verdict.unresolvedCoordinateSpaceWindows;
-  if (windows === undefined) return [];
-  return [
-    `${windows} window(s) on this screen — typically the system keyboard while the app is in landscape — report their geometry in the device's native orientation space, and this capture could not read the app's interface orientation to turn it back. Rects under those windows are not in the same space as the rest of the tree, so distances measured against them and taps aimed at them are unreliable; use screenshot as visual truth for that area and re-run snapshot after the surface is dismissed.`,
   ];
 }
 

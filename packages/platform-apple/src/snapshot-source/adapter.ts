@@ -6,11 +6,7 @@ import type {
 } from '@agent-device/contracts/ios-snapshot';
 import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 import { AcceptedDepthHints, type DepthHintDecision } from './depth-hints.ts';
-import {
-  asSnapshotSourceError,
-  snapshotSourceCaptureError,
-  snapshotSourceError,
-} from './errors.ts';
+import { asSnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { resolveSnapshotSourceLimits } from './limits.ts';
 import { readSnapshotBridgeRecovery, type SnapshotBridgeEnvelope } from './protocol.ts';
@@ -103,7 +99,6 @@ export function createSimulatorSnapshotSource(
         failure: {
           kind: failure.failureKind,
           code: failure.failureCode,
-          scope: failure.failureScope,
           ...(failure.details ? { details: failure.details } : {}),
         },
       } satisfies SnapshotSourceOutcome;
@@ -231,7 +226,7 @@ function createAcquisition(
   // the source refuses the screen it cannot put in one space and the route serves the runner, which
   // reads the orientation and rotates what it captured (#2612).
   if (decoded.unresolvedCoordinateSpaceWindows > 0) {
-    throw snapshotSourceCaptureError('unsupported', 'window-coordinate-space-unresolved', {
+    throw snapshotSourceError('unsupported', 'window-coordinate-space-unresolved', {
       windows: decoded.unresolvedCoordinateSpaceWindows,
     });
   }

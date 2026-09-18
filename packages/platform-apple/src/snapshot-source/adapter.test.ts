@@ -699,7 +699,6 @@ test('the Simulator AX source refuses a window whose coordinate space it cannot 
     if (outcome.stage === 'failed') {
       assert.equal(outcome.failure.kind, 'unsupported');
       assert.equal(outcome.failure.code, 'window-coordinate-space-unresolved');
-      assert.equal(outcome.failure.scope, 'capture');
       assert.equal(outcome.failure.details?.windows, 1);
     }
 

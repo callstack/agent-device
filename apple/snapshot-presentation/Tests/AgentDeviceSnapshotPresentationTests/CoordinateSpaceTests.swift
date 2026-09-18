@@ -288,9 +288,6 @@ final class CoordinateSpaceTests: XCTestCase {
     // surface below a window is a host too.
     XCTAssertTrue(SnapshotGeometrySpace.isSurfaceHost(isWindow: false, parentIsWindow: true))
     XCTAssertFalse(SnapshotGeometrySpace.isSurfaceHost(isWindow: false, parentIsWindow: false))
-    XCTAssertTrue(SnapshotGeometrySpace.isWindowType("Application"))
-    XCTAssertTrue(SnapshotGeometrySpace.isWindowType("Window"))
-    XCTAssertFalse(SnapshotGeometrySpace.isWindowType("Other"))
 
     let windowSpace = SnapshotGeometrySpace.space(
       reportedBySurfaceHost: true,
@@ -320,51 +317,6 @@ final class CoordinateSpaceTests: XCTestCase {
       ),
       .appOrientation
     )
-  }
-
-  /// A published tree that still carries a turned host is one the capture could not place, and the
-  /// count is what lets the daemon say so. A tree the capture did turn back holds none.
-  func testUnplacedSurfaceHostCountNamesTheHostsATreeStillCarriesTurned() {
-    let viewport = CGRect(x: 0, y: 0, width: 874, height: 402)
-    // Application > [Window(app box) > Button, Window(app box) > Other(turned) > Key]
-    let unplaced = [
-      node(0, type: "Application", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: nil),
-      node(1, type: "Window", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: 0),
-      node(2, type: "Button", rect: SnapshotRect(x: 204, y: 323, width: 91, height: 55), parent: 1),
-      node(3, type: "Window", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: 0),
-      node(4, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 3),
-      node(5, type: "Key", rect: SnapshotRect(x: 154, y: 77, width: 45, height: 72), parent: 4),
-    ]
-    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: unplaced, viewport: viewport), 1)
-
-    // The same screen once the capture turned the host back: nothing is left to disclose.
-    let placed = unplaced.map { entry in
-      entry.index == 4
-        ? node(4, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: 3)
-        : entry
-    }
-    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: placed, viewport: viewport), 0)
-
-    // A turned box deep in the tree is content, not a host; a viewport the capture could not resolve
-    // anchors nothing.
-    let deep = [
-      node(0, type: "Application", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: nil),
-      node(1, type: "Window", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: 0),
-      node(2, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: 1),
-      node(3, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 2),
-    ]
-    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: deep, viewport: viewport), 0)
-    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: unplaced, viewport: .infinite), 0)
-
-    // One turned surface is one host even when the window AND the surface under it both report the
-    // turned box: the child folds into the turned window rather than counting a second time.
-    let bothTurned = [
-      node(0, type: "Application", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: nil),
-      node(1, type: "Window", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 0),
-      node(2, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 1),
-      node(3, type: "Key", rect: SnapshotRect(x: 154, y: 77, width: 45, height: 72), parent: 2),
-    ]
-    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: bothTurned, viewport: viewport), 1)
   }
 
   /// Golden parity table (#2612): every case in contracts/fixtures/window-coordinate-space.json
@@ -414,14 +366,6 @@ final class CoordinateSpaceTests: XCTestCase {
           "\(testCase.name) (interfaceOrientation \(interfaceOrientation))"
         )
       }
-      // The disclosure reads the same rule off a published node: a host the table calls turned is
-      // the host the count names, whichever way the app is turned.
-      let host = node(0, type: "Window", rect: snapshotRect(testCase.window.cgRect), parent: nil)
-      XCTAssertEqual(
-        SnapshotGeometrySpace.unplacedSurfaceHostCount(in: [host], viewport: appFrame),
-        testCase.quarterTurned ? 1 : 0,
-        "\(testCase.name) (unplaced host count)"
-      )
     }
     for testCase in fixture.rotationCases {
       XCTAssertEqual(
@@ -436,33 +380,4 @@ final class CoordinateSpaceTests: XCTestCase {
     }
   }
 
-  private func node(_ index: Int, type: String, rect: SnapshotRect, parent: Int?) -> RawAXNode {
-    RawAXNode(
-      index: index,
-      type: type,
-      label: nil,
-      identifier: nil,
-      value: nil,
-      rect: rect,
-      enabled: true,
-      focused: nil,
-      selected: nil,
-      hittable: false,
-      depth: parent == nil ? 0 : 1,
-      parentIndex: parent,
-      hiddenContentAbove: nil,
-      hiddenContentBelow: nil
-    )
-  }
-
-  private func snapshotRect(_ frame: CGRect) -> SnapshotRect {
-    guard frame.origin.x.isFinite, frame.origin.y.isFinite, frame.width.isFinite,
-      frame.height.isFinite
-    else {
-      return SnapshotRect(x: 0, y: 0, width: 0, height: 0)
-    }
-    return SnapshotRect(
-      x: Double(frame.minX), y: Double(frame.minY),
-      width: Double(frame.width), height: Double(frame.height))
-  }
 }

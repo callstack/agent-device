@@ -34,15 +34,9 @@
   in the app's own orientation space.` — and the route sends that one capture to the runner instead of
   retiring the app generation, so the next capture of a healthy app still uses the bridge. One table
   proves both languages apply one rule: `contracts/fixtures/window-coordinate-space.json` (#2612).
-- Changed (ios): a runner capture that could not turn a rotated system surface back into the app's
-  orientation space — the interface orientation was unreadable, or the tier had only the bridge's
-  root box to anchor on — now says so instead of publishing two coordinate spaces silently: the
-  quality verdict carries `unresolvedCoordinateSpaceWindows` and the snapshot warns that rects under
-  those windows are not in the same space as the rest of the tree. Whether a Simulator AX bridge
-  failure retires the app generation from the bridge is now declared where the failure is thrown
-  (`scope: capture | generation`) rather than matched on its code at the route. The rotation table
-  and the coordinate-space rule moved from the XCTest bundle into the `AgentDeviceSnapshotPresentation`
-  package, where `swift test` replays the golden table without a simulator.
+- Changed (ios): the rotation table and the coordinate-space rule moved from the XCTest runner bundle
+  into the `AgentDeviceSnapshotPresentation` package, where `swift test` replays the golden table
+  without a simulator. No behaviour change.
 - Added (limrun): `longpress` on Limrun iOS direct sessions. The interactor refused it as
   unsupported although the SDK exposes the HID primitives; it now holds one touch as a
   `performActions` batch of `touchDown`, `wait`, `touchUp`, defaulting to the 800 ms the Android

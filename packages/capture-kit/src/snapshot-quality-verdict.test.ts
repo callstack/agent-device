@@ -30,23 +30,6 @@ test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
   });
 });
 
-test('readSnapshotQualityVerdict carries a non-zero unplaced-geometry disclosure and drops a zero', () => {
-  const disclosed = readSnapshotQualityVerdict({
-    state: 'healthy',
-    backend: 'tree',
-    unresolvedCoordinateSpaceWindows: 1,
-  });
-  assert.equal(disclosed?.unresolvedCoordinateSpaceWindows, 1);
-
-  const placed = readSnapshotQualityVerdict({
-    state: 'healthy',
-    backend: 'tree',
-    unresolvedCoordinateSpaceWindows: 0,
-  });
-  assert.equal(placed?.state, 'healthy');
-  assert.equal('unresolvedCoordinateSpaceWindows' in placed!, false);
-});
-
 test('readSnapshotQualityVerdict drops incomplete phase timing without dropping the verdict', () => {
   const verdict = readSnapshotQualityVerdict({
     state: 'healthy',

@@ -27,10 +27,6 @@ struct SnapshotQuality: Codable {
   let collapsedLeafIndexes: [Int]?
   /// Coverage of the bounded custom-action pass, when the capture asked for one.
   let customActions: SnapshotCustomActionCoverage?
-  /// Surface hosts the published tree still carries in the device's native space: the capture could
-  /// not name the app's interface orientation to turn them back, so rects under them are not in the
-  /// space the rest of the tree publishes (#2612). Absent when every host was placed.
-  var unresolvedCoordinateSpaceWindows: Int? = nil
   /// Response-level timing for the accepted backend attempt, never repeated per node.
   var timing: SnapshotCaptureTiming? = nil
 }
@@ -65,8 +61,6 @@ struct SnapshotBackendCapture {
   let effectiveDepth: Int?
   var customActions: SnapshotCustomActionCoverage? = nil
   var qualityPayload: DataPayload? = nil
-  /// Turned surface hosts the acquisition left as reported; nil when the tree holds none.
-  var unresolvedCoordinateSpaceWindows: Int? = nil
   var timing: SnapshotCaptureTiming? = nil
 }
 
@@ -509,13 +503,6 @@ extension RunnerTests {
 
     var capture = presented
     capture.timing = timer.timing
-    // A host the walk could not place is disclosed, never silently published as an address: the
-    // orientation read failed, or the tier had only the bridge's root box to anchor on (#2612).
-    let unplaced = SnapshotGeometrySpace.unplacedSurfaceHostCount(
-      in: acquisition.nodes,
-      viewport: acquisition.viewport
-    )
-    capture.unresolvedCoordinateSpaceWindows = unplaced > 0 ? unplaced : nil
     return SnapshotBackendAttempt(
       outcome: .captured(capture),
       timing: timer.timing
@@ -638,7 +625,6 @@ extension RunnerTests {
       effectiveDepth: capture.effectiveDepth,
       collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? []),
       customActions: capture.customActions,
-      unresolvedCoordinateSpaceWindows: capture.unresolvedCoordinateSpaceWindows,
       timing: capture.timing
     )
     return DataPayload(
@@ -888,25 +874,6 @@ extension RunnerTests {
 
     XCTAssertEqual(payload.snapshotQuality?.timing, timing)
     XCTAssertEqual(payload.nodes?.count, 1)
-  }
-
-  /// A tree that still carries a turned host says so on the verdict, and one that holds none says
-  /// nothing: the daemon's warning keys off presence, so a zero must not ride the wire as a fact.
-  func testStampedPayloadDisclosesUnplacedSurfaceHosts() {
-    let payload = DataPayload(
-      nodes: [planTestNode(index: 0, type: "Application", label: "App")],
-      truncated: false
-    )
-    let unplaced = stampedSnapshotPayload(
-      SnapshotBackendCapture(
-        payload: payload, effectiveDepth: nil, unresolvedCoordinateSpaceWindows: 1),
-      backend: .recursiveTree, state: "healthy", reason: nil)
-    XCTAssertEqual(unplaced.snapshotQuality?.unresolvedCoordinateSpaceWindows, 1)
-
-    let placed = stampedSnapshotPayload(
-      SnapshotBackendCapture(payload: payload, effectiveDepth: nil),
-      backend: .recursiveTree, state: "healthy", reason: nil)
-    XCTAssertNil(placed.snapshotQuality?.unresolvedCoordinateSpaceWindows)
   }
 
   func testStampedPayloadTruncationTracksCompletenessNotRecoveryProvenance() {
