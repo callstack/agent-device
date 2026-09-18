@@ -12,6 +12,12 @@ extension RunnerTests {
   private static let rawSnapshotMaxNodes = 5_000
   private static let rawSnapshotTooLargeHint =
     "Raw iOS snapshot exceeded the runner payload guard. Use regular snapshot for visible UI, or scope/depth-limit raw snapshot when inspecting a large accessibility tree."
+  // Runaway guard for the regular tree walk: a work bound only. A screen that trips it raises this
+  // number in ADR 0004's name rather than bounding the walk by geometry again.
+  private static let regularSnapshotMaxNodes = 50_000
+  private static let regularSnapshotTooLargeCode = "IOS_SNAPSHOT_TOO_LARGE"
+  private static let regularSnapshotTooLargeHint =
+    "iOS snapshot walked an unexpectedly large accessibility tree. Scope the snapshot to a subtree or use screenshot."
   struct SnapshotTraversalContext {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
@@ -38,10 +44,16 @@ extension RunnerTests {
     let snapshot: XCUIElementSnapshot
     let depth: Int
     let parentIndex: Int?
-    let parentPresentedDepth: Int
-    let parentTraversal: SnapshotVisibilityFold.TraversalState
-    let geometrySpace: SnapshotGeometrySpace
-    let parentIsWindow: Bool
+  }
+
+  /// The acquisition work bound for a tree walk: raw traversal depth only. A regular capture carries
+  /// no raw bound, so it walks the whole materialized tree and `SnapshotPresentation` does the
+  /// presented-depth cut and the visibility fold on the normalized array. An acquisition bound must
+  /// not read geometry: consulting the fold mid-walk was how a turned keyboard subtree got pruned by
+  /// its un-normalized rect under `--depth` (#2612, #2661).
+  static func canDescendAtRawDepth(_ depth: Int, hint: CaptureHint) -> Bool {
+    guard let rawLimit = hint.rawTraversalDepth else { return true }
+    return depth < rawLimit
   }
 
   struct SnapshotCaptureFailure: Error {
@@ -150,7 +162,7 @@ extension RunnerTests {
   func recursiveTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
     hint: CaptureHint
-  ) -> SnapshotAcquisition {
+  ) throws -> SnapshotAcquisition {
     var cachedDescendantElements: [XCUIElement]?
     func collapsedTabDescendants() -> [XCUIElement] {
       if let cachedDescendantElements {
@@ -163,84 +175,49 @@ extension RunnerTests {
       return result.elements
     }
 
-    // Acquisition serializes facts: every traversed node is emitted at raw traversal depth, and
-    // the regular projection's clip fold runs once inside `SnapshotPresentation` (#1797). The two
-    // walks this backend keeps are the raw budget or regular presented-depth frontier, plus
-    // collapsed-tab augmentation which needs live element handles; neither walk publishes a
-    // presentation node.
+    // Acquisition serializes reported frames only; no coordinate space or fold decision is carried
+    // down the walk (#2661). Its sole bounds are raw traversal depth (nil for a regular capture) and
+    // the node cap; `SnapshotPresentation` folds and cuts the normalized array.
     var nodes: [RawAXNode] = []
-    let rootSpace = geometrySpace(
-      reportedBy: context.rootSnapshot,
-      inheritedFrom: .appOrientation,
-      parentIsWindow: false,
-      context: context
-    )
-    let rootEvaluation = evaluateSnapshot(context.rootSnapshot)
     nodes.append(
       makeSnapshotNode(
         snapshot: context.rootSnapshot,
-        evaluation: rootEvaluation,
+        evaluation: evaluateSnapshot(context.rootSnapshot),
         depth: 0,
         index: 0,
-        parentIndex: nil,
-        viewport: context.viewport,
-        geometrySpace: rootSpace
+        parentIndex: nil
       )
     )
-    let shouldVisitRootChildren = SnapshotPresentation.shouldAcquireChildren(
-      for: hint,
-      rawDepth: 0,
-      regularPresentedDepth: 0
-    )
-    if shouldVisitRootChildren {
+    if Self.canDescendAtRawDepth(0, hint: hint) {
       appendCollapsedTabFallbackNodes(
         to: &nodes,
         containerSnapshot: context.rootSnapshot,
         resolveElements: collapsedTabDescendants,
         depth: 1,
-        parentIndex: 0,
-        viewport: context.viewport,
-        geometrySpace: rootSpace
+        parentIndex: 0
       )
     }
 
     var seen = Set<String>()
     var stack: [SnapshotTraversalEntry] = []
-    if shouldVisitRootChildren {
+    if Self.canDescendAtRawDepth(0, hint: hint) {
       stack = context.rootSnapshot.children.map {
-        SnapshotTraversalEntry(
-          snapshot: $0,
-          depth: 1,
-          parentIndex: 0,
-          parentPresentedDepth: 0,
-          parentTraversal: .root,
-          geometrySpace: rootSpace,
-          parentIsWindow: isWindowElement(context.rootSnapshot.elementType)
-        )
+        SnapshotTraversalEntry(snapshot: $0, depth: 1, parentIndex: 0)
       }
     }
 
     while let entry = stack.popLast() {
       let snapshot = entry.snapshot
       let depth = entry.depth
-      let parentIndex = entry.parentIndex
       if let limit = hint.rawTraversalDepth, depth > limit { continue }
 
-      let nodeSpace = geometrySpace(
-        reportedBy: snapshot,
-        inheritedFrom: entry.geometrySpace,
-        parentIsWindow: entry.parentIsWindow,
-        context: context
-      )
       let evaluation = evaluateSnapshot(snapshot)
       let node = makeSnapshotNode(
         snapshot: snapshot,
         evaluation: evaluation,
         depth: depth,
         index: nodes.count,
-        parentIndex: parentIndex,
-        viewport: context.viewport,
-        geometrySpace: nodeSpace
+        parentIndex: entry.parentIndex
       )
       let key = Self.snapshotTraversalIdentity(
         elementType: snapshot.elementType,
@@ -253,46 +230,28 @@ extension RunnerTests {
         seen.insert(key)
       }
 
-      let currentIndex = !isDuplicate ? nodes.count : parentIndex
-      let transition = SnapshotPresentation.regularTraversalTransition(
-        for: node,
-        parentPresentedDepth: entry.parentPresentedDepth,
-        parentTraversal: entry.parentTraversal,
-        hint: hint,
-        rawDepth: depth,
-        viewport: context.viewport,
-        hasChildren: !snapshot.children.isEmpty,
-        isDuplicate: isDuplicate,
-        policy: .platformDefault
-      )
-      if transition.shouldVisitChildren {
-        for child in snapshot.children.reversed() {
-          stack.append(
-            SnapshotTraversalEntry(
-              snapshot: child,
-              depth: depth + 1,
-              parentIndex: currentIndex,
-              parentPresentedDepth: transition.presentedDepth,
-              parentTraversal: transition.traversal,
-              geometrySpace: nodeSpace,
-              parentIsWindow: isWindowElement(snapshot.elementType)
-            )
-          )
-        }
+      // A repeated node collapses into its parent: its children re-parent onto `entry.parentIndex`,
+      // so identical rows share one addressable owner.
+      let currentIndex = isDuplicate ? entry.parentIndex : nodes.count
+      for child in snapshot.children.reversed() {
+        stack.append(
+          SnapshotTraversalEntry(snapshot: child, depth: depth + 1, parentIndex: currentIndex)
+        )
       }
 
       if isDuplicate { continue }
 
       nodes.append(node)
-      if transition.shouldVisitChildren {
+      if nodes.count > Self.regularSnapshotMaxNodes {
+        throw regularSnapshotTooLargeFailure(nodeCount: nodes.count)
+      }
+      if Self.canDescendAtRawDepth(depth, hint: hint) {
         appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
           resolveElements: collapsedTabDescendants,
           depth: depth + 1,
-          parentIndex: node.index,
-          viewport: context.viewport,
-          geometrySpace: nodeSpace
+          parentIndex: node.index
         )
       }
     }
@@ -302,7 +261,8 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: context.viewport
+      viewport: context.viewport,
+      interfaceOrientation: context.interfaceOrientation
     )
   }
 
@@ -406,9 +366,7 @@ extension RunnerTests {
     func walk(
       _ snapshot: XCUIElementSnapshot,
       depth: Int,
-      parentIndex: Int?,
-      geometrySpace: SnapshotGeometrySpace,
-      parentIsWindow: Bool
+      parentIndex: Int?
     ) throws {
       if let limit = hint.rawTraversalDepth, depth > limit { return }
 
@@ -417,21 +375,13 @@ extension RunnerTests {
         throw rawSnapshotTooLargeFailure(nodeCount: nodes.count + 1)
       }
       let currentIndex = nodes.count
-      let nodeSpace = self.geometrySpace(
-        reportedBy: snapshot,
-        inheritedFrom: geometrySpace,
-        parentIsWindow: parentIsWindow,
-        context: context
-      )
       nodes.append(
         makeSnapshotNode(
           snapshot: snapshot,
           evaluation: evaluation,
           depth: depth,
           index: currentIndex,
-          parentIndex: parentIndex,
-          viewport: context.viewport,
-          geometrySpace: nodeSpace
+          parentIndex: parentIndex
         )
       )
 
@@ -440,9 +390,7 @@ extension RunnerTests {
         try walk(
           child,
           depth: depth + 1,
-          parentIndex: currentIndex,
-          geometrySpace: nodeSpace,
-          parentIsWindow: isWindowElement(snapshot.elementType)
+          parentIndex: currentIndex
         )
       }
     }
@@ -450,16 +398,15 @@ extension RunnerTests {
     try walk(
       context.rootSnapshot,
       depth: 0,
-      parentIndex: nil,
-      geometrySpace: .appOrientation,
-      parentIsWindow: false
+      parentIndex: nil
     )
     return SnapshotAcquisition(
       hint: hint,
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: context.viewport
+      viewport: context.viewport,
+      interfaceOrientation: context.interfaceOrientation
     )
   }
 
@@ -477,7 +424,8 @@ extension RunnerTests {
         nodes: nodes,
         truncated: false,
         effectiveDepth: nil,
-        viewport: .infinite
+        viewport: .infinite,
+        interfaceOrientation: RunnerInterfaceOrientation.unknown
       )
     }
 
@@ -553,7 +501,8 @@ extension RunnerTests {
       nodes: nodes,
       truncated: truncated,
       effectiveDepth: nil,
-      viewport: viewport
+      viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.unknown
     )
   }
 
@@ -588,6 +537,14 @@ extension RunnerTests {
       code: Self.rawSnapshotTooLargeCode,
       message: "iOS raw snapshot exceeded \(Self.rawSnapshotMaxNodes) nodes while walking node \(nodeCount).",
       hint: Self.rawSnapshotTooLargeHint
+    )
+  }
+
+  private func regularSnapshotTooLargeFailure(nodeCount: Int) -> SnapshotCaptureFailure {
+    SnapshotCaptureFailure(
+      code: Self.regularSnapshotTooLargeCode,
+      message: "iOS snapshot exceeded \(Self.regularSnapshotMaxNodes) nodes while walking node \(nodeCount).",
+      hint: Self.regularSnapshotTooLargeHint
     )
   }
 
@@ -1050,60 +1007,26 @@ extension RunnerTests {
     evaluation: SnapshotEvaluation,
     depth: Int,
     index: Int,
-    parentIndex: Int?,
-    viewport: CGRect,
-    geometrySpace: SnapshotGeometrySpace
+    parentIndex: Int?
   ) -> RawAXNode {
-    // One frame, read once, published everywhere: the rect and the actionability verdict below are
-    // the same claim in the space the capture commits to (#2612).
-    let frame = geometrySpace.orientedFrame(of: snapshot.frame)
+    // Acquisition carries the frame the platform reported; `SnapshotGeometrySpace.normalized` turns
+    // it into the app's orientation space and recomputes `hittable` from that one pass (#2661).
     return RawAXNode(
       index: index,
       type: elementTypeName(snapshot.elementType),
       label: evaluation.label.isEmpty ? nil : evaluation.label,
       identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
       value: evaluation.valueText,
-      rect: snapshotRect(from: frame),
+      rect: snapshotRect(from: snapshot.frame),
       enabled: snapshot.isEnabled,
       focused: evaluation.focused ? true : nil,
       selected: evaluation.selected ? true : nil,
-      hittable: parentIndex != nil && SnapshotGeometry.isGeometricallyActionable(
-        enabled: snapshot.isEnabled,
-        frame: frame,
-        viewport: viewport
-      ),
+      hittable: false,
       depth: depth,
       parentIndex: parentIndex,
       hiddenContentAbove: nil,
       hiddenContentBelow: nil
     )
-  }
-
-  /// The space one node's subtree reports its geometry in, and the last place a platform frame is
-  /// still in the space the platform chose.
-  func geometrySpace(
-    reportedBy snapshot: XCUIElementSnapshot,
-    inheritedFrom inherited: SnapshotGeometrySpace,
-    parentIsWindow: Bool,
-    context: SnapshotTraversalContext
-  ) -> SnapshotGeometrySpace {
-    SnapshotGeometrySpace.space(
-      reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(
-        isWindow: isWindowElement(snapshot.elementType),
-        parentIsWindow: parentIsWindow
-      ),
-      reportedFrame: snapshot.frame,
-      inheritedFrom: inherited,
-      appFrame: context.viewport,
-      interfaceOrientation: context.interfaceOrientation
-    )
-  }
-
-  /// Whether this element is one of the app's windows: the app's own window, `UITextEffectsWindow`,
-  /// `UIRemoteKeyboardWindow`. XCTest models each as its own element typed `.application` or
-  /// `.window`.
-  func isWindowElement(_ elementType: XCUIElement.ElementType?) -> Bool {
-    elementType == .application || elementType == .window
   }
 
   /// The app's own interface orientation: the fact that names which way the device's native space is
@@ -1159,18 +1082,14 @@ extension RunnerTests {
     containerSnapshot: XCUIElementSnapshot,
     resolveElements: () -> [XCUIElement],
     depth: Int,
-    parentIndex: Int,
-    viewport: CGRect,
-    geometrySpace: SnapshotGeometrySpace
+    parentIndex: Int
   ) {
     let fallbackNodes = collapsedTabFallbackNodes(
       for: containerSnapshot,
       resolveElements: resolveElements,
       startingIndex: nodes.count,
       depth: depth,
-      parentIndex: parentIndex,
-      viewport: viewport,
-      geometrySpace: geometrySpace
+      parentIndex: parentIndex
     )
     nodes.append(contentsOf: fallbackNodes)
   }
@@ -1180,16 +1099,13 @@ extension RunnerTests {
     resolveElements: () -> [XCUIElement],
     startingIndex: Int,
     depth: Int,
-    parentIndex: Int,
-    viewport: CGRect,
-    geometrySpace: SnapshotGeometrySpace
+    parentIndex: Int
   ) -> [RawAXNode] {
     if !containerSnapshot.children.isEmpty { return [] }
-    // This fallback reads live element frames, which XCTest reports in the app's own space whether or
-    // not the snapshot above them arrived turned. Expanding under a surface host that declared the
-    // native space would rotate those frames a second time, and a collapsed tab container is app
-    // chrome that no rotated system surface hosts, so the scan is skipped there.
-    guard geometrySpace == .appOrientation else { return [] }
+    // This fallback reads live element frames, which XCTest reports in the app's own space, and a
+    // collapsed tab container sits under the app's own window. `SnapshotGeometrySpace.normalized`
+    // keys rotation on ancestry, so these nodes never enter a declared native space and need no
+    // special case here; the containment and area rules below compare reported frames to each other.
     guard shouldExpandCollapsedTabContainer(containerSnapshot) else { return [] }
     let containerFrame = containerSnapshot.frame
     if containerFrame.isNull || containerFrame.isEmpty { return [] }
@@ -1201,9 +1117,7 @@ extension RunnerTests {
       collapsedTabCandidateNode(
         element: element,
         containerSnapshot: containerSnapshot,
-        containerFrame: containerFrame,
-        viewport: viewport,
-        geometrySpace: geometrySpace
+        containerFrame: containerFrame
       )
     }
     .sorted { left, right in
@@ -1251,9 +1165,7 @@ extension RunnerTests {
   private func collapsedTabCandidateNode(
     element: XCUIElement,
     containerSnapshot: XCUIElementSnapshot,
-    containerFrame: CGRect,
-    viewport: CGRect,
-    geometrySpace: SnapshotGeometrySpace
+    containerFrame: CGRect
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
@@ -1284,23 +1196,18 @@ extension RunnerTests {
       }
 
       // The containment and area rules above compared reported frames with each other; the node
-      // joins the tree in the space the capture publishes, like every other node beside it.
-      let orientedFrame = geometrySpace.orientedFrame(of: frame)
+      // joins the tree carrying the frame the platform reported, and normalization places it.
       node = RawAXNode(
         index: 0,
         type: elementTypeName(elementType),
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
-        rect: snapshotRect(from: orientedFrame),
+        rect: snapshotRect(from: frame),
         enabled: element.isEnabled,
         focused: elementHasFocus(element) ? true : nil,
         selected: element.isSelected ? true : nil,
-        hittable: SnapshotGeometry.isGeometricallyActionable(
-          enabled: element.isEnabled,
-          frame: orientedFrame,
-          viewport: viewport
-        ),
+        hittable: false,
         depth: 0,
         parentIndex: nil,
         hiddenContentAbove: nil,

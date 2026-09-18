@@ -155,3 +155,43 @@ public enum SnapshotGeometrySpace: Equatable {
       && frame.width > 0 && frame.height > 0
   }
 }
+
+extension SnapshotGeometrySpace {
+  public static func normalized(
+    nodes: [RawAXNode],
+    viewport: CGRect,
+    interfaceOrientation: Int
+  ) -> [RawAXNode] {
+    let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
+    var spaces = [SnapshotGeometrySpace](repeating: .appOrientation, count: nodes.count)
+    var result: [RawAXNode] = []
+    result.reserveCapacity(nodes.count)
+    for (position, node) in nodes.enumerated() {
+      let parentIndex = node.parentIndex.flatMap { $0 >= 0 && $0 < position ? $0 : nil }
+      let nodeSpace = space(
+        reportedBySurfaceHost: isSurfaceHost(
+          isWindow: carriers.contains(node.type),
+          parentIsWindow: parentIndex.map { carriers.contains(nodes[$0].type) } ?? false
+        ),
+        reportedFrame: node.rect.cgRect,
+        inheritedFrom: parentIndex.map { spaces[$0] } ?? .appOrientation,
+        appFrame: viewport,
+        interfaceOrientation: interfaceOrientation
+      )
+      spaces[position] = nodeSpace
+      let frame = nodeSpace.orientedFrame(of: node.rect.cgRect)
+      result.append(
+        node.replacing(
+          rect: SnapshotRect(frame),
+          hittable: node.parentIndex != nil
+            && SnapshotGeometry.isGeometricallyActionable(
+              enabled: node.enabled,
+              frame: frame,
+              viewport: viewport
+            )
+        )
+      )
+    }
+    return result
+  }
+}

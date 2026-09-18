@@ -220,9 +220,7 @@ extension RunnerTests {
       let viewport = geometry.viewport
       let nodes = privateAXAcquisition(
         rawRoot: root,
-        hint: hint,
-        viewport: viewport,
-        interfaceOrientation: geometry.interfaceOrientation
+        hint: hint
       )
       // Serialization-level emptiness only: an acquired-but-fully-clipped tree is presentation's
       // verdict now, surfaced by the plan's sparse classifier on the presented payload (#1797).
@@ -256,7 +254,8 @@ extension RunnerTests {
         customActions: Self.privateAXCustomActionCoverage(
           response[RunnerAXSnapshotCustomActionsKey]
         ),
-        viewport: viewport
+        viewport: viewport,
+        interfaceOrientation: geometry.interfaceOrientation
       )
     #else
       return nil
@@ -697,9 +696,7 @@ extension RunnerTests {
       rawRoot: tree,
       hint: CaptureHint(
         projection: .regular, depth: nil, regularPresentedDepth: nil,
-        interactiveOnly: false, customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
-      interfaceOrientation: RunnerInterfaceOrientation.portrait
+        interactiveOnly: false, customActions: false)
     )
 
     let card = nodes.first { $0.label == "feedItem-by-whiskers.test" }
@@ -732,9 +729,7 @@ extension RunnerTests {
           scope: "homeScreen",
           raw: false
         )
-      ),
-      viewport: .infinite,
-      interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
     )
 
     let labels = nodes.compactMap { $0.label ?? $0.identifier }
@@ -812,9 +807,11 @@ extension RunnerTests {
     let hint = CaptureHint(
       projection: .regular, depth: nil, regularPresentedDepth: nil,
       interactiveOnly: true, customActions: false)
-    let acquired = privateAXAcquisition(
-      rawRoot: tree, hint: hint, viewport: viewport,
-      interfaceOrientation: RunnerInterfaceOrientation.portrait)
+    let acquired = SnapshotGeometrySpace.normalized(
+      nodes: privateAXAcquisition(rawRoot: tree, hint: hint),
+      viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait
+    )
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
     XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))
 

@@ -45,7 +45,7 @@ export const SNAPSHOT_BACKEND_CAPABILITIES = {
   tree: {
     forceable: true,
     supportsRawProjection: true,
-    regularDepth: 'presented-frontier',
+    regularDepth: 'presentation-cut',
     hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',

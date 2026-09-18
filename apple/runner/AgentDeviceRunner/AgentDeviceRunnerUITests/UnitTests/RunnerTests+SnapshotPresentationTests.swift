@@ -415,12 +415,9 @@ extension RunnerTests {
     XCTAssertFalse(raw.interactiveOnly)
     XCTAssertEqual(raw.rawTraversalDepth, 3)
     XCTAssertNil(raw.regularPresentedDepth)
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: raw, rawDepth: 0, regularPresentedDepth: 0))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: raw, rawDepth: 3, regularPresentedDepth: 0))
+    XCTAssertTrue(Self.canDescendAtRawDepth(0, hint: raw))
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: raw))
+    XCTAssertFalse(Self.canDescendAtRawDepth(3, hint: raw))
     XCTAssertTrue(raw.isRaw)
 
     let actions = SnapshotPresentation.captureHint(
@@ -429,11 +426,10 @@ extension RunnerTests {
     XCTAssertTrue(actions.customActions)
   }
 
-  /// #1797 visible-depth frontier: a regular depth is measured after structural
-  /// wrappers collapse, so the acquisition hint cannot present it as a raw
-  /// traversal cap. The root -> wrapper -> button fixture is the smallest tree
-  /// that distinguishes those two meanings at the public boundary.
-  func testRegularDepthFrontierSurvivesStructuralWrapperCollapse() throws {
+  /// #1797: a regular depth is measured after structural wrappers collapse, so it is a presentation
+  /// cut and never a raw traversal cap. The root -> wrapper -> button fixture is the smallest tree
+  /// where the two meanings diverge: acquisition descends freely, `present` stops at the cut.
+  func testRegularDepthCutsPresentationNotAcquisition() throws {
     func node(
       _ index: Int,
       type: String,
@@ -482,23 +478,19 @@ extension RunnerTests {
 
     XCTAssertEqual(hint.regularPresentedDepth, 1)
     XCTAssertNil(hint.rawTraversalDepth)
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 0, regularPresentedDepth: 0))
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 1, regularPresentedDepth: 0))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 2, regularPresentedDepth: 1))
+    // A regular depth is a presentation cut, not an acquisition bound: the walk descends at every
+    // raw depth. What limits the presented tree is the depth applied inside `present` above.
+    XCTAssertTrue(Self.canDescendAtRawDepth(0, hint: hint))
+    XCTAssertTrue(Self.canDescendAtRawDepth(1, hint: hint))
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: hint))
     XCTAssertEqual(capture.nodes.map(\.label), ["App", "Save"])
     XCTAssertEqual(capture.nodes.map(\.depth), [0, 1])
   }
 
-  /// #1797 P1: an eligible parent outside the viewport is removed by the shared visibility fold,
-  /// while an independently projected child remains visible and must occupy the requested depth.
-  /// The public presentation/capture-hint boundary must not let the removed parent stop acquisition.
-  func testRegularDepthFrontierKeepsVisibleIndependentChildPastClippedParent() throws {
+  /// #1797 P1: the shared visibility fold, running inside `present`, drops an eligible parent
+  /// outside the viewport while an independently projected child stays visible and takes the
+  /// requested depth. Acquisition does not consult that parent's geometry, so it never prunes here.
+  func testVisibilityFoldKeepsIndependentChildPastClippedParent() throws {
     func node(
       _ index: Int,
       type: String,
@@ -569,44 +561,62 @@ extension RunnerTests {
     XCTAssertEqual(presented.map(\.depth), [0, 1])
     XCTAssertEqual(presented.map(\.parentIndex), [nil, 0])
 
-    let clippedParentTransition = SnapshotPresentation.regularTraversalTransition(
-      for: nodes[1],
-      parentPresentedDepth: 0,
-      parentTraversal: .root,
-      hint: hint,
-      rawDepth: 1,
-      viewport: viewport,
-      hasChildren: true,
-      isDuplicate: false,
-      policy: .cursorProjected
-    )
-    XCTAssertEqual(clippedParentTransition.presentedDepth, 0)
-    XCTAssertTrue(clippedParentTransition.traversal.descendantsMayBeVisible)
-    XCTAssertTrue(clippedParentTransition.shouldVisitChildren)
-
-    let childTransition = SnapshotPresentation.regularTraversalTransition(
-      for: nodes[2],
-      parentPresentedDepth: clippedParentTransition.presentedDepth,
-      parentTraversal: clippedParentTransition.traversal,
-      hint: hint,
-      rawDepth: 2,
-      viewport: viewport,
-      hasChildren: false,
-      isDuplicate: false,
-      policy: .cursorProjected
-    )
-    XCTAssertEqual(childTransition.presentedDepth, 1)
-    XCTAssertFalse(childTransition.shouldVisitChildren)
+    // The removed parent is dropped by the fold inside `present`, not by acquisition: the walk's only
+    // bound is the raw depth, which is nil for this regular capture, so a clipped parent never stops
+    // its children from being acquired (#2612, #2661).
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: hint))
 
     let rawHint = SnapshotPresentation.captureHint(
       for: PresentationOptions(interactiveOnly: false, depth: 1, scope: nil, raw: true))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: rawHint,
-        rawDepth: 1,
-        regularPresentedDepth: 0
+    XCTAssertFalse(Self.canDescendAtRawDepth(1, hint: rawHint))
+  }
+
+  /// #2661: a turned keyboard subtree reported in the device's native space survives a regular
+  /// `--depth N` capture. Acquisition never reads geometry, so it descends regardless of the reported
+  /// rect; `normalized` returns the band to the viewport and presentation keeps it at app-space rects.
+  func testRegularDepthKeepsTurnedKeyboardSubtreeAfterOneNormalizationPass() throws {
+    let viewport = CGRect(x: 0, y: 0, width: 874, height: 402)
+    func node(
+      _ index: Int, _ type: String, _ label: String, _ rect: CGRect, _ parent: Int?, _ depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+        enabled: true, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
       )
+    }
+    // Reported (native) geometry: a quarter-turned host box with the plane and `q` inside it.
+    let acquired = [
+      node(0, "Application", "App", CGRect(x: 0, y: 0, width: 874, height: 402), nil, 0),
+      node(1, "Window", "Window", CGRect(x: 0, y: 0, width: 874, height: 402), 0, 1),
+      node(2, "Other", "Keyboard", CGRect(x: 0, y: 0, width: 402, height: 874), 1, 2),
+      node(3, "Key", "plane", CGRect(x: 2, y: 75, width: 202, height: 724), 2, 3),
+      node(4, "Key", "q", CGRect(x: 154, y: 77, width: 45, height: 72), 2, 3),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
+    let options = PresentationOptions(interactiveOnly: false, depth: 3, scope: nil, raw: false)
+    let hint = SnapshotPresentation.captureHint(for: options)
+    let presented = try XCTUnwrap(
+      SnapshotPresentation.present(
+        SnapshotAcquisition(
+          hint: hint,
+          nodes: normalized,
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: viewport
+        ),
+        options: options
+      )?.nodes
+    )
+    let band = presented.first { $0.rect == SnapshotRect(x: 75, y: 198, width: 724, height: 202) }
+    let keyQ = presented.first { $0.rect == SnapshotRect(x: 77, y: 203, width: 72, height: 45) }
+    XCTAssertNotNil(band, "keyboard plane must be presented under --depth \(options.depth ?? -1)")
+    XCTAssertNotNil(keyQ, "`q` key must be presented under --depth \(options.depth ?? -1)")
   }
 }
 #endif

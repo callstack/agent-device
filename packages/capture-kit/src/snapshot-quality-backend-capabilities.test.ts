@@ -92,7 +92,7 @@ test('iOS snapshot registry classifies every backend and conformance target', ()
   expect(SNAPSHOT_BACKEND_CAPABILITIES.tree).toMatchObject({
     forceable: true,
     supportsRawProjection: true,
-    regularDepth: 'presented-frontier',
+    regularDepth: 'presentation-cut',
     hittable: 'geometric-actionability',
     deepExtension: 'no',
     depthLadder: 'n/a',

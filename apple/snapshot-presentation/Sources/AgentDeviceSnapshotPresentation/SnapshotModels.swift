@@ -17,6 +17,15 @@ public struct SnapshotRect: Codable, Equatable {
   public var cgRect: CGRect {
     CGRect(x: x, y: y, width: width, height: height)
   }
+
+  public init(_ rect: CGRect) {
+    self.init(
+      x: Double(rect.origin.x),
+      y: Double(rect.origin.y),
+      width: Double(rect.size.width),
+      height: Double(rect.size.height)
+    )
+  }
 }
 
 public struct RawAXNode: Equatable {
@@ -25,11 +34,11 @@ public struct RawAXNode: Equatable {
   public let label: String?
   public let identifier: String?
   public let value: String?
-  public let rect: SnapshotRect
+  public var rect: SnapshotRect
   public let enabled: Bool
   public let focused: Bool?
   public let selected: Bool?
-  public let hittable: Bool
+  public var hittable: Bool
   public let depth: Int
   public let parentIndex: Int?
   public let hiddenContentAbove: Bool?
@@ -68,6 +77,13 @@ public struct RawAXNode: Equatable {
     self.hiddenContentAbove = hiddenContentAbove
     self.hiddenContentBelow = hiddenContentBelow
     self.actions = actions
+  }
+
+  func replacing(rect: SnapshotRect, hittable: Bool) -> RawAXNode {
+    var updated = self
+    updated.rect = rect
+    updated.hittable = hittable
+    return updated
   }
 
   public var hasSemanticContent: Bool {
@@ -139,11 +155,13 @@ public struct PresentationOptions: Equatable {
 
 public struct SnapshotAcquisition {
   public let hint: CaptureHint
-  public let nodes: [RawAXNode]
+  public var nodes: [RawAXNode]
   public let truncated: Bool
   public let effectiveDepth: Int?
   public var customActions: SnapshotCustomActionCoverage?
   public let viewport: CGRect
+  /// The app's interface orientation, consumed by the one `normalized` pass; `unknown` turns nothing.
+  public let interfaceOrientation: Int
 
   public init(
     hint: CaptureHint,
@@ -151,7 +169,8 @@ public struct SnapshotAcquisition {
     truncated: Bool,
     effectiveDepth: Int?,
     customActions: SnapshotCustomActionCoverage? = nil,
-    viewport: CGRect
+    viewport: CGRect,
+    interfaceOrientation: Int = 0
   ) {
     self.hint = hint
     self.nodes = nodes
@@ -159,6 +178,13 @@ public struct SnapshotAcquisition {
     self.effectiveDepth = effectiveDepth
     self.customActions = customActions
     self.viewport = viewport
+    self.interfaceOrientation = interfaceOrientation
+  }
+
+  public func replacingNodes(_ nodes: [RawAXNode]) -> SnapshotAcquisition {
+    var updated = self
+    updated.nodes = nodes
+    return updated
   }
 }
 

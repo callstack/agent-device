@@ -326,19 +326,7 @@ final class CoordinateSpaceTests: XCTestCase {
   /// which window declares the native space cannot depend on which way the app is turned; the
   /// rotation rows carry their own orientation.
   func testWindowCoordinateSpaceMatchesGoldenParityTable() throws {
-    let fixtureURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent() // AgentDeviceSnapshotPresentationTests
-      .deletingLastPathComponent() // Tests
-      .deletingLastPathComponent() // snapshot-presentation
-      .deletingLastPathComponent() // apple
-      .deletingLastPathComponent() // repo root
-      .appendingPathComponent("contracts")
-      .appendingPathComponent("fixtures")
-      .appendingPathComponent("window-coordinate-space.json")
-    let fixture = try JSONDecoder().decode(
-      WindowCoordinateSpaceFixture.self,
-      from: Data(contentsOf: fixtureURL)
-    )
+    let fixture = try loadWindowCoordinateSpaceFixture()
     XCTAssertFalse(fixture.quarterTurnCases.isEmpty, "parity table must not be empty")
     XCTAssertFalse(fixture.rotationCases.isEmpty, "parity table must not be empty")
     XCTAssertEqual(
@@ -378,6 +366,128 @@ final class CoordinateSpaceTests: XCTestCase {
         testCase.name
       )
     }
+  }
+
+  private func loadWindowCoordinateSpaceFixture() throws -> WindowCoordinateSpaceFixture {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent() // AgentDeviceSnapshotPresentationTests
+      .deletingLastPathComponent() // Tests
+      .deletingLastPathComponent() // snapshot-presentation
+      .deletingLastPathComponent() // apple
+      .deletingLastPathComponent() // repo root
+      .appendingPathComponent("contracts")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("window-coordinate-space.json")
+    return try JSONDecoder().decode(
+      WindowCoordinateSpaceFixture.self,
+      from: Data(contentsOf: fixtureURL)
+    )
+  }
+
+  /// Application → the app's own Window → a surface host reporting the turned box (which declares
+  /// the device's native space for its subtree) → the content whose reported frame must come back.
+  private func turnedSubtree(app: CGRect, reportedLeaf: CGRect) -> [RawAXNode] {
+    let turnedHostBox = CGRect(x: app.origin.x, y: app.origin.y, width: app.height, height: app.width)
+    return [
+      coordinateNode(0, "Application", app, nil, 0),
+      coordinateNode(1, "Window", app, 0, 1),
+      coordinateNode(2, "Other", turnedHostBox, 1, 2),
+      coordinateNode(3, "Button", reportedLeaf, 2, 3),
+    ]
+  }
+
+  private func coordinateNode(
+    _ index: Int, _ type: String, _ rect: CGRect, _ parent: Int?, _ depth: Int, label: String? = nil
+  ) -> RawAXNode {
+    RawAXNode(
+      index: index, type: type, label: label, identifier: nil, value: nil,
+      rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+      enabled: true, focused: nil, selected: nil, hittable: false,
+      depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+    )
+  }
+
+  /// The one normalization pass is where capture turns geometry, so the golden table's rotation rows
+  /// are replayed through a real tree, not just the raw rotation: a quarter turn comes back in the
+  /// app's space, while a half turn, an unnamed orientation, or a square app box stays as reported.
+  func testNormalizedReplaysRotationCasesThroughATwoWindowTree() throws {
+    let fixture = try loadWindowCoordinateSpaceFixture()
+    for testCase in fixture.rotationCases {
+      let app = testCase.app.cgRect
+      let namesQuarterTurn =
+        testCase.interfaceOrientation == RunnerInterfaceOrientation.landscapeLeft
+        || testCase.interfaceOrientation == RunnerInterfaceOrientation.landscapeRight
+      let squareApp = abs(app.width - app.height) <= SnapshotGeometrySpace.quarterTurnTolerance
+      let expected = (namesQuarterTurn && !squareApp) ? testCase.oriented : testCase.native
+      let normalized = SnapshotGeometrySpace.normalized(
+        nodes: turnedSubtree(app: app, reportedLeaf: testCase.native.cgRect),
+        viewport: app,
+        interfaceOrientation: testCase.interfaceOrientation
+      )
+      XCTAssertEqual(normalized.count, 4)
+      XCTAssertEqual(normalized[3].rect.cgRect, expected.cgRect, testCase.name)
+    }
+  }
+
+  /// The measured iPhone 17 Pro landscape keyboard (#2612) driven through the pass: the key plane
+  /// returns as the band docked at the bottom, `q` lands on the band and is actionable once turned.
+  func testNormalizedRestoresTheMeasuredLandscapeKeyboardBand() {
+    let app = CGRect(x: 0, y: 0, width: 874, height: 402)
+    let turnedHostBox = CGRect(x: 0, y: 0, width: 402, height: 874)
+    let acquired = [
+      coordinateNode(0, "Application", app, nil, 0, label: "app"),
+      coordinateNode(1, "Window", app, 0, 1, label: "window"),
+      coordinateNode(2, "Other", turnedHostBox, 1, 2, label: "plane"),
+      coordinateNode(3, "Key", CGRect(x: 2, y: 75, width: 202, height: 724), 2, 3, label: "planeBand"),
+      coordinateNode(4, "Key", CGRect(x: 154, y: 77, width: 45, height: 72), 2, 3, label: "q"),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: app,
+      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    )
+    XCTAssertEqual(
+      normalized.first { $0.label == "planeBand" }?.rect,
+      SnapshotRect(x: 75, y: 198, width: 724, height: 202)
+    )
+    let keyQ = normalized.first { $0.label == "q" }
+    XCTAssertEqual(keyQ?.rect, SnapshotRect(x: 77, y: 203, width: 72, height: 45))
+    XCTAssertEqual(keyQ?.hittable, true)
+    XCTAssertEqual(normalized.first?.hittable, false)
+  }
+
+  /// The query-sweep tier's flat nodes hang off a synthetic root reporting the app's own box under an
+  /// unnamed orientation, so nothing declares a native space: the pass returns the tree unchanged and
+  /// only recomputes hittability from the app-space frame.
+  func testNormalizedLeavesAWindowlessFlatTreeUnplaced() {
+    let app = CGRect(x: 0, y: 0, width: 874, height: 402)
+    let onscreen = CGRect(x: 100, y: 100, width: 40, height: 20)
+    let offscreen = CGRect(x: 900, y: 10, width: 40, height: 20)
+    let acquired = [
+      coordinateNode(0, "Application", app, nil, 0),
+      coordinateNode(1, "Button", onscreen, 0, 1),
+      coordinateNode(2, "Button", offscreen, 0, 1),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: app,
+      interfaceOrientation: RunnerInterfaceOrientation.unknown
+    )
+    XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
+    XCTAssertEqual(normalized[1].hittable, true)
+    XCTAssertEqual(normalized[2].hittable, false)
+    XCTAssertEqual(normalized[0].hittable, false)
+  }
+
+  func testNormalizedOfAnEmptyArrayIsEmpty() {
+    XCTAssertEqual(
+      SnapshotGeometrySpace.normalized(
+        nodes: [],
+        viewport: CGRect(x: 0, y: 0, width: 874, height: 402),
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      ),
+      []
+    )
   }
 
 }

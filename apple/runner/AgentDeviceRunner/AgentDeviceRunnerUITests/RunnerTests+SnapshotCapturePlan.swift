@@ -445,7 +445,7 @@ extension RunnerTests {
           ) {
             hint.isRaw
               ? try self.rawTreeSnapshotAcquisition(context: context, hint: hint)
-              : self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
+              : try self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
           }
         case .querySweep:
           return try self.runMainThreadWork(
@@ -480,19 +480,30 @@ extension RunnerTests {
       )
     }
 
+    // The one coordinate-space pass (#2661): reported frames become the app's orientation space
+    // before presentation reads them. A backend with unknown orientation (the windowless sweep)
+    // turns nothing.
+    let normalizedAcquisition = acquisition.replacingNodes(
+      SnapshotGeometrySpace.normalized(
+        nodes: acquisition.nodes,
+        viewport: acquisition.viewport,
+        interfaceOrientation: acquisition.interfaceOrientation
+      )
+    )
+
     let presented: SnapshotBackendCapture
     do {
       presented = try timer.measure(.presentation) {
-        guard let result = try SnapshotPresentation.present(acquisition, options: options) else {
+        guard let result = try SnapshotPresentation.present(normalizedAcquisition, options: options) else {
           NSLog(
             "AGENT_DEVICE_RUNNER_SNAPSHOT_PROJECTION_MISMATCH requested=%@ acquired=%@",
             hint.projection.rawValue,
-            acquisition.hint.projection.rawValue
+            normalizedAcquisition.hint.projection.rawValue
           )
           throw Self.snapshotProjectionMismatchFailure(
             kind,
             requested: hint.projection,
-            acquired: acquisition.hint.projection
+            acquired: normalizedAcquisition.hint.projection
           )
         }
         return Self.makeSnapshotBackendCapture(from: result)

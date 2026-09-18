@@ -10,12 +10,10 @@ enum SnapshotBackendEnvironment {
 /// acquired, and an acquisition that stopped short of the cut discloses that through its own
 /// truncation verdict. The capability only says how much acquisition work the request bounds.
 enum SnapshotRegularDepthCapability: String {
-  /// Acquisition stops at the requested regular presented-depth frontier.
-  case presentedFrontier = "presented-frontier"
   /// The backend is flat: it acquires the root and one presented level, so a cut past depth 1
   /// returns the sweep unchanged.
   case flat
-  /// Acquisition walks its raw-depth ladder regardless of the request; the presented cut happens
+  /// Acquisition enumerates its hierarchy regardless of the request; the presented cut happens
   /// in presentation and the ladder's cap is disclosed as `effectiveDepth`.
   case presentationCut = "presentation-cut"
 }
@@ -63,7 +61,7 @@ enum SnapshotBackendKind: String, CaseIterable {
   var regularDepthCapability: SnapshotRegularDepthCapability {
     switch self {
     case .recursiveTree:
-      return .presentedFrontier
+      return .presentationCut
     case .querySweep:
       return .flat
     case .privateAX:

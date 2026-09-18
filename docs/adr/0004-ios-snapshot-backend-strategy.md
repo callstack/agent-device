@@ -302,21 +302,31 @@ a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `prese
 snapshot-quality reason, preserved through recovery and the existing TypeScript verdict/warning
 contract.
 
-The visible-depth frontier completes that migration for unscoped regular captures. `CaptureHint`
-keeps raw traversal depth (`--raw --depth`) separate from regular presented depth. A
-hierarchy-capable tree capture walks through structural wrappers until each branch ends or reaches
-the requested presented depth; regular presentation then applies the depth limit after the shared
-fold and eligibility collapse. This keeps shallow probes bounded by the requested presented
-frontier without inventing a raw-depth multiplier. Scoped captures remain broad because depth is
-relative to the scope root selected in presentation.
+A regular `--depth` request is a presentation cut, not an acquisition bound. `CaptureHint` keeps raw
+traversal depth (`--raw --depth`) separate from regular presented depth, but the recursive tree walk
+no longer reads presented depth (or any geometry) while descending: for a regular capture it
+enumerates the hierarchy — a runaway node cap bounds the walk (#1105, #1156) — and serializes each
+node at reported traversal depth and the frame the platform reported. #2661 also removed the per-node
+coordinate space (`geometrySpace` / `parentIsWindow`) that #2612 had threaded through every walker;
+the one coordinate-space decision is now a single post-acquisition pass over the flat array
+(`SnapshotGeometrySpace.normalized`, run in `captureWithBackend`) that keys on ancestry instead of a
+value carried down the stack. An earlier visible-depth frontier consulted the shared fold mid-walk, so
+its presented-depth increment was measured against un-normalized geometry: a turned keyboard band
+reported in the device's native space could be cut at the wrong presented depth before the single pass
+ever ran. Dropping it means no reported rect can prune a subtree the fold would keep. The visibility
+fold and the presented-depth cut both happen inside `SnapshotPresentation`, on the normalized array,
+at `maximumDepth`. De-duplication drops a repeated node and re-parents its children onto that node's
+own parent, so identical rows collapse under one addressable owner instead of splitting a subtree
+across two nodes with the same identity. Scoped captures remain broad because depth is relative to the
+scope root selected in presentation.
 
 Backend capability declarations are part of the contract, and they describe how much acquisition
 work a regular depth request bounds — never whether the backend may answer it. Every backend
 serves a regular `--depth` request because presentation applies the presented-depth cut to
-whatever hierarchy was acquired: the recursive tree stops acquisition at the presented frontier,
-the flat query sweep has only its root and one presented level (so a cut past depth 1 returns the
-sweep unchanged), and private AX walks its raw-depth ladder and is cut afterwards
-(`presentation-cut`). Completeness below an acquisition cap is disclosed the same way it is for an
+whatever hierarchy was acquired: the recursive tree and private AX both enumerate their hierarchy
+and are cut afterwards (`presentation-cut`), and the flat query sweep has only its root and one
+presented level (so a cut past depth 1 returns the sweep unchanged, `flat`). Completeness below an
+acquisition cap is disclosed the same way it is for an
 unscoped capture — through `truncated` and `effectiveDepth` — because a depth-capped regular
 capture is a subset of the unscoped one from the same backend. Refusing the request instead
 produced no answer at all: a plan pinned or deferred to private AX fell through to the synthetic
@@ -441,11 +451,17 @@ the tree can ask `app.keyboards` and gets an answer in the app's own orientation
 closes the keyboard question on the path that used to lean on this ADR's geometry most, and it is why
 the guard's landscape refusals no longer depend on whether the tree arrived turned.
 
-What did not move is the rest of the sentence. The runner's query-sweep tier still has no window
-ancestry, so no node in its tree can declare a space, and the provider producers (`appium-source`,
-`limrun-ios-tree`) never see the app's windows either; a capture from any of them publishes no
-keyboard fact, and a consumer reads that silence as "this producer did not measure". Those paths
-publish what the platform reported, so the last reader that can still refuse geometry it cannot place
-is the tap-path keyboard guard, and its width rule therefore remains. The rule detects un-normalized
+What did not move is the rest of the sentence. Capture settles the space in ONE pass over the flat
+acquired array (`SnapshotGeometrySpace.normalized`, run once in `captureWithBackend` between
+acquisition and presentation, #2661), keyed on each node's `type`, `parentIndex` and `rect`. The
+runner's query-sweep tier still has no window ancestry, so nothing in its tree declares a native space:
+its flat children hang off a synthetic application root that reports the app's own box under an
+interface orientation the tier does not read, so the pass returns that tree exactly as reported — a
+structural consequence of the same rule applied uniformly, not the per-tier omission a hand-threaded
+space would have made it. The provider producers (`appium-source`, `limrun-ios-tree`) never see the
+app's windows either; a capture from any of them publishes no keyboard fact, and a consumer reads that
+silence as "this producer did not measure". Those paths publish what the platform reported, so the
+last reader that can still refuse geometry it cannot place is the tap-path keyboard guard, and its
+width rule therefore remains. The rule detects un-normalized
 arrival, not a standing fact about iOS: the producers above do normalize, and a band taller than it
 is wide is what one that did not looks like.
