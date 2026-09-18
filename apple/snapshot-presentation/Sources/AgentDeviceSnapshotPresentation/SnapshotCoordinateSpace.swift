@@ -214,17 +214,29 @@ public enum SnapshotGeometrySpace: Equatable {
   /// two spaces instead of letting rects under those hosts read as addresses (#2612).
   public static func unplacedSurfaceHostCount(in nodes: [RawAXNode], viewport: CGRect) -> Int {
     guard isPlottable(viewport) else { return 0 }
-    var count = 0
-    for node in nodes {
+    // `parentIndex` is a position into this array: every producer appends nodes in traversal order
+    // with `index == nodes.count` and sets a child's `parentIndex` to the parent's index, so
+    // `nodes[parentIndex]` is that parent. A turned host is one surface even when both its window
+    // and the surface directly under it report the turned box, so a turned node whose parent is
+    // itself turned is folded into that parent rather than counted a second time.
+    func turnedFrame(_ node: RawAXNode) -> Bool {
       let parentIsWindow = node.parentIndex.map { index in
         nodes.indices.contains(index) && isWindowType(nodes[index].type)
       } ?? false
       guard isSurfaceHost(isWindow: isWindowType(node.type), parentIsWindow: parentIsWindow)
-      else { continue }
-      let frame = CGRect(
-        x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height
+      else { return false }
+      return isQuarterTurned(
+        CGRect(x: node.rect.x, y: node.rect.y, width: node.rect.width, height: node.rect.height),
+        relativeTo: viewport
       )
-      if isQuarterTurned(frame, relativeTo: viewport) { count += 1 }
+    }
+    var count = 0
+    for node in nodes {
+      guard turnedFrame(node) else { continue }
+      let parentTurned = node.parentIndex.map { index in
+        nodes.indices.contains(index) && turnedFrame(nodes[index])
+      } ?? false
+      if !parentTurned { count += 1 }
     }
     return count
   }

@@ -355,6 +355,16 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: deep, viewport: viewport), 0)
     XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: unplaced, viewport: .infinite), 0)
+
+    // One turned surface is one host even when the window AND the surface under it both report the
+    // turned box: the child folds into the turned window rather than counting a second time.
+    let bothTurned = [
+      node(0, type: "Application", rect: SnapshotRect(x: 0, y: 0, width: 874, height: 402), parent: nil),
+      node(1, type: "Window", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 0),
+      node(2, type: "Other", rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), parent: 1),
+      node(3, type: "Key", rect: SnapshotRect(x: 154, y: 77, width: 45, height: 72), parent: 2),
+    ]
+    XCTAssertEqual(SnapshotGeometrySpace.unplacedSurfaceHostCount(in: bothTurned, viewport: viewport), 1)
   }
 
   /// Golden parity table (#2612): every case in contracts/fixtures/window-coordinate-space.json

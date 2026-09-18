@@ -20,10 +20,10 @@ export class SnapshotSourceError extends AppError {
   constructor(
     kind: SnapshotSourceFailureKind,
     code: string,
+    scope: SnapshotSourceFailureScope,
     message = `iOS Simulator snapshot source ${kind}: ${code}`,
     details: Readonly<Record<string, unknown>> = {},
     cause?: unknown,
-    scope: SnapshotSourceFailureScope = 'generation',
   ) {
     super(
       APP_ERROR_CODE_BY_KIND[kind],
@@ -50,7 +50,7 @@ export function snapshotSourceError(
   details: Readonly<Record<string, unknown>> = {},
   cause?: unknown,
 ): SnapshotSourceError {
-  return new SnapshotSourceError(kind, code, undefined, details, cause);
+  return new SnapshotSourceError(kind, code, 'generation', undefined, details, cause);
 }
 
 /**
@@ -63,7 +63,7 @@ export function snapshotSourceCaptureError(
   code: string,
   details: Readonly<Record<string, unknown>> = {},
 ): SnapshotSourceError {
-  return new SnapshotSourceError(kind, code, undefined, details, undefined, 'capture');
+  return new SnapshotSourceError(kind, code, 'capture', undefined, details);
 }
 
 export function asSnapshotSourceError(error: unknown): SnapshotSourceError {
