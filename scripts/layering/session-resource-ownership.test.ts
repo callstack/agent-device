@@ -26,11 +26,11 @@ test('session resources are constructed only by their durable domain owners', ()
         `sessionStore.set(name, { ...session, appLog: log, appLogFailure: undefined });`,
       ],
       [
-        'src/daemon/audio-probe-session-resource.ts',
+        'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts',
         `sessionStore.set(name, { ...session, audioProbe: audio });`,
       ],
       [
-        'src/daemon/perf-capture-session-resource.ts',
+        'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts',
         `sessionStore.set(name, { ...session, perfCapture: perf });`,
       ],
     ]),
@@ -39,6 +39,20 @@ test('session resources are constructed only by their durable domain owners', ()
       'src/daemon/handlers/planted.ts: session appLogFailure record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session audioProbe record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session perfCapture record constructed outside its owner',
+    ],
+  );
+});
+
+test('the capture-admission owners sit inside the scan, so a field planted there is caught too', () => {
+  assert.deepEqual(
+    summaries([
+      [
+        'packages/capture-kit/src/capture-admission/durable-capture-resource.ts',
+        `sessionStore.set(name, { ...session, perfCapture: perf });`,
+      ],
+    ]),
+    [
+      'packages/capture-kit/src/capture-admission/durable-capture-resource.ts: session perfCapture record constructed outside its owner',
     ],
   );
 });

@@ -18,6 +18,74 @@
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
     },
+    "./audio-probe-admission-ledger": {
+      "types": "./src/capture-admission/audio-probe-admission-ledger.ts",
+      "default": "./src/capture-admission/audio-probe-admission-ledger.ts"
+    },
+    "./audio-probe-recovery": {
+      "types": "./src/capture-admission/audio-probe-resource-recovery.ts",
+      "default": "./src/capture-admission/audio-probe-resource-recovery.ts"
+    },
+    "./audio-probe-resource-store": {
+      "types": "./src/capture-admission/audio-probe-resource-store.ts",
+      "default": "./src/capture-admission/audio-probe-resource-store.ts"
+    },
+    "./audio-probe-session-resource": {
+      "types": "./src/capture-admission/audio-probe-session-resource.ts",
+      "default": "./src/capture-admission/audio-probe-session-resource.ts"
+    },
+    "./durable-capture-admission-ledger": {
+      "types": "./src/capture-admission/durable-capture-admission-ledger.ts",
+      "default": "./src/capture-admission/durable-capture-admission-ledger.ts"
+    },
+    "./durable-capture-resource": {
+      "types": "./src/capture-admission/durable-capture-resource.ts",
+      "default": "./src/capture-admission/durable-capture-resource.ts"
+    },
+    "./durable-capture-runtime-recovery": {
+      "types": "./src/capture-admission/durable-capture-runtime-recovery.ts",
+      "default": "./src/capture-admission/durable-capture-runtime-recovery.ts"
+    },
+    "./perf-capture-admission-ledger": {
+      "types": "./src/capture-admission/perf-capture-admission-ledger.ts",
+      "default": "./src/capture-admission/perf-capture-admission-ledger.ts"
+    },
+    "./perf-capture-recovery": {
+      "types": "./src/capture-admission/perf-capture-resource-recovery.ts",
+      "default": "./src/capture-admission/perf-capture-resource-recovery.ts"
+    },
+    "./perf-capture-resource-store": {
+      "types": "./src/capture-admission/perf-capture-resource-store.ts",
+      "default": "./src/capture-admission/perf-capture-resource-store.ts"
+    },
+    "./perf-capture-session-resource": {
+      "types": "./src/capture-admission/perf-capture-session-resource.ts",
+      "default": "./src/capture-admission/perf-capture-session-resource.ts"
+    },
+    "./perf-runtime-plan": {
+      "types": "./src/capture-admission/perf-runtime-plan.ts",
+      "default": "./src/capture-admission/perf-runtime-plan.ts"
+    },
+    "./screen-recording-admission-ledger": {
+      "types": "./src/capture-admission/screen-recording-admission-ledger.ts",
+      "default": "./src/capture-admission/screen-recording-admission-ledger.ts"
+    },
+    "./screen-recording-recovery": {
+      "types": "./src/capture-admission/screen-recording-resource-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-resource-recovery.ts"
+    },
+    "./screen-recording-resource-store": {
+      "types": "./src/capture-admission/screen-recording-resource-store.ts",
+      "default": "./src/capture-admission/screen-recording-resource-store.ts"
+    },
+    "./screen-recording-session-resource": {
+      "types": "./src/capture-admission/screen-recording-session-resource.ts",
+      "default": "./src/capture-admission/screen-recording-session-resource.ts"
+    },
+    "./screen-recording-stop-recovery": {
+      "types": "./src/capture-admission/screen-recording-stop-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-stop-recovery.ts"
+    },
     "./durable-capture": {
       "types": "./src/durable-capture/index.ts",
       "default": "./src/durable-capture/index.ts"

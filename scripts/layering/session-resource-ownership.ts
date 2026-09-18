@@ -17,15 +17,22 @@ type AstNode = Record<string, unknown>;
 
 export const SESSION_RESOURCE_OWNERSHIP_RULE = 'R68 session-resource-ownership';
 
+/**
+ * Where a durable session-resource record may be constructed. The capture-admission owners live in
+ * `@agent-device/capture-kit`, so the scan covers that directory alongside the daemon: the rule
+ * guards the field, not the folder it happens to live in.
+ */
+const SCANNED_ROOTS = ['src/daemon/', 'packages/capture-kit/src/capture-admission/'] as const;
+
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
   appLog: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
   appLogFailure: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
   audioProbe: new Set([
-    'src/daemon/audio-probe-session-resource.ts',
+    'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts',
     'src/daemon/session-state.ts',
   ]),
   perfCapture: new Set([
-    'src/daemon/perf-capture-session-resource.ts',
+    'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts',
     'src/daemon/session-state.ts',
   ]),
 };
@@ -36,7 +43,7 @@ export function sessionResourceOwnershipViolations(
 ): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const [file, source] of sources) {
-    if (!file.startsWith('src/daemon/')) continue;
+    if (!SCANNED_ROOTS.some((root) => file.startsWith(root))) continue;
     const program = parseSync(file, source).program as AstNode;
     visitAst(program, (node) => {
       if (node['type'] !== 'Property' || node['kind'] !== 'init' || node['computed'] === true) {
