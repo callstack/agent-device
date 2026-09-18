@@ -230,12 +230,18 @@ function measureDockedKeyboardFrame(params: {
   const bottomEdge = params.viewport.y + params.viewport.height;
   // The keyboard's own geometry stops above the edge the band would run to: not docked.
   if (params.reportedBottom < bottomEdge - KEYBOARD_BOTTOM_ANCHOR_TOLERANCE) return null;
-  // Geometry that arrives taller than it is wide is not in the app's orientation space. iOS gives up
-  // the landscape iPhone keyboard's rects in the keyboard's own rotated space: measured on iPhone 17
-  // Pro, its key plane is 162 x 327 and its dock button reports y 8 of a 402 pt viewport, while the
-  // screenshot shows the keyboard full width across the bottom 327 pt. A band from that would refuse
-  // app content the keyboard is nowhere near while missing the keyboard itself, which is worse than
-  // not measuring — see the landscape cases in the golden table.
+  // A band taller than it is wide did not come from a producer that normalized it. iOS hosts some
+  // system surfaces in the device's native (portrait-up) space while the app is rotated, so their
+  // rects arrive quarter-turned, and only a producer that can name the app's interface orientation
+  // can turn them back: the runner's tree tiers publish the app's own space through
+  // `SnapshotGeometrySpace`, and the Simulator AX bridge refuses the capture so the runner answers it
+  // (ADR 0004). What still reaches this rule is a capture that declares no space at all — the
+  // runner's query-sweep tier, whose flat query has no window ancestry to read one from, and the
+  // `appium-source` and `limrun-ios-tree` producers. Unnormalized landscape geometry measured on
+  // iPhone 17 Pro reports a 162 x 327 key plane and a dock button at y 8 of a 402 pt viewport while
+  // the screenshot shows the keyboard full width across the bottom 327 pt. A band from that would
+  // refuse app content the keyboard is nowhere near while missing the keyboard itself, which is
+  // worse than not measuring — see the landscape cases in the golden table.
   if (maxRight - minX <= params.reportedBottom - minY) return null;
   return { x: minX, y: minY, width: maxRight - minX, height: bottomEdge - minY };
 }

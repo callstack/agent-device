@@ -53,10 +53,12 @@ it empty. Remote elements outside a web view are not classified — no capture h
 web view truncated away by the node or depth cap stays disclosed as truncation. XCTest resolves
 remote elements, so the fallback serves the page (#2484).
 
-The refusal opens the generation circuit like any other bridge failure, so a hybrid app that showed
-one web screen takes XCTest for its remaining native screens until it relaunches — the 0.20.x path
-for every screen. Re-asking the bridge per capture would instead charge a refused bridge round trip
-to every `wait` poll on the web screen; the circuit keeps that cost to one capture per generation.
+The refusal opens the generation circuit, as any failure that says something about the app itself
+does, so a hybrid app that showed one web screen takes XCTest for its remaining native screens until
+it relaunches — the 0.20.x path for every screen. Re-asking the bridge per capture would instead
+charge a refused bridge round trip to every `wait` poll on the web screen; the circuit keeps that cost
+to one capture per generation. A refusal that says something about the screen rather than the app is
+scoped per capture instead; the coordinate-space amendment below decides that case.
 
 Keep the two public snapshot strategies explicit:
 
@@ -380,3 +382,58 @@ snapshots. Its billing, shipping, and contact forms hold text fields the session
 resolve, and a bare `type` addressed to the app process never sees that keyboard. Addressing the
 host in place is what lets the runner's first-responder route type into them; no text-entry branch
 changed for it.
+
+## Amendment: the coordinate space of a captured subtree (issue #2612)
+
+Some system surfaces keep their geometry in the device's native (portrait-up) space while the app
+is rotated, and their *whole subtree* arrives turned with them. Measured on iPhone 17 Pro (iOS
+26.2) with the system keyboard up over a landscape app frame `(0,0,874,402)`:
+`UIRemoteKeyboardWindow` reports its own box as `(0,0,402,874)` — the app's box with its two side
+lengths swapped — while the app's own window and `UITextEffectsWindow` both report `(0,0,874,402)`.
+In portrait the two spaces coincide and nothing is turned. Nothing but that box says which space a
+subtree reports in, and a consumer reading the numbers cannot tell a keyboard laid across the
+bottom of a landscape screen from a strip running down its left edge: it refused app content the
+keyboard was nowhere near and let a tap land on a key.
+
+Decision. One published capture publishes one space — the app's orientation space — and the
+producer settles it where the platform's frame is still the platform's, because downstream of the
+capture the question is unanswerable: a merged tree carries no axis a reader could turn geometry
+against. A window declares the space of its own subtree from its own box, which is either the app's
+box or that box turned through a quarter, and anything that is not a window inherits the space of
+the window above it. A published rect and the actionability verdict read from it come off the same
+oriented frame, so an address and the permission to tap it cannot disagree. Where no space can be
+named — no usable app frame, an interface orientation the platform did not report, or an app frame
+square enough to be indistinguishable from its own quarter turn — the capture publishes what the
+platform reported rather than guessing at a rotation, and consumers fail open on that geometry the
+way they do on any missing platform fact. Detection and the way back share one rotation table with
+synthesized dispatch, and both languages replay it against
+`contracts/fixtures/window-coordinate-space.json` in the ADR 0011 parity-table shape, which is what
+stops capture from turning back with anything other than the exact inverse of what dispatch turns
+forward.
+
+Decision. A producer that cannot name the app's interface orientation refuses the screen rather
+than publishing two spaces in one tree. The Simulator AX bridge's attribute set carries no
+orientation fact, so its decoder counts window roots reporting the app's box quarter-turned and
+fails that capture (`window-coordinate-space-unresolved`, kind `unsupported`) — the same refusal
+shape as `remote-content-boundary` above — and the route serves the runner, which reads the
+orientation. A mixed tree is not half-usable: a published rect is an address, and once some rects
+in a tree answer to a turned axis no pair of them answers "how far apart are these" any more, so
+every consumer downstream would have to know which windows to distrust — a rule the capture could
+have applied and did not. The refusal costs one runner round trip and is correct.
+
+Decision. That refusal is scoped to the capture, not to the app generation. Entering the generation
+circuit is for failures that are evidence about the app: a web-view screen is a property of a
+hybrid app, so its screens keep the runner until it relaunches. A rotated surface is evidence about
+the screen in front of the reader and about nothing else — it is up now and gone after the next
+keystroke — so retiring the generation would move every later portrait capture of a healthy app
+onto the runner to work around one landscape keyboard, the cost #2491 settled for a bridge that was
+merely still being prepared. Which side of that line a failure falls on is a declared property of
+its code rather than a judgment made at the call site.
+
+What stays unnormalized, and why the consumer rule stays: the runner's query-sweep tier has no
+window ancestry, so no node in its tree can declare a space, and the provider producers
+(`appium-source`, `limrun-ios-tree`) never see the app's windows either. Those paths publish what
+the platform reported, so the last reader that can still refuse geometry it cannot place is the
+tap-path keyboard guard, and its width rule therefore remains. The rule detects un-normalized
+arrival, not a standing fact about iOS: the producers above do normalize, and a band taller than it
+is wide is what one that did not looks like.

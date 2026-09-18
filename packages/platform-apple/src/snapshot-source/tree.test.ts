@@ -223,3 +223,108 @@ test('the bridge tree requires a typed truncation flag', () => {
     /truncated-invalid/,
   );
 });
+
+test('a window reporting the app box quarter-turned is counted as an unresolved coordinate space', () => {
+  const landscapeKeyboardWindow = {
+    [application]: 'Application',
+    [baseType]: 'UIRemoteKeyboardWindow',
+    [frame]: { X: 0, Y: 0, Width: 402, Height: 874 },
+    [children]: [
+      {
+        [automationType]: 20,
+        [label]: 'q',
+        [frame]: { X: 154, Y: 77, Width: 45, Height: 72 },
+        [children]: [],
+      },
+    ],
+  };
+  const appWindow = {
+    [application]: 'Application',
+    [baseType]: 'UIWindow',
+    [frame]: { X: 0, Y: 0, Width: 874, Height: 402 },
+    [children]: [],
+  };
+  const turned = (roots: unknown[]) =>
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 874, Height: 402 },
+        [children]: roots,
+      },
+      { truncated: false },
+      limits,
+    ).unresolvedCoordinateSpaceWindows;
+
+  assert.equal(turned([appWindow, landscapeKeyboardWindow]), 1);
+  // The shape the runner's own tree reports: the window keeps the app's box and the surface under it
+  // carries the turn.
+  assert.equal(
+    turned([
+      {
+        [application]: 'Window',
+        [baseType]: 'UIRemoteKeyboardWindow',
+        [frame]: { X: 0, Y: 0, Width: 874, Height: 402 },
+        [children]: [{ ...landscapeKeyboardWindow, [application]: 'Other' }],
+      },
+    ]),
+    1,
+  );
+  // Deep in the tree, a turned box is content reporting large bounds rather than a hosted surface.
+  assert.equal(
+    turned([
+      {
+        [application]: 'Window',
+        [frame]: { X: 0, Y: 0, Width: 874, Height: 402 },
+        [children]: [
+          {
+            [application]: 'Group',
+            [frame]: { X: 0, Y: 0, Width: 874, Height: 402 },
+            [children]: [{ ...landscapeKeyboardWindow, [application]: 'Group' }],
+          },
+        ],
+      },
+    ]),
+    0,
+  );
+  assert.equal(turned([appWindow]), 0);
+  // Reading the turned window as the app frame flags the app's own window instead: the turned node
+  // matches its own frame exactly, and the app window becomes the turned one. An unexpected root order
+  // still refuses rather than publishing a screen in two spaces.
+  assert.equal(
+    decodeSnapshotBridgeTree(
+      [{ ...landscapeKeyboardWindow, [children]: [] }, appWindow],
+      { truncated: false },
+      limits,
+    ).unresolvedCoordinateSpaceWindows,
+    1,
+  );
+  // Portrait: the two spaces coincide, and a square app frame cannot be told from its own turn.
+  assert.equal(
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 402, Height: 874 },
+        [children]: [
+          { ...landscapeKeyboardWindow, [frame]: { X: 0, Y: 0, Width: 402, Height: 874 } },
+        ],
+      },
+      { truncated: false },
+      limits,
+    ).unresolvedCoordinateSpaceWindows,
+    0,
+  );
+  assert.equal(
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 402, Height: 402 },
+        [children]: [
+          { ...landscapeKeyboardWindow, [frame]: { X: 0, Y: 0, Width: 402, Height: 402 } },
+        ],
+      },
+      { truncated: false },
+      limits,
+    ).unresolvedCoordinateSpaceWindows,
+    0,
+  );
+});

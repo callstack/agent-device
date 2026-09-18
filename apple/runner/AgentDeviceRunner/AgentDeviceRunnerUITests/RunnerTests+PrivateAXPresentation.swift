@@ -23,20 +23,35 @@ extension RunnerTests {
   /// `SnapshotPresentation`'s alone (#1797). The traversal-depth cut is the backend's one
   /// narrowing, complete for raw (raw depth *is* traversal depth) and a declared residue for
   /// regular; `hittable` is the shared geometric fact the fold recomputes for effective geometry.
-  func privateAXAcquisition(rawRoot: [String: Any], hint: CaptureHint, viewport: CGRect)
-    -> [RawAXNode]
-  {
+  func privateAXAcquisition(
+    rawRoot: [String: Any],
+    hint: CaptureHint,
+    viewport: CGRect,
+    interfaceOrientation: Int
+  ) -> [RawAXNode] {
     var nodes: [RawAXNode] = []
     appendPrivateAXNode(rawRoot, to: &nodes, hint: hint, viewport: viewport,
-      depth: 0, parentIndex: nil)
+      interfaceOrientation: interfaceOrientation, geometrySpace: .appOrientation,
+      parentIsWindow: false, depth: 0, parentIndex: nil)
     return nodes
   }
 
   private func appendPrivateAXNode(_ raw: [String: Any], to nodes: inout [RawAXNode],
-    hint: CaptureHint, viewport: CGRect, depth: Int, parentIndex: Int?)
+    hint: CaptureHint, viewport: CGRect, interfaceOrientation: Int,
+    geometrySpace: SnapshotGeometrySpace, parentIsWindow: Bool, depth: Int, parentIndex: Int?)
   {
     if let limit = hint.rawTraversalDepth, depth > limit { return }
     let fields = privateAXFields(raw)
+    let nodeSpace = SnapshotGeometrySpace.space(
+      reportedBySurfaceHost: SnapshotGeometrySpace.isSurfaceHost(
+        elementType: fields.elementType,
+        parentIsWindow: parentIsWindow
+      ),
+      reportedFrame: fields.rect,
+      inheritedFrom: geometrySpace,
+      appFrame: viewport,
+      interfaceOrientation: interfaceOrientation
+    )
     let index = nodes.count
     nodes.append(
       privateAXNode(
@@ -44,12 +59,14 @@ extension RunnerTests {
         index: index,
         depth: depth,
         parentIndex: parentIndex,
-        viewport: viewport
+        viewport: viewport,
+        geometrySpace: nodeSpace
       )
     )
     for child in fields.children {
       appendPrivateAXNode(child, to: &nodes, hint: hint, viewport: viewport,
-        depth: depth + 1, parentIndex: index)
+        interfaceOrientation: interfaceOrientation, geometrySpace: nodeSpace,
+        parentIsWindow: isWindowElement(fields.elementType), depth: depth + 1, parentIndex: index)
     }
   }
 
@@ -71,18 +88,19 @@ extension RunnerTests {
   }
 
   private func privateAXNode(_ fields: PrivateAXFields, index: Int, depth: Int, parentIndex: Int?,
-    viewport: CGRect) -> RawAXNode
+    viewport: CGRect, geometrySpace: SnapshotGeometrySpace) -> RawAXNode
   {
-    RawAXNode(index: index,
+    let frame = geometrySpace.orientedFrame(of: fields.rect)
+    return RawAXNode(index: index,
       type: fields.elementType.map(elementTypeName) ?? "Element(\(fields.rawType))",
       label: fields.label.isEmpty ? nil : fields.label,
       identifier: fields.identifier.isEmpty ? nil : fields.identifier,
       value: fields.value.isEmpty ? nil : fields.value,
-      rect: snapshotRect(from: fields.rect), enabled: fields.enabled,
+      rect: snapshotRect(from: frame), enabled: fields.enabled,
       focused: fields.focused, selected: fields.selected,
       hittable: parentIndex != nil && SnapshotGeometry.isGeometricallyActionable(
         enabled: fields.enabled,
-        frame: fields.rect,
+        frame: frame,
         viewport: viewport
       ),
       depth: depth, parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil,
@@ -137,7 +155,9 @@ extension RunnerTests {
     let hint = CaptureHint(
       projection: .regular, depth: nil, regularPresentedDepth: nil,
       interactiveOnly: interactiveOnly, customActions: false)
-    let acquired = privateAXAcquisition(rawRoot: rawRoot, hint: hint, viewport: viewport)
+    let acquired = privateAXAcquisition(
+      rawRoot: rawRoot, hint: hint, viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait)
     return try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
         hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
@@ -145,6 +165,57 @@ extension RunnerTests {
         interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
       policy: .cursorProjected
     ).nodes
+  }
+
+  /// The walk's space declaration has to reach the node it publishes: this asserts the rotated rect of
+  /// a key under a turned surface host, and an untouched sibling under the app's own window, so a walk
+  /// that drops the space it computed fails here.
+  func testPrivateAXAcquisitionPublishesATurnedSurfaceHostInAppOrientationSpace() {
+    let frame = Self.privateAXFrame
+    let appWindow: [String: Any] = [
+      "type": Int(XCUIElement.ElementType.window.rawValue),
+      "frame": frame(0, 0, 874, 402),
+      "children": [
+        ["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Home",
+          "frame": frame(204, 323, 91, 55), "children": []]
+      ]
+    ]
+    let keyboardWindow: [String: Any] = [
+      "type": Int(XCUIElement.ElementType.window.rawValue),
+      "frame": frame(0, 0, 874, 402),
+      "children": [
+        ["type": Int(XCUIElement.ElementType.other.rawValue),
+          "frame": frame(0, 0, 402, 874),
+          "children": [
+            ["type": Int(XCUIElement.ElementType.key.rawValue), "label": "q",
+              "frame": frame(154, 77, 45, 72), "children": []]
+          ]]
+      ]
+    ]
+    let hint = CaptureHint(
+      projection: .raw, depth: nil, regularPresentedDepth: nil,
+      interactiveOnly: false, customActions: false)
+    let nodes = privateAXAcquisition(
+      rawRoot: [
+        "type": Int(XCUIElement.ElementType.application.rawValue),
+        "label": "Element", "frame": frame(0, 0, 874, 402),
+        "children": [appWindow, keyboardWindow]
+      ],
+      hint: hint,
+      viewport: CGRect(x: 0, y: 0, width: 874, height: 402),
+      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+    )
+
+    // Measured on iPhone 17 Pro (26.2): the key plane's left column arrives 154 pt along the device's
+    // long axis and comes back 203 pt down the app's short one.
+    XCTAssertEqual(
+      nodes.first { $0.label == "q" }?.rect,
+      SnapshotRect(x: 77, y: 203, width: 72, height: 45)
+    )
+    XCTAssertEqual(
+      nodes.first { $0.label == "Home" }?.rect,
+      SnapshotRect(x: 204, y: 323, width: 91, height: 55)
+    )
   }
 
   func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() throws {
@@ -169,7 +240,8 @@ extension RunnerTests {
       hint: CaptureHint(
         projection: .raw, depth: nil, regularPresentedDepth: nil,
         interactiveOnly: false, customActions: false),
-      viewport: viewport)
+      viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait)
 
     XCTAssertEqual(raw.map(\.type), ["Application", "ScrollView", "Button", "Image", "Button"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 2, 3, 2])
@@ -197,7 +269,8 @@ extension RunnerTests {
       hint: CaptureHint(
         projection: .raw, depth: 2, regularPresentedDepth: nil,
         interactiveOnly: false, customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 402, height: 874))
+      viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
+      interfaceOrientation: RunnerInterfaceOrientation.portrait)
     XCTAssertEqual(raw.map(\.type), ["Application", "ScrollView", "Button", "Button"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 2, 2])
   }

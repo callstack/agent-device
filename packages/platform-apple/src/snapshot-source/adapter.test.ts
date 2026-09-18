@@ -440,6 +440,8 @@ type AdapterFixture = {
   malformedTree: boolean;
   /** Whether the fake guest's tree ends at another process's content (a remote element leaf). */
   remoteContent: boolean;
+  /** Whether the fake guest's tree holds a window reporting the app box quarter-turned (#2612). */
+  turnedWindow: boolean;
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
 };
@@ -465,6 +467,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     truncated: false,
     malformedTree: false,
     remoteContent: false,
+    turnedWindow: false,
     omitRecovery: false,
     diagnostics: [],
   };
@@ -625,7 +628,28 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
                               ],
                             },
                           ]
-                        : [],
+                        : this.fixture.turnedWindow
+                          ? [
+                              {
+                                XC_kAXXCAttributeElementType: 'Application',
+                                XC_kAXXCAttributeElementBaseType: 'UIRemoteKeyboardWindow',
+                                XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 844, Height: 390 },
+                                XC_kAXXCAttributeChildren: [
+                                  {
+                                    XC_kAXXCAttributeAutomationType: 20,
+                                    XC_kAXXCAttributeLabel: 'q',
+                                    XC_kAXXCAttributeFrame: {
+                                      X: 154,
+                                      Y: 77,
+                                      Width: 45,
+                                      Height: 72,
+                                    },
+                                    XC_kAXXCAttributeChildren: [],
+                                  },
+                                ],
+                              },
+                            ]
+                          : [],
                 },
           },
           {
@@ -643,3 +667,51 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
     queueMicrotask(() => this.emit('close'));
   }
 }
+
+test('the Simulator AX source refuses a window whose coordinate space it cannot resolve', async () => {
+  const root = await mkdtempForTest('agent-device-snapshot-adapter-');
+  const sourceRoot = path.join(root, 'source');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  for (const name of [
+    'SnapshotBridge.m',
+    'SnapshotBridgeRuntime.m',
+    'SnapshotBridgeRuntime.h',
+    'SnapshotBridgeCapture.h',
+    'SnapshotBridgeCapture.m',
+  ]) {
+    await writeFile(path.join(sourceRoot, name), 'native source');
+  }
+  const fixture = createAdapterHost();
+  fixture.turnedWindow = true;
+  const source = createSimulatorSnapshotSource({
+    host: fixture.host,
+    sourceRoot,
+    cacheRoot: path.join(root, 'cache'),
+  });
+  const target = { ...targetForTest(), generation: 'generation-1', targetId: 'target-1' };
+
+  try {
+    const outcome = await source.acquire({
+      target,
+      hint: deriveIosCaptureHint(createIosSnapshotRequest()),
+    });
+    assert.equal(outcome.stage, 'failed');
+    if (outcome.stage === 'failed') {
+      assert.equal(outcome.failure.kind, 'unsupported');
+      assert.equal(outcome.failure.code, 'window-coordinate-space-unresolved');
+      assert.equal(outcome.failure.details?.windows, 1);
+    }
+
+    // The screen, not the app generation, is what the refusal is about: the same generation is served
+    // by the bridge again once no surface reports in another space.
+    fixture.turnedWindow = false;
+    const recovered = await source.acquire({
+      target,
+      hint: deriveIosCaptureHint(createIosSnapshotRequest()),
+    });
+    assert.equal(recovered.stage, 'acquired');
+  } finally {
+    await source.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

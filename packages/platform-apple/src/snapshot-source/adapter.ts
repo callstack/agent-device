@@ -220,6 +220,16 @@ function createAcquisition(
       remoteElements: decoded.opaqueRemoteElements,
     });
   }
+  // A tree carrying a window that reports its subtree in the device's native space would present a
+  // screen whose rects disagree about which way is down, and refs issued from under that window would
+  // be performed somewhere else on it. The reader cannot report the app's interface orientation, so
+  // the source refuses the screen it cannot put in one space and the route serves the runner, which
+  // reads the orientation and rotates what it captured (#2612).
+  if (decoded.unresolvedCoordinateSpaceWindows > 0) {
+    throw snapshotSourceError('unsupported', 'window-coordinate-space-unresolved', {
+      windows: decoded.unresolvedCoordinateSpaceWindows,
+    });
+  }
   const nodes = Object.freeze(
     decoded.nodes.map((node) => Object.freeze({ ...node, pid: target.pid })),
   );

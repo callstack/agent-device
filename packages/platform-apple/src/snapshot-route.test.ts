@@ -329,6 +329,36 @@ test('a bridge still being prepared sends only that capture to the runner', asyn
   expect(second.warnings).toEqual(pending);
 });
 
+test('a window in an unresolved coordinate space sends only that capture to the runner', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: {
+      kind: 'unsupported',
+      code: 'window-coordinate-space-unresolved',
+      details: { windows: 1 },
+    },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  const first = await route.capture(ios, input, signal(), fallback);
+  const second = await route.capture(ios, input, signal(), fallback);
+
+  // A rotated system surface is on screen now and gone after the next keystroke, so unlike a failed
+  // bridge this says nothing about the app generation: retiring it would move every later capture of a
+  // healthy app to the runner to work around one screen (#2612).
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+  expect(fallback).toHaveBeenCalledTimes(2);
+  const refused = [
+    "Simulator AX snapshot unavailable (window-coordinate-space-unresolved); used XCTest for this capture, which reports captured geometry in the app's own orientation space.",
+  ];
+  expect(first.warnings).toEqual(refused);
+  expect(second.warnings).toEqual(refused);
+});
+
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({
     stage: 'failed',

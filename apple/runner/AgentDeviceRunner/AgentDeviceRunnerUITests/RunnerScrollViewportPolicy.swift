@@ -33,7 +33,7 @@ enum RunnerScrollViewport {
   /**
    * The band to plan the swipe inside, the frame to rotate its coordinates against, and the keyboard
    * top when the band was clipped for one. The two frames are separate on purpose: a clip shortens
-   * only the band, while `nativeSynthesizedPoint` derives a `landscapeRight` native x from the
+   * only the band, while `CoordinateSpaceRotation.native(point:)` derives a `landscapeRight` native x from the
    * frame's HEIGHT, so rotating inside the band moves the dispatched path sideways off the planned
    * one.
    */
@@ -329,7 +329,7 @@ extension RunnerTests {
     XCTAssertEqual(constants.accessoryAllowance, ScrollViewportPolicy.accessoryAllowance)
   }
 
-  /// A clipped landscape band shortens the frame, and `nativeSynthesizedPoint` derives a
+  /// A clipped landscape band shortens the frame, and `CoordinateSpaceRotation.native(point:)` derives a
   /// `landscapeRight` native x from the frame's HEIGHT. Rotating inside the band therefore moves the
   /// dispatched path sideways by exactly what the keyboard took, off the lane the plan was built for,
   /// so the plan band and the coordinate basis stay separate values through dispatch (#2500).
@@ -374,20 +374,18 @@ extension RunnerTests {
     XCTAssertEqual(reported.data?.keyboardAvoided, true)
 
     let orientedStartY = gesture.planFrame.minY + gesture.plan.y1
-    let dispatched = nativeSynthesizedPoint(
-      orientedX: gesture.planFrame.minX + gesture.plan.x1,
-      orientedY: orientedStartY,
+    let dispatchedFromViewport = CoordinateSpaceRotation.native(
+      point: CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: orientedStartY),
       in: gesture.coordinateFrame,
       interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
-    let clippedBasis = nativeSynthesizedPoint(
-      orientedX: gesture.planFrame.minX + gesture.plan.x1,
-      orientedY: orientedStartY,
+    let dispatchedFromBand = CoordinateSpaceRotation.native(
+      point: CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: orientedStartY),
       in: gesture.planFrame,
       interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
     XCTAssertEqual(
-      dispatched.x - clippedBasis.x,
+      dispatchedFromViewport.x - dispatchedFromBand.x,
       viewport.height - band.height,
       accuracy: 0.001,
       "rotating inside the clipped band would shift native x by what the keyboard took"

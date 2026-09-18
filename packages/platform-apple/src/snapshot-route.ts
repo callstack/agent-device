@@ -56,6 +56,14 @@ const SYSTEM_SURFACE_HOST_LINGERING = 'system-surface-host-lingering';
  */
 const BRIDGE_PREPARATION_PENDING = 'bridge-preparation-pending';
 
+/**
+ * Why this capture left the bridge: a window on this screen reports its subtree in the device's
+ * native space and the reader cannot name the app's interface orientation to turn it back (#2612).
+ * Like a bridge that is still being built, this says nothing about the app generation, which stays on
+ * the bridge path and uses it again once the surface is gone.
+ */
+const WINDOW_COORDINATE_SPACE_UNRESOLVED = 'window-coordinate-space-unresolved';
+
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
     capture(
@@ -266,10 +274,12 @@ async function fallbackAfterFailure(
   cause?: unknown,
 ): Promise<SnapshotResult> {
   // A failed bridge is evidence about this app generation, so its captures take the runner until the
-  // generation is rebaselined. A bridge that is merely still being prepared is evidence about the
-  // daemon's build queue instead: the same generation has to be able to use it as soon as it exists,
-  // which is what let one cold host cost every later capture of a stable screen (#2491).
-  if (failure.kind !== 'preparing') disabledGenerations.add(generationKey(failedTarget));
+  // generation is rebaselined. Two failures are evidence about something else instead: a bridge that is
+  // merely still being prepared speaks for the daemon's build queue, and a screen holding a surface in
+  // another coordinate space speaks for this capture only. Both have to be able to use the bridge on
+  // the next capture, which is what let one cold host cost every later capture of a stable screen
+  // (#2491) and would otherwise cost every portrait capture after one landscape keyboard (#2612).
+  if (opensGenerationCircuit(failure)) disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
     { id: failedTarget.udid },
@@ -286,6 +296,19 @@ async function fallbackAfterFailure(
     failure.code,
     identity.residue,
   );
+}
+
+/**
+ * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
+ *
+ * Two failures say something else instead. A bridge that is still being prepared speaks for the
+ * daemon's build queue, and a screen holding a surface in another coordinate space speaks for this
+ * capture only: the surface is on screen now and gone after the next keystroke, so retiring the
+ * generation would move every later capture of a healthy app to the runner to work around one screen
+ * (#2491 settled the first of these, and #2612 the second).
+ */
+function opensGenerationCircuit(failure: SnapshotSourceFailure): boolean {
+  return failure.kind !== 'preparing' && failure.code !== WINDOW_COORDINATE_SPACE_UNRESOLVED;
 }
 
 async function runFallback(
@@ -436,6 +459,9 @@ function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: bo
   // that did not happen (#2491).
   if (reason === BRIDGE_PREPARATION_PENDING) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture while the bridge is still being prepared.`;
+  }
+  if (reason === WINDOW_COORDINATE_SPACE_UNRESOLVED) {
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, which reports captured geometry in the app's own orientation space.`;
   }
   const generation = lineage.generation ? 'this app generation' : 'an unverified app generation';
   return `Simulator AX snapshot unavailable (${reason}); used XCTest for ${generation}.`;

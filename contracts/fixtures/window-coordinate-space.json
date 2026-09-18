@@ -1,0 +1,164 @@
+{
+  "description": "Golden table for the coordinate space a captured window's own box declares (#2612), the twin of tap-keyboard-occlusion-policy.json on the geometry that guard reads. iOS hosts some system surfaces in the device's native (portrait-up) space even while the app is rotated, so their whole subtree arrives quarter-turned: measured on iPhone 17 Pro (iOS 26.2) with the system keyboard up over a landscape app frame (0,0,874,402), UIRemoteKeyboardWindow reports its own box as (0,0,402,874) — the app's box with the two side lengths swapped — while the app's own UIWindow, UITextEffectsWindow and a dev-menu overlay window all report (0,0,874,402); in portrait the same keyboard window reports (0,0,402,874) against a (0,0,402,874) app frame, i.e. nothing is turned. RULE 1 (detection) is enforced twice, in packages/contracts/src/window-coordinate-space.ts and in SnapshotGeometrySpace inside apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerCoordinateSpace.swift, and decides from side lengths alone: a window is quarter-turned relative to an app frame when the app frame is not square (abs(app.width - app.height) > quarterTurnTolerance), both frames are finite, positive and non-empty, and the window's side lengths match the app's on the swapped axes (abs(window.width - app.height) <= quarterTurnTolerance && abs(window.height - app.width) <= quarterTurnTolerance). Origins are deliberately never compared: the turn is a statement about which axis a box runs along, and a window may legitimately be placed elsewhere. A square app frame cannot be told from its own quarter turn, so it is left alone rather than guessed at. The tolerance is 1 because measured captures match the swap to the point and this absorbs float representation only. RULE 2 (rotation) is the capture's way back for the runner's own UIInterfaceOrientation raw values — 1 portrait, 2 portraitUpsideDown, 3 landscapeRight, 4 landscapeLeft, and 0 unknown, where portrait and unknown publish what the platform reported rather than inventing a turn — implemented by CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:) in that same Swift file, whose rect helper turns opposite corners of the reported box and re-orders them so the result keeps a top-left origin. `rotationCases` are native -> oriented rows: the landscape ones measured on the device above, the 180 degree and identity ones derived from that table. Capture turns back with the exact inverse of what dispatch turns forward, so each row also has to come back to its own `native` box under the forward mapping; that is why one measured-looking landscape-left pairing whose native and oriented boxes are identical is absent — the table computes no such row. Infinity has no JSON spelling, so the unusable frame a platform hands back when it could not resolve a box is named {\"infinite\": true} and decodes to CGRect.infinite on the Swift side and to an infinite rect on the TypeScript side.",
+  "constants": {
+    "quarterTurnTolerance": 1
+  },
+  "quarterTurnCases": [
+    {
+      "name": "UIRemoteKeyboardWindow reports the app box with its side lengths swapped on a landscape iPhone",
+      "window": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": true
+    },
+    {
+      "name": "the app's own UIWindow reports the app's box, which is the space the capture publishes",
+      "window": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    },
+    {
+      "name": "UITextEffectsWindow tracks the interface rotation and reports the app's box too",
+      "window": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    },
+    {
+      "name": "a dev-menu overlay window reports the app's box and is not a native-hosted surface",
+      "window": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    },
+    {
+      "name": "portrait: the keyboard window and the app report the same box, so nothing is turned",
+      "window": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "app": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "quarterTurned": false
+    },
+    {
+      "name": "a square app frame cannot be told from its own quarter turn, so its geometry is left alone",
+      "window": { "x": 0, "y": 0, "width": 800, "height": 800 },
+      "app": { "x": 0, "y": 0, "width": 800, "height": 800 },
+      "quarterTurned": false
+    },
+    {
+      "name": "an app frame square to within the tolerance is not square enough to be turned back either",
+      "window": { "x": 0, "y": 0, "width": 402.5, "height": 402 },
+      "app": { "x": 0, "y": 0, "width": 402, "height": 402.5 },
+      "quarterTurned": false
+    },
+    {
+      "name": "origins are not compared: a quarter-turned window elsewhere in an offset app frame still declares the native space",
+      "window": { "x": 18, "y": 36, "width": 402, "height": 874 },
+      "app": { "x": 12, "y": 24, "width": 874, "height": 402 },
+      "quarterTurned": true
+    },
+    {
+      "name": "a window missing the swap by half a point is float representation, not a different box",
+      "window": { "x": 0, "y": 0, "width": 402.5, "height": 873.5 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": true
+    },
+    {
+      "name": "a window missing the swap by more than the tolerance is some other box, and stays app space",
+      "window": { "x": 0, "y": 0, "width": 403.5, "height": 874 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    },
+    {
+      "name": "an app frame the capture could not resolve has no box to compare against",
+      "window": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "app": { "x": 0, "y": 0, "width": 0, "height": 0 },
+      "quarterTurned": false
+    },
+    {
+      "name": "a non-finite app frame anchors no rotation",
+      "window": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "app": { "infinite": true },
+      "quarterTurned": false
+    },
+    {
+      "name": "a non-finite window box declares nothing",
+      "window": { "infinite": true },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    },
+    {
+      "name": "a zero-width window carries no geometry to read a space from",
+      "window": { "x": 0, "y": 0, "width": 0, "height": 874 },
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "quarterTurned": false
+    }
+  ],
+  "rotationCases": [
+    {
+      "name": "landscape right turns the reported key plane from a strip on the left edge into the band docked at the bottom",
+      "interfaceOrientation": 3,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 2, "y": 75, "width": 202, "height": 724 },
+      "oriented": { "x": 75, "y": 198, "width": 724, "height": 202 }
+    },
+    {
+      "name": "landscape right turns one reported key with its plane",
+      "interfaceOrientation": 3,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 154, "y": 77, "width": 45, "height": 72 },
+      "oriented": { "x": 77, "y": 203, "width": 72, "height": 45 }
+    },
+    {
+      "name": "landscape right turns the keyboard dock's own button into the strip below the keys",
+      "interfaceOrientation": 3,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 0, "y": 8, "width": 65, "height": 68 },
+      "oriented": { "x": 8, "y": 337, "width": 68, "height": 65 }
+    },
+    {
+      "name": "landscape right turns the keyboard window's own box onto the app's box",
+      "interfaceOrientation": 3,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "oriented": { "x": 0, "y": 0, "width": 874, "height": 402 }
+    },
+    {
+      "name": "landscape right keeps a zero-area padding key zero-area at the plane's corner",
+      "interfaceOrientation": 3,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 204, "y": 75, "width": 0, "height": 0 },
+      "oriented": { "x": 75, "y": 198, "width": 0, "height": 0 }
+    },
+    {
+      "name": "landscape right localizes a non-zero app frame origin before the turn and restores it after",
+      "interfaceOrientation": 3,
+      "app": { "x": 12, "y": 24, "width": 874, "height": 402 },
+      "native": { "x": 2, "y": 75, "width": 202, "height": 724 },
+      "oriented": { "x": 87, "y": 222, "width": 724, "height": 202 }
+    },
+    {
+      "name": "landscape left turns the same plane the other way, which is where its own native column is",
+      "interfaceOrientation": 4,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 238, "y": 75, "width": 162, "height": 724 },
+      "oriented": { "x": 75, "y": 238, "width": 724, "height": 162 }
+    },
+    {
+      "name": "portrait publishes what the platform reported: the reported return key is the app's return key",
+      "interfaceOrientation": 1,
+      "app": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "native": { "x": 300, "y": 752, "width": 99, "height": 54 },
+      "oriented": { "x": 300, "y": 752, "width": 99, "height": 54 }
+    },
+    {
+      "name": "an orientation the platform did not name rotates nothing, even for a landscape app frame",
+      "interfaceOrientation": 0,
+      "app": { "x": 0, "y": 0, "width": 874, "height": 402 },
+      "native": { "x": 154, "y": 77, "width": 45, "height": 72 },
+      "oriented": { "x": 154, "y": 77, "width": 45, "height": 72 }
+    },
+    {
+      "name": "portrait upside down moves the reported box to the opposite corner without swapping its axes",
+      "interfaceOrientation": 2,
+      "app": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "native": { "x": 3, "y": 68, "width": 99, "height": 54 },
+      "oriented": { "x": 300, "y": 752, "width": 99, "height": 54 }
+    }
+  ]
+}

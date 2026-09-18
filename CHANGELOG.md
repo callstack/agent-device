@@ -19,6 +19,21 @@
   (a disabled title field presented as an enabled Button for the whole row) no longer carries the
   field's `hittable: false`; on the XCTest runner path that Button now counts as interactive and
   becomes a Maestro atomic-dispatch candidate where it was excluded before.
+- Fixed (ios): a landscape iPhone snapshot reports the system keyboard's rects in the app's own
+  orientation space. iOS hosts `UIRemoteKeyboardWindow` in the device's native portrait space, so its
+  whole subtree arrived quarter-turned — a key measured 45 pt wide and 72 pt tall at `x 154` in an
+  874 x 402 app, drawing a strip down the left edge where the screenshot shows a 724 x 204 band
+  docked at `y 198`. Rules that read those numbers refused app content the keyboard was nowhere near
+  and let a tap land on a key. The Apple runner now reads the app's interface orientation at capture
+  time and publishes every rect under a turned surface host in the app's space, using the exact
+  inverse of the rotation its synthesized touches already rotate through, so a reported rect and a
+  performed tap cannot disagree about which pixel is which. The Simulator AX bridge reader has no
+  interface orientation in its attribute set, so it refuses a capture holding a surface host reporting
+  the app box quarter-turned — `Simulator AX snapshot unavailable
+  (window-coordinate-space-unresolved); used XCTest for this capture, which reports captured geometry
+  in the app's own orientation space.` — and the route sends that one capture to the runner instead of
+  retiring the app generation, so the next capture of a healthy app still uses the bridge. One table
+  proves both languages apply one rule: `contracts/fixtures/window-coordinate-space.json` (#2612).
 - Added (limrun): `longpress` on Limrun iOS direct sessions. The interactor refused it as
   unsupported although the SDK exposes the HID primitives; it now holds one touch as a
   `performActions` batch of `touchDown`, `wait`, `touchUp`, defaulting to the 800 ms the Android

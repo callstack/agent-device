@@ -138,4 +138,10 @@ export type SnapshotSourceDecodedTree = Readonly<{
    * frame: pages the reader could not cross into (#2484).
    */
   opaqueRemoteElements: number;
+  /**
+   * Windows whose own box is the app's box quarter-turned: their subtree reports in the device's
+   * native space and this producer cannot name the app's interface orientation to turn it back
+   * (#2612).
+   */
+  unresolvedCoordinateSpaceWindows: number;
 }>;

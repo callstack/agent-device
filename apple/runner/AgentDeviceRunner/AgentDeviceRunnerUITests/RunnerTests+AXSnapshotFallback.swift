@@ -216,11 +216,13 @@ extension RunnerTests {
       }
 
       let rootFrame = privateAXRect(root["frame"])
-      let viewport = privateAXSnapshotViewport(app: app, rootFrame: rootFrame)
+      let geometry = privateAXSnapshotGeometry(app: app, rootFrame: rootFrame)
+      let viewport = geometry.viewport
       let nodes = privateAXAcquisition(
         rawRoot: root,
         hint: hint,
-        viewport: viewport
+        viewport: viewport,
+        interfaceOrientation: geometry.interfaceOrientation
       )
       // Serialization-level emptiness only: an acquired-but-fully-clipped tree is presentation's
       // verdict now, surfaced by the plan's sparse classifier on the presented payload (#1797).
@@ -269,26 +271,36 @@ extension RunnerTests {
     !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
   }
 
-  private func privateAXSnapshotViewport(app: XCUIApplication, rootFrame: CGRect) -> CGRect {
+  /// The geometry this tier may anchor a rotation on. The bridge's own root frame is one more
+  /// reported box rather than the app's frame, so a capture anchored on it reports no interface
+  /// orientation and normalizes nothing: rotated system surfaces then stay as reported, which the
+  /// consumers already treat as geometry they cannot measure (#2612).
+  private func privateAXSnapshotGeometry(
+    app: XCUIApplication,
+    rootFrame: CGRect
+  ) -> (viewport: CGRect, interfaceOrientation: Int) {
     let fallback = rootFrame.isEmpty ? CGRect.infinite : rootFrame
     guard shouldReadPrivateAXViewportViaXCTest() else {
-      return fallback
+      return (fallback, RunnerInterfaceOrientation.unknown)
     }
     do {
-      let viewport = try runMainThreadWork(
+      let anchor = try runMainThreadWork(
         "private_ax_viewport",
         timeout: 1,
         timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
       ) {
-        self.safeSnapshotViewport(app: app)
+        (
+          viewport: self.safeSnapshotViewport(app: app),
+          interfaceOrientation: self.capturedInterfaceOrientation(app: app)
+        )
       }
-      if viewport.isInfinite || viewport.isNull || viewport.isEmpty {
-        return fallback
+      if anchor.viewport.isInfinite || anchor.viewport.isNull || anchor.viewport.isEmpty {
+        return (fallback, RunnerInterfaceOrientation.unknown)
       }
-      return viewport
+      return (anchor.viewport, anchor.interfaceOrientation)
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_VIEWPORT_FALLBACK=%@", String(describing: error))
-      return fallback
+      return (fallback, RunnerInterfaceOrientation.unknown)
     }
   }
 
@@ -686,7 +698,8 @@ extension RunnerTests {
       hint: CaptureHint(
         projection: .regular, depth: nil, regularPresentedDepth: nil,
         interactiveOnly: false, customActions: false),
-      viewport: CGRect(x: 0, y: 0, width: 390, height: 844)
+      viewport: CGRect(x: 0, y: 0, width: 390, height: 844),
+      interfaceOrientation: RunnerInterfaceOrientation.portrait
     )
 
     let card = nodes.first { $0.label == "feedItem-by-whiskers.test" }
@@ -720,7 +733,8 @@ extension RunnerTests {
           raw: false
         )
       ),
-      viewport: .infinite
+      viewport: .infinite,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait
     )
 
     let labels = nodes.compactMap { $0.label ?? $0.identifier }
@@ -798,7 +812,9 @@ extension RunnerTests {
     let hint = CaptureHint(
       projection: .regular, depth: nil, regularPresentedDepth: nil,
       interactiveOnly: true, customActions: false)
-    let acquired = privateAXAcquisition(rawRoot: tree, hint: hint, viewport: viewport)
+    let acquired = privateAXAcquisition(
+      rawRoot: tree, hint: hint, viewport: viewport,
+      interfaceOrientation: RunnerInterfaceOrientation.portrait)
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
     XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))
 

@@ -5,7 +5,7 @@
 | [0001 Provider-First Integration Scenarios](0001-provider-first-integration-scenarios.md) | integration testing strategy, provider transcripts, the scenario harness |
 | [0002 Persistent Platform Helper Sessions](0002-persistent-platform-helper-sessions.md) | helper process lifecycle, keep-alive semantics |
 | [0003 Daemon Command Registry](0003-daemon-command-registry.md) | daemon routing, request-policy traits |
-| [0004 iOS Snapshot Backend Strategy](0004-ios-snapshot-backend-strategy.md) | snapshot capture plans, backend fallbacks, quality verdicts |
+| [0004 iOS Snapshot Backend Strategy](0004-ios-snapshot-backend-strategy.md) | snapshot capture plans, backend fallbacks, quality verdicts, the coordinate space a capture publishes |
 | [0005 iOS Runner Interaction Lifecycle](0005-ios-runner-interaction-lifecycle.md) | XCTest runner sessions, leases, adoption, idle-stop |
 | [0006 Daemon RPC Protocol Version](0006-daemon-rpc-protocol-version.md) | remote daemon HTTP/JSON-RPC compatibility |
 | [0007 Remote Device Leases](0007-remote-device-leases.md) | leases, tenancy, provider-owned devices |

@@ -2,6 +2,7 @@ import { isPositiveFiniteRect, isRectVisibleInViewport } from '@agent-device/ker
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
+import { isQuarterTurnedWindowFrame } from './window-coordinate-space.ts';
 import type { SnapshotSourceDecodedTree, SnapshotSourceLimits } from './types.ts';
 import { isRecord } from './protocol.ts';
 
@@ -129,6 +130,7 @@ const NOT_ENABLED_TRAIT = 1n << 8n;
  * truncation, not as a boundary.
  */
 const REMOTE_ELEMENT_CLASS = 'AXRemoteElement';
+const EMPTY_RECT: Rect = { x: 0, y: 0, width: 0, height: 0 };
 const WEB_VIEW_TYPE = 'WebView';
 
 export function decodeSnapshotBridgeTree(
@@ -161,15 +163,15 @@ export function decodeSnapshotBridgeTree(
   if (typeof envelope.truncated !== 'boolean') {
     throw snapshotSourceError('malformed-tree', 'truncated-invalid');
   }
-  const viewport = viewportFromRoot(
-    nodes.find((node) => node.type === 'Application' || node.type === 'Window'),
-  );
+  const windowRoots = nodes.filter(isWindowRoot);
+  const viewport = viewportFromRoot(windowRoots[0]);
   return {
     nodes,
     maxTraversalDepth,
     viewport,
     opaqueRemoteElements: webHostedRemoteLeaves.filter((rect) => isOpaqueRemoteLeaf(rect, viewport))
       .length,
+    unresolvedCoordinateSpaceWindows: countUnresolvedCoordinateSpaceWindows(nodes, viewport),
   };
 
   function visitNode(
@@ -283,11 +285,47 @@ function frameFromGuest(value: unknown): Rect | undefined {
 }
 
 function viewportFromRoot(root: RawSnapshotNode | undefined): IosViewportEvidence {
-  if (!root || (root.type !== 'Application' && root.type !== 'Window')) {
+  if (!root || !isWindowRoot(root)) {
     return { kind: 'missing', reason: 'not-provided' };
   }
   if (isPositiveFiniteRect(root.rect)) return { kind: 'reported', rect: root.rect };
   return { kind: 'missing', reason: root.rect ? 'invalid' : 'not-provided' };
+}
+
+function isWindowRoot(node: RawSnapshotNode): boolean {
+  return node.type === 'Application' || node.type === 'Window';
+}
+
+/**
+ * Surface hosts reporting their subtree in a space this capture cannot name.
+ *
+ * The reader hands over the app's windows as siblings under the app root, and the first of them is
+ * the app's own frame. A surface host whose box is that frame quarter-turned is hosted in the device's
+ * native space and every rect under it arrives turned with it (#2612); rotating it back needs the
+ * app's interface orientation, which the reader's attribute set does not carry. Only a host declares a
+ * space — the window, or the surface directly under it where the turn actually shows up — because a
+ * deep node reporting large bounds is content, not a hosted surface. The count is a refusal signal
+ * rather than a repair: the route serves the capture from the runner, which reads the orientation and
+ * publishes one space. Detection is deliberately symmetric — reading the turned surface as the app
+ * frame flags the app's own window instead — so an unexpected window order still refuses rather than
+ * publishing half a screen.
+ */
+function countUnresolvedCoordinateSpaceWindows(
+  nodes: readonly RawSnapshotNode[],
+  viewport: IosViewportEvidence,
+): number {
+  if (viewport.kind !== 'reported') return 0;
+  return nodes.filter(
+    (node) =>
+      isSurfaceHost(node, nodes) &&
+      isQuarterTurnedWindowFrame(node.rect ?? EMPTY_RECT, viewport.rect),
+  ).length;
+}
+
+/** The window itself, or the surface directly under it: where a hosted surface's box appears. */
+function isSurfaceHost(node: RawSnapshotNode, nodes: readonly RawSnapshotNode[]): boolean {
+  if (isWindowRoot(node)) return true;
+  return node.parentIndex === undefined ? false : isWindowRoot(nodes[node.parentIndex] ?? node);
 }
 
 // fallow-ignore-next-line code-duplication
