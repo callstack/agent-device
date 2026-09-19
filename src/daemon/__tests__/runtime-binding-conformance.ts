@@ -11,6 +11,7 @@ import { commandRuntimeUseRequirements } from '@agent-device/command-registry/re
 import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { resolveBoundActionButtonRuntime } from '../action-button-runtime.ts';
 import { resolveBoundAppSwitcherRuntime } from '../app-switcher-runtime.ts';
 import { resolveBoundBackRuntime } from '../back-runtime.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
@@ -79,6 +80,10 @@ export const conformedRuntimeBindings = {
   home: {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundHomeRuntime({ device, ...bindings })),
+  },
+  'action-button': {
+    resolve: async (device, bindings) =>
+      refusable(await resolveBoundActionButtonRuntime({ device, ...bindings })),
   },
   'app-switcher': {
     resolve: async (device, bindings) =>

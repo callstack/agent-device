@@ -54,6 +54,7 @@ test('specialized daemon routes are claimed by their handler chain', async () =>
 
 test('catalog commands use generic routing only when intentionally passthrough or projected', () => {
   const intentionalGenericCatalogCommands = [
+    PUBLIC_COMMANDS.actionButton,
     PUBLIC_COMMANDS.appSwitcher,
     PUBLIC_COMMANDS.back,
     PUBLIC_COMMANDS.focus,

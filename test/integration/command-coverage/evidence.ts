@@ -38,6 +38,12 @@ export const ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidenc
     [C.tvRemote],
     'classifies Android %s back/home/orientation/keyboard facts through the shared touch gate',
   );
+export const ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.actionButton],
+    'Android refuses the action-button fact on every kind',
+  );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'src/daemon/__tests__/viewport-runtime.test.ts',

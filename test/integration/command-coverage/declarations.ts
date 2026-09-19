@@ -14,6 +14,7 @@ import {
   type PublicCommand,
 } from './entries.ts';
 import {
+  ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
@@ -1292,6 +1293,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'the exact-owner runtime fact rejects native app-switcher navigation on Linux',
+    ),
+  },
+  [C.actionButton]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android runtime fact refuses an iPhone Action Button press on every kind',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the action-button fact for the %s leaf',
+      'the iOS simulator leaf advertises the Action Button press and binds it',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the action-button fact for the %s leaf',
+      'the exact-owner runtime fact refuses action-button on the macOS host leaf',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the action-button fact for the %s leaf',
+      'the exact-owner runtime fact refuses action-button on the tvOS leaf, whose remote has no such control',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      'the exact-owner runtime fact refuses an Action Button press on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses an Action Button press on the Linux desktop',
     ),
   },
   [C.installFromSource]: {

@@ -39,10 +39,10 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 
 test('macOS coverage report counts every manifest classification', () => {
   assert.deepEqual(MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    contract: 21,
+    contract: 22,
     gap: 15,
     live: 18,
-    total: 54,
+    total: 55,
   });
   assert.equal(
     MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.live +

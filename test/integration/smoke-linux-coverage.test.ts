@@ -48,10 +48,10 @@ test('Linux coverage report has the expected classification counts', () => {
     // inventory remains a gap because local Linux screenshot paths are not daemon-downloadable.
     // Keyboard, orientation and tv-remote were already fact-owned command-contract rows rather
     // than catalog denials; R56 moves app-switcher the same way, for the same reason.
-    contract: 28,
+    contract: 29,
     gap: 9,
     live: 17,
-    total: 54,
+    total: 55,
   });
 
   const { contract, gap, live, total } = LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY;
