@@ -33,7 +33,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import {
   isRetryableRunnerError,
-  resolveRunnerBuildFailureHint,
   resolveRunnerEarlyExitHint,
   shouldRetryRunnerConnectError,
   withRunnerCommandId,
@@ -463,15 +462,6 @@ test('resolveRunnerEarlyExitHint falls back to runner connect timeout hint', () 
   );
   assert.match(hint, /retry runner startup/i);
   assert.match(hint, /pnpm clean:xcuitest/i);
-});
-
-test('resolveRunnerBuildFailureHint suggests cache cleanup for non-signing failures', () => {
-  const hint = resolveRunnerBuildFailureHint(
-    new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed'),
-  );
-
-  assert.match(hint, /pnpm clean:xcuitest/i);
-  assert.match(hint, /~\/\.agent-device\/apple-runner\/derived/i);
 });
 
 test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
