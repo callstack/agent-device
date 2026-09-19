@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2693/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2693/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2693/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2693/static/js/index.96e05d0fa6.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2693/static/js/index.13057ad5a1.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -719,8 +719,9 @@ came before it are never replaced.</li>
 <li>Treat <code>clipboard read</code> output as sensitive data; it can include secrets copied by the user or app.</li>
 <li><code>clipboard write &lt;text&gt;</code> updates clipboard text on the selected target.</li>
 <li>Works with an active session device or explicit selectors (<code>--platform</code>, <code>--device</code>, <code>--udid</code>, <code>--serial</code>).</li>
-<li>Supported on macOS, Android emulator/device, and iOS simulator.</li>
+<li>Supported on macOS, iOS simulator, and Android builds whose clipboard service answers the <code>cmd clipboard</code> shell command.</li>
 <li>iOS physical devices currently return <code>UNSUPPORTED_OPERATION</code> for clipboard commands.</li>
+<li>Android reads and writes both go through <code>adb shell cmd clipboard</code>, which needs a build that implements that command. Android 16 (API 36) ships no implementation of it, so there both actions return <code>UNSUPPORTED_OPERATION</code> with a hint naming the substitute instead of an empty clipboard, and <code>capabilities</code> omits <code>clipboard</code>. Verify a copy flow on such a device by pasting into a focused field and reading that field back.</li>
 </ul>
 <h2 class="rp-toc-include" id="keyboard"><a href="#keyboard" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Keyboard</h2>
 <div class="rp-codeblock language-bash"><div class="rp-codeblock__content"><div class="rp-codeblock__content__scroll-container rp-scrollbar rp-scrollbar--always"><pre class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)" tabindex="0" data-lang="bash"><code><span class="line"><span style="color:var(--shiki-token-function)">agent-device</span><span style="color:var(--shiki-token-string)"> keyboard</span><span style="color:var(--shiki-token-string)"> status</span></span>

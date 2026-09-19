@@ -812,8 +812,9 @@ agent-device clipboard write ""   # clear clipboard
 - Treat `clipboard read` output as sensitive data; it can include secrets copied by the user or app.
 - `clipboard write <text>` updates clipboard text on the selected target.
 - Works with an active session device or explicit selectors (`--platform`, `--device`, `--udid`, `--serial`).
-- Supported on macOS, Android emulator/device, and iOS simulator.
+- Supported on macOS, iOS simulator, and Android builds whose clipboard service answers the `cmd clipboard` shell command.
 - iOS physical devices currently return `UNSUPPORTED_OPERATION` for clipboard commands.
+- Android reads and writes both go through `adb shell cmd clipboard`, which needs a build that implements that command. Android 16 (API 36) ships no implementation of it, so there both actions return `UNSUPPORTED_OPERATION` with a hint naming the substitute instead of an empty clipboard, and `capabilities` omits `clipboard`. Verify a copy flow on such a device by pasting into a focused field and reading that field back.
 
 ## Keyboard
 
