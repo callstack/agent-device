@@ -4,10 +4,15 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
+import {
+  IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+} from '../../core/devicectl.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecResult } from '../host.ts';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
+  RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   RUNNER_ERROR_RULES,
   classifyRunnerStartupFailure,
   RUNNER_STARTUP_FAILURE_REASONS,
@@ -48,6 +53,11 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   signing_provisioning_profile_missing: /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/,
   signing_unspecified: /Automatic Signing/,
   devtools_security_developer_mode_disabled: /DevToolsSecurity -enable/,
+  // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
+  // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
+  // preflight publishing them is asserted.
+  device_developer_mode_disabled: new RegExp(IOS_DEVICE_DEVELOPER_MODE_OFF_HINT),
+  device_developer_disk_image_unavailable: new RegExp(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT),
   build_failed_unclassified: CACHE_RECOVERY_HINT,
 };
 
@@ -92,31 +102,51 @@ afterEach(() => {
 
 for (const fixture of buildForTestingFixtures()) {
   test(`a build-for-testing failure publishes ${fixture.reason} for ${fixture.id}`, async () => {
-    const envelope = await driveBuildFailure(fixture);
-
-    assert.equal(envelope.code, 'COMMAND_FAILED');
-    assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
-    assert.equal(envelope.details?.reason, fixture.reason);
-    assert.match(String(envelope.hint), HINT_FOR_REASON[fixture.reason]);
-    // No `logPath` was handed to `normalizeError`: the top-level value can only be the one the
-    // build catch wrote into the error it throws.
-    assert.equal(envelope.logPath, logPath);
-    assert.equal(envelope.diagnosticId, DIAGNOSTIC_ID);
-    // normalizeError hoists these out of `details`; a caller must read them at top level.
-    assert.equal(envelope.details?.hint, undefined);
-    assert.equal(envelope.details?.logPath, undefined);
-    assert.equal(envelope.details?.diagnosticId, undefined);
-    // The tool output stays reachable for a human reading the failure. It is redacted and
-    // length-bounded on the way out, which is another reason the reason is typed: classification
-    // happens before the truncation a caller sees. A message-only failure carries no tool output to
-    // reach, which is exactly why the message is part of the haystack.
-    if ((fixture.carrier ?? 'exec-details') === 'exec-details') {
-      const nestedDetails = envelope.details?.details as Record<string, unknown> | undefined;
-      assert.match(String(nestedDetails?.stdout), /AgentDeviceRunner/);
-    } else {
-      assert.equal(envelope.details?.details, undefined);
-    }
+    assertFailureEnvelope(await driveBuildFailure(fixture), fixture);
   });
+}
+
+/**
+ * Every startup failure reaches a caller through one envelope: the typed reason in `details`, its hint
+ * and the log path hoisted to top level by `normalizeError`, and the tool output still reachable
+ * underneath for a human. The envelope is asserted per fixture rather than once because the reason and
+ * the hint have to travel together for every recorded shape, not just for one of them.
+ */
+function assertFailureEnvelope(
+  envelope: NormalizedError,
+  fixture: RunnerStartupFailureFixture,
+): void {
+  assert.equal(envelope.code, 'COMMAND_FAILED');
+  assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
+  assert.equal(envelope.details?.reason, fixture.reason);
+  assert.match(String(envelope.hint), HINT_FOR_REASON[fixture.reason]);
+  // No `logPath` was handed to `normalizeError`: the top-level value can only be the one the
+  // build catch wrote into the error it throws.
+  assert.equal(envelope.logPath, logPath);
+  assert.equal(envelope.diagnosticId, DIAGNOSTIC_ID);
+  // normalizeError hoists these out of `details`; a caller must read them at top level.
+  assert.equal(envelope.details?.hint, undefined);
+  assert.equal(envelope.details?.logPath, undefined);
+  assert.equal(envelope.details?.diagnosticId, undefined);
+  assertToolOutputReachable(envelope, fixture);
+}
+
+/**
+ * The tool output stays reachable for a human reading the failure, redacted and length-bounded on the
+ * way out — one more reason the reason is typed: classification happens before the truncation a caller
+ * sees. A message-only failure carries no tool output to reach, which is exactly why the message is
+ * part of the haystack.
+ */
+function assertToolOutputReachable(
+  envelope: NormalizedError,
+  fixture: RunnerStartupFailureFixture,
+): void {
+  if ((fixture.carrier ?? 'exec-details') !== 'exec-details') {
+    assert.equal(envelope.details?.details, undefined);
+    return;
+  }
+  const nestedDetails = envelope.details?.details as Record<string, unknown> | undefined;
+  assert.match(String(nestedDetails?.stdout), /AgentDeviceRunner/);
 }
 
 test('every startup failure reason has a recorded fixture', () => {
@@ -136,6 +166,10 @@ test('every reason the classifier can name is produced by a rule row', () => {
   for (const reason of RUNNER_STARTUP_FAILURE_REASONS) {
     // The catch-all is the classifier's own answer when no row matched, so it names no row.
     if (reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) continue;
+    // The device-readiness members are named by the device's own states in
+    // `runner-device-readiness.ts`, not by a rule row: no amount of tool text establishes them,
+    // which is exactly why they are declared as a subset (#2683).
+    if ((RUNNER_DEVICE_READINESS_FAILURE_REASONS as readonly string[]).includes(reason)) continue;
     assert.ok(reasonsFromRules.has(reason), `no rule row yields the ${reason} reason`);
   }
 });

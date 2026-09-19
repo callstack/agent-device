@@ -216,6 +216,18 @@ type RunnerErrorVerdicts = {
 };
 
 /**
+ * The two device-readiness members (#2683): what the iPhone itself reports through
+ * `devicectl device info details`, not what another tool's output implies about it. They are listed
+ * apart because they are the members {@link classifyRunnerStartupFailure} does NOT produce — no
+ * xcodebuild or host-tool text establishes them, and the code that reads the device publishes them
+ * with the hint beside it.
+ */
+export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
+  'device_developer_mode_disabled',
+  'device_developer_disk_image_unavailable',
+] as const;
+
+/**
  * Why the Apple runner could not reach the point of serving a command (#2680). Published in
  * `details.reason` on the `COMMAND_FAILED` every one of these paths throws, so a caller branches
  * on the reason instead of matching prose; the hint that answers it travels with it in
@@ -238,10 +250,15 @@ export const RUNNER_STARTUP_FAILURE_REASONS = [
   'signing_provisioning_profile_missing',
   'signing_unspecified',
   'devtools_security_developer_mode_disabled',
+  ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   'build_failed_unclassified',
 ] as const;
 
 export type RunnerStartupFailureReason = (typeof RUNNER_STARTUP_FAILURE_REASONS)[number];
+
+/** The device-readiness subset, typed from the one list above. */
+export type RunnerDeviceReadinessFailureReason =
+  (typeof RUNNER_DEVICE_READINESS_FAILURE_REASONS)[number];
 
 /**
  * The reason a startup failure carries when no rule proves a cause. Its hint is deliberately the
