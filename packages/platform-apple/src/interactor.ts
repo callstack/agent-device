@@ -35,6 +35,7 @@ import {
 } from './runner/snapshot-presentation.ts';
 import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 
 export function createAppleInteractor(
   device: DeviceInfo,
@@ -241,6 +242,7 @@ async function captureAppleRunnerSnapshot(
     ...(result.quality ? { quality: result.quality } : {}),
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+    ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -262,14 +264,17 @@ function assertReportedRunnerSnapshotNodes(
 
 /**
  * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
- * quality verdict, and the shared disclosure when the capture describes an in-place system surface
- * (e.g. the web sign-in or Apple Pay sheet) rather than the app itself (#2438).
+ * quality verdict, the shared disclosure when the capture describes an in-place system surface
+ * (e.g. the web sign-in or Apple Pay sheet) rather than the app itself (#2438), and the disclosure
+ * when this capture's own command had to bring the session app back to the foreground (#2682).
  */
 function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
   const warnings: string[] = [];
   if (!result.quality && result.message) warnings.push(result.message);
   if (result.systemSurface)
     warnings.push(iosSystemSurfaceDisclosure(result.systemSurface.bundleId));
+  if (result.targetActivation)
+    warnings.push(iosTargetActivationDisclosure(result.targetActivation));
   return warnings;
 }
 

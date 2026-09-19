@@ -248,6 +248,10 @@
       "types": "./src/ios-system-surface.ts",
       "default": "./src/ios-system-surface.ts"
     },
+    "./ios-target-activation": {
+      "types": "./src/ios-target-activation.ts",
+      "default": "./src/ios-target-activation.ts"
+    },
     "./interactor-operation-catalog": {
       "types": "./src/interactor-operation-catalog.ts",
       "default": "./src/interactor-operation-catalog.ts"
