@@ -48,6 +48,7 @@ import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
+import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT } from './clipboard-shell-response.ts';
 import { createAndroidPerfOperations } from './perf/runtime.ts';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
@@ -223,7 +224,7 @@ function androidTouchFact(device: DeviceInfo) {
 const clipboardShellUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
-  hint: 'This Android build ships no shell implementation for the clipboard service, so adb cannot read or write the clipboard on it.',
+  hint: ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
 } as const);
 
 /**

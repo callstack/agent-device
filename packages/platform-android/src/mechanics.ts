@@ -44,7 +44,7 @@ export {
   androidAdbForwardsDeviceExitStatus,
   resetAndroidAdbShellProtocolProbes,
 } from './adb-shell-protocol.ts';
-export { isAndroidShellCommandUnsupported, runAndroidAdb, sleep } from './adb.ts';
+export { runAndroidAdb, sleep } from './adb.ts';
 export { handleAndroidAlert, type AndroidAlertResult } from './alert.ts';
 export {
   classifyAndroidAlertIdentifier,
@@ -95,6 +95,19 @@ export {
   type AndroidBlockingDialogFocus,
   type AndroidBlockingDialogRead,
 } from './app-parsers.ts';
+export async function androidClipboardShellSupportForResult(
+  ...args: Parameters<
+    typeof import('./clipboard-shell-response.ts').androidClipboardShellSupportForResult
+  >
+): Promise<
+  Awaited<
+    ReturnType<typeof import('./clipboard-shell-response.ts').androidClipboardShellSupportForResult>
+  >
+> {
+  const { androidClipboardShellSupportForResult: load } =
+    await import('./clipboard-shell-response.ts');
+  return load(...args);
+}
 export {
   dismissAndroidKeyboard,
   dismissAndroidKeyboardWithAdb,

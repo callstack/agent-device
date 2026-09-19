@@ -3,12 +3,13 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
-import { isAndroidShellCommandUnsupported, sleep } from './adb.ts';
+import { sleep } from './adb.ts';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
+import type { AndroidClipboardOperation } from './clipboard-shell-response.ts';
 import {
   type AndroidInputOwner,
   classifyAndroidInputOwner,
@@ -318,20 +319,19 @@ export async function writeAndroidClipboardWithAdb(
 async function runAndroidClipboardShellCommand(
   adb: AndroidAdbExecutor,
   args: string[],
-  operation: 'read' | 'write',
+  operation: AndroidClipboardOperation,
 ): Promise<string> {
+  const { androidClipboardShellCommandUnavailableError, classifyAndroidClipboardShellResponse } =
+    await import('./clipboard-shell-response.ts');
   const result = await adb(args, { allowFailure: true });
-  // A clean exit settles it before the prose is consulted at all: on a successful read `stdout` is
-  // the clipboard's contents, and a user who has copied one of the missing-shell phrases must not
-  // have their own text mistaken for adb refusing the command.
-  if (result.exitCode === 0) return result.stdout;
-  if (isAndroidShellCommandUnsupported(result.stdout, result.stderr)) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `Android shell clipboard ${operation} is not supported on this device.`,
-    );
+  const verdict = classifyAndroidClipboardShellResponse(result);
+  if (verdict === 'no-shell-command') {
+    throw androidClipboardShellCommandUnavailableError(operation);
   }
-  throw androidAdbResultError(`Failed to ${operation} Android clipboard text`, result);
+  if (verdict === 'call-failed') {
+    throw androidAdbResultError(`Failed to ${operation} Android clipboard text`, result);
+  }
+  return result.stdout;
 }
 
 function normalizeAndroidClipboardText(stdout: string): string {

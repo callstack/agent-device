@@ -5,28 +5,24 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 export function createAndroidToolHost(): AndroidToolHost {
   return Object.freeze({
     /**
-     * Definitive in both directions only where adb actually answers, and honest everywhere else.
-     * The probe runs with `allowFailure`, so a device that is offline, unauthorized, timed out or
-     * otherwise broken comes back as an ordinary non-zero result rather than a throw.
+     * Asks this build's clipboard service whether it implements a shell command, and reads the answer
+     * off the service's own sentence rather than off the exit status, which a service with no shell
+     * command returns as success.
      *
-     * The exit code is read first and settles the answer on its own when it is zero, because on a
-     * clean exit `stdout` is the clipboard's *contents* -- attacker-free but arbitrary user text,
-     * which may well quote an error. Only a failed call can carry prose about the call itself, so
-     * the missing-shell phrases are interpreted on non-zero exits alone. Every remaining result --
-     * non-zero without that prose, or a transport throw -- is `probe-failed`, so admission refuses
-     * instead of caching a verdict the operation would then contradict.
+     * The probe runs with `allowFailure`, so a device that is offline, unauthorized, timed out or
+     * otherwise broken comes back as an ordinary non-zero result rather than a throw, and the
+     * classification keeps a call that failed for another reason from being read as a missing shell
+     * command.
      */
     probeClipboardShellSupport: async (device, signal) => {
       try {
-        const { runAndroidAdb, isAndroidShellCommandUnsupported } = await loadAndroidMechanics();
+        const { runAndroidAdb, androidClipboardShellSupportForResult } =
+          await loadAndroidMechanics();
         const result = await runAndroidAdb(device, ['shell', 'cmd', 'clipboard', 'get', 'text'], {
           allowFailure: true,
           signal,
         });
-        if (result.exitCode === 0) return 'supported';
-        return isAndroidShellCommandUnsupported(result.stdout, result.stderr)
-          ? 'unsupported'
-          : 'probe-failed';
+        return await androidClipboardShellSupportForResult(result);
       } catch {
         return 'probe-failed';
       }

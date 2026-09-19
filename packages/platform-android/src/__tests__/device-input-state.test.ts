@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { promises as fs } from 'node:fs';
 import {
   dismissAndroidKeyboard,
@@ -10,6 +10,7 @@ import {
   readAndroidClipboardWithAdb,
   writeAndroidClipboardWithAdb,
 } from '../device-input-state.ts';
+import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON } from '../clipboard-shell-response.ts';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
@@ -236,14 +237,53 @@ test('writeAndroidClipboardWithAdb leaves safe text unquoted', async () => {
   assert.deepEqual(calls, [['shell', 'cmd', 'clipboard', 'set', 'text', 'android-otp']]);
 });
 
-// A successful `clipboard get text` puts the clipboard's *contents* on stdout, so the missing-shell
-// prose is only ever evidence about a call that failed. Reading it on a clean exit turned a user who
-// had copied one of these phrases into a device that "does not support" its own working clipboard.
+// A read that ran puts the clipboard's *contents* on stdout, so prose there is evidence only about a
+// call that failed. Prose on stderr is about the call whatever the exit status says.
 test('readAndroidClipboardWithAdb returns contents that read like an adb refusal', async () => {
   for (const contents of ['Unknown command: clipboard', 'No shell command implementation.']) {
     const adb: AndroidAdbExecutor = async () => ({ stdout: contents, stderr: '', exitCode: 0 });
     assert.equal(await readAndroidClipboardWithAdb(adb), contents);
   }
+});
+
+// Android 16 (API 36) answers every `cmd clipboard` call this way, and reading the clean exit as
+// execution turned it into `clipboard read` → `text: ""` and `clipboard write` → "Clipboard updated".
+test('readAndroidClipboardWithAdb refuses the exit-0 no-implementation answer instead of empty text', async () => {
+  const adb: AndroidAdbExecutor = async () => ({
+    stdout: '',
+    stderr: 'No shell command implementation.',
+    exitCode: 0,
+  });
+
+  const error = await readAndroidClipboardWithAdb(adb).then(
+    () => assert.fail('expected the clipboard read to reject'),
+    (error: unknown) => error,
+  );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+  assert.equal(
+    (error.details as { reason?: unknown }).reason,
+    ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+  );
+});
+
+test('writeAndroidClipboardWithAdb refuses the exit-0 no-implementation answer instead of claiming success', async () => {
+  const adb: AndroidAdbExecutor = async () => ({
+    stdout: '',
+    stderr: 'No shell command implementation.',
+    exitCode: 0,
+  });
+
+  const error = await writeAndroidClipboardWithAdb(adb, 'android-otp').then(
+    () => assert.fail('expected the clipboard write to reject'),
+    (error: unknown) => error,
+  );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+  assert.equal(
+    (error.details as { reason?: unknown }).reason,
+    ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_REASON,
+  );
 });
 
 test('readAndroidClipboardWithAdb still reports a genuine missing shell command', async () => {
@@ -258,6 +298,8 @@ test('readAndroidClipboardWithAdb still reports a genuine missing shell command'
   });
 });
 
+// A failed call that names no missing command stays the transport failure it is: the clipboard read
+// must not be relabelled, and the adb evidence has to survive for failure classification.
 test('readAndroidClipboardWithAdb reports a non-zero failure that names no missing command', async () => {
   const adb: AndroidAdbExecutor = async () => ({
     stdout: '',
@@ -265,7 +307,17 @@ test('readAndroidClipboardWithAdb reports a non-zero failure that names no missi
     exitCode: 1,
   });
 
-  await assert.rejects(() => readAndroidClipboardWithAdb(adb));
+  const error = await readAndroidClipboardWithAdb(adb).then(
+    () => assert.fail('expected the clipboard read to reject'),
+    (error: unknown) => error,
+  );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.code, 'COMMAND_FAILED');
+  const details = error.details as Record<string, unknown>;
+  assert.equal(details.exitCode, 1);
+  assert.equal(details.stderr, 'error: device offline');
+  assert.equal(details.processExitError, true);
+  assert.equal(typeof normalizeError(error).hint, 'string');
 });
 
 test('dismissAndroidKeyboard skips keyevent when keyboard is already hidden', async () => {
