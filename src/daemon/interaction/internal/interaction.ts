@@ -54,6 +54,19 @@ async function dispatchInteractionCommand(
       return await dispatchTargetedTouchViaRuntime(params, 'hover');
     case 'fill':
       return await dispatchFillViaRuntime(params);
+    default:
+      return await dispatchNonTouchInteractionCommand(params);
+  }
+}
+
+/**
+ * The commands that do not aim a gesture at a captured target. They are a separate question from the
+ * touch dispatch above, which ADR 0011 holds to one delegation per case.
+ */
+async function dispatchNonTouchInteractionCommand(
+  params: RoutedInteractionInput,
+): Promise<DaemonResponse | null> {
+  switch (params.req.command) {
     case PUBLIC_COMMANDS.gesture:
       return await dispatchGestureViaRuntime(params);
     case PUBLIC_COMMANDS.swipe:
