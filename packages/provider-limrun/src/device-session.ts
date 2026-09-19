@@ -62,13 +62,8 @@ type LimrunDeviceSessionBase = {
   startRecording(options?: { quality?: LimrunRecordingQuality }): Promise<void>;
   /** Stops the instance recorder and answers where the finished file is served; nothing is downloaded. */
   stopRecording(): Promise<{ downloadUrl: string }>;
-  /** Fetches a served recording to `outPath`, bounded by `timeoutMs` and `signal`. Retriable while the instance lives. */
-  downloadRecording(input: {
-    downloadUrl: string;
-    outPath: string;
-    signal?: AbortSignal;
-    timeoutMs?: number;
-  }): Promise<void>;
+  /** Fetches a served recording to `outPath` within a fixed deadline. Retriable while the instance lives. */
+  downloadRecording(input: { downloadUrl: string; outPath: string }): Promise<void>;
 };
 
 type LimrunRecordingClient = {
@@ -175,18 +170,12 @@ function createRecordingOperations(
     // Without `localPath` the SDK only stops the recorder and returns the served URL; a download
     // tied to the one-shot stop could not be retried after a dropped transfer.
     stopRecording: async () => ({ downloadUrl: await client.stopRecording({}) }),
-    downloadRecording: async (input: {
-      downloadUrl: string;
-      outPath: string;
-      signal?: AbortSignal;
-      timeoutMs?: number;
-    }) => {
+    downloadRecording: async (input: { downloadUrl: string; outPath: string }) => {
       await host.downloadFile({
         url: input.downloadUrl,
         headers: { Authorization: `Bearer ${token}` },
         destinationPath: input.outPath,
-        timeoutMs: input.timeoutMs ?? LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS,
-        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        timeoutMs: LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS,
       });
     },
   };

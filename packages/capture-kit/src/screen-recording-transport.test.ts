@@ -139,16 +139,14 @@ test('a stop that fails is retried by the next finish', async () => {
   expect(stops).toBe(2);
 });
 
-test('cleanup stops the recorder once, never collects, and aborts a collect in flight', async () => {
-  let collectSignal: AbortSignal | undefined;
+test('cleanup after a failed finish stops the recorder once and does not collect again', async () => {
   const { start, calls } = harness({
     finalize: async () => {
       throw new Error('export unplayable');
     },
     transport: {
-      collect: async (_url, _outputPath, signal) => {
+      collect: async () => {
         calls.push('collect');
-        collectSignal = signal;
       },
     },
   });
@@ -159,11 +157,10 @@ test('cleanup stops the recorder once, never collects, and aborts a collect in f
 
   expect(calls.filter((call) => call === 'stop')).toHaveLength(1);
   expect(calls.filter((call) => call.startsWith('collect'))).toHaveLength(1);
-  expect(collectSignal?.aborted).toBe(true);
 });
 
 test('unsupported options are refused with a typed error before the output is prepared', async () => {
-  const { start, prepare, calls } = harness();
+  const { prepare, calls } = harness();
   const started = startTransportScreenRecording({
     host: {
       screenRecording: {
@@ -193,7 +190,6 @@ test('unsupported options are refused with a typed error before the output is pr
   });
   expect(prepare).not.toHaveBeenCalled();
   expect(calls).toEqual([]);
-  void start;
 });
 
 test('a start cancelled after the recorder acquired is stopped again and reports the cancellation', async () => {
