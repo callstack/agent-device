@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
 
-const { runHarmonyHdc } = vi.hoisted(() => ({ runHarmonyHdc: vi.fn() }));
+const { runHarmonyHdc, runHarmonyShell } = vi.hoisted(() => ({
+  runHarmonyHdc: vi.fn(),
+  runHarmonyShell: vi.fn(),
+}));
 
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc }));
+vi.mock('../hdc.ts', () => ({ runHarmonyHdc, runHarmonyShell }));
 
 import {
   collectArkUiNodes,
@@ -26,6 +29,8 @@ const UNBOUNDED = { maxDepth: Number.POSITIVE_INFINITY, interactiveOnly: false }
 
 beforeEach(() => {
   runHarmonyHdc.mockReset();
+  runHarmonyShell.mockReset();
+  runHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 });
 
 /** Scripts `uitest dumpLayout` + `file recv` so the pulled layout is `layout`. */

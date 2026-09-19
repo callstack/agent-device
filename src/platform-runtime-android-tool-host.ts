@@ -16,9 +16,9 @@ export function createAndroidToolHost(): AndroidToolHost {
      */
     probeClipboardShellSupport: async (device, signal) => {
       try {
-        const { runAndroidAdb, androidClipboardShellSupportForResult } =
+        const { runAndroidShell, androidClipboardShellSupportForResult } =
           await loadAndroidMechanics();
-        const result = await runAndroidAdb(device, ['shell', 'cmd', 'clipboard', 'get', 'text'], {
+        const result = await runAndroidShell(device, ['cmd', 'clipboard', 'get', 'text'], {
           allowFailure: true,
           signal,
         });
@@ -29,7 +29,7 @@ export function createAndroidToolHost(): AndroidToolHost {
     },
     runAdb: async (device, args, options, signal) => {
       const { runAndroidAdb } = await loadAndroidMechanics();
-      const result = await runAndroidAdb(device, [...args], {
+      const result = await runAndroidAdb(device, args, {
         allowFailure: options.allowFailure,
         timeoutMs: options.timeoutMs,
         signal,

@@ -5,11 +5,8 @@ import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
-import {
-  runCmdDetachedMonitored,
-  type ExecDetachedExit,
-  shellQuoteIfNeeded,
-} from '@agent-device/host-kit/command';
+import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 

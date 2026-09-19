@@ -26,9 +26,7 @@ const RUNTIME_PROBE_CALL = [
   'shell',
   'pidof',
   PACKAGE_NAME,
-  '||',
-  'echo',
-  ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER,
+  `|| echo ${ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER}`,
 ];
 
 beforeEach(() => {
@@ -36,7 +34,7 @@ beforeEach(() => {
 });
 
 test('canceled capture answers for the device, not for the force-stop call that served it', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('force-stop')) throw new Error('adb round trip exceeded its budget');
@@ -60,7 +58,7 @@ test('canceled capture answers for the device, not for the force-stop call that 
 
 test('unproven release stays pending until an acquire reads the device', async () => {
   let helperAlive = true;
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (isAndroidHelperRuntimeProbe(args)) {
@@ -102,7 +100,7 @@ test('unproven release stays pending until an acquire reads the device', async (
 });
 
 test('a device that cannot be read leaves the retirement pending without failing the command', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult('unreadable');
@@ -184,7 +182,7 @@ test('an adb killed before it answers is not a release, whatever exit code it le
 });
 
 test('a device that echoes the answer is read as released', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const release = await recordAndroidSnapshotHelperRelease({
     deviceKey: DEVICE_KEY,
     packageName: PACKAGE_NAME,
@@ -204,7 +202,7 @@ test('a device that echoes the answer is read as released', async () => {
 });
 
 test('session cleanup stops the runtime even when the transport refuses the stop', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const cleanup = await settleAndroidSnapshotHelperSessionCleanup({
     adb: recordingAdb(calls, () => ({ exitCode: 1, stdout: '', stderr: 'device offline' })),
     process: new StubAndroidProcess(),
@@ -223,7 +221,7 @@ test('session cleanup stops the runtime even when the transport refuses the stop
 });
 
 test('session cleanup skips the force-stop round trip once release is confirmed', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const cleanup = await settleAndroidSnapshotHelperSessionCleanup({
     adb: recordingAdb(calls),
     process: new StubAndroidProcess(),
@@ -240,7 +238,7 @@ test('session cleanup skips the force-stop round trip once release is confirmed'
 });
 
 function recordingAdb(
-  calls: string[][],
+  calls: (readonly string[])[],
   result: () => { exitCode: number; stdout: string; stderr: string } = () => ({
     exitCode: 0,
     stdout: '',

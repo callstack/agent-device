@@ -6,6 +6,7 @@ import {
 } from './helper-package-install.ts';
 import {
   androidAdbResultError,
+  runAdbShell,
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
 } from './adb-executor.ts';
@@ -205,8 +206,9 @@ async function readInstalledVersionCode(
   timeoutMs: number | undefined,
   signal: AbortSignal | undefined,
 ): Promise<number | undefined> {
-  const result = await adb(
-    ['shell', 'cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
+  const result = await runAdbShell(
+    adb,
+    ['cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
     {
       allowFailure: true,
       timeoutMs,

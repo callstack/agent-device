@@ -1,9 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { shellFragment } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 import { findPidToken } from './perf-native-process.ts';
-import type { AndroidAdbProcess } from './adb-executor.ts';
+import { runAdbShell, type AndroidAdbProcess } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './snapshot-helper-types.ts';
 
 const RETIREMENT_RECOVERY_TIMEOUT_MS = 5_000;
@@ -184,14 +185,14 @@ async function readAndroidSnapshotHelperRuntimeRelease(params: {
     // lost the connection prints nothing at all. No exit status is consulted either, because `adb
     // shell` answers 0 for a device command that failed and the executor has to invent one when the
     // client dies before reporting one.
-    const result = await params.adb(
+    const result = await runAdbShell(
+      params.adb,
       [
-        'shell',
         'pidof',
         params.packageName,
-        '||',
-        'echo',
-        ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER,
+        // `||` is device-shell syntax, not a value: it stays a fragment so the shell parses it as the
+        // fallback operator instead of receiving a literal `||` argument.
+        shellFragment(`|| echo ${ANDROID_SNAPSHOT_HELPER_NO_HELPER_ANSWER}`),
       ],
       { allowFailure: true, timeoutMs: ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS },
     );
@@ -350,13 +351,11 @@ export async function stopAndroidSnapshotHelperRuntime(params: {
   timeoutMs?: number;
   signal?: AbortSignal;
 }): Promise<void> {
-  await params
-    .adb(['shell', 'am', 'force-stop', params.packageName], {
-      allowFailure: true,
-      timeoutMs: params.timeoutMs ?? ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
-      ...(params.signal ? { signal: params.signal } : {}),
-    })
-    .catch(() => {});
+  await runAdbShell(params.adb, ['am', 'force-stop', params.packageName], {
+    allowFailure: true,
+    timeoutMs: params.timeoutMs ?? ANDROID_SNAPSHOT_HELPER_DEVICE_RETIREMENT_TIMEOUT_MS,
+    ...(params.signal ? { signal: params.signal } : {}),
+  }).catch(() => {});
 }
 
 async function removeAndroidSnapshotHelperSessionForward(params: {

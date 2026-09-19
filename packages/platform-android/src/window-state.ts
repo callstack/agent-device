@@ -1,6 +1,6 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runAndroidAdb } from './adb.ts';
+import { runAndroidShell } from './adb.ts';
 import {
   ANDROID_FOCUSED_WINDOW_MARKER,
   ANDROID_FOCUS_MARKERS,
@@ -18,14 +18,14 @@ import {
 // is actually looking at: an escaped press leaves the app resumed while another package owns the
 // focused window (#592).
 const ANDROID_WINDOW_FOCUS_DUMPS = [
-  ['shell', 'dumpsys', 'window', 'windows'],
-  ['shell', 'dumpsys', 'window'],
+  ['dumpsys', 'window', 'windows'],
+  ['dumpsys', 'window'],
 ] as const;
 // What AMS says is resumed. The fallback for a foreground question no window dump answered — a
 // system window (the notification shade, say) owns the focus but not the foreground app.
 const ANDROID_RESUMED_ACTIVITY_DUMPS = [
-  ['shell', 'dumpsys', 'activity', 'activities'],
-  ['shell', 'dumpsys', 'activity'],
+  ['dumpsys', 'activity', 'activities'],
+  ['dumpsys', 'activity'],
 ] as const;
 
 type AndroidWindowDumpTier = readonly (readonly string[])[];
@@ -114,7 +114,7 @@ export function createAndroidWindowDumpReader(device: DeviceInfo): AndroidWindow
     const key = args.join(' ');
     const pending =
       dumps.get(key) ??
-      runAndroidAdb(device, [...args], { allowFailure: true }).then((result) => {
+      runAndroidShell(device, args, { allowFailure: true }).then((result) => {
         const stdout = result.stdout ?? '';
         recordAndroidWindowDumpSections(device, key, stdout);
         return stdout;

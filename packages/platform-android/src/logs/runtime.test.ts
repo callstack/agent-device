@@ -235,8 +235,8 @@ function hostFixture(
     processStartError?: Error;
   } = {},
 ) {
-  const commands: string[][] = [];
-  const backgroundCommands: string[][] = [];
+  const commands: (readonly string[])[] = [];
+  const backgroundCommands: (readonly string[])[] = [];
   let terminated = false;
   let outputDisposed = false;
   let outputOpens = 0;

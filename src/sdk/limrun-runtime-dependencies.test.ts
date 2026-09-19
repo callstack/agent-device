@@ -117,7 +117,7 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   };
   const controller = new AbortController();
   let observedSignal: AbortSignal | undefined;
-  const adb = vi.fn(async (_args: string[], options?: { signal?: AbortSignal }) => {
+  const adb = vi.fn(async (_args: readonly string[], options?: { signal?: AbortSignal }) => {
     observedSignal = options?.signal;
     return await new Promise<never>((_resolve, reject) => {
       options?.signal?.addEventListener(

@@ -6,6 +6,7 @@ import type * as HostRequest from '@agent-device/host-kit/request';
 import type * as HostRetry from '@agent-device/host-kit/retry';
 import type * as HostVersion from '@agent-device/host-kit/version';
 import type * as KernelDeviceIsolation from '@agent-device/kernel/device-isolation';
+import type * as KernelDeviceShell from '@agent-device/kernel/device-shell';
 import type * as KernelKeyedLock from '@agent-device/kernel/keyed-lock';
 import type * as KernelRecord from '@agent-device/kernel/record';
 import type * as KernelSourceValue from '@agent-device/kernel/source-value';
@@ -57,7 +58,6 @@ export type AppleRunnerHost = Pick<
   | 'runCmdBackground'
   | 'requireExecSuccess'
   | 'isCommandTimeoutError'
-  | 'shellQuote'
 > &
   Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
@@ -79,6 +79,7 @@ export type AppleRunnerHost = Pick<
   Pick<typeof KernelRecord, 'isRecord'> &
   Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
   Pick<typeof KernelDeviceIsolation, 'resolveIosSimulatorDeviceSetPath'> &
+  Pick<typeof KernelDeviceShell, 'shellQuote'> &
   Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
   Pick<typeof AppleToolProvider, 'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson'> &
   Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice'> &

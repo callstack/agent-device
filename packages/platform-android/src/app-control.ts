@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
+import { runAdbShell } from './adb-executor.ts';
 import { isAmStartError, parseAndroidLaunchComponent } from './app-lifecycle.ts';
 
 const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
@@ -14,7 +15,7 @@ export async function forceStopAndroidAppWithAdb(
   adb: AndroidAdbExecutor,
   packageName: string,
 ): Promise<void> {
-  await adb(['shell', 'am', 'force-stop', packageName]);
+  await runAdbShell(adb, ['am', 'force-stop', packageName]);
 }
 
 async function resolveAndroidLaunchComponentWithAdb(
@@ -23,9 +24,9 @@ async function resolveAndroidLaunchComponentWithAdb(
   categories: string[] = [ANDROID_LAUNCHER_CATEGORY],
 ): Promise<string | null> {
   for (const category of categories) {
-    const result = await adb(
+    const result = await runAdbShell(
+      adb,
       [
-        'shell',
         'cmd',
         'package',
         'resolve-activity',
@@ -52,8 +53,7 @@ export async function openAndroidAppWithAdb(
 ): Promise<void> {
   const category = options.category ?? ANDROID_LAUNCHER_CATEGORY;
   if (options.activity) {
-    await adb([
-      'shell',
+    await runAdbShell(adb, [
       'am',
       'start',
       '-W',
@@ -69,9 +69,9 @@ export async function openAndroidAppWithAdb(
     return;
   }
 
-  const primary = await adb(
+  const primary = await runAdbShell(
+    adb,
     [
-      'shell',
       'am',
       'start',
       '-W',
@@ -104,8 +104,7 @@ export async function openAndroidAppWithAdb(
       },
     );
   }
-  await adb([
-    'shell',
+  await runAdbShell(adb, [
     'am',
     'start',
     '-W',

@@ -4,7 +4,7 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
 import { commandFirstLine } from '@agent-device/provision-kit/toolchain-probe';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   isAndroidTestImeActive,
   readAndroidDefaultInputMethod,
@@ -93,8 +93,9 @@ async function buildOrphanedTestImeCheck(
   device: DeviceInfo,
   currentIme: string,
 ): Promise<DoctorCheck> {
-  const previousImeResult = await adb(
-    ['shell', 'settings', 'get', 'secure', ANDROID_TEST_IME_SETTINGS_KEYS.previousIme],
+  const previousImeResult = await runAdbShell(
+    adb,
+    ['settings', 'get', 'secure', ANDROID_TEST_IME_SETTINGS_KEYS.previousIme],
     { allowFailure: true, timeoutMs: ANDROID_PROBE_TIMEOUT_MS },
   );
   const previousIme = previousImeResult.stdout.trim();

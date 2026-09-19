@@ -112,7 +112,7 @@ test('the pre-action target read shares the daemon-session helper with the sampl
 
 type FillHelperSession = {
   provider: AndroidAdbProvider;
-  spawnArgs: string[][];
+  spawnArgs: (readonly string[])[];
   processes: FakeAndroidProcess[];
   captureCount: () => number;
   forwardRemovals: () => number;
@@ -121,8 +121,8 @@ type FillHelperSession = {
 function createFillHelperSession(
   options: { textForCapture?: (captureIndex: number) => string } = {},
 ): FillHelperSession {
-  const calls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   let captureCount = 0;
   const provider = createPersistentSnapshotHelperProvider({

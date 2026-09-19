@@ -298,6 +298,7 @@ function createContractFixture() {
         dismissed: false,
       }),
       readLogs: async () => 'log line\n',
+      forceStopApp: async () => {},
       deviceAdbInvocation: (serial: string, command: readonly string[]) =>
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command: readonly string[]) =>

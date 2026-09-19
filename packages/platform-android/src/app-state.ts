@@ -1,16 +1,17 @@
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
+import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { parseAndroidFocusSegment } from './app-parsers.ts';
 
 const FOCUS_COMMANDS = [
-  ['shell', 'dumpsys', 'window', 'windows'],
-  ['shell', 'dumpsys', 'window'],
+  ['dumpsys', 'window', 'windows'],
+  ['dumpsys', 'window'],
 ] as const;
 const ACTIVITY_COMMANDS = [
-  ['shell', 'dumpsys', 'activity', 'activities'],
-  ['shell', 'dumpsys', 'activity'],
+  ['dumpsys', 'activity', 'activities'],
+  ['dumpsys', 'activity'],
 ] as const;
 export type AndroidCommandExecutor = (
-  args: string[],
+  args: readonly string[],
   options: { allowFailure: boolean },
 ) => Promise<{ exitCode: number; stdout?: string; stderr?: string }>;
 
@@ -28,12 +29,12 @@ export async function readAndroidAppStateWithExecutor(
 
 async function readAndroidFocusWithExecutor(
   run: AndroidCommandExecutor,
-  commands: readonly (readonly string[])[],
+  commands: readonly (readonly ShellWord[])[],
   signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult | null> {
-  for (const args of commands) {
+  for (const words of commands) {
     signal?.throwIfAborted();
-    const result = await run([...args], { allowFailure: true });
+    const result = await run(deviceShellArgv('shell', words), { allowFailure: true });
     signal?.throwIfAborted();
     const parsed = parseAndroidForegroundApp(result.stdout ?? '');
     if (parsed) return parsed;

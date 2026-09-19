@@ -201,7 +201,7 @@ test('iOS simulator recording reports host contention and recovers through the f
   );
 });
 
-function writeJsonOutputIfRequested(args: string[]): void {
+function writeJsonOutputIfRequested(args: readonly string[]): void {
   const jsonOutputIndex = args.indexOf('--json-output');
   const jsonPath = jsonOutputIndex >= 0 ? args[jsonOutputIndex + 1] : undefined;
   if (!jsonPath) return;

@@ -12,7 +12,7 @@ import type {
 
 export type AndroidAdbCommandExecutorOverride = (
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult> | undefined;
 

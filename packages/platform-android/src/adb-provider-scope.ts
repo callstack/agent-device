@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import {
+  assertDeviceShellArgv,
+  deviceShellArgv,
+  deviceShellExecutableOf,
+  type ShellWord,
+} from '@agent-device/kernel/device-shell';
 import {
   androidAdbInvocation,
   androidAdbPayloadWithoutSerial,
@@ -50,7 +55,7 @@ export function createDeviceAdbExecutor(
   device: DeviceInfo,
   options: Readonly<{ serverPort?: number }> = {},
 ): AndroidAdbExecutor {
-  return createSerialAdbExecutor(device.id, options.serverPort);
+  return guardDeviceShell(createSerialAdbExecutor(device.id, options.serverPort));
 }
 
 function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAdbExecutor {
@@ -65,17 +70,17 @@ function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAd
 }
 
 function createSerialAdbSpawner(serial: string, serverPort?: number): AndroidAdbSpawner {
-  return (args, options) => {
+  return guardDeviceShellSpawn((args, options) => {
     const request = deviceAdbRouteRequest(serial, serverPort, args, options);
     return requireAndroidAdbHost().spawnAdb(request.invocation, request.options);
-  };
+  });
 }
 
 /** One device-scoped request: addressing decided once, and the server's option channel removed. */
 function deviceAdbRouteRequest<Options extends { serverPort?: number }>(
   serial: string,
   installed: number | undefined,
-  args: string[],
+  args: readonly string[],
   options: Options | undefined,
 ): { invocation: AndroidAdbInvocation; options: Omit<Options, 'serverPort'> } {
   const { serverPort: requested, ...rest } = options ?? ({} as Options);
@@ -98,7 +103,7 @@ function deviceAdbRouteRequest<Options extends { serverPort?: number }>(
  */
 function androidDeviceAdbInvocation(
   serial: string,
-  args: string[],
+  args: readonly string[],
   port: number | undefined,
 ): AndroidAdbInvocation {
   const parsed = parseAndroidAdbArgv(args);
@@ -161,8 +166,8 @@ export function resolveAndroidAdbExecutor(
   executor?: AndroidAdbExecutor,
 ): AndroidAdbExecutor {
   const scoped = scopeForDevice(device);
-  if (executor) return executor;
-  if (scoped?.serial === device.id) return scoped.provider.exec;
+  if (executor) return guardDeviceShell(executor);
+  if (scoped?.serial === device.id) return guardDeviceShell(scoped.provider.exec);
   return createDeviceAdbExecutor(device);
 }
 
@@ -171,10 +176,12 @@ export function resolveAndroidAdbProvider(
   provider?: AndroidAdbProvider | AndroidAdbExecutor,
 ): AndroidAdbProvider {
   const scoped = scopeForDevice(device);
-  if (provider) return normalizeAndroidAdbProvider(provider);
-  return scoped?.serial === device.id
-    ? normalizeAndroidAdbProvider(scoped.provider)
-    : createLocalAndroidAdbProvider(device);
+  if (provider) return guardProviderDeviceShell(normalizeAndroidAdbProvider(provider));
+  return guardProviderDeviceShell(
+    scoped?.serial === device.id
+      ? normalizeAndroidAdbProvider(scoped.provider)
+      : createLocalAndroidAdbProvider(device),
+  );
 }
 
 /**
@@ -189,7 +196,7 @@ export function resolveScopedAndroidAdbBackgroundTransport(
   if (scoped?.serial !== device.id) return { mode: 'local' };
   return {
     mode: 'transport-composed',
-    ...(scoped.provider.spawn ? { spawn: scoped.provider.spawn } : {}),
+    ...(scoped.provider.spawn ? { spawn: guardDeviceShellSpawn(scoped.provider.spawn) } : {}),
   };
 }
 
@@ -325,6 +332,49 @@ function requireScopedSerial(
 }
 
 function isAdbCommand(command: string): boolean {
-  const executable = path.basename(command).replace(/\.(?:com|exe|bat|cmd)$/i, '');
-  return executable === 'adb';
+  return deviceShellExecutableOf(command) === 'adb';
+}
+
+/** Runs `adb shell <words>` through an executor; every word is quoted for the device shell. */
+export async function runAdbShell(
+  adb: AndroidAdbExecutor,
+  words: readonly ShellWord[],
+  options?: AndroidAdbExecutorOptions,
+): Promise<AndroidAdbExecutorResult> {
+  return await adb(deviceShellArgv('shell', words), options);
+}
+
+/** Runs `adb exec-out <words>` (raw stdout) through an executor. */
+export async function runAdbExecOut(
+  adb: AndroidAdbExecutor,
+  words: readonly ShellWord[],
+  options?: AndroidAdbExecutorOptions,
+): Promise<AndroidAdbExecutorResult> {
+  return await adb(deviceShellArgv('exec-out', words), options);
+}
+
+/** Every adb entry point the cluster hands out refuses a device-shell command the funnel skipped. */
+function guardDeviceShell(executor: AndroidAdbExecutor): AndroidAdbExecutor {
+  return async (args, options) => {
+    assertDeviceShellArgv(args, 'adb');
+    return await executor(args, options);
+  };
+}
+
+function guardDeviceShellSpawn(spawn: AndroidAdbSpawner): AndroidAdbSpawner {
+  return (args, options) => {
+    assertDeviceShellArgv(args, 'adb');
+    return spawn(args, options);
+  };
+}
+
+/** A provider's exec and spawn are adb boundaries just like the local route's. */
+function guardProviderDeviceShell<Provider extends AndroidAdbProvider>(
+  provider: Provider,
+): Provider {
+  return {
+    ...provider,
+    exec: guardDeviceShell(provider.exec),
+    ...(provider.spawn ? { spawn: guardDeviceShellSpawn(provider.spawn) } : {}),
+  };
 }

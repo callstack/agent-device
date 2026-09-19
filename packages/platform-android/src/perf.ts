@@ -5,6 +5,7 @@ import { requireExecSuccess } from '@agent-device/host-kit/command';
 import {
   androidAdbResultError,
   resolveAndroidAdbExecutor,
+  runAdbShell,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import { parseNumericToken } from './perf-parsing.ts';
@@ -55,7 +56,7 @@ export async function sampleAndroidMemoryPerf(
 ): Promise<AndroidMemoryPerfSample> {
   const adb = resolveAndroidAdbExecutor(device, options.adb);
   try {
-    const result = await adb(['shell', 'dumpsys', 'meminfo', packageName], {
+    const result = await runAdbShell(adb, ['dumpsys', 'meminfo', packageName], {
       timeoutMs: ANDROID_PERF_TIMEOUT_MS,
     });
     return parseAndroidMemInfoSample(result.stdout, packageName, new Date().toISOString());
@@ -78,7 +79,7 @@ export async function captureAndroidHeapSnapshot(
   const hadLocalArtifact = await fileExists(files, outPath);
   try {
     requireExecSuccess(
-      await adb(['shell', 'am', 'dumpheap', packageName, remotePath], {
+      await runAdbShell(adb, ['am', 'dumpheap', packageName, remotePath], {
         allowFailure: true,
         timeoutMs: ANDROID_HEAP_DUMP_TIMEOUT_MS,
       }),
@@ -141,7 +142,7 @@ export async function captureAndroidHeapSnapshot(
       remotePath,
     };
   } finally {
-    await adb(['shell', 'rm', '-f', remotePath], {
+    await runAdbShell(adb, ['rm', '-f', remotePath], {
       allowFailure: true,
       timeoutMs: ANDROID_PERF_TIMEOUT_MS,
     }).catch(() => {});
@@ -207,7 +208,7 @@ export function parseAndroidMemInfoSample(
 }
 
 async function resolveAndroidAppPid(adb: AndroidAdbExecutor, packageName: string): Promise<number> {
-  const result = await adb(['shell', 'pidof', packageName], {
+  const result = await runAdbShell(adb, ['pidof', packageName], {
     allowFailure: true,
     timeoutMs: ANDROID_PERF_TIMEOUT_MS,
   });

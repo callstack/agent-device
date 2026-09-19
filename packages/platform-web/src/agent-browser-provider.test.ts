@@ -29,7 +29,7 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 
 type AgentBrowserCall = {
   cmd: string;
-  args: string[];
+  args: readonly string[];
 };
 
 const mockProviderStartupCleanup = vi.mocked(providerStartupCleanupMock);
@@ -300,7 +300,7 @@ test('agent-browser provider fetches snapshot rects only when requested', async 
 test('agent-browser provider dumps session network requests', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
-    const executor = async (cmd: string, args: string[]): Promise<ExecResult> => {
+    const executor = async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
       recordAgentBrowserCall(calls, cmd, args);
       return jsonResult({
         success: true,
@@ -431,7 +431,7 @@ test('agent-browser provider generated audio probe script samples streams discov
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
     const page = createAudioProbeScriptPage();
-    const executor = async (cmd: string, args: string[]): Promise<ExecResult> => {
+    const executor = async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
       const cliArgs = recordAgentBrowserCall(calls, cmd, args);
       assert.equal(cliArgs[0], 'eval');
       const script = cliArgs[1];
@@ -587,7 +587,7 @@ async function withManagedAgentBrowserProvider(
 }
 
 function recordingExecutor(calls: AgentBrowserCall[]) {
-  return async (cmd: string, args: string[]): Promise<ExecResult> => {
+  return async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
     recordAgentBrowserCall(calls, cmd, args);
     return jsonResult({ success: true, data: {} });
   };
@@ -598,18 +598,22 @@ function recordingExecutor(calls: AgentBrowserCall[]) {
  * and asserted by agent-browser-tool. Here it is only stripped, so provider
  * tests read as the agent-browser CLI arguments they are about.
  */
-function agentBrowserCliArgs(args: string[]): string[] {
+function agentBrowserCliArgs(args: readonly string[]): string[] {
   return args.slice(1);
 }
 
-function recordAgentBrowserCall(calls: AgentBrowserCall[], cmd: string, args: string[]): string[] {
+function recordAgentBrowserCall(
+  calls: AgentBrowserCall[],
+  cmd: string,
+  args: readonly string[],
+): string[] {
   const cliArgs = agentBrowserCliArgs(args);
   calls.push({ cmd, args: cliArgs });
   return cliArgs;
 }
 
 function snapshotExecutor(calls: AgentBrowserCall[]) {
-  return async (cmd: string, args: string[], options: { allowFailure?: boolean }) => {
+  return async (cmd: string, args: readonly string[], options: { allowFailure?: boolean }) => {
     const cliArgs = recordAgentBrowserCall(calls, cmd, args);
     if (cliArgs[0] === 'snapshot') return snapshotPayload();
     if (cliArgs.slice(0, 3).join(' ') === 'get box @e3') {

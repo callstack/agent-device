@@ -6,7 +6,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 export type MockRunCmdResult = Awaited<ReturnType<typeof runCmd>>;
 export type HostCommandHandler = (
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: Parameters<typeof runCmd>[2],
 ) => Promise<MockRunCmdResult | null>;
 
@@ -76,7 +76,7 @@ export function simulatorPsUnavailable(): HostCommandHandler {
       : null;
 }
 
-export function isSimulatorPs(cmd: string, args: string[]): boolean {
+export function isSimulatorPs(cmd: string, args: readonly string[]): boolean {
   return cmd === 'xcrun' && args.includes('spawn') && args.includes('ps');
 }
 

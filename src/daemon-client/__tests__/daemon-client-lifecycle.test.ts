@@ -29,11 +29,8 @@ import {
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  runCmdDetachedMonitored,
-  runCmdSync,
-  shellQuoteIfNeeded,
-} from '@agent-device/host-kit/command';
+import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';

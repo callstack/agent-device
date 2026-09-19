@@ -1,3 +1,4 @@
+import { relayDeviceShellArgvWithoutOptions } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Readable, Stream, Writable } from 'node:stream';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -78,12 +79,12 @@ export type AndroidAdbProcess = {
  * Implementations must be safe to call concurrently for one request.
  */
 export type AndroidAdbExecutor = (
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult>;
 
 export type AndroidAdbSpawner = (
-  args: string[],
+  args: readonly string[],
   options?: AndroidAdbSpawnOptions,
 ) => AndroidAdbProcess;
 
@@ -462,7 +463,9 @@ export function parseAndroidAdbArgv(args: readonly string[]): AndroidAdbInvocati
     server.kind === 'port';
   return {
     target,
-    command: index === 0 ? args : args.slice(index),
+    // Reading addressing off the front cannot change the device command, so a minted command stays
+    // minted through this slice; an argv built outside the funnel stays what it was.
+    command: relayDeviceShellArgvWithoutOptions(args, 0, index),
     rawArgv: requestedAddressing ? args : undefined,
   };
 }
@@ -511,15 +514,17 @@ export function requireSameAndroidAdbServer(
 export function androidAdbPayloadWithoutSerial(
   args: readonly string[],
   serial: string,
-): string[] | undefined {
+): readonly string[] | undefined {
   let index = 0;
   for (;;) {
     const effect: AndroidAdbOptionEffect =
       index < args.length ? readAndroidAdbOption(args, index) : { kind: 'stop', next: index };
     if (effect.kind === 'stop') return undefined;
     if (effect.kind === 'serial') {
+      // A minted command survives the loss of its own serial pair: the scope adopts that pair as its
+      // addressing, which is exactly the removal the device command cannot object to.
       return effect.serial === serial
-        ? [...args.slice(0, index), ...args.slice(index + 2)]
+        ? relayDeviceShellArgvWithoutOptions(args, index, 2)
         : undefined;
     }
     index = effect.next;

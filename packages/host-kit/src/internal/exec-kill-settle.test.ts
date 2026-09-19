@@ -10,7 +10,7 @@ import {
   signalProcessGroupBestEffort,
   type ExecBackgroundOptions,
 } from './exec.ts';
-import { shellQuote } from './shell-quote.ts';
+import { shellQuote } from '@agent-device/kernel/device-shell';
 import { sleep } from './timeouts.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 

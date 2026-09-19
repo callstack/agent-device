@@ -23,4 +23,3 @@ export {
   withCommandExecutorOverride,
   withoutCommandExecutorOverride,
 } from './internal/exec.ts';
-export { shellQuote, shellQuoteIfNeeded } from './internal/shell-quote.ts';

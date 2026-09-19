@@ -2,11 +2,11 @@ import { describe, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidToolHost } from '../platform-runtime-android-tool-host.ts';
 
-const runAndroidAdb = vi.hoisted(() => vi.fn());
+const runAndroidShell = vi.hoisted(() => vi.fn());
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-android/mechanics')>()),
-  runAndroidAdb,
+  runAndroidShell,
 }));
 
 const device: DeviceInfo = {
@@ -32,12 +32,12 @@ async function probe() {
 // build may not have until the daemon restarts.
 describe('android clipboard shell probe: what each adb result is allowed to prove', () => {
   test('clipboard contents on a clean exit prove support', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, 'clipboard contents'));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, 'clipboard contents'));
     await expect(probe()).resolves.toBe('supported');
   });
 
   test('an empty clipboard on a clean exit still proves support', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, ''));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, ''));
     await expect(probe()).resolves.toBe('supported');
   });
 
@@ -45,12 +45,12 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
   // answers with its sentence on stderr and a clean exit, and the clipboard is never touched. Reading
   // the exit status here is what advertised `clipboard` in `capabilities` on such a device.
   test('the no-shell-command sentence on a clean exit proves the build has none', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, '', 'No shell command implementation.'));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, '', 'No shell command implementation.'));
     await expect(probe()).resolves.toBe('unsupported');
   });
 
   test('the missing-shell prose on a failed call proves the build has none', async () => {
-    runAndroidAdb.mockResolvedValueOnce(
+    runAndroidShell.mockResolvedValueOnce(
       adbResult(255, '', 'Error: no shell command implementation.'),
     );
     await expect(probe()).resolves.toBe('unsupported');
@@ -64,19 +64,19 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['a bridge that never found the device', "error: device '(null)' not found"],
     ['a generic adb failure', 'error: closed'],
   ])('%s refuses rather than admitting support', async (_case, stderr) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, '', stderr));
+    runAndroidShell.mockResolvedValueOnce(adbResult(1, '', stderr));
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
   test('a transport throw refuses rather than admitting support', async () => {
-    runAndroidAdb.mockRejectedValueOnce(new Error('spawn adb ENOENT'));
+    runAndroidShell.mockRejectedValueOnce(new Error('spawn adb ENOENT'));
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
   // Stream-merged transports carry the device's prose onto stdout, so prose is read off stdout once
   // the call has failed.
   test('missing-shell prose on stdout of a non-zero exit reads as unsupported', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, 'No shell command implementation.', ''));
+    runAndroidShell.mockResolvedValueOnce(adbResult(1, 'No shell command implementation.', ''));
     await expect(probe()).resolves.toBe('unsupported');
   });
 
@@ -89,14 +89,16 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['adb said: Unknown command: clipboard'],
     ['No shell command implementation.'],
   ])('a clipboard holding %j is still supported', async (contents) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, contents));
+    runAndroidShell.mockResolvedValueOnce(adbResult(0, contents));
     await expect(probe()).resolves.toBe('supported');
   });
 
   // `unknown command` is adb's own wording as well as a service's (`adb: unknown command features`),
   // so it cannot settle anything about this device's clipboard service on a call that succeeded.
   test('the generic unknown-command phrase on stderr of a clean exit proves nothing', async () => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(0, 'clipboard contents', 'Unknown command: foo'));
+    runAndroidShell.mockResolvedValueOnce(
+      adbResult(0, 'clipboard contents', 'Unknown command: foo'),
+    );
     await expect(probe()).resolves.toBe('supported');
   });
 });

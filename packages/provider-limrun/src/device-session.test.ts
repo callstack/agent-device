@@ -49,6 +49,7 @@ const TEST_DEPENDENCIES = {
       dismissed: false,
     }),
     readLogs: async () => 'log line\n',
+    forceStopApp: async () => {},
     deviceAdbInvocation: (serial, command) =>
       androidAdbInvocation(androidAdbSerialTarget(serial), command),
     hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),

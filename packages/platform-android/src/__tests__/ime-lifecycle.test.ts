@@ -107,7 +107,7 @@ function fakeDeviceState(initialIme: string) {
       : { exitCode: 1, stdout: '', stderr: 'not found' };
   }
 
-  function handleImeSet(args: string[]): FakeAdbResult {
+  function handleImeSet(args: readonly string[]): FakeAdbResult {
     imeSetCalls++;
     const target = args[3] as string;
     if (blockedImeSetTargets.has(target)) return ok();
@@ -115,7 +115,7 @@ function fakeDeviceState(initialIme: string) {
     return ok();
   }
 
-  function handleSettingsGet(args: string[]): FakeAdbResult {
+  function handleSettingsGet(args: readonly string[]): FakeAdbResult {
     const key = args[4];
     if (key === 'default_input_method') return ok(defaultIme);
     if (key === SETTINGS_KEY && returnMismatchForNextPersistReadback) {
@@ -126,7 +126,7 @@ function fakeDeviceState(initialIme: string) {
     throw new Error(`unexpected settings get key: ${String(key)}`);
   }
 
-  function handleSettingsPut(args: string[]): FakeAdbResult {
+  function handleSettingsPut(args: readonly string[]): FakeAdbResult {
     if (args[4] === SETTINGS_KEY) {
       if (failPersist) return { exitCode: 1, stdout: '', stderr: 'rejected' };
       previousImeRecord = args[5];
@@ -138,12 +138,12 @@ function fakeDeviceState(initialIme: string) {
     return ok();
   }
 
-  function handleSettingsDelete(args: string[]): FakeAdbResult {
+  function handleSettingsDelete(args: readonly string[]): FakeAdbResult {
     if (args[4] === SETTINGS_KEY) previousImeRecord = undefined;
     return ok();
   }
 
-  const handlers: Record<string, (args: string[]) => FakeAdbResult> = {
+  const handlers: Record<string, (args: readonly string[]) => FakeAdbResult> = {
     'shell ime enable': () => ok(),
     'shell ime set': handleImeSet,
     'shell settings get': handleSettingsGet,

@@ -17,7 +17,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
-type SpawnedCommand = { cmd: string; args: string[] };
+type SpawnedCommand = { cmd: string; args: readonly string[] };
 
 test('managed agent-browser reports actionable guidance when install is missing', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-tool-');
@@ -246,7 +246,7 @@ test('managed agent-browser setup gives the install lock back on every path out'
   try {
     await withNodeRuntime({ version: '24.13.0' }, async () => {
       await withCommandExecutorOverride(
-        async (_cmd: string, args: string[]) => {
+        async (_cmd: string, args: readonly string[]) => {
           if (args.includes('install') && args.includes('--prefix')) {
             writeFakeManagedAgentBrowserPackage(stateDir);
           }

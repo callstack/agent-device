@@ -3,6 +3,7 @@ import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { waitForStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor, resolveAndroidAdbProvider } from './adb-provider-scope.ts';
+import { runAdbShell } from './adb-executor.ts';
 import {
   ensureAndroidImeHelper,
   getAndroidImeHelperDeviceKey,
@@ -152,11 +153,11 @@ async function activateAndroidTestImeAfterStartupRecovery(
     };
   }
 
-  await adb(['shell', 'ime', 'enable', manifest.serviceComponent], {
+  await runAdbShell(adb, ['ime', 'enable', manifest.serviceComponent], {
     allowFailure: true,
     timeoutMs: 10_000,
   });
-  const setResult = await adb(['shell', 'ime', 'set', manifest.serviceComponent], {
+  const setResult = await runAdbShell(adb, ['ime', 'set', manifest.serviceComponent], {
     allowFailure: true,
     timeoutMs: 10_000,
   });

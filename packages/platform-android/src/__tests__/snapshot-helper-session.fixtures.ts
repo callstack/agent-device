@@ -52,13 +52,13 @@ export class FakeAndroidProcess extends EventEmitter implements AndroidAdbProces
 }
 
 export type PersistentSnapshotHelperProviderOptions = {
-  calls: string[][];
-  spawnArgs: string[][];
+  calls: (readonly string[])[];
+  spawnArgs: (readonly string[])[];
   processes: FakeAndroidProcess[];
   sessionResponseMode?: 'ok' | 'malformed';
   sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
   stalledSessionCleanup?: boolean;
-  oneShotAttempts?: string[][];
+  oneShotAttempts?: (readonly string[])[];
   oneShotXml?: string;
   /** Make the device-side stop fail the way an unhealthy transport answers. */
   runtimeStopFailure?: boolean;
@@ -144,13 +144,13 @@ export function createPersistentSnapshotHelperProvider(
 }
 
 export type SessionProviderOptions = {
-  calls: string[][];
-  cleanupAborts?: string[][];
+  calls: (readonly string[])[];
+  cleanupAborts?: (readonly string[])[];
   processes?: FakeAndroidProcess[];
   quitExit?: { code: number | null; signal: NodeJS.Signals | null };
   quitExitDelayMs?: number;
   quitResponseMode?: 'ok' | 'malformed';
-  spawnArgs?: string[][];
+  spawnArgs?: (readonly string[])[];
   responseMode?: 'ok' | 'malformed' | 'ui-automation-timeout';
   responseDelayMs?: number;
   forceStopDelayMs?: number;
@@ -337,7 +337,7 @@ function adbFeaturesResult(options: SessionProviderOptions): {
 
 async function stallSessionCleanupIfConfigured(
   options: SessionProviderOptions,
-  args: string[],
+  args: readonly string[],
   signal: AbortSignal | undefined,
   forceStopsRuntime: boolean,
 ): Promise<void> {
@@ -431,7 +431,7 @@ function createPersistentSnapshotExec(
 
 function stalledPersistentCleanup(
   options: PersistentSnapshotHelperProviderOptions,
-  args: string[],
+  args: readonly string[],
   signal: AbortSignal | undefined,
 ): ReturnType<AndroidAdbExecutor> | undefined {
   if (!options.stalledSessionCleanup || !signal) return undefined;
@@ -442,7 +442,7 @@ function stalledPersistentCleanup(
 
 function persistentSnapshotExecResult(
   options: PersistentSnapshotHelperProviderOptions,
-  args: string[],
+  args: readonly string[],
 ): ReturnType<AndroidAdbExecutor> {
   if (args.includes('--show-versioncode')) {
     return Promise.resolve(ANDROID_HELPER_INSTALLED_VERSION_PROBE);
@@ -508,7 +508,7 @@ function sessionResponse(params: {
     .join('\n')}\n\n${params.body}`;
 }
 
-function readSessionPort(args: string[]): number {
+function readSessionPort(args: readonly string[]): number {
   const index = args.indexOf('sessionPort');
   assert.notEqual(index, -1);
   return Number(args[index + 1]);

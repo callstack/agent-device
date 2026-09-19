@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AndroidAdbExecutor } from './adb-executor.ts';
+import { shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
+import { runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import { buildAndroidNativeToolUnavailableHint } from './perf-native-errors.ts';
 import { ANDROID_PERF_TIMEOUT_MS, type AndroidNativePerfKind } from './perf-native-types.ts';
 
@@ -8,7 +9,7 @@ export async function resolveAndroidAppPid(
   packageName: string,
 ): Promise<string> {
   try {
-    const result = await adb(['shell', 'pidof', packageName], {
+    const result = await runAdbShell(adb, ['pidof', packageName], {
       allowFailure: true,
       timeoutMs: ANDROID_PERF_TIMEOUT_MS,
     });
@@ -28,10 +29,14 @@ export async function assertAndroidNativeToolAvailable(
   tool: AndroidNativePerfKind,
   packageName: string,
 ): Promise<void> {
-  const result = await adb(['shell', `command -v ${tool} || which ${tool}`], {
-    allowFailure: true,
-    timeoutMs: ANDROID_PERF_TIMEOUT_MS,
-  });
+  const result = await runAdbShell(
+    adb,
+    [shellFragment(`command -v ${shellQuote(tool)} || which ${shellQuote(tool)}`)],
+    {
+      allowFailure: true,
+      timeoutMs: ANDROID_PERF_TIMEOUT_MS,
+    },
+  );
   if (result.exitCode === 0 && result.stdout.trim()) return;
   throw new AppError('UNSUPPORTED_OPERATION', `Android device does not expose ${tool}`, {
     package: packageName,

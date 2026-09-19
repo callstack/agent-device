@@ -78,7 +78,7 @@ const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
 const EXEC_DIAGNOSTIC_ARG_LIMIT = 6;
 export type CommandExecutorOverride = (
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecOptions,
 ) => Promise<ExecResult> | undefined;
 
@@ -99,7 +99,7 @@ export async function withoutCommandExecutorOverride<T>(fn: () => Promise<T>): P
 
 export async function runCmd(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecOptions = {},
 ): Promise<ExecResult> {
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
@@ -109,7 +109,7 @@ export async function runCmd(
 
 export async function runCmdStreaming(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
@@ -139,7 +139,7 @@ export function coerceExecResult<T extends Pick<ExecResult, 'stdout' | 'stderr' 
 
 function runSpawnedCommand(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const executable = normalizeExecutableCommand(cmd);
@@ -309,7 +309,11 @@ export async function resolveFileOverridePath(
 }
 
 // fallow-ignore-next-line complexity
-export function runCmdSync(cmd: string, args: string[], options: ExecOptions = {}): ExecResult {
+export function runCmdSync(
+  cmd: string,
+  args: readonly string[],
+  options: ExecOptions = {},
+): ExecResult {
   const executable = normalizeExecutableCommand(cmd);
   const result = spawnSync(executable, args, {
     cwd: options.cwd,
@@ -366,7 +370,7 @@ export function runCmdSync(cmd: string, args: string[], options: ExecOptions = {
 
 export function runCmdDetached(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecDetachedOptions = {},
 ): number {
   return runCmdDetachedMonitored(cmd, args, options).pid;
@@ -374,7 +378,7 @@ export function runCmdDetached(
 
 export function runCmdDetachedMonitored(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecDetachedOptions = {},
 ): ExecDetachedProcess {
   const executable = normalizeExecutableCommand(cmd);
@@ -405,7 +409,7 @@ export function runCmdDetachedMonitored(
 
 export function runCmdBackground(
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: ExecBackgroundOptions = {},
 ): ExecBackgroundResult {
   const executable = normalizeExecutableCommand(cmd);
@@ -481,9 +485,9 @@ export function runCmdBackground(
 }
 
 type ExecTraceContext = {
-  emitBackgroundCompletion: (cmd: string, args: string[], event: 'error' | 'exit') => void;
-  emitBackgroundSpawn: (cmd: string, args: string[]) => void;
-  emitForegroundCompletion: (cmd: string, args: string[]) => void;
+  emitBackgroundCompletion: (cmd: string, args: readonly string[], event: 'error' | 'exit') => void;
+  emitBackgroundSpawn: (cmd: string, args: readonly string[]) => void;
+  emitForegroundCompletion: (cmd: string, args: readonly string[]) => void;
 };
 
 function createExecTraceContext(): ExecTraceContext {
@@ -538,7 +542,7 @@ function createDisabledExecTraceContext(): ExecTraceContext {
 
 function emitExecCommandDiagnostic(params: {
   cmd: string;
-  args: string[];
+  args: readonly string[];
   startedAtMs?: number;
   data?: Record<string, unknown>;
 }): void {
@@ -570,7 +574,12 @@ function normalizeExecutableCommand(cmd: string): string {
   return candidate;
 }
 
-function createSpawnError(executable: string, cmd: string, args: string[], err: Error): AppError {
+function createSpawnError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  err: Error,
+): AppError {
   const code = (err as NodeJS.ErrnoException).code;
   if (code === 'ENOENT') {
     return createMissingToolError(executable, cmd, err);
@@ -585,7 +594,7 @@ function createMissingToolError(executable: string, cmd: string, cause: Error): 
 function createCommandFailedError(
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   cause: Error,
 ): AppError {
   return new AppError('COMMAND_FAILED', `Failed to run ${executable}`, { cmd, args }, cause);
@@ -594,7 +603,7 @@ function createCommandFailedError(
 function createStdinError(
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   cause: unknown,
 ): AppError {
   return new AppError(
@@ -605,14 +614,18 @@ function createStdinError(
   );
 }
 
-function createCommandCanceledError(executable: string, cmd: string, args: string[]): AppError {
+function createCommandCanceledError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+): AppError {
   return createRequestCanceledError({ cmd, args, executable });
 }
 
 function createTimeoutError(
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   timeoutMs: number,
   exitCode: number,
   stdout: string,
@@ -646,7 +659,7 @@ export function isCommandTimeoutError(error: unknown): error is AppError {
 function createExitError(
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   exitCode: number,
   stdout: string,
   stderr: string,
@@ -707,7 +720,7 @@ function spawnRejectionError(
   abort: CommandAbort,
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   err: Error,
 ): AppError {
   return abort.didAbort
@@ -721,7 +734,7 @@ function commandCloseFailure(
   abort: CommandAbort,
   executable: string,
   cmd: string,
-  args: string[],
+  args: readonly string[],
   exitCode: number,
   allowFailure: boolean | undefined,
   stdout: string,

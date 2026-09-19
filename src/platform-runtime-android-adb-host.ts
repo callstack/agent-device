@@ -1,5 +1,6 @@
 import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';
 import { lowerAndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
+import { assertDeviceShellArgv } from '@agent-device/kernel/device-shell';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   coerceExecResult,
@@ -27,6 +28,15 @@ import os from 'node:os';
 import path from 'node:path';
 
 const environment = process.env;
+
+/**
+ * The adb process boundary: a `shell`/`exec-out` command reaches the device's `sh` verbatim, so the
+ * command must have been minted by the device-shell funnel. Checked on the command, not the lowered
+ * argv, because the addressing this host stitches in front of it is not part of the device command.
+ */
+function requireQuotedDeviceShellCommand(command: readonly string[]): void {
+  assertDeviceShellArgv(command, 'adb');
+}
 
 bindAndroidAdbHost({
   environment,
@@ -82,6 +92,7 @@ bindAndroidAdbHost({
     writeBytes: async (filePath, value) => await writeFile(filePath, value),
   },
   execAdb: async (invocation, options) => {
+    requireQuotedDeviceShellCommand(invocation.command);
     const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
     return await runCmd('adb', lowered.args, {
       ...lowered.options,
@@ -91,6 +102,7 @@ bindAndroidAdbHost({
     });
   },
   spawnAdb: (invocation, options) => {
+    requireQuotedDeviceShellCommand(invocation.command);
     const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
     const background = runCmdBackground('adb', lowered.args, {
       ...lowered.options,

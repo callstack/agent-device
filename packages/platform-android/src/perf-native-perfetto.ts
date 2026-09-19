@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   buildAndroidNativeRemotePath,
   cleanupAndroidRemotePath,
@@ -81,9 +81,9 @@ async function startAndroidPerfettoBackgroundTool(
   packageName: string,
 ): Promise<string> {
   try {
-    const result = await adb(
+    const result = await runAdbShell(
+      adb,
       [
-        'shell',
         'perfetto',
         '--background-wait',
         '-o',

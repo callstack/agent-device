@@ -1,14 +1,19 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { button, node, text } from './alert-fixtures.ts';
 
-const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: string[]) => ({
+const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
   exitCode: 0,
   stdout: '',
   stderr: '',
 }));
-vi.mock('../adb.ts', () => ({ runAndroidAdb }));
+const runAndroidShell = vi.fn(
+  async (device: DeviceInfo, words: ShellWord[]) =>
+    await runAndroidAdb(device, deviceShellArgv('shell', words)),
+);
+vi.mock('../adb.ts', () => ({ runAndroidAdb, runAndroidShell }));
 // The dismissal re-check polls at the contract interval; the clock is the assertion, not the wait.
 vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
 

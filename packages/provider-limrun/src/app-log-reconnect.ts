@@ -91,7 +91,7 @@ async function reconnectAndroid(options: {
     });
     const serial = `${tunnel.address.address}:${tunnel.address.port}`;
     const adb = async (
-      args: string[],
+      args: readonly string[],
       commandOptions?: Parameters<LimrunRuntimeDependencies['host']['runAdb']>[1],
     ) =>
       await options.dependencies.host.runAdb(

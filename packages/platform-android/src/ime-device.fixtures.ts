@@ -19,7 +19,10 @@ export function fakeImeDeviceAdb(state: FakeImeDeviceState): AndroidAdbExecutor 
   };
 }
 
-function handleSettingsCall(state: FakeImeDeviceState, args: string[]): AndroidAdbExecutorResult {
+function handleSettingsCall(
+  state: FakeImeDeviceState,
+  args: readonly string[],
+): AndroidAdbExecutorResult {
   const [, , action, , key = '', value = ''] = args;
   if (action === 'get') return ok(state.settings.get(key) ?? 'null');
   if (action === 'put') {
@@ -31,7 +34,10 @@ function handleSettingsCall(state: FakeImeDeviceState, args: string[]): AndroidA
   return ok();
 }
 
-function handleImeCall(state: FakeImeDeviceState, args: string[]): AndroidAdbExecutorResult {
+function handleImeCall(
+  state: FakeImeDeviceState,
+  args: readonly string[],
+): AndroidAdbExecutorResult {
   const [, , action, component = ''] = args;
   if (action !== 'set') return ok();
   if (state.imeSetFails) return { exitCode: 1, stdout: '', stderr: 'ime set rejected' };

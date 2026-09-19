@@ -31,7 +31,7 @@ function mockRunCmdResponses(responses: Record<string, MockRunCmdResponse>): voi
   });
 }
 
-function formatMockRunCmdCall(cmd: string, args: string[]): string {
+function formatMockRunCmdCall(cmd: string, args: readonly string[]): string {
   return `${cmd} ${args.join(' ')}`;
 }
 

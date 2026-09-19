@@ -73,7 +73,7 @@ export function dismissibleDialog(dialogXml: () => string) {
       visible = true;
     },
     snapshotXml: () => (visible ? dialogXml() : androidAppOwnedSheetXml()),
-    onAdbExec: (args: string[]) => {
+    onAdbExec: (args: readonly string[]) => {
       if (args[0] !== 'shell' || args[1] !== 'input') return;
       if (args[2] === 'tap' || (args[2] === 'keyevent' && args[3] === '4')) visible = false;
     },

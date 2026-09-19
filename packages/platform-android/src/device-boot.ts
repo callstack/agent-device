@@ -24,8 +24,8 @@ export async function observeAndroidBootTimeMs(device: DeviceInfo): Promise<Devi
 
 async function readUptimeSeconds(device: DeviceInfo): Promise<number | undefined> {
   try {
-    const { runAndroidAdb } = await import('./adb.ts');
-    const result = await runAndroidAdb(device, ['shell', 'cat', '/proc/uptime'], {
+    const { runAndroidShell } = await import('./adb.ts');
+    const result = await runAndroidShell(device, ['cat', '/proc/uptime'], {
       allowFailure: true,
       timeoutMs: BOOT_PROBE_TIMEOUT_MS,
     });

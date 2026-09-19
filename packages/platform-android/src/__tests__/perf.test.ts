@@ -64,7 +64,7 @@ test('parseAndroidMemInfoSample returns bounded top memory consumers', () => {
 });
 
 test('captureAndroidHeapSnapshot resolves pid, dumps heap, pulls artifact, and cleans remote path', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const tmpDir = mkdtempForTestSync('agent-device-android-hprof-test-');
   const outPath = path.join(tmpDir, 'app.hprof');
   const adb: AndroidAdbExecutor = async (args) => {
@@ -123,7 +123,7 @@ test('captureAndroidHeapSnapshot explains missing process failures', async () =>
 });
 
 test('captureAndroidHeapSnapshot cleans remote path when dumpheap fails', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const tmpDir = mkdtempForTestSync('agent-device-android-hprof-dump-fail-');
   const outPath = path.join(tmpDir, 'app.hprof');
   const adb: AndroidAdbExecutor = async (args) => {
@@ -336,13 +336,13 @@ test('parseAndroidFramePerfSample treats a reset idle window as an available zer
 });
 
 test('startAndroidSimpleperfProfile resolves pid and starts a bounded simpleperf recorder', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.join('\0') === ['shell', 'pidof', 'com.example.app'].join('\0')) {
       return { exitCode: 0, stdout: '1234\n', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('command -v simpleperf')) {
+    if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
       return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
     }
     if (args[0] === 'shell' && args[1]?.includes('simpleperf')) {
@@ -368,7 +368,7 @@ test('startAndroidSimpleperfProfile resolves pid and starts a bounded simpleperf
 test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compact metadata', async () => {
   const tmpDir = await mkdtempForTest('agent-device-simpleperf-test-');
   const outPath = path.join(tmpDir, 'cpu.perf.data');
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const session: AndroidNativePerfSession = {
     type: 'cpu-profile',
     kind: 'simpleperf',
@@ -392,7 +392,7 @@ test('stopAndroidSimpleperfProfile pulls the profile artifact and reports compac
       await fsPromises.writeFile(args[2]!, 'profile');
       return { exitCode: 0, stdout: '', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('rm -f')) {
+    if (args[0] === 'shell' && args[1] === 'rm' && args[2] === '-f') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     throw new Error(`Unexpected adb call: ${args.join(' ')}`);
@@ -421,7 +421,7 @@ test('stopAndroidSimpleperfProfile fails before pull when remote artifact never 
     startedAt: Date.now() - 2000,
     state: 'running',
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args[0] === 'shell' && args[1]?.includes('kill -INT')) {
@@ -459,7 +459,7 @@ test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact
     startedAt: Date.now() - 1000,
     state: 'running',
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args[0] === 'shell' && args[1]?.includes('kill -INT')) {
@@ -468,7 +468,7 @@ test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact
     if (args[0] === 'shell' && args[1]?.includes('stat -c %s')) {
       return { exitCode: 0, stdout: '5\n', stderr: '' };
     }
-    if (args[0] === 'shell' && args[1]?.includes('rm -f')) {
+    if (args[0] === 'shell' && args[1] === 'rm' && args[2] === '-f') {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
     if (args[0] === 'pull') {
@@ -490,7 +490,7 @@ test('cleanupAndroidNativePerfSession stops profiler and removes remote artifact
 test('start and stop Android Perfetto trace use perfetto trace storage and cleanup remote artifact', async () => {
   const tmpDir = await mkdtempForTest('agent-device-perfetto-test-');
   const outPath = path.join(tmpDir, 'app.perfetto-trace');
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb = makePerfettoTraceAdbExecutor(outPath, calls);
 
   const started = await startAndroidPerfettoTrace(ANDROID_EMULATOR, 'com.example.app', outPath, {
@@ -534,7 +534,7 @@ test('writeAndroidSimpleperfReport writes full artifact rows and returns bounded
     state: 'stopped',
   };
   const adb: AndroidAdbExecutor = async (args) => {
-    if (args[0] === 'shell' && args[1]?.includes('command -v simpleperf')) {
+    if (args[0] === 'shell' && args[1]?.includes("command -v 'simpleperf'")) {
       return { exitCode: 0, stdout: '/system/bin/simpleperf\n', stderr: '' };
     }
     if (args[0] === 'shell' && args[1] === 'simpleperf') {
@@ -582,22 +582,25 @@ test('startAndroidSimpleperfProfile fails with an actionable missing-process hin
   );
 });
 
-function findCallIndex(calls: string[][], pattern: string): number {
-  return calls.findIndex((args) => args.some((arg) => arg.includes(pattern)));
+function findCallIndex(calls: (readonly string[])[], pattern: string): number {
+  return calls.findIndex((args) => args.join(' ').includes(pattern));
 }
 
-function findExactCallIndex(calls: string[][], ...expected: string[]): number {
+function findExactCallIndex(calls: (readonly string[])[], ...expected: string[]): number {
   return calls.findIndex((args) => args.join('\0') === expected.join('\0'));
 }
 
-function findCallPrefixIndex(calls: string[][], ...expected: string[]): number {
+function findCallPrefixIndex(calls: (readonly string[])[], ...expected: string[]): number {
   return calls.findIndex((args) => expected.every((value, index) => args[index] === value));
 }
 
-function makePerfettoTraceAdbExecutor(outPath: string, calls: string[][]): AndroidAdbExecutor {
+function makePerfettoTraceAdbExecutor(
+  outPath: string,
+  calls: (readonly string[])[],
+): AndroidAdbExecutor {
   const responders = [
     staticAdbResponse(exactAdbArgs('shell', 'pidof', 'com.example.app'), '1234\n'),
-    staticAdbResponse(containsAdbArg('command -v perfetto'), '/system/bin/perfetto\n'),
+    staticAdbResponse(containsAdbArg("command -v 'perfetto'"), '/system/bin/perfetto\n'),
     staticAdbResponse(exactAdbArgs('shell', 'dumpsys', 'gfxinfo', 'com.example.app', 'reset')),
     staticAdbResponse(adbArgsPrefix('shell', 'perfetto'), '8765\n'),
     staticAdbResponse(containsAdbArg('kill -INT')),
@@ -615,7 +618,7 @@ function makePerfettoTraceAdbExecutor(outPath: string, calls: string[][]): Andro
         'Number Frame deadline missed: 2',
       ].join('\n'),
     ),
-    staticAdbResponse(containsAdbArg('rm -f')),
+    staticAdbResponse(adbArgsPrefix('shell', 'rm', '-f')),
   ];
   return async (args) => dispatchAdbResponse(args, calls, responders);
 }
@@ -623,13 +626,13 @@ function makePerfettoTraceAdbExecutor(outPath: string, calls: string[][]): Andro
 type MockAdbResult = Awaited<ReturnType<AndroidAdbExecutor>>;
 
 type MockAdbResponder = {
-  matches: (args: string[]) => boolean;
-  run: (args: string[]) => Promise<MockAdbResult>;
+  matches: (args: readonly string[]) => boolean;
+  run: (args: readonly string[]) => Promise<MockAdbResult>;
 };
 
 async function dispatchAdbResponse(
-  args: string[],
-  calls: string[][],
+  args: readonly string[],
+  calls: (readonly string[])[],
   responders: MockAdbResponder[],
 ): Promise<MockAdbResult> {
   calls.push(args);

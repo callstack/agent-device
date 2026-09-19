@@ -1,5 +1,6 @@
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitAndroidAdbDiagnostic } from './adb-host.ts';
+import { runAdbShell } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './adb-transport.ts';
 
 // The on-device restore record. The previous-IME value lives in a custom `settings secure` key —
@@ -15,8 +16,9 @@ export const ANDROID_TEST_IME_SETTINGS_KEYS = {
 };
 
 export async function readAndroidDefaultInputMethod(adb: AndroidAdbExecutor): Promise<string> {
-  const result = await adb(
-    ['shell', 'settings', 'get', SETTINGS_NAMESPACE, DEFAULT_INPUT_METHOD_KEY],
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'get', SETTINGS_NAMESPACE, DEFAULT_INPUT_METHOD_KEY],
     { allowFailure: true, timeoutMs: 5_000 },
   );
   return normalizeSettingsValue(result.exitCode === 0 ? result.stdout : '');
@@ -25,8 +27,9 @@ export async function readAndroidDefaultInputMethod(adb: AndroidAdbExecutor): Pr
 export async function readPersistedPreviousIme(
   adb: AndroidAdbExecutor,
 ): Promise<string | undefined> {
-  const result = await adb(
-    ['shell', 'settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME],
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME],
     { allowFailure: true, timeoutMs: 5_000 },
   );
   const value = normalizeSettingsValue(result.exitCode === 0 ? result.stdout : '');
@@ -39,8 +42,9 @@ export async function writePersistedPreviousIme(
   adb: AndroidAdbExecutor,
   value: string,
 ): Promise<boolean> {
-  const result = await adb(
-    ['shell', 'settings', 'put', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME, value],
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'put', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME, value],
     { allowFailure: true, timeoutMs: 5_000 },
   );
   if (result.exitCode !== 0) return false;
@@ -48,7 +52,7 @@ export async function writePersistedPreviousIme(
 }
 
 export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promise<void> {
-  await adb(['shell', 'settings', 'delete', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME], {
+  await runAdbShell(adb, ['settings', 'delete', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME], {
     allowFailure: true,
     timeoutMs: 5_000,
   });

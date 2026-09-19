@@ -23,7 +23,7 @@ export type FakeAdbProviderExtras = AndroidAdbProvider extends infer P
 
 export async function withFakeAdb<T>(
   script: FakeAdbScript,
-  run: (ctx: { calls: string[][]; device: DeviceInfo }) => Promise<T>,
+  run: (ctx: { calls: (readonly string[])[]; device: DeviceInfo }) => Promise<T>,
   options: {
     device?: DeviceInfo;
     provider?: FakeAdbProviderExtras;
@@ -31,7 +31,7 @@ export async function withFakeAdb<T>(
 ): Promise<T> {
   const device: DeviceInfo = { ...(options.device ?? ANDROID_EMULATOR) };
   bindAndroidAdbTestHost();
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const exec = async (
     args: string[],
     execOptions?: AndroidAdbExecutorOptions,

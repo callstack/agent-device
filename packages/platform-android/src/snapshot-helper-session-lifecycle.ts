@@ -250,16 +250,10 @@ async function startAndroidSnapshotHelperSession(params: {
     timeoutMs: FORWARD_TIMEOUT_MS,
     signal: params.options.signal,
   });
-  const args = buildAndroidSnapshotHelperArgs({
-    ...params.resolved,
-    outputPath: undefined,
-    emitChunks: false,
-  });
-  const runner = args.at(-1);
-  if (!runner) {
-    throw new AppError('INVALID_ARGS', 'Android snapshot helper runner was not resolved');
-  }
-  const sessionArgs = [...args.slice(0, -1), '-e', 'sessionPort', String(port), runner];
+  const sessionArgs = buildAndroidSnapshotHelperArgs(
+    { ...params.resolved, outputPath: undefined, emitChunks: false },
+    { sessionPort: port },
+  );
   const childProcess = params.options.adbProvider!.spawn!(sessionArgs, {
     allowFailure: true,
     captureOutput: false,

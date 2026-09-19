@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
 import type {
   DeviceInventoryHostFor,
@@ -124,7 +125,7 @@ test.skipIf(process.platform === 'win32')(
           commands: {
             which: async () => 'adb',
             run: async (request, signal) =>
-              await runCmd(request.executable, [...request.args], {
+              await runCmd(request.executable, request.args, {
                 allowFailure: request.allowFailure,
                 signal,
                 timeoutMs: request.timeoutMs,
@@ -159,7 +160,7 @@ test.skipIf(process.platform === 'win32')(
           wrongPortReason = (error as { details?: { reason?: string } }).details?.reason;
         }
         const provider = resolveAndroidAdbProvider(reachability.device);
-        const serial = await provider.exec(['shell', 'id']);
+        const serial = await provider.exec(deviceShellArgv('shell', ['id']));
         return {
           inventory,
           host: JSON.parse(host.stdout),

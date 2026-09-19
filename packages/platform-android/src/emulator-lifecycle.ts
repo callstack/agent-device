@@ -1,5 +1,6 @@
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { type ExecResult, runCmdDetached, whichCmd } from '@agent-device/host-kit/command';
 import { Deadline, retryWithPolicy, sleep } from '@agent-device/host-kit/retry';
@@ -156,11 +157,10 @@ async function readAndroidBootProp(
   signal?: AbortSignal,
 ): Promise<ExecResult> {
   return await runAndroidHostAdb(
-    androidAdbInvocation(androidAdbSerialTarget(serial), [
-      'shell',
-      'getprop',
-      'sys.boot_completed',
-    ]),
+    androidAdbInvocation(
+      androidAdbSerialTarget(serial),
+      deviceShellArgv('shell', ['getprop', 'sys.boot_completed']),
+    ),
     { allowFailure: true, signal, timeoutMs },
   );
 }

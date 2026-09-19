@@ -120,6 +120,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
         dismissed: false,
       }),
       readLogs: async () => '',
+      forceStopApp: async () => {},
       deviceAdbInvocation: (serial: string, command: readonly string[]) => ({
         target: { selector: { kind: 'serial', serial }, server: { kind: 'ambient' } },
         command,

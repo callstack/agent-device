@@ -29,12 +29,12 @@ const android = {
 };
 
 test('uses the request-scoped Android ADB executor rather than a host fallback', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     {
-      exec: async (args: string[]) => {
+      exec: async (args: readonly string[]) => {
         calls.push(args);
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         if (command.includes('screenrecord --bit-rate')) return result('42\n');
         if (command === 'cat /proc/42/stat') return result(procStat(42, '42'));
         if (command === 'cat /proc/42/cmdline') {
@@ -60,11 +60,11 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
   );
   expect(calls).toEqual([
     ['shell', expect.stringContaining('screenrecord --bit-rate 8000000')],
-    ['shell', 'test -d /proc/42'],
-    ['shell', 'cat /proc/42/stat'],
-    ['shell', 'cat /proc/42/cmdline'],
-    ['shell', "test -e '/sdcard/capture.mp4'"],
-    ['shell', "stat -c %s '/sdcard/capture.mp4'"],
+    ['shell', 'test', '-d', '/proc/42'],
+    ['shell', 'cat', '/proc/42/stat'],
+    ['shell', 'cat', '/proc/42/cmdline'],
+    ['shell', 'test', '-e', '/sdcard/capture.mp4'],
+    ['shell', 'stat', '-c', '%s', '/sdcard/capture.mp4'],
   ]);
 });
 
@@ -73,7 +73,7 @@ test('finds only exact screenrecord processes for the canonical remote path', as
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         if (command === 'ps -A -o pid=') return result('41\n42\n43\n44\n');
         if (/^test -d \/proc\/\d+$/.test(command)) return result();
         const pid = /\/proc\/(\d+)\//.exec(command)?.[1];
@@ -153,7 +153,7 @@ test.each(inconclusiveWriterScans)(
     await withAndroidAdbProvider(
       {
         exec: async (args) => {
-          const command = args[1] ?? '';
+          const command = args.slice(1).join(' ');
           if (command === 'ps -A -o pid=') {
             return device.pids ? result(device.pids) : result('', 'adb: device offline', 1);
           }
@@ -181,7 +181,7 @@ test('revalidates start-time and exact argv before SIGINT', async () => {
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         commands.push(command);
         if (command.endsWith('/stat')) return result(procStat(51, currentStart));
         if (command.endsWith('/cmdline')) {
@@ -211,7 +211,7 @@ test('distinguishes a missing proc directory from an unavailable identity probe'
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         if (command === 'test -d /proc/42') return result('', '', 1);
         if (command === 'test -d /proc/43') return result('', 'transport unavailable', 1);
         if (command === 'cat /proc/42/stat') {
@@ -233,7 +233,7 @@ test('distinguishes a missing proc directory from an unavailable identity probe'
 
 test('retains an interrupted empty-stderr presence probe as uncertain', async () => {
   adbExecutor.override = async (args) => {
-    expect(args).toEqual(['shell', 'test -d /proc/44']);
+    expect(args).toEqual(['shell', 'test', '-d', '/proc/44']);
     return result('', '', null);
   };
   try {
@@ -253,7 +253,7 @@ test('retains an interrupted empty-stderr presence probe as uncertain', async ()
 test('credits a path as absent only from a probe that answered, not from one that failed', async () => {
   let attempt = 0;
   adbExecutor.override = async (args) => {
-    expect(args).toEqual(['shell', "test -e '/sdcard/capture.mp4'"]);
+    expect(args).toEqual(['shell', 'test', '-e', '/sdcard/capture.mp4']);
     attempt += 1;
     if (attempt === 1) return result('', '', 1);
     if (attempt === 2) return result('', '', null);
@@ -275,7 +275,7 @@ test('credits a path as absent only from a probe that answered, not from one tha
 
 test('retains an interrupted empty-stderr manifest probe as unavailable', async () => {
   adbExecutor.override = async (args) => {
-    expect(args).toEqual(['shell', "test -e '/sdcard/interrupted.json'"]);
+    expect(args).toEqual(['shell', 'test', '-e', '/sdcard/interrupted.json']);
     return result('', '', null);
   };
   try {
@@ -305,7 +305,7 @@ test('proves termination from each ownership-lost producer without signalling', 
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         commands.push(command);
         if (command.endsWith('/stat')) return result(identity.stat);
         if (command.endsWith('/cmdline')) return result(identity.cmdline);
@@ -338,7 +338,7 @@ test('classifies a replacement recorder on the same path as a foreign writer and
   await withAndroidAdbProvider(
     {
       exec: async (args) => {
-        const command = args[1] ?? '';
+        const command = args.slice(1).join(' ');
         commands.push(command);
         if (command.endsWith('/stat')) return result(replacementRecorder.stat);
         if (command.endsWith('/cmdline')) return result(replacementRecorder.cmdline);
@@ -385,8 +385,8 @@ test('retains unavailable manifest reads and confirms manifest deletion', async 
   const commands: string[] = [];
   await withAndroidAdbProvider(
     {
-      exec: async (args: string[]) => {
-        const command = args[1] ?? '';
+      exec: async (args: readonly string[]) => {
+        const command = args.slice(1).join(' ');
         commands.push(command);
         if (command.startsWith('test -e')) {
           return { stdout: '', stderr: 'transport unavailable', exitCode: 1 };

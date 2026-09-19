@@ -77,7 +77,10 @@ test('Provider-backed integration daemon command policies gate admission and pro
   );
 });
 
-function androidAdbResult(args: string[], activeRecordingPath: string | undefined): AdbResult {
+function androidAdbResult(
+  args: readonly string[],
+  activeRecordingPath: string | undefined,
+): AdbResult {
   const command = args.join(' ');
   return (
     deviceStatusResponse(command) ??

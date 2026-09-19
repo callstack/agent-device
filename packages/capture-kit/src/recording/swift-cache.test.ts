@@ -5,7 +5,7 @@ import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
-  runCmd: vi.fn(async (_cmd: string, args: string[]) => {
+  runCmd: vi.fn(async (_cmd: string, args: readonly string[]) => {
     const outputPath = args[args.indexOf('-o') + 1]!;
     fs.writeFileSync(outputPath, 'compiled');
     fs.chmodSync(outputPath, 0o755);
@@ -166,7 +166,7 @@ test('a compile that failed is reported over a cache lock that could not be give
   const sourcePath = writeSourceFile();
   const buildFailure = new Error('swiftc: error: build failed');
   let lockDir = '';
-  mockRunCmd.mockImplementationOnce(async (_cmd: string, args: string[]) => {
+  mockRunCmd.mockImplementationOnce(async (_cmd: string, args: readonly string[]) => {
     // The temp executable sits one directory under the cache entry, and the lock beside it.
     const outputPath = args[args.indexOf('-o') + 1]!;
     const executablePath = path.join(
@@ -210,7 +210,7 @@ async function createBlockedCacheEntry() {
 async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promise<void> {
   let releaseCompile: () => void = () => {};
   const compileStarted = new Promise<void>((resolve) => {
-    mockRunCmd.mockImplementationOnce(async (_cmd: string, args: string[]) => {
+    mockRunCmd.mockImplementationOnce(async (_cmd: string, args: readonly string[]) => {
       resolve();
       await new Promise<void>((release) => {
         releaseCompile = release;

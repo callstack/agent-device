@@ -13,7 +13,7 @@ test('semantic provider methods win over the exec fallback and escape the overri
       return await fn();
     },
   });
-  const pulls: string[][] = [];
+  const pulls: (readonly string[])[] = [];
   const installs: string[] = [];
   const provider: AndroidAdbProvider = {
     exec: async () => {
@@ -39,7 +39,7 @@ test('semantic provider methods win over the exec fallback and escape the overri
 
 test('the exec fallback lowers the semantic replace option into adb flags', async () => {
   bindAndroidAdbHostStub();
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider: AndroidAdbProvider = {
     exec: async (args) => {
       calls.push(args);

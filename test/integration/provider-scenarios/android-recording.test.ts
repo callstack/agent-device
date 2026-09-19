@@ -139,7 +139,7 @@ test('Provider-backed integration Android record stop returns fenced completed n
   );
 });
 
-const ANDROID_MARKER_REMOVAL = "shell rm -f '/sdcard/agent-device-recording-active.json'";
+const ANDROID_MARKER_REMOVAL = 'shell rm -f /sdcard/agent-device-recording-active.json';
 
 test('Provider-backed integration Android record start retires completed evidence after the emulator reassigns its recorder pid', async () => {
   await withAndroidRecordingScenario(
@@ -182,7 +182,7 @@ test('Provider-backed integration Android record start retires completed evidenc
         });
         assert.equal(assertRpcOk<{ recording?: unknown }>(started).recording, 'started');
         assert.ok(
-          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          calls.some((args) => args.join(' ') === `shell rm -f ${remotePath}`),
           'retired the completed chunk artifact',
         );
         assert.ok(
@@ -230,7 +230,7 @@ test('Provider-backed integration Android record start retires evidence stranded
         });
         assert.equal(assertRpcOk<{ recording?: unknown }>(started).recording, 'started');
         assert.ok(
-          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          calls.some((args) => args.join(' ') === `shell rm -f ${remotePath}`),
           'retired the stranded chunk artifact',
         );
         assert.ok(
@@ -291,7 +291,7 @@ test('Provider-backed integration Android record start retains completed evidenc
           /another recorder is writing/,
         );
         assert.equal(
-          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          calls.some((args) => args.join(' ') === `shell rm -f ${remotePath}`),
           false,
           'the replacement recorder keeps its artifact',
         );
@@ -364,7 +364,7 @@ test('Provider-backed integration Android record start refuses completed evidenc
           false,
         );
         assert.equal(
-          calls.some((args) => args.join(' ') === `shell rm -f '${remotePath}'`),
+          calls.some((args) => args.join(' ') === `shell rm -f ${remotePath}`),
           false,
         );
       } finally {

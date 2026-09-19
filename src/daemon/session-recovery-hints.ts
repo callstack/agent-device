@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { SessionRef, SessionState } from './session-state.ts';
 import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
 

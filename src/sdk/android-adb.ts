@@ -7,6 +7,9 @@ export {
   type AndroidPortReverseEndpoint,
 } from '@agent-device/platform-android/mechanics';
 export { listAndroidAppsWithAdb } from '@agent-device/platform-android/mechanics';
+export { runAdbExecOut, runAdbShell } from '@agent-device/platform-android/mechanics';
+export { runAndroidExecOut, runAndroidShell } from '@agent-device/platform-android/mechanics';
+export type { ShellWord } from '@agent-device/kernel/device-shell';
 
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';

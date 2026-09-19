@@ -84,11 +84,11 @@ function createHelperAdb(
   };
 }
 
-function isHelperVersionProbe(args: string[]): boolean {
+function isHelperVersionProbe(args: readonly string[]): boolean {
   return args.includes('--show-versioncode');
 }
 
-function helperAdbOperation(args: string[]): 'instrument' | 'activity' | undefined {
+function helperAdbOperation(args: readonly string[]): 'instrument' | 'activity' | undefined {
   if (args.includes('instrument')) return 'instrument';
   return args.includes('dumpsys') && args.includes('activity') ? 'activity' : undefined;
 }
@@ -275,7 +275,7 @@ function androidSnapshotHelperAdb(xml: string, activityDump?: string): AndroidAd
   });
 }
 
-function isAndroidSdkVersionCommand(args: string[]): boolean {
+function isAndroidSdkVersionCommand(args: readonly string[]): boolean {
   return (
     args.includes('shell') && args.includes('getprop') && args.includes('ro.build.version.sdk')
   );
@@ -423,7 +423,7 @@ test('snapshotAndroid emits helper phase diagnostics', async () => {
 });
 
 test('snapshotAndroid resolves helper adb through scoped provider', async () => {
-  const adbCalls: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
   const provider: AndroidAdbProvider = {
     snapshotHelperArtifact: helperArtifact,
     exec: async (args) => {
@@ -469,8 +469,8 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
 });
 
 test('snapshotAndroid stops command-scoped persistent helper session after capture', async () => {
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -496,8 +496,8 @@ test('snapshotAndroid stops command-scoped persistent helper session after captu
 });
 
 test('snapshotAndroid keeps daemon-session helper alive for reuse until session cleanup', async () => {
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -541,8 +541,8 @@ test('a daemon-session viewport read warms the session the next snapshot reuses'
   // The gesture viewport and snapshot capture are different helper commands on the same device.
   // They may only share the live session if both derive the same session identity, which is why
   // their capture options have one construction path.
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -572,8 +572,8 @@ test('a daemon-session viewport read warms the session the next snapshot reuses'
 });
 
 test('snapshotAndroid retires content-invalid daemon helper before the next request', async () => {
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -611,8 +611,8 @@ test('content-invalid daemon helper retirement force-stops the helper runtime', 
   // Retirement after a content failure is a recovery path, not a release: the helper answered with
   // output we could not trust, so the next capture must meet a runtime that was reset. A clean quit
   // is evidence the helper let go of UiAutomation, never evidence that it was healthy.
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -635,8 +635,8 @@ test('content-invalid daemon helper retirement force-stops the helper runtime', 
 });
 
 test('snapshotAndroid falls back to one-shot capture after retiring a failed session', async () => {
-  const adbCalls: string[][] = [];
-  const spawnArgs: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createPersistentSnapshotHelperProvider({
     calls: adbCalls,
@@ -662,8 +662,8 @@ test('snapshotAndroid falls back to one-shot capture after retiring a failed ses
 });
 
 test('snapshotAndroid answers from one-shot capture when the session stop could not run', async () => {
-  const adbCalls: string[][] = [];
-  const oneShotAttempts: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
+  const oneShotAttempts: (readonly string[])[] = [];
   // The stop call failing says the transport is unhealthy, not that UiAutomation is still held.
   // ADR 0002 keeps the one-shot transport as the fallback for a session failure either way.
   const provider = createPersistentSnapshotHelperProvider({
@@ -687,7 +687,7 @@ test('snapshotAndroid answers from one-shot capture when the session stop could 
 });
 
 test('snapshotAndroid fails closed when the helper fails', async () => {
-  const adbCalls: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
   const helperAdb: AndroidAdbExecutor = async (args) => {
     adbCalls.push(args);
     if (args.includes('--show-versioncode')) {
@@ -715,7 +715,7 @@ test('snapshotAndroid fails closed when the helper fails', async () => {
 });
 
 test('snapshotAndroid fails closed when helper returns only system windows', async () => {
-  const adbCalls: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
   const helperXml = androidSystemWindowOnlyXml();
   const helperAdb: AndroidAdbExecutor = async (args) => {
     adbCalls.push(args);
@@ -746,7 +746,7 @@ test('snapshotAndroid fails closed when helper returns only system windows', asy
 });
 
 test('snapshotAndroid re-captures past a transient system-window-only sample', async () => {
-  const instrumentCalls: string[][] = [];
+  const instrumentCalls: (readonly string[])[] = [];
   const helperAdb = createHelperAdb({
     instrument: async (args) => {
       instrumentCalls.push(args);
@@ -774,7 +774,7 @@ test('snapshotAndroid re-captures past a transient system-window-only sample', a
 });
 
 test('snapshotAndroid still fails closed when every re-capture stays unreadable', async () => {
-  const instrumentCalls: string[][] = [];
+  const instrumentCalls: (readonly string[])[] = [];
   const helperAdb = createHelperAdb({
     instrument: async (args) => {
       instrumentCalls.push(args);
@@ -1062,7 +1062,7 @@ test('snapshotAndroid emits timeout diagnostics when helper capture times out', 
 });
 
 test('snapshotAndroid fails closed after unparseable helper output', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const helperAdb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('--show-versioncode')) return installedHelperProbe;
@@ -1240,7 +1240,7 @@ test('snapshotAndroid never probes the activity dump for scroll hints', async ()
     </node>
   </node>
 </hierarchy>`;
-  const activityDumpCalls: string[][] = [];
+  const activityDumpCalls: (readonly string[])[] = [];
   const helperAdb = createHelperAdb({
     instrument: async () => ({ exitCode: 0, stdout: helperOutput(xml), stderr: '' }),
     activity: async (args) => {

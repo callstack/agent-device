@@ -1,6 +1,6 @@
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
-export type RecordedSpawn = { command: string; args: string[] };
+export type RecordedSpawn = { command: string; args: readonly string[] };
 
 export type CommandSpawnOutcome = {
   /** Exit status reported for every recorded command. Defaults to success. */

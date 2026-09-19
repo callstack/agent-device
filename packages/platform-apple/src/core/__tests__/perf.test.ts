@@ -45,7 +45,7 @@ import {
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
-type XcrunMockHandler = (args: string[]) => Promise<MockRunCmdResult | null>;
+type XcrunMockHandler = (args: readonly string[]) => Promise<MockRunCmdResult | null>;
 
 const IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',
@@ -735,7 +735,7 @@ function mockXcrunCommands(handlers: XcrunMockHandler[]): void {
   });
 }
 
-async function mockIosDeviceApps(args: string[]): Promise<MockRunCmdResult | null> {
+async function mockIosDeviceApps(args: readonly string[]): Promise<MockRunCmdResult | null> {
   if (!matchesDevicectlInfo(args, 'apps')) return null;
   await writeJsonOutput(args, {
     result: {
@@ -751,7 +751,7 @@ async function mockIosDeviceApps(args: string[]): Promise<MockRunCmdResult | nul
   return emptyRunResult();
 }
 
-async function mockIosDeviceProcesses(args: string[]): Promise<MockRunCmdResult | null> {
+async function mockIosDeviceProcesses(args: readonly string[]): Promise<MockRunCmdResult | null> {
   if (!matchesDevicectlInfo(args, 'processes')) return null;
   await writeJsonOutput(args, {
     result: {
@@ -781,7 +781,9 @@ function mockXctraceRecord(onRecord: () => void): XcrunMockHandler {
   };
 }
 
-async function mockAnimationHitchesRecord(args: string[]): Promise<MockRunCmdResult | null> {
+async function mockAnimationHitchesRecord(
+  args: readonly string[],
+): Promise<MockRunCmdResult | null> {
   if (args[0] !== 'xctrace' || args[1] !== 'record') return null;
   assert.deepEqual(args.slice(2, 10), [
     '--template',
@@ -826,16 +828,14 @@ function mockSequentialExports(xmlPayloads: string[]): XcrunMockHandler {
   };
 }
 
-async function mockFrameTableExports(args: string[]): Promise<MockRunCmdResult | null> {
+async function mockFrameTableExports(args: readonly string[]): Promise<MockRunCmdResult | null> {
   if (args[0] !== 'xctrace' || args[1] !== 'export') return null;
   const xpath = args[args.indexOf('--xpath') + 1] ?? '';
   await fs.writeFile(readOutputPath(args), readFrameTableXml(xpath), 'utf8');
   return emptyRunResult();
 }
 
-async function mockFrameTableExportsWithoutDisplayInfo(
-  args: string[],
-): Promise<MockRunCmdResult | null> {
+const mockFrameTableExportsWithoutDisplayInfo: XcrunMockHandler = async (args) => {
   if (args[0] !== 'xctrace' || args[1] !== 'export') return null;
   const xpath = args[args.indexOf('--xpath') + 1] ?? '';
   if (xpath.includes('device-display-info')) {
@@ -843,7 +843,7 @@ async function mockFrameTableExportsWithoutDisplayInfo(
   }
   await fs.writeFile(readOutputPath(args), readFrameTableXml(xpath), 'utf8');
   return emptyRunResult();
-}
+};
 
 function readFrameTableXml(xpath: string): string {
   if (xpath.includes('hitches-frame-lifetimes')) return makeAppleFrameLifetimesXml(4);
@@ -851,17 +851,17 @@ function readFrameTableXml(xpath: string): string {
   return makeAppleHitchesXml();
 }
 
-function matchesDevicectlInfo(args: string[], subject: 'apps' | 'processes'): boolean {
+function matchesDevicectlInfo(args: readonly string[], subject: 'apps' | 'processes'): boolean {
   return (
     args[0] === 'devicectl' && args[1] === 'device' && args[2] === 'info' && args[3] === subject
   );
 }
 
-async function writeJsonOutput(args: string[], data: unknown): Promise<void> {
+async function writeJsonOutput(args: readonly string[], data: unknown): Promise<void> {
   await fs.writeFile(readOutputPath(args, '--json-output'), JSON.stringify(data), 'utf8');
 }
 
-function readOutputPath(args: string[], flag = '--output'): string {
+function readOutputPath(args: readonly string[], flag = '--output'): string {
   return args[args.indexOf(flag) + 1]!;
 }
 

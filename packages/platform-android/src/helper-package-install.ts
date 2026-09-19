@@ -5,6 +5,7 @@ import {
   androidAdbResultError,
   installAndroidAdbPackage,
   pullAndroidAdbFile,
+  runAdbShell,
   type AndroidAdbExecutor,
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
@@ -215,8 +216,9 @@ async function readInstalledAndroidPackageVersionCode(
   packageName: string,
   signal?: AbortSignal,
 ): Promise<number | undefined> {
-  const result = await adb(
-    ['shell', 'cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
+  const result = await runAdbShell(
+    adb,
+    ['cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
     { allowFailure: true, timeoutMs: 5_000, signal },
   );
   if (result.exitCode !== 0) return undefined;
@@ -232,7 +234,7 @@ async function readInstalledAndroidPackageSha256(
   packageName: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const pathResult = await adb(['shell', 'pm', 'path', packageName], {
+  const pathResult = await runAdbShell(adb, ['pm', 'path', packageName], {
     allowFailure: true,
     timeoutMs: ANDROID_HELPER_IDENTITY_TIMEOUT_MS,
     signal,

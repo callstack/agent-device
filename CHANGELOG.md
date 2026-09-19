@@ -145,6 +145,22 @@
   option → flag round trip and its allowlist carried nothing. Older manifests that still contain
   the field parse unchanged; the field is ignored. The adb provider `install` capability now takes
   only `replace` (#2364).
+- Changed (android, harmonyos): every `adb shell`, `adb exec-out`, and `hdc shell` command now goes
+  through one device-shell funnel that quotes each argument for the device's `sh` (#2026, #2611).
+  The device shell re-parses the arguments it is handed, so an unquoted dynamic value was a command
+  injection: Android quoted a few sites by hand and HarmonyOS quoted none. Three effects are visible
+  on a device. HarmonyOS `type` and `fill` text containing spaces or shell metacharacters now reaches
+  `uitest uiInput text` as one argument instead of being split by the device shell. An empty argument
+  renders as `''` rather than vanishing from the command, so a command that read its own shift and
+  its operand as two words no longer misaligns. A script body handed to `sh -c` arrives as one
+  argument. Custom adb executors and providers (SDK, MCP, and relay transports such as Limrun's) that
+  pass a raw `['shell', …]` or `['exec-out', …]` argv are now refused with `INVALID_ARGS` and
+  `details.reason` `unguarded-device-shell-argv`, because a command the transport is about to let the
+  device parse has to be one the funnel built. Build it with `runAndroidShell` / `runAndroidExecOut`
+  (a `DeviceInfo`) or `runAdbShell` / `runAdbExecOut` (an `AndroidAdbExecutor`), all exported from
+  `agent-device/android-adb`, and pass each dynamic value as its own word. SDK: `AndroidAdbExecutor`
+  and `AndroidAdbProvider.exec` now receive `readonly string[]`, so a custom executor annotated
+  `(args: string[])` must widen its parameter to take the command.
 - Fixed: BrowserStack sessions honour `--provider-project`, `--provider-build`, and
   `--provider-session-name`. The capability builder emitted the legacy JSON Wire keys `device`,
   `os_version`, and `app` at the top level next to the W3C `bstack:options` block; the hub treats a

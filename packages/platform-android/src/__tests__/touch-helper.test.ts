@@ -139,7 +139,7 @@ test('readAndroidTouchHelperFinalRecord throws when no final result record is pr
 
 test('one-shot gesture instruments the snapshot-helper runner with the touch-plan payload', async () => {
   const device = makeIsolatedDevice();
-  let capturedArgs: string[] | undefined;
+  let capturedArgs: readonly string[] | undefined;
   let capturedTimeoutMs: number | undefined;
   const result = await withAndroidAdbProvider(
     {
@@ -378,7 +378,7 @@ test('unparseable output with a non-zero exit code reports a helper failure', as
 
 test('one-shot viewport instruments the snapshot-helper runner and validates bounds', async () => {
   const device = makeIsolatedDevice();
-  let capturedArgs: string[] | undefined;
+  let capturedArgs: readonly string[] | undefined;
   const viewportResult = await withAndroidAdbProvider(
     {
       exec: currentVersionAdb(async (args) => {

@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 test('allows a persistent session snapshot to use the helper command budget', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, responseDelayMs: 25 });
 
   assert.equal(
@@ -47,7 +47,7 @@ test('allows a persistent session snapshot to use the helper command budget', as
 });
 
 test('retires a persistent session that exceeds the helper command budget', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, responseDelayMs: 50 });
 
   const output = await captureAndroidSnapshotWithHelperSession({
@@ -66,7 +66,7 @@ test('retires a persistent session that exceeds the helper command budget', asyn
 });
 
 test('cancels a stalled snapshot, retires its helper, and starts the next capture cleanly', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({ calls, processes, stalledSnapshots: 1 });
   const controller = new AbortController();
@@ -96,8 +96,8 @@ test('cancels a stalled snapshot, retires its helper, and starts the next captur
 });
 
 test('canceled capture joins canceled external cleanup before returning', async () => {
-  const calls: string[][] = [];
-  const cleanupAborts: string[][] = [];
+  const calls: (readonly string[])[] = [];
+  const cleanupAborts: (readonly string[])[] = [];
   const provider = createSessionProvider({
     calls,
     cleanupAborts,
@@ -126,7 +126,7 @@ test('canceled capture joins canceled external cleanup before returning', async 
 });
 
 test('release the transport could not confirm falls back instead of failing the capture', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   // An adb that cannot forward the device exit status, and a device that cannot be read back:
   // neither says anything about who owns UiAutomation, so neither may answer for this capture.
@@ -151,7 +151,7 @@ test('release the transport could not confirm falls back instead of failing the 
 });
 
 test('capture refuses a device the previous teardown found the helper still running', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({
     calls,
@@ -179,7 +179,7 @@ test('capture refuses a device the previous teardown found the helper still runn
 });
 
 test('allows device retirement beyond host-process grace before falling back', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
   const provider = createSessionProvider({
     calls,
@@ -199,7 +199,7 @@ test('allows device retirement beyond host-process grace before falling back', a
 });
 
 test('invalidates and falls back from the helper session after a malformed response', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, responseMode: 'malformed' });
 
   const output = await captureAndroidSnapshotWithHelperSession({

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 
-vi.mock('../hdc.ts', () => ({ runHarmonyHdc: vi.fn() }));
+vi.mock('../hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
 
-import { runHarmonyHdc } from '../hdc.ts';
+import { runHarmonyShell } from '../hdc.ts';
 import { setHarmonySetting } from '../settings.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -14,11 +14,11 @@ const device: DeviceInfo = {
   kind: 'emulator',
   booted: true,
 };
-const mockRunHarmonyHdc = vi.mocked(runHarmonyHdc);
+const mockRunHarmonyShell = vi.mocked(runHarmonyShell);
 
 beforeEach(() => {
-  mockRunHarmonyHdc.mockReset();
-  mockRunHarmonyHdc.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
+  mockRunHarmonyShell.mockReset();
+  mockRunHarmonyShell.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' } as never);
 });
 
 test('HarmonyOS clear-app-state force stops then clears bundle data and cache', async () => {
@@ -34,10 +34,10 @@ test('HarmonyOS clear-app-state force stops then clears bundle data and cache', 
     );
   });
   assert.deepEqual(
-    mockRunHarmonyHdc.mock.calls.map((call) => call[1]),
+    mockRunHarmonyShell.mock.calls.map((call) => call[1]),
     [
-      ['shell', 'aa', 'force-stop', 'com.example.application'],
-      ['shell', 'bm', 'clean', '-n', 'com.example.application', '-d', '-c'],
+      ['aa', 'force-stop', 'com.example.application'],
+      ['bm', 'clean', '-n', 'com.example.application', '-d', '-c'],
     ],
   );
 });

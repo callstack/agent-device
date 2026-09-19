@@ -11,7 +11,7 @@ import { withFakeAdb } from './test-utils/fake-adb.ts';
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
 
-function isShellInput(args: string[], subcommand: 'tap' | 'text'): boolean {
+function isShellInput(args: readonly string[], subcommand: 'tap' | 'text'): boolean {
   return args[0] === 'shell' && args[1] === 'input' && args[2] === subcommand;
 }
 
@@ -405,7 +405,7 @@ test('typeAndroid reports clear error when unicode input is unsupported', async 
   );
 });
 
-function shellInputTextCalls(calls: string[][]): string[][] {
+function shellInputTextCalls(calls: (readonly string[])[]): (readonly string[])[] {
   return calls.filter((args) => isShellInput(args, 'text'));
 }
 

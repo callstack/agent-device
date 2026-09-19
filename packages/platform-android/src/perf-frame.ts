@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import { parseAndroidFramePerfSample, type AndroidFramePerfSample } from './perf-frame-parser.ts';
 
 export type { AndroidFramePerfSample } from './perf-frame-parser.ts';
@@ -19,7 +19,7 @@ export async function sampleAndroidFramePerf(
 ): Promise<AndroidFramePerfSample> {
   const adb = resolveAndroidAdbExecutor(device, options.adb);
   try {
-    const result = await adb(['shell', 'dumpsys', 'gfxinfo', packageName, 'framestats'], {
+    const result = await runAdbShell(adb, ['dumpsys', 'gfxinfo', packageName, 'framestats'], {
       timeoutMs: ANDROID_FRAME_PERF_TIMEOUT_MS,
     });
     const sample = parseAndroidFramePerfSample(
@@ -41,7 +41,7 @@ export async function resetAndroidFramePerfStats(
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device, options.adb);
   try {
-    await adb(['shell', 'dumpsys', 'gfxinfo', packageName, 'reset'], {
+    await runAdbShell(adb, ['dumpsys', 'gfxinfo', packageName, 'reset'], {
       allowFailure: true,
       timeoutMs: ANDROID_FRAME_RESET_TIMEOUT_MS,
     });

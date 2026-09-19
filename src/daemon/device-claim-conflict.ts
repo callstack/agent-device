@@ -5,7 +5,7 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runtimeOwnerKey, type RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type { AllocatorHeldClaimAdmission } from './device-claim-allocator.ts';
 import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 import { deviceClaimIdentity } from './device-claims.ts';

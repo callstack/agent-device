@@ -56,7 +56,7 @@ afterEach(() => {
 
 test('typeAndroid routes non-ASCII text through the test IME broadcast channel when active', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
@@ -94,7 +94,7 @@ test('typeAndroid routes non-ASCII text through the test IME broadcast channel w
 test('fillAndroid clears then commits non-ASCII text through the test IME and verifies it', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   let currentText = '';
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
@@ -140,7 +140,7 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
 // nothing in this process's activation cache — the batch channel is still the right channel there.
 
 test('typeAndroid batches ASCII text when the device is already on the helper IME', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
@@ -173,7 +173,7 @@ test('typeAndroid batches ASCII text when the device is already on the helper IM
 
 test('fillAndroid batches ASCII text when the device is already on the helper IME', async () => {
   let currentText = 'stale value';
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
@@ -226,7 +226,7 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   let currentText = 'stale value';
   let commits = 0;
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
@@ -274,7 +274,7 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
 // the broadcast channel to exactly the devices that could serve it: helper active, cache empty.
 
 test('typeAndroid broadcasts Unicode text when the helper IME is active with an empty cache', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const diagnostics = await captureTextInjectionDiagnostics(async () => {
     await withAndroidAdbProvider(
       async (args) => {
@@ -306,7 +306,7 @@ test('typeAndroid broadcasts Unicode text when the helper IME is active with an 
 
 test('fillAndroid broadcasts Unicode text when the helper IME is active with an empty cache', async () => {
   let currentText = 'stale value';
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
@@ -348,7 +348,7 @@ test('fillAndroid broadcasts Unicode text when the helper IME is active with an 
 });
 
 test('a third-party active IME keeps ASCII text on the chunked shell path', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   await withAndroidAdbProvider(
     async (args) => {
       calls.push(args);
@@ -399,7 +399,7 @@ async function captureTextInjectionDiagnostics(
   }
 }
 
-function decodeBroadcastText(args: string[] | undefined): string {
+function decodeBroadcastText(args: readonly string[] | undefined): string {
   const textIndex = args?.indexOf('text') ?? -1;
   if (!args || textIndex < 0) return '';
   return Buffer.from(args[textIndex + 1] ?? '', 'base64').toString('utf8');

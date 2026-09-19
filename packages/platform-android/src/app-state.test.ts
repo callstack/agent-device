@@ -31,8 +31,8 @@ test('scans repeated uncontrolled focus text without regular-expression backtrac
 
 test('stops between dumpsys attempts once the request is aborted', async () => {
   const controller = new AbortController();
-  const issued: string[][] = [];
-  const run = async (args: string[]) => {
+  const issued: (readonly string[])[] = [];
+  const run = async (args: readonly string[]) => {
     issued.push(args);
     controller.abort(new Error('request canceled'));
     return { exitCode: 0, stdout: 'mCurrentFocus=Window{1 u0 StatusBar}', stderr: '' };

@@ -10,7 +10,7 @@ import {
 } from './test-utils/web-managed-agent-browser.ts';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
-type SpawnedCommand = { cmd: string; args: string[] };
+type SpawnedCommand = { cmd: string; args: readonly string[] };
 
 // `binaryPath` has been in the published `web setup`/`web doctor` JSON since #833.
 // The Windows spawn fix (#2022) moves execution to `node <entryScript>` and adds

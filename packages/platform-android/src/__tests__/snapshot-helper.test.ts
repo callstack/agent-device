@@ -175,7 +175,7 @@ test('ensureAndroidSnapshotHelper installs when missing and skips a newer versio
     ...manifest,
     sha256: sha256Text('helper-apk'),
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('--show-versioncode')) {
@@ -401,7 +401,7 @@ test('ensureAndroidSnapshotHelper caches successful install checks per device an
     ...manifest,
     sha256: sha256Text('helper-apk'),
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('--show-versioncode')) {
@@ -469,7 +469,7 @@ test('ensureAndroidSnapshotHelper always policy bypasses cached install result',
     ...manifest,
     sha256: sha256Text('helper-apk'),
   };
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const adb: AndroidAdbExecutor = async (args) => {
     calls.push(args);
     if (args.includes('--show-versioncode')) {
@@ -553,7 +553,7 @@ test('ensureAndroidSnapshotHelper uninstalls and retries when signatures differ'
   const tmpDir = await mkdtempForTest('snapshot-helper-reinstall-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   let installAttempts = 0;
 
   const result = await ensureAndroidSnapshotHelper({
@@ -627,7 +627,7 @@ test('ensureAndroidSnapshotHelper retry install also uses provider install capab
   const tmpDir = await mkdtempForTest('snapshot-helper-provider-retry-');
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
-  const adbCalls: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
   const installCalls: string[] = [];
   let installAttempts = 0;
   const adb: AndroidAdbExecutor = async (args) => {
@@ -669,7 +669,7 @@ test('ensureAndroidSnapshotHelper retry install also uses provider install capab
 });
 
 test('captureAndroidSnapshotWithHelper uses injected adb executor', async () => {
-  let capturedArgs: string[] | undefined;
+  let capturedArgs: readonly string[] | undefined;
   const adb: AndroidAdbExecutor = async (args, options) => {
     if (args[0] === 'shell' && args[1] === 'rm') {
       assert.equal(options?.allowFailure, true);
@@ -737,7 +737,7 @@ test('captureAndroidSnapshotWithHelper uses injected adb executor', async () => 
 });
 
 test('captureAndroidSnapshotWithHelper can read output file when chunks are disabled', async () => {
-  const adbCalls: string[][] = [];
+  const adbCalls: (readonly string[])[] = [];
   const outputPath = '/sdcard/Download/agent-device-snapshot.xml';
   const adb: AndroidAdbExecutor = async (args) => {
     adbCalls.push(args);
@@ -810,7 +810,7 @@ test('captureAndroidSnapshotWithHelper can read output file when chunks are disa
     'shell',
     'sh',
     '-c',
-    'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
+    `'cat "$1"; status=$?; rm -f "$1"; exit "$status"'`,
     'agent-device-snapshot-helper-output',
     outputPath,
   ]);
@@ -871,7 +871,7 @@ test('captureAndroidSnapshotWithHelper wraps unparseable failed output with adb 
 });
 
 test('captureAndroidSnapshotWithHelper reads helper output file when instrumentation output is unparseable', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const result = await captureAndroidSnapshotWithHelper({
     adb: async (args) => {
       calls.push(args);
@@ -900,7 +900,7 @@ test('captureAndroidSnapshotWithHelper reads helper output file when instrumenta
     'shell',
     'sh',
     '-c',
-    'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
+    `'cat "$1"; status=$?; rm -f "$1"; exit "$status"'`,
     'agent-device-snapshot-helper-output',
     '/sdcard/Android/data/com.callstack.agentdevice.snapshothelper/files/test.xml',
   ]);

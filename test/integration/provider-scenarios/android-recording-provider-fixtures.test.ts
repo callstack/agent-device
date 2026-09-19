@@ -6,7 +6,7 @@ test('Android recording provider fixtures reject unmodeled executable commands',
   const provider = createAndroidRecordingProvider({ calls: [] });
 
   await assert.rejects(
-    provider.exec(['shell', 'echo unmodeled-provider-command']),
+    provider.exec(['shell', 'echo', 'unmodeled-provider-command']),
     /Unhandled Android recording provider command: shell echo unmodeled-provider-command/,
   );
 });

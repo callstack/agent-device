@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import {
@@ -8,7 +9,7 @@ import {
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from './settings-parsing.ts';
-import { runAndroidAdb } from './adb.ts';
+import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
@@ -32,7 +33,7 @@ export async function setAndroidSetting(
   switch (normalized) {
     case 'wifi': {
       const enabled = parseSettingState(state);
-      await runAndroidAdb(device, ['shell', 'svc', 'wifi', enabled ? 'enable' : 'disable']);
+      await runAndroidShell(device, ['svc', 'wifi', enabled ? 'enable' : 'disable']);
       return;
     }
     case 'airplane': {
@@ -56,26 +57,20 @@ export async function setAndroidSetting(
       }
       const enabled = parseSettingState(state);
       const mode = enabled ? '3' : '0';
-      await runAndroidAdb(device, ['shell', 'settings', 'put', 'secure', 'location_mode', mode]);
+      await runAndroidShell(device, ['settings', 'put', 'secure', 'location_mode', mode]);
       return;
     }
     case 'animations': {
       const enabled = parseSettingState(state);
       const scale = enabled ? '1' : '0';
       for (const key of ANDROID_ANIMATION_SCALE_SETTINGS) {
-        await runAndroidAdb(device, ['shell', 'settings', 'put', 'global', key, scale]);
+        await runAndroidShell(device, ['settings', 'put', 'global', key, scale]);
       }
       return { scale, keys: [...ANDROID_ANIMATION_SCALE_SETTINGS] };
     }
     case 'appearance': {
       const target = await resolveAndroidAppearanceTarget(device, state);
-      await runAndroidAdb(device, [
-        'shell',
-        'cmd',
-        'uimode',
-        'night',
-        target === 'dark' ? 'yes' : 'no',
-      ]);
+      await runAndroidShell(device, ['cmd', 'uimode', 'night', target === 'dark' ? 'yes' : 'no']);
       return;
     }
     case 'clear-app-state': {
@@ -95,10 +90,10 @@ export async function setAndroidSetting(
           'settings clear-app-state requires a package name, not an intent.',
         );
       }
-      await runAndroidAdb(device, ['shell', 'am', 'force-stop', resolved.value], {
+      await runAndroidShell(device, ['am', 'force-stop', resolved.value], {
         allowFailure: true,
       });
-      const result = await runAndroidAdb(device, ['shell', 'pm', 'clear', resolved.value], {
+      const result = await runAndroidShell(device, ['pm', 'clear', resolved.value], {
         allowFailure: true,
       });
       if (result.exitCode !== 0 || !/\bSuccess\b/i.test(result.stdout)) {
@@ -188,11 +183,11 @@ async function runAndroidFingerprintCommand(
 function androidFingerprintCommandAttempts(
   device: DeviceInfo,
   action: AndroidFingerprintAction,
-): string[][] {
+): (readonly string[])[] {
   const fingerprintId = action === 'match' ? '1' : '9999';
-  const attempts: string[][] = [
-    ['shell', 'cmd', 'fingerprint', 'touch', fingerprintId],
-    ['shell', 'cmd', 'fingerprint', 'finger', fingerprintId],
+  const attempts: (readonly string[])[] = [
+    deviceShellArgv('shell', ['cmd', 'fingerprint', 'touch', fingerprintId]),
+    deviceShellArgv('shell', ['cmd', 'fingerprint', 'finger', fingerprintId]),
   ];
   if (device.kind === 'emulator') {
     attempts.push(['emu', 'finger', 'touch', fingerprintId]);
@@ -220,7 +215,7 @@ async function resolveAndroidAppearanceTarget(
   const action = parseAppearanceAction(state);
   if (action !== 'toggle') return action;
 
-  const currentResult = await runAndroidAdb(device, ['shell', 'cmd', 'uimode', 'night'], {
+  const currentResult = await runAndroidShell(device, ['cmd', 'uimode', 'night'], {
     allowFailure: true,
   });
   if (currentResult.exitCode !== 0) {

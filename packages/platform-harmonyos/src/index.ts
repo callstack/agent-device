@@ -42,6 +42,9 @@ export const closeHarmonyApp = deferred<(typeof import('./app-lifecycle.ts'))['c
 export const runHarmonyHdc = deferred<(typeof import('./hdc.ts'))['runHarmonyHdc']>(
   async () => (await import('./hdc.ts')).runHarmonyHdc,
 );
+export const runHarmonyShell = deferred<(typeof import('./hdc.ts'))['runHarmonyShell']>(
+  async () => (await import('./hdc.ts')).runHarmonyShell,
+);
 export const ensureHarmonyToolchainPathConfigured = deferred<
   (typeof import('./hdc.ts'))['ensureHarmonyToolchainPathConfigured']
 >(async () => (await import('./hdc.ts')).ensureHarmonyToolchainPathConfigured);

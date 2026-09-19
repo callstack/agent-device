@@ -62,6 +62,14 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
           timeoutMs: 5_000,
         });
       },
+      forceStopApp: async (adb, packageName, signal) => {
+        const { runAdbShell } = await import('@agent-device/platform-android/mechanics');
+        await runAdbShell(
+          async (args, options) => await adb(args, { ...options, signal }),
+          ['am', 'force-stop', packageName],
+          { allowFailure: true },
+        );
+      },
       deviceAdbInvocation: (serial, command) =>
         androidAdbInvocation(androidAdbSerialTarget(serial), command),
       hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),

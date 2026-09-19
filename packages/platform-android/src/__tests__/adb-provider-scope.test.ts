@@ -16,7 +16,7 @@ const device = {
 } as const;
 
 test('withAndroidAdbProvider intercepts adb commands for the scoped serial', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
 
   const result = await withAndroidAdbProvider(
     async (args, options) => {
@@ -39,7 +39,7 @@ test('withAndroidAdbProvider intercepts adb commands for the scoped serial', asy
 });
 
 test('withAndroidAdbProvider ignores adb commands for another serial', async () => {
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const tmpDir = mkdtempForTestSync('agent-device-adb-provider-scope-');
   const adbPath = path.join(tmpDir, 'adb');
   fs.writeFileSync(

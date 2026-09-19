@@ -7,7 +7,7 @@ import {
   type InspectedDeviceClaim,
 } from '../../daemon/device-claim-inspection.ts';
 import type { DeviceClaimStaleReleaseOutcome } from '../../daemon/device-claims.ts';
-import { shellQuoteIfNeeded } from '@agent-device/host-kit/command';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';

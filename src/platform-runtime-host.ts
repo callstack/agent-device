@@ -12,13 +12,14 @@ import path from 'node:path';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 
 export function createDeviceInventoryHost(): DeviceInventoryHost {
   return Object.freeze({
     commands: Object.freeze({
       which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
       run: async (request: HostCommandRequest, signal?: AbortSignal) => {
-        const result = await runCmd(request.executable, [...request.args], {
+        const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
           allowFailure: request.allowFailure,
           cwd: request.cwd,
           env: request.env ? { ...process.env, ...request.env } : undefined,
