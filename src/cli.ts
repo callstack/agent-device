@@ -29,7 +29,7 @@ import { materializeRemoteConnectionForCommand } from './cli/commands/connection
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import { runReactDevtoolsCommand } from './cli/commands/react-devtools.ts';
-import { readCliBatchStepsJson } from './cli/batch-steps.ts';
+import { readCliBatchStepsJson } from './commands/batch/batch-steps.ts';
 import {
   createRequestId,
   emitDiagnostic,

@@ -3,7 +3,7 @@ import {
   buildUsageText,
   helpTopicIds,
   resolveHelpTargetUsageText,
-} from '../cli-schema/cli-help.ts';
+} from '../commands/schema/cli-help.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import type { ToolResult } from './command-tools.ts';

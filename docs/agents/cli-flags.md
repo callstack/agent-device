@@ -7,9 +7,9 @@ Thread a flag only through the layers that consume it:
    `packages/command-registry/src/flag-groups.ts`
    (for example `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the
    flag; find the owner with
-   `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For
+   `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`. For
    schema-only CLI commands, the owner is `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in
-   `src/cli-schema/command-overrides.ts`. Every flag declaration states `projectConfig`
+   `src/commands/schema/command-overrides.ts`. Every flag declaration states `projectConfig`
    (may be set from a project `agent-device.json`) and `recorded` (the session recorder
    copies it into `SessionAction.flags`). Both are required, so a new declaration that
    omits either does not compile — that, not an allowlist, is the completeness gate. Set
@@ -43,16 +43,16 @@ steps 1-3, plus step 9.
 
 ## Where CLI help and schema live
 
-- Long help prose: `src/cli-schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
-- Synopsis: `src/cli-schema/usage.ts` generates the `[label]` flag tail from `allowedFlags`, so a
+- Long help prose: `src/commands/schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
+- Synopsis: `src/commands/schema/usage.ts` generates the `[label]` flag tail from `allowedFlags`, so a
   new option reaches `--help` without any synopsis edit. Declare `usageFlags` on the command only
   when its synopsis names fewer options: `[]` for a synopsis that is pure grammar (or writes its own
   mutually-exclusive brackets), otherwise the subset it names. `Command flags:` always lists
   everything in `allowedFlags`. Keep a cross-cutting opt-in out of every synopsis with
-  `usageHidden: true` on its flag definition. `src/cli-schema/usage.test.ts` fails a tail that names
+  `usageHidden: true` on its flag definition. `src/commands/schema/usage.test.ts` fails a tail that names
   an option the command does not accept, or one the hand-written grammar already wrote.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
 - Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in
-  `src/cli-schema/command-overrides.ts`. Keep the two separate.
-- Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/cli-schema`.
+  `src/commands/schema/command-overrides.ts`. Keep the two separate.
+- Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.

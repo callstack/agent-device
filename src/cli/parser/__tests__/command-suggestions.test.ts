@@ -5,8 +5,8 @@ import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseArgs } from '../args.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { getFlagDefinitions } from '../../../cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../../cli-schema/option-schema.ts';
+import { getFlagDefinitions } from '../../../commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../../commands/schema/option-schema.ts';
 import {
   listCommandAliasSuggestionEntries,
   listFlagNameSuggestionEntries,

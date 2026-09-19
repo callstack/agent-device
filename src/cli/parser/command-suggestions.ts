@@ -1,7 +1,7 @@
 import { RETIRED_SCREENSHOT_MAX_SIZE } from '@agent-device/contracts/capture';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { getFlagDefinitions } from '../../cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
+import { getFlagDefinitions } from '../../commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../commands/schema/option-schema.ts';
 
 /**
  * Curated guess -> canonical command mapping for unknown CLI command names.

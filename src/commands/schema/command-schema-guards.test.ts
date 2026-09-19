@@ -73,7 +73,7 @@ test('schema runtime-fact mappings match descriptor source-of-truth', () => {
 });
 
 function collectCliDispatchCommandLiterals(): Set<string> {
-  const cliPath = fileURLToPath(new URL('../cli.ts', import.meta.url));
+  const cliPath = fileURLToPath(new URL('../../cli.ts', import.meta.url));
   const sourceText = fs.readFileSync(cliPath, 'utf8');
   const parsed = parseSync(cliPath, sourceText);
   const commands = new Set<string>();

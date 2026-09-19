@@ -13,8 +13,8 @@ import {
   getCliCommandSchema,
   getFlagDefinitions,
   type FlagDefinition,
-} from '../../src/cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../src/cli-schema/option-schema.ts';
+} from '../../src/commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../src/commands/schema/option-schema.ts';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
 import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
 

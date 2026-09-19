@@ -23,12 +23,12 @@
         "count": 1
       }
     },
-    "src/cli-schema/cli-config.ts": {
+    "src/commands/schema/cli-config.ts": {
       "crap_moderate": {
         "count": 1
       }
     },
-    "src/cli-schema/option-schema.ts": {
+    "src/commands/schema/option-schema.ts": {
       "complexity_moderate": {
         "count": 1
       },

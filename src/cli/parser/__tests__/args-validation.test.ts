@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseArgs } from '../args.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
+import { getCliCommandSchema } from '../../../commands/schema/command-schema.ts';
 
 test('parseArgs rejects test retries above the supported ceiling', () => {
   assert.throws(

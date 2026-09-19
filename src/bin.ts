@@ -5,7 +5,7 @@ declare const __AGENT_DEVICE_VERSION__: string;
 runEntry(
   process.argv.slice(2),
   {
-    help: () => import('./cli-schema/cli-help.ts'),
+    help: () => import('./commands/schema/cli-help.ts'),
     cli: () => import('./cli/process-entry.ts'),
     mcp: () => import('./mcp/server.ts'),
     version: () => import('@agent-device/host-kit/version'),

@@ -3,7 +3,7 @@ import {
   cliAliasesForCommand,
   normalizeCliCommandAlias,
 } from '@agent-device/command-registry/cli-command-aliases';
-import { buildCommandUsage } from '../cli-schema/usage.ts';
+import { buildCommandUsage } from '../commands/schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
@@ -15,7 +15,7 @@ import {
   type CommandSchema,
   type FlagDefinition,
   type FlagKey,
-} from '../cli-schema/command-schema.ts';
+} from '../commands/schema/command-schema.ts';
 import { commandFamilies, type CommandFamilyMetadata } from '../commands/family/registry.ts';
 
 export type CommandFlagExplanation = {
@@ -317,7 +317,7 @@ function commandFiles(
       `src/commands/${family}/index.test.ts`,
     );
   } else if (cliCommandNames.has(command)) {
-    derived.push('src/cli-schema/command-overrides.ts');
+    derived.push('src/commands/schema/command-overrides.ts');
   }
   if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;

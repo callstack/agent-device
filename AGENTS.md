@@ -57,7 +57,7 @@ Read the declaration rather than maintaining a prose copy:
 
 Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation
 and progress in `@agent-device/host-kit/request`; cross-layer contracts in `packages/contracts/src`;
-CLI flags in `src/commands/cli-grammar`; cross-surface schema composition in `src/cli-schema`.
+CLI flags in `src/commands/cli-grammar`; cross-surface schema composition in `src/commands/schema`.
 
 Resolve registry completeness failures at the missing declaration. Diagnose other gate failures
 at their reported invariant; do not suppress them or add an allowlist to get a pass. Build interaction

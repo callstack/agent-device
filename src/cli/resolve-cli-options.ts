@@ -1,7 +1,7 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { mergeDefinedFlags } from '../cli-schema/merge-flags.ts';
+import { mergeDefinedFlags } from '../commands/schema/merge-flags.ts';
 import { finalizeParsedArgs, parseRawArgs } from './parser/args.ts';
-import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
+import { resolveConfigBackedFlagDefaults } from '../commands/schema/cli-config.ts';
 import { resolveRemoteConfigDefaults } from './remote-config-flags.ts';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 

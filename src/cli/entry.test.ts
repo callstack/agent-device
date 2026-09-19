@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import * as cliHelp from '../cli-schema/cli-help.ts';
+import * as cliHelp from '../commands/schema/cli-help.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { cliAliasesForCommand } from '@agent-device/command-registry/cli-command-aliases';
 import { runEntry, type EntryModules } from './entry.ts';

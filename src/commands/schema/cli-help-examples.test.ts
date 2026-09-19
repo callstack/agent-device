@@ -1,12 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { BatchStep } from '@agent-device/contracts/client';
-import { parseArgs } from '../cli/parser/args.ts';
-import { readCliBatchStepsJson } from '../cli/batch-steps.ts';
+import { parseArgs } from '../../cli/parser/args.ts';
+import { readCliBatchStepsJson } from '../batch/batch-steps.ts';
 import { buildCommandUsageText, buildUsageText, helpTopicIds } from './cli-help.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { readInputFromCli } from '../commands/cli-grammar.ts';
-import { findCommandMetadata, isCommandName } from '../commands/command-metadata.ts';
+import { readInputFromCli } from '../cli-grammar.ts';
+import { findCommandMetadata, isCommandName } from '../command-metadata.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 
 // Help is the agent-facing contract, and agents copy its example lines verbatim, so an example the

@@ -9,7 +9,7 @@
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { getFlagDefinitions } from '../../src/cli-schema/command-schema.ts';
+import { getFlagDefinitions } from '../../src/commands/schema/command-schema.ts';
 import { getFuzzTarget } from './registry.ts';
 import { decodeValidationCase } from './validation-case.ts';
 import { describeGeneratorContract } from './validation-generator-contract.ts';

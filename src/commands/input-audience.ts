@@ -15,7 +15,7 @@ export type OperatorInputSource =
   | { envFlagKeys?: readonly [string, ...string[]]; operatorConfig?: boolean }
   /**
    * No environment variable (the `ENV_EXCLUDED_FLAG_KEYS` set in
-   * `cli-schema/option-schema.ts`), so the config file is the only path.
+   * `schema/option-schema.ts`), so the config file is the only path.
    */
   | { envFlagKeys: readonly []; operatorConfig: true }
   /** Neither env nor config resolves it: the declaration states its own sentence. */

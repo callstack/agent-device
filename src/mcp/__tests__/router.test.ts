@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { helpTopicIds } from '../../cli-schema/cli-help.ts';
+import { helpTopicIds } from '../../commands/schema/cli-help.ts';
 import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import { handleMcpMessage } from '../router.ts';
 import {

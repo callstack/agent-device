@@ -1,5 +1,5 @@
 import type { CliCommandName } from '@agent-device/command-registry/catalog';
-import { listCommandMetadata } from '../commands/command-metadata.ts';
+import { listCommandMetadata } from '../command-metadata.ts';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import { getCliCommandOverride, getSchemaOnlyCliCommandSchema } from './command-overrides.ts';
 import {

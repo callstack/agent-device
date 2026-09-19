@@ -201,13 +201,13 @@ test('neutral ownership zones reject value imports into higher layers', () => {
       ['src/commands/cancel.ts', 'export const cancel = true;'],
       ['packages/selectors/src/internal/parse.ts', "import '../../../../src/client/client.ts';"],
       ['src/client/client.ts', 'export const client = true;'],
-      ['src/cli-schema/schema.ts', "import '../cli/parser.ts';"],
+      ['src/mcp/schema.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
     ]),
   );
 
   assert.deepEqual(collectBackEdges(edges), {
-    'cli-schema -> cli': ['src/cli-schema/schema.ts -> src/cli/parser.ts'],
+    'mcp -> cli': ['src/mcp/schema.ts -> src/cli/parser.ts'],
     'contracts -> core': ['src/contracts/result.ts -> src/core/result.ts'],
     'device-selection -> commands': [
       'packages/device-selection/src/selection.ts -> src/commands/cancel.ts',

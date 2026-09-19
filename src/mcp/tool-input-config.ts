@@ -1,10 +1,10 @@
-import { isFlagSupportedForCommand } from '../cli-schema/option-schema.ts';
+import { isFlagSupportedForCommand } from '../commands/schema/option-schema.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandName } from '../commands/command-metadata.ts';
-import { resolveConfigBackedFlagDefaults } from '../cli-schema/cli-config.ts';
-import { mergeDefinedFlags } from '../cli-schema/merge-flags.ts';
+import { resolveConfigBackedFlagDefaults } from '../commands/schema/cli-config.ts';
+import { mergeDefinedFlags } from '../commands/schema/merge-flags.ts';
 
 export function resolveMcpConfigDefaults(
   name: CommandName,

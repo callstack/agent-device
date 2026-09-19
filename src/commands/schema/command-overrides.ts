@@ -1,5 +1,5 @@
-import type { CommandName } from '../commands/command-metadata.ts';
-import { listCommandFamilyCliSchemas } from '../commands/family/registry.ts';
+import type { CommandName } from '../command-metadata.ts';
+import { listCommandFamilyCliSchemas } from '../family/registry.ts';
 import type { LocalCliCommandName } from '@agent-device/command-registry/catalog';
 import type { CommandSchema } from '@agent-device/command-registry/command-schema';
 import {

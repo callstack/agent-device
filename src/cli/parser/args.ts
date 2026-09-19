@@ -1,6 +1,6 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { mergeDefinedFlags } from '../../cli-schema/merge-flags.ts';
+import { mergeDefinedFlags } from '../../commands/schema/merge-flags.ts';
 import {
   assertCommandPositionalArity,
   getCommandSchema,
@@ -8,8 +8,8 @@ import {
   getFlagDefinitions,
   type FlagDefinition,
   type FlagKey,
-} from '../../cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
+} from '../../commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../commands/schema/option-schema.ts';
 import { applyCommandDefaults } from '@agent-device/command-registry/registry';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import {
@@ -387,12 +387,12 @@ function formatUnsupportedFlagMessage(command: string | null, unsupported: strin
 // Usage text lives in cli-help.ts, which pulls the full command schema surface.
 // Callers load it lazily so plain command invocations never parse the help text.
 export async function usage(): Promise<string> {
-  const { buildUsageText } = await import('../../cli-schema/cli-help.ts');
+  const { buildUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildUsageText();
 }
 
 export async function usageForCommand(command: string): Promise<string | null> {
-  const { buildCommandUsageText } = await import('../../cli-schema/cli-help.ts');
+  const { buildCommandUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 

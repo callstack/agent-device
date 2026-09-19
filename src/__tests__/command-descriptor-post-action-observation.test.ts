@@ -11,7 +11,7 @@ import {
   listCommandFamilyDefinitions,
 } from '../commands/family/registry.ts';
 import type { SettleCapableClientOptionCommands } from '../commands/post-action-observation-client-options.ts';
-import { getCliCommandSchema } from '../cli-schema/command-schema.ts';
+import { getCliCommandSchema } from '../commands/schema/command-schema.ts';
 import { buildActionDetails } from '@agent-device/session-journal/session-event-action';
 import { COMMAND_OUTPUT_SCHEMAS } from '../mcp/command-output-schemas.ts';
 import {

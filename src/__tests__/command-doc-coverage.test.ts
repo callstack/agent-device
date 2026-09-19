@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import { PUBLIC_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import { cliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
-import { getCliCommandSchema } from '../cli-schema/command-schema.ts';
-import { buildCommandUsage } from '../cli-schema/usage.ts';
+import { getCliCommandSchema } from '../commands/schema/command-schema.ts';
+import { buildCommandUsage } from '../commands/schema/usage.ts';
 
 // Enumerates the public command surface (`PUBLIC_COMMANDS`, derived from the
 // command descriptor registry) against the human-facing command reference at

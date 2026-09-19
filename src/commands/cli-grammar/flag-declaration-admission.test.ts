@@ -5,7 +5,7 @@ import { test, vi } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
-import { resolveConfigBackedFlagDefaults } from '../../cli-schema/cli-config.ts';
+import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
 import { recordActionEntry } from '../../daemon/session-action-recorder.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeTempWorkspace } from '../../__tests__/cli-config-fixtures.ts';
@@ -63,7 +63,7 @@ test('project-config admission follows the declaration: an undeclared key is ref
   const planted = getInRegistry(registry, 'daemonBaseUrl');
   Object.assign(planted, { projectConfig: true });
   const { resolveConfigBackedFlagDefaults: derivePlanted } =
-    await import('../../cli-schema/cli-config.ts');
+    await import('../schema/cli-config.ts');
   const workspace = makeTempWorkspace();
   try {
     writeProjectConfig(workspace.project, { daemonBaseUrl: 'https://daemon.example.test' });

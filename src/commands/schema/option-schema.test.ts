@@ -11,7 +11,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   getRemoteConfigEnvNames,
-} from '../remote/remote-config-schema.ts';
+} from '../../remote/remote-config-schema.ts';
 
 test('option schema exposes config/env metadata for global options', () => {
   const spec = getOptionSpec('platform');
