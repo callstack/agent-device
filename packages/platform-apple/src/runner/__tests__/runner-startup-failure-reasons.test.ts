@@ -8,6 +8,7 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
+  RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   RUNNER_ERROR_RULES,
   classifyRunnerStartupFailure,
   RUNNER_STARTUP_FAILURE_REASONS,
@@ -48,6 +49,8 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   signing_provisioning_profile_missing: /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/,
   signing_unspecified: /Automatic Signing/,
   devtools_security_developer_mode_disabled: /DevToolsSecurity -enable/,
+  device_developer_mode_disabled: /Privacy & Security > Developer Mode/,
+  device_developer_disk_image_unavailable: /developer disk image, not the Developer Mode toggle/,
   build_failed_unclassified: CACHE_RECOVERY_HINT,
 };
 
@@ -156,6 +159,10 @@ test('every reason the classifier can name is produced by a rule row', () => {
   for (const reason of RUNNER_STARTUP_FAILURE_REASONS) {
     // The catch-all is the classifier's own answer when no row matched, so it names no row.
     if (reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) continue;
+    // The device-readiness members are named by the device's own states in
+    // `runner-device-readiness.ts`, not by a rule row: no amount of tool text establishes them,
+    // which is exactly why they are declared as a subset (#2683).
+    if ((RUNNER_DEVICE_READINESS_FAILURE_REASONS as readonly string[]).includes(reason)) continue;
     assert.ok(reasonsFromRules.has(reason), `no rule row yields the ${reason} reason`);
   }
 });

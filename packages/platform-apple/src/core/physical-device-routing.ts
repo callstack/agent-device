@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { IosDeviceReadiness } from '../runner/runner-contract.ts';
 
 /**
  * The physical-device routing contract, declared below both sides that need it: the runner's
@@ -19,4 +20,10 @@ export type IosPhysicalDeviceTunnel = { tunnelIp: string | null };
 export type IosPhysicalDeviceRunnerControl = {
   readonly backend: IosPhysicalDeviceBackend;
   resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosPhysicalDeviceTunnel>;
+  /**
+   * The device's own report on whether it can run development tooling (#2683). Only CoreDevice
+   * answers this, so an XCTest-backed device reports that it could not be read rather than lending
+   * the runner a guess to fail on.
+   */
+  readDeviceReadiness(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosDeviceReadiness>;
 };

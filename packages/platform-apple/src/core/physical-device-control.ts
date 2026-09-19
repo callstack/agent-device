@@ -16,11 +16,13 @@ import {
   resolveCoreDeviceTunnelIp,
 } from './physical-device-coredevice.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
+import { readIosDeviceReadiness } from './ios-device-readiness.ts';
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
 } from './physical-device-constants.ts';
 import type { AppleRunnerCommandExecutor, AppleRunnerCommandOptions } from '../runner/index.ts';
+import type { IosDeviceReadiness } from '../runner/runner-contract.ts';
 import {
   captureCoreDeviceScreenshot,
   captureXctestDeviceScreenshot,
@@ -88,6 +90,7 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
     resolveTunnel: async (device, timeoutBudgetMs) => ({
       tunnelIp: await resolveCoreDeviceTunnelIp(device, timeoutBudgetMs),
     }),
+    readDeviceReadiness: readIosDeviceReadiness,
   },
   xctest: {
     backend: 'xctest',
@@ -102,6 +105,7 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
     captureScreenshot: captureXctestDeviceScreenshot,
     copyRunnerFile: rejectXctestRunnerFileCopy,
     resolveTunnel: rejectXctestTunnelLookup,
+    readDeviceReadiness: readXctestDeviceReadiness,
   },
 };
 
@@ -159,6 +163,14 @@ async function rejectXctestTunnelLookup(device: DeviceInfo): Promise<never> {
       hint: 'Connect the device by cable so it is reachable through usbmux.',
     },
   );
+}
+
+async function readXctestDeviceReadiness(device: DeviceInfo): Promise<IosDeviceReadiness> {
+  return {
+    available: false,
+    reason: 'device_readiness_unreadable',
+    hint: `This device is driven through XCTest (device ${device.id}), which does not report Developer Mode or developer disk image state. Check the device's own Settings if development tooling fails to start on it.`,
+  };
 }
 
 async function rejectXctestRunnerFileCopy(device: DeviceInfo): Promise<never> {

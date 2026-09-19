@@ -74,6 +74,13 @@ function fakeResolveIosPhysicalDeviceControl(device: {
         fs.rmSync(jsonPath, { force: true });
       }
     },
+    // Device readiness is asserted in runner-device-readiness.test.ts; this suite only ever needs
+    // the transport route, and an unreadable device is the shape that keeps it out of the way.
+    readDeviceReadiness: async () => ({
+      available: false as const,
+      reason: 'device_readiness_unreadable' as const,
+      hint: 'unreadable in this suite',
+    }),
   };
 }
 
