@@ -57,6 +57,12 @@ function adoptionPhaseTimeouts(): unknown[] {
     .map((event) => event.data?.timeoutMs);
 }
 
+function adoptionProbePhases(): unknown[] {
+  return emittedDiagnostics
+    .filter((event) => event.phase === 'ios_runner_lease_adoption_probe')
+    .map((event) => `${event.data?.probePhase}:${event.data?.budgetCapMs}:${event.data?.answered}`);
+}
+
 beforeEach(() => {
   emittedDiagnostics = [];
   appleRunnerTestHost.update({
@@ -190,6 +196,23 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
   // Adoption transfers ownership: the lease on disk now belongs to us.
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
+});
+
+test('the adopted runner keeps the log file its predecessor opened for it', async () => {
+  // The runner inherited that descriptor at spawn, so the next daemon has to keep writing to the
+  // same path a client was already told about (#2681).
+  const runnerLogPath = path.join(leaseDir, 'runner.log');
+  writeStaleLease({ runnerLogPath });
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+  const session = await tryAdoptRunnerSessionFromLease(simulator, {});
+
+  expect(session?.runnerLogPath).toBe(runnerLogPath);
+  const restamped = JSON.parse(
+    fs.readFileSync(path.join(leaseDir, `${simulator.id}.json`), 'utf8'),
+  ) as RunnerLease;
+  expect(restamped.runnerLogPath).toBe(runnerLogPath);
 });
 
 test('a request canceled during the fingerprint probe fails adoption instead of skipping it, cold or with the fingerprint cache warm', async () => {
@@ -389,7 +412,7 @@ test('adoption is refused when the owner state dir is gone but the owner process
 
 // #2681: the physical lane. These are automated refusal decisions over the handoff gate — they are
 // not the live-device proof, which `docs/agents/device-verification.md` and
-// `.device-evidence/CHECKLIST.md` own.
+// `docs/evidence/ios-physical-runner-handoff-2026-09-19.md` own.
 test('physical coredevice lane adopts the detached runner and names its lane', async () => {
   const lease = writeStaleLeaseFor(physicalCoreDevice);
   mockIsProcessAlive.mockReturnValue(true);
@@ -518,6 +541,7 @@ test('physical refusal matrix: the cold tunnel route cannot answer inside its bu
   // The tight usbmux-shaped phase first, then the one phase with room for a cold `devicectl`
   // tunnel lookup — and no further probing.
   expect(adoptionPhaseTimeouts()).toEqual([500, 5_000]);
+  expect(adoptionProbePhases()).toEqual(['tight:500:false', 'cold_tunnel:5000:false']);
   expect(adoptionRefusalReason()).toBe('probe_failed');
   expect(readStaleRunnerLease(physicalCoreDevice.id)?.ownerToken).toBe(lease?.ownerToken);
 });
@@ -544,6 +568,41 @@ test('a simulator spends only the tight probe phase, budget unchanged by #2681',
 
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
   expect(adoptionPhaseTimeouts()).toEqual([500]);
+});
+
+test('both probe phases spend the startup budget they were handed instead of each getting a fresh one', async () => {
+  // Adoption runs inside the request's lease lock, so an unclamped cold-tunnel phase could hold it
+  // for five seconds after the request itself had seconds left (#2422).
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockRejectedValue(new Error('connection refused'));
+
+  expect(
+    await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {
+      budget: createRunnerPhaseBudget(1_200, undefined),
+    }),
+  ).toBeNull();
+
+  const timeouts = adoptionPhaseTimeouts() as number[];
+  expect(timeouts[0]).toBe(500);
+  expect(timeouts[1]).toBeGreaterThan(0);
+  expect(timeouts[1]).toBeLessThan(5_000);
+});
+
+test('a budget the fingerprint check already spent refuses adoption instead of probing at zero', async () => {
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  const lease = readStaleRunnerLease(physicalCoreDevice.id);
+
+  expect(
+    await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {
+      budget: createRunnerPhaseBudget(0, undefined),
+    }),
+  ).toBeNull();
+
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+  expect(adoptionRefusalReason()).toBe('probe_budget_exhausted');
+  expect(readStaleRunnerLease(physicalCoreDevice.id)?.ownerToken).toBe(lease?.ownerToken);
 });
 
 test('the kill switch disables the physical lane too', async () => {

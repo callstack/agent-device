@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { vi, type Mock } from 'vitest';
+import { vi } from 'vitest';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
@@ -25,6 +25,7 @@ export function makeRunnerSession(overrides: Partial<RunnerSession> = {}): Runne
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null },
     state: 'ready',
+    inFlightCommands: 0,
     ...overrides,
   } as RunnerSession;
 }
@@ -49,21 +50,13 @@ export function makeRunnerLease(
   return { ...lease, ...overrides, ownerToken };
 }
 
-export type MockOutputPipe = EventEmitter & { destroy: Mock };
-
-function makeMockOutputPipe(): MockOutputPipe {
-  // A real `ChildProcess` stdout/stderr is a Readable with `destroy()`, which is how a handoff
-  // releases the pipes it no longer owns (#2681). The double carries the same door.
-  return Object.assign(new EventEmitter(), { destroy: vi.fn() }) as MockOutputPipe;
-}
-
 export function makeBackgroundRunner(pid: number) {
   return {
     child: {
       pid,
       exitCode: null,
-      stdout: makeMockOutputPipe(),
-      stderr: makeMockOutputPipe(),
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
     },
     wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
   };

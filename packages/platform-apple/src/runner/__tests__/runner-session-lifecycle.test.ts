@@ -5,6 +5,7 @@ import { beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { resolveRunnerLaunchLogPath } from '../runner-io.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import {
   captureDiagnostics,
@@ -420,6 +421,13 @@ test('a runner that served a command is handed off on the physical lane', async 
   assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
   assert.match(diagnostics, /"phase":"ios_runner_session_detached"/);
   assert.match(diagnostics, /"lane":"physical_coredevice"/);
+
+  // What a client of the next daemon is told to read, so the handoff must name the file and keep it
+  // writable by the runner this process no longer follows (#2681).
+  const runnerLogPath = resolveRunnerLaunchLogPath(undefined, device.id);
+  assert.ok(diagnostics.includes(`"runnerLogPath":${JSON.stringify(runnerLogPath)}`));
+  fs.appendFileSync(runnerLogPath, 'written after the handoff\n');
+  assert.match(fs.readFileSync(runnerLogPath, 'utf8'), /written after the handoff/);
 });
 
 test('a runner that never served a command is torn down instead of handed off', async () => {
@@ -468,6 +476,36 @@ test('a runner reporting main-thread work still draining is not handed off', asy
   assert.ok(readRunnerSessionLiveness(device.id));
 });
 
+test('a session that still owes a response is not handed off', async () => {
+  // The occupancy mirror only describes the last COMPLETED exchange, so a command abandoned while the
+  // runner holds it would otherwise hand off a runner with work on its main thread (#2681).
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-in-flight' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  // `terminate` answers the preflight gate itself, so the only exchange left hanging is the one the
+  // runner is holding.
+  mockSendRunnerCommandOnce.mockImplementation(
+    () => new Promise<Response>(() => {}) as Promise<Response>,
+  );
+  const inFlight = executeRunnerCommandWithSession(
+    device,
+    session,
+    { command: 'terminate', appBundleId: 'com.example.demo' },
+    '/tmp/runner.log',
+    30_000,
+  );
+  void inFlight.catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(session.inFlightCommands, 1);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"command_in_flight"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
 test('the macOS host runner is never handed off, although it is kind device', async () => {
   const device: DeviceInfo = { ...MACOS_DEVICE, id: 'runner-lifecycle-detach-macos' };
   const session = await ensureRunnerSession(device, {});
@@ -481,16 +519,20 @@ test('the macOS host runner is never handed off, although it is kind device', as
   assert.ok(readRunnerSessionLiveness(device.id));
 });
 
-test('handing a runner off releases this daemon read side of its output pipes', async () => {
-  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-output' };
-  const launched = makeBackgroundRunner(4242);
-  mockRunCmdBackground.mockReturnValueOnce(launched);
+test("the handoff releases this daemon's log bookkeeping only after the lease says so", async () => {
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-order' };
   const session = await ensureRunnerSession(device, {});
   await serveOneCommand(device, session);
+  // What a release done too early would show: the lease this callback reads back is still owned.
+  const tokenWhenReleased: string[] = [];
+  session.endOutputObservation = () => {
+    tokenWhenReleased.push(leaseRaw(device.id));
+  };
 
   assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
-  assert.equal(launched.child.stdout.destroy.mock.calls.length, 1);
-  assert.equal(launched.child.stderr.destroy.mock.calls.length, 1);
+
+  assert.equal(tokenWhenReleased.length, 1);
+  assert.match(tokenWhenReleased[0]!, /"ownerToken": "detached-owner-/);
 });
 
 test('a registered runner whose process died is recycled instead of reused', async () => {

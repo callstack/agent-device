@@ -96,6 +96,7 @@ function makeRunnerSession(port: number, sessionId = `wiring:${port}`): RunnerSe
     testPromise: new Promise<ExecResult>(() => {}),
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
+    inFlightCommands: 0,
   };
   return session;
 }

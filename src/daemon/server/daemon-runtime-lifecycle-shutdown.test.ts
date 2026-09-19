@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -14,6 +15,14 @@ vi.mock('../../platform-runtime.ts', () => ({
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {
         lifecycleEvents.push('detach');
+        // The real diagnostics module, unmocked: what this records is whether a diagnostic raised by
+        // the handoff reaches disk at all, which only the shutdown's own scope can decide (#2681).
+        const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+        emitDiagnostic({
+          level: 'debug',
+          phase: 'detach_scope_probe',
+          data: { lane: 'physical_coredevice' },
+        });
       },
       finalizeDaemonShutdown: async () => {
         lifecycleEvents.push('finalize');
@@ -66,6 +75,35 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
 
     expect(lifecycleEvents).toEqual(['detach', 'gateway-shutdown', 'finalize']);
     expect(exits).toEqual([0]);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reasons into', async () => {
+  // Without the scope, `emitDiagnostic` is a no-op outside a request and every detach reason —
+  // including "why did this runner get killed instead of handed off" — disappears with the daemon.
+  const stateDir = mkdtempForTestSync('agent-device-daemon-detach-diagnostics-');
+  try {
+    const runtime = await startDaemonRuntime({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+      exit: () => {},
+      registerProcessHandlers: false,
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    expect(runtime).not.toBeNull();
+
+    await runtime?.shutdown();
+
+    const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
+    expect(daemonLog).toMatch(/"phase":"detach_scope_probe"/);
+    expect(daemonLog).toMatch(/"lane":"physical_coredevice"/);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

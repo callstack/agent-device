@@ -51,6 +51,12 @@ export type RunnerLease = {
   port: number;
   xctestrunPath: string;
   jsonPath: string;
+  /**
+   * Where the leased runner's own output goes. The runner appends to this file for its whole life,
+   * including across a daemon handoff, so the daemon that adopts it can point at it (#2681).
+   * Absent on leases written before the runner's stdio moved onto a file.
+   */
+  runnerLogPath?: string;
   createdAtMs: number;
   /**
    * The owner arbitrates device ownership through host-global device claims
@@ -96,7 +102,9 @@ export function buildRunnerLease(params: {
   port: number;
   xctestrunPath: string;
   jsonPath: string;
+  runnerLogPath?: string;
 }): RunnerLease {
+  const runnerLogPath = readOptionalNonEmptyString(params.runnerLogPath);
   return {
     schemaVersion: RUNNER_LEASE_SCHEMA_VERSION,
     deviceId: params.deviceId,
@@ -110,6 +118,7 @@ export function buildRunnerLease(params: {
     port: params.port,
     xctestrunPath: params.xctestrunPath,
     jsonPath: params.jsonPath,
+    ...(runnerLogPath ? { runnerLogPath } : {}),
     createdAtMs: Date.now(),
     deviceClaimProtocol: 1,
   };
@@ -460,6 +469,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
+    runnerLogPath: readOptionalNonEmptyString(raw.runnerLogPath),
     ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };
 }
@@ -482,6 +492,10 @@ function readRunnerLeaseRequiredFields(
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readOptionalNonEmptyString(value: unknown): string | undefined {
+  return readNonEmptyString(value) ?? undefined;
 }
 
 function readOptionalString(value: unknown): string | null {

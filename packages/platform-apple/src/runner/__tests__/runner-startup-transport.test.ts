@@ -27,8 +27,12 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
   };
 });
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
+import { readRunnerLogTail } from '../runner-io.ts';
 import { waitForRunner } from '../runner-startup-transport.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 beforeEach(() => {
   clearDeviceTunnelIpCache();
@@ -211,6 +215,13 @@ test('waitForRunner invalidates cached tunnel IP when localhost fallback succeed
 });
 
 test('waitForRunner preserves xcodebuild diagnostics when the runner exits during the final probe', async () => {
+  // Production shape since #2681: xcodebuild appends its own output to the session log, and the
+  // exec result carries nothing, so the log is what the early-exit error can quote.
+  const runnerLogPath = path.join(mkdtempForTestSync('runner-early-exit-'), 'runner.log');
+  fs.writeFileSync(
+    runnerLogPath,
+    'The application could not be launched because the Developer App Certificate is not trusted.\n',
+  );
   const session: RunnerSession = {
     sessionId: 'starting-device-session',
     device: xctestIosDevice,
@@ -218,14 +229,12 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     port: 8100,
     xctestrunPath: '/tmp/runner.xctestrun',
     jsonPath: '/tmp/runner.json',
-    testPromise: Promise.resolve({
-      exitCode: 65,
-      stdout: '',
-      stderr:
-        'The application could not be launched because the Developer App Certificate is not trusted.',
-    }),
+    runnerLogPath,
+    readLogTail: (maxBytes) => readRunnerLogTail(runnerLogPath, maxBytes),
+    testPromise: Promise.resolve({ exitCode: 65, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'starting',
+    inFlightCommands: 0,
   };
   mockUsbmuxPostCommand.mockImplementation(async () => {
     (session.child as { exitCode: number | null }).exitCode = 65;
@@ -312,5 +321,6 @@ function makeReadyRunnerSession(): RunnerSession {
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'ready',
+    inFlightCommands: 0,
   };
 }

@@ -75,7 +75,9 @@ type RunnerAdoptionRefusal =
   | 'runner_pid_recycled'
   | 'expected_derived_unresolved'
   | 'artifact_fingerprint_mismatch'
-  | 'probe_failed';
+  | 'probe_failed'
+  /** The startup phase had nothing left to probe with, so the rebuild starts on its own clock. */
+  | 'probe_budget_exhausted';
 
 // Adopts a still-running runner left behind by a dead daemon (crash or
 // graceful detach) instead of killing and restarting it: the device is a
@@ -176,9 +178,8 @@ async function claimAdoptableRunnerLease(
   if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
     return skip('artifact_fingerprint_mismatch', lease);
   }
-  if (!(await probeRunnerAnswersUptime(device, lease.port, lane))) {
-    return skip('probe_failed', lease);
-  }
+  const probe = await probeRunnerAnswersUptime(device, lease.port, lane, options.budget);
+  if (probe !== 'answered') return skip(probe, lease);
   // The probe awaited network I/O — the xcodebuild can have exited and its pid
   // been recycled while the old port still answers. Re-verify before the
   // adopted lease re-stamps the pid; everything below is synchronous.
@@ -216,22 +217,51 @@ function claimLeasedRunner(
  * Probes with the tight budget first, and only a physical CoreDevice device that could not be
  * answered there gets the cold-tunnel phase. A lane with no tunnel route — every simulator, and any
  * device the tight phase already answered — spends exactly what it spent before #2681.
+ *
+ * Both phases spend the startup phase's budget (#2422): they run inside the request's lease lock, so
+ * a wedged runner must not get to stretch the phase past what the request already allowed, and a
+ * cancelled request has to be able to reach a probe mid-flight.
  */
 async function probeRunnerAnswersUptime(
   device: DeviceInfo,
   port: number,
   lane: RunnerHandoffLane,
-): Promise<boolean> {
-  if (await sendUptimeProbe(device, port, RUNNER_ADOPTION_PROBE_TIMEOUT_MS)) return true;
-  if (lane !== 'physical_coredevice') return false;
-  return await sendUptimeProbe(device, port, RUNNER_ADOPTION_COLD_TUNNEL_PROBE_TIMEOUT_MS);
+  budget: RunnerPhaseBudget | undefined,
+): Promise<RunnerProbeOutcome> {
+  const tight = await sendUptimeProbe(
+    device,
+    port,
+    lane,
+    'tight',
+    RUNNER_ADOPTION_PROBE_TIMEOUT_MS,
+    budget,
+  );
+  if (tight !== 'probe_failed') return tight;
+  if (lane !== 'physical_coredevice') return 'probe_failed';
+  return await sendUptimeProbe(
+    device,
+    port,
+    lane,
+    'cold_tunnel',
+    RUNNER_ADOPTION_COLD_TUNNEL_PROBE_TIMEOUT_MS,
+    budget,
+  );
 }
+
+type RunnerProbePhase = 'tight' | 'cold_tunnel';
+/** `'answered'`, or the refusal the caller reports for what kept the runner from answering. */
+type RunnerProbeOutcome = 'answered' | 'probe_failed' | 'probe_budget_exhausted';
 
 async function sendUptimeProbe(
   device: DeviceInfo,
   port: number,
-  timeoutMs: number,
-): Promise<boolean> {
+  lane: RunnerHandoffLane,
+  phase: RunnerProbePhase,
+  capMs: number,
+  budget: RunnerPhaseBudget | undefined,
+): Promise<RunnerProbeOutcome> {
+  const timeoutMs = runnerProbeTimeoutMs(budget, capMs);
+  if (timeoutMs <= 0) return 'probe_budget_exhausted';
   const startedAtMs = Date.now();
   let answered = false;
   try {
@@ -240,21 +270,38 @@ async function sendUptimeProbe(
       port,
       withRunnerCommandId({ command: 'uptime' }),
       timeoutMs,
+      budget?.signal,
     );
     answered = isRunnerResponseOk(decodeRunnerResponseBody(await response.text()));
-    return answered;
-  } catch {
-    return false;
+    return answered ? 'answered' : 'probe_failed';
+  } catch (error) {
+    // A cancelled request is not a runner that failed to answer: the caller must not rebuild on it.
+    if (isRequestCanceledError(error)) throw error;
+    return 'probe_failed';
   } finally {
-    // The per-phase budget and what it actually cost is the evidence #2681 sizes these two
-    // constants against, so it is recorded rather than only reasoned about.
+    // What each phase was allowed to spend and what it actually cost is the evidence #2681 sizes
+    // these two constants against, so it is recorded rather than only reasoned about.
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_lease_adoption_probe',
       durationMs: Date.now() - startedAtMs,
-      data: { deviceId: device.id, port, timeoutMs, answered },
+      data: {
+        deviceId: device.id,
+        port,
+        lane,
+        probePhase: phase,
+        budgetCapMs: capMs,
+        timeoutMs,
+        answered,
+      },
     });
   }
+}
+
+/** The probe's own cap, cut down to whatever the startup phase still has. */
+function runnerProbeTimeoutMs(budget: RunnerPhaseBudget | undefined, capMs: number): number {
+  if (!budget?.deadline) return capMs;
+  return Math.min(capMs, Math.floor(budget.deadline.remainingMs()));
 }
 
 function resolveExpectedDerivedPath(
@@ -301,8 +348,12 @@ function buildAdoptedRunnerSession(
     jsonPath: lease.jsonPath,
     testPromise: wait,
     child,
+    // The runner appends to this file for its whole life, so the log the previous daemon handed over
+    // is still the one worth quoting; a lease from before #2681 has none (#2681).
+    runnerLogPath: lease.runnerLogPath,
     // The probe already proved the runner answers commands.
     state: 'ready',
+    inFlightCommands: 0,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
       requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
     ),
@@ -313,6 +364,7 @@ function buildAdoptedRunnerSession(
       port: lease.port,
       xctestrunPath: lease.xctestrunPath,
       jsonPath: lease.jsonPath,
+      runnerLogPath: lease.runnerLogPath,
     }),
   };
 }

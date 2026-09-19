@@ -57,20 +57,32 @@ export type RunnerSession = {
   xctestrunPath: string;
   xctestrunArtifact?: RunnerXctestrunArtifact;
   jsonPath: string;
+  /**
+   * Where this runner's own output goes: the file handed to the child as its stdout/stderr, which
+   * the runner keeps appending to across a daemon handoff (#2681). A session adopted from an older
+   * lease has none, because that runner wrote into pipes its own daemon held.
+   */
+  runnerLogPath?: string;
   testPromise: Promise<ExecResult>;
   child: RunnerProcessHandle;
   /**
-   * Releases this daemon's read side of the runner's stdout/stderr. Only a session launched by this
-   * process has one: a runner spawned detached keeps running with no reader, so a handoff releases
-   * the pipes at the handoff instead of at process exit, which is what makes a runner that cannot
-   * survive a write die where the shutdown can still see it and refuse the handoff (#2681).
+   * Gives up this daemon's sides of the runner's log: the tail it follows and its copy of the log's
+   * write end. Only a session this process launched has either. The runner keeps its own descriptor,
+   * so handing off is a bookkeeping step and cannot disturb a running runner (#2681).
    */
   endOutputObservation?: () => void;
+  /**
+   * Reads the end of {@link runnerLogPath}. The module that opened the file answers for it, so the
+   * code quoting a runner's failure does not have to know how the log is stored (#2681).
+   */
+  readLogTail?: (maxBytes: number) => string;
   /** Moves only through {@link advanceRunnerSessionState}. */
   state: RunnerSessionState;
   /** Wakes one startup retry when the listener becomes ready or its process exits. */
   startupRetryWake?: AbortSignal;
   startupTimeoutMs?: number;
+  /** Commands this process is still waiting on a response for. */
+  inFlightCommands: number;
   // Records the last allowlisted mutating interaction that the runner confirmed
   // healthy (parsed ok, non-runnerFatal) for a given app bundle. Lives only on
   // the session object so it dies with every invalidation/restart (#702).
@@ -159,6 +171,8 @@ export function isRunnerMainThreadOccupied(
 export type RunnerDetachRefusal =
   /** The runner never answered a command, so nothing proves it serves requests (#2681). */
   | 'runner_never_served_a_command'
+  /** A command is still owed a response, so the runner is busy whatever its last report says (#2681). */
+  | 'command_in_flight'
   /** The runner reported main-thread work still draining as of its last exchange. */
   | 'main_thread_occupied';
 
@@ -170,15 +184,20 @@ export type RunnerDetachDecision =
  * Whether this session's runner may be handed to the next daemon by a graceful shutdown (#2681).
  * `ready` is the only state that proves the runner serves requests: physical startup runs tens of
  * seconds, so a shutdown mid-boot would otherwise hand off a runner that never reached its listener
- * and make the next daemon pay a rebuild it cannot detect. Occupancy is decided by the runner's own
- * report, because a runner still draining abandoned work refuses every command the next daemon
- * sends it.
+ * and make the next daemon pay a rebuild it cannot detect. A command this process is still waiting
+ * on is refused outright: the occupancy report below only describes the last COMPLETED exchange, and
+ * an abandoned in-flight command leaves work on the main thread that the report never saw.
+ * Occupancy is decided by the runner's own report, because a runner still draining abandoned work
+ * refuses every command the next daemon sends it.
  */
 export function resolveRunnerDetachDecision(
-  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy'>,
+  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy' | 'inFlightCommands'>,
 ): RunnerDetachDecision {
   if (session.state !== 'ready') {
     return { detach: false, reason: 'runner_never_served_a_command' };
+  }
+  if (session.inFlightCommands > 0) {
+    return { detach: false, reason: 'command_in_flight' };
   }
   if (isRunnerMainThreadOccupied(session)) {
     return { detach: false, reason: 'main_thread_occupied' };

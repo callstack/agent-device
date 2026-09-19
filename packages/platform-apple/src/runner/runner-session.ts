@@ -18,7 +18,7 @@ import {
 } from './apple-runner-platform.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
-import { getFreePort } from './runner-io.ts';
+import { getFreePort, resolveRunnerLaunchLogPath } from './runner-io.ts';
 import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
@@ -242,6 +242,7 @@ async function startRunnerSessionWithLease(
     'simulator_set_redirect',
     async () => await acquireXcodebuildSimulatorSetRedirect(device),
   );
+  const runnerLogPath = resolveRunnerLaunchLogPath(options.logPath, device.id);
   let runnerProcess: LaunchedRunnerProcess;
   try {
     if (xctestrunArtifact.buildMs > 0) {
@@ -258,7 +259,7 @@ async function startRunnerSessionWithLease(
         xctestrunPath,
         derivedPath: xctestrunArtifact.derived,
         signal,
-        logPath: options.logPath,
+        logPath: runnerLogPath,
         traceLogPath: options.traceLogPath,
         verbose: options.verbose,
       }),
@@ -275,6 +276,7 @@ async function startRunnerSessionWithLease(
     port,
     xctestrunPath,
     jsonPath,
+    runnerLogPath: runnerProcess.runnerLogPath,
   });
   const session: RunnerSession = {
     sessionId,
@@ -284,10 +286,13 @@ async function startRunnerSessionWithLease(
     xctestrunPath,
     xctestrunArtifact,
     jsonPath,
+    runnerLogPath: runnerProcess.runnerLogPath,
     testPromise: runnerProcess.wait,
     child: runnerProcess.child,
     endOutputObservation: runnerProcess.endOutputObservation,
+    readLogTail: runnerProcess.readLogTail,
     state: 'starting',
+    inFlightCommands: 0,
     startupRetryWake: runnerProcess.startupRetryWake,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(startupTimeoutMs),
     startupTimings,
@@ -664,23 +669,23 @@ type RunnerDetachSkippedReason =
   | 'simulator_set_redirect'
   | 'lease_absent'
   | 'runner_process_dead'
-  | 'runner_died_on_output_release'
   | 'lease_write_failed';
 
 // Graceful daemon shutdown hands a request-proven runner off to the next daemon instead of paying
 // the xcodebuild ramp again: the lease token is rewritten to a detached form (so this daemon's own
-// teardown paths no longer classify it as owned), this process releases its read side of the
-// runner's output pipes, and the session simply leaves the in-memory map. Once this process exits
-// the lease is stale and the adoption path picks it up. Explicit cleanup still works: clean:daemon
-// kills by the lease's runnerPid, and the runner's XCTWaiter self-expires after 24h.
+// teardown paths no longer classify it as owned), this process gives up its sides of the runner's
+// log, and the session simply leaves the in-memory map. Once this process exits the lease is stale
+// and the adoption path picks it up. Explicit cleanup still works: clean:daemon kills by the lease's
+// runnerPid, and the runner's XCTWaiter self-expires after 24h.
 //
 // Every gate that keeps a session on the kill path is named and reported, because a handoff that
 // silently declines is indistinguishable from a rebuild: the handoff lanes
-// (`resolveRunnerHandoffTarget`), a session that never served a command or last reported main-thread
-// work still draining (`resolveRunnerDetachDecision`), a scoped simulator-set redirect, and a runner
-// this process cannot prove alive. What stays in the map is torn down by `stopAllIosRunnerSessions`,
-// which the daemon's shutdown runs right after this — so a shutdown during a startup tears that
-// runner down rather than handing off one that never reached its listener (#2681).
+// (`resolveRunnerHandoffTarget`), a session that never served a command, still owes a response, or
+// last reported main-thread work still draining (`resolveRunnerDetachDecision`), a scoped
+// simulator-set redirect, a missing or unwritable lease, and a runner this process cannot prove
+// alive. What stays in the map is torn down by `stopAllIosRunnerSessions`, which the daemon's
+// shutdown runs right after this — so a shutdown during a startup tears that runner down rather than
+// handing off one that never reached its listener (#2681).
 export async function detachIosRunnerSessionsForShutdown(): Promise<number> {
   if (!isIosRunnerDetachEnabled()) return 0;
   let detached = 0;
@@ -709,6 +714,7 @@ export async function detachIosRunnerSessionsForShutdown(): Promise<number> {
         sessionId: session.sessionId,
         runnerPid: session.child.pid,
         port: session.port,
+        runnerLogPath: session.runnerLogPath,
       },
     });
   }
@@ -746,19 +752,16 @@ function detachRunnerSessionForShutdown(
   if (!isRunnerProcessAlive(session.child.pid)) {
     return { detached: false, lane, reason: 'runner_process_dead' };
   }
-  // The child outlives this process with these pipes as its only stdout/stderr. Releasing them at
-  // the handoff rather than at process exit is what makes a runner that cannot survive a write die
-  // while a shutdown is still running and can fall back to the kill path, instead of after the next
-  // daemon adopted it (#2681).
-  session.endOutputObservation?.();
-  if (!isRunnerProcessAlive(session.child.pid)) {
-    return { detached: false, lane, reason: 'runner_died_on_output_release' };
-  }
   try {
     writeRunnerLease(buildDetachedRunnerLease(lease));
   } catch {
     return { detached: false, lane, reason: 'lease_write_failed' };
   }
+  // Only once the lease says the runner is handed over does this process give up its own sides of
+  // the runner's log: until that write lands the session is still owned, and an owned session that
+  // stopped following its runner's output is worse off than one that never handed anything off.
+  // The runner holds its own descriptor, so this cannot disturb it either way (#2681).
+  session.endOutputObservation?.();
   runnerSessions.delete(deviceId);
   cancelIosRunnerIdleStop(deviceId);
   advanceRunnerSessionState(session, 'stopped');
@@ -826,6 +829,11 @@ export function validateRunnerDevice(device: DeviceInfo): void {
   }
 }
 
+/**
+ * Runs one command through a session. The transport round-trip inside records that a response is
+ * owed (`sendRunnerCommandAfterPreflight`), which is what a graceful shutdown reads before handing
+ * the runner to the next daemon (#2681).
+ */
 export async function executeRunnerCommandWithSession(
   device: DeviceInfo,
   session: RunnerSession,
@@ -973,24 +981,38 @@ async function sendRunnerCommandAfterPreflight(params: {
       }
     : { command: runnerCommand.command, commandId: runnerCommand.commandId };
 
-  return await withDiagnosticTimer(
-    'ios_runner_command_send',
-    async () => {
-      if (readOnlyCommand) {
-        return await waitForRunner(
+  // From here the runner holds our request, and a shutdown that hands it off would orphan a command
+  // nobody is waiting for any more. The occupancy mirror only describes the last COMPLETED exchange,
+  // so this count is what keeps an abandoned round-trip off the handoff path (#2681).
+  session.inFlightCommands += 1;
+  try {
+    return await withDiagnosticTimer(
+      'ios_runner_command_send',
+      async () => {
+        if (readOnlyCommand) {
+          return await waitForRunner(
+            device,
+            session.port,
+            runnerCommand,
+            logPath,
+            remainingMs,
+            session,
+            signal,
+          );
+        }
+        return await sendRunnerCommandOnce(
           device,
           session.port,
           runnerCommand,
-          logPath,
           remainingMs,
-          session,
           signal,
         );
-      }
-      return await sendRunnerCommandOnce(device, session.port, runnerCommand, remainingMs, signal);
-    },
-    diagnosticData,
-  );
+      },
+      diagnosticData,
+    );
+  } finally {
+    session.inFlightCommands -= 1;
+  }
 }
 
 async function runRunnerReadinessPreflight(params: {

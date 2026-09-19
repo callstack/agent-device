@@ -35,6 +35,7 @@ function makeRunnerSession(port: number): RunnerSession {
     testPromise: new Promise<ExecResult>(() => {}),
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
+    inFlightCommands: 0,
   };
 }
 
