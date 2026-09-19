@@ -316,9 +316,16 @@ the walk has already taken — the fold would read reported geometry, and a turn
 device's native space could be cut at the wrong presented depth before the pass ever ran. With the
 frontier gone, no acquisition-time decision reads geometry, the walk is bounded only by raw traversal
 depth and the node cap, and the visibility fold and the presented-depth cut both happen inside
-`SnapshotPresentation`, on the normalized array, at `maximumDepth`. Measured on the recursive tier
-(form, catalog; 7 warm captures each) the frontier bought nothing: acquisition p50 within 4 % and p95
-within 10 % of `main`, in the branch's favour, with identical presented trees. De-duplication drops a repeated node and re-parents its children onto that node's
+`SnapshotPresentation`, on the normalized array, at `maximumDepth`. The frontier only ever engaged
+when a presented depth was set (`snapshot --depth N`; `snapshot -i` carries none), so that is the
+route whose cost the change could move. Measured there on the recursive tier, 15 warm captures per
+cell against `main` on the same simulator: the form (135 raw nodes, 4 or 6 presented) and the
+scrolled catalog list (279 raw nodes, 4 or 6 presented) walk their whole raw tree on this branch
+where `main` pruned it at the presented depth, and acquisition p50 stays within ±4 % and p95 within
+±7 % of `main` with mixed sign. The walk runs over an `XCUIElementSnapshot` tree the platform has
+already materialized in one call, which is where acquisition time goes; the node construction the
+frontier saved is not measurable on these trees. Screens that recover to private AX are untouched
+by it. The bound that remains is the raw node cap. De-duplication drops a repeated node and re-parents its children onto that node's
 own parent, so identical rows collapse under one addressable owner instead of splitting a subtree
 across two nodes with the same identity. Scoped captures remain broad because depth is relative to the
 scope root selected in presentation.
