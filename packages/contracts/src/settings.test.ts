@@ -18,7 +18,10 @@ import {
 // Fixed expected data on purpose (#2614): this file is the witness that a shared permission
 // declaration neither widened nor narrowed what any settings surface already accepted, and that it
 // kept the accepted names in the order `settings` help has always listed them.
+// The one deliberate widening is `all`, first in the list: the Maestro setPermissions merge
+// needs it to travel as one `settings permission` call while each backend resolves it.
 const MOBILE_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',
@@ -61,7 +64,6 @@ const NORMALIZATIONS = [
 
 const REJECTED_TARGETS = [
   ...MACOS_ONLY_TARGETS,
-  'all',
   'bluetooth',
   'camera-x',
   'camera limited',
@@ -172,6 +174,5 @@ describe('permission vocabulary types', () => {
     expectTypeOf<'accessibility'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'screen-recording'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'input-monitoring'>().not.toMatchTypeOf<PermissionTarget>();
-    expectTypeOf<'all'>().not.toMatchTypeOf<PermissionTarget>();
   });
 });

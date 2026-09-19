@@ -596,10 +596,36 @@ function androidPackageAdbResult(
 ): AndroidAdbResult | undefined {
   return (
     androidSnapshotHelperProbeAdbResult(key) ??
+    androidPackageDumpsysAdbResult(args) ??
     androidLaunchablePackagesAdbResult(args) ??
     androidInstalledPackagesAdbResult(key) ??
     androidForegroundReadAdbResult(key, dumpsysWindow)
   );
+}
+
+/**
+ * Named permission targets intersect the package's declared permissions (like `all` does),
+ * so even a single-id grant reads `dumpsys package` first. The scripted dump declares
+ * CAMERA, which is the only permission this harness grants.
+ */
+function androidPackageDumpsysAdbResult(args: string[]): AndroidAdbResult | undefined {
+  if (args[0] !== 'shell' || args[1] !== 'dumpsys' || args[2] !== 'package' || !args[3]) {
+    return undefined;
+  }
+  return {
+    stdout: [
+      'Packages:',
+      `  Package [${args[3]}] (abc):`,
+      '    requested permissions:',
+      '      android.permission.CAMERA',
+      '    User 0: ceDataInode=0 installed=true',
+      '      runtime permissions:',
+      '        android.permission.CAMERA: granted=false',
+      'Queries:',
+    ].join('\n'),
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 function androidSnapshotHelperProbeAdbResult(key: string): AndroidAdbResult | undefined {

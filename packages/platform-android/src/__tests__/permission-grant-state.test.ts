@@ -1,6 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseAndroidRuntimePermissionGrants } from '../permission-grant-state.ts';
+import {
+  parseAndroidRequestedPermissions,
+  parseAndroidRuntimePermissionGrants,
+} from '../permission-grant-state.ts';
 
 // Captured from `adb shell dumpsys package com.callstack.agentdevicelab` on a Pixel 7 / API 36
 // emulator, trimmed to the sections that decide the answer. The indentation is load-bearing:
@@ -90,4 +93,45 @@ test('sections after Packages: cannot reopen the scan', () => {
 
   assert.equal(grants?.get('android.permission.RECORD_AUDIO'), 'not_granted');
   assert.equal(grants?.get('android.permission.CAMERA'), 'granted');
+});
+
+// Requested ids live in their own section: bare names, no grant flags, ending where the
+// install section begins. Later top-level sections cannot contribute ids either.
+const REQUESTED_DUMP = [
+  'Packages:',
+  '  Package [com.example.app] (5f3a1c2):',
+  '    requested permissions:',
+  '      android.permission.INTERNET',
+  '      android.permission.RECORD_AUDIO: restricted=false',
+  '      com.example.app.CUSTOM_PERMISSION',
+  '    install permissions:',
+  '      android.permission.INTERNET: granted=true',
+  '    User 0: ceDataInode=0 installed=true',
+  'Queries:',
+  '  com.example.app.OTHER: granted=true',
+].join('\n');
+
+test('requested permissions read bare ids up to the install section', () => {
+  assert.deepEqual(parseAndroidRequestedPermissions(REQUESTED_DUMP), [
+    'android.permission.INTERNET',
+    'android.permission.RECORD_AUDIO',
+    'com.example.app.CUSTOM_PERMISSION',
+  ]);
+});
+
+test.each([
+  ['empty output', ''],
+  ['no Packages section', 'Activity Resolver Table:'],
+  ['a package without the section', 'Packages:\n  Package [com.example.app] (abc):'],
+] as const)('requested permissions reads %s as unknown', (_label, output) => {
+  assert.equal(parseAndroidRequestedPermissions(output), undefined);
+});
+
+test('an empty requested block declares nothing', () => {
+  assert.deepEqual(
+    parseAndroidRequestedPermissions(
+      'Packages:\n  Package [com.example.app] (abc):\n    requested permissions:\n    User 0: installed=true',
+    ),
+    [],
+  );
 });

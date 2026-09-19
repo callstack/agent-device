@@ -89,6 +89,19 @@ test('marks projected hierarchy captures as observation-only for the daemon', ()
   expect(request.internal).toEqual({ observationOnly: true });
 });
 
+test('folds Maestro settings app targeting into the request-private half', () => {
+  const request = maestroOperationDaemonRequest(
+    { token: 'token', session: 'session', command: 'replay', positionals: [] },
+    {
+      command: 'settings',
+      positionals: ['permission', 'grant', 'camera'],
+      dispatch: { settingsAppBundleId: 'com.example.app' },
+    },
+  );
+
+  expect(request.internal).toEqual({ settingsAppBundleId: 'com.example.app' });
+});
+
 test('leaves request-private state the operation does not set untouched', () => {
   const viewport = { x: 0, y: 0, width: 402, height: 874 };
   const request = maestroOperationDaemonRequest(

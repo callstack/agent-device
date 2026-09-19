@@ -4,6 +4,7 @@ import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import assert from 'node:assert/strict';
 import { describe, expect, test } from 'vitest';
 import {
+  mapMaestroSetPermissions,
   projectMaestroPublicOperation,
   type MaestroPublicOperation,
 } from '../daemon-runtime-public-operation.ts';
@@ -184,6 +185,31 @@ describe('Maestro public operation projection', () => {
         dispatch: { observationOnly: true },
       },
     },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        appId: 'com.example',
+        state: 'grant',
+        permission: 'camera',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'camera'],
+        dispatch: { settingsAppBundleId: 'com.example' },
+      },
+    },
+    {
+      operation: {
+        kind: 'settingsPermission',
+        state: 'grant',
+        permission: 'photos',
+        mode: 'limited',
+      },
+      expected: {
+        command: 'settings',
+        positionals: ['permission', 'grant', 'photos', 'limited'],
+      },
+    },
   ])('projects $operation.kind', ({ operation, expected }) => {
     expect(projectMaestroPublicOperation(operation)).toEqual(expected);
   });
@@ -223,5 +249,69 @@ describe('Maestro public operation projection', () => {
     assert.equal(plan.intent, 'pan');
     assert.equal(plan.executionProfile, 'endpoint-hold');
     assert.equal(plan.durationMs, 400);
+  });
+});
+
+describe('Maestro setPermissions mapping', () => {
+  test('maps plain values and sends all first so specific entries override it', () => {
+    expect(
+      mapMaestroSetPermissions({ notifications: 'unset', ALL: 'deny', camera: 'allow' }),
+    ).toEqual([
+      { state: 'deny', permission: 'all' },
+      { state: 'reset', permission: 'notifications' },
+      { state: 'grant', permission: 'camera' },
+    ]);
+  });
+
+  test('maps the granular values and the medialibrary spelling', () => {
+    expect(
+      mapMaestroSetPermissions({
+        location: 'always',
+        photos: 'limited',
+        medialibrary: 'allow',
+      }),
+    ).toEqual([
+      { state: 'grant', permission: 'location-always' },
+      { state: 'grant', permission: 'photos', mode: 'limited' },
+      { state: 'grant', permission: 'media-library' },
+    ]);
+    expect(mapMaestroSetPermissions({ location: 'inuse' })).toEqual([
+      { state: 'grant', permission: 'location' },
+    ]);
+    expect(mapMaestroSetPermissions({ location: 'never' })).toEqual([
+      { state: 'deny', permission: 'location' },
+    ]);
+  });
+
+  test.each([
+    'bluetooth',
+    'speech',
+    'health',
+    'contacts-limited',
+    'location-always',
+    'constructor',
+    'android.permission.MANAGE_EXTERNAL_STORAGE',
+  ])('refuses the name %s before any mutation', (name) => {
+    expect(() => mapMaestroSetPermissions({ camera: 'allow', [name]: 'allow' })).toThrow(
+      expect.objectContaining({
+        code: 'UNSUPPORTED_OPERATION',
+        message: `Maestro permission "${name.toLowerCase()}" is not supported.`,
+      }),
+    );
+  });
+
+  test.each([
+    ['camera', 'always', 'Use allow|deny|unset.'],
+    ['all', 'never', 'Use allow|deny|unset.'],
+    ['photos', 'always', 'Use allow|deny|unset|limited.'],
+    ['location', 'toString', 'Use allow|deny|unset|always|inuse|never.'],
+  ])('refuses %s: %s', (name, value, hint) => {
+    expect(() => mapMaestroSetPermissions({ [name]: value })).toThrow(
+      expect.objectContaining({ code: 'INVALID_ARGS', details: { hint } }),
+    );
+  });
+
+  test('refuses an empty map', () => {
+    expect(() => mapMaestroSetPermissions({})).toThrow(/at least one permission/);
   });
 });

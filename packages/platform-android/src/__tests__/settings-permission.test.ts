@@ -123,9 +123,10 @@ test.each([
     'grant microphone',
     'grant' as const,
     { permissionTarget: 'microphone' } as const,
-    // No dumpsys: a grant cannot kill the app, so it reads no state.
+    // A grant resolves its declared ids before mutating, so it reads the dump once.
     [
       ['shell', 'am', 'get-current-user'],
+      ['shell', 'dumpsys', 'package', 'com.example.app'],
       ['shell', 'pm', 'grant', '--user', '10', 'com.example.app', MICROPHONE],
     ],
   ],
@@ -296,13 +297,13 @@ test.each([
 
 test.each([
   [
-    'mode outside photos',
-    { permissionTarget: 'camera', permissionMode: 'limited' },
-    /mode is only supported for photos/i,
+    'a permission mode',
+    { permissionTarget: 'photos', permissionMode: 'limited' },
+    /Android does not support permission modes/i,
   ],
   [
     'an iOS-only target',
-    { permissionTarget: 'calendar' },
+    { permissionTarget: 'location-always' },
     /Unsupported permission target on Android/i,
   ],
 ] as const)('setAndroidSetting permission rejects %s', async (_label, options, message) => {
@@ -319,5 +320,396 @@ test('setAndroidSetting permission requires an app in session', async () => {
         permissionTarget: 'camera',
       }),
     { code: 'INVALID_ARGS', message: /requires an active app in session/ },
+  );
+});
+
+// Explicit multi-id names fan out to one pm call per id, in table order.
+test('setAndroidSetting permission grant contacts grants both contact ids', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => (flat === CURRENT_USER ? '0' : undefined)),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'contacts',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.READ_CONTACTS'),
+        flat.join('; '),
+      );
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.WRITE_CONTACTS'),
+        flat.join('; '),
+      );
+    },
+  );
+});
+
+function dumpsysWithRequestedIds(ids: readonly string[]): string {
+  return [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    ...ids.map((id) => `      ${id}`),
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    ...ids.map((id) => `        ${id}: granted=false`),
+    'Queries:',
+  ].join('\n');
+}
+
+// A named multi-id target intersects the declared set like `all` does: an app
+// declaring only READ_CONTACTS gets only that id, instead of failing on the
+// missing WRITE_CONTACTS like the strict fan-out did.
+test('setAndroidSetting permission grant contacts applies the declared subset', async () => {
+  const requested = dumpsysWithRequestedIds(['android.permission.READ_CONTACTS']);
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.WRITE_CONTACTS') {
+        return {
+          stderr:
+            'SecurityException: Package com.example.app has not requested permission android.permission.WRITE_CONTACTS',
+          exitCode: 1,
+        };
+      }
+      return undefined;
+    }),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'contacts',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.READ_CONTACTS'),
+        flat.join('; '),
+      );
+      assert.ok(
+        !flat.includes('shell pm grant --user 0 com.example.app android.permission.WRITE_CONTACTS'),
+        flat.join('; '),
+      );
+    },
+  );
+});
+
+// Same for location: a coarse-only app gets COARSE without attempting FINE.
+test('setAndroidSetting permission grant location applies the declared subset', async () => {
+  const requested = dumpsysWithRequestedIds(['android.permission.ACCESS_COARSE_LOCATION']);
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      return undefined;
+    }),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'location',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes(
+          'shell pm grant --user 0 com.example.app android.permission.ACCESS_COARSE_LOCATION',
+        ),
+        flat.join('; '),
+      );
+      assert.ok(
+        !flat.includes(
+          'shell pm grant --user 0 com.example.app android.permission.ACCESS_FINE_LOCATION',
+        ),
+        flat.join('; '),
+      );
+    },
+  );
+});
+
+// An explicit target declaring none of its ids fails loudly with no pm call.
+test('setAndroidSetting permission grant contacts fails when none of its ids are declared', async () => {
+  const requested = dumpsysWithRequestedIds(['android.permission.CAMERA']);
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'contacts',
+          }),
+        { code: 'COMMAND_FAILED', message: /has not requested permission/ },
+      );
+      assert.ok(
+        calls.every((args) => !args.includes('pm') || args.includes('dumpsys')),
+        calls.map((args) => args.join(' ')).join('; '),
+      );
+    },
+  );
+});
+
+// Deny and reset intersect like grant does: on a READ-only contacts app only
+// READ is revoked, so a fake that fails WRITE proves it was never attempted —
+// the path `all: deny` plus a named override depends on.
+test.each(['deny', 'reset'] as const)(
+  'setAndroidSetting permission %s contacts revokes only the declared READ id',
+  async (action) => {
+    const requested = dumpsysWithRequestedIds(['android.permission.READ_CONTACTS']);
+    await withFakeAdb(
+      fakeAdb((flat) => {
+        if (flat === CURRENT_USER) return '0';
+        if (flat === DUMPSYS) return requested;
+        if (flat === 'shell pm revoke --user 0 com.example.app android.permission.WRITE_CONTACTS') {
+          return {
+            stderr:
+              'SecurityException: Package com.example.app has not requested permission android.permission.WRITE_CONTACTS',
+            exitCode: 1,
+          };
+        }
+        return undefined;
+      }),
+      async ({ calls, device }) => {
+        const result = (await setAndroidSetting(device, 'permission', action, 'com.example.app', {
+          permissionTarget: 'contacts',
+        })) as Record<string, unknown>;
+        assert.equal(result.permission, 'android.permission.READ_CONTACTS');
+        const flat = calls.map((args) => args.join(' '));
+        assert.ok(
+          flat.includes(
+            'shell pm revoke --user 0 com.example.app android.permission.READ_CONTACTS',
+          ),
+          flat.join('; '),
+        );
+        assert.ok(!flat.some((call) => call.includes('WRITE_CONTACTS')), flat.join('; '));
+        if (action === 'reset') {
+          assert.ok(
+            flat.includes(
+              'shell pm clear-permission-flags --user 0 com.example.app android.permission.READ_CONTACTS user-set',
+            ),
+            flat.join('; '),
+          );
+        }
+      },
+    );
+  },
+);
+
+/** A dump shaped like the lab app's: install, custom, and runtime permissions side by side. */
+function dumpsysWithRequested(): string {
+  return [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.INTERNET',
+    '      android.permission.RECORD_AUDIO',
+    '      com.example.app.CUSTOM_PERMISSION',
+    '    install permissions:',
+    '      android.permission.INTERNET: granted=true',
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    '        android.permission.RECORD_AUDIO: granted=true, flags=[ USER_SET]',
+    'Queries:',
+  ].join('\n');
+}
+
+// `all` intersects the declared set before issuing anything: INTERNET is declared
+// but not changeable, so it is skipped with a reason while RECORD_AUDIO lands.
+test('setAndroidSetting permission grant all applies the declared changeable ids', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return dumpsysWithRequested();
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.INTERNET') {
+        return {
+          stderr:
+            "Exception occurred while executing 'grant':\njava.lang.SecurityException: INTERNET is not a changeable permission type",
+          exitCode: 1,
+        };
+      }
+      if (flat === 'shell pm grant --user 0 com.example.app com.example.app.CUSTOM_PERMISSION') {
+        return {
+          stderr:
+            'SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+          exitCode: 1,
+        };
+      }
+      return undefined;
+    }),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'all',
+      });
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
+        flat.join('; '),
+      );
+      assert.deepEqual(result, {
+        permission: 'all',
+        applied: ['android.permission.RECORD_AUDIO'],
+        warnings: [
+          "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
+          'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
+        ],
+      });
+    },
+  );
+});
+
+// A role-managed id (WRITE_SETTINGS on API 36: "managed by role") is
+// declared-but-not-changeable like INTERNET, so `all` skips it with a reason
+// instead of aborting — found live on com.google.android.contacts.
+test('setAndroidSetting permission all skips a role-managed id', async () => {
+  const requested = [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.WRITE_SETTINGS',
+    '      android.permission.RECORD_AUDIO',
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    '        android.permission.RECORD_AUDIO: granted=false',
+    'Queries:',
+  ].join('\n');
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.WRITE_SETTINGS') {
+        return {
+          stderr:
+            "Exception occurred while executing 'grant':\njava.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
+          exitCode: 1,
+        };
+      }
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+        permissionTarget: 'all',
+      });
+      assert.deepEqual(result, {
+        permission: 'all',
+        applied: ['android.permission.RECORD_AUDIO'],
+        warnings: [
+          "Skipped android.permission.WRITE_SETTINGS for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
+        ],
+      });
+    },
+  );
+});
+
+// Revoke under `all` warns per held permission, like the single path.
+test('setAndroidSetting permission revoke all warns for the held runtime id', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return dumpsysWithRequested();
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = (await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'all',
+      })) as Record<string, unknown>;
+      assert.deepEqual(result.permission, 'all');
+      assert.ok(
+        (result.applied as string[]).includes('android.permission.RECORD_AUDIO'),
+        JSON.stringify(result),
+      );
+      const warnings = (result.warnings as string[]).join('\n');
+      assert.match(warnings, /RECORD_AUDIO was granted before this revoke/);
+    },
+  );
+});
+
+// Validation happens before mutation: an unreadable dump issues no pm call.
+test.each([
+  ['dumpsys fails', { stderr: 'error', exitCode: 1 }],
+  ['no requested section', dumpsys([{ id: 0, runtime: [[MICROPHONE, false]] }])],
+] as const)('setAndroidSetting permission all refuses when %s', async (_label, reply) => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return reply as string;
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'all',
+          }),
+        { code: 'COMMAND_FAILED', message: /declared permissions|requested permissions/i },
+      );
+      assert.ok(
+        calls.every((args) => !args.includes('pm')),
+        calls.map((args) => args.join(' ')).join('; '),
+      );
+    },
+  );
+});
+
+// An operational pm failure mid-`all` aborts instead of being skipped: an
+// offline device must not let launchApp continue with half-applied permissions.
+test('setAndroidSetting permission grant all propagates an operational pm failure', async () => {
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return dumpsysWithRequested();
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO') {
+        return { stderr: 'device offline', exitCode: 1 };
+      }
+      return undefined;
+    }),
+    async ({ device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'all',
+          }),
+        { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*RECORD_AUDIO/ },
+      );
+    },
+  );
+});
+
+// A photos probe that fails operationally (not as non-changeable) aborts `all`
+// rather than collapsing into a skip warning.
+test('setAndroidSetting permission grant all propagates an operational photos failure', async () => {
+  const requested = [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.READ_MEDIA_IMAGES',
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    '        android.permission.READ_MEDIA_IMAGES: granted=false',
+    'Queries:',
+  ].join('\n');
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === 'shell getprop ro.build.version.sdk') return '36';
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      if (
+        flat.startsWith('shell pm grant --user 0 com.example.app android.permission.READ_MEDIA')
+      ) {
+        return { stderr: 'device offline', exitCode: 1 };
+      }
+      if (
+        flat.startsWith('shell pm grant --user 0 com.example.app android.permission.READ_EXTERNAL')
+      ) {
+        return { stderr: 'device offline', exitCode: 1 };
+      }
+      return undefined;
+    }),
+    async ({ device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'all',
+          }),
+        { code: 'COMMAND_FAILED', message: /Failed to grant Android photos permission/ },
+      );
+    },
   );
 });

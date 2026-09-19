@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added (maestro): `setPermissions` and `launchApp.permissions` support `all: allow|deny|unset`
+  on iOS simulators and Android, with specific entries overriding `all`. Both accept a
+  Maestro-style permissions map. iOS `all` does not cover notifications: simctl has no
+  notifications service on these runtimes, so targeted notifications fails loudly and `all`
+  leaves it unchanged.
 - Fixed (daemon): `close` now stops an active app-log stream (and audio probe / perf capture /
   recording) on an implicitly cwd-scoped session. Teardown addressed those resources by
   `session.name` (`default`) instead of the store address (`cwd:<hash>:default`), so the record

@@ -14,6 +14,7 @@ export const PERMISSION_MODES = ['full', 'limited'] as const;
 
 /** The app-scoped targets, the only ones `parsePermissionTarget` accepts. */
 export const MOBILE_PERMISSION_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',

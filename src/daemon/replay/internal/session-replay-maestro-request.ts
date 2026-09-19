@@ -44,5 +44,6 @@ function dispatchInternal(
     observationOnly: dispatch?.observationOnly,
     gestureViewport: dispatch?.gestureViewport,
     gestureExecutionProfile: dispatch?.gestureExecutionProfile,
+    settingsAppBundleId: dispatch?.settingsAppBundleId,
   } satisfies Record<keyof MaestroDaemonDispatchOptions, unknown>);
 }
