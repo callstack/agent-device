@@ -83,3 +83,50 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
   });
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
+
+test('a non-2xx answer whose body stalls ends at the deadline as the typed timeout', async () => {
+  const url = await serve((_request, response) => {
+    response.writeHead(503);
+    response.write('upstr');
+    // Never end: the error body stalls like a transfer can.
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  await expect(
+    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 150 }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Limrun download timed out',
+    details: { timeoutMs: 150 },
+  });
+});
+
+test('a failed retry removes the file an earlier attempt left at the destination', async () => {
+  const url = await serve((_request, response) => {
+    response.writeHead(500);
+    response.end('recorder gone');
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+  fs.writeFileSync(destinationPath, 'earlier attempt');
+
+  await expect(
+    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', details: { statusCode: 500 } });
+  expect(fs.existsSync(destinationPath)).toBe(false);
+});
+
+test('an error body is read only up to the preview, without waiting for the rest', async () => {
+  const url = await serve((_request, response) => {
+    response.writeHead(502);
+    response.write('x'.repeat(2_048));
+    // Never end: the preview must not wait for the whole body.
+  });
+  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
+
+  await expect(
+    downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { statusCode: 502, body: 'x'.repeat(500) },
+  });
+});
