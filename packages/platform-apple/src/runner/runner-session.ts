@@ -63,7 +63,6 @@ import {
   type RunnerDisposalOptions,
 } from './runner-disposal.ts';
 import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
-import { assertDevToolsSecurityForIosRunner } from './runner-dev-tools-security.ts';
 import {
   advanceRunnerSessionState,
   buildRunnerSessionId,
@@ -188,6 +187,10 @@ async function startRunnerSessionWithLease(
     await ensureBootedIfNeeded(device);
   });
   await measureRunnerStartupStep(startupTimings, 'verify_host_dev_tools_security', async () => {
+    // Loaded here rather than at the top of the file: the runner subtree sits in the eager import
+    // closure of the seven Apple facades (eager-closure-budgets), and a preflight only a physical
+    // device ever needs has no business being evaluated to answer a simulator request.
+    const { assertDevToolsSecurityForIosRunner } = await import('./runner-dev-tools-security.ts');
     await assertDevToolsSecurityForIosRunner(device);
   });
   if (options.cleanStaleBundles) {
