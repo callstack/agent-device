@@ -200,6 +200,18 @@ extension RunnerTests {
     return true
   }
 
+  /// The pid of the application that held the foreground while the session app did not, when the
+  /// private AX client reports exactly one such application. The client resolves pids only — it
+  /// answers no bundle id for an arbitrary app — so anything other than one foreign pid stays
+  /// unstated rather than guessed (#2682).
+  func foregroundApplicationPid(excluding sessionPid: Int?) -> Int? {
+    let pids = RunnerAXSnapshotBridge.activeApplicationProcessIdentifiers().compactMap {
+      ($0 as? NSNumber)?.intValue
+    }
+    let foreign = Set(pids.filter { $0 > 0 && $0 != sessionPid })
+    return foreign.count == 1 ? foreign.first : nil
+  }
+
   func activateTarget(bundleId: String, reason: String) -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: bundleId)
     let initialState = target.state
@@ -216,7 +228,22 @@ extension RunnerTests {
         bundleId
       )
     } else {
+      // Read the other app's pid before activating: after `activate()` the stolen foreground is
+      // gone and the fact would describe the repair instead of the state it repaired (#2682).
+      let foregroundPid = foregroundApplicationPid(excluding: Self.processIdentifier(of: target))
       target.activate()
+      pendingTargetActivation = TargetActivationFactPayload(
+        reason: reason,
+        priorState: Int(initialState.rawValue),
+        foregroundPid: foregroundPid
+      )
+      NSLog(
+        "AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=%@ reason=%@ priorState=%d foregroundPid=%@",
+        bundleId,
+        reason,
+        initialState.rawValue,
+        foregroundPid.map(String.init) ?? "-"
+      )
     }
     currentApp = target
     currentBundleId = bundleId

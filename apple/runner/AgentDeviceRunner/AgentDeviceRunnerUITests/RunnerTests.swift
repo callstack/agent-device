@@ -55,6 +55,9 @@ final class RunnerTests: XCTestCase {
   var currentApp: XCUIApplication?
   var currentBundleId: String?
   var currentAppProcessIdentifier: Int?
+  // Set while serving a command that had to re-activate the bound app, and stamped onto that
+  // command's response before it leaves the execution queue (#2682).
+  var pendingTargetActivation: TargetActivationFactPayload?
   // iOS does not reliably expose hasKeyboardFocus for a bare type request, especially when
   // hardware-keyboard input hides the software keyboard. A successful tap on a concrete text
   // input is a scoped witness for the immediately-following bare type; lifecycle and non-text

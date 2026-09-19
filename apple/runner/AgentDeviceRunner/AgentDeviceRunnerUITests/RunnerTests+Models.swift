@@ -239,6 +239,27 @@ extension Response {
     payload.runnerMainThreadBusy = value
     return Response(ok: ok, data: payload, error: error)
   }
+
+  /// The serving command had to bring the bound app back to the foreground to answer at all.
+  /// Stamped on the response of that command, never on a later one (#2682). Only successful
+  /// responses carry it: a refusal is already the disclosure of a command that did not run.
+  func stampingTargetActivation(_ value: TargetActivationFactPayload) -> Response {
+    guard ok else { return self }
+    var payload = data ?? DataPayload()
+    payload.targetActivation = value
+    return Response(ok: ok, data: payload, error: error)
+  }
+}
+
+/// Foreground repair the runner performed while serving one command (#2682). `priorState` is the
+/// bound app's `XCApplicationState` raw value read BEFORE `XCUIApplication.activate()` ran, so the
+/// fact describes what was repaired rather than what the repair produced. `foregroundPid` names the
+/// other app that held the foreground when exactly one candidate existed; the private AX client
+/// exposes only pids for applications it has an active session with, so no bundle id is claimed.
+struct TargetActivationFactPayload: Codable {
+  let reason: String
+  let priorState: Int
+  let foregroundPid: Int?
 }
 
 struct DataPayload: Codable {
@@ -298,6 +319,7 @@ struct DataPayload: Codable {
   var completedSteps: Int?
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
+  var targetActivation: TargetActivationFactPayload?
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"

@@ -921,11 +921,18 @@ extension RunnerTests {
 
   func executeAccepted(command: Command) throws -> Response {
     commandJournal.start(command: command)
+    pendingTargetActivation = nil
     do {
       let response = try executeDispatched(command: command)
       commandJournal.finish(command: command, response: response)
-      return response
+      guard let fact = pendingTargetActivation else { return response }
+      // Stamped after `finish`, like the uptime anchor: a journal-replayed result carries no
+      // activation fact, because the command that paid for it is the one being replayed, not one
+      // that just repaired foreground (#2682).
+      pendingTargetActivation = nil
+      return response.stampingTargetActivation(fact)
     } catch {
+      pendingTargetActivation = nil
       commandJournal.fail(command: command, error: error)
       throw error
     }
