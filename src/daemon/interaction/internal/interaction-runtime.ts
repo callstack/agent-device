@@ -47,14 +47,21 @@ export function createInteractionRuntimeForRoute(
     flags: params.req.flags,
     session,
     contextFromFlags: params.contextFromFlags,
-    captureSnapshot: async (flags, options) =>
-      await params.captureSnapshotForSession(
+    captureSnapshot: async (flags, options) => {
+      const snapshot = await params.captureSnapshotForSession(
         session,
         flags,
         params.sessionStore,
         params.contextFromFlags,
         options,
-      ),
+      );
+      // First fact wins: a later capture in the same request that reports no repair must not erase
+      // the capture that did (#2682).
+      if (params.activationProof && snapshot.targetActivation && !params.activationProof.state) {
+        params.activationProof.state = snapshot;
+      }
+      return snapshot;
+    },
     runtimeSessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
       getSession: () => session,
