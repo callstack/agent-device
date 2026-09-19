@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Changed (ios): a regular `snapshot --depth N` on the XCTest runner is a presentation cut over a
+  full acquisition, not a bound on the walk. Acquisition publishes the frames the platform reported,
+  one normalization pass turns geometry into the app's orientation space and recomputes `hittable`,
+  and the visibility fold and depth cut run on that array. Presented trees are unchanged on the
+  screens measured; a boundary container under `--depth N` now carries its scroll hints from its real
+  children. The runner's regular-depth capability is `presentation-cut` (was `presented-frontier`),
+  and every `CGRect` becomes a `SnapshotRect` through one initializer (#2661).
 - Fixed (daemon): `close` now stops an active app-log stream (and audio probe / perf capture /
   recording) on an implicitly cwd-scoped session. Teardown addressed those resources by
   `session.name` (`default`) instead of the store address (`cwd:<hash>:default`), so the record

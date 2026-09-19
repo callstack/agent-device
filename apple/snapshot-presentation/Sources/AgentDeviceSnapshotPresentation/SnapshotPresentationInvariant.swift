@@ -63,7 +63,7 @@ public enum SnapshotPresentationInvariant {
         throw SnapshotPresentationFailure.regularNodeOutsideCumulativeClip(
           index: node.raw.index,
           frame: node.effectiveRect,
-          clip: snapshotRect(from: ancestorClip)
+          clip: SnapshotRect(ancestorClip)
         )
       }
     }
@@ -80,12 +80,4 @@ public enum SnapshotPresentationInvariant {
       && frame.maxY <= clip.maxY + tolerance
   }
 
-  private static func snapshotRect(from rect: CGRect) -> SnapshotRect {
-    SnapshotRect(
-      x: Double(rect.minX),
-      y: Double(rect.minY),
-      width: Double(rect.width),
-      height: Double(rect.height)
-    )
-  }
 }

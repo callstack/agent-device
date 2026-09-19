@@ -310,12 +310,15 @@ node at reported traversal depth and the frame the platform reported. #2661 also
 coordinate space (`geometrySpace` / `parentIsWindow`) that #2612 had threaded through every walker;
 the one coordinate-space decision is now a single post-acquisition pass over the flat array
 (`SnapshotGeometrySpace.normalized`, run in `captureWithBackend`) that keys on ancestry instead of a
-value carried down the stack. An earlier visible-depth frontier consulted the shared fold mid-walk, so
-its presented-depth increment was measured against un-normalized geometry: a turned keyboard band
-reported in the device's native space could be cut at the wrong presented depth before the single pass
-ever ran. Dropping it means no reported rect can prune a subtree the fold would keep. The visibility
-fold and the presented-depth cut both happen inside `SnapshotPresentation`, on the normalized array,
-at `maximumDepth`. De-duplication drops a repeated node and re-parents its children onto that node's
+value carried down the stack. That pass is why the earlier visible-depth frontier had to go: the
+frontier consulted the shared fold mid-walk, and a post-walk normalization pass cannot feed a decision
+the walk has already taken — the fold would read reported geometry, and a turned keyboard band in the
+device's native space could be cut at the wrong presented depth before the pass ever ran. With the
+frontier gone, no acquisition-time decision reads geometry, the walk is bounded only by raw traversal
+depth and the node cap, and the visibility fold and the presented-depth cut both happen inside
+`SnapshotPresentation`, on the normalized array, at `maximumDepth`. Measured on the recursive tier
+(form, catalog; 7 warm captures each) the frontier bought nothing: acquisition p50 within 4 % and p95
+within 10 % of `main`, in the branch's favour, with identical presented trees. De-duplication drops a repeated node and re-parents its children onto that node's
 own parent, so identical rows collapse under one addressable owner instead of splitting a subtree
 across two nodes with the same identity. Scoped captures remain broad because depth is relative to the
 scope root selected in presentation.

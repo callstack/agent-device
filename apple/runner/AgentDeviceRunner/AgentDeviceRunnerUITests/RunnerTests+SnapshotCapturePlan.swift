@@ -756,7 +756,7 @@ extension RunnerTests {
         label: label,
         identifier: identifier,
         value: nil,
-        rect: snapshotRect(from: .zero),
+        rect: SnapshotRect(.zero),
         enabled: true,
         focused: nil,
         selected: nil,

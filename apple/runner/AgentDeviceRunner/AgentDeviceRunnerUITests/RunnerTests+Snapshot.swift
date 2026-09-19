@@ -812,7 +812,7 @@ extension RunnerTests {
       label: nil,
       identifier: nil,
       value: nil,
-      rect: snapshotRect(from: rect),
+      rect: SnapshotRect(rect),
       enabled: true,
       focused: nil,
       selected: nil,
@@ -831,15 +831,6 @@ extension RunnerTests {
     let maxX = candidates.map { CGFloat($0.rect.x + $0.rect.width) }.max() ?? 0
     let maxY = candidates.map { CGFloat($0.rect.y + $0.rect.height) }.max() ?? 0
     return CGRect(x: 0, y: 0, width: max(1, maxX), height: max(1, maxY))
-  }
-
-  func snapshotRect(from frame: CGRect) -> SnapshotRect {
-    return SnapshotRect(
-      x: Double(frame.origin.x),
-      y: Double(frame.origin.y),
-      width: Double(frame.size.width),
-      height: Double(frame.size.height)
-    )
   }
 
   // MARK: - Snapshot Filtering
@@ -1017,7 +1008,7 @@ extension RunnerTests {
       label: evaluation.label.isEmpty ? nil : evaluation.label,
       identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
       value: evaluation.valueText,
-      rect: snapshotRect(from: snapshot.frame),
+      rect: SnapshotRect(snapshot.frame),
       enabled: snapshot.isEnabled,
       focused: evaluation.focused ? true : nil,
       selected: evaluation.selected ? true : nil,
@@ -1203,7 +1194,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
-        rect: snapshotRect(from: frame),
+        rect: SnapshotRect(frame),
         enabled: element.isEnabled,
         focused: elementHasFocus(element) ? true : nil,
         selected: element.isSelected ? true : nil,
@@ -1359,7 +1350,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
-        rect: snapshotRect(from: frame),
+        rect: SnapshotRect(frame),
         enabled: enabled,
         focused: elementHasFocus(element) ? true : nil,
         selected: element.isSelected ? true : nil,

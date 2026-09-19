@@ -242,7 +242,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText.isEmpty ? nil : valueText,
-        rect: snapshotRect(from: element.frame),
+        rect: SnapshotRect(element.frame),
         enabled: element.isEnabled,
         focused: nil,
         selected: element.isSelected ? true : nil,

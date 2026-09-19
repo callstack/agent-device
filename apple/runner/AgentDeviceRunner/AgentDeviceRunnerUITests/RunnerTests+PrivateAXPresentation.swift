@@ -70,7 +70,7 @@ extension RunnerTests {
       label: fields.label.isEmpty ? nil : fields.label,
       identifier: fields.identifier.isEmpty ? nil : fields.identifier,
       value: fields.value.isEmpty ? nil : fields.value,
-      rect: snapshotRect(from: fields.rect), enabled: fields.enabled,
+      rect: SnapshotRect(fields.rect), enabled: fields.enabled,
       focused: fields.focused, selected: fields.selected,
       hittable: false,
       depth: depth, parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil,
