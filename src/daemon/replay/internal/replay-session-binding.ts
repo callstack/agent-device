@@ -10,7 +10,8 @@ import type {
 /**
  * The live session record reached through the reads replay binds over. The daemon implements it
  * over its locked `SessionStore`; replay binds a session from it and never names the record or
- * the store behind it.
+ * the store behind it. Every read is a thunk the binding hands over unchanged, so it must arrive
+ * bound to its subject rather than as a method that needs a receiver.
  */
 export type ReplaySessionContainer = Readonly<{
   get: () => ReplaySessionState | undefined;
@@ -41,20 +42,16 @@ export function bindReplaySession(
   container: ReplaySessionContainer,
   policy: ReplaySessionPolicy,
 ): ReplaySession {
-  const { get } = container;
   return {
     name,
     logPath,
     store: {
-      get,
-      lookup: container.lookup,
-      getRuntimeHints: container.getRuntimeHints,
-      ensureSessionDir: container.ensureSessionDir,
+      ...container,
       assertSelectorMatches: policy.assertSelectorMatches,
       resolveOpenRuntimeHints: policy.resolveOpenRuntimeHints,
     },
     observationStore: {
-      get,
+      get: container.get,
       bindAuthority: policy.bindAuthority,
       capture: policy.capture,
     },
