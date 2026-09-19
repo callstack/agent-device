@@ -60,6 +60,7 @@
   "@agent-device/contracts/interactor-types",
   "@agent-device/contracts/ios-snapshot",
   "@agent-device/contracts/ios-system-surface",
+  "@agent-device/contracts/ios-target-activation",
   "@agent-device/contracts/is-predicate",
   "@agent-device/contracts/keyboard",
   "@agent-device/contracts/keyboard-runtime",
