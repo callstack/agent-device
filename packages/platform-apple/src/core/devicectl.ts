@@ -343,6 +343,21 @@ export const IOS_DEVICECTL_DEFAULT_HINT =
 const IOS_DEVICE_PROCESS_LIST_HINT =
   "This Xcode/CoreDevice toolchain must support 'devicectl device info processes' with JSON runningProcesses so agent-device can resolve app process IDs. Inspect diagnostics for the exact devicectl API failure.";
 
+/**
+ * The answer for a device whose own Developer Mode toggle is off (#2683). The device fact publishes
+ * this same string, so the tool-output path and the device path cannot drift apart.
+ */
+const IOS_DEVICE_DEVELOPER_MODE_OFF_HINT =
+  'Enable Developer Mode on the iOS device (Settings > Privacy & Security > Developer Mode), restart it when prompted, unlock it, then retry.';
+
+/**
+ * The answer for a developer disk image complaint on its own (#2683). It is deliberately not a
+ * Developer Mode answer: a device can have the toggle on and still be waiting for Xcode to install
+ * device support, and sending someone to a setting that is already correct loses the actual cause.
+ */
+const IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT =
+  'Let Xcode finish preparing this device: keep it unlocked and connected by cable, open Xcode > Settings > Platforms (or Window > Devices and Simulators), wait for device support to install, then retry.';
+
 export function resolveIosDevicectlHint(stdout: string, stderr: string): string | null {
   const text = `${stdout}\n${stderr}`.toLowerCase();
   if (text.includes('device is busy') && text.includes('connecting')) {
@@ -356,8 +371,15 @@ export function resolveIosDevicectlHint(stdout: string, stderr: string): string 
   // usual state of a phone that has never been used for development. The
   // default hint sends people to check trust and Xcode, none of which is wrong
   // yet none of which is the cause.
-  if (text.includes('developer disk image') || text.includes('developer mode is disabled')) {
-    return 'Enable Developer Mode on the iOS device (Settings > Privacy & Security > Developer Mode), restart it when prompted, unlock it, then retry.';
+  //
+  // The two complaints are answered apart (#2683): an image line by itself is not evidence that the
+  // toggle is off, and the device reports both states directly, so the name of one is never used as
+  // the name of the other.
+  if (text.includes('developer mode is disabled')) {
+    return IOS_DEVICE_DEVELOPER_MODE_OFF_HINT;
+  }
+  if (text.includes('developer disk image')) {
+    return IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT;
   }
   if (text.includes('must be paired')) {
     return 'Pair the iOS device with this Mac: connect it by cable, unlock it, accept the Trust prompt, and enter the device passcode, then retry.';
