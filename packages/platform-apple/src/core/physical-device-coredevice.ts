@@ -303,6 +303,94 @@ function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/**
+ * The device's own report on whether it can host development tooling (#2683), published through the
+ * physical-device control facet. `runner/host.ts` mirrors this shape structurally on its side of the
+ * host port.
+ *
+ * The two states are kept apart because the device reports them apart and they fail apart. A device
+ * with Developer Mode off cannot serve its developer disk image either; an image that is not up on a
+ * device with the toggle on is its own failure. Deciding which one to name is the reader's job in
+ * `runner/runner-device-readiness.ts`, beside the rules and hints that name them.
+ *
+ * `available: false` is the answer when the device could not be reached at all. It carries no
+ * verdict — an unreadable device is not a diagnosed one — only the way to read it again.
+ */
+export type IosDeviceReadiness =
+  | Readonly<{
+      available: true;
+      developerMode: IosDeveloperModeState;
+      developerDiskImage: IosDeveloperDiskImageState;
+    }>
+  | Readonly<{
+      available: false;
+      reason: 'device_readiness_unreadable';
+      hint: string;
+    }>;
+
+/** How a device reports its own Settings > Privacy & Security > Developer Mode toggle. */
+export type IosDeveloperModeState = 'enabled' | 'disabled' | 'unknown';
+
+/** How a device reports the services that serve its developer disk image. */
+export type IosDeveloperDiskImageState = 'available' | 'unavailable' | 'unknown';
+
+const IOS_DEVICE_READINESS_TIMEOUT_MS = 10_000;
+
+/**
+ * What a device whose report could not be read needs: a way to read it, and no diagnosis. No fact
+ * means no claim, so this shape never names a cause (#2683).
+ */
+const IOS_DEVICE_READINESS_UNREADABLE_HINT =
+  'Read the device state directly with `xcrun devicectl device info details --device <id> --json-output -`, keeping the device unlocked and connected by cable, then retry.';
+
+/**
+ * The device's own answer to "can this iPhone run development tooling right now" (#2683).
+ *
+ * This reads and never interprets: `developerModeStatus` is the owner's toggle in Settings >
+ * Privacy & Security > Developer Mode, and `ddiServicesAvailable` is whether the device exposes
+ * developer disk image services. Both are copied into their own field so the reader that draws a
+ * verdict can tell that one arrived and the other did not, which is what stops an image complaint
+ * from being answered as a toggle problem. What the states mean for a runner is decided by
+ * `runner/runner-device-readiness.ts`, beside the rules and hints that name them.
+ */
+export async function readIosDeviceReadiness(
+  device: DeviceInfo,
+  timeoutBudgetMs = IOS_DEVICE_READINESS_TIMEOUT_MS,
+  signal?: AbortSignal,
+): Promise<IosDeviceReadiness> {
+  const details = await readIosDeviceDetails(device, timeoutBudgetMs, signal);
+  if (!details) {
+    return {
+      available: false,
+      reason: 'device_readiness_unreadable',
+      hint: IOS_DEVICE_READINESS_UNREADABLE_HINT,
+    };
+  }
+  return {
+    available: true,
+    developerMode: readDeveloperModeState(details.developerModeStatus),
+    developerDiskImage: readDeveloperDiskImageState(details.developerDiskImageServicesAvailable),
+  };
+}
+
+/**
+ * Only the two spellings CoreDevice uses are states. A missing key or a spelling we do not know
+ * stays `unknown`: the point of asking the device is that we repeat what it said, so an answer we
+ * cannot recognise cannot be read as either permission or accusation.
+ */
+function readDeveloperModeState(status: string | undefined): IosDeveloperModeState {
+  const spelled = status?.toLowerCase();
+  if (spelled === 'enabled') return 'enabled';
+  if (spelled === 'disabled') return 'disabled';
+  return 'unknown';
+}
+
+function readDeveloperDiskImageState(available: boolean | undefined): IosDeveloperDiskImageState {
+  if (available === true) return 'available';
+  if (available === false) return 'unavailable';
+  return 'unknown';
+}
+
 export function resolveIosReadyHint(stdout: string, stderr: string): string {
   const devicectlHint = resolveIosDevicectlHint(stdout, stderr);
   if (devicectlHint) return devicectlHint;

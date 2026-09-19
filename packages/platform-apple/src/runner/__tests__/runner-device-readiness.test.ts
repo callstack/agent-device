@@ -3,12 +3,9 @@ import { beforeEach, test, vi } from 'vitest';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { IosPhysicalDeviceRunnerControl } from '../host.ts';
+import type { IosDeviceRunnerReadiness, IosPhysicalDeviceRunnerControl } from '../host.ts';
 import { assertDeviceReadinessForIosRunner } from '../runner-device-readiness.ts';
-import {
-  RUNNER_DEVICE_READINESS_FAILURE_REASONS,
-  type IosDeviceReadiness,
-} from '../runner-contract.ts';
+import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { deviceReadinessFixtures } from './runner-startup-failure-fixtures.ts';
 
@@ -28,7 +25,7 @@ const HINT_FOR_REASON = {
   device_developer_disk_image_unavailable: /developer disk image, not the Developer Mode toggle/,
 } as const;
 
-const readDeviceReadiness = vi.fn((): Promise<IosDeviceReadiness> =>
+const readDeviceReadiness = vi.fn((): Promise<IosDeviceRunnerReadiness> =>
   Promise.reject(new Error('this case records no device report')),
 );
 
@@ -44,7 +41,7 @@ for (const fixture of REPORTS) {
     readDeviceReadiness.mockResolvedValue({
       available: true,
       ...fixture.deviceReport,
-    } satisfies IosDeviceReadiness);
+    } satisfies IosDeviceRunnerReadiness);
 
     const error = await expectRefusal(IOS_DEVICE);
 
@@ -62,7 +59,7 @@ for (const fixture of REPORTS) {
     readDeviceReadiness.mockResolvedValue({
       available: true,
       ...fixture.deviceReport,
-    } satisfies IosDeviceReadiness);
+    } satisfies IosDeviceRunnerReadiness);
 
     const error = await expectRefusal(IOS_DEVICE);
     const rendered = JSON.parse(
@@ -84,7 +81,7 @@ test('a device whose report cannot be read is not given a reason', async () => {
     available: false,
     reason: 'device_readiness_unreadable',
     hint: 'Read the device state directly with `xcrun devicectl device info details`.',
-  } satisfies IosDeviceReadiness);
+  } satisfies IosDeviceRunnerReadiness);
 
   await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
 });
@@ -94,7 +91,7 @@ test('a device reporting both states healthy is not a failure', async () => {
     available: true,
     developerMode: 'enabled',
     developerDiskImage: 'available',
-  } satisfies IosDeviceReadiness);
+  } satisfies IosDeviceRunnerReadiness);
 
   await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
 });
@@ -106,7 +103,7 @@ test('a device that reports neither state is not read as accusing its owner', as
     available: true,
     developerMode: 'unknown',
     developerDiskImage: 'unknown',
-  } satisfies IosDeviceReadiness);
+  } satisfies IosDeviceRunnerReadiness);
 
   await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
 });
@@ -119,7 +116,7 @@ test('an unavailable disk image on a device with Developer Mode on is never name
       available: true,
       developerMode,
       developerDiskImage: 'unavailable',
-    } satisfies IosDeviceReadiness);
+    } satisfies IosDeviceRunnerReadiness);
 
     const error = await expectRefusal(IOS_DEVICE);
 
@@ -135,7 +132,7 @@ test('a device with Developer Mode off names the toggle even when the image is d
     available: true,
     developerMode: 'disabled',
     developerDiskImage: 'unavailable',
-  } satisfies IosDeviceReadiness);
+  } satisfies IosDeviceRunnerReadiness);
 
   const error = await expectRefusal(IOS_DEVICE);
 

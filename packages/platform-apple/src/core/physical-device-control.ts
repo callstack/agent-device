@@ -13,16 +13,16 @@ import {
 import {
   ensureCoreDeviceReady,
   launchCoreDeviceApp,
+  readIosDeviceReadiness,
   resolveCoreDeviceTunnelIp,
+  type IosDeviceReadiness,
 } from './physical-device-coredevice.ts';
 import { copyCoreDeviceRunnerFile } from './physical-device-files.ts';
-import { readIosDeviceReadiness } from './ios-device-readiness.ts';
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
 } from './physical-device-constants.ts';
 import type { AppleRunnerCommandExecutor, AppleRunnerCommandOptions } from '../runner/index.ts';
-import type { IosDeviceReadiness } from '../runner/runner-contract.ts';
 import {
   captureCoreDeviceScreenshot,
   captureXctestDeviceScreenshot,

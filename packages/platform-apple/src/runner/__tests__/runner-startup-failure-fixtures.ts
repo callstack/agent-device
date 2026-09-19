@@ -1,11 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type {
-  IosDeveloperDiskImageState,
-  IosDeveloperModeState,
   RunnerDeviceReadinessFailureReason,
   RunnerStartupFailureReason,
 } from '../runner-contract.ts';
 import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
+import type { IosPhysicalDeviceRunnerControl } from '../host.ts';
 
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).
@@ -36,10 +35,15 @@ export type RunnerStartupFailureSite =
  * evidence: the payload they came from is captured in
  * `packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json`.
  */
-export type IosDeviceReadinessReport = Readonly<{
-  developerMode: IosDeveloperModeState;
-  developerDiskImage: IosDeveloperDiskImageState;
-}>;
+export type IosDeviceReadinessReport = Omit<
+  Extract<
+    Awaited<ReturnType<IosPhysicalDeviceRunnerControl['readDeviceReadiness']>>,
+    {
+      available: true;
+    }
+  >,
+  'available'
+>;
 
 /**
  * Whether the text reaches the build catch inside the exec error's `details` (`exec-details`, which

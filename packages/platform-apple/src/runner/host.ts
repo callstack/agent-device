@@ -3,7 +3,6 @@ import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import type { XmlNode } from '@agent-device/xml';
-import type { IosDeviceReadiness } from './runner-contract.ts';
 
 /**
  * The host-capability port for the Apple runner client. Every effectful or
@@ -151,10 +150,31 @@ export type BootFailureReason =
   | 'UNKNOWN';
 
 /** The slice of physical-device control the runner's command routing consults. */
+/**
+ * Mirrors `core/physical-device-coredevice.ts`'s `IosDeviceReadiness` (#2683): the device's own report on
+ * whether it can host development tooling, with the Developer Mode toggle and the developer disk
+ * image held apart because they are two states that fail apart. `available: false` is the device
+ * being unreadable, which is no verdict about anything.
+ */
+export type IosDeviceRunnerReadiness =
+  | Readonly<{
+      available: true;
+      developerMode: 'enabled' | 'disabled' | 'unknown';
+      developerDiskImage: 'available' | 'unavailable' | 'unknown';
+    }>
+  | Readonly<{
+      available: false;
+      reason: 'device_readiness_unreadable';
+      hint: string;
+    }>;
+
 export type IosPhysicalDeviceRunnerControl = {
   backend: string;
   resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<{ tunnelIp: string | null }>;
-  readDeviceReadiness(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosDeviceReadiness>;
+  readDeviceReadiness(
+    device: DeviceInfo,
+    timeoutBudgetMs?: number,
+  ): Promise<IosDeviceRunnerReadiness>;
 };
 
 export type AppleRunnerHost = {
