@@ -18,6 +18,7 @@ import {
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-xctestrun.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import type { DiagnosticEventInput } from '../host.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -40,11 +41,31 @@ const mockIsProcessAlive = vi.fn((_pid: number) => false);
 const mockReadProcessCommand = vi.fn((_pid: number): string | null => null);
 const mockReadProcessStartTime = vi.fn((_pid: number): string | null => 'test-process-start');
 
+// A refusal only exists as a diagnostic, so the refusal matrix reads what adoption emitted rather
+// than what it returned.
+let emittedDiagnostics: DiagnosticEventInput[] = [];
+
+function adoptionRefusalReason(): unknown {
+  return emittedDiagnostics
+    .filter((event) => event.phase === 'ios_runner_lease_adoption_skipped')
+    .at(-1)?.data?.reason;
+}
+
+function adoptionPhaseTimeouts(): unknown[] {
+  return emittedDiagnostics
+    .filter((event) => event.phase === 'ios_runner_lease_adoption_probe')
+    .map((event) => event.data?.timeoutMs);
+}
+
 beforeEach(() => {
+  emittedDiagnostics = [];
   appleRunnerTestHost.update({
     isProcessAlive: mockIsProcessAlive,
     readProcessCommand: mockReadProcessCommand,
     readProcessStartTime: mockReadProcessStartTime,
+    emitDiagnostic: (event) => {
+      emittedDiagnostics.push(event);
+    },
   });
 });
 
@@ -57,14 +78,33 @@ const simulator: DeviceInfo = {
   booted: true,
 };
 
+// The physical lanes #2681 added: the CoreDevice-backed device handoff covers, and the usbmux-only
+// XCTest backend it explicitly refuses.
+const physicalCoreDevice: DeviceInfo = {
+  platform: 'apple',
+  id: 'adopt-device-1',
+  name: 'iPhone 17 Pro',
+  kind: 'device',
+  target: 'mobile',
+  appleOs: 'ios',
+  iosPhysicalDeviceBackend: 'coredevice',
+  booted: true,
+};
+
+const physicalXctestDevice: DeviceInfo = {
+  ...physicalCoreDevice,
+  id: 'adopt-device-xctest',
+  iosPhysicalDeviceBackend: 'xctest',
+};
+
 let leaseDir: string;
 let expectedDerived: string;
 
-function writeStaleLease(overrides: Partial<RunnerLease> = {}): RunnerLease {
+function writeStaleLeaseFor(device: DeviceInfo, overrides: Partial<RunnerLease> = {}): RunnerLease {
   const lease: RunnerLease = {
     ...buildRunnerLease({
-      deviceId: simulator.id,
-      sessionId: `${simulator.id}:50700:1`,
+      deviceId: device.id,
+      sessionId: `${device.id}:50700:1`,
       runnerPid: 424242,
       port: 50700,
       xctestrunPath: path.join(expectedDerived, 'Build', 'Products', 'env.session.xctestrun'),
@@ -79,6 +119,10 @@ function writeStaleLease(overrides: Partial<RunnerLease> = {}): RunnerLease {
   };
   writeRunnerLease(lease);
   return lease;
+}
+
+function writeStaleLease(overrides: Partial<RunnerLease> = {}): RunnerLease {
+  return writeStaleLeaseFor(simulator, overrides);
 }
 
 beforeEach(() => {
@@ -340,5 +384,173 @@ test('adoption is refused when the owner state dir is gone but the owner process
 
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+// #2681: the physical lane. These are automated refusal decisions over the handoff gate — they are
+// not the live-device proof, which `docs/agents/device-verification.md` and
+// `.device-evidence/CHECKLIST.md` own.
+test('physical coredevice lane adopts the detached runner and names its lane', async () => {
+  const lease = writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+
+  const session = await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {});
+
+  expect(session?.state).toBe('ready');
+  expect(session?.child.pid).toBe(lease.runnerPid);
+  expect(session?.port).toBe(lease.port);
+  expect(
+    emittedDiagnostics.find((event) => event.phase === 'ios_runner_lease_adopted')?.data,
+  ).toMatchObject({ deviceId: physicalCoreDevice.id, lane: 'physical_coredevice' });
+  // Ownership transferred: the adopted lease is no longer stale for a third daemon.
+  expect(readStaleRunnerLease(physicalCoreDevice.id)).toBeNull();
+});
+
+test('physical lane refuses the usbmux-only xctest backend before reading anything', async () => {
+  writeStaleLeaseFor(physicalXctestDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalXctestDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('xctest_backend');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical lane refuses the macOS host, which is kind device too', async () => {
+  const macHost: DeviceInfo = { ...physicalCoreDevice, id: 'host-macos', appleOs: 'macos' };
+
+  expect(await tryAdoptRunnerSessionFromLease(macHost, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('macos_host');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: no lease on disk', async () => {
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('lease_absent');
+});
+
+test('physical refusal matrix: the lease is not stale because its owner is alive', async () => {
+  const liveStateDir = mkdtempForTestSync('agent-device-adopt-owner-live-');
+  appleRunnerTestHost.update({ leaseOwnerStateDir: () => liveStateDir });
+  writeStaleLeaseFor(physicalCoreDevice, {
+    ownerToken: 'owner-foreign-live',
+    ownerPid: process.pid,
+    ownerStartTime: appleRunnerTestHost.defaults().readProcessStartTime(process.pid),
+    ownerStateDir: liveStateDir,
+  });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('lease_owner_live');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the leased runner pid is dead', async () => {
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(false);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('runner_process_dead');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the leased runner pid was recycled', async () => {
+  writeStaleLeaseFor(physicalCoreDevice, { runnerStartTime: 'runner-original-start' });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('runner_pid_recycled');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the artifact fingerprint moved', async () => {
+  writeStaleLeaseFor(physicalCoreDevice, {
+    xctestrunPath: '/somewhere/else/Build/Products/env.xctestrun',
+  });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('artifact_fingerprint_mismatch');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the caller expected another runner session', async () => {
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(
+    await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {
+      expectedRunnerSessionId: 'some-other-runner-session',
+    }),
+  ).toBeNull();
+  expect(adoptionRefusalReason()).toBe('session_identity_mismatch');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the owner is alive with its owner-state dir gone', async () => {
+  // Stale enough for the force-stop path to reclaim, never for adoption: adopting a runner whose
+  // live owner still believes it owns it would create two masters.
+  const goneStateDir = mkdtempForTestSync('agent-device-adopt-dir-gone-device-');
+  fs.rmSync(goneStateDir, { recursive: true, force: true });
+  writeStaleLeaseFor(physicalCoreDevice, {
+    ownerToken: 'owner-foreign-dir-gone',
+    ownerPid: process.pid,
+    // classifyOwnerLiveness runs unmocked, so it reads this process's REAL start time.
+    ownerStartTime: appleRunnerTestHost.defaults().readProcessStartTime(process.pid),
+    ownerStateDir: goneStateDir,
+  });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  expect(adoptionRefusalReason()).toBe('lease_owner_state_dir_gone');
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
+test('physical refusal matrix: the cold tunnel route cannot answer inside its budget', async () => {
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockRejectedValue(new Error('connection refused'));
+  const lease = readStaleRunnerLease(physicalCoreDevice.id);
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
+  // The tight usbmux-shaped phase first, then the one phase with room for a cold `devicectl`
+  // tunnel lookup — and no further probing.
+  expect(adoptionPhaseTimeouts()).toEqual([500, 5_000]);
+  expect(adoptionRefusalReason()).toBe('probe_failed');
+  expect(readStaleRunnerLease(physicalCoreDevice.id)?.ownerToken).toBe(lease?.ownerToken);
+});
+
+test('physical lane adopts on the cold tunnel phase the tight phase could not answer', async () => {
+  // The device is Wi-Fi-only: usbmux refuses it and the tunnel address has to be looked up, which
+  // is exactly the seconds-long route a 500 ms budget cannot contain.
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce
+    .mockRejectedValueOnce(new Error('usbmux: device not attached'))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true })));
+
+  const session = await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {});
+
+  expect(session?.state).toBe('ready');
+  expect(adoptionPhaseTimeouts()).toEqual([500, 5_000]);
+});
+
+test('a simulator spends only the tight probe phase, budget unchanged by #2681', async () => {
+  writeStaleLease();
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockRejectedValue(new Error('connection refused'));
+
+  expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  expect(adoptionPhaseTimeouts()).toEqual([500]);
+});
+
+test('the kill switch disables the physical lane too', async () => {
+  writeStaleLeaseFor(physicalCoreDevice);
+  mockIsProcessAlive.mockReturnValue(true);
+  process.env.AGENT_DEVICE_IOS_RUNNER_DETACH = '0';
+
+  expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 });

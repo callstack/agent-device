@@ -58,3 +58,39 @@ test('runner process exit wakes startup probing without a listener marker', asyn
 
   assert.equal(launched.startupRetryWake.aborted, true);
 });
+
+test('the runner is spawned detached, which is what a handoff across daemons rests on', async () => {
+  mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
+
+  launchRunnerProcess({
+    device: IOS_SIMULATOR,
+    port: 8123,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    derivedPath: '/tmp/runner-derived',
+  });
+
+  assert.equal(mockRunCmdBackground.mock.calls[0]?.[2]?.detached, true);
+});
+
+test('ending output observation stops the ready marker and releases both pipes', async () => {
+  // The handoff calls this instead of letting the pipes close at process exit, so a runner that
+  // cannot survive a write dies where the shutdown can still refuse it (#2681).
+  const background = {
+    ...makeBackgroundRunner(4242),
+    wait: new Promise<{ stdout: string; stderr: string; exitCode: number }>(() => {}),
+  };
+  mockRunCmdBackground.mockReturnValue(background);
+
+  const launched = launchRunnerProcess({
+    device: IOS_SIMULATOR,
+    port: 8123,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    derivedPath: '/tmp/runner-derived',
+  });
+  launched.endOutputObservation();
+  background.child.stderr.emit('data', 'AGENT_DEVICE_RUNNER_LISTENER_READY');
+
+  assert.equal(launched.startupRetryWake.aborted, false);
+  assert.equal(background.child.stdout.destroy.mock.calls.length, 1);
+  assert.equal(background.child.stderr.destroy.mock.calls.length, 1);
+});

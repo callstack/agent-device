@@ -59,6 +59,13 @@ export type RunnerSession = {
   jsonPath: string;
   testPromise: Promise<ExecResult>;
   child: RunnerProcessHandle;
+  /**
+   * Releases this daemon's read side of the runner's stdout/stderr. Only a session launched by this
+   * process has one: a runner spawned detached keeps running with no reader, so a handoff releases
+   * the pipes at the handoff instead of at process exit, which is what makes a runner that cannot
+   * survive a write die where the shutdown can still see it and refuse the handoff (#2681).
+   */
+  endOutputObservation?: () => void;
   /** Moves only through {@link advanceRunnerSessionState}. */
   state: RunnerSessionState;
   /** Wakes one startup retry when the listener becomes ready or its process exits. */
@@ -95,8 +102,8 @@ export type RunnerSession = {
 // so a runner cannot be revived by a late answer and a finished teardown never runs again. Both
 // live states reach `stopped` without a `draining` step on the graceful-shutdown handoff, where
 // the runner keeps serving the next daemon and this session's ownership simply ends. That handoff
-// covers a session that has not answered yet: a daemon shutting down during a startup has a
-// running runner and a valid lease to hand off exactly as it does for an answered one.
+// covers only a `ready` session (#2681): a daemon shutting down during a startup has a runner that
+// never proved it serves requests, so it is torn down by the shutdown's own stop path instead.
 const RUNNER_SESSION_STATE_SUCCESSORS: Record<RunnerSessionState, readonly RunnerSessionState[]> = {
   starting: ['ready', 'draining', 'stopped'],
   ready: ['draining', 'stopped'],
@@ -123,6 +130,60 @@ export function advanceRunnerSessionState(
  */
 export function canWorkWithRunnerSession(session: RunnerSessionStateHolder): boolean {
   return session.state === 'starting' || session.state === 'ready';
+}
+
+/** What the runner reported about its own XCTest main thread at the last exchange (#2552). */
+type RunnerOccupancyVerdict = 'drained' | 'occupied' | 'unreported';
+
+/**
+ * The one reader of {@link RunnerSession.runnerMainThreadBusy}: the runner's occupancy report, or
+ * `unreported` when nothing has stamped it yet. Retention and handoff both refuse a runner that is
+ * still draining, and both must read the report — not the lifecycle state, which says nothing about
+ * what the main thread is doing.
+ */
+function readRunnerOccupancyVerdict(
+  session: Pick<RunnerSession, 'runnerMainThreadBusy'>,
+): RunnerOccupancyVerdict {
+  if (session.runnerMainThreadBusy === true) return 'occupied';
+  if (session.runnerMainThreadBusy === false) return 'drained';
+  return 'unreported';
+}
+
+export function isRunnerMainThreadOccupied(
+  session: Pick<RunnerSession, 'runnerMainThreadBusy'>,
+): boolean {
+  return readRunnerOccupancyVerdict(session) === 'occupied';
+}
+
+/** Why a graceful shutdown must stop this session's runner instead of handing it over. */
+export type RunnerDetachRefusal =
+  /** The runner never answered a command, so nothing proves it serves requests (#2681). */
+  | 'runner_never_served_a_command'
+  /** The runner reported main-thread work still draining as of its last exchange. */
+  | 'main_thread_occupied';
+
+export type RunnerDetachDecision =
+  | { detach: true }
+  | { detach: false; reason: RunnerDetachRefusal };
+
+/**
+ * Whether this session's runner may be handed to the next daemon by a graceful shutdown (#2681).
+ * `ready` is the only state that proves the runner serves requests: physical startup runs tens of
+ * seconds, so a shutdown mid-boot would otherwise hand off a runner that never reached its listener
+ * and make the next daemon pay a rebuild it cannot detect. Occupancy is decided by the runner's own
+ * report, because a runner still draining abandoned work refuses every command the next daemon
+ * sends it.
+ */
+export function resolveRunnerDetachDecision(
+  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy'>,
+): RunnerDetachDecision {
+  if (session.state !== 'ready') {
+    return { detach: false, reason: 'runner_never_served_a_command' };
+  }
+  if (isRunnerMainThreadOccupied(session)) {
+    return { detach: false, reason: 'main_thread_occupied' };
+  }
+  return { detach: true };
 }
 
 /** The liveness of a registered session, read against the process probe held beside its state. */

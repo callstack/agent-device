@@ -1,0 +1,42 @@
+{
+  "_note": "Redacted subset of `xcrun devicectl device info details --device <id> --json-output <file>` on the cabled device this budget was sized against. Identifiers, serial, hostnames, and the capture path are replaced; the full dump is regenerable with that command.",
+  "commandType": "devicectl.device.info.details",
+  "jsonVersion": 4,
+  "connectionProperties": {
+    "authenticationType": "manualPairing",
+    "isMobileDeviceOnly": false,
+    "lastConnectionDate": "2026-09-19T13:16:00.000Z",
+    "localHostnames": [
+      "<redacted-device-name>.coredevice.local",
+      "<redacted-identifier>.coredevice.local",
+      "<redacted-udid>.coredevice.local"
+    ],
+    "pairingState": "paired",
+    "potentialHostnames": [
+      "<redacted-device-name>.coredevice.local",
+      "<redacted-identifier>.coredevice.local",
+      "<redacted-udid>.coredevice.local"
+    ],
+    "transportType": "wired",
+    "tunnelIPAddress": "fd1b:bdb2:2626::1",
+    "tunnelState": "connected",
+    "tunnelTransportProtocol": "tcp"
+  },
+  "deviceProperties": {
+    "bootState": "booted",
+    "bootedFromSnapshot": true,
+    "ddiServicesAvailable": true,
+    "developerModeStatus": "enabled",
+    "osBuildUpdate": "23G90",
+    "osVersionNumber": "26.6.2"
+  },
+  "hardwareProperties": {
+    "hardwareModel": "V53AP",
+    "marketingName": "iPhone 17 Pro",
+    "cpuType": {
+      "name": "arm64e",
+      "subType": -2147483646,
+      "type": 16777228
+    }
+  }
+}

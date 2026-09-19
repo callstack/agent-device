@@ -296,15 +296,39 @@ function formatEnvAssignment(name: string, value: string): string {
 // dies, so crash-orphans and deliberate handoffs share one recovery path.
 // Adoption is strictly PID-dead-gated: an owner whose state dir is gone but
 // whose process is still alive may still hold a live connection to the
-// runner, so adopting it would create two masters. Those leases return null
+// runner, so adopting it would create two masters. Those leases are refused
 // here and go through prepareRunnerLeaseForStartup's force-stop path (kill
 // the leased runner processes, then rebuild) instead.
-export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+export type RunnerLeaseAdoptionRefusal =
+  | 'lease_owned_by_this_daemon'
+  | 'lease_owner_live'
+  | 'lease_owner_state_dir_gone';
+
+export type RunnerLeaseAdoptionVerdict =
+  | { type: 'adoptable'; lease: RunnerLease }
+  | { type: 'absent' }
+  | { type: 'refused'; reason: RunnerLeaseAdoptionRefusal; lease: RunnerLease };
+
+/** The one classification adoption reads, so a refused lease reports why it was refused. */
+export function readRunnerLeaseForAdoption(deviceId: string): RunnerLeaseAdoptionVerdict {
   const state = classifyRunnerLease(readRunnerLease(deviceId));
-  return state.type === 'stale' &&
-    (state.staleReason === 'owner-process-dead' || state.staleReason === 'owner-process-reused')
-    ? state.lease
-    : null;
+  switch (state.type) {
+    case 'empty':
+      return { type: 'absent' };
+    case 'owned':
+      return { type: 'refused', reason: 'lease_owned_by_this_daemon', lease: state.lease };
+    case 'busy':
+      return { type: 'refused', reason: 'lease_owner_live', lease: state.lease };
+    case 'stale':
+      return state.staleReason === 'owner-state-dir-gone'
+        ? { type: 'refused', reason: 'lease_owner_state_dir_gone', lease: state.lease }
+        : { type: 'adoptable', lease: state.lease };
+  }
+}
+
+export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+  const verdict = readRunnerLeaseForAdoption(deviceId);
+  return verdict.type === 'adoptable' ? verdict.lease : null;
 }
 
 // Marks a lease as handed off during graceful shutdown: the token no longer

@@ -10,7 +10,8 @@ physical devices. Live verification steps apply when exercising a device-facing 
 - Before any Android verification from source: `pnpm build`, `pnpm build:android`, `pnpm clean:daemon`.
   `build:android` refreshes and verifies both bundled Android helper artifacts for the current
   package version.
-- `shutdown` hands off a healthy simulator runner; a new daemon may adopt the old binary. After
+- Graceful `shutdown` hands off a healthy runner that already answered a command, on the simulator
+  and physical iOS lanes alike; a new daemon may adopt the old binary. After
   Swift runner changes, run `pnpm build:xcuitest` before verification. Use the session cleanup
   procedure below if ownership is stuck.
 

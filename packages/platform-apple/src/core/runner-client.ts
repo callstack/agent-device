@@ -33,8 +33,8 @@ export const resolveRunnerAppBundleId: AppleRunnerClient['resolveRunnerAppBundle
   client.resolveRunnerAppBundleId;
 export const hasCachedAppleRunnerArtifact: AppleRunnerClient['hasCachedAppleRunnerArtifact'] =
   client.hasCachedAppleRunnerArtifact;
-export const detachIosSimulatorRunnerSessionsForShutdown: AppleRunnerClient['detachIosSimulatorRunnerSessionsForShutdown'] =
-  client.detachIosSimulatorRunnerSessionsForShutdown;
+export const detachIosRunnerSessionsForShutdown: AppleRunnerClient['detachIosRunnerSessionsForShutdown'] =
+  client.detachIosRunnerSessionsForShutdown;
 export const readRunnerSessionLiveness: AppleRunnerClient['readRunnerSessionLiveness'] =
   client.readRunnerSessionLiveness;
 export const releaseIosRunnerOnClose: AppleRunnerClient['releaseIosRunnerOnClose'] =

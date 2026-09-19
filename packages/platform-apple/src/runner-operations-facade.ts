@@ -1,6 +1,6 @@
 export {
   applyXctestRunnerAppIconFromDerivedPath,
-  detachIosSimulatorRunnerSessionsForShutdown,
+  detachIosRunnerSessionsForShutdown,
   hasLiveIosRunnerSession,
   notifyIosRunnerAppRelaunched,
   prepareIosRunner,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { vi } from 'vitest';
+import { vi, type Mock } from 'vitest';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
@@ -49,13 +49,21 @@ export function makeRunnerLease(
   return { ...lease, ...overrides, ownerToken };
 }
 
+export type MockOutputPipe = EventEmitter & { destroy: Mock };
+
+function makeMockOutputPipe(): MockOutputPipe {
+  // A real `ChildProcess` stdout/stderr is a Readable with `destroy()`, which is how a handoff
+  // releases the pipes it no longer owns (#2681). The double carries the same door.
+  return Object.assign(new EventEmitter(), { destroy: vi.fn() }) as MockOutputPipe;
+}
+
 export function makeBackgroundRunner(pid: number) {
   return {
     child: {
       pid,
       exitCode: null,
-      stdout: new EventEmitter(),
-      stderr: new EventEmitter(),
+      stdout: makeMockOutputPipe(),
+      stderr: makeMockOutputPipe(),
     },
     wait: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
   };
