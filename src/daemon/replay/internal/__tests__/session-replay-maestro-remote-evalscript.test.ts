@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
-import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
+import { LeaseRegistry } from '../../../lease-registry.ts';
 import { SessionStore } from '../../../session-store.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonRequest } from '../../../daemon-request.ts';
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
+import { handleReplayCommand } from '../../../handlers/session-replay-command.ts';
 import * as maestro from '@agent-device/maestro';
 
 const spy = vi.spyOn(maestro, 'executeMaestroFlow');
@@ -29,6 +29,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
     positionals: [flowPath],
     flags: {
       platform: 'ios',
+      replayBackend: 'maestro',
       replayScriptSource: await maestroScriptSourceBundleFor(flowPath),
     },
     ...(publicNetworkOnly === true ? { internal: { publicNetworkOnly: true } } : {}),
@@ -37,13 +38,24 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
 
   spy.mockResolvedValueOnce({ ok: true, replayed: 1, planDigest: 'test', startIndex: 0 } as never);
 
-  const response = await runTypedMaestroReplay({
-    request: req,
-    session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
+  // Drive the real `replay` handler so the request-private → command-input
+  // mapping (`req.internal.publicNetworkOnly → command.publicNetworkOnly`) is on
+  // the asserted path: dropping it in the handler must fail this test, since an
+  // unset field reads as trusted and a remote flow would run evalScript.
+  const response = await handleReplayCommand({
+    req,
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
     invoke: async () => ({ ok: true, data: {} }) as never,
-    publicNetworkOnly: publicNetworkOnly === true,
+    leaseRegistry: new LeaseRegistry(),
+    reconcileOrphanedDeviceClaim: async () => ({
+      status: 'retained' as const,
+      reason: 'test' as const,
+    }),
   });
 
+  if (!response) throw new Error('Expected replay response');
   expect(response.ok).toBe(true);
   return spy.mock.calls.at(-1)?.[2] as { trustedScripts?: boolean } | undefined;
 }
