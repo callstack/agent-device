@@ -1,6 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceKind, DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Point, Rect, SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
 
 function readRequired<T>(
@@ -85,7 +84,7 @@ export function parseRect(value: unknown): Rect | undefined {
 }
 
 /**
- * Reads a producer-declared keyboard band (#2660) out of an undtyped payload, shared by every seam
+ * Reads a producer-declared keyboard band (#2660) out of an untyped payload, shared by every seam
  * that receives one: the Apple runner's wire reader, the daemon's Node client reader. `undefined`
  * means the producer published no fact at all, which is how a tier that never reads the keyboard is
  * distinguished from one that measured and reported.
@@ -108,7 +107,14 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
   }
   if (value.kind === 'visible') {
     const frame = parseRect(value.frame);
-    return isPositiveFiniteRect(frame)
+    // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
+    // many facades evaluate, and a rect import here would land in every one of their closures.
+    const plottable =
+      frame !== undefined &&
+      [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
+      frame.width > 0 &&
+      frame.height > 0;
+    return plottable
       ? { kind: 'visible', frame }
       : { kind: 'unmeasurable', reason: 'invalid-visible-frame' };
   }

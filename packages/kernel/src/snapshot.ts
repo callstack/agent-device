@@ -281,9 +281,8 @@ export type HiddenContentHint = {
  *
  * A keyboard is its own system surface, so it never reaches the tree as a covering sibling of app
  * content, and a consumer that wants to refuse a tap behind it has to learn where it is from
- * somewhere (#2589). Every producer that can measure the band directly — the Apple runner's
- * `app.keyboards` query, and the Simulator AX bridge for the portrait tree it is willing to serve —
- * publishes one fact per capture and says nothing else about it. A consumer therefore gets three
+ * somewhere (#2589). A producer that can measure the band directly — the Apple runner, from its
+ * `app.keyboards` query — publishes one fact per capture and says nothing else about it. A consumer therefore gets three
  * answers and no fourth: a band in the same space as every node rect, a proven absence, or a
  * producer that could not look.
  *

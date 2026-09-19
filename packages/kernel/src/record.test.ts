@@ -30,7 +30,7 @@ test('a measured band, a proven absence, and a stated failure read back as thems
 
 // The order is load-bearing: a payload that is not even an object cannot also have an unrecognized
 // kind, and an `unmeasurable` is checked for its reason before a `visible` is checked for its frame.
-test('a payload that cannot be place names one reason, resolved from shape to kind to fields', () => {
+test('a payload that cannot be placed names one reason, resolved from shape to kind to fields', () => {
   const cases: ReadonlyArray<readonly [unknown, string]> = [
     ['visible', 'malformed-fact'],
     [42, 'malformed-fact'],

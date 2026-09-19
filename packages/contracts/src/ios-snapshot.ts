@@ -1,9 +1,4 @@
-import type {
-  RawSnapshotNode,
-  Rect,
-  SnapshotKeyboardBandFact,
-  SnapshotNode,
-} from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export type IosSnapshotProducer =
   | 'apple-runner'
@@ -157,12 +152,6 @@ type IosSnapshotAcquisitionForIntent<Intent extends IosAcquisitionIntent> = Read
   nodes: readonly RawSnapshotNode[];
   truncated?: boolean;
   viewport: IosViewportEvidence;
-  /**
-   * The keyboard band this producer measured for this capture, derived from the tree it decoded
-   * rather than from a second query (#2660). The tap-path guard prefers it over re-deriving the band
-   * itself; an acquisition that says nothing leaves the guard on the tree-derived rule.
-   */
-  keyboard?: SnapshotKeyboardBandFact;
   lineage: IosSnapshotLineage;
   residue: readonly IosAcquisitionResidue[];
 }>;

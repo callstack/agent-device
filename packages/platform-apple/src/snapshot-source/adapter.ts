@@ -243,7 +243,6 @@ function createAcquisition(
     nodes,
     truncated,
     viewport: decoded.viewport,
-    keyboard: decoded.keyboard,
     lineage,
     residue,
   };

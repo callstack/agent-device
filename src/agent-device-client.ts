@@ -550,13 +550,6 @@ function optionalSnapshotResponseFields(
   };
 }
 
-/**
- * The keyboard band the capture's producer measured (#2660). The reader is the shared one the Apple
- * runner's wire reader uses, so the same payload cannot be read one way on each seam: a fact that
- * cannot be placed keeps its `unmeasurable` reason here too instead of going silent, because silence
- * would read downstream as a producer that never looked.
- */
-
 function readObject(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
 }

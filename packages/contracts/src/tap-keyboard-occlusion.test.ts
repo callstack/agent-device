@@ -8,7 +8,6 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import {
-  deriveKeyboardBandFactFromTree,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -223,33 +222,5 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
       reason: 'keyboard-frame-query-timeout',
     });
     assert.equal(withFact.kind, fixture.expected.kind, `${fixture.name}: kind`);
-  }
-});
-
-test('the fact a producer derives from its own tree is the band the rule measures', () => {
-  // The bridge publishes exactly this (#2660), so the guard's preferred path and the rule it
-  // replaces have to agree case by case — including the cases where the honest answer is that the
-  // tree cannot be measured.
-  for (const fixture of loadTable().cases) {
-    const fact = deriveKeyboardBandFactFromTree({
-      nodes: fixture.nodes as RawSnapshotNode[],
-      viewport: fixture.viewport,
-    });
-    if (fixture.expected.frame) {
-      assert.equal(fact.kind, 'visible', `${fixture.name}: expected a measured band`);
-      assert.deepEqual(
-        (fact as { frame: Rect }).frame,
-        fixture.expected.frame,
-        `${fixture.name}: band frame`,
-      );
-    } else if (fixture.expected.kind === 'no-keyboard') {
-      assert.equal(fact.kind, 'absent', `${fixture.name}: a tree with no keyboard proves absence`);
-    } else {
-      assert.equal(
-        fact.kind,
-        'unmeasurable',
-        `${fixture.name}: a keyboard this tree cannot measure is not an absent one`,
-      );
-    }
   }
 });

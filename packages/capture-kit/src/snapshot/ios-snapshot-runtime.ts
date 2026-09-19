@@ -49,7 +49,6 @@ export function presentIosSnapshotAcquisition(
       ...(acquired.acquisition.truncated === undefined
         ? {}
         : { truncated: acquired.acquisition.truncated }),
-      ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),
       ...snapshotWarnings(acquired.acquisition.residue),
     };
   } catch (error) {

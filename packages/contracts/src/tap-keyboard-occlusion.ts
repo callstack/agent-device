@@ -18,11 +18,10 @@ import { normalizeType } from './snapshot-text.ts';
  * too. The result was a silent misfire: pressing an element behind the keyboard reported success
  * while the touch activated a key (#2589).
  *
- * Two producers answer this question, in this order. A capture whose producer measured the band
- * directly publishes a {@link SnapshotKeyboardBandFact} beside its tree, and the guard measures the
- * tap point against that band — a point-in-rect check with no geometry to believe. The Apple runner
- * does this from `app.keyboards.firstMatch`, which answers in the app's own orientation space, and
- * the Simulator AX bridge does it for the portrait trees it is willing to serve (#2660).
+ * A capture whose producer measured the band directly publishes a {@link SnapshotKeyboardBandFact}
+ * beside its tree, and the guard measures the tap point against that band — a point-in-rect check
+ * with no geometry to believe. The Apple runner does this from `app.keyboards.firstMatch`, which
+ * answers in the app's own orientation space (#2660).
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
  * costs no round trip. This is the path for Android's input method nodes and for the producers that
@@ -314,27 +313,6 @@ function resolveVisibleKeyboardSurface(
     frame,
     controlRects: usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index))),
   };
-}
-
-/**
- * The fact a producer publishes when the tree it decoded is the only evidence it has (#2660): the
- * band this module's rule measures, or an honest statement that this tree cannot be measured.
- *
- * This is the bridge's answer, and it deliberately reuses the tree rule rather than inventing a
- * second one — the bridge reads the app's own process, so in portrait the keyboard window's subtree
- * is already in the app's space and the rule computes the band it always did. A landscape capture
- * with the keyboard up is refused by the bridge and served by the runner, which measures the band
- * itself, so the bridge never has to answer that case (#2612, #2653).
- */
-export function deriveKeyboardBandFactFromTree(params: {
-  nodes: readonly RawSnapshotNode[];
-  viewport: Rect | null;
-}): SnapshotKeyboardBandFact {
-  const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
-  if (surface) return { kind: 'visible', frame: surface.frame };
-  return params.nodes.some(isKeyboardAnchorNode)
-    ? { kind: 'unmeasurable', reason: 'tree-keyboard-band-unmeasurable' }
-    : { kind: 'absent' };
 }
 
 /**

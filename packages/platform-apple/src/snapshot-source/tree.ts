@@ -1,6 +1,5 @@
 import { isPositiveFiniteRect, isRectVisibleInViewport } from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { deriveKeyboardBandFactFromTree } from '@agent-device/contracts/tap-keyboard-occlusion';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
 import { isQuarterTurnedWindowFrame } from './window-coordinate-space.ts';
@@ -166,15 +165,10 @@ export function decodeSnapshotBridgeTree(
   }
   const windowRoots = nodes.filter(isWindowRoot);
   const viewport = viewportFromRoot(windowRoots[0]);
-  const keyboard = deriveKeyboardBandFactFromTree({
-    nodes,
-    viewport: viewport.kind === 'missing' ? null : viewport.rect,
-  });
   return {
     nodes,
     maxTraversalDepth,
     viewport,
-    keyboard,
     opaqueRemoteElements: webHostedRemoteLeaves.filter((rect) => isOpaqueRemoteLeaf(rect, viewport))
       .length,
     unresolvedCoordinateSpaceWindows: countUnresolvedCoordinateSpaceWindows(nodes, viewport),

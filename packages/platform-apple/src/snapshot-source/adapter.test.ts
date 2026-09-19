@@ -61,9 +61,6 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       kind: 'reported',
       rect: { x: 0, y: 0, width: 390, height: 844 },
     });
-    // The tree this host answers with holds no keyboard, and the bridge publishes that as a proven
-    // absence rather than silence (#2660): the guard is allowed to act on it.
-    assert.deepEqual(result.acquisition.keyboard, { kind: 'absent' });
     assert.deepEqual(result.acquisition.lineage, {
       targetId: 'target-1',
       generation: 'generation-1',

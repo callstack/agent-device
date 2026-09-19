@@ -4,7 +4,7 @@ import type {
   IosSnapshotAcquisition,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
-import type { RawSnapshotNode, SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 
 export type SnapshotSourceLimits = Readonly<{
@@ -133,13 +133,6 @@ export type SnapshotSourceDecodedTree = Readonly<{
   nodes: readonly RawSnapshotNode[];
   viewport: IosViewportEvidence;
   maxTraversalDepth: number;
-  /**
-   * The keyboard band this producer can state for the tree it decoded (#2660). The reader cannot
-   * query the keyboard the way the runner does, so this is the band the shared tree rule measures —
-   * which is sound because the bridge refuses a capture whose geometry it cannot place in the app's
-   * own space, and a landscape capture with the keyboard up is therefore never its to answer (#2612).
-   */
-  keyboard: SnapshotKeyboardBandFact;
   /**
    * `AXRemoteElement` leaves under a web view whose frame reaches the viewport, or that report no
    * frame: pages the reader could not cross into (#2484).
