@@ -4,7 +4,6 @@ import { cropPngBytes } from './png-crop-bytes.ts';
 import { decodePng, PNG } from './png.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
 import { computePngRgbDifference } from './png-rgb-difference.ts';
-import { transcodeScreenshotToPng } from './png-transcode.ts';
 import {
   toBuffer,
   type PngWorkerJobResult,
@@ -18,7 +17,8 @@ import {
  * `png-worker-client.ts`; published as the `internal/png-worker` build entry.
  */
 
-function runJob(request: PngWorkerRequest): PngWorkerJobResult {
+// The daemon prewarms this worker at startup, so the JPEG decoder loads only for a transcode job.
+async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
   switch (request.kind) {
     case 'decode': {
       const png = decodePng(toBuffer(request.png), request.label);
@@ -44,6 +44,7 @@ function runJob(request: PngWorkerRequest): PngWorkerJobResult {
       return { kind: 'diff-pixels', ...computeScreenshotDiffPixels(request) };
     }
     case 'jpeg-to-png': {
+      const { transcodeScreenshotToPng } = await import('./png-transcode.ts');
       return {
         kind: 'jpeg-to-png',
         png: transcodeScreenshotToPng(toBuffer(request.image), request.label),
@@ -95,10 +96,10 @@ function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
 
 const port = parentPort;
 if (port) {
-  port.on('message', (request: PngWorkerRequest) => {
+  port.on('message', async (request: PngWorkerRequest) => {
     let response: PngWorkerResponse;
     try {
-      response = { id: request.id, ok: true, result: runJob(request) };
+      response = { id: request.id, ok: true, result: await runJob(request) };
     } catch (error) {
       response = { id: request.id, ok: false, error: normalizeError(error) };
     }
