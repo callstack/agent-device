@@ -4,11 +4,11 @@ import {
   isProcessGroupAlive,
   signalPidsBestEffort,
   signalProcessGroupBestEffort,
-  type ExecBackgroundResult,
   buildSimctlArgsForDevice,
   runAppleToolCommand,
   runXcrun,
 } from './host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';

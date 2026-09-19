@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { DiagnosticEventInput } from '../host.ts';
+import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 
 const mockRunCmdStreaming = vi.fn();
 const mockRunCmdSync = vi.fn();

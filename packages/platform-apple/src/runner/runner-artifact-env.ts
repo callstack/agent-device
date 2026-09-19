@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { type DefinedEnvMap as EnvMap, requireExecSuccess, runAppleToolCommand } from './host.ts';
+import { requireExecSuccess, runAppleToolCommand } from './host.ts';
+
+/** The xctestrun plist spells environment blocks as fully defined string maps. */
+type EnvMap = Record<string, string>;
 
 const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
   PreferredScreenCaptureFormat: 'screenshots',

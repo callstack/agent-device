@@ -20,8 +20,8 @@ import {
   isRequestCanceled,
   bootFailureHint,
   classifyBootFailure,
-  type BootFailureReason,
 } from './host.ts';
+import type { BootFailureReason } from '@agent-device/provision-kit/boot-diagnostics';
 import type { RunnerSession } from './runner-session-types.ts';
 
 /**

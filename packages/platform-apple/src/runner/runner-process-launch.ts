@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { runCmdBackground, type ExecBackgroundResult } from './host.ts';
+import { runCmdBackground } from './host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { resolveRunnerDestination } from './apple-runner-platform.ts';
 import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
 import { logChunk } from './runner-io.ts';

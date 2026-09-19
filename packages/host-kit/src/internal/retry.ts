@@ -9,10 +9,20 @@ type RetryPolicy = {
   shouldRetry?: (error: unknown, attempt: number) => boolean;
 };
 
+/**
+ * The read side of a deadline. Holders are typed against this rather than the class so a caller
+ * can hand one a substitute clock; {@link Deadline} is the production implementation.
+ */
+export type DeadlineClock = {
+  remainingMs(nowMs?: number): number;
+  elapsedMs(nowMs?: number): number;
+  isExpired(nowMs?: number): boolean;
+};
+
 type RetryAttemptContext = {
   attempt: number;
   maxAttempts: number;
-  deadline?: Deadline;
+  deadline?: DeadlineClock;
 };
 
 type RetryTelemetryEvent = {
@@ -27,7 +37,7 @@ type RetryTelemetryEvent = {
 };
 
 type RetryOptions = {
-  deadline?: Deadline;
+  deadline?: DeadlineClock;
   phase?: string;
   signal?: AbortSignal;
   classifyReason?: (error: unknown) => string | undefined;
@@ -51,7 +61,7 @@ const defaultOptions: Pick<RetryPolicy, 'maxAttempts' | 'baseDelayMs' | 'maxDela
   jitter: 0.2,
 };
 
-export class Deadline {
+export class Deadline implements DeadlineClock {
   private readonly startedAtMs: number;
   private readonly expiresAtMs: number;
 

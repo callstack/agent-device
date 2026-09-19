@@ -1,6 +1,6 @@
 import { beforeEach, vi } from 'vitest';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecResult } from '../host.ts';
+import type { ExecResult } from '@agent-device/host-kit/command';
 
 const STUBBED_APPLE_TOOLCHAIN = {
   xcodeVersion: '26.2',

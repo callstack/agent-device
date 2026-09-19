@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import type { ExecResult } from '../host.ts';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import type { RunnerSession } from '../runner-session.ts';

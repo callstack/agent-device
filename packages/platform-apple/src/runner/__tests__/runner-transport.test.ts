@@ -13,7 +13,7 @@ import {
 } from './runner-transport.fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { isCommandTimeoutError } from '../host.ts';
-import type { IosPhysicalDeviceRunnerControl } from '../host.ts';
+import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
 
 const { mockRunCmd, mockUsbmuxPostCommand } = vi.hoisted(() => ({
   mockRunCmd: vi.fn(),

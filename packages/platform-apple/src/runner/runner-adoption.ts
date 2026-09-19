@@ -4,8 +4,8 @@ import {
   emitDiagnostic,
   isProcessAlive,
   parseBooleanLiteral,
-  type ExecResult,
 } from './host.ts';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { sendRunnerCommandOnce } from './runner-transport.ts';

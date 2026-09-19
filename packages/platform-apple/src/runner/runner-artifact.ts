@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   runCmdStreaming,
-  type ExecBackgroundResult,
   withKeyedLock,
   withProcessLock,
   emitRequestProgress,
   findProjectRoot,
 } from './host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
 import { logChunk } from './runner-io.ts';

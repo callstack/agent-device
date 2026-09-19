@@ -1,6 +1,5 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
-  type ExecResult,
   withKeyedLock,
   Deadline,
   emitRequestProgress,
@@ -10,6 +9,7 @@ import {
   runAppleToolCommand,
   runXcrun,
 } from './host.ts';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import { isIosFamily, isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';

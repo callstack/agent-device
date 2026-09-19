@@ -9,7 +9,7 @@ import {
 } from '../runner-icon.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions, ExecResult } from '../host.ts';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 type AppleToolCall = [string, string[]];
 
