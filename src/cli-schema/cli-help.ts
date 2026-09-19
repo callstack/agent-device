@@ -689,6 +689,7 @@ iOS physical-device prerequisites:
   If Xcode cannot choose a profile, set AGENT_DEVICE_IOS_PROVISIONING_PROFILE to the profile name/specifier, not a file path.
   AGENT_DEVICE_IOS_SIGNING_IDENTITY is optional; omit it unless xcodebuild asks for a specific identity.
   The profile/team must allow AGENT_DEVICE_IOS_BUNDLE_ID and <id>.uitests.
+  A runner build failure names its class in error details.reason rather than only in prose: signing_no_development_team, signing_provisioning_profile_missing, signing_style_conflict, bundle_identifier_already_registered, signing_unspecified, devtools_security_developer_mode_disabled (the Mac's DevToolsSecurity setting, which says nothing about the device's Developer Mode toggle), or build_failed_unclassified when nothing proved a cause. Branch on details.reason and follow hint; the message is for humans.
   First-run XCTest setup/build can take longer than normal commands; keep the device connected and use --debug to inspect signing/build diagnostics if setup times out.
 
 Android physical-device prerequisites:

@@ -12,7 +12,7 @@ import {
   findProjectRoot,
 } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
+import { classifyRunnerStartupFailure } from './runner-contract.ts';
 import { logChunk } from './runner-io.ts';
 import { withXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
 import {
@@ -517,8 +517,11 @@ async function buildRunnerXctestrun(
       if (isRequestCanceledError(error)) throw error;
       const appErr =
         error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-      const hint = resolveRunnerBuildFailureHint(appErr);
+      // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
+      // switches on can never disagree with the advice it is handed.
+      const { reason, hint } = classifyRunnerStartupFailure(appErr);
       throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
+        reason,
         error: appErr.message,
         details: appErr.details,
         logPath: options.logPath,
