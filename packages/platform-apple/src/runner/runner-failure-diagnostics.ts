@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { AppError, type AppErrorCode } from '@agent-device/kernel/errors';
+import { flushRunnerLogAppends } from './runner-io.ts';
 
 const RUNNER_LOG_TAIL_BYTES = 64 * 1024;
 
@@ -20,24 +21,32 @@ const IOS_RUNNER_MAIN_THREAD_TIMEOUT_HINT =
   'XCTest timed out waiting for main-thread work on the current iOS screen. The app may still be visually responsive, especially on focused React Native overlays or animating screens. Use screenshot as visual truth, use coordinate presses only to prove or leave the state, and retry snapshot -i after the UI settles or after navigating away.';
 
 /**
- * Where `runner.log` had reached before a command was sent (#2683). The runner writes one log per
- * device and it is never truncated between commands, so everything an earlier command produced is
- * still there when a later one fails. Reading the tail of that file without this marker blames an
- * older command's crash on the command that merely happened to fail next.
+ * The one thing a failing command needs to charge log evidence to its own attempt (#2683): which
+ * `runner.log`, and where that file had reached before anything was sent. The runner writes one log
+ * per device and never truncates it between commands, so everything an earlier command produced is
+ * still there when a later one fails, and reading the tail without this boundary blames an older
+ * command's crash on the command that merely happened to fail next. There is deliberately no
+ * log-path-only shape: an attempt that skipped the boundary would read the whole file again.
  */
-export type RunnerLogOffset = Readonly<{ logPath: string; byteOffset: number }>;
+export type RunnerLogAttempt = Readonly<{ logPath: string; byteOffset: number }>;
 
 /**
- * Marks the end of `runner.log` as it stands right now, to be handed to
- * {@link enrichRunnerFailureFromLog} when the command this precedes fails.
+ * Draws the boundary for one command: everything `runner.log` holds when this returns belongs to an
+ * earlier command, and {@link enrichRunnerFailureFromLog} reads only what comes after it. Any append
+ * still queued for that path is awaited first, so an earlier command cannot write its way into this
+ * one's evidence (#2683).
  *
  * A log that does not exist yet is reported as `byteOffset: 0` rather than skipped: every byte it
  * gets from here on belongs to this command, which is exactly the claim worth keeping.
  */
-export async function captureRunnerLogOffset(
+export async function captureRunnerLogAttempt(
   logPath: string | undefined,
-): Promise<RunnerLogOffset | undefined> {
+): Promise<RunnerLogAttempt | undefined> {
   if (!logPath) return undefined;
+  // The writer serialises appends on a promise chain, so an earlier command's crash can still be in
+  // flight and land past whatever size `fs.stat` reports right now. Measuring without draining it
+  // first is what this whole marker exists to prevent (#2683).
+  await flushRunnerLogAppends(logPath);
   try {
     return { logPath, byteOffset: (await fs.stat(logPath)).size };
   } catch {
@@ -47,14 +56,15 @@ export async function captureRunnerLogOffset(
 
 export async function enrichRunnerFailureFromLog(params: {
   error: AppError;
-  logPath?: string;
-  /** Bytes of `runner.log` that were already there when the failing command was sent. */
-  logSince?: RunnerLogOffset;
+  /**
+   * The failing command's own log boundary. Without one there is no way to tell whose bytes are in
+   * the tail, so the tail is not read at all and the message keeps whatever the response said (#2683).
+   */
+  logSince?: RunnerLogAttempt;
 }): Promise<AppError> {
   const diagnostic =
-    (await resolveRunnerFailureDiagnostic(
-      params.logSince ?? (params.logPath ? { logPath: params.logPath, byteOffset: 0 } : undefined),
-    )) ?? classifyRunnerFailureError(params.error);
+    (await resolveRunnerFailureDiagnostic(params.logSince)) ??
+    classifyRunnerFailureError(params.error);
   if (!diagnostic) return params.error;
 
   return new AppError(
@@ -73,7 +83,7 @@ export async function enrichRunnerFailureFromLog(params: {
 }
 
 async function resolveRunnerFailureDiagnostic(
-  logSince: RunnerLogOffset | undefined,
+  logSince: RunnerLogAttempt | undefined,
 ): Promise<RunnerFailureDiagnostic | undefined> {
   if (!logSince) return undefined;
   const tail = await readFileSince(logSince, RUNNER_LOG_TAIL_BYTES);
@@ -133,7 +143,7 @@ function isMainThreadExecutionTimeout(message: string): boolean {
 }
 
 async function readFileSince(
-  logSince: RunnerLogOffset,
+  logSince: RunnerLogAttempt,
   maxBytes: number,
 ): Promise<string | undefined> {
   let handle: FileHandle | undefined;

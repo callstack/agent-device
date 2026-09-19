@@ -4,6 +4,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
+import {
+  IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+} from '../../core/devicectl.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecResult } from '../host.ts';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
@@ -49,8 +53,11 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   signing_provisioning_profile_missing: /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/,
   signing_unspecified: /Automatic Signing/,
   devtools_security_developer_mode_disabled: /DevToolsSecurity -enable/,
-  device_developer_mode_disabled: /Privacy & Security > Developer Mode/,
-  device_developer_disk_image_unavailable: /developer disk image, not the Developer Mode toggle/,
+  // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
+  // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
+  // preflight publishing them is asserted.
+  device_developer_mode_disabled: new RegExp(IOS_DEVICE_DEVELOPER_MODE_OFF_HINT),
+  device_developer_disk_image_unavailable: new RegExp(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT),
   build_failed_unclassified: CACHE_RECOVERY_HINT,
 };
 

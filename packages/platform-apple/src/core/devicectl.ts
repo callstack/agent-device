@@ -298,18 +298,22 @@ const IOS_DEVICE_PROCESS_LIST_HINT =
   "This Xcode/CoreDevice toolchain must support 'devicectl device info processes' with JSON runningProcesses so agent-device can resolve app process IDs. Inspect diagnostics for the exact devicectl API failure.";
 
 /**
- * The answer for a device whose own Developer Mode toggle is off (#2683). The device fact publishes
- * this same string, so the tool-output path and the device path cannot drift apart.
+ * What to tell a caller whose device reports its own Developer Mode toggle off (#2683). This is the
+ * one owner of that remedy: the device-readiness fact publishes these two strings as the `remedies`
+ * of the report it reads, so the runner preflight and this tool-output path cannot carry two
+ * wordings of one fix. `core/physical-device-coredevice.ts` imports them rather than restating them.
  */
-const IOS_DEVICE_DEVELOPER_MODE_OFF_HINT =
+export const IOS_DEVICE_DEVELOPER_MODE_OFF_HINT =
   'Enable Developer Mode on the iOS device (Settings > Privacy & Security > Developer Mode), restart it when prompted, unlock it, then retry.';
 
 /**
- * The answer for a developer disk image complaint on its own (#2683). It is deliberately not a
- * Developer Mode answer: a device can have the toggle on and still be waiting for Xcode to install
- * device support, and sending someone to a setting that is already correct loses the actual cause.
+ * What to tell a caller whose developer disk image is the only thing down (#2683). Deliberately not a
+ * Developer Mode answer, and it never names that setting: this path only has tool text, which cannot
+ * say where the toggle is, and sending someone to a setting that is already correct loses the actual
+ * cause. The device-fact path is where both states are known, and it publishes them as fields rather
+ * than as prose. Owned by the same pair as {@link IOS_DEVICE_DEVELOPER_MODE_OFF_HINT}.
  */
-const IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT =
+export const IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT =
   'Let Xcode finish preparing this device: keep it unlocked and connected by cable, open Xcode > Settings > Platforms (or Window > Devices and Simulators), wait for device support to install, then retry.';
 
 export function resolveIosDevicectlHint(stdout: string, stderr: string): string | null {

@@ -161,6 +161,8 @@ export type IosDeviceRunnerReadiness =
       available: true;
       developerMode: 'enabled' | 'disabled' | 'unknown';
       developerDiskImage: 'available' | 'unavailable' | 'unknown';
+      /** Wording of the fix for each state, owned by `core/devicectl.ts` and read, never rewritten. */
+      remedies: IosDeviceRunnerReadinessRemedies;
     }>
   | Readonly<{
       available: false;
@@ -168,12 +170,19 @@ export type IosDeviceRunnerReadiness =
       hint: string;
     }>;
 
+/** Mirrors `IosDeviceReadinessRemedies` in `core/physical-device-coredevice.ts` (#2683). */
+export type IosDeviceRunnerReadinessRemedies = Readonly<{
+  developerModeOff: string;
+  developerDiskImageUnavailable: string;
+}>;
+
 export type IosPhysicalDeviceRunnerControl = {
   backend: string;
   resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<{ tunnelIp: string | null }>;
   readDeviceReadiness(
     device: DeviceInfo,
     timeoutBudgetMs?: number,
+    signal?: AbortSignal,
   ): Promise<IosDeviceRunnerReadiness>;
 };
 

@@ -35,6 +35,11 @@ export type RunnerStartupFailureSite =
  * evidence: the payload they came from is captured in
  * `packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json`.
  */
+/**
+ * The two states a device payload carries. `remedies` is left out on purpose: that wording is ours and
+ * arrives on the report, so a fixture that recorded it would be recording our own advice as if the
+ * phone had said it.
+ */
 export type IosDeviceReadinessReport = Omit<
   Extract<
     Awaited<ReturnType<IosPhysicalDeviceRunnerControl['readDeviceReadiness']>>,
@@ -42,7 +47,7 @@ export type IosDeviceReadinessReport = Omit<
       available: true;
     }
   >,
-  'available'
+  'available' | 'remedies'
 >;
 
 /**

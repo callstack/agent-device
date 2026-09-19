@@ -9,6 +9,8 @@ import {
 } from '@agent-device/host-kit/host-file';
 import { hostProcessId } from '@agent-device/host-kit/process';
 import {
+  IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
   IOS_DEVICECTL_DEFAULT_HINT,
   resolveIosDevicectlHint,
   runIosDevicectl,
@@ -233,6 +235,8 @@ export type IosDeviceDetails = {
   developerModeStatus?: string;
   /** `deviceProperties.ddiServicesAvailable`, which is what the device says about its developer disk image. */
   developerDiskImageServicesAvailable?: boolean;
+  /** `deviceProperties.bootState`, which says whether the device was awake enough to answer at all. */
+  bootState?: string;
 };
 
 export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails {
@@ -259,6 +263,9 @@ export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails
   const developerDiskImageServicesAvailable =
     readBoolean(deviceProperties?.ddiServicesAvailable) ??
     readBoolean(nestedDevice(result)?.deviceProperties?.ddiServicesAvailable);
+  const bootState =
+    readNonEmptyString(deviceProperties?.bootState) ??
+    readNonEmptyString(nestedDevice(result)?.deviceProperties?.bootState);
   const outcome = readNonEmptyString(
     (payload as { info?: { outcome?: unknown } } | null | undefined)?.info?.outcome,
   );
@@ -270,30 +277,29 @@ export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails
     ...(developerDiskImageServicesAvailable === undefined
       ? {}
       : { developerDiskImageServicesAvailable }),
+    ...(bootState ? { bootState } : {}),
   };
 }
 
-function readDeviceProperties(
-  result: object,
-): { developerModeStatus?: unknown; ddiServicesAvailable?: unknown } | undefined {
+function readDeviceProperties(result: object): DeviceProperties | undefined {
   const properties = (result as { deviceProperties?: unknown }).deviceProperties;
   return properties && typeof properties === 'object'
-    ? (properties as { developerModeStatus?: unknown; ddiServicesAvailable?: unknown })
+    ? (properties as DeviceProperties)
     : undefined;
 }
 
-function nestedDevice(
-  result: object,
-):
-  | { deviceProperties?: { developerModeStatus?: unknown; ddiServicesAvailable?: unknown } }
-  | undefined {
+function nestedDevice(result: object): { deviceProperties?: DeviceProperties } | undefined {
   const device = (result as { device?: unknown }).device;
   return device && typeof device === 'object'
-    ? (device as {
-        deviceProperties?: { developerModeStatus?: unknown; ddiServicesAvailable?: unknown };
-      })
+    ? (device as { deviceProperties?: DeviceProperties })
     : undefined;
 }
+
+type DeviceProperties = {
+  developerModeStatus?: unknown;
+  ddiServicesAvailable?: unknown;
+  bootState?: unknown;
+};
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -311,22 +317,38 @@ function readBoolean(value: unknown): boolean | undefined {
  * The two states are kept apart because the device reports them apart and they fail apart. A device
  * with Developer Mode off cannot serve its developer disk image either; an image that is not up on a
  * device with the toggle on is its own failure. Deciding which one to name is the reader's job in
- * `runner/runner-device-readiness.ts`, beside the rules and hints that name them.
+ * `runner/runner-device-readiness.ts`.
  *
- * `available: false` is the answer when the device could not be reached at all. It carries no
- * verdict — an unreadable device is not a diagnosed one — only the way to read it again.
+ * The remedy travels with the states in {@link IosDeviceReadinessRemedies} rather than being worded
+ * again at each site that publishes one, so the runner preflight and the `devicectl` output path
+ * cannot drift apart while describing the same fix.
+ *
+ * `available: false` is the answer when no state can be established — the device could not be read,
+ * or it read an answer that could not have been true at the moment it was asked. It carries no
+ * verdict, because an unreadable device is not a diagnosed one.
  */
 export type IosDeviceReadiness =
   | Readonly<{
       available: true;
       developerMode: IosDeveloperModeState;
       developerDiskImage: IosDeveloperDiskImageState;
+      remedies: IosDeviceReadinessRemedies;
     }>
   | Readonly<{
       available: false;
       reason: 'device_readiness_unreadable';
       hint: string;
     }>;
+
+/**
+ * What to tell a caller about each state the device can report, published with the report. Both
+ * strings are owned by `core/devicectl.ts`, which answers the same two complaints when they arrive as
+ * tool output instead of as a device fact (#2683).
+ */
+export type IosDeviceReadinessRemedies = Readonly<{
+  developerModeOff: string;
+  developerDiskImageUnavailable: string;
+}>;
 
 /** How a device reports its own Settings > Privacy & Security > Developer Mode toggle. */
 export type IosDeveloperModeState = 'enabled' | 'disabled' | 'unknown';
@@ -336,12 +358,36 @@ export type IosDeveloperDiskImageState = 'available' | 'unavailable' | 'unknown'
 
 const IOS_DEVICE_READINESS_TIMEOUT_MS = 10_000;
 
+const IOS_DEVICE_READINESS_REMEDIES: IosDeviceReadinessRemedies = {
+  developerModeOff: IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+  developerDiskImageUnavailable: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+};
+
 /**
  * What a device whose report could not be read needs: a way to read it, and no diagnosis. No fact
  * means no claim, so this shape never names a cause (#2683).
  */
 const IOS_DEVICE_READINESS_UNREADABLE_HINT =
   'Read the device state directly with `xcrun devicectl device info details --device <id> --json-output -`, keeping the device unlocked and connected by cable, then retry.';
+
+/**
+ * The developer disk image services are only answerable while the device is running and reachable.
+ * With the tunnel down or the phone asleep, `ddiServicesAvailable: false` says the services are not
+ * listening right now, not that device support is missing — and refusing the run on that reading
+ * would turn a self-healing first launch into a permanent "wait for Xcode" loop (#2683).
+ */
+function isDeveloperDiskImageAnswerObservable(details: IosDeviceDetails): boolean {
+  return details.tunnelState === 'connected' && details.bootState === 'booted';
+}
+
+function buildUnobservableDiskImageHint(details: IosDeviceDetails): string {
+  return (
+    `The device reported its developer disk image as unavailable while it was not observable ` +
+    `(tunnelState=${details.tunnelState ?? 'unknown'}, bootState=${details.bootState ?? 'unknown'}). ` +
+    'Unlock it, keep it connected by cable until `xcrun devicectl device info details` reports ' +
+    'tunnelState=connected and bootState=booted, then retry.'
+  );
+}
 
 /**
  * The device's own answer to "can this iPhone run development tooling right now" (#2683).
@@ -351,7 +397,12 @@ const IOS_DEVICE_READINESS_UNREADABLE_HINT =
  * developer disk image services. Both are copied into their own field so the reader that draws a
  * verdict can tell that one arrived and the other did not, which is what stops an image complaint
  * from being answered as a toggle problem. What the states mean for a runner is decided by
- * `runner/runner-device-readiness.ts`, beside the rules and hints that name them.
+ * `runner/runner-device-readiness.ts`.
+ *
+ * The one thing it refuses to report is an image answer that could not have been true: an
+ * uncorroborated `ddiServicesAvailable: false` publishes the unavailability shape instead. The
+ * toggle keeps its answer regardless, because a disabled toggle already explains an unavailable
+ * image and comes from the paired record rather than from a live service.
  */
 export async function readIosDeviceReadiness(
   device: DeviceInfo,
@@ -366,10 +417,26 @@ export async function readIosDeviceReadiness(
       hint: IOS_DEVICE_READINESS_UNREADABLE_HINT,
     };
   }
+  const developerMode = readDeveloperModeState(details.developerModeStatus);
+  const developerDiskImage = readDeveloperDiskImageState(
+    details.developerDiskImageServicesAvailable,
+  );
+  if (
+    developerDiskImage === 'unavailable' &&
+    developerMode !== 'disabled' &&
+    !isDeveloperDiskImageAnswerObservable(details)
+  ) {
+    return {
+      available: false,
+      reason: 'device_readiness_unreadable',
+      hint: buildUnobservableDiskImageHint(details),
+    };
+  }
   return {
     available: true,
-    developerMode: readDeveloperModeState(details.developerModeStatus),
-    developerDiskImage: readDeveloperDiskImageState(details.developerDiskImageServicesAvailable),
+    developerMode,
+    developerDiskImage,
+    remedies: IOS_DEVICE_READINESS_REMEDIES,
   };
 }
 

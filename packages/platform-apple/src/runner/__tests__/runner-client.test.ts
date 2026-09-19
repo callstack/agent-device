@@ -56,6 +56,7 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
+import type { RunnerLogAttempt } from '../runner-failure-diagnostics.ts';
 import { parseRunnerResponse } from '../runner-session.ts';
 
 const iosSimulator: DeviceInfo = {
@@ -490,7 +491,7 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
   const session = { state: 'starting' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
@@ -516,7 +517,7 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint naming the occlusio
   const session = { state: 'starting' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
@@ -545,7 +546,7 @@ test('parseRunnerResponse preserves iOS AX snapshot failure code and hint', asyn
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'IOS_AX_SNAPSHOT_FAILED');
@@ -574,7 +575,7 @@ test('parseRunnerResponse preserves XCTest recorded failure code and hint', asyn
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'XCTEST_RECORDED_FAILURE');
@@ -601,7 +602,7 @@ test('parseRunnerResponse maps RUNNER_BUSY to retriable command failure', async 
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -628,7 +629,7 @@ test('parseRunnerResponse preserves RUNNER_WEDGED as a fatal runner code', async
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    () => parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log')),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'RUNNER_WEDGED');
@@ -660,7 +661,7 @@ Thread 0 Crashed::  Dispatch queue: com.apple.main-thread
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, logPath),
+    () => parseRunnerResponse(response, session, runnerLogAttempt(logPath)),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'IOS_TARGET_APP_CRASH');
@@ -690,7 +691,7 @@ The application under test terminated unexpectedly.
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, logPath),
+    () => parseRunnerResponse(response, session, runnerLogAttempt(logPath)),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'IOS_TARGET_APP_CRASH');
@@ -719,7 +720,7 @@ AGENT_DEVICE_RUNNER_COMMAND_FAILED command=snapshot error=fetch failed
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, logPath),
+    () => parseRunnerResponse(response, session, runnerLogAttempt(logPath)),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -747,7 +748,7 @@ test('parseRunnerResponse hints when XCTest main-thread execution times out', as
   const session = { state: 'ready' } as const;
 
   await assert.rejects(
-    () => parseRunnerResponse(response, session, logPath),
+    () => parseRunnerResponse(response, session, runnerLogAttempt(logPath)),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -776,7 +777,7 @@ test('parseRunnerResponse emits diagnostics for runner gesture fallbacks', async
   const diagnosticEvents: DiagnosticEventInput[] = [];
   appleRunnerTestHost.update({ emitDiagnostic: (event) => diagnosticEvents.push(event) });
 
-  const data = await parseRunnerResponse(response, session, '/tmp/runner.log');
+  const data = await parseRunnerResponse(response, session, runnerLogAttempt('/tmp/runner.log'));
   assert.equal(data.gestureFallback, 'xctest-coordinate-drag');
 
   assert.equal(session.state, 'ready');
@@ -784,6 +785,14 @@ test('parseRunnerResponse emits diagnostics for runner gesture fallbacks', async
   assert.match(diagnostics, /ios_runner_gesture_fallback/);
   assert.match(diagnostics, /xctest-coordinate-drag/);
 });
+
+/**
+ * A log attempt over a log this test just created. Offset 0 is the honest boundary there: the file
+ * holds nothing but this command's bytes, so everything in it may be read as this attempt's evidence.
+ */
+function runnerLogAttempt(logPath: string): RunnerLogAttempt {
+  return { logPath, byteOffset: 0 };
+}
 
 function writeRunnerLogTail(contents: string): string {
   const dir = mkdtempForTestSync('agent-device-runner-log-');

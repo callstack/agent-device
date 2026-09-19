@@ -8,20 +8,22 @@ const DISK_IMAGE_SERVICES_MESSAGE =
   'The iOS device reports that developer disk image services are unavailable';
 
 /**
- * The remedy for each state an iPhone can name about itself (#2683), kept beside the states it
- * answers because a hint that outlives its detector turns into advice nobody can check.
+ * The remedy for each state an iPhone can name about itself (#2683). These are not worded here: the
+ * device fact arrives carrying them, because `core/devicectl.ts` is the one owner that answers a
+ * Developer Mode or developer disk image complaint — whether it reaches us as a device state or as
+ * that tool's own output — and a second wording of one fix is a second fix people go looking for.
  *
- * These answer what the DEVICE reported. Two other sites carry the same vocabulary about different
- * evidence and deliberately say something else: the Mac's `DevToolsSecurity -status` setting is
- * answered in `runner-dev-tools-security.ts`, and a `devicectl` complaint about the image or the
- * toggle is answered from that tool's own output in `core/devicectl.ts`.
+ * `runner-dev-tools-security.ts` carries its own hint and says something different on purpose: that
+ * one is about the Mac's `DevToolsSecurity -status`, which no iPhone setting can change.
  */
-const DEVICE_READINESS_HINTS: Record<RunnerDeviceReadinessFailureReason, string> = {
-  device_developer_mode_disabled:
-    "Turn Developer Mode on on the iPhone itself: Settings > Privacy & Security > Developer Mode, restart it when prompted, unlock it, then retry. The Mac's developer-tools setting is separate and enabling it does not change this one.",
-  device_developer_disk_image_unavailable:
-    'Let Xcode finish preparing this device: keep it unlocked and connected by cable, open Xcode > Settings > Platforms (or Window > Devices and Simulators), wait for device support to install, then retry. This is the developer disk image, not the Developer Mode toggle, which the device answers separately.',
-};
+function readinessHint(
+  remedies: ReadableIosDeviceReadiness['remedies'],
+  reason: RunnerDeviceReadinessFailureReason,
+): string {
+  return reason === 'device_developer_mode_disabled'
+    ? remedies.developerModeOff
+    : remedies.developerDiskImageUnavailable;
+}
 
 /**
  * The device half of "can this iPhone run the runner at all", asked before the runner builds.
@@ -35,9 +37,19 @@ const DEVICE_READINESS_HINTS: Record<RunnerDeviceReadinessFailureReason, string>
  * one from a missing read is how a temporarily unplugged cable turns into a claim about someone's
  * Settings (#2683).
  */
-export async function assertDeviceReadinessForIosRunner(device: DeviceInfo): Promise<void> {
+export async function assertDeviceReadinessForIosRunner(
+  device: DeviceInfo,
+  budget: Readonly<{ budgetMs: number; signal?: AbortSignal }>,
+): Promise<void> {
   if (!isIosFamily(device) || device.kind !== 'device') return;
-  const readiness = await resolveIosPhysicalDeviceControl(device).readDeviceReadiness(device);
+  const readiness = await resolveIosPhysicalDeviceControl(device).readDeviceReadiness(
+    device,
+    budget.budgetMs,
+    budget.signal,
+  );
+  // A read that returned just as the startup budget ran out is still not permission to keep going:
+  // the caller that cancelled is not waiting for a build that cannot be delivered (#2683).
+  budget.signal?.throwIfAborted();
   if (!readiness.available) return;
   const obstacle = nameIosDeviceReadinessObstacle(readiness);
   if (!obstacle) return;
@@ -68,17 +80,19 @@ export function nameIosDeviceReadinessObstacle(
   | Readonly<{ reason: RunnerDeviceReadinessFailureReason; message: string; hint: string }>
   | undefined {
   if (readiness.developerMode === 'disabled') {
+    const reason: RunnerDeviceReadinessFailureReason = 'device_developer_mode_disabled';
     return {
-      reason: 'device_developer_mode_disabled',
+      reason,
       message: DEVICE_MODE_OFF_MESSAGE,
-      hint: DEVICE_READINESS_HINTS.device_developer_mode_disabled,
+      hint: readinessHint(readiness.remedies, reason),
     };
   }
   if (readiness.developerDiskImage === 'unavailable') {
+    const reason: RunnerDeviceReadinessFailureReason = 'device_developer_disk_image_unavailable';
     return {
-      reason: 'device_developer_disk_image_unavailable',
+      reason,
       message: DISK_IMAGE_SERVICES_MESSAGE,
-      hint: DEVICE_READINESS_HINTS.device_developer_disk_image_unavailable,
+      hint: readinessHint(readiness.remedies, reason),
     };
   }
   return undefined;

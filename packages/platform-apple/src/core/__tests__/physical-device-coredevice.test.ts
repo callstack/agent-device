@@ -9,6 +9,10 @@ import {
   resolveIosReadyHint,
   type IosDeviceReadiness,
 } from '../physical-device-coredevice.ts';
+import {
+  IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+} from '../devicectl.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 
@@ -186,6 +190,12 @@ const IOS_DEVICE: DeviceInfo = {
 
 const XCTEST_IOS_DEVICE: DeviceInfo = { ...IOS_DEVICE, iosPhysicalDeviceBackend: 'xctest' };
 
+/** The remedies a readable report publishes, spelled once so the assertions below stay readable. */
+const DEVICE_REMEDIES = {
+  developerModeOff: IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+  developerDiskImageUnavailable: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+};
+
 test('a device reporting its toggle on and its disk image up is ready', async () => {
   const calls: string[][] = [];
   const readiness = await readDeviceDetails(DEVICE_INFO_DETAILS_TEXT, calls);
@@ -194,6 +204,7 @@ test('a device reporting its toggle on and its disk image up is ready', async ()
     available: true,
     developerMode: 'enabled',
     developerDiskImage: 'available',
+    remedies: DEVICE_REMEDIES,
   });
   assert.equal(calls.length, 1);
   const [cmd, ...args] = calls[0] ?? [];
@@ -212,6 +223,7 @@ test('a device reporting its toggle off says so, whatever its disk image says', 
     available: true,
     developerMode: 'disabled',
     developerDiskImage: 'unavailable',
+    remedies: DEVICE_REMEDIES,
   });
 });
 
@@ -224,6 +236,7 @@ test('a device with its toggle on and its disk image down reports the image, not
     available: true,
     developerMode: 'enabled',
     developerDiskImage: 'unavailable',
+    remedies: DEVICE_REMEDIES,
   });
 });
 
@@ -239,10 +252,16 @@ test('a device that answers with a spelling we do not know reports nothing', asy
     available: true,
     developerMode: 'unknown',
     developerDiskImage: 'unknown',
+    remedies: DEVICE_REMEDIES,
   });
   assert.deepEqual(
     await readDeviceDetails(JSON.stringify({ info: { outcome: 'success' }, result: {} })),
-    { available: true, developerMode: 'unknown', developerDiskImage: 'unknown' },
+    {
+      available: true,
+      developerMode: 'unknown',
+      developerDiskImage: 'unknown',
+      remedies: DEVICE_REMEDIES,
+    },
   );
 });
 
@@ -261,6 +280,84 @@ test('a device whose details cannot be read is reported unreadable rather than d
     assert.match(readiness.hint, /devicectl device info details/);
     assert.doesNotMatch(readiness.hint, /Developer Mode/i);
   }
+});
+
+test('the device report carries the remedies the devicectl path already owns', async () => {
+  // One wording per fix (#2683): the runner preflight publishes whatever arrives here, so this is the
+  // only place the wording can be asserted once instead of at every site that shows it.
+  const readiness = await readDeviceDetails(
+    devicePropertiesPayload({ developerModeStatus: 'enabled', ddiServicesAvailable: false }),
+  );
+
+  assert.ok(readiness.available);
+  assert.equal(readiness.remedies.developerModeOff, IOS_DEVICE_DEVELOPER_MODE_OFF_HINT);
+  assert.equal(
+    readiness.remedies.developerDiskImageUnavailable,
+    IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  );
+});
+
+test('an image complaint from a device that could not have answered is not a diagnosis', async () => {
+  // `ddiServicesAvailable: false` with the tunnel down or the phone asleep means the developer disk
+  // image services were not listening, not that device support is missing. Refusing the run on that
+  // reading would send a self-healing first launch into a permanent "wait for Xcode" loop (#2683).
+  const unobservable = [
+    { bootState: 'asleep' },
+    { tunnelState: 'unavailable' },
+    { tunnelState: 'unavailable', bootState: 'asleep' },
+  ];
+  for (const context of unobservable) {
+    const readiness = await readDeviceDetails(
+      devicePropertiesPayload(
+        { developerModeStatus: 'enabled', ddiServicesAvailable: false },
+        context,
+      ),
+    );
+
+    assert.equal(readiness.available, false);
+    if (readiness.available) continue;
+    assert.equal(readiness.reason, 'device_readiness_unreadable');
+    // The reader says which observation is missing rather than naming a cause.
+    assert.match(readiness.hint, /tunnelState=/);
+    assert.match(readiness.hint, /bootState=/);
+    assert.doesNotMatch(readiness.hint, /Let Xcode finish preparing/);
+  }
+});
+
+test('a disabled toggle keeps its answer even from a sleeping device', async () => {
+  // The exception that keeps the pairing honest: a toggle that is off already explains why the image
+  // is down, and it comes from the paired record rather than from a live service, so it does not need
+  // the device to be awake to be believed (#2683).
+  const readiness = await readDeviceDetails(
+    devicePropertiesPayload(
+      { developerModeStatus: 'disabled', ddiServicesAvailable: false },
+      { tunnelState: 'unavailable', bootState: 'asleep' },
+    ),
+  );
+
+  assert.ok(readiness.available);
+  assert.equal(readiness.developerMode, 'disabled');
+  assert.equal(readiness.developerDiskImage, 'unavailable');
+});
+
+test('the committed capture holds no identity a real device would recognise', () => {
+  // This payload was read off a real phone and is committed, so the fields that would identify that
+  // one unit are masked while the states the reader consumes stay verbatim (#2683).
+  const capture = DEVICE_INFO_DETAILS_CAPTURE as {
+    result: {
+      hardwareProperties: { serialNumber: string; ecid: number };
+      deviceProperties: { bootedSnapshotName: string; developerModeStatus: string };
+      connectionProperties: { tunnelIPAddress: string };
+    };
+  };
+  const { hardwareProperties, deviceProperties, connectionProperties } = capture.result;
+
+  assert.match(hardwareProperties.serialNumber, /MASKED/);
+  assert.equal(hardwareProperties.ecid, 0);
+  assert.match(deviceProperties.bootedSnapshotName, /MASKED/);
+  assert.match(connectionProperties.tunnelIPAddress, /^fd00:/);
+  // The states the reader consumes are the captured ones, masks and all.
+  assert.equal(deviceProperties.developerModeStatus, 'enabled');
 });
 
 test('a device that fails the details command is unreadable, not unavailable', async () => {
@@ -334,8 +431,26 @@ test('the CoreDevice backend publishes the device report', async () => {
   assert.equal(readiness.developerDiskImage, 'available');
 });
 
-function devicePropertiesPayload(deviceProperties: Record<string, unknown>): string {
-  return JSON.stringify({ info: { outcome: 'success' }, result: { deviceProperties } });
+/**
+ * A `deviceProperties` payload together with the context it was read in. Both default to the state a
+ * developer disk image answer requires — tunnel up, phone booted — because #2683 treats that context
+ * as part of the answer rather than as background: the same `false` from a sleeping or unreachable
+ * device says the services were not listening. A caller that wants the weaker reading names it.
+ */
+function devicePropertiesPayload(
+  deviceProperties: Record<string, unknown>,
+  context: { tunnelState?: string; bootState?: string } = {},
+): string {
+  return JSON.stringify({
+    info: { outcome: 'success' },
+    result: {
+      deviceProperties: {
+        ...deviceProperties,
+        bootState: deviceProperties.bootState ?? context.bootState ?? 'booted',
+      },
+      connectionProperties: { tunnelState: context.tunnelState ?? 'connected' },
+    },
+  });
 }
 
 async function readDeviceDetails(

@@ -42,7 +42,10 @@
         "featureIdentifier": "com.apple.dt.serviceconnection.create",
         "name": "Create Service Connection"
       },
-      { "featureIdentifier": "com.apple.dt.servicesocket.create", "name": "Create Service Socket" },
+      {
+        "featureIdentifier": "com.apple.dt.servicesocket.create",
+        "name": "Create Service Socket"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.customizeappearancesettings",
         "name": "Customize Appearance Settings"
@@ -131,18 +134,30 @@
         "featureIdentifier": "com.apple.coredevice.feature.installapp",
         "name": "Install Application"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.installroot", "name": "Install Root" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.installroot",
+        "name": "Install Root"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.launchapplication",
         "name": "Launch Application"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.listFiles", "name": "List Files" },
-      { "featureIdentifier": "com.apple.coredevice.feature.listroots", "name": "List Roots" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.listFiles",
+        "name": "List Files"
+      },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.listroots",
+        "name": "List Roots"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.default.user.credentials",
         "name": "Modify Credentials for Default Users for a Device"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.tags", "name": "Modify Tags" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.tags",
+        "name": "Modify Tags"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.monitorfilechanges",
         "name": "Monitor File Changes"
@@ -151,7 +166,10 @@
         "featureIdentifier": "com.apple.coredevice.feature.monitorprocesstermination",
         "name": "Monitor Process for Termination"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.pasteboard", "name": "Pasteboard" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.pasteboard",
+        "name": "Pasteboard"
+      },
       {
         "featureIdentifier": "com.apple.dt.customer.postdarwinnotification",
         "name": "Post Darwin Notification"
@@ -168,8 +186,14 @@
         "featureIdentifier": "com.apple.coredevice.feature.querymobilegestalt",
         "name": "Query MobileGestalt"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.rebootdevice", "name": "Reboot Device" },
-      { "featureIdentifier": "com.apple.coredevice.feature.renamedevice", "name": "Rename Device" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.rebootdevice",
+        "name": "Reboot Device"
+      },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.renamedevice",
+        "name": "Rename Device"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.sendmemorywarningtoprocess",
         "name": "Send Memory Warning to Process"
@@ -178,7 +202,10 @@
         "featureIdentifier": "com.apple.coredevice.feature.sendsignaltoprocess",
         "name": "Send Signal to Process"
       },
-      { "featureIdentifier": "com.apple.dt.profile", "name": "Service Hub Profile" },
+      {
+        "featureIdentifier": "com.apple.dt.profile",
+        "name": "Service Hub Profile"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.servicexpcpeerconnection",
         "name": "Service XPC Peer Connection"
@@ -235,7 +262,10 @@
         "featureIdentifier": "com.apple.coredevice.feature.remote.universalhidservice",
         "name": "UniversalHIDService"
       },
-      { "featureIdentifier": "com.apple.coredevice.feature.unpairdevice", "name": "Unpair Device" },
+      {
+        "featureIdentifier": "com.apple.coredevice.feature.unpairdevice",
+        "name": "Unpair Device"
+      },
       {
         "featureIdentifier": "com.apple.coredevice.feature.viewdevicescreen",
         "name": "View Device Screen"
@@ -257,14 +287,14 @@
         "00000000-0000000000000000.coredevice.local"
       ],
       "transportType": "wired",
-      "tunnelIPAddress": "fd1b:bdb2:2626::1",
+      "tunnelIPAddress": "fd00:0000:0000::1",
       "tunnelState": "connected",
       "tunnelTransportProtocol": "tcp"
     },
     "deviceProperties": {
       "bootState": "booted",
       "bootedFromSnapshot": true,
-      "bootedSnapshotName": "com.apple.os.update-A22D383A04712C2BCB9B7939F83D537AAD06280E44D5508E0212E24B9FE8587F",
+      "bootedSnapshotName": "com.apple.os.update-MASKED",
       "ddiServicesAvailable": true,
       "developerModeStatus": "enabled",
       "hasInternalOSBuild": false,
@@ -276,9 +306,13 @@
       "supportsCheckedAllocations": true
     },
     "hardwareProperties": {
-      "cpuType": { "name": "arm64e", "subType": -2147483646, "type": 16777228 },
+      "cpuType": {
+        "name": "arm64e",
+        "subType": -2147483646,
+        "type": 16777228
+      },
       "deviceType": "iPhone",
-      "ecid": 6836093504208924,
+      "ecid": 0,
       "hardwareModel": "V53AP",
       "internalStorageCapacity": 256000000000,
       "isProductionFused": true,
@@ -286,10 +320,18 @@
       "platform": "iOS",
       "productType": "iPhone18,1",
       "reality": "physical",
-      "serialNumber": "C07NWHY2H0",
+      "serialNumber": "C07MASKED00000",
       "supportedCPUTypes": [
-        { "name": "arm64e", "subType": -2147483646, "type": 16777228 },
-        { "name": "arm64", "subType": 0, "type": 16777228 }
+        {
+          "name": "arm64e",
+          "subType": -2147483646,
+          "type": 16777228
+        },
+        {
+          "name": "arm64",
+          "subType": 0,
+          "type": 16777228
+        }
       ],
       "supportedDeviceFamilies": [1],
       "thinningProductType": "iPhone18,1",
@@ -301,18 +343,25 @@
         "lastConnectionDate": 811516560,
         "pairingState": "paired",
         "transportType": "wired",
-        "tunnelIPAddressString": "fd1b:bdb2:2626::1",
+        "tunnelIPAddressString": "fd00:0000:0000::1",
         "tunnelTransportProtocol": "tcp"
       },
       "hardware": {
-        "cpuCount": { "logicalCores": 6, "packages": 1, "physicalCores": 6 },
-        "cpuType": { "subtype": 18446744071562067970, "type": 16777228 },
-        "ecid": 6836093504208924,
+        "cpuCount": {
+          "logicalCores": 6,
+          "packages": 1,
+          "physicalCores": 6
+        },
+        "cpuType": {
+          "subtype": 18446744071562067970,
+          "type": 16777228
+        },
+        "ecid": 0,
         "internalStorageCapacity": 256000000000,
         "marketingName": "iPhone 17 Pro",
         "productType": "iPhone18,1",
         "reality": "physical",
-        "serialNumber": "C07NWHY2H0",
+        "serialNumber": "C07MASKED00000",
         "udid": "00000000-0000000000000000"
       },
       "software": {
@@ -350,7 +399,11 @@
       },
       "state": {
         "bootState": "booted",
-        "developerModeStatus": { "enabled": { "mode": 1 } },
+        "developerModeStatus": {
+          "enabled": {
+            "mode": 1
+          }
+        },
         "name": "apex-test-iphone"
       }
     },
