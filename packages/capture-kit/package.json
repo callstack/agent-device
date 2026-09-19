@@ -98,6 +98,10 @@
       "types": "./src/recording/stop-sequence.ts",
       "default": "./src/recording/stop-sequence.ts"
     },
+    "./screen-recording-transport": {
+      "types": "./src/screen-recording-transport.ts",
+      "default": "./src/screen-recording-transport.ts"
+    },
     "./ios-snapshot-acquisition": {
       "types": "./src/ios-snapshot-acquisition.ts",
       "default": "./src/ios-snapshot-acquisition.ts"

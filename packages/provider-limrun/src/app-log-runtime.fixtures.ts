@@ -32,6 +32,7 @@ export function limrunOwnerOptions(
     ownsDevice: () => true,
     hasLiveSession: () => true,
     getInteractor: () => undefined,
+    getDeviceSession: () => undefined,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],

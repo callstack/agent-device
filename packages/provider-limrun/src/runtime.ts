@@ -388,6 +388,7 @@ async function loadLimrunPlatformRuntime(
     ownsDevice: (device) => runtime.ownsDevice(device),
     hasLiveSession: (device) => runtime.hasLiveSession(device),
     getInteractor: (device, runner) => runtime.getInteractor(device, runner),
+    getDeviceSession: (device) => runtime.getDeviceSession(device),
     resolveAppReference: (device, app) => runtime.resolveAppReference(device, app),
     openCurrent: async (device) => runtime.currentAppLogReader(device),
     reconnect: async (descriptor, signal) =>

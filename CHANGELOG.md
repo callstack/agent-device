@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added (limrun): `record start` and `record stop` on Limrun iOS and Android direct sessions. The
+  runtime declared recording unavailable although the Limrun SDK exposes a server-side recorder.
+  Start asks the instance to record (`--quality medium` maps to Limrun quality 5, `high` to 8);
+  stop asks the instance to stop once, then downloads the served MP4 to the output path as a
+  separate bounded step, so a dropped transfer is retried by the next `record stop` without a
+  second remote stop. The capture is always the whole simulator or emulator screen; `--fps` and
+  `--hide-touches` are refused, and a recording cannot be reattached after a daemon restart. The
+  web recorder now shares the same transport-recording runtime.
 - Fixed (limrun): `screenshot` on Limrun iOS direct sessions writes a PNG. Limrun serves its capture
   as JPEG and the interactor wrote those bytes straight to the `.png` path, so every capture failed
   downstream with "Screenshot file is not a valid PNG". The bytes are now sniffed and a JPEG is
