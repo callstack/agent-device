@@ -23,7 +23,7 @@ that branch: five already-foreground `snapshot -i` runs measured 221–240 ms ag
 before the change, and carry no field. (b) would break the screenshot→snapshot flow callers already
 use and needs per-caller recovery; (a) preserves behavior and PR1 ships alone.
 
-## Foreground identity: ship `priorState` + `foregroundPid`, not `foregroundBundleId`
+## Foreground identity: ship `priorState` + `otherActiveApplicationPid`, not a foreground owner
 
 `XCAXClient_iOS` on this runtime answers `activeApplications` and `systemApplication` only;
 `frontmostApplication` and `focusedApplication` do not exist there. Each element exposes
@@ -34,13 +34,21 @@ same pid. That is a new private surface with unknown physical-device behavior, a
 `activeApplications` has no proven ordering to identify which element is foreground. So PR1 states a
 pid, and only when exactly one foreign application is AX-active; it never guesses a bundle id.
 
+Adversarial review (PR1/PR2) caught the naming over-claiming what that probe proves: with no ordering
+in `activeApplications`, the pid establishes only that exactly one other application held an active
+accessibility session at that moment — a liveness claim, not a foreground owner. The field is therefore
+`otherActiveApplicationPid` and the sentence says the same thing the value proves. `priorState` is
+unaffected: it is `XCUIApplication.state` read before `activate()` ran, which is a real fact about the
+session app.
+
 ## Disclosure as it lands (same simulator, PR1 head)
 
 ```
-The session app was not foreground when this command arrived (another app (pid 33878) held it,
-prior state runningBackground), so the runner activated it before answering (reason stale_target).
-Any capture taken earlier in this session described another app (pid 33878), not the session app.
-Re-capture now that the session app answers, or drive the other app in its own session.
+The session app was not foreground when this command arrived (prior state runningBackground), so
+the runner activated it before answering (reason stale_target). Any capture taken earlier in this
+session described the only app other than the session app with an active accessibility session
+(pid 33878), not the session app. Re-capture now that the session app answers, or drive the other
+app in its own session.
 ```
 
 pid 33878 resolved to `…/MobileSafari.app/MobileSafari` by host `ps`. The immediately following

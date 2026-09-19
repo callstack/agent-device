@@ -30,6 +30,7 @@ import {
   iosSystemSurfaceHost,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
+import { emitDiagnostic } from './host.ts';
 import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from './target-activation.ts';
 import type { IosTargetActivation } from '@agent-device/contracts/ios-target-activation';
 
@@ -51,7 +52,13 @@ export function readAppleSnapshotResult(
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
   const keyboard = readSnapshotKeyboardBandFact(result.keyboard);
-  const targetActivation = readTargetActivationFact(result[TARGET_ACTIVATION_WIRE_KEY]);
+  const targetActivation = readTargetActivationFact(result[TARGET_ACTIVATION_WIRE_KEY], (detail) =>
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_runner_target_activation_prior_state_unmapped',
+      data: detail,
+    }),
+  );
   return {
     nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,

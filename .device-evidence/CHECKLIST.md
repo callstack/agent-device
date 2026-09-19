@@ -33,13 +33,17 @@ already-installed bundle id is not evidence.
 ## Expected AFTER (PR1 head)
 
 - Step 4 carries, as a warning line and as `data.targetActivation` from PR2:
-  `The session app was not foreground when this command arrived (another app (pid <N>) held it,
-  prior state runningBackground), so the runner activated it before answering (reason
-  <stale_target|bundle_changed|missing_after_wait|interaction_foreground_guard>). ... Re-capture
-  now that the session app answers, or drive the other app in its own session.`
+  `The session app was not foreground when this command arrived (prior state runningBackground), so
+  the runner activated it before answering (reason
+  <stale_target|bundle_changed|missing_after_wait|interaction_foreground_guard>). Any capture taken
+  earlier in this session described the only app other than the session app with an active
+  accessibility session (pid <N>), not the session app. Re-capture now that the session app answers,
+  or drive the other app in its own session.`
 - Step 5 carries no disclosure — the fact belongs to the command that activated.
-- If the runner could not isolate exactly one foreign AX-active app, the sentence says
-  `another app` with no pid; a wrong pid is a bug, an absent one is not.
+- `<N>` is a **liveness** claim and the sentence is written to claim no more: `otherActiveApplicationPid`
+  is present only when exactly one application other than the session app held an active accessibility
+  session. `activeApplications` exposes no ordering, so nothing here proves which app owned the screen.
+  A pid that is not an AX-active application of the session is a bug; an absent pid is not.
 
 ## Proving the disclosure comes from activation, not a later state read
 
@@ -47,20 +51,28 @@ already-installed bundle id is not evidence.
 `XCUIApplication.activate()` runs, and the fact is stamped only in the branch where `activate()` is
 actually called. Assert the pair on the same device run:
 
-- `runner.log`: `AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=... reason=... priorState=2 foregroundPid=<N>`
-  — the same line's `priorState` is what the response must carry; `state=` on the preceding
-  `AGENT_DEVICE_RUNNER_ACTIVATE` must be non-foreground.
-- The response can therefore never report `priorState: runningForeground`; if it does, the fact was
-  read after the repair and the test `target activation fact refuses a reason or state the runner
-  never stamps` is being violated.
-- Correlate `<N>` with the foreign app: `xcrun devicectl list processes --device $UDID` (or the
-  physical-lane equivalent of the simulator's `ps`) and confirm the pid is the app in step 3.
+- `runner.log`: `AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=... reason=... priorState=2
+  otherActiveApplicationPid=<N>` — the same line's `priorState` is what the response must carry;
+  `state=` on the preceding `AGENT_DEVICE_RUNNER_ACTIVATE` must be non-foreground.
+- The response can therefore never report `priorState: runningForeground`. Both directions are pinned
+  in the runner unit lane (`UnitTests/RunnerTests+LifecycleCacheTests.swift`): the already-foreground
+  call asserts `pendingTargetActivation == nil` and the backgrounded call asserts the stamped
+  `priorState` equals `XCUIApplication.State.runningBackground.rawValue`.
+- Correlate `<N>` with the app from step 3: `xcrun devicectl list processes --device $UDID` (or the
+  physical-lane equivalent of the simulator's `ps`) should find that pid alive. Confirming it is
+  AX-active is what the runner probed; confirming it *owned the screen* is not what this fact claims.
   On a physical device `proc_pidpath`-style resolution is deliberately NOT attempted.
 
 ## Still to prove on this lane (PR1 risk list)
 
 - Whether `activeApplications` reports more than the session app while a foreign app is foreground
-  on real hardware (decides how often `foregroundPid` is present).
+  on real hardware (decides how often `otherActiveApplicationPid` is present at all).
 - That screenshot stays lifecycle, #2438 in-place system-host serving still applies (Apple Pay sheet
   from **Automation lab → Open Apple Pay**), and ADR 0005 `targetReset` on external relaunch is
   untouched.
+
+## Not covered by the disclosure shipped in PR2
+
+`press <x> <y>` and `press @ref` answered from a live ref frame consume no capture, so they carry no
+disclosure even though the runner may have re-activated the app to serve them. Treat a silent
+interaction as "unknown", never as "no repair". Follow-up: callstack/agent-device#2694.

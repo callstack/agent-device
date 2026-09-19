@@ -36,13 +36,13 @@ function interactorServing(payload: Record<string, unknown>) {
 test('a capture whose own command repaired foreground discloses it and keeps the fact', async () => {
   const snapshot = (await interactorServing({
     ...HEALTHY_TREE,
-    targetActivation: { reason: 'stale_target', priorState: 2, foregroundPid: 4562 },
+    targetActivation: { reason: 'stale_target', priorState: 2, otherActiveApplicationPid: 4562 },
   }).snapshot()) as SnapshotResult;
 
   assert.deepEqual(snapshot.targetActivation, {
     reason: 'stale_target',
     priorState: 'runningBackground',
-    foregroundPid: 4562,
+    otherActiveApplicationPid: 4562,
   });
   assert.match(
     String(snapshot.warnings?.find((warning) => warning.includes('not foreground'))),

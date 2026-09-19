@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
-import { spawnSync } from 'node:child_process';
+
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+import { runCmd } from '@agent-device/host-kit/command';
+import {
+  cleanupSession,
+  createContext,
+  runStep,
+  type LiveContext,
+} from './ios-simulator-e2e/live-harness.ts';
 
 /**
  * Live lane for #2682: an off-app handoff followed by `screenshot` then `snapshot` must not let the
@@ -8,69 +18,103 @@ import { spawnSync } from 'node:child_process';
  * actually activated the bound app, so this drives the real runner on a real simulator — a mocked
  * runner response proves the decoder, not the fact.
  *
- * Requires the same environment as the iOS simulator E2E lane plus a fixture app already installed:
- *   AGENT_DEVICE_IOS_E2E=1 AGENT_DEVICE_FIXTURE_APP_ID=... AGENT_DEVICE_IOS_UDID=...
- *   node --test test/integration/smoke-ios-target-activation.test.ts
+ * Runs on the same lanes as the iOS simulator fixture E2E (`smoke` and `full` tiers) and needs the
+ * same environment: `AGENT_DEVICE_IOS_E2E=1`, `AGENT_DEVICE_IOS_E2E_TIER`, a fixture app already
+ * installed (`AGENT_DEVICE_FIXTURE_APP_ID`), and `AGENT_DEVICE_IOS_UDID`.
  */
 
 const enabled = process.env.AGENT_DEVICE_IOS_E2E === '1';
-const appId = process.env.AGENT_DEVICE_FIXTURE_APP_ID ?? '';
-const udid = process.env.AGENT_DEVICE_IOS_UDID ?? '';
-const stateDir = process.env.AGENT_DEVICE_STATE_DIR ?? '';
-const session = process.env.AGENT_DEVICE_IOS_E2E_SESSION ?? 'smoke-target-activation';
+const HANDOFF_URL = 'https://example.com';
+const HANDOFF_DEADLINE_MS = 90_000;
+const HANDOFF_POLL_MS = 2_000;
 
 test(
   'live iOS runner discloses a foreground repair on the command that paid for it',
-  {
-    skip:
-      enabled && appId && udid ? false : 'Set AGENT_DEVICE_IOS_E2E=1 with fixture app id and UDID.',
-  },
-  () => {
-    const cli = ['bin/agent-device.mjs'];
-    const selector = ['--platform', 'ios', '--udid', udid, '--session', session];
-    if (stateDir) selector.push('--state-dir', stateDir);
-    const run = (args: string[]) => {
-      const result = spawnSync('node', [...cli, ...args, ...selector], {
-        encoding: 'utf8',
-        maxBuffer: 32 * 1024 * 1024,
-      });
-      assert.equal(result.status, 0, `${args.join(' ')} failed: ${result.stderr}`);
-      return result.stdout;
-    };
-
+  { skip: enabled ? false : 'Set AGENT_DEVICE_IOS_E2E=1 to run the live iOS lanes.' },
+  async () => {
+    const context = createContext();
     try {
-      run(['open', appId]);
+      await runStep(context, 'open fixture app', ['open', context.appId]);
+
       // Screenshot is a lifecycle command: it serves whatever is foreground without touching the
       // bound app, so it is the observation the repair would otherwise contradict.
-      run(['screenshot', '--out', '/tmp/agent-device-2682-before.png']);
+      const before = path.join(context.artifactDir, 'target-activation-before.png');
+      await runStep(context, 'screenshot session app', ['screenshot', '--out', before]);
+      assert.ok(await exists(before), `screenshot wrote no artifact: ${before}`);
+
       // Hand off to another app the same way an in-app external link does: LaunchServices brings
       // MobileSafari forward while the session stays bound to the fixture app.
-      const handoff = spawnSync('xcrun', ['simctl', 'openurl', udid, 'https://example.com'], {
-        encoding: 'utf8',
-      });
-      assert.equal(handoff.status, 0, `simctl openurl failed: ${handoff.stderr}`);
-      spawnSync('sleep', ['6']);
-      run(['screenshot', '--out', '/tmp/agent-device-2682-foreign.png']);
+      const handoff = await runCmd('xcrun', ['simctl', 'openurl', context.udid, HANDOFF_URL]);
+      assert.equal(handoff.exitCode, 0, `simctl openurl failed: ${handoff.stderr}`);
 
-      const snapshot = run(['snapshot', '-i']);
-      assert.match(
-        snapshot,
-        /The session app was not foreground when this command arrived/,
-        `no foreground disclosure after an off-app handoff:\n${snapshot.slice(0, 400)}`,
+      const foreign = path.join(context.artifactDir, 'target-activation-foreign.png');
+      await runStep(context, 'screenshot after handoff', ['screenshot', '--out', foreign]);
+      assert.ok(await exists(foreign), `post-handoff screenshot wrote no artifact: ${foreign}`);
+
+      // Poll instead of sleeping a fixed window: the disclosure must arrive on the command that
+      // paid for the repair, and a lane that never sees one is the regression this asserts against.
+      const repaired = await captureUntilDisclosed(context);
+      const fact = repaired.json!.data.targetActivation;
+      assert.ok(
+        typeof fact.reason === 'string' && fact.reason.length > 0,
+        `disclosure carried no reason: ${JSON.stringify(fact)}`,
       );
-      assert.match(snapshot, /prior state running(Background|BackgroundSuspended)/);
-      assert.match(snapshot, /reason (stale_target|bundle_changed|missing_after_wait)/);
+      assert.match(
+        String(fact.priorState),
+        /^running(Background|BackgroundSuspended)$|^notRunning$|^unknown$/,
+        `prior state claims the repair's outcome, not its starting point: ${fact.priorState}`,
+      );
+      const warnings: unknown[] = repaired.json!.data.warnings ?? [];
+      assert.ok(
+        warnings.includes(iosTargetActivationDisclosure(fact)),
+        `warnings did not carry the shared disclosure sentence: ${JSON.stringify(warnings)}`,
+      );
 
       // The repair is a fact about one command, not a property of the session: with the app already
       // foreground again, the next capture must say nothing.
-      const settled = run(['snapshot', '-i']);
+      const settled = await runStep(context, 'snapshot after the repair settled', [
+        'snapshot',
+        '-i',
+      ]);
       assert.equal(
-        settled.includes('The session app was not foreground'),
+        settled.json?.data?.targetActivation,
+        undefined,
+        `second capture re-disclosed a repair it did not perform: ${JSON.stringify(
+          settled.json?.data?.warnings,
+        )}`,
+      );
+      assert.equal(
+        String(settled.json?.data?.warning ?? '').includes('was not foreground'),
         false,
-        `second capture re-disclosed a repair it did not perform:\n${settled.slice(0, 400)}`,
+        'second capture re-disclosed a repair it did not perform',
       );
     } finally {
-      run(['close']);
+      await cleanupSession(context);
     }
   },
 );
+
+/** Poll `snapshot -i` until the runner reports the repair, or fail with the last response. */
+async function captureUntilDisclosed(context: LiveContext) {
+  const deadline = Date.now() + HANDOFF_DEADLINE_MS;
+  let last: Awaited<ReturnType<typeof runStep>> | undefined;
+  while (Date.now() < deadline) {
+    last = await runStep(context, 'snapshot after handoff', ['snapshot', '-i'], {
+      allowFailure: true,
+    });
+    if (last.json?.data?.targetActivation !== undefined) return last;
+    await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
+  }
+  assert.fail(
+    `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ${HANDOFF_URL}: ` +
+      `${JSON.stringify(last?.json ?? null)}`,
+  );
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    return (await fs.stat(filePath)).size > 0;
+  } catch {
+    return false;
+  }
+}

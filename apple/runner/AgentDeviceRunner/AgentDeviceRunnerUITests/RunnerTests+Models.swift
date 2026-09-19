@@ -262,13 +262,14 @@ extension Response {
 
 /// Foreground repair the runner performed while serving one command (#2682). `priorState` is the
 /// bound app's `XCApplicationState` raw value read BEFORE `XCUIApplication.activate()` ran, so the
-/// fact describes what was repaired rather than what the repair produced. `foregroundPid` names the
-/// other app that held the foreground when exactly one candidate existed; the private AX client
-/// exposes only pids for applications it has an active session with, so no bundle id is claimed.
+/// fact describes what was repaired rather than what the repair produced. `otherActiveApplicationPid`
+/// names the only other application holding an active accessibility session when exactly one existed
+/// — a liveness claim, not a foreground owner, since the private AX client exposes no ordering of
+/// `activeApplications`, resolves no bundle id for an arbitrary app, and reports only pids.
 struct TargetActivationFactPayload: Codable {
   let reason: String
   let priorState: Int
-  let foregroundPid: Int?
+  let otherActiveApplicationPid: Int?
 }
 
 struct DataPayload: Codable {
