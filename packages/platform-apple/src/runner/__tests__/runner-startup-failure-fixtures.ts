@@ -1,5 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { RunnerStartupFailureReason } from '../runner-contract.ts';
+import type {
+  IosDeveloperDiskImageState,
+  IosDeveloperModeState,
+  RunnerDeviceReadinessFailureReason,
+  RunnerStartupFailureReason,
+} from '../runner-contract.ts';
+import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
 
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).
@@ -19,7 +25,21 @@ import type { RunnerStartupFailureReason } from '../runner-contract.ts';
  * these fields; they exist so a reason can be traced to an observation instead of to a guess.
  */
 
-export type RunnerStartupFailureSite = 'build-for-testing' | 'host-dev-tools-security';
+export type RunnerStartupFailureSite =
+  | 'build-for-testing'
+  | 'host-dev-tools-security'
+  | 'device-readiness';
+
+/**
+ * The two states a device reports about itself (#2683), in the shape `readIosDeviceReadiness`
+ * publishes them. They are recorded as states rather than as payload text because the states are the
+ * evidence: the payload they came from is captured in
+ * `packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json`.
+ */
+export type IosDeviceReadinessReport = Readonly<{
+  developerMode: IosDeveloperModeState;
+  developerDiskImage: IosDeveloperDiskImageState;
+}>;
 
 /**
  * Whether the text reaches the build catch inside the exec error's `details` (`exec-details`, which
@@ -47,9 +67,15 @@ export type RunnerStartupFailureFixture = Readonly<{
   output: string;
   /** The argv the exec reported, which is never evidence of a cause (#2680). */
   args?: readonly string[];
+  /** The device's own states, which is the evidence the `device-readiness` site reads. */
+  deviceReport?: IosDeviceReadinessReport;
   /** What the pending capture still has to show, and how to reach it. */
   note?: string;
 }>;
+
+/** The one command the `device-readiness` site runs, spelled out by `readIosDeviceReadiness`. */
+const DEVICE_INFO_DETAILS_COMMAND =
+  'xcrun devicectl device info details --device <udid> --json-output <file> --timeout 10';
 
 export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixture[] = [
   {
@@ -149,6 +175,28 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     note: 'The argv we were asked to run is not xcodebuild evidence: a caller who pinned a profile still gets cache-recovery advice for a compile error (#2680).',
   },
   {
+    id: 'device-mode-off',
+    reason: 'device_developer_mode_disabled',
+    site: 'device-readiness',
+    command: DEVICE_INFO_DETAILS_COMMAND,
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output: '"developerModeStatus" : "disabled",\n"ddiServicesAvailable" : false,\n',
+    deviceReport: { developerMode: 'disabled', developerDiskImage: 'unavailable' },
+    note: 'Both states bad, which is what a phone with the toggle off looks like: the toggle has to be the reason named, since it explains the image. No device with the toggle off has been captured.',
+  },
+  {
+    id: 'device-disk-image-down',
+    reason: 'device_developer_disk_image_unavailable',
+    site: 'device-readiness',
+    command: DEVICE_INFO_DETAILS_COMMAND,
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output: '"developerModeStatus" : "enabled",\n"ddiServicesAvailable" : false,\n',
+    deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
+    note: 'The decisive pairing, and the one #2682 used to answer with Developer Mode advice: the toggle is on and only the image is down. The enabled half is the captured state; a device waiting on device support has not been captured.',
+  },
+  {
     id: 'devtools-security-disabled',
     reason: 'devtools_security_developer_mode_disabled',
     site: 'host-dev-tools-security',
@@ -168,6 +216,28 @@ export function buildFixtureById(id: string): RunnerStartupFailureFixture {
   const fixture = RUNNER_STARTUP_FAILURE_FIXTURES.find((candidate) => candidate.id === id);
   if (!fixture) throw new Error(`no startup failure fixture records ${id}`);
   return fixture;
+}
+
+/** A recorded device report, narrowed to the reasons the device can name about itself. */
+export type IosDeviceReadinessFixture = RunnerStartupFailureFixture & {
+  reason: RunnerDeviceReadinessFailureReason;
+  site: 'device-readiness';
+  deviceReport: IosDeviceReadinessReport;
+};
+
+/** The recorded device reports, which the runner preflight reads instead of any tool's text. */
+export function deviceReadinessFixtures(): IosDeviceReadinessFixture[] {
+  return RUNNER_STARTUP_FAILURE_FIXTURES.filter(isDeviceReadinessFixture);
+}
+
+function isDeviceReadinessFixture(
+  fixture: RunnerStartupFailureFixture,
+): fixture is IosDeviceReadinessFixture {
+  return (
+    fixture.site === 'device-readiness' &&
+    fixture.deviceReport !== undefined &&
+    (RUNNER_DEVICE_READINESS_FAILURE_REASONS as readonly string[]).includes(fixture.reason)
+  );
 }
 
 /**

@@ -135,16 +135,33 @@ export async function resolveCoreDeviceTunnelIp(
   device: DeviceInfo,
   timeoutBudgetMs?: number,
 ): Promise<string | null> {
-  if (typeof timeoutBudgetMs === 'number' && timeoutBudgetMs <= 0) return null;
-  const timeoutMs =
-    typeof timeoutBudgetMs === 'number'
-      ? Math.max(1, Math.min(IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS, timeoutBudgetMs))
-      : IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS;
+  const details = await readIosDeviceDetails(
+    device,
+    timeoutBudgetMs ?? IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS,
+  );
+  return details?.tunnelIp ?? null;
+}
+
+/**
+ * The device's own report, or `null` when CoreDevice could not answer it. Callers that need a
+ * verdict out of these fields read it here rather than re-running the tool: this is the one place
+ * that spells the command out, and an unreadable device stays unreadable instead of becoming an
+ * assumption about what is wrong with it (#2683).
+ */
+export async function readIosDeviceDetails(
+  device: DeviceInfo,
+  timeoutBudgetMs: number,
+  signal?: AbortSignal,
+): Promise<IosDeviceDetails | null> {
+  if (!(timeoutBudgetMs > 0)) return null;
+  const timeoutMs = Math.max(1, Math.min(IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS, timeoutBudgetMs));
   try {
-    const probe = await runCoreDeviceDetails(device.id, timeoutMs);
+    const probe = await runCoreDeviceDetails(device.id, timeoutMs, 0, signal);
     if (probe.result.exitCode !== 0 || !probe.parsed.parsed) return null;
     if (probe.parsed.outcome && probe.parsed.outcome !== 'success') return null;
-    return probe.parsed.tunnelIp ?? null;
+    const { parsed } = probe;
+    const { parsed: _parsed, ...details } = parsed;
+    return details;
   } catch {
     return null;
   }
@@ -157,7 +174,7 @@ async function runCoreDeviceDetails(
   signal?: AbortSignal,
 ): Promise<{
   result: Awaited<ReturnType<typeof runXcrun>>;
-  parsed: { parsed: boolean; outcome?: string; tunnelState?: string; tunnelIp?: string };
+  parsed: { parsed: boolean } & IosDeviceDetails;
 }> {
   const jsonPath = path.join(
     hostTemporaryDirectory(),
@@ -192,7 +209,7 @@ async function runCoreDeviceDetails(
 
 async function readCoreDeviceDetails(
   jsonPath: string,
-): Promise<{ parsed: boolean; outcome?: string; tunnelState?: string; tunnelIp?: string }> {
+): Promise<{ parsed: boolean } & IosDeviceDetails> {
   try {
     const payload = JSON.parse(await readHostTextFile(jsonPath)) as unknown;
     const details = parseIosDeviceDetailsPayload(payload);
@@ -202,11 +219,23 @@ async function readCoreDeviceDetails(
   }
 }
 
-export function parseIosDeviceDetailsPayload(payload: unknown): {
+/**
+ * What one `devicectl device info details` payload reports (#2683). Every field is the tool's own
+ * value, copied rather than interpreted: whether Developer Mode is on, and whether the device
+ * exposes developer disk image services, are two separate answers the device gives, and a reader
+ * that turns them into a verdict has to be able to see that one arrived and the other did not.
+ */
+export type IosDeviceDetails = {
   outcome?: string;
   tunnelState?: string;
   tunnelIp?: string;
-} {
+  /** `deviceProperties.developerModeStatus`, spelled as CoreDevice spells it. */
+  developerModeStatus?: string;
+  /** `deviceProperties.ddiServicesAvailable`, which is what the device says about its developer disk image. */
+  developerDiskImageServicesAvailable?: boolean;
+};
+
+export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails {
   const result = (payload as { result?: unknown } | null | undefined)?.result;
   if (!result || typeof result !== 'object') return {};
   const direct = (
@@ -223,6 +252,13 @@ export function parseIosDeviceDetailsPayload(payload: unknown): {
     readNonEmptyString(direct?.tunnelState) ?? readNonEmptyString(nested?.tunnelState);
   const tunnelIp =
     readNonEmptyString(direct?.tunnelIPAddress) ?? readNonEmptyString(nested?.tunnelIPAddress);
+  const deviceProperties = readDeviceProperties(result);
+  const developerModeStatus =
+    readNonEmptyString(deviceProperties?.developerModeStatus) ??
+    readNonEmptyString(nestedDevice(result)?.deviceProperties?.developerModeStatus);
+  const developerDiskImageServicesAvailable =
+    readBoolean(deviceProperties?.ddiServicesAvailable) ??
+    readBoolean(nestedDevice(result)?.deviceProperties?.ddiServicesAvailable);
   const outcome = readNonEmptyString(
     (payload as { info?: { outcome?: unknown } } | null | undefined)?.info?.outcome,
   );
@@ -230,11 +266,41 @@ export function parseIosDeviceDetailsPayload(payload: unknown): {
     ...(outcome ? { outcome } : {}),
     ...(tunnelState ? { tunnelState } : {}),
     ...(tunnelIp ? { tunnelIp } : {}),
+    ...(developerModeStatus ? { developerModeStatus } : {}),
+    ...(developerDiskImageServicesAvailable === undefined
+      ? {}
+      : { developerDiskImageServicesAvailable }),
   };
+}
+
+function readDeviceProperties(
+  result: object,
+): { developerModeStatus?: unknown; ddiServicesAvailable?: unknown } | undefined {
+  const properties = (result as { deviceProperties?: unknown }).deviceProperties;
+  return properties && typeof properties === 'object'
+    ? (properties as { developerModeStatus?: unknown; ddiServicesAvailable?: unknown })
+    : undefined;
+}
+
+function nestedDevice(
+  result: object,
+):
+  | { deviceProperties?: { developerModeStatus?: unknown; ddiServicesAvailable?: unknown } }
+  | undefined {
+  const device = (result as { device?: unknown }).device;
+  return device && typeof device === 'object'
+    ? (device as {
+        deviceProperties?: { developerModeStatus?: unknown; ddiServicesAvailable?: unknown };
+      })
+    : undefined;
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 export function resolveIosReadyHint(stdout: string, stderr: string): string {

@@ -3,6 +3,7 @@ import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import type { XmlNode } from '@agent-device/xml';
+import type { IosDeviceReadiness } from './runner-contract.ts';
 
 /**
  * The host-capability port for the Apple runner client. Every effectful or
@@ -153,6 +154,7 @@ export type BootFailureReason =
 export type IosPhysicalDeviceRunnerControl = {
   backend: string;
   resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<{ tunnelIp: string | null }>;
+  readDeviceReadiness(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosDeviceReadiness>;
 };
 
 export type AppleRunnerHost = {
