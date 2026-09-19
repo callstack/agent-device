@@ -45,11 +45,11 @@ test(
       // The handoff only means something once the session app is on screen. `open` returns while a
       // freshly installed app is still drawing — CI's before-handoff screenshot was a blank status
       // bar — and handing off from there asks the runner about an app that never reached foreground,
-      // which is not the question this lane asks. Same readiness signal the fixture E2E uses.
+      // which is not the question this lane asks. The launch surface is the app's home screen, so the
+      // gate is a card on it — `Automation lab` is a surface the fixture E2E has to navigate to first.
       await runStep(context, 'wait for the fixture to render', [
         'wait',
-        'text',
-        'Automation lab',
+        'label="Gesture lab"',
         '30000',
       ]);
 
