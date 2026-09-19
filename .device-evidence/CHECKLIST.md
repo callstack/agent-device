@@ -92,3 +92,85 @@ Expected: either `signing_provisioning_profile_missing` (xcodebuild complained a
 first) or `build_failed_unclassified`. Paste the error and the `xcodebuild -version` either way: a
 capture of the conflicting-settings line is what would let a follow-up name the cause, and the
 capture must show which build setting disagrees before any hint naming a lever is written.
+## #2683 — device-readiness facts from `devicectl device info details`
+
+Build the CLI first, and stop any warm daemon so the run is on this commit (same preamble as the
+#2680 section above).
+
+### 1. Both facts are readable, and they are two facts
+
+```sh
+xcrun devicectl device info details --device "<udid>" --json-output /tmp/device-details.json
+node -e 'const d=require("/tmp/device-details.json").result.deviceProperties;console.log(JSON.stringify({developerModeStatus:d.developerModeStatus,ddiServicesAvailable:d.ddiServicesAvailable}))'
+xcodebuild -version
+```
+
+Expected: `{"developerModeStatus":"enabled","ddiServicesAvailable":true}` on a healthy device, plus
+the Xcode version. `packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json`
+holds this payload with its device identifiers, hostnames and capture path masked, and
+`packages/platform-apple/src/runner/__tests__/runner-startup-failure-fixtures.ts` records the two
+state pairings as `tool-error-shape`. Paste the raw values so both can move to `captured`. Also
+record the `tunnelState` and `tunnelIPAddress` from the same file, which is the transport data the
+parser reads.
+
+### 2. A healthy device is left alone
+
+```sh
+node --experimental-strip-types src/bin.ts --json   prepare ios-runner --platform ios --device "<physical iPhone name>"
+```
+
+Expected: success as before, and a `ios_runner_session_startup` diagnostic whose timings include
+`verify_device_readiness`. No reason may appear on a healthy device: the probe reads, it does not
+guess. Record the `verify_device_readiness` duration next to `verify_host_dev_tools_security`.
+
+### 3. Developer Mode off on the device -> `device_developer_mode_disabled`
+
+Turn the toggle off on a device you are willing to re-pair (Settings > Privacy & Security >
+Developer Mode, then restart), and rerun the `prepare ios-runner` command above.
+
+Expected: exit non-zero with
+
+```json
+{
+  "code": "COMMAND_FAILED",
+  "message": "The iOS device reports that Developer Mode is turned off",
+  "details": {
+    "reason": "device_developer_mode_disabled",
+    "developerMode": "disabled",
+    "developerDiskImage": "unavailable"
+  }
+}
+```
+
+`hint` is top-level and names `Settings > Privacy & Security > Developer Mode`. Record what
+`developerDiskImage` says; either value is acceptable as long as the toggle stays the reason.
+
+### 4. Developer disk image down with the toggle on -> `device_developer_disk_image_unavailable`
+
+This is the pairing the old hint got wrong, so it is the evidence that matters. Reach it with a
+device whose iOS build is newer than the installed Xcode supports, or before Xcode finishes
+installing device support for a freshly paired phone, with Developer Mode on.
+
+Expected: `details.reason` is `device_developer_disk_image_unavailable`, `details.developerMode` is
+`enabled`, and the hint names device support WITHOUT mentioning `Settings > Privacy & Security`. If
+the toggle reason appears here instead, that is the bug this issue exists to fix: paste the whole
+error and the `/tmp/device-details.json` payload rather than adjusting a rule.
+
+### 5. A device that cannot be read claims nothing
+
+Unplug the iPhone (or shut it down) after a session exists, then rerun the `prepare ios-runner`
+command.
+
+Expected: the failure names whatever the transport could not reach, and no `details.reason` of
+`device_developer_mode_disabled` or `device_developer_disk_image_unavailable` appears anywhere in the
+error. An unreadable device is never diagnosed.
+
+### 6. Log evidence belongs to the command that wrote it (optional, needs a crash repro)
+
+Run any command that crashes the app under test, then a second command that fails for its own
+reason (for example a selector that no longer exists).
+
+Expected: the second error carries no `details.runnerFailureReason`. Before this change it inherited
+`target_app_axruntime_coretext_crash` from the first command's lines in `runner.log`. If the repro
+is not reachable, say so; the pairing is covered by
+`packages/platform-apple/src/runner/__tests__/runner-failure-diagnostics.test.ts`.
