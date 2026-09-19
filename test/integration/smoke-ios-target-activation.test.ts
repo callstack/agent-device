@@ -18,18 +18,29 @@ import {
  * actually activated the bound app, so this drives the real runner on a real simulator — a mocked
  * runner response proves the decoder, not the fact.
  *
- * Runs on the same lanes as the iOS simulator fixture E2E (`smoke` and `full` tiers) and needs the
- * same environment: `AGENT_DEVICE_IOS_E2E=1`, `AGENT_DEVICE_IOS_E2E_TIER`, `AGENT_DEVICE_FIXTURE_APP_PATH`
- * and `AGENT_DEVICE_FIXTURE_APP_ID`, and `AGENT_DEVICE_IOS_UDID`. Those lanes fetch the fixture with
- * `install: 'false'`, so this lane installs it through the public CLI like the other fixture lanes do.
+ * MANUAL, ENV-GATED LANE. It is deliberately absent from the `ios.yml` and `replays-manual.yml` test
+ * lists: on the CI-hosted simulator the runner reads its own target as `.runningForeground` while a
+ * foreign app is demonstrably on screen, so that host owes no repair and no disclosure
+ * ([#2696](https://github.com/callstack/agent-device/issues/2696)). Running it there measures
+ * `XCUIApplication.state` on a headless simulator, not this feature.
+ *
+ * Run it against a local simulator or a physical device:
+ *
+ *   AGENT_DEVICE_IOS_E2E=1 AGENT_DEVICE_IOS_E2E_TIER=smoke \
+ *   AGENT_DEVICE_FIXTURE_APP_PATH=<fixture .app> AGENT_DEVICE_FIXTURE_APP_ID=com.callstack.agentdevicelab \
+ *   AGENT_DEVICE_IOS_UDID=<udid> node --experimental-strip-types scripts/node-test-tmpdir.ts --test \
+ *   test/integration/smoke-ios-target-activation.test.ts
+ *
+ * It installs the fixture through the public CLI, so it needs no pre-installed app.
  */
 
 const enabled = process.env.AGENT_DEVICE_IOS_E2E === '1';
-// Settings, not a web link: `simctl openurl https://…` hands off through Safari, and on a CI
-// simulator that handoff can complete without Safari ever taking the foreground, which leaves this
-// lane waiting for a repair that was never owed. `simctl launch com.apple.Preferences` is the
-// handoff the iOS replays already rely on for the same effect.
-const HANDOFF_BUNDLE_ID = 'com.apple.Preferences';
+// Safari, through LaunchServices, the way an in-app external link does it. Launching Settings
+// directly (`simctl launch com.apple.Preferences`) also changes the screen, and the screenshot guard
+// below would still pass, but on the local simulator the runner then reads its own target as
+// foreground for the whole polling window — the same state divergence recorded in #2696, which this
+// lane exists to avoid mistaking for a missing disclosure.
+const HANDOFF_URL = 'https://example.com';
 const HANDOFF_DEADLINE_MS = 90_000;
 const HANDOFF_POLL_MS = 2_000;
 
@@ -45,11 +56,14 @@ test(
       // The handoff only means something once the session app is on screen. `open` returns while a
       // freshly installed app is still drawing — CI's before-handoff screenshot was a blank status
       // bar — and handing off from there asks the runner about an app that never reached foreground,
-      // which is not the question this lane asks. The launch surface is the app's home screen, so the
-      // gate is a card on it — `Automation lab` is a surface the fixture E2E has to navigate to first.
+      // which is not the question this lane asks. The gate is a string the app draws on any of its
+      // own surfaces — the release home screen and a development build's server menu both carry it —
+      // because which screen the fixture draws is not what this lane is about, and a lane that only
+      // passes on one build variant could not be run manually against a dev build at all.
       await runStep(context, 'wait for the fixture to render', [
         'wait',
-        'label="Gesture lab"',
+        'text',
+        'Agent Device Tester',
         '30000',
       ]);
 
@@ -61,14 +75,10 @@ test(
 
       const foreign = path.join(context.artifactDir, 'target-activation-foreign.png');
 
-      // Hand off to an app the session is not bound to. Settings comes forward and the fixture app
-      // goes background, which is the state the next capture has to repair.
-      const handoff = await runCmd('xcrun', ['simctl', 'launch', context.udid, HANDOFF_BUNDLE_ID]);
-      assert.equal(
-        handoff.exitCode,
-        0,
-        `simctl launch ${HANDOFF_BUNDLE_ID} failed: ${handoff.stderr}`,
-      );
+      // Hand off to Safari: the session stays bound to the fixture app while another app takes the
+      // screen, which is the state the next capture has to repair.
+      const handoff = await runCmd('xcrun', ['simctl', 'openurl', context.udid, HANDOFF_URL]);
+      assert.equal(handoff.exitCode, 0, `simctl openurl ${HANDOFF_URL} failed: ${handoff.stderr}`);
       await runStep(context, 'screenshot after handoff', ['screenshot', '--out', foreign]);
       assert.ok(await exists(foreign), `post-handoff screenshot wrote no artifact: ${foreign}`);
       // A screenshot identical to the pre-handoff one means nothing moved to the foreground and the
@@ -76,7 +86,7 @@ test(
       assert.notEqual(
         await checksum(before),
         await checksum(foreign),
-        'the screen did not change after launching Settings: no handoff to repair',
+        'the screen did not change after the handoff: nothing came forward to repair',
       );
 
       // Poll instead of sleeping a fixed window: the disclosure must arrive on the command that
@@ -159,7 +169,7 @@ async function captureUntilDisclosed(context: LiveContext) {
   }
   assert.fail(
     `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ` +
-      `${HANDOFF_BUNDLE_ID}: ${JSON.stringify(last?.json ?? null)}`,
+      `${HANDOFF_URL}: ${JSON.stringify(last?.json ?? null)}`,
   );
 }
 

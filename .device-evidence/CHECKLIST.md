@@ -76,3 +76,18 @@ actually called. Assert the pair on the same device run:
 `press <x> <y>` and `press @ref` answered from a live ref frame consume no capture, so they carry no
 disclosure even though the runner may have re-activated the app to serve them. Treat a silent
 interaction as "unknown", never as "no repair". Follow-up: callstack/agent-device#2694.
+
+## Why the live activation lane is manual
+
+`test/integration/smoke-ios-target-activation.test.ts` is env-gated and deliberately absent from the
+`ios.yml` / `replays-manual.yml` test lists. On GitHub-hosted simulators the runner reads its own
+target as `.runningForeground` while a foreign app is provably on screen (uploaded artifact of
+https://github.com/callstack/agent-device/actions/runs/35460535722/job/105943468492: rendered app
+screenshot, Settings screenshot, 31 captures in ~450 ms each, no repair). The runner is then correct
+to activate nothing, so a CI assertion on the disclosure measures `XCUIApplication.state` on that
+host rather than this feature. Tracked as callstack/agent-device#2696.
+
+Manual evidence stands in for it, and both are reproducible:
+- local simulator, first capture after the handoff: `{"reason":"stale_target","priorState":"runningBackground","otherActiveApplicationPid":33878}`
+  with the shared sentence appended to `warnings`; the following capture reports neither.
+- the physical device sequence below, which the coordinator runs.

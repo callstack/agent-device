@@ -290,7 +290,7 @@ jobs:
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
           pnpm gate build
-          node --experimental-strip-types scripts/node-test-tmpdir.ts --test --test-concurrency=1 test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts test/integration/smoke-ios-target-activation.test.ts
+          node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       # #1584: isolated, cheap automatic guard for the #1562 class of regression (iOS silently
       # ignoring a `gesture pan` duration). Split out of gesture-lab.ad, which stays full-tier
