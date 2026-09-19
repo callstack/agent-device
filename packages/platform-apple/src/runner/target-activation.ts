@@ -8,11 +8,13 @@ import {
   IOS_TARGET_ACTIVATION_REASONS,
   type IosTargetActivation,
   type IosTargetActivationPriorState,
+  type IosTargetActivationReason,
 } from '@agent-device/contracts/ios-target-activation';
 
 /** Why a prior-state raw value could not be named, for the caller that owns the request log. */
 export type UnmappedPriorStateDetail = Readonly<{
-  reason: string;
+  /** Already checked against the declared reasons, so a log reader gets the name and not a string. */
+  reason: IosTargetActivationReason;
   rawPriorState: number;
 }>;
 
@@ -50,15 +52,16 @@ export function readTargetActivationFact(
   ) {
     return undefined;
   }
+  const stampedReason = reason as IosTargetActivationReason;
   const rawPriorState = fact.priorState;
   if (typeof rawPriorState !== 'number' || !Number.isInteger(rawPriorState)) return undefined;
   const priorState = PRIOR_STATE_BY_RAW_VALUE[rawPriorState];
   if (priorState === undefined) {
-    onUnmappedPriorState?.({ reason, rawPriorState });
+    onUnmappedPriorState?.({ reason: stampedReason, rawPriorState });
   }
   const otherActiveApplicationPid = fact.otherActiveApplicationPid;
   return {
-    reason: reason as IosTargetActivation['reason'],
+    reason: stampedReason,
     // An unmapped raw value is the one case where the repair stays disclosed and only the state
     // degrades: the reason already proves `activate()` ran, and `unknown` is exactly what a raw value
     // this table never declared means. Dropping the fact there would trade a vague disclosure for the
