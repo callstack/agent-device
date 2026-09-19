@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { resolveIosPhysicalDeviceControl } from './host.ts';
-import type { IosDeviceReadiness, RunnerDeviceReadinessFailureReason } from './runner-contract.ts';
+import { resolveIosPhysicalDeviceControl, type IosDeviceRunnerReadiness } from './host.ts';
+import type { RunnerDeviceReadinessFailureReason } from './runner-contract.ts';
 
 const DEVICE_MODE_OFF_MESSAGE = 'The iOS device reports that Developer Mode is turned off';
 const DISK_IMAGE_SERVICES_MESSAGE =
@@ -51,7 +51,7 @@ export async function assertDeviceReadinessForIosRunner(device: DeviceInfo): Pro
 }
 
 /** The device report once it is known to have arrived, which is the only shape with states to weigh. */
-type ReadableIosDeviceReadiness = Extract<IosDeviceReadiness, { available: true }>;
+type ReadableIosDeviceReadiness = Extract<IosDeviceRunnerReadiness, { available: true }>;
 
 /**
  * Which of the device's own states names the obstacle, in the order the states explain each other.

@@ -269,39 +269,6 @@ export type RunnerStartupFailureReason = (typeof RUNNER_STARTUP_FAILURE_REASONS)
 export type RunnerDeviceReadinessFailureReason =
   (typeof RUNNER_DEVICE_READINESS_FAILURE_REASONS)[number];
 
-/** How a device reports its own Settings > Privacy & Security > Developer Mode toggle. */
-export type IosDeveloperModeState = 'enabled' | 'disabled' | 'unknown';
-
-/** How a device reports the services that serve its developer disk image. */
-export type IosDeveloperDiskImageState = 'available' | 'unavailable' | 'unknown';
-
-/**
- * Whether an iPhone says it can run development tooling right now (#2683). The device's own report,
- * copied by `core/ios-device-readiness.ts` and published through {@link AppleRunnerHost}'s
- * physical-device control, which is what keeps the runner from reading a tool's opinion as the
- * device's. No verdict and no hint travel with it: `runner-device-readiness.ts` draws the verdict
- * from these states, so the reason and its remedy are named where the rules are.
- *
- * The two states are kept apart because the device reports them apart and they fail apart. A device
- * with Developer Mode off cannot serve its developer disk image either, so the toggle is named
- * first; an image that is not up on a device with the toggle on is its own failure and is never
- * restated as a toggle problem.
- *
- * `available: false` is the answer when the device could not be reached at all. It carries no
- * verdict — an unreadable device is not a diagnosed one — only the way to read it again.
- */
-export type IosDeviceReadiness =
-  | Readonly<{
-      available: true;
-      developerMode: IosDeveloperModeState;
-      developerDiskImage: IosDeveloperDiskImageState;
-    }>
-  | Readonly<{
-      available: false;
-      reason: 'device_readiness_unreadable';
-      hint: string;
-    }>;
-
 /**
  * The reason a startup failure carries when no rule proves a cause. Its hint is deliberately the
  * cache-recovery advice rather than anything about signing: an unclassified build is not evidence of
