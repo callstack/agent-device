@@ -4,7 +4,7 @@ import type {
   RunnerStartupFailureReason,
 } from '../runner-contract.ts';
 import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
-import type { IosPhysicalDeviceRunnerControl } from '../host.ts';
+import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
 
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).

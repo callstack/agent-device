@@ -105,6 +105,16 @@ export type AppleRunnerHost = Pick<
 /** The runner's deadline type is the host's read side; the {@link Deadline} shim below builds them. */
 export type Deadline = HostRetry.DeadlineClock;
 
+/**
+ * What an iPhone reports about its own fitness to host development tooling (#2683), read off the
+ * control port that answers for devices. Derived rather than restated: the states and their remedies
+ * are owned by `core/physical-device-coredevice.ts`, and a second spelling here is a second thing to
+ * keep in step with a device.
+ */
+export type IosDeviceRunnerReadiness = Awaited<
+  ReturnType<IosPhysicalDeviceRunnerControl['readDeviceReadiness']>
+>;
+
 let boundHost: AppleRunnerHost | undefined;
 
 /**
