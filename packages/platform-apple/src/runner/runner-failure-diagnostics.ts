@@ -19,13 +19,42 @@ const IOS_TARGET_APP_CRASH_HINT =
 const IOS_RUNNER_MAIN_THREAD_TIMEOUT_HINT =
   'XCTest timed out waiting for main-thread work on the current iOS screen. The app may still be visually responsive, especially on focused React Native overlays or animating screens. Use screenshot as visual truth, use coordinate presses only to prove or leave the state, and retry snapshot -i after the UI settles or after navigating away.';
 
+/**
+ * Where `runner.log` had reached before a command was sent (#2683). The runner writes one log per
+ * device and it is never truncated between commands, so everything an earlier command produced is
+ * still there when a later one fails. Reading the tail of that file without this marker blames an
+ * older command's crash on the command that merely happened to fail next.
+ */
+export type RunnerLogOffset = Readonly<{ logPath: string; byteOffset: number }>;
+
+/**
+ * Marks the end of `runner.log` as it stands right now, to be handed to
+ * {@link enrichRunnerFailureFromLog} when the command this precedes fails.
+ *
+ * A log that does not exist yet is reported as `byteOffset: 0` rather than skipped: every byte it
+ * gets from here on belongs to this command, which is exactly the claim worth keeping.
+ */
+export async function captureRunnerLogOffset(
+  logPath: string | undefined,
+): Promise<RunnerLogOffset | undefined> {
+  if (!logPath) return undefined;
+  try {
+    return { logPath, byteOffset: (await fs.stat(logPath)).size };
+  } catch {
+    return { logPath, byteOffset: 0 };
+  }
+}
+
 export async function enrichRunnerFailureFromLog(params: {
   error: AppError;
   logPath?: string;
+  /** Bytes of `runner.log` that were already there when the failing command was sent. */
+  logSince?: RunnerLogOffset;
 }): Promise<AppError> {
   const diagnostic =
-    (await resolveRunnerFailureDiagnostic(params.logPath)) ??
-    classifyRunnerFailureError(params.error);
+    (await resolveRunnerFailureDiagnostic(
+      params.logSince ?? (params.logPath ? { logPath: params.logPath, byteOffset: 0 } : undefined),
+    )) ?? classifyRunnerFailureError(params.error);
   if (!diagnostic) return params.error;
 
   return new AppError(
@@ -44,10 +73,10 @@ export async function enrichRunnerFailureFromLog(params: {
 }
 
 async function resolveRunnerFailureDiagnostic(
-  logPath: string | undefined,
+  logSince: RunnerLogOffset | undefined,
 ): Promise<RunnerFailureDiagnostic | undefined> {
-  if (!logPath) return undefined;
-  const tail = await readFileTail(logPath, RUNNER_LOG_TAIL_BYTES);
+  if (!logSince) return undefined;
+  const tail = await readFileSince(logSince, RUNNER_LOG_TAIL_BYTES);
   if (!tail) return undefined;
   return classifyRunnerFailureLog(tail);
 }
@@ -103,15 +132,21 @@ function isMainThreadExecutionTimeout(message: string): boolean {
   return message.toLowerCase().includes('main thread execution timed out');
 }
 
-async function readFileTail(filePath: string, maxBytes: number): Promise<string | undefined> {
+async function readFileSince(
+  logSince: RunnerLogOffset,
+  maxBytes: number,
+): Promise<string | undefined> {
   let handle: FileHandle | undefined;
   try {
-    const stat = await fs.stat(filePath);
-    const start = Math.max(0, stat.size - maxBytes);
+    const stat = await fs.stat(logSince.logPath);
+    // Never reads before the marker, and never reads more than the tail budget of what came after
+    // it. A log that is shorter than the marker has been replaced underneath us, which is not
+    // evidence about this command.
+    const start = Math.max(logSince.byteOffset, stat.size - maxBytes);
     const length = stat.size - start;
     if (length <= 0) return undefined;
 
-    handle = await fs.open(filePath, 'r');
+    handle = await fs.open(logSince.logPath, 'r');
     const buffer = Buffer.alloc(length);
     await handle.read(buffer, 0, length, start);
     return buffer.toString('utf8');
