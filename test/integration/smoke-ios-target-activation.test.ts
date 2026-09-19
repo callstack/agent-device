@@ -105,11 +105,35 @@ test(
         false,
         'second capture re-disclosed a repair it did not perform',
       );
+    } catch (error) {
+      throw await withRunnerLogEvidence(context, error);
     } finally {
       await cleanupSession(context);
     }
   },
 );
+
+/**
+ * The runner writes what it decided — `AGENT_DEVICE_RUNNER_ACTIVATE`, `_SKIPPED`, and the stamped
+ * fact — only to the session's `runner.log`, and the CI job uploads artifacts and not the state dir.
+ * A lane that fails without that file leaves the reader guessing whether the runner declined to
+ * activate, activated without stamping, or stamped something the decoder refused.
+ */
+async function withRunnerLogEvidence(context: LiveContext, error: unknown): Promise<Error> {
+  const source = path.join(context.stateDir, 'sessions', context.session, 'runner.log');
+  const destination = path.join(context.artifactDir, 'target-activation-runner.log');
+  let note = `runner log not found at ${source}`;
+  try {
+    await fs.copyFile(source, destination);
+    note = `runner log copied to ${destination}`;
+  } catch {
+    // The artifact is the point; a missing log is reported and the original failure still stands.
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  const enriched = new Error(`${message}\n${note}`);
+  enriched.stack = error instanceof Error ? error.stack : enriched.stack;
+  return enriched;
+}
 
 /** Poll `snapshot -i` until the runner reports the repair, or fail with the last response. */
 async function captureUntilDisclosed(context: LiveContext) {

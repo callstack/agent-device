@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
+import { IOS_TARGET_ACTIVATION_PRIOR_STATES } from '@agent-device/contracts/ios-target-activation';
 import {
   TARGET_ACTIVATION_WIRE_KEY,
   readTargetActivationFact,
@@ -14,6 +15,24 @@ const swiftModelsPath = path.resolve(
   here,
   '../../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift',
 );
+
+/**
+ * The decode table is declared by raw value rather than by position, which buys safety against a
+ * reordered enum at the price of a new obligation: a state the contract declares but no raw value
+ * names would be disclosed as `unknown` forever, silently. This is the assertion that keeps the two
+ * declarations in step.
+ */
+test('every declared prior state is reachable from some raw value', () => {
+  const named = new Set<string>();
+  for (let raw = 0; raw < 16; raw++) {
+    const fact = readTargetActivationFact(wire('stale_target', raw));
+    if (fact) named.add(fact.priorState);
+  }
+  assert.deepEqual(
+    IOS_TARGET_ACTIVATION_PRIOR_STATES.filter((state) => !named.has(state)),
+    [],
+  );
+});
 
 test('target activation fact decodes every reason the runner can stamp', () => {
   assert.deepEqual(readTargetActivationFact(wire('stale_target', 2)), {
