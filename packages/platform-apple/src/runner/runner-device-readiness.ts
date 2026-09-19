@@ -74,7 +74,7 @@ type ReadableIosDeviceReadiness = Extract<IosDeviceRunnerReadiness, { available:
  * and is never restated as a toggle problem. That one-way direction is what #2683 adds; tool output
  * has always had one line covering both states and always named the wrong one first.
  */
-export function nameIosDeviceReadinessObstacle(
+function nameIosDeviceReadinessObstacle(
   readiness: ReadableIosDeviceReadiness,
 ):
   | Readonly<{ reason: RunnerDeviceReadinessFailureReason; message: string; hint: string }>

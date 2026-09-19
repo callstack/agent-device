@@ -150,7 +150,7 @@ export async function resolveCoreDeviceTunnelIp(
  * that spells the command out, and an unreadable device stays unreadable instead of becoming an
  * assumption about what is wrong with it (#2683).
  */
-export async function readIosDeviceDetails(
+async function readIosDeviceDetails(
   device: DeviceInfo,
   timeoutBudgetMs: number,
   signal?: AbortSignal,
@@ -239,67 +239,88 @@ export type IosDeviceDetails = {
   bootState?: string;
 };
 
-export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails {
-  const result = (payload as { result?: unknown } | null | undefined)?.result;
-  if (!result || typeof result !== 'object') return {};
-  const direct = (
-    result as {
-      connectionProperties?: { tunnelState?: unknown; tunnelIPAddress?: unknown };
-    }
-  ).connectionProperties;
-  const nested = (
-    result as {
-      device?: { connectionProperties?: { tunnelState?: unknown; tunnelIPAddress?: unknown } };
-    }
-  ).device?.connectionProperties;
-  const tunnelState =
-    readNonEmptyString(direct?.tunnelState) ?? readNonEmptyString(nested?.tunnelState);
-  const tunnelIp =
-    readNonEmptyString(direct?.tunnelIPAddress) ?? readNonEmptyString(nested?.tunnelIPAddress);
-  const deviceProperties = readDeviceProperties(result);
-  const developerModeStatus =
-    readNonEmptyString(deviceProperties?.developerModeStatus) ??
-    readNonEmptyString(nestedDevice(result)?.deviceProperties?.developerModeStatus);
-  const developerDiskImageServicesAvailable =
-    readBoolean(deviceProperties?.ddiServicesAvailable) ??
-    readBoolean(nestedDevice(result)?.deviceProperties?.ddiServicesAvailable);
-  const bootState =
-    readNonEmptyString(deviceProperties?.bootState) ??
-    readNonEmptyString(nestedDevice(result)?.deviceProperties?.bootState);
-  const outcome = readNonEmptyString(
-    (payload as { info?: { outcome?: unknown } } | null | undefined)?.info?.outcome,
-  );
+/**
+ * What one payload reports, whichever of the two shapes CoreDevice used. Fields arrive either on
+ * `result` or nested under `result.device`, and that is a fact about the payload rather than about
+ * any field, so the shapes are collapsed into one pair of sections before anything is read: a parser
+ * that prefers the direct value per field has to spell the fallback out every time it grows a field,
+ * which is how a new state ends up read from only one of the two shapes (#2683).
+ */
+/** The payload\'s two sections, after the shape difference between releases is resolved. */
+type ReportedSections = {
+  connectionProperties?: Record<string, unknown>;
+  deviceProperties?: Record<string, unknown>;
+};
+
+function readReportedSections(result: object): ReportedSections {
+  const source = result as {
+    device?: unknown;
+    connectionProperties?: unknown;
+    deviceProperties?: unknown;
+  };
+  const nested = asRecord(source.device);
   return {
-    ...(outcome ? { outcome } : {}),
-    ...(tunnelState ? { tunnelState } : {}),
-    ...(tunnelIp ? { tunnelIp } : {}),
-    ...(developerModeStatus ? { developerModeStatus } : {}),
-    ...(developerDiskImageServicesAvailable === undefined
-      ? {}
-      : { developerDiskImageServicesAvailable }),
-    ...(bootState ? { bootState } : {}),
+    connectionProperties: mergeReportedSections(
+      asRecord(source.connectionProperties),
+      asRecord(nested?.connectionProperties),
+    ),
+    deviceProperties: mergeReportedSections(
+      asRecord(source.deviceProperties),
+      asRecord(nested?.deviceProperties),
+    ),
   };
 }
 
-function readDeviceProperties(result: object): DeviceProperties | undefined {
-  const properties = (result as { deviceProperties?: unknown }).deviceProperties;
-  return properties && typeof properties === 'object'
-    ? (properties as DeviceProperties)
-    : undefined;
+/** Direct wins wherever it spelled a value; the nested section fills the fields it left blank. */
+function mergeReportedSections(
+  direct: Record<string, unknown> | undefined,
+  nested: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!direct) return nested;
+  if (!nested) return direct;
+  const merged: Record<string, unknown> = { ...nested };
+  for (const [key, value] of Object.entries(direct)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged;
 }
 
-function nestedDevice(result: object): { deviceProperties?: DeviceProperties } | undefined {
-  const device = (result as { device?: unknown }).device;
-  return device && typeof device === 'object'
-    ? (device as { deviceProperties?: DeviceProperties })
-    : undefined;
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 
-type DeviceProperties = {
-  developerModeStatus?: unknown;
-  ddiServicesAvailable?: unknown;
-  bootState?: unknown;
-};
+export function parseIosDeviceDetailsPayload(payload: unknown): IosDeviceDetails {
+  const result = asRecord((payload as { result?: unknown } | undefined)?.result);
+  if (!result) return {};
+  const { connectionProperties, deviceProperties } = readReportedSections(result);
+  return {
+    ...withValue(
+      'outcome',
+      readNonEmptyString((payload as { info?: { outcome?: unknown } })?.info?.outcome),
+    ),
+    ...withValue('tunnelState', readNonEmptyString(connectionProperties?.tunnelState)),
+    ...withValue('tunnelIp', readNonEmptyString(connectionProperties?.tunnelIPAddress)),
+    ...withValue('developerModeStatus', readNonEmptyString(deviceProperties?.developerModeStatus)),
+    ...withValue(
+      'developerDiskImageServicesAvailable',
+      readBoolean(deviceProperties?.ddiServicesAvailable),
+    ),
+    ...withValue('bootState', readNonEmptyString(deviceProperties?.bootState)),
+  };
+}
+
+/**
+ * Reports a field only when the payload carried it. An absent state has to stay absent so the reader
+ * can tell that the device said nothing from the device saying no.
+ */
+function withValue<K extends keyof IosDeviceDetails>(
+  key: K,
+  value: IosDeviceDetails[K],
+): Pick<IosDeviceDetails, K> {
+  return value === undefined
+    ? ({} as Pick<IosDeviceDetails, K>)
+    : ({ [key]: value } as Pick<IosDeviceDetails, K>);
+}
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
