@@ -44,11 +44,12 @@ The handoff closes only this daemon's copy of the log descriptor. A runner that 
 write would look like a healthy adoption and then fail minutes later, which is the failure this
 section exists to catch.
 
-- [ ] `wc -c "$RUNNER_LOG"` before `daemon stop`, and again after.
-- [ ] Force a post-handoff write from the runner's own side, in increasing-annoyance order until one
-      is available: a `device lock`/`device unlock` pair, an unplug/replug, or any app-side log line.
-- [ ] `wc -c "$RUNNER_LOG"` grew, and `tail -40 "$RUNNER_LOG"` shows the new output while
-      `ps -p $RUNNER_PID` still shows the same elapsed time.
+- [ ] Nothing a client sends forces `xcodebuild` to write on demand, so take the two moments it does:
+      unplug the cable for 10 s and replug it, and later (step 3) close the session so the runner
+      tears itself down. Both make the process write to the descriptor it inherited at spawn.
+- [ ] After the replug: `wc -c "$RUNNER_LOG"` grew and `tail -40 "$RUNNER_LOG"` shows new output while
+      `ps -p $RUNNER_PID -o pid,etime` shows the same process, undisturbed by the handoff.
+- [ ] After step 3's `close --session p2681`: the same file ends with the runner's own teardown line.
 - [ ] If the runner vanished instead: capture `$RUNNER_LOG` and `daemon.log`, and treat it as the
       SIGPIPE regression the file-backed stdio restructure was written to remove.
 
@@ -57,8 +58,9 @@ section exists to catch.
 - [ ] `node bin/agent-device.mjs snapshot -i --json --session p2681 --platform ios --udid <UDID>` (or `open` again).
 - [ ] In that request's `$STATE_DIR/sessions/p2681/requests/<requestId>.ndjson`:
   - [ ] `"phase":"ios_runner_lease_adopted"` with `"lane":"physical_coredevice"` and `runnerPid` equal to `$RUNNER_PID`.
-  - [ ] No `xctestrun` build phase and no second `launch_xcodebuild` for this request; the reported
-        `startupTimings` name the reclaim (`adopt_detached_runner`) rather than a build.
+  - [ ] No `xctestrun` build phase and no second `launch_xcodebuild` for this request:
+        `"phase":"ios_runner_session_startup_timings"` carries `data.timings` with
+        `adopt_detached_runner` and without `build_xctestrun` or `launch_xcodebuild`.
   - [ ] Wall time is a reclaim, not a rebuild: compare against a cold physical start on this device
         (`AGENT_DEVICE_IOS_RUNNER_DETACH=0` on the daemon, then repeat 1 and 3 and time the first command).
 - [ ] `ps -p $RUNNER_PID` unchanged across both daemons.
