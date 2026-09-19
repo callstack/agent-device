@@ -446,12 +446,7 @@ extension RunnerTests {
         truncated = true
         break
       }
-      guard let node = flatSnapshotNode(
-        element: element,
-        index: 0,
-        parentIndex: 0,
-        viewport: viewport
-      ) else {
+      guard let node = flatSnapshotNode(element: element, index: 0, parentIndex: 0) else {
         continue
       }
       let key = "\(node.type)-\(node.label ?? "")-\(node.identifier ?? "")-\(node.value ?? "")-\(node.rect.x)-\(node.rect.y)-\(node.rect.width)-\(node.rect.height)"
@@ -1323,8 +1318,7 @@ extension RunnerTests {
   private func flatSnapshotNode(
     element: XCUIElement,
     index: Int,
-    parentIndex: Int?,
-    viewport: CGRect
+    parentIndex: Int?
   ) -> RawAXNode? {
     var node: RawAXNode?
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
@@ -1338,11 +1332,6 @@ extension RunnerTests {
       let valueText = snapshotValueText(element)
       let elementType = element.elementType
       let enabled = element.isEnabled
-      let hittable = SnapshotGeometry.isGeometricallyActionable(
-        enabled: enabled,
-        frame: frame,
-        viewport: viewport
-      )
 
       node = RawAXNode(
         index: index,
@@ -1354,7 +1343,7 @@ extension RunnerTests {
         enabled: enabled,
         focused: elementHasFocus(element) ? true : nil,
         selected: element.isSelected ? true : nil,
-        hittable: hittable,
+        hittable: false,
         depth: 1,
         parentIndex: parentIndex,
         hiddenContentAbove: nil,
