@@ -172,11 +172,11 @@ type RunnerErrorMatch = {
   /** Every entry must appear in the lowercased message. */
   messageIncludesAll?: readonly string[];
   /**
-   * Every entry must appear in the lowercased JSON of the details bag, so a tool's own failure
-   * text (which arrives in `stderr`/`stdout` rather than in our message) can carry a rule. JSON
-   * escaping keeps each line whole, so an entry must live on one line of the tool's output.
+   * Every entry must appear in the lowercased {@link runnerToolText}: our message plus the tool's
+   * own `stdout`/`stderr`. Nothing else in `details` is read, so the argv we were asked to run and
+   * the verdict this classifier already published can never carry a rule (#2680).
    */
-  detailsIncludesAll?: readonly string[];
+  toolTextIncludesAll?: readonly string[];
   /** Required details evidence beyond code/message. */
   details?: RunnerErrorDetailsMatch;
 };
@@ -225,12 +225,17 @@ type RunnerErrorVerdicts = {
  * disk image state read from the device itself), which is why it is keyed on startup rather than on
  * `xcodebuild`: an iPhone that refuses the runner for reasons other than signing stops the runner
  * before a build is ever the question.
+ *
+ * Placement: here beside the rules that produce it, not in `@agent-device/contracts`. Every member
+ * names a verdict an Apple runner path reaches, while `contracts` carries shapes several surfaces
+ * answer with (`InfrastructureBootFailureReason`, which both simulator and device boot use).
+ * Nothing outside this package publishes or consumes this enum, and one declaration is the only way
+ * a row and its reason cannot disagree.
  */
 export const RUNNER_STARTUP_FAILURE_REASONS = [
   'bundle_identifier_already_registered',
   'signing_no_development_team',
   'signing_provisioning_profile_missing',
-  'signing_style_conflict',
   'signing_unspecified',
   'devtools_security_developer_mode_disabled',
   'build_failed_unclassified',
@@ -367,16 +372,20 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   // to resend. Specific rows precede generic ones: the classifier takes the first match.
   //
   // Why these rows are text matchers while the rows above key on a code or a typed field:
-  // `matchesRunnerErrorMessage`/`matchesRunnerErrorDetailsText` read xcodebuild's own prose because
-  // that prose is the only publication these failures have — there is no code and no typed field to
-  // key on. The DevToolsSecurity row is the other half: where a probe of ours publishes a typed
-  // fact, the row keys on that fact alone. `resolveRunnerEarlyExitHint` stays outside this table for
-  // the same reason it stays a hint builder — it classifies a runner that DID build and then exited
-  // early, whose reason axis is the `BootFailureReason` `classifyBootFailure` already returns, and a
-  // build that never produced a binary has no boot to classify.
+  // `runnerToolText` reads xcodebuild's own prose because that prose is the only publication these
+  // failures have — there is no code and no typed field to key on. Its haystack is deliberately
+  // narrow: our message plus the tool's stdout/stderr, never the whole details bag, which also
+  // holds the argv we were asked to run (so a caller's own PROVISIONING_PROFILE_SPECIFIER=… would
+  // otherwise name a signing cause for an unrelated compile error) and the reason and hint this
+  // classifier just published (so a re-wrapped failure would match itself). The DevToolsSecurity
+  // row is the other half: where a probe of ours publishes a typed fact, the row keys on that fact
+  // alone. `resolveRunnerEarlyExitHint` stays outside this table for the same reason it stays a hint
+  // builder — it classifies a runner that DID build and then exited early, whose reason axis is the
+  // `BootFailureReason` `classifyBootFailure` already returns, and a build that never produced a
+  // binary has no boot to classify.
   {
     reason: 'bundle_identifier_registration_failed',
-    match: { detailsIncludesAll: ['failed registering bundle identifier'] },
+    match: { toolTextIncludesAll: ['failed registering bundle identifier'] },
     verdicts: {},
     buildFailure: {
       reason: 'bundle_identifier_already_registered',
@@ -385,7 +394,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   },
   {
     reason: 'bundle_identifier_unavailable',
-    match: { detailsIncludesAll: ['app identifier', 'not available'] },
+    match: { toolTextIncludesAll: ['app identifier', 'not available'] },
     verdicts: {},
     buildFailure: {
       reason: 'bundle_identifier_already_registered',
@@ -394,7 +403,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   },
   {
     reason: 'signing_requires_development_team',
-    match: { detailsIncludesAll: ['requires a development team'] },
+    match: { toolTextIncludesAll: ['requires a development team'] },
     verdicts: {},
     buildFailure: {
       reason: 'signing_no_development_team',
@@ -402,19 +411,22 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     },
   },
   {
-    // Precedes the profile rows: this xcodebuild failure names a profile in saying the signing
-    // styles conflict, and the recovery is to align the settings, not to go install a profile.
-    reason: 'signing_style_conflict',
-    match: { detailsIncludesAll: ['conflicting provisioning settings'] },
+    // "conflicting provisioning settings" names a profile while saying the automatic and manual
+    // settings disagree, so without this row the profile row below would send the reader to install
+    // a profile for a problem that is a settings mismatch. No reason is claimed for it: nothing has
+    // captured this failure or proved which lever clears it, and advice the reader cannot follow is
+    // worse than the cache-recovery advice the unclassified path already gives (#2680).
+    reason: 'conflicting_provisioning_settings_unproven',
+    match: { toolTextIncludesAll: ['conflicting provisioning settings'] },
     verdicts: {},
     buildFailure: {
-      reason: 'signing_style_conflict',
-      hint: 'The runner project mixes signing styles: one setting asks for automatic signing while another pins a profile or team. Clear AGENT_DEVICE_IOS_PROVISIONING_PROFILE to let Xcode choose, or set CODE_SIGN_STYLE=Manual alongside a matching AGENT_DEVICE_IOS_PROVISIONING_PROFILE, then retry.',
+      reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
+      hint: RUNNER_CACHE_RECOVERY_HINT,
     },
   },
   {
     reason: 'signing_no_profiles_for_bundle_id',
-    match: { detailsIncludesAll: ['no profiles for'] },
+    match: { toolTextIncludesAll: ['no profiles for'] },
     verdicts: {},
     buildFailure: {
       reason: 'signing_provisioning_profile_missing',
@@ -423,7 +435,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   },
   {
     reason: 'signing_provisioning_profile_unusable',
-    match: { detailsIncludesAll: ['provisioning profile'] },
+    match: { toolTextIncludesAll: ['provisioning profile'] },
     verdicts: {},
     buildFailure: {
       reason: 'signing_provisioning_profile_missing',
@@ -434,7 +446,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // Signing is involved but nothing above names how: the reason says signing and the hint stays
     // the generic one it has always carried, rather than naming a misconfiguration no rule proved.
     reason: 'signing_unspecified',
-    match: { detailsIncludesAll: ['code signing'] },
+    match: { toolTextIncludesAll: ['code signing'] },
     verdicts: {},
     buildFailure: {
       reason: 'signing_unspecified',
@@ -455,7 +467,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
 function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boolean {
   if (match.code !== undefined && error.code !== match.code) return false;
   if (!matchesRunnerErrorDetails(error, match.details)) return false;
-  if (!matchesRunnerErrorDetailsText(error, match.detailsIncludesAll)) return false;
+  if (!matchesRunnerToolText(error, match.toolTextIncludesAll)) return false;
   return matchesRunnerErrorMessage(error, match.messageIncludesAll);
 }
 
@@ -470,13 +482,24 @@ function matchesRunnerErrorMessage(error: AppError, parts: readonly string[] | u
   return parts.every((part) => message.includes(part));
 }
 
-function matchesRunnerErrorDetailsText(
-  error: AppError,
-  parts: readonly string[] | undefined,
-): boolean {
+/**
+ * The only text a startup rule may read: our message plus the tool's own `stdout` and `stderr`
+ * (#2680). The rest of `details` is deliberately out of reach — `cmd`/`args` describe what we were
+ * asked to run, and `reason`/`hint` are this classifier's own output, which a re-wrapped failure
+ * would otherwise find and match again.
+ */
+function runnerToolText(error: AppError): string {
+  const details = error.details ?? {};
+  return [error.message, details.stdout, details.stderr]
+    .filter((part): part is string => typeof part === 'string')
+    .join('\n')
+    .toLowerCase();
+}
+
+function matchesRunnerToolText(error: AppError, parts: readonly string[] | undefined): boolean {
   if (!parts) return true;
-  const details = error.details ? JSON.stringify(error.details).toLowerCase() : '';
-  return parts.every((part) => details.includes(part));
+  const text = runnerToolText(error);
+  return parts.every((part) => text.includes(part));
 }
 
 function runnerErrorVerdict<Axis extends keyof RunnerErrorVerdicts>(
