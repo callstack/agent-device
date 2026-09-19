@@ -43,6 +43,11 @@ export type ScreenRecordingTransportSupport = Parameters<
   typeof assertScreenRecordingOptionsSupported
 >[1];
 
+/** The host slice a transport recording owns: preparing the output and finalizing the export. */
+export type ScreenRecordingTransportHost = Readonly<{
+  screenRecording: Pick<ScreenRecordingRuntimeHost, 'finalize' | 'outputs'>;
+}>;
+
 export type TransportRecordingDescriptor = Readonly<{ backend: string; outputPath: string }>;
 
 export function transportRecordingDescriptorCodec(backend: string) {
@@ -82,7 +87,7 @@ export function transportRecordingCleanupPending(message: string): CleanupOutcom
  * and the live handle owns the memoized stop, the retriable collect, and the finalizer call.
  */
 export async function startTransportScreenRecording<Collectible>(params: {
-  host: Readonly<{ screenRecording: Pick<ScreenRecordingRuntimeHost, 'finalize' | 'outputs'> }>;
+  host: ScreenRecordingTransportHost;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   input: ScreenRecordingStartInput;

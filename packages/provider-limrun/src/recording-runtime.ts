@@ -2,12 +2,12 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { RecordingExportQuality } from '@agent-device/contracts/recording';
-import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
 import {
+  type ScreenRecordingTransportHost,
   startTransportScreenRecording,
   transportRecordingCleanupPending,
   transportRecordingUnreattachable,
@@ -19,10 +19,6 @@ export type LimrunScreenRecordingSession = Pick<
   LimrunDeviceSession,
   'startRecording' | 'stopRecording' | 'downloadRecording'
 >;
-
-type LimrunScreenRecordingOperationHost = Readonly<{
-  screenRecording: Pick<ScreenRecordingRuntimeHost, 'finalize' | 'outputs'>;
-}>;
 
 const LIMRUN_RECORDING_BACKEND = 'limrun-recorder';
 
@@ -40,7 +36,7 @@ const LIMRUN_QUALITY_BY_EXPORT: Readonly<Record<RecordingExportQuality, LimrunRe
  * whole simulator or emulator screen, so every scope records the same frame.
  */
 export function createLimrunScreenRecordingOperations(params: {
-  host: LimrunScreenRecordingOperationHost;
+  host: ScreenRecordingTransportHost;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   signal: AbortSignal;
