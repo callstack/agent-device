@@ -16,8 +16,6 @@ const DAEMON_REPLAY_FACADE = {
   exports: [
     'ReplayCoordinator',
     'ReplayDaemonDependencies',
-    'ReplayDispatchRequest',
-    'ReplayInvoke',
     'ReplayResumeStamper',
     'ReplaySession',
     'ReplaySessionView',

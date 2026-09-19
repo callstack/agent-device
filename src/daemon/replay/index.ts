@@ -4,8 +4,6 @@ export { runReplayTestCommand } from './internal/test-command.ts';
 export type {
   ReplayCoordinator,
   ReplayDaemonDependencies,
-  ReplayDispatchRequest,
-  ReplayInvoke,
   ReplayResumeStamper,
   ReplaySession,
   ReplaySessionView,
