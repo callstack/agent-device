@@ -3,7 +3,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { ReplayDispatchRequest, ReplayInvoke } from './command-types.ts';
+import type { ReplayCommand, ReplayDispatchRequest, ReplayInvoke } from './command-types.ts';
 
 /** The request-private facts replay's own decisions read, as the daemon resolves them. */
 export type ReplayPrivateAdmission = Readonly<{
@@ -18,16 +18,14 @@ export type ReplayPrivateAdmission = Readonly<{
 export type ReplayRequest<Private extends ReplayPrivateAdmission> = DaemonWireRequest &
   Readonly<{ internal?: Private }>;
 
-/** A request as a `ReplayCommand` carries it: its wire half plus the two admission facts. */
-export type ReplayCommandEnvelope = Readonly<{
-  request: DaemonWireRequest;
-  /**
-   * True when the request arrived over the daemon's public network surface: flow scripts are then
-   * untrusted, and `runScript` HTTP calls may not reach private addresses.
-   */
-  publicNetworkOnly?: true;
-  resolvedSessionScope?: SessionScope;
-}>;
+/**
+ * The part of a `ReplayCommand` a request answers to: its wire half plus the two admission facts.
+ * Drawn from the command itself, so the envelope cannot drift from what the command reads.
+ */
+export type ReplayCommandEnvelope = Pick<
+  ReplayCommand,
+  'request' | 'publicNetworkOnly' | 'resolvedSessionScope'
+>;
 
 /**
  * Reads a request into the command's public half and the admission facts it may act on. The
