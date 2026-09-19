@@ -23,6 +23,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
     request: req,
     session: createReplaySession(sessionName, logPath, sessionStore),
     invoke: invokeReplayAction ?? invoke,
+    publicNetworkOnly: req.internal?.publicNetworkOnly === true,
   });
 
 export const handleReplayTestCommand: SessionCommandHandler = async ({
@@ -63,6 +64,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     createSession: (testSessionName, testLogPath) =>
       createReplaySession(testSessionName, testLogPath, sessionStore),
     invoke: invokeReplayAction ?? invoke,
+    publicNetworkOnly: req.internal?.publicNetworkOnly === true,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
         req,

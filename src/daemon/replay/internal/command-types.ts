@@ -39,6 +39,13 @@ export type ReplayCommand = Readonly<{
   invoke: DaemonInvokeFn;
   tracePath?: string;
   onStep?: ReplayTestAttemptStepSink;
+  /**
+   * True when the request reached the daemon only over its public HTTP surface. The handler draws
+   * it from the request's daemon-private half and hands it here so the Maestro engine decides
+   * script trust from an explicit input instead of reading `req.internal`. Absent means a local
+   * caller, which trusts its own scripts.
+   */
+  publicNetworkOnly?: boolean;
 }>;
 
 type ReplayRequestContext = Readonly<{

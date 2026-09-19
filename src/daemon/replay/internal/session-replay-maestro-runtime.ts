@@ -109,6 +109,9 @@ async function executeTypedMaestroReplay(
     invoke,
   } = command;
   const context = await prepareTypedMaestroReplay({ command, bundle });
+  // evalScript runs via node:vm, which is not a security sandbox; only trust it
+  // for flows that did not arrive over the daemon's remote HTTP surface.
+  const publicNetworkOnly = command.publicNetworkOnly === true;
   const port = createMaestroReplayPort({
     req,
     invoke,
@@ -116,6 +119,7 @@ async function executeTypedMaestroReplay(
     platform: context.platform,
     runtimeHints: context.runtimeHints,
     sourcePath: context.filePath,
+    publicNetworkOnly,
   });
   state.snapshotStart = sessionStore.get()?.snapshotDiagnostics?.samples.length ?? 0;
   const outcome = await executeMaestroFlow(context.flow, port, {
@@ -127,9 +131,7 @@ async function executeTypedMaestroReplay(
     signal: context.signal,
     from: req.flags?.replayFrom,
     planDigest: req.flags?.replayPlanDigest,
-    // evalScript runs via node:vm, which is not a security sandbox; only trust it
-    // for flows that did not arrive over the daemon's remote HTTP surface.
-    trustedScripts: req.internal?.publicNetworkOnly !== true,
+    trustedScripts: !publicNetworkOnly,
     // #1802: `runFlow` includes resolve out of the caller's bundle, so a local
     // and a remote run compile the same flow closure.
     readSource: (includePath) => readReplayScriptSourceFile(bundle, includePath),
@@ -321,13 +323,14 @@ function createMaestroReplayPort(params: {
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
   sourcePath: string;
+  publicNetworkOnly: boolean;
 }) {
-  const { req, invoke, device, platform, runtimeHints, sourcePath } = params;
+  const { req, invoke, device, platform, runtimeHints, sourcePath, publicNetworkOnly } = params;
   const replay = { ...req, runtime: runtimeHints };
   return createDaemonMaestroRuntimePort({
     invoke: (operation) => invoke(maestroOperationDaemonRequest(replay, operation)),
     flags: maestroRuntimeDeviceFlags(device, platform, req.flags),
-    publicNetworkOnly: req.internal?.publicNetworkOnly === true,
+    publicNetworkOnly,
     platform,
     sourcePath,
     dependencies: {

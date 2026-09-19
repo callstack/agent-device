@@ -41,6 +41,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
     request: req,
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     invoke: async () => ({ ok: true, data: {} }) as never,
+    publicNetworkOnly: publicNetworkOnly === true,
   });
 
   expect(response.ok).toBe(true);

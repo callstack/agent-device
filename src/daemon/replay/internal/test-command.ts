@@ -250,6 +250,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         session: attemptSession,
         tracePath,
         onStep,
+        publicNetworkOnly: command.publicNetworkOnly,
         invoke: async (nestedReq) => {
           const startResponse = videoRecordingParams
             ? await startReplayTestVideoRecordingIfReady(videoRecordingParams)
