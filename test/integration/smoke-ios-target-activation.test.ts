@@ -42,6 +42,17 @@ test(
       await runStep(context, 'install fixture app', ['install', context.appPath]);
       await runStep(context, 'open fixture app', ['open', context.appId]);
 
+      // The handoff only means something once the session app is on screen. `open` returns while a
+      // freshly installed app is still drawing — CI's before-handoff screenshot was a blank status
+      // bar — and handing off from there asks the runner about an app that never reached foreground,
+      // which is not the question this lane asks. Same readiness signal the fixture E2E uses.
+      await runStep(context, 'wait for the fixture to render', [
+        'wait',
+        'text',
+        'Automation lab',
+        '30000',
+      ]);
+
       // Screenshot is a lifecycle command: it serves whatever is foreground without touching the
       // bound app, so it is the observation the repair would otherwise contradict.
       const before = path.join(context.artifactDir, 'target-activation-before.png');
