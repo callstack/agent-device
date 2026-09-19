@@ -200,7 +200,6 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   await session.downloadRecording({
     downloadUrl: 'https://android.example/recording',
     outPath: '/tmp/android-recording.mp4',
-    timeoutMs: 30_000,
   });
   await session.adb.reverse?.remove('tcp:8081');
 
@@ -213,7 +212,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
       url: 'https://android.example/recording',
       headers: { Authorization: 'Bearer android-instance-token' },
       destinationPath: '/tmp/android-recording.mp4',
-      timeoutMs: 30_000,
+      timeoutMs: 120_000,
     },
   ]);
   assert.deepEqual(removeReverse.mock.calls[0], ['tcp:8081']);

@@ -132,7 +132,6 @@ test('stop asks the instance once, downloads the served MP4 to the output path, 
     expect.objectContaining({
       downloadUrl: DOWNLOAD_URL,
       outPath: '/tmp/limrun-recording.mp4',
-      signal: expect.any(AbortSignal),
     }),
   );
   expect(outcome).toMatchObject({

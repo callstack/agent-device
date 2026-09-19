@@ -83,25 +83,3 @@ test('a stalled transfer ends at the deadline as a typed timeout and removes the
   });
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
-
-test("a caller's abort surfaces as its own reason", async () => {
-  const url = await serve((_request, response) => {
-    response.writeHead(200, { 'content-type': 'video/mp4' });
-    response.write('partial');
-  });
-  const destinationPath = path.join(await mkdtempForTest('limrun-download-'), 'clip.mp4');
-  const controller = new AbortController();
-  const reason = new Error('recording discarded');
-
-  const failure = downloadLimrunFile({
-    url,
-    headers: {},
-    destinationPath,
-    timeoutMs: 5_000,
-    signal: controller.signal,
-  });
-  setTimeout(() => controller.abort(reason), 50);
-
-  await expect(failure).rejects.toBe(reason);
-  expect(fs.existsSync(destinationPath)).toBe(false);
-});

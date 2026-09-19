@@ -86,8 +86,8 @@ async function startLimrunRecording(
         });
       },
       stop: async () => (await session.stopRecording()).downloadUrl,
-      collect: async (downloadUrl, outputPath, signal) => {
-        await session.downloadRecording({ downloadUrl, outPath: outputPath, signal });
+      collect: async (downloadUrl, outputPath) => {
+        await session.downloadRecording({ downloadUrl, outPath: outputPath });
       },
     },
     support: {

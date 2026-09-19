@@ -9,17 +9,20 @@ import type { LimrunFileDownload } from '@agent-device/provider-limrun';
 const RESPONSE_BODY_PREVIEW_CHARS = 500;
 
 /**
- * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs` and
- * by the caller's `signal`; a failed or aborted transfer leaves no partial file behind, so the
- * caller can retry from the same URL.
+ * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
+ * failed or timed-out transfer leaves no partial file behind, so the caller can retry from the
+ * same URL.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
   let response: Response;
   try {
-    response = await fetch(options.url, { method: 'GET', headers: options.headers, signal });
+    response = await fetch(options.url, {
+      method: 'GET',
+      headers: options.headers,
+      signal: timeout,
+    });
   } catch (error) {
     throw downloadFailure(error, options, timeout);
   }
@@ -38,7 +41,7 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await pipeline(
       Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
       fs.createWriteStream(options.destinationPath),
-      { signal },
+      { signal: timeout },
     );
   } catch (error) {
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
@@ -57,7 +60,6 @@ function downloadFailure(
       timeoutMs: options.timeoutMs,
     });
   }
-  if (options.signal?.aborted) return options.signal.reason;
   if (error instanceof AppError) return error;
   return new AppError('COMMAND_FAILED', 'Limrun download failed', {
     url: options.url,

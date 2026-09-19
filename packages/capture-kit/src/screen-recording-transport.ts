@@ -34,9 +34,9 @@ export type ScreenRecordingTransport<Collectible = void> = Readonly<{
   stop(): Promise<Collectible>;
   /**
    * Brings the finished media to `outputPath`. Omitted when the recorder writes `outputPath`
-   * itself. `signal` aborts when the recording is discarded.
+   * itself. Runs inside `finish`, so it owns its own deadline: nothing can cancel it.
    */
-  collect?(collectible: Collectible, outputPath: string, signal: AbortSignal): Promise<void>;
+  collect?(collectible: Collectible, outputPath: string): Promise<void>;
 }>;
 
 export type ScreenRecordingTransportSupport = Parameters<
@@ -106,14 +106,13 @@ export async function startTransportScreenRecording<Collectible>(params: {
     signal.throwIfAborted();
     throw error;
   }
-  const discard = new AbortController();
   const handle = createScreenRecordingLiveHandle(
     transportRecordingSnapshot(transport.backend, input),
     {
       finish: async (current) => {
         const collectible = await stopOnce();
         if (transport.collect) {
-          await transport.collect(collectible, current.outPath, discard.signal);
+          await transport.collect(collectible, current.outPath);
         }
         const finalization = await host.screenRecording.finalize.complete({
           outputPath: current.outPath,
@@ -129,7 +128,6 @@ export async function startTransportScreenRecording<Collectible>(params: {
         });
       },
       forceCleanup: async () => {
-        discard.abort(new Error(`${transport.backend} recording discarded`));
         try {
           await stopOnce();
           return { status: 'cleaned' } as const;
