@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { createAppleApplicationTools } from '../platform-runtime-apple-application-tools.ts';
 
-const detachIosSimulatorRunnerSessionsForShutdown = vi.hoisted(() => vi.fn(async () => 0));
+const detachIosRunnerSessionsForShutdown = vi.hoisted(() => vi.fn(async () => 0));
 const stopAllIosRunnerSessions = vi.hoisted(() => vi.fn(async () => {}));
 
 // The factory awaits the real Apple runner graph on purpose: that wait is what let a second,
@@ -10,7 +10,7 @@ const stopAllIosRunnerSessions = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, detachIosSimulatorRunnerSessionsForShutdown, stopAllIosRunnerSessions };
+  return { ...actual, detachIosRunnerSessionsForShutdown, stopAllIosRunnerSessions };
 });
 
 // Two ports of these tools run at once whenever the open path leaves its runner prewarm
@@ -26,6 +26,6 @@ test('concurrent runner ports share one module resolution, so the mock always ap
     tools.finalizeRunnerSessionsForShutdown(),
   ]);
 
-  expect(detachIosSimulatorRunnerSessionsForShutdown).toHaveBeenCalledTimes(1);
+  expect(detachIosRunnerSessionsForShutdown).toHaveBeenCalledTimes(1);
   expect(stopAllIosRunnerSessions).toHaveBeenCalledTimes(1);
 });

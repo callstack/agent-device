@@ -201,6 +201,7 @@ function makeRunnerSession(
     testPromise,
     child: { pid: 42, exitCode: null },
     state: 'ready',
+    inFlightCommands: 0,
     ...overrides,
   };
 }

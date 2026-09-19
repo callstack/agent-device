@@ -1,4 +1,4 @@
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, StdioOptions } from 'node:child_process';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
@@ -50,6 +50,13 @@ export type ExecOptions = {
   detached?: boolean;
   signal?: AbortSignal;
   maxBuffer?: number;
+  /**
+   * Where the child's stdios go. The Apple runner gets an open log file rather than pipes, so a
+   * detached runner never holds a reader this process can close under it (#2681).
+   */
+  stdio?: StdioOptions;
+  /** False when the caller owns the child's streams, so the wait result carries nothing captured. */
+  captureOutput?: boolean;
 };
 
 export type ExecStreamOptions = ExecOptions & {

@@ -587,10 +587,21 @@ export async function startDaemonRuntime(
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
     await closeDaemonServers(servers);
-    // Hand healthy simulator runners off before durable session teardown. The lifecycle gateway
-    // later terminates only still-owned generations once all resources have finalized.
+    // Hand healthy runners off before durable session teardown. The lifecycle gateway later
+    // terminates only still-owned generations once all resources have finalized.
+    //
+    // The scope is what makes this step observable: a SIGTERM shutdown has no request, and therefore
+    // no diagnostics scope, so `emitDiagnostic` would drop every detach reason. Daemon debug level is
+    // forced on here because the declines are the point of the record — a handoff that silently
+    // skipped is indistinguishable from a rebuild (#2681).
     try {
-      await applicationLifecycle.detachForDaemonShutdown();
+      await withDiagnosticsScope(
+        { command: 'daemon', session: 'daemon', logPath, debug: true },
+        async () => {
+          await applicationLifecycle.detachForDaemonShutdown();
+          flushDiagnosticsToSessionFile({ force: true });
+        },
+      );
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();

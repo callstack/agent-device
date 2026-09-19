@@ -51,6 +51,12 @@ export type RunnerLease = {
   port: number;
   xctestrunPath: string;
   jsonPath: string;
+  /**
+   * Where the leased runner's own output goes. The runner appends to this file for its whole life,
+   * including across a daemon handoff, so the daemon that adopts it can point at it (#2681).
+   * Absent on leases written before the runner's stdio moved onto a file.
+   */
+  runnerLogPath?: string;
   createdAtMs: number;
   /**
    * The owner arbitrates device ownership through host-global device claims
@@ -96,7 +102,9 @@ export function buildRunnerLease(params: {
   port: number;
   xctestrunPath: string;
   jsonPath: string;
+  runnerLogPath?: string;
 }): RunnerLease {
+  const runnerLogPath = readOptionalNonEmptyString(params.runnerLogPath);
   return {
     schemaVersion: RUNNER_LEASE_SCHEMA_VERSION,
     deviceId: params.deviceId,
@@ -110,6 +118,7 @@ export function buildRunnerLease(params: {
     port: params.port,
     xctestrunPath: params.xctestrunPath,
     jsonPath: params.jsonPath,
+    ...(runnerLogPath ? { runnerLogPath } : {}),
     createdAtMs: Date.now(),
     deviceClaimProtocol: 1,
   };
@@ -296,15 +305,39 @@ function formatEnvAssignment(name: string, value: string): string {
 // dies, so crash-orphans and deliberate handoffs share one recovery path.
 // Adoption is strictly PID-dead-gated: an owner whose state dir is gone but
 // whose process is still alive may still hold a live connection to the
-// runner, so adopting it would create two masters. Those leases return null
+// runner, so adopting it would create two masters. Those leases are refused
 // here and go through prepareRunnerLeaseForStartup's force-stop path (kill
 // the leased runner processes, then rebuild) instead.
-export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+export type RunnerLeaseAdoptionRefusal =
+  | 'lease_owned_by_this_daemon'
+  | 'lease_owner_live'
+  | 'lease_owner_state_dir_gone';
+
+export type RunnerLeaseAdoptionVerdict =
+  | { type: 'adoptable'; lease: RunnerLease }
+  | { type: 'absent' }
+  | { type: 'refused'; reason: RunnerLeaseAdoptionRefusal; lease: RunnerLease };
+
+/** The one classification adoption reads, so a refused lease reports why it was refused. */
+export function readRunnerLeaseForAdoption(deviceId: string): RunnerLeaseAdoptionVerdict {
   const state = classifyRunnerLease(readRunnerLease(deviceId));
-  return state.type === 'stale' &&
-    (state.staleReason === 'owner-process-dead' || state.staleReason === 'owner-process-reused')
-    ? state.lease
-    : null;
+  switch (state.type) {
+    case 'empty':
+      return { type: 'absent' };
+    case 'owned':
+      return { type: 'refused', reason: 'lease_owned_by_this_daemon', lease: state.lease };
+    case 'busy':
+      return { type: 'refused', reason: 'lease_owner_live', lease: state.lease };
+    case 'stale':
+      return state.staleReason === 'owner-state-dir-gone'
+        ? { type: 'refused', reason: 'lease_owner_state_dir_gone', lease: state.lease }
+        : { type: 'adoptable', lease: state.lease };
+  }
+}
+
+export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+  const verdict = readRunnerLeaseForAdoption(deviceId);
+  return verdict.type === 'adoptable' ? verdict.lease : null;
 }
 
 // Marks a lease as handed off during graceful shutdown: the token no longer
@@ -436,6 +469,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
+    runnerLogPath: readOptionalNonEmptyString(raw.runnerLogPath),
     ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };
 }
@@ -458,6 +492,10 @@ function readRunnerLeaseRequiredFields(
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readOptionalNonEmptyString(value: unknown): string | undefined {
+  return readNonEmptyString(value) ?? undefined;
 }
 
 function readOptionalString(value: unknown): string | null {

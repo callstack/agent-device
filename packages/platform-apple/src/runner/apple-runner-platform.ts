@@ -3,6 +3,7 @@ import {
   isMacOs,
   isApplePlatform,
   resolveApplePlatformName,
+  resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 
@@ -139,6 +140,58 @@ export function resolveRunnerPlatformName(device: DeviceInfo): RunnerApplePlatfo
   // Prefer the stored Apple OS discriminant; fall back to target-based inference
   // for legacy records that predate it. iPadOS maps to the iOS runner profile.
   return resolveApplePlatformName(device.target, device.appleOs);
+}
+
+export type RunnerHandoffLane = 'simulator' | 'physical_coredevice';
+
+/** Why a runner is not eligible to be handed to the next daemon. */
+export type RunnerHandoffRefusal =
+  /** Not an Apple target at all: only Apple runners take leases. */
+  | 'non_apple_target'
+  /** The macOS desktop target, which is `kind: 'device'` too. */
+  | 'macos_host'
+  /** A physical tvOS/visionOS runner: never exercised across a daemon restart. */
+  | 'physical_non_ios_os'
+  /** An XCTest-backed physical iOS device: usbmux-only, and never exercised across a restart. */
+  | 'xctest_backend';
+
+export type RunnerHandoffTarget =
+  | { handoff: true; lane: RunnerHandoffLane }
+  | { handoff: false; reason: RunnerHandoffRefusal };
+
+/**
+ * Which runner processes a daemon shutdown may hand to the next daemon (#2681). `kind === 'device'`
+ * is not "physical iOS": the macOS desktop host and physical tvOS/visionOS are that same kind, so
+ * the lanes are named from the OS discriminant and the physical backend instead.
+ *
+ * - `simulator`: every Apple-family Simulator, exactly as before #2681. Scoped simulator sets are a
+ *   second gate at the handoff itself, not here.
+ * - `physical_coredevice`: a physical iOS/iPadOS device whose runner is reached through CoreDevice.
+ *
+ * macOS keeps its runner under the daemon that built it, and physical tvOS/visionOS plus the
+ * usbmux-only `xctest` backend keep the kill-and-rebuild path: #2681 has no handoff evidence for
+ * them, and an unexercised handoff is worse than a rebuild.
+ */
+export function resolveRunnerHandoffTarget(device: DeviceInfo): RunnerHandoffTarget {
+  if (!isApplePlatform(device.platform)) {
+    return { handoff: false, reason: 'non_apple_target' };
+  }
+  if (device.kind === 'simulator') {
+    return { handoff: true, lane: 'simulator' };
+  }
+  if (isMacOs(device)) {
+    return { handoff: false, reason: 'macos_host' };
+  }
+  // `resolveDeviceAppleOs` defaults a legacy record to iOS, matching the runner profile
+  // `resolveRunnerPlatformName` picks for it.
+  const appleOs = resolveDeviceAppleOs(device);
+  if (appleOs !== 'ios' && appleOs !== 'ipados') {
+    return { handoff: false, reason: 'physical_non_ios_os' };
+  }
+  if (device.iosPhysicalDeviceBackend === 'xctest') {
+    return { handoff: false, reason: 'xctest_backend' };
+  }
+  return { handoff: true, lane: 'physical_coredevice' };
 }
 
 export function resolveRunnerSdkName(

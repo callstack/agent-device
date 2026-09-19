@@ -57,13 +57,32 @@ export type RunnerSession = {
   xctestrunPath: string;
   xctestrunArtifact?: RunnerXctestrunArtifact;
   jsonPath: string;
+  /**
+   * Where this runner's own output goes: the file handed to the child as its stdout/stderr, which
+   * the runner keeps appending to across a daemon handoff (#2681). A session adopted from an older
+   * lease has none, because that runner wrote into pipes its own daemon held.
+   */
+  runnerLogPath?: string;
   testPromise: Promise<ExecResult>;
   child: RunnerProcessHandle;
+  /**
+   * Gives up this daemon's sides of the runner's log: the tail it follows and its copy of the log's
+   * write end. Only a session this process launched has either. The runner keeps its own descriptor,
+   * so handing off is a bookkeeping step and cannot disturb a running runner (#2681).
+   */
+  endOutputObservation?: () => void;
+  /**
+   * Reads the end of {@link runnerLogPath}. The module that opened the file answers for it, so the
+   * code quoting a runner's failure does not have to know how the log is stored (#2681).
+   */
+  readLogTail?: (maxBytes: number) => string;
   /** Moves only through {@link advanceRunnerSessionState}. */
   state: RunnerSessionState;
   /** Wakes one startup retry when the listener becomes ready or its process exits. */
   startupRetryWake?: AbortSignal;
   startupTimeoutMs?: number;
+  /** Commands this process is still waiting on a response for. */
+  inFlightCommands: number;
   // Records the last allowlisted mutating interaction that the runner confirmed
   // healthy (parsed ok, non-runnerFatal) for a given app bundle. Lives only on
   // the session object so it dies with every invalidation/restart (#702).
@@ -95,8 +114,8 @@ export type RunnerSession = {
 // so a runner cannot be revived by a late answer and a finished teardown never runs again. Both
 // live states reach `stopped` without a `draining` step on the graceful-shutdown handoff, where
 // the runner keeps serving the next daemon and this session's ownership simply ends. That handoff
-// covers a session that has not answered yet: a daemon shutting down during a startup has a
-// running runner and a valid lease to hand off exactly as it does for an answered one.
+// covers only a `ready` session (#2681): a daemon shutting down during a startup has a runner that
+// never proved it serves requests, so it is torn down by the shutdown's own stop path instead.
 const RUNNER_SESSION_STATE_SUCCESSORS: Record<RunnerSessionState, readonly RunnerSessionState[]> = {
   starting: ['ready', 'draining', 'stopped'],
   ready: ['draining', 'stopped'],
@@ -123,6 +142,67 @@ export function advanceRunnerSessionState(
  */
 export function canWorkWithRunnerSession(session: RunnerSessionStateHolder): boolean {
   return session.state === 'starting' || session.state === 'ready';
+}
+
+/** What the runner reported about its own XCTest main thread at the last exchange (#2552). */
+type RunnerOccupancyVerdict = 'drained' | 'occupied' | 'unreported';
+
+/**
+ * The one reader of {@link RunnerSession.runnerMainThreadBusy}: the runner's occupancy report, or
+ * `unreported` when nothing has stamped it yet. Retention and handoff both refuse a runner that is
+ * still draining, and both must read the report — not the lifecycle state, which says nothing about
+ * what the main thread is doing.
+ */
+function readRunnerOccupancyVerdict(
+  session: Pick<RunnerSession, 'runnerMainThreadBusy'>,
+): RunnerOccupancyVerdict {
+  if (session.runnerMainThreadBusy === true) return 'occupied';
+  if (session.runnerMainThreadBusy === false) return 'drained';
+  return 'unreported';
+}
+
+export function isRunnerMainThreadOccupied(
+  session: Pick<RunnerSession, 'runnerMainThreadBusy'>,
+): boolean {
+  return readRunnerOccupancyVerdict(session) === 'occupied';
+}
+
+/** Why a graceful shutdown must stop this session's runner instead of handing it over. */
+export type RunnerDetachRefusal =
+  /** The runner never answered a command, so nothing proves it serves requests (#2681). */
+  | 'runner_never_served_a_command'
+  /** A command is still owed a response, so the runner is busy whatever its last report says (#2681). */
+  | 'command_in_flight'
+  /** The runner reported main-thread work still draining as of its last exchange. */
+  | 'main_thread_occupied';
+
+export type RunnerDetachDecision =
+  | { detach: true }
+  | { detach: false; reason: RunnerDetachRefusal };
+
+/**
+ * Whether this session's runner may be handed to the next daemon by a graceful shutdown (#2681).
+ * `ready` is the only state that proves the runner serves requests: physical startup runs tens of
+ * seconds, so a shutdown mid-boot would otherwise hand off a runner that never reached its listener
+ * and make the next daemon pay a rebuild it cannot detect. A command this process is still waiting
+ * on is refused outright: the occupancy report below only describes the last COMPLETED exchange, and
+ * an abandoned in-flight command leaves work on the main thread that the report never saw.
+ * Occupancy is decided by the runner's own report, because a runner still draining abandoned work
+ * refuses every command the next daemon sends it.
+ */
+export function resolveRunnerDetachDecision(
+  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy' | 'inFlightCommands'>,
+): RunnerDetachDecision {
+  if (session.state !== 'ready') {
+    return { detach: false, reason: 'runner_never_served_a_command' };
+  }
+  if (session.inFlightCommands > 0) {
+    return { detach: false, reason: 'command_in_flight' };
+  }
+  if (isRunnerMainThreadOccupied(session)) {
+    return { detach: false, reason: 'main_thread_occupied' };
+  }
+  return { detach: true };
 }
 
 /** The liveness of a registered session, read against the process probe held beside its state. */
