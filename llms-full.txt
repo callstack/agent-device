@@ -1510,6 +1510,7 @@ agent-device app-switcher
 - Android: `shutdown --platform android --device <avd-name>` stops a running emulator.
 - `open [app|url] [url]` already boots/activates the selected target when needed.
 - `open <app> --timeout <ms>` is a startup budget for that boot. A never-booted iOS Simulator runs Apple's first-boot migration, which can take several minutes; without the flag the boot wait is capped at 120 seconds. When the budget runs out the command fails with `error.details.reason: boot_timeout` and the Simulator keeps booting, so a retry finds it further along.
+- `open <app> --wait <ms>` waits up to that budget for a device another session is holding instead of failing at once. The open reports each poll, then either opens the device or fails with `DEVICE_IN_USE` naming the owning session and saying the budget was spent. A wait that finds the device taken again keeps waiting for the rest of its budget, so several opens can queue on one device and none of them is refused before its budget is spent. Only session contention is waited for: a device claim held by another workspace's daemon is never retriable and returns its recovery command immediately. The wait extends the command's timeout envelope, so a long budget does not need a longer `--timeout`.
 - `open <url>` deep links are supported on Android and iOS.
 - `open <app> <url>` opens a deep link on iOS.
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
@@ -4400,6 +4401,14 @@ A never-booted iOS Simulator can take several minutes to finish its first boot. 
 ```bash
 agent-device open Settings --platform ios --udid <udid> --timeout 600000
 ```
+
+When the device is held by a session that will let go soon — a parallel agent finishing its run — `open --wait <ms>` blocks for the device instead of refusing at once, and reports who holds it while it waits:
+
+```bash
+agent-device open Demo --platform android --wait 60000
+```
+
+If the budget runs out with the device still busy, the open fails with `DEVICE_IN_USE` naming the owning session address, which `close --session <address>` releases. Every open waiting on a device gets its whole budget: when the holder lets go, the waiting open that did not get the device waits again for what is left of its own budget rather than refusing early, so several agents can queue on one device.
 
 Notes:
 

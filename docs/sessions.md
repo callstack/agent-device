@@ -69,6 +69,14 @@ A never-booted iOS Simulator can take several minutes to finish its first boot. 
 agent-device open Settings --platform ios --udid <udid> --timeout 600000
 ```
 
+When the device is held by a session that will let go soon — a parallel agent finishing its run — `open --wait <ms>` blocks for the device instead of refusing at once, and reports who holds it while it waits:
+
+```bash
+agent-device open Demo --platform android --wait 60000
+```
+
+If the budget runs out with the device still busy, the open fails with `DEVICE_IN_USE` naming the owning session address, which `close --session <address>` releases. Every open waiting on a device gets its whole budget: when the holder lets go, the waiting open that did not get the device waits again for what is left of its own budget rather than refusing early, so several agents can queue on one device.
+
 Notes:
 
 - `open <app>` within an existing session switches the active app and updates the session bundle id.
