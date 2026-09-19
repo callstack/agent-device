@@ -1,7 +1,5 @@
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { stripUndefined } from '@agent-device/kernel/record';
-import type { DaemonInvokeFn, DaemonRequest } from '../daemon-request.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
 import { bindInternalObservationAuthority } from '../internal-observation.ts';
@@ -9,11 +7,12 @@ import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
 import {
+  bindReplaySession,
+  replayInvokeOverDispatch,
   runReplayCommand,
   runReplayTestCommand,
+  splitReplayCommandRequest,
   type ReplayDaemonDependencies,
-  type ReplayDispatchRequest,
-  type ReplayInvoke,
   type ReplaySession,
 } from '../replay/index.ts';
 import { createReplayCoordinator } from '../session-replay-coordinator.ts';
@@ -37,9 +36,9 @@ export const handleReplayCommand: SessionCommandHandler = async ({
   invokeReplayAction,
 }) =>
   await runReplayCommand({
-    ...replayCommandEnvelope(req),
+    ...splitReplayCommandRequest(req),
     session: createReplaySession(sessionName, logPath, sessionStore),
-    invoke: replayInvoke(invokeReplayAction ?? invoke, req),
+    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
   });
 
@@ -76,11 +75,11 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     throwIfCanceled,
   });
   return await runReplayTestCommand({
-    ...replayCommandEnvelope(req),
+    ...splitReplayCommandRequest(req),
     session: createReplaySession(sessionName, logPath, sessionStore),
     createSession: (testSessionName, testLogPath) =>
       createReplaySession(testSessionName, testLogPath, sessionStore),
-    invoke: replayInvoke(invokeReplayAction ?? invoke, req),
+    invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
@@ -98,47 +97,15 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
 };
 
 /**
- * The request as replay may read it: its wire half, plus the two admission facts the daemon
- * resolved into the private half that replay's own decisions depend on.
+ * Binds one replay session over the daemon's live record. The container hands the port its reads;
+ * the policy hands back what the port may consult but not own: the repair gateway, the
+ * ref-publication authority, selector admission, open runtime hints and snapshot capture.
  */
-export function replayCommandEnvelope(req: DaemonRequest): {
-  request: DaemonWireRequest;
-  publicNetworkOnly?: true;
-  resolvedSessionScope?: SessionState['sessionScope'];
-} {
-  const { internal, ...request } = req;
-  return {
-    request,
-    ...(internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
-    ...(internal?.resolvedSessionScope
-      ? { resolvedSessionScope: internal.resolvedSessionScope }
-      : {}),
-  };
-}
-
-/**
- * Dispatches replay's nested requests through the daemon with the private half re-attached: the
- * originating request's own (`executionPlan`, `admittedLease`, ...) first, then whatever the
- * dispatch bag asks for. Replay never composes `internal`; this is the one place it is folded in.
- */
-export function replayInvoke(invoke: DaemonInvokeFn, base: DaemonRequest): ReplayInvoke {
-  return async (request) => await invoke(withDaemonPrivateHalf(base, request));
-}
-
-function withDaemonPrivateHalf(
-  base: DaemonRequest,
-  { dispatch, ...request }: ReplayDispatchRequest,
-): DaemonRequest {
-  const internal = stripUndefined({ ...base.internal, ...dispatch });
-  return Object.keys(internal).length > 0 ? { ...request, internal } : request;
-}
-
 export function createReplaySession(
   name: string,
   logPath: string,
   store: SessionStore,
 ): ReplaySession {
-  const get = () => store.get(name);
   const updateSession = (mutate: (session: SessionState) => void): boolean => {
     const session = store.get(name);
     if (!session) return false;
@@ -146,26 +113,29 @@ export function createReplaySession(
     store.set(name, session);
     return true;
   };
-  const coordinator = createReplayCoordinator({
-    sessionStore: {
-      get,
-      lookup: () => store.lookup(name),
-      getRuntimeHints: () => store.getRuntimeHints(name),
-      ensureSessionDir: () => store.ensureSessionDir(name),
-    },
-    mutationStore: {
-      update: updateSession,
-      clearRepairTombstone: () => store.clearRepairTombstone(name),
-    },
-  });
-  return {
+  return bindReplaySession(
     name,
     logPath,
-    store: {
-      get,
+    {
+      get: () => store.get(name),
       lookup: () => store.lookup(name),
       getRuntimeHints: () => store.getRuntimeHints(name),
       ensureSessionDir: () => store.ensureSessionDir(name),
+    },
+    {
+      createCoordinator: () =>
+        createReplayCoordinator({
+          sessionStore: {
+            get: () => store.get(name),
+            lookup: () => store.lookup(name),
+            getRuntimeHints: () => store.getRuntimeHints(name),
+            ensureSessionDir: () => store.ensureSessionDir(name),
+          },
+          mutationStore: {
+            update: updateSession,
+            clearRepairTombstone: () => store.clearRepairTombstone(name),
+          },
+        }),
       assertSelectorMatches: (flags) => {
         const ref = store.lookup(name);
         if (ref) assertSessionSelectorMatches(ref, flags);
@@ -181,12 +151,9 @@ export function createReplaySession(
           device,
           platform,
         }),
-    },
-    observationStore: {
-      get,
       bindAuthority: (signal) =>
         bindInternalObservationAuthority({
-          sessionStore: { get, update: updateSession },
+          sessionStore: { get: () => store.get(name), update: updateSession },
           sessionName: name,
           ...(signal ? { signal } : {}),
         }),
@@ -203,8 +170,7 @@ export function createReplaySession(
         });
       },
     },
-    coordinator,
-  };
+  );
 }
 
 type ReplayTestSessionCleanupParams = Readonly<{

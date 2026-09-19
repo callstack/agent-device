@@ -23,12 +23,15 @@ const DAEMON_REPLAY_FACADE = {
     'ReplaySessionView',
     'ReplayTestVideoOwner',
     'appTargetResolutionOptions',
+    'bindReplaySession',
     'buildMaestroReplayTargetDeviceResolutionOptions',
     'buildReplayScriptPlatformFlags',
     'healedScriptSiblingPath',
     'readScriptReplaySelection',
+    'replayInvokeOverDispatch',
     'runReplayCommand',
     'runReplayTestCommand',
+    'splitReplayCommandRequest',
   ],
 } as const;
 

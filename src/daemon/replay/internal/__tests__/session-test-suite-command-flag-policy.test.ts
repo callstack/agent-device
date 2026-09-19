@@ -11,11 +11,13 @@ import { test, vi } from 'vitest';
 import { SessionStore } from '../../../session-store.ts';
 import {
   createReplaySession,
-  replayCommandEnvelope,
   replayDaemonDependencies,
-  replayInvoke,
 } from '../../../handlers/session-replay-command.ts';
-import { runReplayTestCommand } from '../../index.ts';
+import {
+  replayInvokeOverDispatch,
+  runReplayTestCommand,
+  splitReplayCommandRequest,
+} from '../../index.ts';
 import type { ReplayTestCommand } from '../command-types.ts';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../../commands/replay/index.ts';
@@ -45,11 +47,11 @@ function testCommand(
   invoke: DaemonInvokeFn,
 ): ReplayTestCommand {
   return {
-    ...replayCommandEnvelope(req),
+    ...splitReplayCommandRequest(req),
     session: createReplaySession(req.session, path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
-    invoke: replayInvoke(invoke, req),
+    invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,
     cleanupSession: async () => {},
   };

@@ -11,6 +11,11 @@ export type {
   ReplaySessionView,
   ReplayTestVideoOwner,
 } from './internal/command-types.ts';
+export { bindReplaySession } from './internal/replay-session-binding.ts';
+export {
+  replayInvokeOverDispatch,
+  splitReplayCommandRequest,
+} from './internal/replay-dispatch-envelope.ts';
 export { healedScriptSiblingPath } from './internal/session-replay-heal.ts';
 export {
   appTargetResolutionOptions,
