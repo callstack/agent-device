@@ -168,7 +168,15 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
   // Matched and unmatched outcomes both consumed this capture: when it is an occluding system
   // surface, the response must disclose that app content is occluded.
-  if (!matchResult.ok) return withCaptureDisclosures(matchResult.response, snapshotResult);
+  // Find resolves its target from a capture it took itself, so the same tree is both what the
+  // response describes and what this request paid for.
+  if (!matchResult.ok) {
+    return withCaptureDisclosures({
+      response: matchResult.response,
+      consumedTree: snapshotResult,
+      activationProof: { state: snapshotResult },
+    });
+  }
   const node = matchResult.node;
   // Every node stage find's row declares, in one call.
   const target = await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
@@ -189,7 +197,13 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   };
 
   const response = await dispatchFindAction(ctx, match, action, value);
-  return response ? withCaptureDisclosures(response, snapshotResult) : response;
+  return response
+    ? withCaptureDisclosures({
+        response,
+        consumedTree: snapshotResult,
+        activationProof: { state: snapshotResult },
+      })
+    : response;
 }
 
 /**

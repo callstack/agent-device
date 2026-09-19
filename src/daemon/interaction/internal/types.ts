@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { RequestActivationProof } from '../../capture-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandSessionStore } from '../../../runtime-contract.ts';
 import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-outcome.ts';
@@ -31,11 +32,10 @@ export type InteractionRouteInput = {
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
   /**
-   * Filled by the LAST capture this request consumed, so the route can disclose what that capture
-   * observed without re-reading the stored snapshot — a coordinate press consumes no capture and
-   * must not be disclosed against an earlier request's tree (#2682).
+   * The foreground repair this request's own capture reported, when it captured at all. A coordinate
+   * press consumes no capture and must not be disclosed against an earlier request's tree (#2682).
    */
-  consumedSnapshot?: { state?: SnapshotState };
+  activationProof?: RequestActivationProof;
 };
 
 export type FindRouteInput = {

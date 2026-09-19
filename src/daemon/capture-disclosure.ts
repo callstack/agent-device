@@ -11,6 +11,20 @@ export type CaptureProvenance = Pick<
 >;
 
 /**
+ * The foreground repair THIS request paid for, filled by the capture path only when the request
+ * actually captured a tree (#2682).
+ *
+ * Separate from the consumed tree on purpose. A selector read may answer from a cached or stored
+ * tree — that tree still describes the surface the response is about, which is what #2438 discloses
+ * — but a cache hit performed no device work, so it can own no repair. Stamping the repair off the
+ * consumed tree would tell a command "you found the session app out of foreground" when it never
+ * looked, which is a fabricated observation rather than a disclosure.
+ */
+export type RequestActivationProof = {
+  state?: CaptureProvenance;
+};
+
+/**
  * Append the occluding-system-surface disclosure to a selector-route response whose consumed
  * snapshot was a system surface: an Android notification shade / quick settings, or an iOS in-place
  * system sheet such as web sign-in or Apple Pay (#2438). Both found and not-found outcomes must
@@ -51,12 +65,22 @@ export function withTargetActivationDisclosure(
   return { ...response, data };
 }
 
-/** Every capture-provenance disclosure a consumed tree owes its response (#2438, #2682). */
-export function withCaptureDisclosures(
-  response: DaemonResponse,
-  snapshot: CaptureProvenance | undefined,
-): DaemonResponse {
-  return withTargetActivationDisclosure(withSystemSurfaceDisclosure(response, snapshot), snapshot);
+/**
+ * Every capture-provenance disclosure a response owes, from the two different things a capture can
+ * prove: what the answered tree describes (#2438 — cache tiers included, because the surface is
+ * still on screen) and what this request's own capture found (#2682 — cache hits excluded, because
+ * a request that captured nothing repaired nothing).
+ */
+export function withCaptureDisclosures(params: {
+  response: DaemonResponse;
+  consumedTree: CaptureProvenance | undefined;
+  activationProof?: RequestActivationProof;
+}): DaemonResponse {
+  const { response, consumedTree, activationProof } = params;
+  return withTargetActivationDisclosure(
+    withSystemSurfaceDisclosure(response, consumedTree),
+    activationProof?.state,
+  );
 }
 
 function responseWarnings(value: unknown): string[] {

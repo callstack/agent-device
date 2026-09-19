@@ -445,14 +445,15 @@ export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_
 /**
  * Foreground repair the Apple runner performed while serving one command (#2682). `priorState` is
  * the session app's state BEFORE the runner activated it, so the fact describes what was repaired
- * rather than what the repair produced. `foregroundPid` is present only when exactly one
- * application other than the session app had an active accessibility session at that moment: the
- * private AX client the runner reads resolves pids and answers no bundle id for an arbitrary app.
+ * rather than what the repair produced. `otherActiveApplicationPid` is present only when exactly one
+ * application other than the session app held an active accessibility session at that moment: a
+ * liveness claim and nothing more, since the private AX client reports no ordering of
+ * `activeApplications`, resolves pids only, and answers no bundle id for an arbitrary app.
  */
 export type IosTargetActivation = Readonly<{
   reason: IosTargetActivationReason;
   priorState: IosTargetActivationPriorState;
-  foregroundPid?: number;
+  otherActiveApplicationPid?: number;
 }>;
 
 export type SnapshotState = {

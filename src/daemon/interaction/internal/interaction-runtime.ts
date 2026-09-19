@@ -55,7 +55,11 @@ export function createInteractionRuntimeForRoute(
         params.contextFromFlags,
         options,
       );
-      if (params.consumedSnapshot) params.consumedSnapshot.state = snapshot;
+      // First fact wins: a later capture in the same request that reports no repair must not erase
+      // the capture that did (#2682).
+      if (params.activationProof && snapshot.targetActivation && !params.activationProof.state) {
+        params.activationProof.state = snapshot;
+      }
       return snapshot;
     },
     runtimeSessions: createDaemonRuntimeSessionStore({

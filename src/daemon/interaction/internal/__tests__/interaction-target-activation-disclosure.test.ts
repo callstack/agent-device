@@ -12,7 +12,7 @@ import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 const FACT: IosTargetActivation = {
   reason: 'stale_target',
   priorState: 'runningBackground',
-  foregroundPid: 4562,
+  otherActiveApplicationPid: 4562,
 };
 
 function capturedTree(params: {

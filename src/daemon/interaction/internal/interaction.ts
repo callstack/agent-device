@@ -1,7 +1,9 @@
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { withTargetActivationDisclosure } from '../../capture-disclosure.ts';
+import {
+  type RequestActivationProof,
+  withTargetActivationDisclosure,
+} from '../../capture-disclosure.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
 import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
@@ -25,12 +27,12 @@ import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contra
 export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
 ): Promise<DaemonResponse | null> {
-  const consumedSnapshot: { state?: SnapshotState } = {};
-  const routed = { ...params, refSnapshotFlagGuardResponse, consumedSnapshot };
+  const activationProof: RequestActivationProof = {};
+  const routed = { ...params, refSnapshotFlagGuardResponse, activationProof };
   const response = await dispatchInteractionCommand(routed);
   // The interaction's own capture is what the gesture was aimed at, so a foreground repair inside
   // it belongs on this response even though the interaction routes never read the stored snapshot.
-  return response ? withTargetActivationDisclosure(response, consumedSnapshot.state) : response;
+  return response ? withTargetActivationDisclosure(response, activationProof.state) : response;
 }
 
 type RoutedInteractionInput = InteractionRouteInput & {
