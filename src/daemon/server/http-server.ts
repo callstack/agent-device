@@ -10,12 +10,12 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type {
   CommandRpcParams,
+  DaemonInstallSource,
   JsonRpcId,
   JsonRpcRequestEnvelope,
   LeaseBackend,
 } from '@agent-device/kernel/contracts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
-import type { DaemonInstallSource } from '../daemon-request-wire.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../daemon-request.ts';
 import { normalizeTenantId } from '../config.ts';
 import {

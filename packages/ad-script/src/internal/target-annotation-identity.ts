@@ -2,7 +2,7 @@
  * ADR 0012 decision 3: the record/replay-shared local-identity + ancestry-
  * prefix matching over versioned `.ad` target-binding evidence, plus the
  * bounded diagnostic diffs built on top of it. Both the writer (over
- * `SnapshotNode`-derived values, `src/daemon/session-target-evidence.ts`) and
+ * `SnapshotNode`-derived values, `@agent-device/selectors/target-evidence`) and
  * replay-time verification (`src/daemon/replay/internal/session-replay-target-classification.ts` and
  * `src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
  * sides compute the SAME identity/ancestry match by construction (#1478 P5
@@ -49,7 +49,7 @@ type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
  * ADR 0012 decision 3: the ONE snapshot-node local-identity reader —
  * normalized (NFC, label whitespace collapse, `normalizeType` role) AND
  * 256-byte field-capped, on every path. Shared by the record-time writer
- * (`src/daemon/session-target-evidence.ts`), replay-time verification
+ * (`@agent-device/selectors/target-evidence`), replay-time verification
  * (`src/daemon/replay/internal/session-replay-target-verification.ts`), and the
  * dispatch-side post-resolution guard
  * (`src/commands/interaction/runtime/resolution.ts`), so all three compute

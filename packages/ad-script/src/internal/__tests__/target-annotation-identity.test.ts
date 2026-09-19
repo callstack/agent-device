@@ -70,7 +70,7 @@ test('matchesLocalIdentity: with no recorded id, role+label must both match, abs
 // ---------------------------------------------------------------------------
 // Shared id demotion. `idMatchCountInTree` / `demoteNonUniqueLocalIdentity`
 // are the ONE shared uniqueness predicate behind both id-demotion sites (the
-// `target-v1` identity tuple `session-target-evidence.ts` writes at record
+// `target-v1` identity tuple `@agent-device/selectors/target-evidence` writes at record
 // time, and the selector chain `buildSelectorChainForNode` builds — see
 // `src/__tests__/selectors-build.test.ts` for that consumer's own coverage). Neither
 // consumer test exercises the pair directly; these tests pin the shared

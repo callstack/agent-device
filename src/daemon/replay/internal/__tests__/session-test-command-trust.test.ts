@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { SessionStore } from '../../../session-store.ts';
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
+import {
+  createReplaySession,
+  replayDaemonDependencies,
+} from '../../../handlers/session-replay-command.ts';
 import { runReplayTestCommand } from '../../index.ts';
 import type { ReplayCommand, ReplayTestCommand } from '../command-types.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
@@ -26,7 +29,7 @@ beforeEach(() => {
   capturedCommands.length = 0;
 });
 
-async function forwardedCommands(publicNetworkOnly?: boolean): Promise<readonly ReplayCommand[]> {
+async function forwardedCommands(publicNetworkOnly?: true): Promise<readonly ReplayCommand[]> {
   const root = mkdtempForTestSync('agent-device-test-command-trust-');
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'context platform=ios\nopen "Demo"\n');
@@ -48,6 +51,7 @@ async function forwardedCommands(publicNetworkOnly?: boolean): Promise<readonly 
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
     invoke: (async () => ({ ok: true as const, data: {} })) as DaemonInvokeFn,
+    dependencies: replayDaemonDependencies,
     cleanupSession: async () => {},
     ...(publicNetworkOnly === undefined ? {} : { publicNetworkOnly }),
   };
@@ -64,7 +68,7 @@ test('test command forwards untrusted replay trust to each attempt', async () =>
 });
 
 test('test command forwards trusted replay trust to each attempt', async () => {
-  const commands = await forwardedCommands(false);
+  const commands = await forwardedCommands();
   expect(commands).toHaveLength(1);
-  expect(commands[0]?.publicNetworkOnly).toBe(false);
+  expect(commands[0]?.publicNetworkOnly).toBeUndefined();
 });

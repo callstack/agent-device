@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';
-import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  inferFillText,
   appendScriptSeriesFlags,
   formatPortableActionLine,
   formatScriptArg,

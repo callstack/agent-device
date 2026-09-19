@@ -19,7 +19,12 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createReplayTestVideoOwner } from '../../../handlers/session-replay-video-owner.ts';
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
+import {
+  createReplaySession,
+  replayCommandEnvelope,
+  replayDaemonDependencies,
+  replayInvoke,
+} from '../../../handlers/session-replay-command.ts';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
@@ -272,24 +277,24 @@ test('test finalizes replay video exactly once when cancellation arrives after s
   if (!video) throw new Error('Expected replay video owner');
 
   const responsePromise = runReplayTestCommand({
-    request,
+    ...replayCommandEnvelope(request),
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
     video,
     cleanupSession: async () => {},
-    invoke: async (nestedReq) => {
+    dependencies: replayDaemonDependencies,
+    invoke: replayInvoke(async (nestedReq) => {
       nestedRequests.push(nestedReq);
       if (nestedReq.command === 'open') {
         const provisionalSession = makeIosSession(nestedReq.session);
         sessionStore.set(nestedReq.session, provisionalSession);
-        const hookResponse =
-          await nestedReq.internal?.openLifecycle?.beforeDispatch?.(provisionalSession);
+        const hookResponse = await nestedReq.internal?.openLifecycle?.beforeDispatch?.();
         if (hookResponse && !hookResponse.ok) return hookResponse;
         events.push('open:dispatch');
       }
       return { ok: true, data: { session: nestedReq.session } };
-    },
+    }, request),
   });
   await vi.advanceTimersByTimeAsync(4_000);
   const response = await responsePromise;

@@ -48,7 +48,7 @@ import {
   computeScrollRegionKey,
   scrollRegionKeysEqual,
   orderByViewportPosition,
-} from '../../session-target-evidence.ts';
+} from '@agent-device/selectors/target-evidence';
 import { resolveRecordedTarget } from '@agent-device/selectors';
 import { resolveUnverifiedWrapperControl } from '@agent-device/selectors/interaction-targeting';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';

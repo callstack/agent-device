@@ -8,7 +8,7 @@ import type {
   PerfProfileHandoff,
 } from '@agent-device/contracts/perf-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
+import type { SessionAction, SessionScope, SessionSurface } from '@agent-device/contracts/session';
 import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
@@ -25,7 +25,7 @@ import type { SessionScriptPublicationState } from './session-script-publication
  * `ref-frame.ts` owns the `refFrame` slot whose value is declared in `ref-frame-slot.ts`.
  *
  * Nothing here belongs on the wire. The request half of a dispatch lives in `daemon-request.ts`,
- * and its public-only shape in `daemon-request-wire.ts`.
+ * and its public-only shape is `DaemonWireRequest` in `@agent-device/contracts/command`.
  */
 
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
@@ -116,12 +116,6 @@ export type SessionRef = {
   address: string;
   session: SessionState;
 };
-
-export type SessionScope =
-  | { kind: 'cwd'; id: string }
-  | { kind: 'tenant'; id: string }
-  | { kind: 'named-local' }
-  | { kind: 'global-default' };
 
 export type SessionState = {
   name: string;

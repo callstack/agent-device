@@ -7,9 +7,11 @@ export {
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
   filterDeviceInventoryProjection,
+  isDeviceClaimConflictReason,
   projectProviderDeviceInventoryRequest,
 } from '../device-inventory.ts';
 export type {
+  DeviceClaimConflictReason,
   DeviceInventoryGroup,
   DeviceInventoryGroupCounts,
   DeviceInventoryRequest,

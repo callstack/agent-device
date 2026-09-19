@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
 import { SessionStore } from '../../../session-store.ts';
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
+import { replayCommandForTest } from '../../__tests__/replay-command-fixture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
@@ -37,11 +37,15 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
     meta: { requestId: 'req-maestro-address' },
   } as unknown as DaemonRequest;
 
-  const response = await runTypedMaestroReplay({
-    request: req,
-    session: createReplaySession(SCOPED_ADDRESS, path.join(root, 'daemon.log'), sessionStore),
-    invoke: async () => ({ ok: true, data: {} }),
-  });
+  const response = await runTypedMaestroReplay(
+    replayCommandForTest({
+      req,
+      sessionName: SCOPED_ADDRESS,
+      logPath: path.join(root, 'daemon.log'),
+      sessionStore,
+      invoke: async () => ({ ok: true, data: {} }),
+    }),
+  );
 
   expect(response.ok).toBe(false);
   if (response.ok) return;

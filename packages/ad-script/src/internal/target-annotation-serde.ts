@@ -1,7 +1,7 @@
 /**
  * ADR 0012 decision 3: versioned `.ad` target-binding evidence — the
  * comment-line SERDE half shared by the writer
- * (`src/daemon/session-target-evidence.ts`) and the parser
+ * (`@agent-device/selectors/target-evidence`) and the parser
  * (`packages/ad-script/src/internal/script.ts`). Owns the wire type,
  * canonical field order, normalization, size caps, and payload
  * parsing/validation.

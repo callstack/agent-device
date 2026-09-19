@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
-import { maestroOperationDaemonRequest } from '../session-replay-maestro-request.ts';
+import type { ReplayDispatchRequest } from '../command-types.ts';
+import { maestroOperationDispatchRequest } from '../session-replay-maestro-request.ts';
 
-const replay: DaemonRequest = {
+const replay: ReplayDispatchRequest = {
   token: 'nested-token',
   session: 'maestro-nested',
   command: 'replay',
@@ -20,11 +20,11 @@ const replay: DaemonRequest = {
     metroPort: 8081,
     bundleUrl: 'http://127.0.0.1:8081/index.bundle',
   },
-  internal: { publicNetworkOnly: true },
+  dispatch: { observationOnly: true },
 };
 
 test('keeps the replay request envelope and replaces the command it carried', () => {
-  const request = maestroOperationDaemonRequest(replay, {
+  const request = maestroOperationDispatchRequest(replay, {
     command: 'open',
     positionals: ['com.example.app'],
     flags: { platform: 'android', target: 'mobile', noRecord: true, relaunch: true },
@@ -38,22 +38,22 @@ test('keeps the replay request envelope and replaces the command it carried', ()
     command: 'open',
     positionals: ['com.example.app'],
     flags: { platform: 'android', target: 'mobile', noRecord: true, relaunch: true },
-    internal: { publicNetworkOnly: true },
+    dispatch: { observationOnly: true },
   });
   expect(request).not.toHaveProperty('input');
 });
 
-test('folds the dispatch options into the request-private half beside the replay state', () => {
+test('folds the operation dispatch options beside the ones the replay carries', () => {
   const viewport = { x: 0, y: 100, width: 402, height: 650 };
-  const request = maestroOperationDaemonRequest(replay, {
+  const request = maestroOperationDispatchRequest(replay, {
     command: 'gesture',
     positionals: [],
     input: { kind: 'pan', origin: { x: 1, y: 2 }, delta: { x: -3, y: 0 }, durationMs: 300 },
     dispatch: { gestureExecutionProfile: 'endpoint-hold', gestureViewport: viewport },
   });
 
-  expect(request.internal).toEqual({
-    publicNetworkOnly: true,
+  expect(request.dispatch).toEqual({
+    observationOnly: true,
     gestureExecutionProfile: 'endpoint-hold',
     gestureViewport: viewport,
   });
@@ -65,8 +65,8 @@ test('folds the dispatch options into the request-private half beside the replay
   });
 });
 
-test('omits internal entirely when neither side carries request-private state', () => {
-  const request = maestroOperationDaemonRequest(
+test('omits dispatch entirely when neither side carries options', () => {
+  const request = maestroOperationDispatchRequest(
     { token: 'token', session: 'session', command: 'replay', positionals: [] },
     { command: 'snapshot', positionals: [], flags: { noRecord: true } },
   );
@@ -81,29 +81,29 @@ test('omits internal entirely when neither side carries request-private state', 
 });
 
 test('marks projected hierarchy captures as observation-only for the daemon', () => {
-  const request = maestroOperationDaemonRequest(
+  const request = maestroOperationDispatchRequest(
     { token: 'token', session: 'session', command: 'replay', positionals: [] },
     { command: 'snapshot', positionals: [], dispatch: { observationOnly: true } },
   );
 
-  expect(request.internal).toEqual({ observationOnly: true });
+  expect(request.dispatch).toEqual({ observationOnly: true });
 });
 
-test('leaves request-private state the operation does not set untouched', () => {
+test('leaves dispatch options the operation does not set untouched', () => {
   const viewport = { x: 0, y: 0, width: 402, height: 874 };
-  const request = maestroOperationDaemonRequest(
+  const request = maestroOperationDispatchRequest(
     {
       token: 'token',
       session: 'session',
       command: 'replay',
       positionals: [],
-      internal: { publicNetworkOnly: true, gestureViewport: viewport },
+      dispatch: { replayPlanStep: true, gestureViewport: viewport },
     },
     { command: 'open', positionals: [], dispatch: { closeAppOnly: true } },
   );
 
-  expect(request.internal).toEqual({
-    publicNetworkOnly: true,
+  expect(request.dispatch).toEqual({
+    replayPlanStep: true,
     gestureViewport: viewport,
     closeAppOnly: true,
   });

@@ -28,7 +28,7 @@ const COORDINATOR_MODULE = 'src/daemon/session-replay-coordinator.ts';
 const TRANSACTION_MODULE = 'src/daemon/session-replay-transaction.ts';
 const SESSION_STORE_MODULE = 'src/daemon/session-store.ts';
 
-const RUNTIME_FILE = 'src/daemon/replay/internal/native-command.ts';
+const RUNTIME_FILE = 'src/daemon/handlers/session-replay-command.ts';
 
 /** The divergence-report chain: never a second `ReplayCoordinator`, never a bare `SessionStore`. */
 const DIVERGENCE_CHAIN_FILES = [

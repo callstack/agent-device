@@ -1,11 +1,11 @@
-import type { SessionSurface } from '@agent-device/contracts/session';
+import type { SessionScope, SessionSurface } from '@agent-device/contracts/session';
 import {
   isIosFamily,
   isSerialAddressablePlatform,
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { SessionRuntimeHints, SessionScope, SessionState } from '../../session-state.ts';
+import type { SessionRuntimeHints, SessionState } from '../../session-state.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
 import type { DeviceSelectionResult } from '@agent-device/device-selection/device-selection-resolver';

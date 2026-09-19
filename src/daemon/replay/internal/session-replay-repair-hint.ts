@@ -16,7 +16,7 @@
  * Lives in the daemon zone because the container-presence test
  * below is a genuine structural containment check over `parentIndex` — the
  * same tree-walking machinery decision 3's own identity-set filter uses
- * (`buildAncestryChain`/`computeScrollRegionKey`, `session-target-evidence.ts`)
+ * (`buildAncestryChain`/`computeScrollRegionKey`, `@agent-device/selectors/target-evidence`)
  * — not a flat identity-string search.
  */
 
@@ -24,7 +24,10 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergenceKind, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import { matchesAncestryPrefix, buildAncestryChain, buildIndexMap } from '@agent-device/ad-script';
 import type { TargetAnnotationV1, TargetScrollRegion } from '@agent-device/contracts/replay';
-import { computeScrollRegionKey, scrollRegionKeysEqual } from '../../session-target-evidence.ts';
+import {
+  computeScrollRegionKey,
+  scrollRegionKeysEqual,
+} from '@agent-device/selectors/target-evidence';
 
 export type ReplayRepairHintCapture =
   | { state: 'available'; nodes: SnapshotNode[] }

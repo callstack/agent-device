@@ -1,17 +1,8 @@
 import fs from 'node:fs';
-import type { DaemonRequest } from '../../daemon-request.ts';
-import type { ReplaySessionStore } from './command-types.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { ReplayCoordinator, ReplaySessionStore, ReplaySessionView } from './command-types.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
-import {
-  NO_SCRIPT_PUBLICATION,
-  scriptTargetForce,
-  scriptTargetPath,
-  type SessionScriptPublicationState,
-} from '../../session-script-publication-state.ts';
-import {
-  healedScriptSiblingPath,
-  type ReplayCoordinator,
-} from '../../session-replay-coordinator.ts';
+import { healedScriptSiblingPath } from './session-replay-heal.ts';
 import {
   errorResponse,
   noActiveSessionError,
@@ -27,8 +18,15 @@ import {
  * EEXIST preflight, and the actual arming closure).
  */
 
+const NO_SCRIPT_PUBLICATION_VIEW: ReplaySessionView['scriptPublication'] = {
+  kind: 'none',
+  status: undefined,
+  targetPath: undefined,
+  targetForce: false,
+};
+
 export function prepareReplaySession(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   entryIndex: number;
   sessionStore: ReplaySessionStore;
   sourcePath: string;
@@ -66,7 +64,7 @@ function validateReplaySessionEntry(params: {
 function rejectSaveScriptArming(params: {
   saveScript: boolean | string | undefined;
   force: boolean | undefined;
-  preRunState: SessionScriptPublicationState;
+  preRunState: ReplaySessionView['scriptPublication'];
   sourcePath: string;
 }): DaemonResponse | undefined {
   const { saveScript, force, preRunState, sourcePath } = params;
@@ -79,25 +77,24 @@ function rejectSaveScriptArming(params: {
   return preflightSaveScriptTarget({
     saveScript,
     liveForce: force,
-    persistedForce: scriptTargetForce(preRunState) || undefined,
+    persistedForce: preRunState.targetForce || undefined,
     sourcePath,
-    existingSaveScriptPath: scriptTargetPath(preRunState),
+    existingSaveScriptPath: preRunState.targetPath,
   });
 }
 
 function prepareSaveScriptSession(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   sessionStore: ReplaySessionStore;
   sourcePath: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, sessionStore, sourcePath, coordinator } = params;
-  const preRunSession = sessionStore.get();
+  const { req, sourcePath, coordinator } = params;
   const { saveScript, force } = req.flags ?? {};
   const rejection = rejectSaveScriptArming({
     saveScript,
     force,
-    preRunState: preRunSession?.scriptPublication ?? NO_SCRIPT_PUBLICATION,
+    preRunState: coordinator.view()?.scriptPublication ?? NO_SCRIPT_PUBLICATION_VIEW,
     sourcePath,
   });
   if (rejection) return { ok: false, response: rejection };
@@ -115,7 +112,7 @@ function prepareSaveScriptSession(params: {
 }
 
 function consumeReplayResumeState(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   coordinator: ReplayCoordinator;
 }): void {
   const { req, coordinator } = params;

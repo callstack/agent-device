@@ -1,0 +1,3 @@
+appId: com.example.app
+---
+- evalScript: ${output.sum = 1 + 2}

@@ -10,9 +10,12 @@ import {
 } from '@agent-device/ad-replay/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { DaemonRequest } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
-import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type {
+  ReplaySessionObservation,
+  ReplaySessionState,
+  ReplaySessionStore,
+} from './command-types.ts';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {
@@ -44,7 +47,7 @@ export type MaestroFailureReportProjection = {
 
 export function buildTypedMaestroFailureReportProjection(
   failure: MaestroFailedAction,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
 ): MaestroFailureReportProjection {
   const progress = {
     command: failure.action,
@@ -66,7 +69,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly error: DaemonError;
   readonly failure: MaestroFailedAction;
   readonly replayPath: string;
-  readonly req: DaemonRequest;
+  readonly req: DaemonWireRequest;
   readonly sessionStore: ReplaySessionStore;
   readonly observationStore: ReplaySessionObservation;
   readonly logPath: string;
@@ -161,7 +164,7 @@ export async function buildTypedMaestroFailureResponse(params: {
 function collectTypedMaestroSuggestions(params: {
   failure: MaestroFailedAction;
   action: MaestroFailureReportAction;
-  session: SessionState;
+  session: ReplaySessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
 }) {

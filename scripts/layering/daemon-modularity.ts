@@ -27,11 +27,11 @@ export const DAEMON_MODULARITY_BASELINE = {
 } as const;
 
 // The modules that own the daemon's dispatch vocabulary since #2338 split `daemon/types.ts`:
-// the request shape, its wire-only half, and the live session record. All three are ratcheted
+// the request shape and the live session record (the wire-only half moved to
+// `@agent-device/contracts/command` as `DaemonWireRequest`). Both are ratcheted
 // together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
 const DAEMON_TYPE_MODULES: readonly string[] = [
   'src/daemon/daemon-request.ts',
-  'src/daemon/daemon-request-wire.ts',
   'src/daemon/session-state.ts',
 ];
 

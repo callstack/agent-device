@@ -10,8 +10,8 @@ import {
   buildDeviceClaimInspectionCommand,
   decideAllocatorHeldAdmission,
   DEVICE_CLAIM_ALLOCATOR_HELD,
-  isDeviceClaimConflictReason,
 } from '../device-claim-conflict.ts';
+import { isDeviceClaimConflictReason } from '@agent-device/contracts/device';
 import type { AllocatorHeldClaimAdmission } from '../device-claim-allocator.ts';
 import type { InspectedDeviceClaim } from '../device-claim-inspection.ts';
 

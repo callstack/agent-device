@@ -21,13 +21,17 @@ import type { SessionCommandParams } from '../session-command-input.ts';
 import { makeSessionStore } from './session-test-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-const runReplayCommand = vi.fn(async (_command: ReplayCommand) => ({
-  ok: true as const,
-  data: {},
-}));
-const runReplayTestCommand = vi.fn(async (_command: ReplayTestCommand) => ({
-  ok: true as const,
-  data: {},
+// Hoisted: the handler reaches the replay façade through a daemon module that this file's own
+// imports pull in, so the factory below runs before a plain `const` would be initialized.
+const { runReplayCommand, runReplayTestCommand } = vi.hoisted(() => ({
+  runReplayCommand: vi.fn(async (_command: ReplayCommand) => ({
+    ok: true as const,
+    data: {},
+  })),
+  runReplayTestCommand: vi.fn(async (_command: ReplayTestCommand) => ({
+    ok: true as const,
+    data: {},
+  })),
 }));
 
 vi.mock('../../replay/index.ts', () => ({
@@ -95,7 +99,7 @@ test('replay handler maps internal.publicNetworkOnly to the command input', asyn
 
 test('replay handler marks a local request as trusted', async () => {
   await handleReplayCommand(baseParams('replay'));
-  expect(runReplayCommand.mock.calls[0]?.[0].publicNetworkOnly).toBe(false);
+  expect(runReplayCommand.mock.calls[0]?.[0].publicNetworkOnly).toBeUndefined();
 });
 
 test('replay test handler maps internal.publicNetworkOnly to the command input', async () => {
@@ -105,5 +109,5 @@ test('replay test handler maps internal.publicNetworkOnly to the command input',
 
 test('replay test handler marks a local request as trusted', async () => {
   await handleReplayTestCommand(testParams());
-  expect(runReplayTestCommand.mock.calls[0]?.[0].publicNetworkOnly).toBe(false);
+  expect(runReplayTestCommand.mock.calls[0]?.[0].publicNetworkOnly).toBeUndefined();
 });

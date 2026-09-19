@@ -22,7 +22,13 @@
 
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
-import { findNearestScrollableContainer } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { findNearestScrollableContainer } from '@agent-device/capture-kit/ios-snapshot-tree';
+import type {
+  TargetAncestryEntry,
+  TargetAnnotationV1,
+  TargetScrollRegion,
+  TargetVerification,
+} from '@agent-device/contracts/replay';
 import {
   buildAncestryChain,
   buildIndexMap,
@@ -38,12 +44,6 @@ import {
   TARGET_ANNOTATION_MAX_ANCESTRY,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
 } from '@agent-device/ad-script';
-import type {
-  TargetAncestryEntry,
-  TargetAnnotationV1,
-  TargetScrollRegion,
-  TargetVerification,
-} from '@agent-device/contracts/replay';
 
 /** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
 export type RecordedTargetCapture = {

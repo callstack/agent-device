@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { computeTargetEvidence } from '../../../session-target-evidence.ts';
+import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { classifyReplayTarget } from '../session-replay-target-classification.ts';

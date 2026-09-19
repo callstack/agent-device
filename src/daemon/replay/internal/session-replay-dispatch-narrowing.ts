@@ -1,4 +1,4 @@
-import type { DaemonRequest } from '../../daemon-request.ts';
+import type { ReplayDispatchRequest } from './command-types.ts';
 import type {
   AdReplayDispatchGuard,
   AdReplayDispatchOutcome,
@@ -39,12 +39,12 @@ import { type DaemonResponse } from '@agent-device/kernel/contracts';
  * wire-reading responsibility, not engine policy.
  */
 
-/** Threads a pre-action identity guard into the request's `internal` block the interaction layer reads for its own resolution — a no-op when no guard applies. */
+/** Threads a pre-action identity guard into the dispatch options the interaction layer reads for its own resolution — a no-op when no guard applies. */
 export function applyReplayDispatchGuard(
-  replayReq: DaemonRequest,
+  replayReq: ReplayDispatchRequest,
   guard: AdReplayDispatchGuard | undefined,
-): DaemonRequest {
-  const guardInternal =
+): ReplayDispatchRequest {
+  const guardDispatch =
     guard?.kind === 'target'
       ? { replayTargetGuard: guard.guard.expected }
       : guard?.kind === 'targets'
@@ -57,8 +57,8 @@ export function applyReplayDispatchGuard(
         : guard?.kind === 'landmark'
           ? { replayLandmarkGuard: guard.landmark }
           : undefined;
-  return guardInternal
-    ? { ...replayReq, internal: { ...replayReq.internal, ...guardInternal } }
+  return guardDispatch
+    ? { ...replayReq, dispatch: { ...replayReq.dispatch, ...guardDispatch } }
     : replayReq;
 }
 

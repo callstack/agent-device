@@ -1,4 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,8 @@ import {
   publicPlatformString,
 } from '@agent-device/kernel/device';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionRef, SessionScope, SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from './session-store.ts';
 import { listSessionSelectorConflicts, type SessionSelectorConflict } from './session-selector.ts';
 
@@ -58,7 +59,7 @@ export function resolveImplicitSessionScope(
   return scope.kind === 'cwd' ? scope : undefined;
 }
 
-export function resolveSessionScope(req: DaemonRequest): SessionScope {
+export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
   if (req.meta?.sessionIsolation === 'tenant' || req.flags?.sessionIsolation === 'tenant') {
     const tenantId = req.meta?.tenantId;
     if (!tenantId) {
@@ -102,7 +103,7 @@ export function isImplicitSessionScopeConflict(req: DaemonRequest, session: Sess
   return session.sessionScope.id !== scope.id;
 }
 
-export function hasExplicitSessionFlag(req: DaemonRequest): boolean {
+export function hasExplicitSessionFlag(req: DaemonWireRequest): boolean {
   if (req.meta?.sessionExplicit === true) return true;
   const value = (req.flags as CommandFlags | undefined)?.session;
   return typeof value === 'string' && value.trim().length > 0;

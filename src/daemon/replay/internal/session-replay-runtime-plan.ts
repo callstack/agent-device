@@ -1,10 +1,14 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
-import type { ReplayCoordinator } from '../../session-replay-coordinator.ts';
-import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
-import { buildReplayScriptPlatformFlags } from '../../replay-device-selection.ts';
+import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
+import type {
+  ReplayCommand,
+  ReplayCoordinator,
+  ReplayDispatchRequest,
+  ReplaySessionState,
+  ReplaySessionStore,
+} from './command-types.ts';
+import { buildReplayScriptPlatformFlags } from './replay-script-selection.ts';
 import {
   inspectAdReplay,
   type AdReplayManifest,
@@ -63,12 +67,12 @@ export async function routeMaestroReplay(params: {
 }
 
 export type PreparedReplayPlan = {
-  replayReq: DaemonRequest;
+  replayReq: ReplayDispatchRequest;
   actions: SessionAction[];
   actionLines: number[];
   actionSourcePaths: (string | undefined)[] | undefined;
   planDigest: string;
-  preEntrySession: SessionState | undefined;
+  preEntrySession: ReplaySessionState | undefined;
   entryIndex: number;
   /**
    * `${VAR}` scope INPUTS — plain data, never a built `ReplayVarScope`
@@ -81,7 +85,7 @@ export type PreparedReplayPlan = {
 };
 
 export function prepareReplayPlan(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   sessionName: string;
   sessionStore: ReplaySessionStore;
   tracePath: string | undefined;
@@ -89,12 +93,15 @@ export function prepareReplayPlan(params: {
   /** The entry script's text, taken from the request's replay script source bundle (#1802). */
   script: string;
   coordinator: ReplayCoordinator;
+  /** Dispatch options the command carries; every plan step inherits them. */
+  dispatch: ReplayDispatchOptions | undefined;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved, script, coordinator } = params;
+  const { req, sessionName, sessionStore, tracePath, resolved, script, coordinator, dispatch } =
+    params;
   const backendRejection = validateReplayBackendFlag(req);
   if (backendRejection) return { ok: false, response: backendRejection };
 
-  const { manifest, replayReq } = inspectReplayPlanManifest(req, script);
+  const { manifest, replayReq } = inspectReplayPlanManifest(req, script, dispatch);
   const { metadata, actions, actionLines, actionSourcePaths, planDigest } = manifest;
   const preEntrySession = sessionStore.get();
   const entryIndexResult = resolveReplayPlanEntryIndex({
@@ -138,7 +145,7 @@ export function prepareReplayPlan(params: {
  * Maestro-format request to `runTypedMaestroReplay` above; only a
  * stray/unknown value reaches this branch.
  */
-function validateReplayBackendFlag(req: DaemonRequest): DaemonResponse | undefined {
+function validateReplayBackendFlag(req: DaemonWireRequest): DaemonResponse | undefined {
   if (req.flags?.replayBackend && req.flags.replayBackend !== 'maestro') {
     return errorResponse(
       'INVALID_ARGS',
@@ -156,25 +163,30 @@ function validateReplayBackendFlag(req: DaemonRequest): DaemonResponse | undefin
  * `readEffectiveReplayPlanDigestMetadata(replayReq.flags)`.
  */
 function inspectReplayPlanManifest(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   script: string,
-): { manifest: AdReplayManifest; replayReq: DaemonRequest } {
+  dispatch: ReplayDispatchOptions | undefined,
+): { manifest: AdReplayManifest; replayReq: ReplayDispatchRequest } {
   const manifest = inspectAdReplay(script, {
     platform: req.flags?.platform,
     target: req.flags?.target,
   });
   const replayReq = applyReplayMetadata(
-    { ...req, flags: buildReplayScriptPlatformFlags(req.flags, manifest.actions) },
+    {
+      ...req,
+      flags: buildReplayScriptPlatformFlags(req.flags, manifest.actions),
+      ...(dispatch ? { dispatch } : {}),
+    },
     manifest.metadata,
   );
   return { manifest, replayReq };
 }
 
 function resolveReplayPlanEntryIndex(params: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   coordinator: ReplayCoordinator;
   manifest: AdReplayManifest;
-  preEntrySession: SessionState | undefined;
+  preEntrySession: ReplaySessionState | undefined;
 }): { ok: true; value: number } | { ok: false; response: DaemonResponse } {
   const { req, coordinator, manifest, preEntrySession } = params;
   const entryIndex = manifest.resolveEntryIndex({
@@ -190,9 +202,9 @@ function resolveReplayPlanEntryIndex(params: {
 }
 
 function applyReplayMetadata(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   metadata: AdReplayManifest['metadata'],
-): DaemonRequest {
+): DaemonWireRequest {
   if (!metadata.platform && !metadata.target) return req;
   return { ...req, flags: buildReplayMetadataFlags(req.flags, metadata) };
 }
@@ -206,8 +218,8 @@ function applyReplayMetadata(
  * P1); this function stops at collecting the plain data.
  */
 function buildPreparedReplayVarSources(params: {
-  req: DaemonRequest;
-  replayReq: DaemonRequest;
+  req: DaemonWireRequest;
+  replayReq: ReplayDispatchRequest;
   sessionName: string;
   resolved: string;
   metadata: AdReplayManifest['metadata'];

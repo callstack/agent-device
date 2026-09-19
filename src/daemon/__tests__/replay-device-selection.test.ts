@@ -2,10 +2,8 @@ import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '@agent-device/ad-script';
-import {
-  buildReplayScriptPlatformFlags,
-  buildReplayTargetDeviceResolution,
-} from '../replay-device-selection.ts';
+import { buildReplayTargetDeviceResolution } from '../replay-device-selection.ts';
+import { buildReplayScriptPlatformFlags } from '../replay/index.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 

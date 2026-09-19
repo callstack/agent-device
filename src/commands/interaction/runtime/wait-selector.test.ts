@@ -9,7 +9,7 @@ import {
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock } from './__tests__/test-utils/index.ts';
-import { computeTargetEvidence } from '../../../daemon/session-target-evidence.ts';
+import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
 

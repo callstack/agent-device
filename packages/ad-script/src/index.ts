@@ -63,6 +63,7 @@ export {
 } from './internal/format.ts';
 
 export {
+  inferFillText,
   readRecordedInputVariableName,
   recordedInputPlaceholder,
   validateRecordedInputVariableName,

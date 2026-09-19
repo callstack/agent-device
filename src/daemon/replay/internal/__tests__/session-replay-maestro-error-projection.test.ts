@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
 import { SessionStore } from '../../../session-store.ts';
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
+import { replayCommandForTest } from '../../__tests__/replay-command-fixture.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
@@ -35,11 +35,15 @@ test('a typed Maestro replay error keeps its recovery hint', async () => {
     meta: { requestId: 'req-maestro-hint' },
   } as unknown as DaemonRequest;
 
-  const response = await runTypedMaestroReplay({
-    request: req,
-    session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
-    invoke: async () => ({ ok: true, data: {} }),
-  });
+  const response = await runTypedMaestroReplay(
+    replayCommandForTest({
+      req,
+      sessionName: 'default',
+      logPath: path.join(root, 'daemon.log'),
+      sessionStore,
+      invoke: async () => ({ ok: true, data: {} }),
+    }),
+  );
 
   expect(response.ok).toBe(false);
   if (response.ok) return;

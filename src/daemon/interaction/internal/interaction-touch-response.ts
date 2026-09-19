@@ -16,7 +16,7 @@ import {
   type InteractionResponseDataTransformCommand,
 } from '../../../core/interaction-response-data-transform.ts';
 import { issueSettleRefs } from '../../session-snapshot.ts';
-import type { RecordedTargetCapture } from '../../session-target-evidence.ts';
+import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import type { SessionState } from '../../session-state.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { resolveDirectTouchReferenceFrameSafely } from './interaction-touch-reference-frame.ts';

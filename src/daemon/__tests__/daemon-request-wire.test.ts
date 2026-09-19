@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DaemonRequest } from '../daemon-request.ts';
-import type { DaemonWireRequest } from '../daemon-request-wire.ts';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { ExecutionPlan } from '../execution-plan.ts';
 import type { SessionState } from '../session-state.ts';
 
 /**
@@ -53,7 +54,10 @@ const wireCannotReachDeviceLease: IsExactly<Reaches<DaemonWireRequest, DeviceLea
 
 // Positive controls: without these, a walk that simply never finds anything would pass above.
 const requestHasInternalKey: IsExactly<Extract<keyof DaemonRequest, 'internal'>, 'internal'> = true;
-const requestReachesSessionState: IsExactly<Reaches<DaemonRequest, SessionState>, true> = true;
+// The private half no longer names `SessionState` itself (its open-lifecycle hook takes no
+// session since the replay dispatch options moved to contracts); the batch execution plan is the
+// daemon-only shape it still carries, so it stands as the second positive control.
+const requestReachesExecutionPlan: IsExactly<Reaches<DaemonRequest, ExecutionPlan>, true> = true;
 const requestReachesDeviceLease: IsExactly<Reaches<DaemonRequest, DeviceLease>, true> = true;
 
 test('the wire request shape carries no daemon-only half', () => {
@@ -65,7 +69,7 @@ test('the wire request shape carries no daemon-only half', () => {
 });
 
 test('the daemon request shape does reach both, so the walk above can find them', () => {
-  expect([requestHasInternalKey, requestReachesSessionState, requestReachesDeviceLease]).toEqual([
+  expect([requestHasInternalKey, requestReachesExecutionPlan, requestReachesDeviceLease]).toEqual([
     true,
     true,
     true,
