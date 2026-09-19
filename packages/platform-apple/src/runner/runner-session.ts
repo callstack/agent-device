@@ -197,6 +197,13 @@ async function startRunnerSessionWithLease(
     const { assertDevToolsSecurityForIosRunner } = await import('./runner-dev-tools-security.ts');
     await assertDevToolsSecurityForIosRunner(device);
   });
+  await measureRunnerStartupStep(startupTimings, 'verify_device_readiness', async () => {
+    // Read from the device rather than from any tool's opinion of it, and loaded here for the same
+    // reason as the host probe above: a preflight only a physical device ever needs has no business
+    // in the eager closure of the runner subtree (#2683).
+    const { assertDeviceReadinessForIosRunner } = await import('./runner-device-readiness.ts');
+    await assertDeviceReadinessForIosRunner(device);
+  });
   if (options.cleanStaleBundles) {
     await measureRunnerStartupStep(startupTimings, 'cleanup_stale_bundles', async () => {
       await cleanupStaleSimulatorRunnerBundles(device);
