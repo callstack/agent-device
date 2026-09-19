@@ -3,13 +3,14 @@
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   { contracts, request, selectors } ◄ core ◄ { commands, cli-schema }
+//   { contracts, request, selectors } ◄ core ◄ commands
 //         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 // (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
 // zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
-// `commands` and `cli-schema` share a rank, so the spine cannot order them; R2 declares the
-// direction instead — cli-schema renders the command facets and reads them, commands never
-// imports cli-schema (#2543).
+// `commands/schema/` renders the rest of commands/'s facets and reads them; commands never
+// imports it back (#2543). It shares the commands zone (#2679 folded the standalone
+// cli-schema zone into it), so the ranked spine and the R2 zone-policy table cannot see the
+// edge — `commands-schema-boundary.ts` enforces the direction as a folder-scoped rule instead.
 //
 // This gate enforces five things, across four scopes:
 //   - GLOBALLY, across every production source file: the remaining R2 move rule and
@@ -103,6 +104,7 @@ import {
   readTrackedPlatformPackageDeclarations,
 } from './platform-package-repository.ts';
 import { policyLead, policyViolation, ZONE_POLICIES } from './zone-policy.ts';
+import { checkCommandsSchemaBoundary } from './commands-schema-boundary.ts';
 import { contractsImplementationAuthorityViolations } from './contracts-implementation-policy.ts';
 import { substrateDomainShapeViolations } from './substrate-domain-shape.ts';
 import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownership.ts';
@@ -436,6 +438,7 @@ export type LayeringRule = (context: LayeringContext) => LayeringViolation[];
  */
 export const LAYERING_RULE_IDS = [
   'zone-policies',
+  'commands-schema-boundary',
   'value-import-cycles',
   'runtime-execution-integrity',
   'source-execution-compatibility',
@@ -468,6 +471,7 @@ export type LayeringRuleId = (typeof LAYERING_RULE_IDS)[number];
 
 export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'zone-policies': (context) => checkLayeringRules(context.edges),
+  'commands-schema-boundary': (context) => checkCommandsSchemaBoundary(context.edges),
   'value-import-cycles': (context) => checkCycles(context.edges),
   'runtime-execution-integrity': (context) => runtimeExecutionIntegrityViolations(context.sources),
   'source-execution-compatibility': (context) =>

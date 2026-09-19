@@ -44,22 +44,6 @@ test('R2 commands-floor closes the remaining zones below the command surface, wh
   assert.deepEqual(firing(edge('src/mcp/tools.ts', 'mcp', 'commands')), []);
 });
 
-test('R2 commands-floor places commands below the cli-schema layer, whatever the kind', () => {
-  // #2543: cli-schema renders the facets commands authors, so it reads commands and commands never
-  // reads it back. The direction holds for value, type-only, and dynamic forms alike.
-  for (const kind of [{}, { typeOnly: true }, { dynamic: true }]) {
-    assert.ok(
-      firing(edge('src/commands/thing.ts', 'commands', 'cli-schema', kind)).includes(
-        'R2 commands-floor',
-      ),
-      `commands -> cli-schema ${JSON.stringify(kind)} must violate R2`,
-    );
-  }
-
-  // The declared direction — cli-schema reading the facets — must stay silent.
-  assert.deepEqual(firing(edge('src/cli-schema/command-schema.ts', 'cli-schema', 'commands')), []);
-});
-
 test('the retired R3 platforms seam has no zone-policy declaration', () => {
   assert.equal(
     ZONE_POLICIES.some(({ rule }) => rule === 'R3 platforms-seam'),

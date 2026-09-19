@@ -44,10 +44,13 @@ export type ZonePolicy = {
  * packages/kernel, where package resolution and R11 package-boundaries enforce
  * the sink property physically — a package cannot import root src at all.
  *
- * The two rows share `R2 commands-floor`: both state that commands sits at a floor and is read
- * from above. The first keeps `core`/`daemon` below it; the second places `cli-schema` above it,
- * so commands may not import the schema layer that renders its facets (#2543 declared the
- * direction after the shared schema grammar moved down to the command registry).
+ * `R2 commands-floor` states that commands sits at a floor and is read from above, keeping
+ * `core`/`daemon` below it. It used to carry a second row placing `cli-schema` above commands
+ * (#2543: commands may not import the schema layer that renders its facets), but #2679 folded
+ * `cli-schema` into `commands/schema/`, putting both sides of that direction in the same zone —
+ * a same-zone edge this table can never see, since `checkLayeringRules` only evaluates edges
+ * that cross zones. `commands-schema-boundary.ts` enforces that direction now, as a
+ * folder-scoped rule instead of a zone-policy row.
  */
 export const ZONE_POLICIES: readonly ZonePolicy[] = [
   {
@@ -57,15 +60,6 @@ export const ZONE_POLICIES: readonly ZonePolicy[] = [
     hint:
       'commands/ is the command surface, above these zones. Depend on shared kernel/contracts ' +
       'instead; if two zones need the same rule, put the rule below both of them.',
-  },
-  {
-    rule: 'R2 commands-floor',
-    from: ['commands'],
-    to: ['cli-schema'],
-    hint:
-      'cli-schema is the CLI/MCP schema layer that renders the command facets, so it sits above ' +
-      'commands and reads them; commands must not import it back. The shared CommandSchema type and ' +
-      'flag grammar live in @agent-device/command-registry, below both zones.',
   },
 ];
 
