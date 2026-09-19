@@ -1,5 +1,6 @@
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
+import type { IosTargetActivation } from './ios-target-activation.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
@@ -269,6 +270,11 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    * from `nodes`; see {@link SnapshotKeyboardBandFact}.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * Set when this capture's own command had to bring the session app back to the foreground, i.e.
+   * something else held it and an earlier observation described that instead (#2682).
+   */
+  targetActivation?: IosTargetActivation;
 } & SnapshotProvenance;
 
 export type SnapshotRuntimeAcquiredResult = Readonly<{

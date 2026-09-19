@@ -707,6 +707,26 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   return [self integerFrom:application selectorName:@"processID"];
 }
 
++ (NSArray<NSNumber *> *)activeApplicationProcessIdentifiers
+{
+  id axClient = [self accessibilityClient];
+  if (nil == axClient) {
+    return @[];
+  }
+  id activeApplications = [self objectFrom:axClient selectorName:@"activeApplications"];
+  if (![activeApplications isKindOfClass:NSArray.class]) {
+    return @[];
+  }
+  NSMutableArray<NSNumber *> *processIdentifiers = [NSMutableArray array];
+  for (id candidate in (NSArray *)activeApplications) {
+    NSInteger processIdentifier = [self integerFrom:candidate selectorName:@"processIdentifier"];
+    if (processIdentifier > 0) {
+      [processIdentifiers addObject:@(processIdentifier)];
+    }
+  }
+  return processIdentifiers;
+}
+
 + (id)accessibilityApplicationForApplication:(XCUIApplication *)application axClient:(id)axClient
 {
   NSInteger targetProcessID = [self integerFrom:application selectorName:@"processID"];
