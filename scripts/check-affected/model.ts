@@ -529,6 +529,19 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
       file.startsWith('examples/test-app/security/') ||
       file === 'examples/test-app/pnpm-workspace.yaml',
   },
+  // In-package payload captures: a recorded tool response checked in under a package's fixture
+  // directory (`packages/*/**/__tests__/fixtures/*.json`, or a `fixtures/` dir beside the module that
+  // reads it). Nothing builds them and no `.ts` sibling names them, so without this a capture edit
+  // fails the gate open even though exactly one suite asserts against it.
+  {
+    check: 'unit',
+    rule: 'own:package-capture',
+    detail: 'the vitest unit suite reads the captured payload',
+    owns: (file) =>
+      file.startsWith('packages/') &&
+      file.endsWith('.json') &&
+      (file.includes('/__tests__/fixtures/') || file.includes('/fixtures/')),
+  },
   // TS/Swift golden tables (`contracts/fixtures/*.json`): the vitest parity test and the
   // runner XCTest twin both read them, so a table edit owns the unit lane and both runner
   // builds. Without this a `.json` under contracts/ has no derivable owner and fails open.

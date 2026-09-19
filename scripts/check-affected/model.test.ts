@@ -230,6 +230,23 @@ test('unknown path fails open to the full check set', () => {
   assert.equal(result.failOpenReasons[0]?.rule, 'unknown-path');
 });
 
+test('a payload capture inside a package selects the unit lane', () => {
+  // Recorded tool responses checked in beside the module that parses them (#2683). Before this rule
+  // a capture edit failed the gate open, which punished adding evidence rather than the absence of it.
+  for (const file of [
+    'packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json',
+    'packages/platform-apple/src/snapshot-source/fixtures/wire-vocabulary.json',
+  ]) {
+    const result = plan([file]);
+    assert.equal(result.failOpen, false, file);
+    assert.ok(result.checks.includes('unit'), file);
+    assert.ok(
+      result.reasons.some((reason) => reason.rule === 'own:package-capture'),
+      file,
+    );
+  }
+});
+
 test('a non-.ts fixture under an owned root fails open (format alone is not ownership)', () => {
   const result = plan(['test/integration/provider-scenarios/fixtures/device.json']);
   assert.equal(result.failOpen, true);
