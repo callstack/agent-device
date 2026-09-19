@@ -9,6 +9,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
+import type { RequestActivationProof } from './capture-disclosure.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
@@ -29,6 +30,11 @@ export type SelectorCaptureRuntimeParams = {
   // Sessionless routes have no session record to read the consumed capture back from, so the
   // capture runtime reports every consumed snapshot here for response-level disclosures.
   consumedSnapshot?: { state?: SnapshotState };
+  /**
+   * Filled ONLY by a capture this request actually took, never by a cache tier — the foreground
+   * repair a route may disclose has to be one the route paid for (#2682).
+   */
+  activationProof?: RequestActivationProof;
   /**
    * The request-bound capture from `resolveBoundSelectorCapture`: every cache tier, recovery
    * re-capture, and poll below reaches the platform through it. Required since find (R35) —
@@ -108,6 +114,11 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
 
     const snapshot = await captureSelectorSnapshot({ params, request });
     request.signal?.throwIfAborted();
+    // First fact wins: a later capture in the same request (a poll, a recovery re-capture) that
+    // reports no repair must not erase the one that did.
+    if (params.activationProof && snapshot.targetActivation && !params.activationProof.state) {
+      params.activationProof.state = snapshot;
+    }
     const result = { snapshot };
     updateSessionSnapshot({ session, sessionStore, sessionName, snapshot });
     lastSnapshotAt = timestamp;

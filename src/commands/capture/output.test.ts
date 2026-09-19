@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {
@@ -101,21 +102,16 @@ test('snapshot output presents the materialized fallback screenshot path', async
  * never has to parse the sentence.
  */
 test('a repaired capture renders the disclosure and keeps the structured fact', async () => {
+  const fact = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  } as const;
   const output = await snapshotCliOutput({
     result: {
       ...buildResult(REPEATED_CHAIN),
-      warnings: [
-        'The session app was not foreground when this command arrived (another app (pid 4562) held ' +
-          'it, prior state runningBackground), so the runner activated it before answering (reason ' +
-          'stale_target). Any capture taken earlier in this session described another app (pid 4562), ' +
-          'not the session app. Re-capture now that the session app answers, or drive the other app ' +
-          'in its own session.',
-      ],
-      targetActivation: {
-        reason: 'stale_target',
-        priorState: 'runningBackground',
-        foregroundPid: 4562,
-      },
+      warnings: [iosTargetActivationDisclosure(fact)],
+      targetActivation: fact,
     } as CaptureSnapshotResult,
   });
 
@@ -124,6 +120,6 @@ test('a repaired capture renders the disclosure and keeps the structured fact', 
   assert.deepEqual((output.jsonData as { targetActivation?: unknown }).targetActivation, {
     reason: 'stale_target',
     priorState: 'runningBackground',
-    foregroundPid: 4562,
+    otherActiveApplicationPid: 4562,
   });
 });

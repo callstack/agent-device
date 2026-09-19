@@ -8,7 +8,7 @@ import type { DaemonResponse } from '../daemon-request.ts';
 const FACT: IosTargetActivation = {
   reason: 'stale_target',
   priorState: 'runningBackground',
-  foregroundPid: 4562,
+  otherActiveApplicationPid: 4562,
 };
 
 function okResponse(data: Record<string, unknown>): DaemonResponse {
@@ -64,14 +64,38 @@ test('a capture with no repair leaves the response byte-identical', () => {
 });
 
 /**
+ * A failure carries the sentence in `error.details.hint`. That carrier is exactly where a route could
+ * cheaply borrow the previous command's repair off the stored snapshot and blame it on this request,
+ * so the repair travels only on the request's own proof (#2682).
+ */
+test('a failure does not borrow a repair the stored snapshot happens to carry', () => {
+  const failed: DaemonResponse = {
+    ok: false,
+    error: { code: 'COMMAND_FAILED', message: 'snapshot failed' } as never,
+  };
+
+  const response = withCaptureDisclosures({
+    response: failed,
+    consumedTree: { targetActivation: FACT },
+    activationProof: {},
+  });
+
+  assert.equal(response, failed);
+});
+
+/**
  * The two carriers are pre-existing: the surface disclosure extends `data.warning`, the capture's
  * own warnings arrive as `data.warnings` (#2438 predates the array). A response can therefore carry
  * both, and each disclosure must survive in the carrier it belongs to.
  */
 test('surface and foreground disclosures ride one response together', () => {
-  const response = withCaptureDisclosures(okResponse({ nodes: [] }), {
-    iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
-    targetActivation: FACT,
+  const response = withCaptureDisclosures({
+    response: okResponse({ nodes: [] }),
+    consumedTree: {
+      iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+      targetActivation: FACT,
+    },
+    activationProof: { state: { targetActivation: FACT } },
   });
   const data = dataOf(response);
   assert.match(String(data.warning), /system web sign-in sheet/);

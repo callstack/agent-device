@@ -4,6 +4,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
+import type { RequestActivationProof } from './capture-disclosure.ts';
 import { withCaptureDisclosures } from './capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
@@ -14,6 +15,7 @@ import type { SessionState } from './session-state.ts';
 export async function dispatchSnapshotViaRuntime(
   params: SnapshotRuntimeRouteParams,
 ): Promise<DaemonResponse> {
+  const activationProof: RequestActivationProof = {};
   const response = await dispatchSnapshotRuntimeCommand({
     ...params,
     command: 'snapshot',
@@ -29,6 +31,11 @@ export async function dispatchSnapshotViaRuntime(
         // The session-resolved scope wins over the raw flag.
         scope: snapshotScope,
       });
+      // This request's own capture, read here rather than off the stored snapshot: a snapshot that
+      // failed before capturing must not inherit the previous command's repair (#2682).
+      if (result.targetActivation && !activationProof.state) {
+        activationProof.state = { targetActivation: result.targetActivation };
+      }
       const refsGeneration = publishedSnapshotGeneration(
         request,
         params.sessionStore.get(resolvedSessionName),
@@ -72,9 +79,13 @@ export async function dispatchSnapshotViaRuntime(
       };
     },
   });
-  // The published snapshot is what this response describes, so the provenance the capture carried
-  // rides on the response that hands it over (#2682).
-  return withCaptureDisclosures(response, params.sessionStore.get(params.sessionName)?.snapshot);
+  // The published snapshot is what this response describes, so the surface it describes rides the
+  // response that hands it over; the repair claim comes only from this request's capture (#2682).
+  return withCaptureDisclosures({
+    response,
+    consumedTree: params.sessionStore.get(params.sessionName)?.snapshot,
+    activationProof,
+  });
 }
 
 function publishedSnapshotGeneration(
