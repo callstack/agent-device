@@ -113,64 +113,57 @@ export function createReplaySession(
     store.set(name, session);
     return true;
   };
-  return bindReplaySession(
-    name,
-    logPath,
-    {
-      get: () => store.get(name),
-      lookup: () => store.lookup(name),
-      getRuntimeHints: () => store.getRuntimeHints(name),
-      ensureSessionDir: () => store.ensureSessionDir(name),
+  // One read set for both views: the narrowed one the port binds over, and the full-record one the
+  // repair coordinator writes through.
+  const reads = {
+    get: () => store.get(name),
+    lookup: () => store.lookup(name),
+    getRuntimeHints: () => store.getRuntimeHints(name),
+    ensureSessionDir: () => store.ensureSessionDir(name),
+  };
+  return bindReplaySession(name, logPath, reads, {
+    createCoordinator: () =>
+      createReplayCoordinator({
+        sessionStore: reads,
+        mutationStore: {
+          update: updateSession,
+          clearRepairTombstone: () => store.clearRepairTombstone(name),
+        },
+      }),
+    assertSelectorMatches: (flags) => {
+      const ref = store.lookup(name);
+      if (ref) assertSessionSelectorMatches(ref, flags);
     },
-    {
-      createCoordinator: () =>
-        createReplayCoordinator({
-          sessionStore: {
-            get: () => store.get(name),
-            lookup: () => store.lookup(name),
-            getRuntimeHints: () => store.getRuntimeHints(name),
-            ensureSessionDir: () => store.ensureSessionDir(name),
-          },
-          mutationStore: {
-            update: updateSession,
-            clearRepairTombstone: () => store.clearRepairTombstone(name),
-          },
-        }),
-      assertSelectorMatches: (flags) => {
-        const ref = store.lookup(name);
-        if (ref) assertSessionSelectorMatches(ref, flags);
-      },
-      resolveOpenRuntimeHints: ({ request, device, platform }) =>
-        resolveEffectiveOpenRuntimeHints({
-          req: request,
-          sessionStore: {
-            getRuntimeHints: (requestedSessionName) =>
-              requestedSessionName === name ? store.getRuntimeHints(name) : undefined,
-          },
-          sessionName: name,
-          device,
-          platform,
-        }),
-      bindAuthority: (signal) =>
-        bindInternalObservationAuthority({
-          sessionStore: { get: () => store.get(name), update: updateSession },
-          sessionName: name,
-          ...(signal ? { signal } : {}),
-        }),
-      capture: async ({ flags, logPath: captureLogPath }) => {
-        const session = store.get(name);
-        if (!session) {
-          throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
-        }
-        return await captureSnapshot({
-          device: session.device,
-          session,
-          flags,
-          logPath: captureLogPath,
-        });
-      },
+    resolveOpenRuntimeHints: ({ request, device, platform }) =>
+      resolveEffectiveOpenRuntimeHints({
+        req: request,
+        sessionStore: {
+          getRuntimeHints: (requestedSessionName) =>
+            requestedSessionName === name ? store.getRuntimeHints(name) : undefined,
+        },
+        sessionName: name,
+        device,
+        platform,
+      }),
+    bindAuthority: (signal) =>
+      bindInternalObservationAuthority({
+        sessionStore: { get: () => store.get(name), update: updateSession },
+        sessionName: name,
+        ...(signal ? { signal } : {}),
+      }),
+    capture: async ({ flags, logPath: captureLogPath }) => {
+      const session = store.get(name);
+      if (!session) {
+        throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
+      }
+      return await captureSnapshot({
+        device: session.device,
+        session,
+        flags,
+        logPath: captureLogPath,
+      });
     },
-  );
+  });
 }
 
 type ReplayTestSessionCleanupParams = Readonly<{

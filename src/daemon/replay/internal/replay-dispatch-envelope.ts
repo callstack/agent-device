@@ -60,7 +60,7 @@ function mergeReplayDispatch<Private extends ReplayPrivateAdmission>(
 ): (Private & ReplayDispatchOptions) | undefined {
   const internal = stripUndefined({ ...base, ...dispatch });
   return Object.keys(internal).length > 0
-    ? (internal as unknown as Private & ReplayDispatchOptions)
+    ? (internal as Private & ReplayDispatchOptions)
     : undefined;
 }
 
