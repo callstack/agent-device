@@ -15,11 +15,14 @@ import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { SessionStore } from '../../session-store.ts';
 import {
   createReplaySession,
-  replayCommandEnvelope,
   replayDaemonDependencies,
-  replayInvoke,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayCommand, runReplayTestCommand } from '../index.ts';
+import {
+  replayInvokeOverDispatch,
+  runReplayCommand,
+  runReplayTestCommand,
+  splitReplayCommandRequest,
+} from '../index.ts';
 import type { ReplayCommand, ReplayTestCommand } from '../internal/command-types.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
@@ -45,9 +48,9 @@ function replayCommand(
   invoke: (request: DaemonRequest) => Promise<DaemonResponse>,
 ): ReplayCommand {
   return {
-    ...replayCommandEnvelope(req),
+    ...splitReplayCommandRequest(req),
     session: createReplaySession(req.session, path.join(root, 'daemon.log'), sessionStore),
-    invoke: replayInvoke(invoke, req),
+    invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,
   };
 }

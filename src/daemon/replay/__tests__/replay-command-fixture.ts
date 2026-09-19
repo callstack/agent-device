@@ -3,11 +3,9 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon
 import type { SessionStore } from '../../session-store.ts';
 import {
   createReplaySession,
-  replayCommandEnvelope,
   replayDaemonDependencies,
-  replayInvoke,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayCommand } from '../index.ts';
+import { replayInvokeOverDispatch, runReplayCommand, splitReplayCommandRequest } from '../index.ts';
 import type { ReplayCommand } from '../internal/command-types.ts';
 
 export type ReplayCommandTestInput = Readonly<{
@@ -28,9 +26,9 @@ export type ReplayCommandTestInput = Readonly<{
 export function replayCommandForTest(params: ReplayCommandTestInput): ReplayCommand {
   const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep } = params;
   return {
-    ...replayCommandEnvelope(req),
+    ...splitReplayCommandRequest(req),
     session: createReplaySession(sessionName, logPath, sessionStore),
-    invoke: replayInvoke(invoke, req),
+    invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,
     ...(tracePath === undefined ? {} : { tracePath }),
     ...(onStep === undefined ? {} : { onStep }),

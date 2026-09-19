@@ -6,7 +6,11 @@ import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { runReplayTestCommand } from '../../index.ts';
+import {
+  replayInvokeOverDispatch,
+  runReplayTestCommand,
+  splitReplayCommandRequest,
+} from '../../index.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import {
@@ -21,9 +25,7 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import { createReplayTestVideoOwner } from '../../../handlers/session-replay-video-owner.ts';
 import {
   createReplaySession,
-  replayCommandEnvelope,
   replayDaemonDependencies,
-  replayInvoke,
 } from '../../../handlers/session-replay-command.ts';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
@@ -277,14 +279,14 @@ test('test finalizes replay video exactly once when cancellation arrives after s
   if (!video) throw new Error('Expected replay video owner');
 
   const responsePromise = runReplayTestCommand({
-    ...replayCommandEnvelope(request),
+    ...splitReplayCommandRequest(request),
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
     video,
     cleanupSession: async () => {},
     dependencies: replayDaemonDependencies,
-    invoke: replayInvoke(async (nestedReq) => {
+    invoke: replayInvokeOverDispatch(async (nestedReq) => {
       nestedRequests.push(nestedReq);
       if (nestedReq.command === 'open') {
         const provisionalSession = makeIosSession(nestedReq.session);

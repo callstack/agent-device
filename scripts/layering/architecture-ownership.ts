@@ -16,19 +16,20 @@ const DAEMON_REPLAY_FACADE = {
   exports: [
     'ReplayCoordinator',
     'ReplayDaemonDependencies',
-    'ReplayDispatchRequest',
-    'ReplayInvoke',
     'ReplayResumeStamper',
     'ReplaySession',
     'ReplaySessionView',
     'ReplayTestVideoOwner',
     'appTargetResolutionOptions',
+    'bindReplaySession',
     'buildMaestroReplayTargetDeviceResolutionOptions',
     'buildReplayScriptPlatformFlags',
     'healedScriptSiblingPath',
     'readScriptReplaySelection',
+    'replayInvokeOverDispatch',
     'runReplayCommand',
     'runReplayTestCommand',
+    'splitReplayCommandRequest',
   ],
 } as const;
 
