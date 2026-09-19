@@ -15,8 +15,8 @@ const RESPONSE_BODY_PREVIEW_BYTES = 500;
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
   try {
+    await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
     const response = await fetch(options.url, {
       method: 'GET',
       headers: options.headers,
@@ -57,13 +57,14 @@ async function readBodyPreview(response: Response): Promise<string> {
     while (bytes < RESPONSE_BODY_PREVIEW_BYTES) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value);
+      const room = RESPONSE_BODY_PREVIEW_BYTES - bytes;
+      chunks.push(value.subarray(0, room));
       bytes += value.byteLength;
     }
   } finally {
     void reader.cancel().catch(() => {});
   }
-  return Buffer.concat(chunks).subarray(0, RESPONSE_BODY_PREVIEW_BYTES).toString('utf8');
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function downloadFailure(

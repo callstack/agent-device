@@ -115,6 +115,28 @@ test('a failed retry removes the file an earlier attempt left at the destination
   expect(fs.existsSync(destinationPath)).toBe(false);
 });
 
+test('a destination directory that cannot be created ends typed without fetching', async () => {
+  const requests: string[] = [];
+  const url = await serve((request, response) => {
+    requests.push(request.url ?? '');
+    response.writeHead(200);
+    response.end('payload');
+  });
+  const blocker = path.join(await mkdtempForTest('limrun-download-'), 'blocked');
+  fs.writeFileSync(blocker, 'not a directory');
+  const destinationPath = path.join(blocker, 'clip.mp4');
+
+  const failure = downloadLimrunFile({ url, headers: {}, destinationPath, timeoutMs: 5_000 });
+
+  await expect(failure).rejects.toBeInstanceOf(AppError);
+  await expect(failure).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Limrun download failed',
+    details: { url },
+  });
+  expect(requests).toEqual([]);
+});
+
 test('an error body is read only up to the preview, without waiting for the rest', async () => {
   const url = await serve((_request, response) => {
     response.writeHead(502);
