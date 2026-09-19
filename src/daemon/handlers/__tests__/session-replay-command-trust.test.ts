@@ -4,8 +4,8 @@
  * command input. If a later edit — such as the PR B move — drops the mapping on either entry
  * point, the field reads absent, the engine trusts the flow, and a remote HTTP replay would run
  * `evalScript`. These assertions pin the mapping for BOTH `replay` and `replay test` so a dropped
- * line fails here instead of failing open. The engine-level trust assertion for the `replay`
- * route lives in `session-replay-maestro-remote-evalscript.test.ts`, routed through the handler.
+ * line fails here instead of failing open. The engine-level assertions for both routes live in
+ * `session-replay-maestro-remote-evalscript.test.ts`, routed through these handlers.
  */
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
