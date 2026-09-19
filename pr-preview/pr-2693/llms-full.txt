@@ -2190,7 +2190,7 @@ agent-device apps --platform android --all
 ```
 
 - Android `appstate` reports live foreground package/activity.
-- iOS `appstate` is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer arrives as the `targetActivation` disclosure described above, and the refusal's hint says so.
+- iOS `appstate` is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer arrives as the [`targetActivation` disclosure](#foreground-repairs-on-ios), and the refusal's hint says so.
 - `apps` shows user-installed apps by default. Use `--all` when you need the full inventory, including system/OEM apps.
 
 ## Foreground repairs on iOS
@@ -2206,29 +2206,43 @@ agent-device screenshot --platform ios            # Safari screen
 agent-device snapshot -i --platform ios           # answers with the app's tree
 ```
 
-The `snapshot` response carries `targetActivation` plus a `warnings` entry naming the app that held
-the foreground (by pid), the state it was in, and why the runner activated:
+The `snapshot` response carries `targetActivation` plus an appended `warnings` entry naming the
+state the session app was found in and why the runner activated it:
 
 ```json
 {
   "targetActivation": {
     "reason": "bundle_changed",
     "priorState": "runningBackground",
-    "foregroundPid": 4562
+    "otherActiveApplicationPid": 4562
   }
 }
 ```
 
 - Read it as: anything captured earlier in this session described the other app, not the session app.
   Re-capture now, or drive the other app in its own session.
+- `otherActiveApplicationPid` is present only when exactly one application other than the session app
+  held an active accessibility session at that moment. It is a liveness claim, not a foreground owner:
+  the runner's probe reports no ordering, so nothing here proves which app owned the screen. Absent
+  means the runner could not isolate one candidate, which is not a failure.
+- `priorState` is the session app's state read before the runner activated it, so it names what was
+  repaired rather than what the repair produced. It is never `runningForeground`.
+- `reason` names the check that found the app out of foreground: `bundle_changed` when the runner's
+  cached session target differs from the bundle the command asked for, `stale_target` when the cached
+  target matches but no longer answers as foreground, `missing_after_wait` when a wait for the app
+  never observed it, and `interaction_foreground_guard` when an interaction's own foreground guard
+  tripped before dispatching.
 - The disclosure rides capture-consuming commands — `snapshot`, `find`, `get`, `is`, `wait`, and an
   interaction whose target tree was captured for it — at every response level, including
-  `--level digest`. A command that consumed no capture (a coordinate `press`, a `press @ref` answered
-  from a live ref frame) did no capture for the repair to describe and stays silent.
+  `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
+  from a cached or stored tree did no device work and reports no repair of its own.
+- **Silence is not proof.** A command that consumes no capture — a coordinate `press`, a `press @ref`
+  answered from a live ref frame — may still have had the runner re-activate the session app to serve
+  it, and reports nothing. Do not infer that the foreground held from an interaction that said nothing
+  ([#2694](https://github.com/callstack/agent-device/issues/2694) tracks closing that gap). When the
+  distinction matters, spend a `snapshot -i` and read its disclosure.
 - The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
   came before it are never replaced.
-- `reason` is `stale_target` when the session app was still the session's own target but not
-  foreground, and `bundle_changed` when a different app's bundle was the one on screen.
 
 ## Clipboard
 
@@ -4453,7 +4467,9 @@ Notes:
 - `open <url>` in iOS sessions opens deep links.
 - `open <app> <url>` in iOS sessions opens deep links.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
-- On iOS, `appstate` is session-scoped and requires a matching active session on the target device.
+- On iOS, `appstate` is unavailable: the Apple target answers no sessionless foreground probe. Whether
+  the session app actually held the foreground is answered per command instead, by the
+  [`targetActivation` disclosure](/agent-device/pr-preview/pr-2693/docs/commands.md#foreground-repairs-on-ios).
 - For remote `connect --remote-config` sessions, see [Commands](/agent-device/pr-preview/pr-2693/docs/commands.md#remote-metro-workflow).
 - Use `--session <name>` for intentional named-session sharing. Do not parallelize mutating commands against the same session; serialize stateful actions such as open, press, fill, type, scroll, back, alert, replay, batch, and close.
 
