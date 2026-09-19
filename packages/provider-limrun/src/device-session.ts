@@ -71,8 +71,14 @@ type LimrunRecordingClient = {
   stopRecording(saveTo: { localPath?: string }): Promise<string>;
 };
 
-/** The SDK's own inline download has no deadline; a served MP4 of a few minutes fits well inside this. */
-const LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS = 120_000;
+/**
+ * The SDK's own inline download has no deadline, and the deadline given here may not outlive the
+ * `record stop` request that carries it: past that window the CLI resets a local daemon
+ * mid-transfer, which loses the memoized stop answer with the file. `record` runs on the default
+ * request envelope, so this cuts itself off inside it and the next `record stop` retries the
+ * served URL typed instead.
+ */
+const LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 export type LimrunAndroidDeviceSession = LimrunDeviceSessionBase & {
   readonly platform: 'android';

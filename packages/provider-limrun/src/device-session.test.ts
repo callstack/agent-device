@@ -122,7 +122,7 @@ test('iOS device session exposes reusable capabilities without its raw client', 
       url: 'https://ios.example/recording',
       headers: { Authorization: 'Bearer ios-instance-token' },
       destinationPath: '/tmp/ios-recording.mp4',
-      timeoutMs: 120_000,
+      timeoutMs: 60_000,
     },
   ]);
   assert.deepEqual(simctl.mock.calls[0], [['listapps', 'booted']]);
@@ -212,7 +212,7 @@ test('Android device session exposes semantic ADB capabilities without its raw c
       url: 'https://android.example/recording',
       headers: { Authorization: 'Bearer android-instance-token' },
       destinationPath: '/tmp/android-recording.mp4',
-      timeoutMs: 120_000,
+      timeoutMs: 60_000,
     },
   ]);
   assert.deepEqual(removeReverse.mock.calls[0], ['tcp:8081']);
