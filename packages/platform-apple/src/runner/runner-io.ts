@@ -51,6 +51,16 @@ function appendLogChunk(logPath: string, chunk: string): void {
   logAppendQueues.set(logPath, queued);
 }
 
+/**
+ * Waits for the appends already queued for `logPath` to reach disk. `appendLogChunk` serialises
+ * writes on a promise chain, so bytes an earlier command produced can still be in flight when a
+ * later command marks the end of the log; measuring without this would hand those bytes to the
+ * command that did not write them (#2683).
+ */
+export async function flushRunnerLogAppends(logPath: string): Promise<void> {
+  await logAppendQueues.get(logPath);
+}
+
 export function cleanupTempFile(filePath: string): void {
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);

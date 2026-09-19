@@ -7,7 +7,10 @@ import type { IosDeviceRunnerReadiness, IosPhysicalDeviceRunnerControl } from '.
 import { assertDeviceReadinessForIosRunner } from '../runner-device-readiness.ts';
 import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
-import { deviceReadinessFixtures } from './runner-startup-failure-fixtures.ts';
+import {
+  deviceReadinessFixtures,
+  type IosDeviceReadinessReport,
+} from './runner-startup-failure-fixtures.ts';
 
 /**
  * Whether an iPhone can host development tooling is a fact the phone holds, not a fact a build log
@@ -20,13 +23,32 @@ import { deviceReadinessFixtures } from './runner-startup-failure-fixtures.ts';
  */
 
 const REPORTS = deviceReadinessFixtures();
-const HINT_FOR_REASON = {
-  device_developer_mode_disabled: /Privacy & Security > Developer Mode/,
-  device_developer_disk_image_unavailable: /developer disk image, not the Developer Mode toggle/,
+
+/**
+ * Remedies no other module could produce, so a hint matching one of them can only have come from the
+ * report this test handed over. That is the claim #2683 has to keep: the preflight reads the wording
+ * the device fact carries, which `core/devicectl.ts` owns, and never words a fix of its own beside it.
+ */
+const REMEDIES = {
+  developerModeOff: 'FIX-DEVELOPER-MODE-TOGGLE',
+  developerDiskImageUnavailable: 'FIX-DEVELOPER-DISK-IMAGE',
 } as const;
 
-const readDeviceReadiness = vi.fn((): Promise<IosDeviceRunnerReadiness> =>
-  Promise.reject(new Error('this case records no device report')),
+const HINT_FOR_REASON = {
+  device_developer_mode_disabled: REMEDIES.developerModeOff,
+  device_developer_disk_image_unavailable: REMEDIES.developerDiskImageUnavailable,
+} as const;
+
+/** The budget `runner-session.ts` hands the probe: its slice of the startup budget and its signal. */
+const BUDGET = { budgetMs: 10_000 } as const;
+
+const readDeviceReadiness = vi.fn(
+  (
+    _device: DeviceInfo,
+    _budgetMs?: number,
+    _signal?: AbortSignal,
+  ): Promise<IosDeviceRunnerReadiness> =>
+    Promise.reject(new Error('this case records no device report')),
 );
 
 beforeEach(() => {
@@ -38,16 +60,13 @@ beforeEach(() => {
 
 for (const fixture of REPORTS) {
   test(`a device reporting ${fixture.deviceReport.developerMode} mode and ${fixture.deviceReport.developerDiskImage} disk image publishes ${fixture.reason}`, async () => {
-    readDeviceReadiness.mockResolvedValue({
-      available: true,
-      ...fixture.deviceReport,
-    } satisfies IosDeviceRunnerReadiness);
+    readDeviceReadiness.mockResolvedValue(readableReport(fixture.deviceReport));
 
     const error = await expectRefusal(IOS_DEVICE);
 
     assert.equal(error.code, 'COMMAND_FAILED');
     assert.equal(error.details?.reason, fixture.reason);
-    assert.match(String(error.details?.hint), HINT_FOR_REASON[fixture.reason]);
+    assert.equal(error.details?.hint, HINT_FOR_REASON[fixture.reason]);
     assert.equal(error.details?.deviceId, IOS_DEVICE.id);
     // Both states travel with the reason, so a caller can see what the device said rather than only
     // which of the two this reader decided to name.
@@ -56,10 +75,7 @@ for (const fixture of REPORTS) {
   });
 
   test(`the ${fixture.reason} reason reaches rendered CLI JSON`, async () => {
-    readDeviceReadiness.mockResolvedValue({
-      available: true,
-      ...fixture.deviceReport,
-    } satisfies IosDeviceRunnerReadiness);
+    readDeviceReadiness.mockResolvedValue(readableReport(fixture.deviceReport));
 
     const error = await expectRefusal(IOS_DEVICE);
     const rendered = JSON.parse(
@@ -70,7 +86,7 @@ for (const fixture of REPORTS) {
     assert.equal(rendered.error.code, 'COMMAND_FAILED');
     assert.equal(rendered.error.details.reason, fixture.reason);
     // `normalizeError` lifts the hint out of `details`, so rendered JSON carries it at top level.
-    assert.match(String(rendered.error.hint), HINT_FOR_REASON[fixture.reason]);
+    assert.equal(rendered.error.hint, HINT_FOR_REASON[fixture.reason]);
     assert.equal(rendered.error.details.hint, undefined);
     assert.equal(rendered.error.diagnosticId, 'diag-1');
   });
@@ -83,56 +99,49 @@ test('a device whose report cannot be read is not given a reason', async () => {
     hint: 'Read the device state directly with `xcrun devicectl device info details`.',
   } satisfies IosDeviceRunnerReadiness);
 
-  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
+  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE, BUDGET));
 });
 
 test('a device reporting both states healthy is not a failure', async () => {
-  readDeviceReadiness.mockResolvedValue({
-    available: true,
-    developerMode: 'enabled',
-    developerDiskImage: 'available',
-  } satisfies IosDeviceRunnerReadiness);
+  readDeviceReadiness.mockResolvedValue(
+    readableReport({ developerMode: 'enabled', developerDiskImage: 'available' }),
+  );
 
-  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
+  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE, BUDGET));
 });
 
 test('a device that reports neither state is not read as accusing its owner', async () => {
   // A toolchain that spells these fields differently, or omits one, earns no verdict. Reading
   // "unknown" as "off" is how a version bump turns into a claim about someone's Settings (#2683).
-  readDeviceReadiness.mockResolvedValue({
-    available: true,
-    developerMode: 'unknown',
-    developerDiskImage: 'unknown',
-  } satisfies IosDeviceRunnerReadiness);
+  readDeviceReadiness.mockResolvedValue(
+    readableReport({ developerMode: 'unknown', developerDiskImage: 'unknown' }),
+  );
 
-  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE));
+  await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(IOS_DEVICE, BUDGET));
 });
 
 test('an unavailable disk image on a device with Developer Mode on is never named as the toggle', async () => {
   // The conflation #2682 answered with "enable Developer Mode" for a device that had it on. The
   // unread half of the states has to stay unread too: only the image may be named here.
   for (const developerMode of ['enabled', 'unknown'] as const) {
-    readDeviceReadiness.mockResolvedValue({
-      available: true,
-      developerMode,
-      developerDiskImage: 'unavailable',
-    } satisfies IosDeviceRunnerReadiness);
+    readDeviceReadiness.mockResolvedValue(
+      readableReport({ developerMode, developerDiskImage: 'unavailable' }),
+    );
 
     const error = await expectRefusal(IOS_DEVICE);
 
     assert.equal(error.details?.reason, 'device_developer_disk_image_unavailable');
-    assert.doesNotMatch(String(error.details?.hint), /Settings > Privacy & Security/);
+    // Only the image remedy may be published: the toggle remedy mentions the Settings pane.
+    assert.doesNotMatch(String(error.details?.hint), /Privacy & Security/);
   }
 });
 
 test('a device with Developer Mode off names the toggle even when the image is down too', async () => {
   // The direction that does hold: the toggle explains the image, so naming the toggle is the claim
   // that leaves the reader with one thing to fix.
-  readDeviceReadiness.mockResolvedValue({
-    available: true,
-    developerMode: 'disabled',
-    developerDiskImage: 'unavailable',
-  } satisfies IosDeviceRunnerReadiness);
+  readDeviceReadiness.mockResolvedValue(
+    readableReport({ developerMode: 'disabled', developerDiskImage: 'unavailable' }),
+  );
 
   const error = await expectRefusal(IOS_DEVICE);
 
@@ -141,7 +150,7 @@ test('a device with Developer Mode off names the toggle even when the image is d
 
 test('a simulator or the desktop target never asks the device', async () => {
   for (const device of [IOS_SIMULATOR, MACOS_DEVICE]) {
-    await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(device));
+    await assert.doesNotReject(() => assertDeviceReadinessForIosRunner(device, BUDGET));
   }
 
   assert.equal(readDeviceReadiness.mock.calls.length, 0);
@@ -156,10 +165,54 @@ test('every device-readiness reason has a recorded device report', () => {
   }
 });
 
+test('the probe is bounded by the startup budget it runs inside', async () => {
+  // A preflight that ignores the budget it was given can outlive the command that started it, which
+  // is how a cancelled `prepare` ends up building anyway (#2683).
+  const controller = new AbortController();
+  readDeviceReadiness.mockResolvedValue(
+    readableReport({ developerMode: 'enabled', developerDiskImage: 'available' }),
+  );
+
+  await assertDeviceReadinessForIosRunner(IOS_DEVICE, {
+    budgetMs: 2_500,
+    signal: controller.signal,
+  });
+
+  assert.deepEqual(readDeviceReadiness.mock.lastCall?.[1], 2_500);
+  assert.equal(readDeviceReadiness.mock.lastCall?.[2], controller.signal);
+});
+
+test('a budget that ran out during the probe stops the startup even on a healthy device', async () => {
+  // The read returning just as the caller gave up is not permission to keep going: nobody is waiting
+  // for a build that cannot be delivered (#2683).
+  const controller = new AbortController();
+  readDeviceReadiness.mockImplementation(() => {
+    controller.abort();
+    return Promise.resolve(
+      readableReport({ developerMode: 'enabled', developerDiskImage: 'available' }),
+    );
+  });
+
+  await assert.rejects(
+    () =>
+      assertDeviceReadinessForIosRunner(IOS_DEVICE, {
+        budgetMs: 10_000,
+        signal: controller.signal,
+      }),
+    (error: unknown) => (error as Error).name === 'AbortError',
+  );
+});
+
+function readableReport(
+  report: IosDeviceReadinessReport,
+): Extract<IosDeviceRunnerReadiness, { available: true }> {
+  return { available: true, ...report, remedies: REMEDIES };
+}
+
 async function expectRefusal(device: DeviceInfo): Promise<AppError> {
   let caught: unknown;
   await assert.rejects(
-    () => assertDeviceReadinessForIosRunner(device),
+    () => assertDeviceReadinessForIosRunner(device, BUDGET),
     (error: unknown) => {
       caught = error;
       return true;

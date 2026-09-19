@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { IosDeviceReadiness } from '../runner/runner-contract.ts';
+import type { IosDeviceReadiness } from './physical-device-coredevice.ts';
 
 /**
  * The physical-device routing contract, declared below both sides that need it: the runner's
@@ -25,5 +25,9 @@ export type IosPhysicalDeviceRunnerControl = {
    * answers this, so an XCTest-backed device reports that it could not be read rather than lending
    * the runner a guess to fail on.
    */
-  readDeviceReadiness(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosDeviceReadiness>;
+  readDeviceReadiness(
+    device: DeviceInfo,
+    timeoutBudgetMs?: number,
+    signal?: AbortSignal,
+  ): Promise<IosDeviceReadiness>;
 };

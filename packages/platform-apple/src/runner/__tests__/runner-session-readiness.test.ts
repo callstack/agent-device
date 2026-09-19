@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
-import { IOS_SIMULATOR } from './device-fixtures.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -14,6 +15,7 @@ import {
   redirectHandle,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -113,7 +115,11 @@ vi.mock('../runner-xctestrun.ts', async () => {
   };
 });
 
-import { abortAllIosRunnerSessions, executeRunnerCommandWithSession } from '../runner-session.ts';
+import {
+  abortAllIosRunnerSessions,
+  ensureRunnerSession,
+  executeRunnerCommandWithSession,
+} from '../runner-session.ts';
 
 // Test-only stand-in for the daemon's own runtime lease-owner-state-dir
 // setter (root-only; the package cannot import it - R11). Backs the
@@ -539,3 +545,59 @@ test('runner session preserves structured runner failures', async () => {
     },
   );
 });
+
+/**
+ * The two startup probes answer different questions about different machines, and the order they run
+ * in is a claim (#2683). Both answers can be wrong at once; the phone's is the one the caller can fix
+ * without admin rights on the Mac, so the device is asked first and gets to speak. Probing the host
+ * first would publish only the Mac's reason and hide the device's for as long as both held.
+ */
+test('a device and a Mac that are both wrong publish the device reason', async () => {
+  const device = { ...IOS_DEVICE, id: 'runner-session-probe-order-device' };
+  mockRunAppleToolCommand.mockImplementation(async (cmd: string, args: string[]) => {
+    if (cmd === 'DevToolsSecurity' && args[0] === '-status') {
+      return { exitCode: 0, stdout: 'Developer mode is currently disabled.\n', stderr: '' };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+
+  await assert.rejects(
+    () =>
+      withAppleToolProvider(
+        createLocalAppleToolProvider({
+          runCommand: async (_cmd: string, args: string[]) => {
+            const outputPath = jsonOutputPathOf(args);
+            if (outputPath) {
+              fs.writeFileSync(outputPath, DEVELOPER_MODE_OFF_DETAILS_PAYLOAD);
+            }
+            return { exitCode: 0, stdout: '', stderr: '' };
+          },
+        }),
+        () => ensureRunnerSession(device, {}),
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'device_developer_mode_disabled');
+      return true;
+    },
+  );
+});
+
+/** A device reporting its own toggle off while awake and connected: the state that makes it a fact. */
+const DEVELOPER_MODE_OFF_DETAILS_PAYLOAD = JSON.stringify({
+  info: { outcome: 'success' },
+  result: {
+    deviceProperties: {
+      developerModeStatus: 'disabled',
+      ddiServicesAvailable: false,
+      bootState: 'booted',
+    },
+    connectionProperties: { tunnelState: 'connected' },
+  },
+});
+
+/** Where `devicectl ... --json-output <path>` is told to put its payload. */
+function jsonOutputPathOf(args: string[]): string | undefined {
+  const index = args.indexOf('--json-output');
+  return index >= 0 ? args[index + 1] : undefined;
+}

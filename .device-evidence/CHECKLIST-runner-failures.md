@@ -114,12 +114,20 @@ xcodebuild -version
 ```
 
 Expected: `{"developerModeStatus":"enabled","ddiServicesAvailable":true}` on a healthy device, plus
-the Xcode version. `packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json`
-holds this payload with its device identifiers, hostnames and capture path masked, and
-`packages/platform-apple/src/runner/__tests__/runner-startup-failure-fixtures.ts` records the two
-state pairings as `tool-error-shape`. Paste the raw values so both can move to `captured`. Also
-record the `tunnelState` and `tunnelIPAddress` from the same file, which is the transport data the
-parser reads.
+the Xcode version. Also record `bootState` and `tunnelState` from the same file: those two are what
+make a `ddiServicesAvailable: false` an answer at all rather than a device that was not listening.
+
+`packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json` holds this payload
+and `packages/platform-apple/src/runner/__tests__/runner-startup-failure-fixtures.ts` records the two
+state pairings, both at `invented-shape` until this capture moves them to `captured`. Paste the raw
+values rather than a summary.
+
+The committed payload is masked, and the mask is a rule with a test, not a one-time edit:
+`hardwareProperties.serialNumber` and `deviceProperties.bootedSnapshotName` carry `MASKED`,
+`hardwareProperties.ecid` is `0`, and `connectionProperties.tunnelIPAddress` is a documentation-only
+`fd00:` address. Everything the reader consumes — the toggle, the image, `bootState`, `tunnelState`,
+OS build — stays verbatim. If you refresh this capture, apply the same mask in both the `result`
+block and the mirrored `properties` block, and leave the states alone.
 
 ### 2. A healthy device is left alone
 
@@ -164,6 +172,13 @@ Expected: `details.reason` is `device_developer_disk_image_unavailable`, `detail
 the toggle reason appears here instead, that is the bug this issue exists to fix: paste the whole
 error and the `/tmp/device-details.json` payload rather than adjusting a rule.
 
+Capture the details payload at the same moment as the refusal, and check it says
+`tunnelState: "connected"` and `bootState: "booted"`. A `ddiServicesAvailable: false` read any other
+way is not this case: an asleep or unreachable device has the same field and no obstacle, and the run
+must not name device support for it. The hint you get here is the one `core/devicectl.ts` owns and the
+device report carries, so it is worded identically to the hint `devicectl` output produces for the
+same complaint — paste both strings and confirm they match character for character.
+
 ### 5. A device that cannot be read claims nothing
 
 Unplug the iPhone (or shut it down) after a session exists, then rerun the `prepare ios-runner`
@@ -171,9 +186,23 @@ command.
 
 Expected: the failure names whatever the transport could not reach, and no `details.reason` of
 `device_developer_mode_disabled` or `device_developer_disk_image_unavailable` appears anywhere in the
-error. An unreadable device is never diagnosed.
+error. An unreadable device is never diagnosed. This is also the case that catches a sleeping phone
+reporting `ddiServicesAvailable: false`: if the hint here says `Let Xcode finish preparing this
+device`, the corroboration rule has been lost, and pasting the payload with its `tunnelState` and
+`bootState` is the evidence — do not adjust the rule to make the run pass.
 
-### 6. Log evidence belongs to the command that wrote it (optional, needs a crash repro)
+### 6. A device and a Mac that are both wrong publish the device's reason
+
+With the iPhone's Developer Mode toggle off AND `sudo DevToolsSecurity -status` reporting the
+developer-tools setting disabled, run the `prepare ios-runner` command.
+
+Expected: one error, whose `details.reason` is `device_developer_mode_disabled`. The Mac's reason is
+the other one (`devtools_security_developer_mode_disabled`) and must not be what you get: the phone's
+fix needs no admin rights on the Mac, so the probe that can be acted on has to be the one that speaks.
+Record which of the two appears; a captured pairing here is what would let a follow-up drop the
+ordering argument.
+
+### 7. Log evidence belongs to the command that wrote it (optional, needs a crash repro)
 
 Run any command that crashes the app under test, then a second command that fails for its own
 reason (for example a selector that no longer exists).
