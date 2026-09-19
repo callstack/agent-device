@@ -70,13 +70,29 @@ test('parseIosDeviceProcessesPayload maps running process entries', () => {
   ]);
 });
 
-test('resolveIosDevicectlHint points at Developer Mode when the disk image cannot mount', () => {
+test('resolveIosDevicectlHint names the developer disk image when that is all it reports', () => {
   // Observed on a freshly paired iPhone: unlocked, trusted, `available (paired)`
-  // in Xcode, and still unusable because Developer Mode was off. The default
-  // hint sent the user to re-check trust, which was already fine.
+  // in Xcode, and still unusable. This line used to be answered with Developer
+  // Mode advice, which is right often enough to survive as a guess and wrong
+  // whenever Xcode simply has not finished installing device support on a phone
+  // whose toggle is already on (#2683). The device reports both states apart, so
+  // the hint answers the one the output named.
   const hint = resolveIosDevicectlHint(
     '',
     'Failed to launch iOS app: The developer disk image could not be mounted on this device. (com.apple.dt.CoreDeviceError error 12040 (0x2F08))',
+  );
+
+  assert.match(String(hint), /device support/i);
+  assert.doesNotMatch(String(hint), /Developer Mode/);
+});
+
+test('resolveIosDevicectlHint names Developer Mode when the output says both', () => {
+  // The pairing this hint was written for: a phone with the toggle off cannot
+  // mount the image either, so the toggle is the thing to fix and the direction
+  // that genuinely holds (#2683).
+  const hint = resolveIosDevicectlHint(
+    '',
+    'The operation failed because Developer Mode is disabled. The developer disk image could not be mounted on this device.',
   );
 
   assert.match(String(hint), /Developer Mode/);
