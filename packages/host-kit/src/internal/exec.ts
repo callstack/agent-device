@@ -29,7 +29,7 @@ export type ExecOptions = {
   maxBuffer?: number;
 };
 
-type ExecStreamOptions = ExecOptions & {
+export type ExecStreamOptions = ExecOptions & {
   onStdoutChunk?: (chunk: string) => void;
   onStderrChunk?: (chunk: string) => void;
   onSpawn?: (child: ReturnType<typeof spawn>) => void;

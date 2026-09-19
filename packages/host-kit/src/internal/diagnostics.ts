@@ -123,12 +123,14 @@ export function countDiagnosticEventsByPhase(phases: readonly string[]): number 
   return total;
 }
 
-export function emitDiagnostic(event: {
+export type DiagnosticEventInput = {
   level?: DiagnosticLevel;
   phase: string;
   durationMs?: number;
   data?: Record<string, unknown>;
-}): void {
+};
+
+export function emitDiagnostic(event: DiagnosticEventInput): void {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return;
   const payload: DiagnosticEvent = {

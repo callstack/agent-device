@@ -4,7 +4,7 @@ import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions } from '../host.ts';
+import type { ExecOptions } from '@agent-device/host-kit/command';
 import {
   createRunnerPhaseBudget,
   diffComparableRunnerCacheMetadata,

@@ -1,6 +1,7 @@
 export {
   countDiagnosticEventsByPhase,
   createRequestId,
+  type DiagnosticEventInput,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,

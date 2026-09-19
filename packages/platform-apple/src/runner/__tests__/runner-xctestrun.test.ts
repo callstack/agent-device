@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions, ExecResult } from '../host.ts';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 // This script runs outside the package's host abstraction (it is invoked directly via
 // dynamic import in the "setup metadata script" test below) and calls node:child_process

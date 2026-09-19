@@ -27,14 +27,10 @@ import {
   type IosPhysicalDeviceScreenshotOptions,
 } from './physical-device-screenshot.ts';
 import { runXcrun } from './tool-provider.ts';
-
-export type IosPhysicalDeviceBackend = 'coredevice' | 'xctest';
-/**
- * Only the CoreDevice tunnel address is resolved here. Which transport a runner
- * command uses is decided by the route resolver, which reaches this at all only
- * after usbmux has reported the device unattached.
- */
-export type IosPhysicalDeviceTunnel = { tunnelIp: string | null };
+import type {
+  IosPhysicalDeviceBackend,
+  IosPhysicalDeviceRunnerControl,
+} from './physical-device-routing.ts';
 
 type IosPhysicalDeviceLaunchOptions = {
   payloadUrl?: string;
@@ -43,8 +39,7 @@ type IosPhysicalDeviceLaunchOptions = {
   runRunnerCommand: AppleRunnerCommandExecutor;
 };
 
-export type IosPhysicalDeviceControl = {
-  readonly backend: IosPhysicalDeviceBackend;
+export type IosPhysicalDeviceControl = IosPhysicalDeviceRunnerControl & {
   assertAppInstallationSupported(device: DeviceInfo): void;
   ensureReady(device: DeviceInfo, signal?: AbortSignal): Promise<void>;
   listApps(device: DeviceInfo, filter: AppsFilter): Promise<IosAppInfo[]>;
@@ -75,7 +70,6 @@ export type IosPhysicalDeviceControl = {
     outPath: string,
     timeoutMs?: number,
   ): Promise<void>;
-  resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<IosPhysicalDeviceTunnel>;
 };
 
 const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {

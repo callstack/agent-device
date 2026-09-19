@@ -9,8 +9,8 @@ import {
   readProcessStartTime,
   acquireProcessLock,
   withProcessLock,
-  type ProcessLockRelease,
 } from './host.ts';
+import type { ProcessLockRelease } from '@agent-device/host-kit/file';
 
 const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
 const XCTEST_DEVICE_SET_BACKUP_SUFFIX = '.agent-device-backup';

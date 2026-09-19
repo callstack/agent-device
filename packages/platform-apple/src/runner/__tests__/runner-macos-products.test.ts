@@ -12,7 +12,7 @@ import {
   repairMacOsRunnerProductsIfNeeded,
 } from '../runner-macos-products.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions, ExecResult } from '../host.ts';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 const XCTESTRUN_PATH = '/tmp/agent-device-runner.xctestrun';
 

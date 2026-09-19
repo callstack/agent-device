@@ -15,8 +15,8 @@ import {
   findProjectRoot,
   readVersion,
   runCmdSync,
-  type TtlMemo,
 } from './host.ts';
+import type { TtlMemo } from '@agent-device/kernel/ttl-memo';
 import {
   COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   resolveRunnerBuildDestinationFamily,

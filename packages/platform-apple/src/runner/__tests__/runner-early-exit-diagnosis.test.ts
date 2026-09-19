@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AppError } from '@agent-device/kernel/errors';
-import type { ExecBackgroundResult } from '../host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerEarlyExitError } from '../runner-contract.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 

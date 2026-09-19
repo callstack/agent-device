@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions, ExecResult, ExecStreamOptions } from '../host.ts';
+import type { ExecOptions, ExecResult, ExecStreamOptions } from '@agent-device/host-kit/command';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { MACOS_DEVICE } from './device-fixtures.ts';
