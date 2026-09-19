@@ -3,7 +3,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
-import { decodePng, PNG } from './png.ts';
+import { decodePng, hasPngSignature, PNG } from './png.ts';
 import {
   computeScreenshotDiffPixels,
   type ScreenshotDiffPixelsJob,
@@ -28,8 +28,6 @@ import {
  */
 
 const PNG_WORKER_ENTRYPOINT = 'png-worker';
-// Kept local so the JPEG decoder module stays out of every entry that only needs PNG jobs.
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** Worker-infrastructure failure: the generic runner falls back to the sync path. */
 class PngWorkerUnavailableError extends Error {}
@@ -265,7 +263,7 @@ export async function computeScreenshotDiffPixelsAsync(
  * capture never blocks the daemon event loop. Decode failures carry the canonical `AppError`.
  */
 export async function transcodeScreenshotToPngAsync(bytes: Buffer, label: string): Promise<Buffer> {
-  if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) return bytes;
+  if (hasPngSignature(bytes)) return bytes;
   const result = await runPngJob({ kind: 'jpeg-to-png', image: bytes, label }, async () => {
     // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
     // needs the worker's other jobs.

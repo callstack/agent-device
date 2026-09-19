@@ -133,6 +133,8 @@ test('transcodeScreenshotToPngAsync rejects a corrupt JPEG with the canonical de
     assert.equal(error instanceof AppError, true);
     assert.equal((error as AppError).code, 'COMMAND_FAILED');
     assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
+    assert.equal((error as AppError).details?.label, 'fixture');
+    assert.ok(String((error as AppError).details?.reason).length > 0);
     return true;
   });
 });
