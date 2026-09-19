@@ -31,7 +31,7 @@ async function probe() {
 // lifetime, so a wrong admission here is not a single bad answer -- it advertises a clipboard the
 // build may not have until the daemon restarts.
 describe('android clipboard shell probe: what each adb result is allowed to prove', () => {
-  test('a clean exit is the only thing that proves support', async () => {
+  test('clipboard contents on a clean exit prove support', async () => {
     runAndroidAdb.mockResolvedValueOnce(adbResult(0, 'clipboard contents'));
     await expect(probe()).resolves.toBe('supported');
   });
@@ -41,7 +41,15 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     await expect(probe()).resolves.toBe('supported');
   });
 
-  test('the missing-shell prose proves the build ships no clipboard command', async () => {
+  // Android 16 (API 36): `ClipboardService` implements no shell command, so the framework default
+  // answers with its sentence on stderr and a clean exit, and the clipboard is never touched. Reading
+  // the exit status here is what advertised `clipboard` in `capabilities` on such a device.
+  test('the no-shell-command sentence on a clean exit proves the build has none', async () => {
+    runAndroidAdb.mockResolvedValueOnce(adbResult(0, '', 'No shell command implementation.'));
+    await expect(probe()).resolves.toBe('unsupported');
+  });
+
+  test('the missing-shell prose on a failed call proves the build has none', async () => {
     runAndroidAdb.mockResolvedValueOnce(
       adbResult(255, '', 'Error: no shell command implementation.'),
     );
@@ -65,13 +73,10 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     await expect(probe()).resolves.toBe('probe-failed');
   });
 
-  // adb reports the missing shell command non-zero, so the prose is only ever evidence about a
-  // call that failed -- which is exactly why it must not be read on a call that succeeded.
-  test.each([
-    ['stderr', '', 'Unknown command: clipboard'],
-    ['stdout', 'No shell command implementation.', ''],
-  ])('missing-shell prose on %s of a non-zero exit reads as unsupported', async (_c, out, err) => {
-    runAndroidAdb.mockResolvedValueOnce(adbResult(1, out, err));
+  // Stream-merged transports carry the device's prose onto stdout, so prose is read off stdout once
+  // the call has failed.
+  test('missing-shell prose on stdout of a non-zero exit reads as unsupported', async () => {
+    runAndroidAdb.mockResolvedValueOnce(adbResult(1, 'No shell command implementation.', ''));
     await expect(probe()).resolves.toBe('unsupported');
   });
 
@@ -85,6 +90,13 @@ describe('android clipboard shell probe: what each adb result is allowed to prov
     ['No shell command implementation.'],
   ])('a clipboard holding %j is still supported', async (contents) => {
     runAndroidAdb.mockResolvedValueOnce(adbResult(0, contents));
+    await expect(probe()).resolves.toBe('supported');
+  });
+
+  // `unknown command` is adb's own wording as well as a service's (`adb: unknown command features`),
+  // so it cannot settle anything about this device's clipboard service on a call that succeeded.
+  test('the generic unknown-command phrase on stderr of a clean exit proves nothing', async () => {
+    runAndroidAdb.mockResolvedValueOnce(adbResult(0, 'clipboard contents', 'Unknown command: foo'));
     await expect(probe()).resolves.toBe('supported');
   });
 });

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed (android): `clipboard read` and `clipboard write` stop reporting success on a build whose
+  clipboard service has no shell command. Android 16 (API 36) answers every `adb shell cmd clipboard …`
+  with the framework default `Binder.handleShellCommand` — `No shell command implementation.` on
+  stderr and exit status 0 — and the exit status was consulted first, so a read reported `text: ""`,
+  a write reported "Clipboard updated", and `capabilities` advertised `clipboard` on a clipboard no
+  adb call ever touched. The response is now classified per stream into one typed verdict shared by
+  both legs and the capability probe: the service's own sentence on `stderr` outranks a clean exit
+  (a service that never ran wrote no payload to `stdout`), while `stdout` stays payload until the call
+  has failed. Such a device now refuses with `UNSUPPORTED_OPERATION` and a hint naming the substitute,
+  and the exported `readAndroidClipboardWithAdb` / `writeAndroidClipboardWithAdb` helpers reject
+  instead of resolving an empty string or nothing at all (#2674).
 - Fixed (limrun): `screenshot` on Limrun iOS direct sessions writes a PNG. Limrun serves its capture
   as JPEG and the interactor wrote those bytes straight to the `.png` path, so every capture failed
   downstream with "Screenshot file is not a valid PNG". The bytes are now sniffed and a JPEG is

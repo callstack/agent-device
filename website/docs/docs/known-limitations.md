@@ -34,3 +34,16 @@ If the helper cannot be installed (locked-down managed devices, some cloud provi
 Some OEM builds gate the first install of a package behind the system package installer and keep `adb install` open until someone confirms it on the device screen. That applies to both `agent-device` helper APKs (the snapshot helper and the test IME), one time per package: on ColorOS, reported on an OPPO Find N6, the first install needs two taps — confirm the install, then dismiss the completion screen — and every later install of the same package is silent.
 
 An unattended first Android snapshot therefore times out with a helper install failure whose hint says to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry; if no dialog is showing, restart the ADB server as the hint says.
+
+## Android: no clipboard access over adb on Android 16
+
+`agent-device` reaches the Android clipboard through `adb shell cmd clipboard`. That command works only on a build whose clipboard service implements a shell command, and AOSP's `ClipboardService` does not: the class carries no shell command at `android13-release`, `android14-release`, `android15-release` or `android16-release`, nor on current AOSP `main`, and a physical device runs that same class. On Android 16 (API 36) every `cmd clipboard get text` and `cmd clipboard set text <text>` call is answered by the framework's default `Binder.handleShellCommand` — `No shell command implementation.` on stderr, exit status **0** — so the clipboard is never touched even though the call reports success.
+
+`agent-device` asks each device once whether its clipboard service answers, and refuses rather than repeating that silence:
+
+- `capabilities` omits `clipboard` on such a device;
+- `clipboard read` and `clipboard write` fail with `UNSUPPORTED_OPERATION` and a hint naming the missing shell command and the substitute, instead of answering `text: ""` and "Clipboard updated".
+
+**Workaround:** verify a copy flow from the app side — trigger the app's copy action, paste into a focused text field, and read that field back with `snapshot`. It proves the app's own clipboard write, which an adb-side read never did.
+
+On a build that does implement `cmd clipboard`, note that Android 10+ restricts clipboard reads to the app with input focus or the current input method service (adb is neither), so an adb-side read can still come back blank there. `agent-device` reports the empty clipboard it was given rather than guessing at a denial it has not observed; if you have such a build, file it with the output of `adb shell cmd clipboard get text; echo rc=$?`.
