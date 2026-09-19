@@ -19,8 +19,9 @@ import {
  * runner response proves the decoder, not the fact.
  *
  * Runs on the same lanes as the iOS simulator fixture E2E (`smoke` and `full` tiers) and needs the
- * same environment: `AGENT_DEVICE_IOS_E2E=1`, `AGENT_DEVICE_IOS_E2E_TIER`, a fixture app already
- * installed (`AGENT_DEVICE_FIXTURE_APP_ID`), and `AGENT_DEVICE_IOS_UDID`.
+ * same environment: `AGENT_DEVICE_IOS_E2E=1`, `AGENT_DEVICE_IOS_E2E_TIER`, `AGENT_DEVICE_FIXTURE_APP_PATH`
+ * and `AGENT_DEVICE_FIXTURE_APP_ID`, and `AGENT_DEVICE_IOS_UDID`. Those lanes fetch the fixture with
+ * `install: 'false'`, so this lane installs it through the public CLI like the other fixture lanes do.
  */
 
 const enabled = process.env.AGENT_DEVICE_IOS_E2E === '1';
@@ -34,6 +35,7 @@ test(
   async () => {
     const context = createContext();
     try {
+      await runStep(context, 'install fixture app', ['install', context.appPath]);
       await runStep(context, 'open fixture app', ['open', context.appId]);
 
       // Screenshot is a lifecycle command: it serves whatever is foreground without touching the
