@@ -34,7 +34,11 @@ const { runReplayCommand, runReplayTestCommand } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('../../replay/index.ts', () => ({
+// The doubles replace only the two entry points. The handler also binds the session and splits the
+// request through this façade, and those bindings are part of what is pinned here, so the rest of
+// the module stays real.
+vi.mock('../../replay/index.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../replay/index.ts')>()),
   runReplayCommand,
   runReplayTestCommand,
 }));
