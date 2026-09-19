@@ -35,7 +35,9 @@ Expected: exit non-zero, one error object with
 `hint`, `logPath` and `diagnosticId` are top-level, never inside `details`. Also record the Xcode
 version (`xcodebuild -version`) so the `signing_no_development_team` fixture in
 `packages/platform-apple/src/runner/__tests__/runner-startup-failure-fixtures.ts` can move from
-`inherited-sniff-trigger` to `captured`.
+`shipped-sniff-trigger` to `captured` and its `xcodeVersion` from `unobserved` to that version.
+Paste the whole error so the fixture's `output` can become the capture and its `command` can be
+recorded.
 
 ### 2. A bundle identifier somebody else already owns -> `bundle_identifier_already_registered`
 
@@ -61,14 +63,32 @@ version so the matching fixture's `provenance` can be upgraded:
 # devtools_security_developer_mode_disabled (macOS admin state, no device work)
 DevToolsSecurity -status
 
-# signing_provisioning_profile_missing / signing_style_conflict: point the runner build at a
-# profile that is not installed, then read the reason off the same prepare command as above.
+# signing_provisioning_profile_missing: point the runner build at a profile that is not installed,
+# then read the reason off the same prepare command as above.
 env AGENT_DEVICE_IOS_TEAM_ID="<your team id>" \
   AGENT_DEVICE_IOS_PROVISIONING_PROFILE="no-such-profile-installed" \
   node --experimental-strip-types src/bin.ts --json \
   prepare ios-runner --platform ios --device "<physical iPhone name>"
 ```
 
-Expected: `details.reason` is `signing_provisioning_profile_missing`, or `signing_style_conflict`
-when xcodebuild reports conflicting provisioning settings. If neither reason appears, say which
-reason did and treat the fixture as unconfirmed rather than editing the rule to fit.
+Expected: `details.reason` is `signing_provisioning_profile_missing`. If a different reason appears,
+say which one did and treat the fixture as unconfirmed rather than editing the rule to fit.
+
+### 4. The line that claims no reason yet -> `build_failed_unclassified`
+
+`xcodebuild` reports a settings mismatch with a line that names a profile ("has conflicting
+provisioning settings"). #2680 deliberately publishes `build_failed_unclassified` for it, because no
+capture has proved which lever clears it. To reach it, pin a profile while leaving automatic signing
+on:
+
+```sh
+env AGENT_DEVICE_IOS_TEAM_ID="<your team id>" \
+  AGENT_DEVICE_IOS_PROVISIONING_PROFILE="match-development" \
+  node --experimental-strip-types src/bin.ts --json \
+  prepare ios-runner --platform ios --device "<physical iPhone name>"
+```
+
+Expected: either `signing_provisioning_profile_missing` (xcodebuild complained about the profile
+first) or `build_failed_unclassified`. Paste the error and the `xcodebuild -version` either way: a
+capture of the conflicting-settings line is what would let a follow-up name the cause, and the
+capture must show which build setting disagrees before any hint naming a lever is written.

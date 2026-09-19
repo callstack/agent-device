@@ -4,121 +4,157 @@ import type { RunnerStartupFailureReason } from '../runner-contract.ts';
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).
  *
- * Each entry carries the tool output exactly as it reaches the host, the command that produced it,
- * the Xcode that produced it, and how it got here. `provenance` is what says whether a line was
- * observed or transcribed: an entry stays `inherited-sniff-trigger` until the matching command in
- * `.device-evidence/CHECKLIST.md` is run against real hardware, at which point `output` is replaced
- * with the capture and `provenance` becomes `captured`. Nothing in the classifier reads these
- * fields — they exist so a reason can be traced to an observation instead to a guess.
+ * Provenance is the point of this file, so it is stated per entry and never as a blanket claim:
+ *
+ * - `captured` — `output` was pasted from a run, and `command` plus `xcodeVersion` (from
+ *   `xcodebuild -version`) were recorded with it by `.device-evidence/CHECKLIST.md`.
+ * - `shipped-sniff-trigger` — the substrings a rule matches are the ones shipped in
+ *   `resolveSigningFailureHint` before #2680, which is evidence xcodebuild can emit them. The
+ *   sentence around them is ours, so `command` and `xcodeVersion` stay unrecorded.
+ * - `invented-shape` — no shipped trigger and no capture. The entry exists to exercise a rule and
+ *   makes no claim about wording xcodebuild prints.
+ *
+ * Until Phase B captures the real runs, every entry is `unobserved` for `xcodeVersion` and carries
+ * no `command`: an invocation we did not run is not provenance. Nothing in the classifier reads
+ * these fields; they exist so a reason can be traced to an observation instead of to a guess.
  */
 
 export type RunnerStartupFailureSite = 'build-for-testing' | 'host-dev-tools-security';
 
+/**
+ * Whether the text reaches the build catch inside the exec error's `details` (`exec-details`, which
+ * is how a non-zero `xcodebuild` arrives) or only in the thrown message (`message-only`, which is
+ * how anything the exec layer raised as a plain `Error` arrives after the catch wraps `String(err)`).
+ */
+export type RunnerStartupFailureCarrier = 'exec-details' | 'message-only';
+
+const UNOBSERVED = 'unobserved';
+
 export type RunnerStartupFailureFixture = Readonly<{
+  /** Stable name for a focused test or a review comment. */
+  id: string;
   /** The reason this output must reach the caller with. */
   reason: RunnerStartupFailureReason;
   /** Which throw site receives this output. */
   site: RunnerStartupFailureSite;
-  /** The invocation that produced {@link RunnerStartupFailureFixture.output}. */
-  command: string;
-  /** `xcodebuild -version` of the machine that produced it. */
+  carrier?: RunnerStartupFailureCarrier;
+  /** The invocation that produced {@link RunnerStartupFailureFixture.output}, once one is recorded. */
+  command?: string;
+  /** `xcodebuild -version` recorded from that run, or `unobserved`. */
   xcodeVersion: string;
-  provenance: 'captured' | 'inherited-sniff-trigger' | 'tool-error-shape';
-  /** The tool's own stdout/stderr, kept on one shape so JSON detail matching sees it as the host does. */
+  provenance: 'captured' | 'shipped-sniff-trigger' | 'invented-shape';
+  /** The tool's own stdout/stderr. */
   output: string;
-  /** What the pending capture still has to show. */
+  /** The argv the exec reported, which is never evidence of a cause (#2680). */
+  args?: readonly string[];
+  /** What the pending capture still has to show, and how to reach it. */
   note?: string;
 }>;
 
-/**
- * The `xcodebuild` invocation `buildRunnerXctestrun` issues for a physical iOS device with Automatic
- * Signing and no profile pinned, which is the configuration every signing reason below is about.
- */
-const BUILD_FOR_TESTING_COMMAND =
-  'xcodebuild build-for-testing -project apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj ' +
-  '-scheme AgentDeviceRunner -parallel-testing-enabled NO -destination generic/platform=iOS ' +
-  '-derivedDataPath <derived> -allowProvisioningUpdates CODE_SIGN_STYLE=Automatic ' +
-  'DEVELOPMENT_TEAM=<AGENT_DEVICE_IOS_TEAM_ID>';
-
-const OBSERVED_ON = 'Xcode 26.2 (Build 17C52)';
-
 export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixture[] = [
   {
+    id: 'bundle-id-registration-failed',
     reason: 'bundle_identifier_already_registered',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'inherited-sniff-trigger',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output:
-      "error: Failed registering bundle identifier \"com.yourname.agentdevice.runner\" with the developer portal: An App ID with Identifier 'com.yourname.agentdevice.runner' is not available. Please enter a different string. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
-    note: 'Capture with AGENT_DEVICE_IOS_BUNDLE_ID set to an identifier already registered by another team.',
+      "error: Failed registering bundle identifier \"com.yourname.agentdevice.runner\" with the developer portal (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'Capture with AGENT_DEVICE_IOS_BUNDLE_ID set to an identifier already registered by another team, and record the `xcodebuild -version` of the machine.',
   },
   {
+    id: 'app-id-not-available',
     reason: 'bundle_identifier_already_registered',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'tool-error-shape',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output:
-      "error: App Identifier 'com.yourname.agentdevice.runner' is not available. Choose a different App Identifier, or register it in your Apple Developer account before building. (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
-    note: 'The second shape of the same cause: no "failed registering" line, so only the two-part match can name it.',
+      "error: App Identifier 'com.yourname.agentdevice.runner' is not available (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'The second shape of the same cause: no "failed registering" line, so only the two-part "app identifier" + "not available" trigger can name it. Trimmed to the shipped trigger; the real sentence is still unrecorded.',
   },
   {
+    id: 'requires-development-team',
     reason: 'signing_no_development_team',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'inherited-sniff-trigger',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output:
-      "error: Signing for \"AgentDeviceRunner\" requires a development team. Select a development team in the Signing & Capabilities editor. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+      "error: Signing for \"AgentDeviceRunner\" requires a development team (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'Capture with AGENT_DEVICE_IOS_TEAM_ID unset on a signed-in-but-team-less account.',
   },
   {
+    id: 'requires-development-team-message-only',
+    reason: 'signing_no_development_team',
+    site: 'build-for-testing',
+    carrier: 'message-only',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
+    output:
+      "error: Signing for \"AgentDeviceRunner\" requires a development team (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')",
+    note: 'Same text arriving in the thrown message instead of the exec details: the catch wraps a non-AppError with String(err), and the rule still has to see it.',
+  },
+  {
+    id: 'no-profiles-for-bundle-id',
     reason: 'signing_provisioning_profile_missing',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'inherited-sniff-trigger',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output:
-      "error: No profiles for 'com.yourname.agentdevice.runner' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'com.yourname.agentdevice.runner'. Automatic signing is disabled and unable to generate a profile. To enable automatic signing, pass -allowProvisioningUpdates to xcodebuild. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+      "error: No profiles for 'com.yourname.agentdevice.runner' were found (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'Capture with AGENT_DEVICE_IOS_PROVISIONING_PROFILE naming a profile that is not installed.',
   },
   {
-    reason: 'signing_style_conflict',
+    id: 'conflicting-provisioning-settings',
+    reason: 'build_failed_unclassified',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'tool-error-shape',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
     output:
-      'error: "AgentDeviceRunner" has conflicting provisioning settings. AgentDeviceRunner is automatically signed, but provisioning profile "match-development-com-yourname-agentdevice-runner" has been manually specified. Set the provisioning profile value to "Automatic" in the build settings editor, or switch to manual signing in the Signing & Capabilities editor. (in target \'AgentDeviceRunner\' from project \'AgentDeviceRunner\')\n** TEST BUILD FAILED **\n',
-    note: 'New reason: capture the conflicting-settings line before claiming this wording on hardware.',
+      "error: \"AgentDeviceRunner\" has conflicting provisioning settings (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'Names a profile while saying the settings disagree, so the profile row must not win. No reason is claimed until a capture proves which lever clears it.',
   },
   {
+    id: 'code-signing-required',
     reason: 'signing_unspecified',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'inherited-sniff-trigger',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output:
-      "error: Code signing is required for product type 'Application' in SDK 'iOS 26.2' (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+      "error: Code signing is required for product type 'Application' (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'Signing is named and nothing above it is: the reason stays unspecified on purpose.',
   },
   {
+    id: 'compile-error',
     reason: 'build_failed_unclassified',
     site: 'build-for-testing',
-    command: BUILD_FOR_TESTING_COMMAND,
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'tool-error-shape',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
     output:
       "error: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'Any build failure that names no signing fact must keep the cache-recovery hint.',
   },
   {
+    id: 'argv-names-a-provisioning-profile',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    args: [
+      'build-for-testing',
+      'PROVISIONING_PROFILE_SPECIFIER=match-development',
+      'Provisioning Profile: match-development',
+    ],
+    note: 'The argv we were asked to run is not xcodebuild evidence: a caller who pinned a profile still gets cache-recovery advice for a compile error (#2680).',
+  },
+  {
+    id: 'devtools-security-disabled',
     reason: 'devtools_security_developer_mode_disabled',
     site: 'host-dev-tools-security',
     command: 'DevToolsSecurity -status',
-    xcodeVersion: OBSERVED_ON,
-    provenance: 'inherited-sniff-trigger',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
     output: 'Developer mode is currently disabled for development tools.\n',
     note: "Host-side refusal. It says nothing about the device's Developer Mode toggle (#2683 reads that).",
   },
@@ -128,21 +164,30 @@ export function buildForTestingFixtures(): RunnerStartupFailureFixture[] {
   return RUNNER_STARTUP_FAILURE_FIXTURES.filter((fixture) => fixture.site === 'build-for-testing');
 }
 
+export function buildFixtureById(id: string): RunnerStartupFailureFixture {
+  const fixture = RUNNER_STARTUP_FAILURE_FIXTURES.find((candidate) => candidate.id === id);
+  if (!fixture) throw new Error(`no startup failure fixture records ${id}`);
+  return fixture;
+}
+
 /**
- * The error the exec layer hands the build-failure catch when `xcodebuild` exits non-zero: a
- * COMMAND_FAILED whose message is the exec's own and whose tool output sits in `details`, which is
- * exactly why the rules below read details text and not only the message.
+ * What the exec layer hands the build-failure catch: for `exec-details` a COMMAND_FAILED carrying
+ * the tool's output and the argv in `details` (`execFailureDetails` shape), and for `message-only`
+ * the plain `Error` the catch turns into `new AppError('COMMAND_FAILED', String(error))`.
  */
-export function buildForTestingExecError(
-  fixture: Pick<RunnerStartupFailureFixture, 'output'>,
+export function buildForTestingExecFailure(
+  fixture: RunnerStartupFailureFixture,
   exitCode = 65,
-): AppError {
-  return new AppError('COMMAND_FAILED', 'xcodebuild exited with code 65', {
+): unknown {
+  if ((fixture.carrier ?? 'exec-details') === 'message-only') {
+    return new Error(`xcodebuild exited with code ${exitCode}: ${fixture.output}`);
+  }
+  return new AppError('COMMAND_FAILED', `xcodebuild exited with code ${exitCode}`, {
     stdout: fixture.output,
     stderr: '',
     exitCode,
     processExitError: true,
     cmd: 'xcodebuild',
-    args: ['build-for-testing'],
+    args: fixture.args ?? ['build-for-testing'],
   });
 }

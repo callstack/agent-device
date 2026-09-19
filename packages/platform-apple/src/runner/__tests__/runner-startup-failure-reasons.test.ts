@@ -9,16 +9,20 @@ import type { ExecResult } from '../host.ts';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
   RUNNER_ERROR_RULES,
+  classifyRunnerStartupFailure,
   RUNNER_STARTUP_FAILURE_REASONS,
   RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
   type RunnerStartupFailureReason,
 } from '../runner-contract.ts';
+import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_DEVICE } from './device-fixtures.ts';
 import {
   RUNNER_STARTUP_FAILURE_FIXTURES,
-  buildForTestingExecError,
+  buildFixtureById,
+  buildForTestingExecFailure,
   buildForTestingFixtures,
+  type RunnerStartupFailureFixture,
 } from './runner-startup-failure-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -30,8 +34,10 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
  * assertion, and the hint beside it has to be the hint the rule that named the reason carries.
  *
  * The envelope assertions are deliberate: `normalizeError` moves `hint`, `logPath` and
- * `diagnosticId` out of `details` to the top level, so a reason that survives in `details` and a
- * hint that survives at top level are two different claims about where the error was built.
+ * `diagnosticId` out of `details` to the top level, and it is called here with no `logPath`
+ * fallback — a top-level `logPath` therefore proves the build catch put it there. The negative
+ * cases matter just as much: argv, our own emitted reason, and wording without a typed fact behind
+ * it must all stay unclassified.
  */
 
 const CACHE_RECOVERY_HINT = /clean:xcuitest|apple-runner\/derived/;
@@ -40,7 +46,6 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   bundle_identifier_already_registered: /AGENT_DEVICE_IOS_BUNDLE_ID/,
   signing_no_development_team: /AGENT_DEVICE_IOS_TEAM_ID/,
   signing_provisioning_profile_missing: /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/,
-  signing_style_conflict: /CODE_SIGN_STYLE/,
   signing_unspecified: /Automatic Signing/,
   devtools_security_developer_mode_disabled: /DevToolsSecurity -enable/,
   build_failed_unclassified: CACHE_RECOVERY_HINT,
@@ -48,6 +53,7 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
 
 const runCmdSync = vi.fn();
 const runCmdStreaming = vi.fn();
+const runAppleToolCommand = vi.fn();
 const DIAGNOSTIC_ID = 'diag-build-failure-1';
 let projectRoot: string;
 let derivedPath: string;
@@ -70,9 +76,11 @@ beforeEach(() => {
     stdout: '',
     stderr: '',
   }));
+  runAppleToolCommand.mockReset().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   appleRunnerTestHost.update({
     runCmdSync,
     runCmdStreaming,
+    runAppleToolCommand,
     findProjectRoot: () => projectRoot,
     readVersion: () => '0.0.0-test',
   });
@@ -83,13 +91,15 @@ afterEach(() => {
 });
 
 for (const fixture of buildForTestingFixtures()) {
-  test(`a build-for-testing failure publishes ${fixture.reason}`, async () => {
-    const envelope = await driveBuildFailure(buildForTestingExecError(fixture));
+  test(`a build-for-testing failure publishes ${fixture.reason} for ${fixture.id}`, async () => {
+    const envelope = await driveBuildFailure(fixture);
 
     assert.equal(envelope.code, 'COMMAND_FAILED');
     assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
     assert.equal(envelope.details?.reason, fixture.reason);
     assert.match(String(envelope.hint), HINT_FOR_REASON[fixture.reason]);
+    // No `logPath` was handed to `normalizeError`: the top-level value can only be the one the
+    // build catch wrote into the error it throws.
     assert.equal(envelope.logPath, logPath);
     assert.equal(envelope.diagnosticId, DIAGNOSTIC_ID);
     // normalizeError hoists these out of `details`; a caller must read them at top level.
@@ -98,9 +108,14 @@ for (const fixture of buildForTestingFixtures()) {
     assert.equal(envelope.details?.diagnosticId, undefined);
     // The tool output stays reachable for a human reading the failure. It is redacted and
     // length-bounded on the way out, which is another reason the reason is typed: classification
-    // happens before the truncation a caller sees.
-    const nestedDetails = envelope.details?.details as Record<string, unknown> | undefined;
-    assert.match(String(nestedDetails?.stdout), /AgentDeviceRunner/);
+    // happens before the truncation a caller sees. A message-only failure carries no tool output to
+    // reach, which is exactly why the message is part of the haystack.
+    if ((fixture.carrier ?? 'exec-details') === 'exec-details') {
+      const nestedDetails = envelope.details?.details as Record<string, unknown> | undefined;
+      assert.match(String(nestedDetails?.stdout), /AgentDeviceRunner/);
+    } else {
+      assert.equal(envelope.details?.details, undefined);
+    }
   });
 }
 
@@ -125,17 +140,54 @@ test('every reason the classifier can name is produced by a rule row', () => {
   }
 });
 
+test('an argv that names a provisioning profile is not evidence of a signing failure', async () => {
+  // The exec reports the invocation we asked for in `details.args`. Reading the whole details bag
+  // would let a caller's own pinned profile name the cause of an unrelated compile error and take
+  // the cache-recovery hint with it (#2680).
+  const argvFixture = buildFixtureById('argv-names-a-provisioning-profile');
+
+  const envelope = await driveBuildFailure(argvFixture);
+
+  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
+  assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/);
+});
+
+test('a signing sentence that arrives only in the thrown message is still classified', async () => {
+  // The catch wraps a non-AppError as `new AppError('COMMAND_FAILED', String(error))`, so the tool's
+  // sentence can reach the classifier in the message with no details behind it (#2680).
+  const messageOnly = buildFixtureById('requires-development-team-message-only');
+
+  const envelope = await driveBuildFailure(messageOnly);
+
+  assert.equal(envelope.details?.reason, 'signing_no_development_team');
+  assert.match(String(envelope.hint), /AGENT_DEVICE_IOS_TEAM_ID/);
+});
+
+test('the failure the build catch publishes does not classify itself', async () => {
+  // The wrapper carries `reason` and `hint` in its details. Re-running the classifier over it must
+  // not read our own verdict back out of the bag the rules scan (#2680).
+  const signingFixture = buildFixtureById('requires-development-team');
+  const published = await runBuildCatch(() => buildForTestingExecFailure(signingFixture));
+
+  const reclassified = classifyRunnerStartupFailure(published);
+
+  assert.equal(reclassified.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.match(reclassified.hint, CACHE_RECOVERY_HINT);
+});
+
 test('an identical message without the typed host fact is not read as a DevToolsSecurity refusal', async () => {
-  // Same message the host probe throws; the only difference is the typed `devToolsSecurityStatus`
-  // fact the probe publishes. Text alone must not activate a reason (#2680).
-  const withoutFact = new AppError('COMMAND_FAILED', 'Developer mode is disabled', {
+  // The exact sentence the host probe throws, minus the typed `devToolsSecurityStatus` fact only the
+  // probe publishes. Text alone must not activate the reason (#2680).
+  const hostRefusal = await expectHostRefusal();
+  const withoutFact = new AppError('COMMAND_FAILED', hostRefusal.message, {
     stdout: 'developer mode is disabled\n',
     stderr: '',
     exitCode: 65,
     processExitError: true,
   });
 
-  const envelope = await driveBuildFailure(withoutFact);
+  const envelope = await driveBuildRejection(withoutFact);
 
   assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
@@ -143,10 +195,11 @@ test('an identical message without the typed host fact is not read as a DevTools
 });
 
 test('an app identifier named without the availability fact is not read as a taken bundle id', async () => {
-  const nearMiss = buildForTestingExecError({
+  const nearMiss: RunnerStartupFailureFixture = {
+    ...buildFixtureById('app-id-not-available'),
     output:
-      "error: App Identifier 'com.yourname.agentdevice.runner' is invalid. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n",
-  });
+      "error: App Identifier 'com.yourname.agentdevice.runner' is invalid (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+  };
 
   const envelope = await driveBuildFailure(nearMiss);
 
@@ -155,36 +208,34 @@ test('an app identifier named without the availability fact is not read as a tak
   assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_BUNDLE_ID/);
 });
 
-test('a signing failure that only names code signing keeps the generic signing advice', async () => {
-  const generic = buildForTestingExecError({
-    output: "error: Code signing is required for product type 'Application' in SDK 'iOS 26.2'\n",
-  });
-
-  const envelope = await driveBuildFailure(generic);
-
-  assert.equal(envelope.details?.reason, 'signing_unspecified');
-  assert.match(String(envelope.hint), /Automatic Signing/);
-  assert.doesNotMatch(String(envelope.hint), CACHE_RECOVERY_HINT);
-});
-
-test('a conflicting-settings failure is not downgraded to a missing profile', async () => {
-  // The conflicting-settings line names a profile while explaining that the styles disagree, so
-  // the more specific row has to win the race the generic profile row would also run.
-  const conflict = buildForTestingExecError({
-    output:
-      'error: "AgentDeviceRunner" has conflicting provisioning settings. AgentDeviceRunner is automatically signed, but provisioning profile "match-development" has been manually specified.\n',
-  });
+test('a conflicting-settings failure is not answered with missing-profile advice', async () => {
+  // The conflicting-settings line names a profile while explaining that the settings disagree. It
+  // precedes the profile row and claims no cause of its own (#2680).
+  const conflict = buildFixtureById('conflicting-provisioning-settings');
 
   const envelope = await driveBuildFailure(conflict);
 
-  assert.equal(envelope.details?.reason, 'signing_style_conflict');
-  assert.match(String(envelope.hint), /CODE_SIGN_STYLE/);
+  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
+  assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/);
 });
 
-async function driveBuildFailure(execError: AppError): Promise<NormalizedError> {
-  runCmdStreaming.mockReset().mockRejectedValue(execError);
+/** Drives a recorded fixture through the real build catch and normalizes what it threw. */
+async function driveBuildFailure(fixture: RunnerStartupFailureFixture): Promise<NormalizedError> {
+  return normalizeThrown(await runBuildCatch(() => buildForTestingExecFailure(fixture)));
+}
 
-  let envelope: NormalizedError | undefined;
+/** Drives a hand-built rejection through the same real build catch. */
+async function driveBuildRejection(rejection: unknown): Promise<NormalizedError> {
+  return normalizeThrown(await runBuildCatch(() => rejection));
+}
+
+async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
+  runCmdStreaming.mockReset().mockImplementation(async () => {
+    throw buildRejection();
+  });
+
+  let caught: unknown;
   await assert.rejects(
     () =>
       ensureXctestrunArtifact(IOS_DEVICE, {
@@ -192,10 +243,33 @@ async function driveBuildFailure(execError: AppError): Promise<NormalizedError> 
         budget: createRunnerPhaseBudget(120_000, undefined),
       }),
     (error: unknown) => {
-      envelope = normalizeError(error, { diagnosticId: DIAGNOSTIC_ID, logPath });
+      caught = error;
       return true;
     },
   );
-  assert.ok(envelope, 'the build-failure catch must throw');
-  return envelope;
+  assert.ok(caught, 'the build-failure catch must throw');
+  return caught;
+}
+
+function normalizeThrown(caught: unknown): NormalizedError {
+  return normalizeError(caught, { diagnosticId: DIAGNOSTIC_ID });
+}
+
+async function expectHostRefusal(): Promise<AppError> {
+  runAppleToolCommand.mockImplementation(async () => ({
+    exitCode: 0,
+    stdout: 'Developer mode is currently disabled for development tools.\n',
+    stderr: '',
+  }));
+
+  let caught: unknown;
+  await assert.rejects(
+    () => assertDevToolsSecurityForIosRunner(IOS_DEVICE),
+    (error: unknown) => {
+      caught = error;
+      return true;
+    },
+  );
+  assert.ok(caught instanceof AppError);
+  return caught;
 }
