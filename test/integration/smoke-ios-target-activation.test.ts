@@ -25,7 +25,11 @@ import {
  */
 
 const enabled = process.env.AGENT_DEVICE_IOS_E2E === '1';
-const HANDOFF_URL = 'https://example.com';
+// Settings, not a web link: `simctl openurl https://…` hands off through Safari, and on a CI
+// simulator that handoff can complete without Safari ever taking the foreground, which leaves this
+// lane waiting for a repair that was never owed. `simctl launch com.apple.Preferences` is the
+// handoff the iOS replays already rely on for the same effect.
+const HANDOFF_BUNDLE_ID = 'com.apple.Preferences';
 const HANDOFF_DEADLINE_MS = 90_000;
 const HANDOFF_POLL_MS = 2_000;
 
@@ -44,14 +48,25 @@ test(
       await runStep(context, 'screenshot session app', ['screenshot', '--out', before]);
       assert.ok(await exists(before), `screenshot wrote no artifact: ${before}`);
 
-      // Hand off to another app the same way an in-app external link does: LaunchServices brings
-      // MobileSafari forward while the session stays bound to the fixture app.
-      const handoff = await runCmd('xcrun', ['simctl', 'openurl', context.udid, HANDOFF_URL]);
-      assert.equal(handoff.exitCode, 0, `simctl openurl failed: ${handoff.stderr}`);
-
       const foreign = path.join(context.artifactDir, 'target-activation-foreign.png');
+
+      // Hand off to an app the session is not bound to. Settings comes forward and the fixture app
+      // goes background, which is the state the next capture has to repair.
+      const handoff = await runCmd('xcrun', ['simctl', 'launch', context.udid, HANDOFF_BUNDLE_ID]);
+      assert.equal(
+        handoff.exitCode,
+        0,
+        `simctl launch ${HANDOFF_BUNDLE_ID} failed: ${handoff.stderr}`,
+      );
       await runStep(context, 'screenshot after handoff', ['screenshot', '--out', foreign]);
       assert.ok(await exists(foreign), `post-handoff screenshot wrote no artifact: ${foreign}`);
+      // A screenshot identical to the pre-handoff one means nothing moved to the foreground and the
+      // lane would be waiting for a repair the device is not obliged to report.
+      assert.notEqual(
+        await checksum(before),
+        await checksum(foreign),
+        'the screen did not change after launching Settings: no handoff to repair',
+      );
 
       // Poll instead of sleeping a fixed window: the disclosure must arrive on the command that
       // paid for the repair, and a lane that never sees one is the regression this asserts against.
@@ -108,9 +123,17 @@ async function captureUntilDisclosed(context: LiveContext) {
     await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
   }
   assert.fail(
-    `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ${HANDOFF_URL}: ` +
-      `${JSON.stringify(last?.json ?? null)}`,
+    `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ` +
+      `${HANDOFF_BUNDLE_ID}: ${JSON.stringify(last?.json ?? null)}`,
   );
+}
+
+async function checksum(filePath: string): Promise<string> {
+  const crypto = await import('node:crypto');
+  return crypto
+    .createHash('sha256')
+    .update(await fs.readFile(filePath))
+    .digest('hex');
 }
 
 async function exists(filePath: string): Promise<boolean> {
