@@ -30,6 +30,12 @@ export type InteractionRouteInput = {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
+  /**
+   * Filled by the LAST capture this request consumed, so the route can disclose what that capture
+   * observed without re-reading the stored snapshot — a coordinate press consumes no capture and
+   * must not be disclosed against an earlier request's tree (#2682).
+   */
+  consumedSnapshot?: { state?: SnapshotState };
 };
 
 export type FindRouteInput = {

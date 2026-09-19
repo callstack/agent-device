@@ -750,8 +750,45 @@ agent-device apps --platform android --all
 ```
 
 - Android `appstate` reports live foreground package/activity.
-- iOS `appstate` is session-scoped and reports the app tracked by the active session on the target device.
+- iOS `appstate` is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer arrives as the `targetActivation` disclosure described above, and the refusal's hint says so.
 - `apps` shows user-installed apps by default. Use `--all` when you need the full inventory, including system/OEM apps.
+
+## Foreground repairs on iOS
+
+An iOS session is bound to one app, but the app can leave the foreground without the session knowing:
+a deep link, a system sheet, or a `simctl openurl` hands the screen to another app. When the next
+command arrives, the runner brings the session app back so the command can be answered at all, and
+that repair is disclosed on the command that paid for it rather than applied silently:
+
+```bash
+agent-device open com.example.app --platform ios
+agent-device screenshot --platform ios            # Safari screen
+agent-device snapshot -i --platform ios           # answers with the app's tree
+```
+
+The `snapshot` response carries `targetActivation` plus a `warnings` entry naming the app that held
+the foreground (by pid), the state it was in, and why the runner activated:
+
+```json
+{
+  "targetActivation": {
+    "reason": "bundle_changed",
+    "priorState": "runningBackground",
+    "foregroundPid": 4562
+  }
+}
+```
+
+- Read it as: anything captured earlier in this session described the other app, not the session app.
+  Re-capture now, or drive the other app in its own session.
+- The disclosure rides capture-consuming commands — `snapshot`, `find`, `get`, `is`, `wait`, and an
+  interaction whose target tree was captured for it — at every response level, including
+  `--level digest`. A command that consumed no capture (a coordinate `press`, a `press @ref` answered
+  from a live ref frame) did no capture for the repair to describe and stays silent.
+- The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
+  came before it are never replaced.
+- `reason` is `stale_target` when the session app was still the session's own target but not
+  foreground, and `bundle_changed` when a different app's bundle was the one on screen.
 
 ## Clipboard
 

@@ -47,14 +47,17 @@ export function createInteractionRuntimeForRoute(
     flags: params.req.flags,
     session,
     contextFromFlags: params.contextFromFlags,
-    captureSnapshot: async (flags, options) =>
-      await params.captureSnapshotForSession(
+    captureSnapshot: async (flags, options) => {
+      const snapshot = await params.captureSnapshotForSession(
         session,
         flags,
         params.sessionStore,
         params.contextFromFlags,
         options,
-      ),
+      );
+      if (params.consumedSnapshot) params.consumedSnapshot.state = snapshot;
+      return snapshot;
+    },
     runtimeSessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
       getSession: () => session,

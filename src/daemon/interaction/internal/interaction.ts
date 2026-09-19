@@ -1,5 +1,7 @@
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { withTargetActivationDisclosure } from '../../capture-disclosure.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
 import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
@@ -23,19 +25,33 @@ import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contra
 export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
 ): Promise<DaemonResponse | null> {
-  const touchParams = { ...params, refSnapshotFlagGuardResponse };
+  const consumedSnapshot: { state?: SnapshotState } = {};
+  const routed = { ...params, refSnapshotFlagGuardResponse, consumedSnapshot };
+  const response = await dispatchInteractionCommand(routed);
+  // The interaction's own capture is what the gesture was aimed at, so a foreground repair inside
+  // it belongs on this response even though the interaction routes never read the stored snapshot.
+  return response ? withTargetActivationDisclosure(response, consumedSnapshot.state) : response;
+}
 
+type RoutedInteractionInput = InteractionRouteInput & {
+  captureSnapshotForSession: CaptureSnapshotForSession;
+  refSnapshotFlagGuardResponse: typeof refSnapshotFlagGuardResponse;
+};
+
+async function dispatchInteractionCommand(
+  params: RoutedInteractionInput,
+): Promise<DaemonResponse | null> {
   switch (params.req.command) {
     case 'press':
-      return await dispatchTargetedTouchViaRuntime(touchParams, 'press');
+      return await dispatchTargetedTouchViaRuntime(params, 'press');
     case 'click':
-      return await dispatchTargetedTouchViaRuntime(touchParams, 'click');
+      return await dispatchTargetedTouchViaRuntime(params, 'click');
     case 'longpress':
-      return await dispatchTargetedTouchViaRuntime(touchParams, 'longpress');
+      return await dispatchTargetedTouchViaRuntime(params, 'longpress');
     case 'hover':
-      return await dispatchTargetedTouchViaRuntime(touchParams, 'hover');
+      return await dispatchTargetedTouchViaRuntime(params, 'hover');
     case 'fill':
-      return await dispatchFillViaRuntime(touchParams);
+      return await dispatchFillViaRuntime(params);
     case PUBLIC_COMMANDS.gesture:
       return await dispatchGestureViaRuntime(params);
     case PUBLIC_COMMANDS.swipe:

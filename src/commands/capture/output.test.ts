@@ -94,3 +94,36 @@ test('snapshot output presents the materialized fallback screenshot path', async
     /Captured a screenshot of this screen automatically as visual truth: \/client\/artifacts\/snapshot-fallback\.png/,
   );
 });
+
+/**
+ * The rendered surface an agent actually reads after the runner repaired foreground (#2682): the
+ * disclosure is printed, and the structured fact survives the JSON projection so a scripted caller
+ * never has to parse the sentence.
+ */
+test('a repaired capture renders the disclosure and keeps the structured fact', async () => {
+  const output = await snapshotCliOutput({
+    result: {
+      ...buildResult(REPEATED_CHAIN),
+      warnings: [
+        'The session app was not foreground when this command arrived (another app (pid 4562) held ' +
+          'it, prior state runningBackground), so the runner activated it before answering (reason ' +
+          'stale_target). Any capture taken earlier in this session described another app (pid 4562), ' +
+          'not the session app. Re-capture now that the session app answers, or drive the other app ' +
+          'in its own session.',
+      ],
+      targetActivation: {
+        reason: 'stale_target',
+        priorState: 'runningBackground',
+        foregroundPid: 4562,
+      },
+    } as CaptureSnapshotResult,
+  });
+
+  assert.match(String(output.text), /prior state runningBackground/);
+  assert.match(String(output.text), /drive the other app in its own session/);
+  assert.deepEqual((output.jsonData as { targetActivation?: unknown }).targetActivation, {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    foregroundPid: 4562,
+  });
+});

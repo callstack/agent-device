@@ -24,7 +24,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-run
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
-import { withSystemSurfaceDisclosure } from './system-surface-disclosure.ts';
+import { withCaptureDisclosures } from './capture-disclosure.ts';
 import {
   createSelectorRuntimeForDevice,
   type SelectorRuntimeParams,
@@ -68,7 +68,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   }
   // Both a satisfied wait and a timeout consumed the polled capture stored on the session:
   // when it is an occluding system surface, the outcome must disclose the occlusion.
-  return withSystemSurfaceDisclosure(
+  return withCaptureDisclosures(
     await withSessionlessRunnerCleanup(
       session,
       device,

@@ -34,6 +34,9 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     truncated: data.truncated,
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
     ...(data.snapshotQuality !== undefined ? { snapshotQuality: data.snapshotQuality } : {}),
+    // A foreground repair rewrites which app this tree describes, so no response level may drop it
+    // even though every byte around it is negotiable (#2682).
+    ...(data.targetActivation !== undefined ? { targetActivation: data.targetActivation } : {}),
     ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
     ...(data.fallbackScreenshotPath !== undefined
       ? { fallbackScreenshotPath: data.fallbackScreenshotPath }

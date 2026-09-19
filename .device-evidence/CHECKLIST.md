@@ -76,3 +76,28 @@ actually called. Assert the pair on the same device run:
 `press <x> <y>` and `press @ref` answered from a live ref frame consume no capture, so they carry no
 disclosure even though the runner may have re-activated the app to serve them. Treat a silent
 interaction as "unknown", never as "no repair". Follow-up: callstack/agent-device#2694.
+
+## PR2 simulator lane — daemon disclosure (apex-2682-proto, iOS 26.2)
+
+Driven with `bin/agent-device.mjs` after `pnpm build && pnpm clean:daemon`, session `apex2682-pr3`,
+off-app handoff via `xcrun simctl openurl <UDID> https://example.com` before each command. Every
+command below re-activated the session app, and each answered with `targetActivation` plus the
+appended warning:
+
+| Command | Result |
+| --- | --- |
+| `snapshot -i` | warning first in `warnings`, ahead of the AX-backend warning; `targetActivation` carried |
+| `snapshot -i --level digest` | `targetActivation` survives the digest projection |
+| `find "Tab Bar" --first` | disclosed on the matched response |
+| `press 'label="INFO"'` | disclosed on the interaction response |
+| `wait 'label="INFO"' 8000` | disclosed on the satisfied response |
+
+`otherActiveApplicationPid` on the simulator was the Safari process, consistent across commands (pid 33878).
+
+### Proof the review asked for on this lane
+
+The false-attribution class is covered by unit tests rather than a device run, because the device
+cannot show a cache hit on command: `src/daemon/__tests__/capture-disclosure-target-activation.test.ts`
+pins that a cache-reused tree discloses nothing, and
+`src/daemon/interaction/internal/__tests__/interaction-target-activation-disclosure.test.ts` pins that
+a press which consumed no capture is not disclosed against an older tree.

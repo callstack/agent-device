@@ -1,0 +1,80 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
+import { withCaptureDisclosures, withTargetActivationDisclosure } from '../capture-disclosure.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
+
+const FACT: IosTargetActivation = {
+  reason: 'stale_target',
+  priorState: 'runningBackground',
+  foregroundPid: 4562,
+};
+
+function okResponse(data: Record<string, unknown>): DaemonResponse {
+  return { ok: true, data };
+}
+
+function dataOf(response: DaemonResponse): Record<string, unknown> {
+  assert.ok(response.ok);
+  assert.ok(response.data);
+  return response.data;
+}
+
+test('a consumed repair is disclosed on the response without replacing earlier warnings', () => {
+  const response = withTargetActivationDisclosure(
+    okResponse({ warnings: ['Refs are stale'], targetActivation: undefined }),
+    { targetActivation: FACT },
+  );
+  const data = dataOf(response);
+  assert.deepEqual(data.warnings, ['Refs are stale', iosTargetActivationDisclosure(FACT)]);
+  assert.deepEqual(data.targetActivation, FACT);
+});
+
+test('a capture that already disclosed the identical repair is not told twice', () => {
+  const already = okResponse({ warnings: [iosTargetActivationDisclosure(FACT)] });
+  const response = withTargetActivationDisclosure(already, { targetActivation: FACT });
+  assert.deepEqual(dataOf(response).warnings, [iosTargetActivationDisclosure(FACT)]);
+});
+
+test('a failure response appends the repair to its hint and keeps the original details', () => {
+  const response = withTargetActivationDisclosure(
+    {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'selector missed',
+        details: { blockedBy: 'android_foreground_surface' },
+      },
+    },
+    { targetActivation: FACT },
+  );
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.message, 'selector missed');
+  assert.equal(response.error.code, 'COMMAND_FAILED');
+  assert.equal(response.error.details?.blockedBy, 'android_foreground_surface');
+  assert.match(String(response.error.details?.hint), /prior state runningBackground/);
+});
+
+test('a capture with no repair leaves the response byte-identical', () => {
+  const untouched = okResponse({ nodes: [], warnings: ['Refs are stale'] });
+  const response = withTargetActivationDisclosure(untouched, { targetActivation: undefined });
+  assert.deepEqual(response, untouched);
+});
+
+/**
+ * The two carriers are pre-existing: the surface disclosure extends `data.warning`, the capture's
+ * own warnings arrive as `data.warnings` (#2438 predates the array). A response can therefore carry
+ * both, and each disclosure must survive in the carrier it belongs to.
+ */
+test('surface and foreground disclosures ride one response together', () => {
+  const response = withCaptureDisclosures(okResponse({ nodes: [] }), {
+    iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
+    targetActivation: FACT,
+  });
+  const data = dataOf(response);
+  assert.match(String(data.warning), /system web sign-in sheet/);
+  assert.deepEqual(data.warnings, [iosTargetActivationDisclosure(FACT)]);
+  assert.deepEqual(data.targetActivation, FACT);
+});

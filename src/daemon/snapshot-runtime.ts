@@ -4,6 +4,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
+import { withCaptureDisclosures } from './capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
@@ -13,7 +14,7 @@ import type { SessionState } from './session-state.ts';
 export async function dispatchSnapshotViaRuntime(
   params: SnapshotRuntimeRouteParams,
 ): Promise<DaemonResponse> {
-  return await dispatchSnapshotRuntimeCommand({
+  const response = await dispatchSnapshotRuntimeCommand({
     ...params,
     command: 'snapshot',
     execute: async ({
@@ -71,6 +72,9 @@ export async function dispatchSnapshotViaRuntime(
       };
     },
   });
+  // The published snapshot is what this response describes, so the provenance the capture carried
+  // rides on the response that hands it over (#2682).
+  return withCaptureDisclosures(response, params.sessionStore.get(params.sessionName)?.snapshot);
 }
 
 function publishedSnapshotGeneration(
