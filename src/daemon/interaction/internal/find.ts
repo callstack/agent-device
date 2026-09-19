@@ -18,7 +18,7 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
-import { withSystemSurfaceDisclosure } from '../../system-surface-disclosure.ts';
+import { withCaptureDisclosures } from '../../capture-disclosure.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
@@ -168,7 +168,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
   // Matched and unmatched outcomes both consumed this capture: when it is an occluding system
   // surface, the response must disclose that app content is occluded.
-  if (!matchResult.ok) return withSystemSurfaceDisclosure(matchResult.response, snapshotResult);
+  if (!matchResult.ok) return withCaptureDisclosures(matchResult.response, snapshotResult);
   const node = matchResult.node;
   // Every node stage find's row declares, in one call.
   const target = await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
@@ -189,7 +189,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   };
 
   const response = await dispatchFindAction(ctx, match, action, value);
-  return response ? withSystemSurfaceDisclosure(response, snapshotResult) : response;
+  return response ? withCaptureDisclosures(response, snapshotResult) : response;
 }
 
 /**

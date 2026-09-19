@@ -1,6 +1,7 @@
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type {
+  IosTargetActivation,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotState,
@@ -19,6 +20,8 @@ export type FindTargetTree = {
   iosSystemSurfaceBundleId?: string;
   /** The keyboard band this capture's producer measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
+  /** The runner re-activated the session app to serve this capture (#2682). */
+  targetActivation?: IosTargetActivation;
 };
 
 /**
@@ -74,6 +77,7 @@ export function createFindTargetCapture(
       systemSurfaceOnly: snapshot.systemSurfaceOnly,
       iosSystemSurfaceBundleId: snapshot.iosSystemSurfaceBundleId,
       ...(snapshot.keyboard ? { keyboard: snapshot.keyboard } : {}),
+      ...(snapshot.targetActivation ? { targetActivation: snapshot.targetActivation } : {}),
     };
   };
 }

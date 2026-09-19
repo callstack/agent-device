@@ -415,6 +415,56 @@ export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefi
   );
 }
 
+/**
+ * Reasons the Apple runner can stamp when serving a command required re-activating the session app
+ * (#2682). Mirrors its `activateTarget(bundleId:reason:)` call sites.
+ */
+export const IOS_TARGET_ACTIVATION_REASONS = [
+  'bundle_changed',
+  'stale_target',
+  'missing_after_wait',
+  'interaction_foreground_guard',
+] as const;
+
+export type IosTargetActivationReason = (typeof IOS_TARGET_ACTIVATION_REASONS)[number];
+
+/** Whether `value` is a reason the runner can stamp; the only gate consumers apply to the field. */
+export function isIosTargetActivationReason(
+  value: unknown,
+): value is IosTargetActivationReason {
+  return (
+    typeof value === 'string' &&
+    (IOS_TARGET_ACTIVATION_REASONS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * States an activation could have been needed for, in `XCApplicationState` raw order.
+ * `runningForeground` is excluded because the runner skips `activate()` when the app is already
+ * foreground and never stamps a fact there.
+ */
+export const IOS_TARGET_ACTIVATION_PRIOR_STATES = [
+  'unknown',
+  'notRunning',
+  'runningBackground',
+  'runningBackgroundSuspended',
+] as const;
+
+export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_STATES)[number];
+
+/**
+ * Foreground repair the Apple runner performed while serving one command (#2682). `priorState` is
+ * the session app's state BEFORE the runner activated it, so the fact describes what was repaired
+ * rather than what the repair produced. `foregroundPid` is present only when exactly one
+ * application other than the session app had an active accessibility session at that moment: the
+ * private AX client the runner reads resolves pids and answers no bundle id for an arbitrary app.
+ */
+export type IosTargetActivation = Readonly<{
+  reason: IosTargetActivationReason;
+  priorState: IosTargetActivationPriorState;
+  foregroundPid?: number;
+}>;
+
 export type SnapshotState = {
   nodes: SnapshotNode[];
   createdAt: number;
@@ -443,6 +493,12 @@ export type SnapshotState = {
    * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * iOS: this capture's own command found the session app out of foreground and the runner
+   * activated it before answering, so an earlier observation in the session described whatever held
+   * the foreground instead (#2682). Consumers that surface this tree disclose the repair.
+   */
+  targetActivation?: IosTargetActivation;
 } & SnapshotStateProvenance;
 
 export type SnapshotUnchanged = {

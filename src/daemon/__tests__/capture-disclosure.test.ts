@@ -35,7 +35,7 @@ vi.mock('../device-ready.ts', () => ({
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-import { withSystemSurfaceDisclosure } from '../system-surface-disclosure.ts';
+import { withSystemSurfaceDisclosure } from '../capture-disclosure.ts';
 
 // The occluding-shade capture every scenario below consumes: no application window content, one
 // active quick-settings surface. The Android capture route stamps systemSurfaceOnly on both the

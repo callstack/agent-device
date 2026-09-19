@@ -8,6 +8,7 @@ import {
   attachRefs,
   buildSnapshotPresentationKey,
   snapshotPresentationOptionsFromFlags,
+  type IosTargetActivation,
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotCaptureProvenance,
@@ -46,6 +47,8 @@ export function buildSnapshotState(
     quality?: unknown;
     comparisonIdentity?: IosSnapshotComparisonIdentity;
     systemSurface?: IosSystemSurfaceProvenance;
+    /** Foreground repair this capture's own command performed (#2682). */
+    targetActivation?: IosTargetActivation;
     /** The keyboard band the producer measured, carried to the state the tap guards read (#2660). */
     keyboard?: SnapshotKeyboardBandFact;
   } & SnapshotCaptureProvenance,
@@ -84,6 +87,7 @@ export function buildSnapshotState(
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),
     ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
+    ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),
     presentationKey: buildSnapshotPresentationKey(snapshotPresentationOptionsFromFlags(flags)),
     // Only broad Android snapshots become freshness baselines. If the user asked for a scoped

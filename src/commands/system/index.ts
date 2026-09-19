@@ -41,7 +41,8 @@ const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
 
-const appStateCommandDescription = 'Show foreground app/activity';
+const appStateCommandDescription =
+  'Show foreground app/activity (Android; iOS answers per command)';
 const backCommandDescription =
   'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
 const homeCommandDescription =

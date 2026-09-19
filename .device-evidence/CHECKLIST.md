@@ -77,6 +77,32 @@ actually called. Assert the pair on the same device run:
 disclosure even though the runner may have re-activated the app to serve them. Treat a silent
 interaction as "unknown", never as "no repair". Follow-up: callstack/agent-device#2694.
 
+## PR2 simulator lane — daemon disclosure (apex-2682-proto, iOS 26.2)
+
+Driven with `bin/agent-device.mjs` after `pnpm build && pnpm clean:daemon`, session `apex2682-pr3`,
+off-app handoff via `xcrun simctl openurl <UDID> https://example.com` before each command. Every
+command below re-activated the session app, and each answered with `targetActivation` plus the
+appended warning:
+
+| Command | Result |
+| --- | --- |
+| `snapshot -i` | warning first in `warnings`, ahead of the AX-backend warning; `targetActivation` carried |
+| `snapshot -i --level digest` | `targetActivation` survives the digest projection |
+| `find "Tab Bar" --first` | disclosed on the matched response |
+| `press 'label="INFO"'` | disclosed on the interaction response |
+| `wait 'label="INFO"' 8000` | disclosed on the satisfied response |
+
+`otherActiveApplicationPid` on the simulator was the Safari process, consistent across commands (pid 33878).
+
+### Proof the review asked for on this lane
+
+The false-attribution class is covered by unit tests rather than a device run, because the device
+cannot show a cache hit on command: `src/daemon/__tests__/capture-disclosure-target-activation.test.ts`
+pins that a cache-reused tree discloses nothing, and
+`src/daemon/interaction/internal/__tests__/interaction-target-activation-disclosure.test.ts` pins that
+a press which consumed no capture is not disclosed against an older tree.
+
+D
 ## Why the live activation lane is manual
 
 `test/integration/smoke-ios-target-activation.test.ts` is env-gated and deliberately absent from the
@@ -94,7 +120,9 @@ Manual evidence stands in for it, and both are reproducible:
   arrived (prior state runningBackground), so the runner activated it before answering (reason
   stale_target). Any capture taken earlier in this session described the only app other than the
   session app with an active accessibility session (pid 33878), not the session app. Re-capture now
-  that the session app answers, or drive the other app in its own session.` — and the following capture
-  carries no such line. On this head that sentence is the whole disclosure: the typed
-  `data.targetActivation` field beside it is PR2's daemon seam.
-- the physical device sequence below, which the coordinator runs.
+  that the session app answers, or drive the other app in its own session.` — and, on this head, the
+  typed fact beside it as `data.targetActivation`:
+  `{"reason":"stale_target","priorState":"runningBackground","otherActiveApplicationPid":33878}`.
+  PR1 alone carries the sentence only; the typed field is this PR's daemon seam. Either way the
+  following capture reports neither.
+- the physical device sequence in this file, which the coordinator runs.
