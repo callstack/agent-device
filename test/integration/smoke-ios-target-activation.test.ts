@@ -130,9 +130,9 @@ async function withRunnerLogEvidence(context: LiveContext, error: unknown): Prom
     // The artifact is the point; a missing log is reported and the original failure still stands.
   }
   const message = error instanceof Error ? error.message : String(error);
-  const enriched = new Error(`${message}\n${note}`);
-  enriched.stack = error instanceof Error ? error.stack : enriched.stack;
-  return enriched;
+  // A test reporter prints the stack, whose first line is the original error's own message, so a note
+  // carried only on a copied stack never reaches a CI log. Both halves belong in the new message.
+  return new Error(`${message}\n${note}`, { cause: error });
 }
 
 /** Poll `snapshot -i` until the runner reports the repair, or fail with the last response. */
