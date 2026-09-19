@@ -2080,6 +2080,18 @@ extension RunnerTests {
     case .appSwitcher:
       performAppSwitcherGesture(app: activeApp)
       return Response(ok: true, data: DataPayload(message: "appSwitcher"))
+    case .actionButton:
+      guard pressActionButton() else {
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: "UNSUPPORTED_OPERATION",
+            message: "actionButton requires a device model with an Action Button",
+            hint: "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
+          )
+        )
+      }
+      return Response(ok: true, data: DataPayload(message: "actionButton"))
     case .keyboardDismiss:
       let result = dismissKeyboard(app: activeApp)
       if result.wasVisible && !result.dismissed {

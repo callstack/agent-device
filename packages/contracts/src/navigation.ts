@@ -53,6 +53,17 @@ export type AppSwitcherCommandResult = {
   message: string;
 };
 
+/**
+ * `action-button` — `{ action: 'action-button', message: 'Pressed Action Button' }`.
+ *
+ * Deliberately narrower than `tv-remote`: `XCUIDevice.press(.action)` takes no hold duration, so
+ * there is no `durationMs` to report and no button to name.
+ */
+export type ActionButtonCommandResult = {
+  action: 'action-button';
+  message: string;
+};
+
 /** `tv-remote` — `{ action: 'tv-remote', button, durationMs?, message }`. */
 export type TvRemoteCommandResult = {
   action: 'tv-remote';

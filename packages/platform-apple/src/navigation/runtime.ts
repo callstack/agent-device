@@ -1,4 +1,5 @@
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
@@ -127,9 +128,36 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
+const actionButtonKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'action-button is supported on iPhone and iPad simulators and physical devices.',
+} as const);
+const actionButtonOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
+} as const);
 /**
- * The navigation cells: back, home, app-switcher, orientation, tv-remote, and keyboard
- * status/dismiss/enter.
+ * The Action Button is a physical side control on iPhone and iPad (M4+) only, so this is a
+ * positive OS reading rather than a reuse of {@link appleMobileInputEligible}: that predicate is
+ * `orientation`'s and admits visionOS, whose headset has a Digital Crown and no Action Button.
+ *
+ * Which *model* inside an admitted leaf actually carries the button is not something `DeviceInfo`
+ * records — discovery fills platform, kind, and Apple OS, never a model identifier. The runner
+ * answers that with `XCUIDevice.hasHardwareButton(.action)` and reports a typed
+ * UNSUPPORTED_OPERATION, so this fact stays a claim about the leaf and never guesses at hardware
+ * it cannot see.
+ */
+function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return actionButtonKindUnavailable;
+  const os = resolveDeviceAppleOs(device);
+  return os === 'ios' || os === 'ipados' ? available : actionButtonOsUnavailable;
+}
+
+/**
+ * The navigation cells: back, home, app-switcher, action-button, orientation, tv-remote, and
+ * keyboard status/dismiss/enter.
  */
 export function appleNavigationFacts(device: DeviceInfo) {
   return Object.freeze({
@@ -140,6 +168,9 @@ export function appleNavigationFacts(device: DeviceInfo) {
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
+    ...actionButtonRuntimeOperationFacts({
+      actionButton: appleActionButtonFact(device),
+    }),
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),

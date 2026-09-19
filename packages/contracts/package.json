@@ -64,6 +64,10 @@
       "types": "./src/app-state-runtime.ts",
       "default": "./src/app-state-runtime.ts"
     },
+    "./action-button-runtime": {
+      "types": "./src/action-button-runtime.ts",
+      "default": "./src/action-button-runtime.ts"
+    },
     "./app-switcher-runtime": {
       "types": "./src/app-switcher-runtime.ts",
       "default": "./src/app-switcher-runtime.ts"

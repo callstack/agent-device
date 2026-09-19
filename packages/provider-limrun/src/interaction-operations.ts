@@ -21,6 +21,7 @@ import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -141,6 +142,17 @@ const appSwitcherUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
+} as const);
+/**
+ * Refused on both legs, so — unlike `limrunAppSwitcherOperationFacts`, whose Android leg rides the
+ * local Android interactor — this needs no device-parameterized helper: the iOS session has no
+ * Action Button transport, and the Android leg's own interactor refuses for the same reason the
+ * local Android fact does.
+ */
+export const LIMRUN_ACTION_BUTTON_UNAVAILABLE = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'action-button presses iPhone Action Button hardware, which no Limrun session exposes.',
 } as const);
 
 /**
@@ -326,6 +338,15 @@ export function limrunAppSwitcherOperationFacts(
     liveSessionUnavailable ??
     (device.platform === 'android' ? available : appSwitcherUnavailableIos);
   return Object.freeze({ ...appSwitcherRuntimeOperationFacts({ appSwitcher: cell }) });
+}
+
+/** The Action Button refusal both Limrun legs share. */
+export function limrunActionButtonOperationFacts() {
+  return Object.freeze({
+    ...actionButtonRuntimeOperationFacts({
+      actionButton: LIMRUN_ACTION_BUTTON_UNAVAILABLE,
+    }),
+  });
 }
 
 /**

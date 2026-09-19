@@ -27,6 +27,7 @@ import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { AppSwitcherRuntimeOperations } from './app-switcher-runtime.ts';
+import type { ActionButtonRuntimeOperations } from './action-button-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
@@ -80,6 +81,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
   AppSwitcherRuntimeOperations &
+  ActionButtonRuntimeOperations &
   AppEventRuntimeOperations &
   SettingsRuntimeOperations &
   AlertRuntimeOperations &
@@ -115,6 +117,7 @@ export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
+export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const settingsRuntimeUse = defineUse({ required: ['setSetting'] });
 export const alertReadUse = defineUse({ required: ['readAlert'] });

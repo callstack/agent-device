@@ -92,6 +92,8 @@ export type OrientationCommandOptions = DeviceCommandBaseOptions & {
 
 export type AppSwitcherCommandOptions = DeviceCommandBaseOptions;
 
+export type ActionButtonCommandOptions = DeviceCommandBaseOptions;
+
 export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
   button: TvRemoteButton;
   durationMs?: number;

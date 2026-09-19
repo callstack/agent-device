@@ -95,6 +95,10 @@ test.each([
     expect(facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
+  // The Action Button is iPhone/iPad hardware with no HarmonyOS control behind it, so it refuses
+  // even on the kinds the hdc-driven navigation gate admits.
+  expect(facts.operations.actionButton).toMatchObject({ available: false });
+  expect(binding.operations.actionButton).toBeUndefined();
   // Public orientation and TV-remote operations remain unavailable unconditionally.
   expect(facts.operations.setOrientation).toEqual({
     available: false,

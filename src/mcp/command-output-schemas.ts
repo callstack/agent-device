@@ -517,6 +517,10 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     'action',
     'message',
   ]),
+  'action-button': objectSchema({ action: constSchema('action-button'), message: stringSchema() }, [
+    'action',
+    'message',
+  ]),
   'tv-remote': objectSchema(
     {
       action: constSchema('tv-remote'),

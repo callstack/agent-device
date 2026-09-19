@@ -218,6 +218,8 @@ function expectLinuxNavigationAndKeyboardFacts(
     // R56: the Linux interactor's own `appSwitcher` throws, and the retired descriptor declared
     // `linux: {}`, so no Linux cell was ever admitted.
     'appSwitcher',
+    // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control.
+    'actionButton',
     // R57: the retired `trigger-app-event` descriptor declared `linux: {}` too.
     'triggerAppEvent',
     // R58/R59: and so did `settings` and `alert`.

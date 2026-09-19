@@ -380,6 +380,7 @@ function sourceRuntimeFacts(
       ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       appSwitcher: unavailable,
+      actionButton: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
       readAlert: unavailable,

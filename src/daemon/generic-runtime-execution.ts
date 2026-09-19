@@ -9,6 +9,7 @@ import type { SessionState } from './session-state.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
 import { resolveBoundHomeRuntime } from './home-runtime.ts';
+import { resolveBoundActionButtonRuntime } from './action-button-runtime.ts';
 import { resolveBoundAppSwitcherRuntime } from './app-switcher-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
@@ -72,6 +73,12 @@ export async function resolveGenericRuntimeExecution(
       });
     case 'app-switcher':
       return await resolveBoundAppSwitcherRuntime({
+        device: params.session.device,
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'action-button':
+      return await resolveBoundActionButtonRuntime({
         device: params.session.device,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,

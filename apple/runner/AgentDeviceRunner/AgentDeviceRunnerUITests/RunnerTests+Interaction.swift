@@ -124,6 +124,25 @@ extension RunnerTests {
 #endif
   }
 
+  /// Presses the iPhone Action Button.
+  ///
+  /// `XCUIDevice.press(_:)` has no hold-duration overload, so a single press is the whole gesture
+  /// this API can express. `hasHardwareButton(.action)` is what separates a model with the button
+  /// from one without; returning false rather than pressing anyway is what stops a model without
+  /// the hardware from reporting a press that never happened.
+  @discardableResult
+  func pressActionButton() -> Bool {
+#if os(iOS)
+    if #available(iOS 16.0, *) {
+      guard XCUIDevice.shared.hasHardwareButton(.action) else { return false }
+    }
+    XCUIDevice.shared.press(.action)
+    return true
+#else
+    return false
+#endif
+  }
+
   func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
     let element = app.descendants(matching: .any).matching(predicate).firstMatch

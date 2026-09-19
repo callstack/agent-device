@@ -211,6 +211,8 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     'readClipboard',
     'writeClipboard',
     'appSwitcher',
+    // The Action Button is iPhone/iPad hardware with no web analogue at all.
+    'actionButton',
     'triggerAppEvent',
     // R58/R59: the retired `settings` and `alert` descriptors declared no web leaf either.
     'setSetting',

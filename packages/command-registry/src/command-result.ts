@@ -10,6 +10,7 @@ import type {
   TriggerAppEventCommandResult,
 } from '@agent-device/contracts/device';
 import type {
+  ActionButtonCommandResult,
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
@@ -56,6 +57,7 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contr
  * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
+  'action-button': ActionButtonCommandResult;
   'app-switcher': AppSwitcherCommandResult;
   appstate: AppStateCommandResult;
   back: BackCommandResult;

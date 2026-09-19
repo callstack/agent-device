@@ -32,6 +32,7 @@ import {
 } from '@agent-device/platform-android/mechanics';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
@@ -113,6 +114,12 @@ export function createAndroidInteractor(
     home: () => homeAndroid(device),
     setOrientation: (orientation) => setAndroidOrientation(device, orientation),
     appSwitcher: () => appSwitcherAndroid(device),
+    actionButton: () => {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'action-button presses iPhone Action Button hardware, which Android has no equivalent for',
+      );
+    },
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     keyboardStatus: async () => ({ kind: 'ime-probe', ...(await getAndroidKeyboardState(device)) }),
     keyboardDismiss: async () => ({ kind: 'ime-probe', ...(await dismissAndroidKeyboard(device)) }),

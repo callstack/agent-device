@@ -23,6 +23,7 @@ enum CommandType: String, Codable {
   case home
   case rotate
   case appSwitcher
+  case actionButton
   case keyboardDismiss
   case keyboardReturn
   case alert
@@ -94,7 +95,11 @@ extension CommandType {
       return CommandTraits(isInteraction: false, readOnly: .conditional, isLifecycle: false)
 
     // Runner-lifecycle commands: skip the app-activation preflight.
-    case .recordStop, .uptime, .terminate, .targetReset, .shutdown:
+    // .actionButton joins this group for its one property, not for a lifecycle meaning: a hardware
+    // Action Button press has to reach a Shortcut or App Intent whether the session app is
+    // foregrounded, backgrounded, or terminated, and the activation preflight would foreground it
+    // first (#2699). It is not read-only, so it never takes the session-invalidating retry.
+    case .actionButton, .recordStop, .uptime, .terminate, .targetReset, .shutdown:
       return CommandTraits(isInteraction: false, readOnly: .never, isLifecycle: true)
 
     case .status:

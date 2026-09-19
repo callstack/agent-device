@@ -363,6 +363,12 @@ export type Interactor = {
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   appSwitcher(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
+  /**
+   * Presses the iPhone Action Button. Required rather than optional for the same reason `tvRemote`
+   * is: an absent member would let an advertised press resolve as a no-op that reports success.
+   * Owners without the button throw `UNSUPPORTED_OPERATION`.
+   */
+  actionButton(): Promise<void>;
   /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */

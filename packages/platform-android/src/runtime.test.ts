@@ -194,6 +194,27 @@ test('admits Android tv-remote only for a real TV target', async () => {
   expect(binding.operations.tvRemote).toBeTypeOf('function');
 });
 
+test('Android refuses the action-button fact on every kind', async () => {
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    // No `input keyevent` reaches a Shortcut the way an iPhone Action Button press does, so this
+    // is a platform-leaf refusal on every kind rather than the shared touch gate `home` rides.
+    expect(binding.facts.operations.actionButton).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'action-button presses iPhone Action Button hardware; Android has no equivalent key event.',
+    });
+    expect(binding.operations.actionButton).toBeUndefined();
+  }
+});
+
 // R55 parity: the retired `clipboard` bucket was `ANDROID_ALL` (emulator/device/unknown) with no
 // Android admission closure, so `cmd clipboard get/set text` is admitted on every real kind and
 // refused only on the synthetic `simulator` row the bucket never listed. (`unknown` is the

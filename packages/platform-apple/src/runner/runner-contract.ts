@@ -73,6 +73,7 @@ export type RunnerCommand = {
     | 'gesture'
     | 'gestureViewport'
     | 'appSwitcher'
+    | 'actionButton'
     | 'keyboardDismiss'
     | 'keyboardReturn'
     | 'alert'

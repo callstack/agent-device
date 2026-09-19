@@ -143,6 +143,13 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
+    actionButton: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'actionButton', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
     tvRemote: async (button, durationMs) => {
       await runAppleRunnerCommand(
         device,

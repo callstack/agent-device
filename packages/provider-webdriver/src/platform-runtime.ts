@@ -28,6 +28,7 @@ import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
@@ -228,6 +229,18 @@ const appSwitcherUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'This WebDriver provider runtime does not expose the app switcher for this device.',
+} as const);
+
+/**
+ * Unlike its `appSwitcher` neighbour this is never a per-session capability question: no WebDriver
+ * `mobile:` script presses an iPhone Action Button, so the interactor refuses unconditionally and
+ * the fact refuses unconditionally to match. There is deliberately no capability key declared for
+ * it, which would advertise a button this provider can never press.
+ */
+const actionButtonUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'action-button presses iPhone Action Button hardware, which no WebDriver backend exposes.',
 } as const);
 
 /**
@@ -521,6 +534,7 @@ function webDriverFacts(
       keyboard: inactiveSession,
       clipboard: inactiveSession,
       appSwitcher: inactiveSession,
+      actionButton: actionButtonUnavailable,
       triggerAppEvent: inactiveSession,
       setSetting: inactiveSession,
       readAlert: inactiveSession,
@@ -564,6 +578,7 @@ function webDriverFacts(
     keyboard: keyboardUnavailable,
     clipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
+    actionButton: actionButtonUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
     readAlert: alertUnavailable,
@@ -658,6 +673,7 @@ function webDriverFacts(
       ...appSwitcherRuntimeOperationFacts({
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
+      ...actionButtonRuntimeOperationFacts({ actionButton: actionButtonUnavailable }),
       // The deep link opens through the same reachable interactor `open` every lifecycle command
       // drives on this provider.
       ...appEventRuntimeOperationFacts({

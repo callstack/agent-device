@@ -266,6 +266,13 @@ function providerScenarioRuntimeFacts(
       listApps: fakeProviderUnavailable,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       captureSnapshot: fakeProviderAvailable,
+      // The Action Button press is an interactor-catalog operation riding the same runner
+      // transport, but the hardware only exists on the iPhone/iPad leaf (#2699), so the fixture
+      // states it the way the Apple owner does instead of granting it to every provider device.
+      actionButton:
+        device.appleOs === 'ios' || device.appleOs === 'ipados'
+          ? fakeProviderAvailable
+          : fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({

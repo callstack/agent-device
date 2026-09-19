@@ -147,6 +147,10 @@ const appSwitcherUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'app-switcher is not supported on Vega OS.',
 );
+const actionButtonUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'action-button is not supported on Vega OS.',
+);
 const clipboardUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'clipboard is not supported on Vega OS.',
@@ -193,6 +197,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     tvRemote: tvRemoteUnavailable,
     clipboard: clipboardUnavailable,
     appSwitcher: appSwitcherUnavailable,
+    actionButton: actionButtonUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
     readAlert: alertUnavailable,

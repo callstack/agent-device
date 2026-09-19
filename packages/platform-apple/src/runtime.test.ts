@@ -239,6 +239,41 @@ test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch fami
   }
 });
 
+test.each(Object.entries(leaves))(
+  'classifies the action-button fact for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expectActionButtonFact(binding, device);
+  },
+);
+
+/**
+ * The Action Button is a physical control on iPhone and iPad leaves only. visionOS is the leaf that
+ * separates this from `orientation`'s mobile-input reading: a headset has a Digital Crown and no
+ * Action Button, so it refuses here while orientation admits it.
+ */
+function expectActionButtonFact(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): void {
+  const available = device.appleOs === 'ios' || device.appleOs === 'ipados';
+  expectOperationAvailability(binding, 'actionButton', available);
+  if (!available) {
+    expect(binding.facts.operations.actionButton).toHaveProperty(
+      'hint',
+      expect.stringContaining('Action Button is iPhone and iPad hardware'),
+    );
+  }
+}
+
 /** Both the fact and the bound operation function agree on availability, for one operation. */
 function expectOperationAvailability(
   binding: DeviceBinding<PlatformRuntimeOperations>,

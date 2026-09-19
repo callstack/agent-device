@@ -105,6 +105,33 @@ test('provider-supplied Apple runner transport reuses the shared interactor stac
   });
 });
 
+// The Action Button press is an interactor operation on the same seam as a tap, and it owes the
+// session app nothing: the press must reach the provider transport and must not spend an activation
+// on the way (#2699). This world has no request-boundary resolver, so a press that leaked to the
+// local XCTest runtime would never be recorded here.
+test('provider transport carries the Action Button press without an app activation', async () => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+    calls.runner.length = 0;
+    assert.deepEqual(
+      assertRpcOk(await daemon.callCommand('action-button', [], request.flags, request)),
+      { action: 'action-button', message: 'Pressed Action Button' },
+    );
+    assert.ok(
+      calls.runner.some((call) => call.command.command === 'actionButton'),
+      'expected actionButton on the provider transport, not local XCTest',
+    );
+    assert.deepEqual(
+      calls.runner.filter((call) => call.command.command === 'activate'),
+      [],
+      'an Action Button press must not activate the session app',
+    );
+  });
+});
+
 // Daemon routes that issue runner commands OUTSIDE interactor methods (keyboard,
 // native alert, point read, iOS sequences) must reach the provider transport via
 // the request-boundary `appleRunnerProvider` scope instead of escaping to the

@@ -27,6 +27,7 @@ import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
+import { actionButtonRuntimeOperationFacts } from './action-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
@@ -64,6 +65,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   keyboard: RuntimeOperationUnavailability;
   clipboard: RuntimeOperationUnavailability;
   appSwitcher: RuntimeOperationUnavailability;
+  actionButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
   setSetting: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
@@ -119,6 +121,7 @@ const UNAVAILABLE_CELLS = {
   keyboard: true,
   clipboard: true,
   appSwitcher: true,
+  actionButton: true,
   triggerAppEvent: true,
   setSetting: true,
   readAlert: true,
@@ -239,6 +242,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: frozen.appSwitcher }),
+      ...actionButtonRuntimeOperationFacts({ actionButton: frozen.actionButton }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),
       ...alertRuntimeOperationFacts({

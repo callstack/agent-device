@@ -136,6 +136,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   home: { command: 'home' },
   rotate: { command: 'rotate', orientation: 'landscape-left' },
   appSwitcher: { command: 'appSwitcher' },
+  actionButton: { command: 'actionButton' },
   keyboardDismiss: { command: 'keyboardDismiss' },
   keyboardReturn: { command: 'keyboardReturn' },
   alert: { command: 'alert', action: 'accept' },
@@ -313,6 +314,7 @@ test('resolveRunnerDestination uses simulator destination for simulators', () =>
 test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
   const commands = Object.keys(runnerProtocolCommandFixtures).sort();
   assert.deepEqual(commands, [
+    'actionButton',
     'activate',
     'alert',
     'appSwitcher',

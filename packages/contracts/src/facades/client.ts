@@ -112,6 +112,7 @@ export type { PermissionTarget, SettingsUpdateOptions } from '../client-settings
 export type {
   AlertCommandOptions,
   AppStateCommandOptions,
+  ActionButtonCommandOptions,
   AppSwitcherCommandOptions,
   BackCommandOptions,
   ClipboardCommandOptions,

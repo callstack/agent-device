@@ -50,6 +50,7 @@ const UNAVAILABLE_FACTS: UnavailablePlatformRuntimeFacts = {
   keyboard: { available: false, reason: 'unsupported-provider-mode' },
   clipboard: { available: false, reason: 'unsupported-provider-mode' },
   appSwitcher: { available: false, reason: 'unsupported-provider-mode' },
+  actionButton: { available: false, reason: 'unsupported-provider-mode' },
   triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
   setSetting: { available: false, reason: 'unsupported-provider-mode' },
   readAlert: { available: false, reason: 'unsupported-provider-mode' },

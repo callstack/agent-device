@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import type {
+  ActionButtonCommandOptions,
   AgentDeviceCommandClient,
   AppSwitcherCommandOptions,
   BackCommandOptions,
@@ -11,6 +12,8 @@ import type { CommandResult } from '@agent-device/command-registry/command-resul
 import { readInputFromCli } from '../cli-grammar/registry.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
+  actionButtonCliReader,
+  actionButtonDaemonWriter,
   appStateCliReader,
   appStateDaemonWriter,
   appSwitcherCliReader,
@@ -57,13 +60,21 @@ describe('system command interface', () => {
     expectTypeOf<AgentDeviceCommandClient['appSwitcher']>().toEqualTypeOf<
       (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>
     >();
+    expectTypeOf<AgentDeviceCommandClient['actionButton']>().toEqualTypeOf<
+      (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>
+    >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
     >();
   });
 
   test('parameterless readers project common selection flags through', () => {
-    for (const reader of [appStateCliReader, homeCliReader, appSwitcherCliReader]) {
+    for (const reader of [
+      appStateCliReader,
+      homeCliReader,
+      appSwitcherCliReader,
+      actionButtonCliReader,
+    ]) {
       expect(reader([], flags({ platform: 'ios' }))).toEqual({
         platform: 'ios',
       });
@@ -75,6 +86,10 @@ describe('system command interface', () => {
     expect(homeDaemonWriter({})).toMatchObject({ command: 'home', positionals: [] });
     expect(appSwitcherDaemonWriter({})).toMatchObject({
       command: 'app-switcher',
+      positionals: [],
+    });
+    expect(actionButtonDaemonWriter({})).toMatchObject({
+      command: 'action-button',
       positionals: [],
     });
   });

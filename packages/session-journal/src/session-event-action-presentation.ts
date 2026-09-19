@@ -37,6 +37,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return buildBackActionSummary(result);
     case PUBLIC_COMMANDS.appSwitcher:
       return 'Opened app switcher';
+    case PUBLIC_COMMANDS.actionButton:
+      return 'Pressed Action Button';
     case PUBLIC_COMMANDS.orientation:
       return buildOrientationActionSummary(result);
     case PUBLIC_COMMANDS.viewport:

@@ -47,6 +47,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   home: messageOutput,
   orientation: messageOutput,
   'app-switcher': messageOutput,
+  'action-button': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),
   clipboard: resultOutput(clipboardCliOutput),
   'tv-remote': messageOutput,

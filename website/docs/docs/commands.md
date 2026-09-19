@@ -53,6 +53,7 @@ agent-device home
 agent-device orientation portrait
 agent-device orientation landscape-left
 agent-device app-switcher
+agent-device action-button
 ```
 
 - `boot` ensures the selected target is ready without launching an app.
@@ -82,6 +83,11 @@ agent-device app-switcher
 - `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
 - `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
 - `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
+- `action-button` presses the iPhone Action Button once through the Apple runner. It takes no arguments and no `--duration-ms`: XCUITest exposes the press without a hold duration, so a long press is not expressible. The slide surface on the same edge belongs to Camera Control, which `action-button` does not drive.
+- `action-button` is an iPhone and iPad command. Android, web, Linux, HarmonyOS, and Vega refuse it, and so do tvOS, macOS, and visionOS leaves.
+- `action-button` asks the device whether it has the button before pressing it. A target whose model has none — an iPhone SE beside an iPhone 15, or most iPad simulators — fails with `UNSUPPORTED_OPERATION` rather than reporting a press that never happened.
+- `action-button` does not activate or relaunch the session's app, and it takes no `--settle`: pressing a hardware button is not a navigation, so the app stays where it was.
+- `action-button` is not a cheap command to loop. On an iPhone 17 Pro Simulator the press itself spent about five seconds inside XCUITest, while `home` and `app-switcher` on the same session took under two seconds each.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
 - Commands that need one concrete device refuse to guess: if no `--device`/`--udid`/`--serial` is given and several candidates are equally preferred (for example two booted emulators), the command fails with `AMBIGUOUS_MATCH` and lists them, rather than picking one and returning a successful answer about a device you did not select. Preferences still apply first — virtual over physical, booted over offline — so one booted emulator beside offline ones resolves normally, as does any command running inside an existing session. `devices` lists everything as before.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.
@@ -317,7 +323,7 @@ agent-device snapshot -i --platform apple --target desktop
 - In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
 - Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
 - Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.
-- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `install`, `reinstall`, `install-from-source`, and `push`.
+- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `install`, `reinstall`, `install-from-source`, and `push`.
 
 Recommended loops:
 

@@ -32,6 +32,7 @@ const BACK_COMMAND_NAME = 'back';
 const HOME_COMMAND_NAME = 'home';
 const ORIENTATION_COMMAND_NAME = 'orientation';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
+const ACTION_BUTTON_COMMAND_NAME = 'action-button';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
@@ -52,6 +53,8 @@ const keyboardCommandDescription =
   'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. To hide the keyboard, use keyboard dismiss. It taps the keyboard dismiss/hide key when one is exposed, verifies the keyboard closed, and reports UNSUPPORTED_OPERATION when no dismiss key exists \u2014 background taps are never attempted.';
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
+const actionButtonCommandDescription =
+  'Press the iPhone Action Button. The press reaches the system exactly as a hardware press does, so a Shortcut or App Intent assigned to the button fires whether the app is foregrounded, backgrounded, or terminated. The app is never activated first and nothing is re-captured after: the press preserves the app state it found.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
@@ -83,6 +86,12 @@ const orientationCommandMetadata = defineFieldCommandMetadata(
 const appSwitcherCommandMetadata = defineFieldCommandMetadata(
   APP_SWITCHER_COMMAND_NAME,
   appSwitcherCommandDescription,
+  {},
+);
+
+const actionButtonCommandMetadata = defineFieldCommandMetadata(
+  ACTION_BUTTON_COMMAND_NAME,
+  actionButtonCommandDescription,
   {},
 );
 
@@ -129,6 +138,8 @@ const homeCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const appSwitcherCliSchema = {} as const satisfies CommandSchemaOverride;
 
+const actionButtonCliSchema = {} as const satisfies CommandSchemaOverride;
+
 const orientationCliSchema = {
   usageOverride: 'orientation <portrait|portrait-upside-down|landscape-left|landscape-right>',
   positionalArgs: ['orientation'],
@@ -156,6 +167,8 @@ const tvRemoteCliSchema = {
 export const appStateCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
 export const homeCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
 export const appSwitcherCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
+export const actionButtonCliReader: CliReader = (_positionals, flags) =>
+  commonInputFromFlags(flags);
 
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -197,6 +210,8 @@ export const orientationDaemonWriter: DaemonWriter = direct(ORIENTATION_COMMAND_
 ]);
 
 export const appSwitcherDaemonWriter: DaemonWriter = direct(APP_SWITCHER_COMMAND_NAME);
+
+export const actionButtonDaemonWriter: DaemonWriter = direct(ACTION_BUTTON_COMMAND_NAME);
 
 export const keyboardDaemonWriter: DaemonWriter = direct(KEYBOARD_COMMAND_NAME, (input) =>
   optionalString(input.action),
@@ -301,6 +316,21 @@ const clipboardCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.clipboard,
 });
 
+const actionButtonCommandFacet = defineCommandFacet({
+  name: ACTION_BUTTON_COMMAND_NAME,
+  text: {
+    summary: 'Press the iPhone Action Button',
+    cliDetail:
+      'iPhone and iPad only. The runner asks the device for the button and reports unsupported when that model has none.',
+  },
+  metadata: actionButtonCommandMetadata,
+  run: (client, input) => client.command.actionButton(input),
+  cliSchema: actionButtonCliSchema,
+  cliReader: actionButtonCliReader,
+  daemonWriter: actionButtonDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters['action-button'],
+});
+
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
   text: {
@@ -323,6 +353,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     homeCommandFacet,
     orientationCommandFacet,
     appSwitcherCommandFacet,
+    actionButtonCommandFacet,
     keyboardCommandFacet,
     clipboardCommandFacet,
     tvRemoteCommandFacet,
