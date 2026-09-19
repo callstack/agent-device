@@ -200,11 +200,13 @@ extension RunnerTests {
     return true
   }
 
-  /// The pid of the application that held the foreground while the session app did not, when the
-  /// private AX client reports exactly one such application. The client resolves pids only — it
-  /// answers no bundle id for an arbitrary app — so anything other than one foreign pid stays
-  /// unstated rather than guessed (#2682).
-  func foregroundApplicationPid(excluding sessionPid: Int?) -> Int? {
+  /// The pid of the one other application holding an active accessibility session, or nil unless
+  /// exactly one exists. What this proves is that liveness claim and nothing more: the private AX
+  /// client exposes no ordering of `activeApplications`, so this is NOT a foreground owner — it is
+  /// the only other process that could have been on screen while the session app sat out of the
+  /// foreground. The client resolves pids only, answering no bundle id for an arbitrary app, so
+  /// anything other than exactly one foreign pid stays unstated rather than guessed (#2682).
+  func soleOtherActiveApplicationPid(excluding sessionPid: Int?) -> Int? {
     let pids = RunnerAXSnapshotBridge.activeApplicationProcessIdentifiers().compactMap {
       ($0 as? NSNumber)?.intValue
     }
@@ -228,21 +230,21 @@ extension RunnerTests {
         bundleId
       )
     } else {
-      // Read the other app's pid before activating: after `activate()` the stolen foreground is
-      // gone and the fact would describe the repair instead of the state it repaired (#2682).
-      let foregroundPid = foregroundApplicationPid(excluding: Self.processIdentifier(of: target))
+      // Read the other app's pid before activating: after `activate()` that app is gone from the
+      // active set, so the fact would describe the repair instead of the state it repaired (#2682).
+      let otherActiveApplicationPid = soleOtherActiveApplicationPid(excluding: Self.processIdentifier(of: target))
       target.activate()
       pendingTargetActivation = TargetActivationFactPayload(
         reason: reason,
         priorState: Int(initialState.rawValue),
-        foregroundPid: foregroundPid
+        otherActiveApplicationPid: otherActiveApplicationPid
       )
       NSLog(
-        "AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=%@ reason=%@ priorState=%d foregroundPid=%@",
+        "AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=%@ reason=%@ priorState=%d otherActiveApplicationPid=%@",
         bundleId,
         reason,
         initialState.rawValue,
-        foregroundPid.map(String.init) ?? "-"
+        otherActiveApplicationPid.map(String.init) ?? "-"
       )
     }
     currentApp = target

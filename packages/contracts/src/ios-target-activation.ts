@@ -5,9 +5,11 @@
  * an agent. `@agent-device/platform-apple`'s runner reader is the single decoder of the wire shape;
  * nothing else parses it.
  *
- * Deliberately a pid and not a bundle id: the private AX client the runner already uses for process
- * matching resolves pids only, and the escalation that would name an arbitrary foreground app
- * (`proc_pidpath`) has no iOS SDK declaration and no physical-device evidence.
+ * The pid it carries is a liveness claim, not a foreground owner: the private AX client the runner
+ * already uses for process matching exposes no ordering of `activeApplications`, resolves pids only,
+ * and the escalation that would name an arbitrary app (`proc_pidpath`) has no iOS SDK declaration and
+ * no physical-device evidence. So the fact states which other application was alive and leaves the
+ * reader to conclude no more than that.
  */
 
 /** Reasons the runner can stamp; mirrors its `activateTarget(bundleId:reason:)` call sites. */
@@ -35,20 +37,26 @@ export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_
 
 /**
  * Foreground repair performed while serving one command. `priorState` is the session app's state
- * BEFORE the runner activated it, so the fact describes what was repaired rather than what the
- * repair produced. `foregroundPid` is present only when exactly one application other than the
- * session app had an active accessibility session at that moment.
+ * BEFORE the runner activated it — read before `activate()` ran — so the fact describes what was
+ * repaired rather than what the repair produced, and it can never report `runningForeground`.
+ * `otherActiveApplicationPid` is present only when exactly one application other than the session app
+ * held an active accessibility session at that moment: proof that it was alive, not proof that it
+ * owned the screen.
  */
 export type IosTargetActivation = Readonly<{
   reason: IosTargetActivationReason;
   priorState: IosTargetActivationPriorState;
-  foregroundPid?: number;
+  otherActiveApplicationPid?: number;
 }>;
 
-function foregroundSubject(fact: IosTargetActivation): string {
-  return fact.foregroundPid === undefined
-    ? 'another app'
-    : `another app (pid ${fact.foregroundPid})`;
+/**
+ * What the earlier captures showed. Naming the live pid is a pointer to the only candidate, never a
+ * claim that it owned the screen; with no single candidate the reader is told exactly that instead.
+ */
+function earlierSubject(fact: IosTargetActivation): string {
+  return fact.otherActiveApplicationPid === undefined
+    ? 'whatever app held the foreground (the runner reported no single other app with an active accessibility session)'
+    : `the only app other than the session app with an active accessibility session (pid ${fact.otherActiveApplicationPid})`;
 }
 
 /**
@@ -60,10 +68,10 @@ function foregroundSubject(fact: IosTargetActivation): string {
  */
 export function iosTargetActivationDisclosure(fact: IosTargetActivation): string {
   return (
-    `The session app was not foreground when this command arrived (${foregroundSubject(fact)} ` +
-    `held it, prior state ${fact.priorState}), so the runner activated it before answering ` +
-    `(reason ${fact.reason}). Any capture taken earlier in this session described ` +
-    `${foregroundSubject(fact)}, not the session app. Re-capture now that the session app answers, ` +
-    'or drive the other app in its own session.'
+    `The session app was not foreground when this command arrived (prior state ` +
+    `${fact.priorState}), so the runner activated it before answering (reason ${fact.reason}). ` +
+    `Any capture taken earlier in this session described ${earlierSubject(fact)}, not the ` +
+    'session app. Re-capture now that the session app answers, or drive the other app in its own ' +
+    'session.'
   );
 }

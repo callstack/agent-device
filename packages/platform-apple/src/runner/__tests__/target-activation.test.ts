@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from '../target-activation.ts';
+import {
+  TARGET_ACTIVATION_WIRE_KEY,
+  readTargetActivationFact,
+  type UnmappedPriorStateDetail,
+} from '../target-activation.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const swiftModelsPath = path.resolve(
@@ -17,11 +21,13 @@ test('target activation fact decodes every reason the runner can stamp', () => {
     priorState: 'runningBackground',
   });
   assert.deepEqual(
-    readTargetActivationFact(wire('interaction_foreground_guard', 3, { foregroundPid: 4562 })),
+    readTargetActivationFact(
+      wire('interaction_foreground_guard', 3, { otherActiveApplicationPid: 4562 }),
+    ),
     {
       reason: 'interaction_foreground_guard',
       priorState: 'runningBackgroundSuspended',
-      foregroundPid: 4562,
+      otherActiveApplicationPid: 4562,
     },
   );
   assert.deepEqual(readTargetActivationFact(wire('bundle_changed', 1)), {
@@ -35,27 +41,44 @@ test('target activation fact decodes every reason the runner can stamp', () => {
 });
 
 test('target activation fact omits a foreground pid the runner could not isolate', () => {
-  for (const foregroundPid of [undefined, 0, -1, 4.5, '4562', null]) {
+  for (const otherActiveApplicationPid of [undefined, 0, -1, 4.5, '4562', null]) {
     const decoded = readTargetActivationFact(
-      wire('stale_target', 2, { foregroundPid: foregroundPid as unknown }),
+      wire('stale_target', 2, { otherActiveApplicationPid: otherActiveApplicationPid as unknown }),
     );
     assert.ok(decoded);
-    assert.equal('foregroundPid' in decoded, false, String(foregroundPid));
+    assert.equal('otherActiveApplicationPid' in decoded, false, String(otherActiveApplicationPid));
   }
 });
 
-test('target activation fact refuses a reason or state the runner never stamps', () => {
-  // Closest negatives: a repair the shared rules cannot name, and the state the runner skips
-  // activation for — a payload carrying it did not come from the activation path.
+test('target activation fact refuses a reason the runner never stamps', () => {
+  // A reason the shared rules cannot name is not this repair at all, so nothing is decoded.
   assert.equal(readTargetActivationFact(wire('auto_rebound', 2)), undefined);
-  assert.equal(readTargetActivationFact(wire('stale_target', 4)), undefined);
-  assert.equal(readTargetActivationFact(wire('stale_target', 99)), undefined);
   assert.equal(readTargetActivationFact(wire('stale_target', 'runningBackground')), undefined);
   assert.equal(readTargetActivationFact(wire('stale_target', undefined)), undefined);
   assert.equal(readTargetActivationFact(undefined), undefined);
   assert.equal(readTargetActivationFact(null), undefined);
   assert.equal(readTargetActivationFact([]), undefined);
   assert.equal(readTargetActivationFact('stale_target'), undefined);
+});
+
+/**
+ * `XCApplicationState` ships in no public header this repo compiles against, so a raw value the
+ * table never declared must degrade the STATE and keep the disclosure: the reason already proves
+ * `activate()` ran, and the silent repair is the failure #2682 is about. The gap is named in the log.
+ */
+test('an unmapped prior-state raw value discloses the repair as unknown and says so', () => {
+  const unmapped: UnmappedPriorStateDetail[] = [];
+  for (const rawPriorState of [4, 99]) {
+    assert.deepEqual(readTargetActivationFact(wire('bundle_changed', rawPriorState)), {
+      reason: 'bundle_changed',
+      priorState: 'unknown',
+    });
+  }
+  readTargetActivationFact(wire('stale_target', 42), (detail) => unmapped.push(detail));
+  assert.deepEqual(unmapped, [{ reason: 'stale_target', rawPriorState: 42 }]);
+  // A mapped value owes no note.
+  readTargetActivationFact(wire('stale_target', 2), (detail) => unmapped.push(detail));
+  assert.equal(unmapped.length, 1);
 });
 
 test('wire key matches the runner payload property that carries it', () => {
