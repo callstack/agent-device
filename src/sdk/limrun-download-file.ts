@@ -6,38 +6,28 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunFileDownload } from '@agent-device/provider-limrun';
 
-const RESPONSE_BODY_PREVIEW_CHARS = 500;
+const RESPONSE_BODY_PREVIEW_BYTES = 500;
 
 /**
  * Streams one authenticated Limrun download to disk. The transfer is bounded by `timeoutMs`; a
- * failed or timed-out transfer leaves no partial file behind, so the caller can retry from the
- * same URL.
+ * failed or timed-out attempt leaves no file at the destination, so the caller can retry from the
+ * same URL and never mistakes an earlier attempt's file for this one's.
  */
 export async function downloadLimrunFile(options: LimrunFileDownload): Promise<void> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
   await fs.promises.mkdir(path.dirname(options.destinationPath), { recursive: true });
-  let response: Response;
   try {
-    response = await fetch(options.url, {
+    const response = await fetch(options.url, {
       method: 'GET',
       headers: options.headers,
       signal: timeout,
     });
-  } catch (error) {
-    throw downloadFailure(error, options, timeout);
-  }
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
-      url: options.url,
-      statusCode: response.status,
-      body: body.slice(0, RESPONSE_BODY_PREVIEW_CHARS),
-    });
-  }
-  if (!response.body) {
-    throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', { url: options.url });
-  }
-  try {
+    if (!response.ok) throw await httpFailure(response, options);
+    if (!response.body) {
+      throw new AppError('COMMAND_FAILED', 'Limrun download returned no body', {
+        url: options.url,
+      });
+    }
     await pipeline(
       Readable.fromWeb(response.body as WebReadableStream<Uint8Array>),
       fs.createWriteStream(options.destinationPath),
@@ -47,6 +37,33 @@ export async function downloadLimrunFile(options: LimrunFileDownload): Promise<v
     await fs.promises.rm(options.destinationPath, { force: true }).catch(() => {});
     throw downloadFailure(error, options, timeout);
   }
+}
+
+async function httpFailure(response: Response, options: LimrunFileDownload): Promise<AppError> {
+  return new AppError('COMMAND_FAILED', `Limrun download failed with HTTP ${response.status}`, {
+    url: options.url,
+    statusCode: response.status,
+    body: await readBodyPreview(response),
+  });
+}
+
+/** Reads at most the preview's bytes of an error body; a body that stalls fails like the transfer. */
+async function readBodyPreview(response: Response): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (bytes < RESPONSE_BODY_PREVIEW_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      bytes += value.byteLength;
+    }
+  } finally {
+    void reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks).subarray(0, RESPONSE_BODY_PREVIEW_BYTES).toString('utf8');
 }
 
 function downloadFailure(
