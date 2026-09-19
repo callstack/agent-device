@@ -62,7 +62,11 @@ import {
   stopRunnerPrepProcesses,
   type RunnerDisposalOptions,
 } from './runner-disposal.ts';
-import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
+import {
+  captureRunnerLogOffset,
+  enrichRunnerFailureFromLog,
+  type RunnerLogOffset,
+} from './runner-failure-diagnostics.ts';
 import {
   advanceRunnerSessionState,
   buildRunnerSessionId,
@@ -748,6 +752,9 @@ export async function executeRunnerCommandWithSession(
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   emitRunnerStartupTimings(session, command.command);
+  // Marked before anything is sent, including the preflight: whatever the runner writes from here
+  // on is this command's attempt, and whatever is already in the log belongs to an earlier one (#2683).
+  const logSince = await captureRunnerLogOffset(logPath);
   const runnerCommand = withRunnerCommandId(command);
   const readOnlyCommand = isReadOnlyRunnerCommand(runnerCommand);
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
@@ -758,6 +765,7 @@ export async function executeRunnerCommandWithSession(
       session,
       runnerCommand,
       logPath,
+      logSince,
       deadline,
       signal,
       decision: preflightDecision,
@@ -787,7 +795,7 @@ export async function executeRunnerCommandWithSession(
     throw markSkippedPreflightTransportError(error, session, preflightDecision);
   }
   try {
-    const data = await parseRunnerResponse(response, session, logPath);
+    const data = await parseRunnerResponse(response, session, logPath, logSince);
     // Mirror the runner's own main-thread occupancy stamped on this response: a runner that
     // served a read off the XCTest channel (e.g. a private-AX capture) while a tree crawl it
     // abandoned still grinds reports busy, so the healthy response must not be read as drained.
@@ -911,11 +919,12 @@ async function runRunnerReadinessPreflight(params: {
   session: RunnerSession;
   runnerCommand: RunnerCommand;
   logPath: string | undefined;
+  logSince: RunnerLogOffset | undefined;
   deadline: Deadline;
   signal: AbortSignal | undefined;
   decision: Extract<RunnerReadinessPreflightDecision, { action: 'run' }>;
 }): Promise<void> {
-  const { device, session, runnerCommand, logPath, deadline, signal, decision } = params;
+  const { device, session, runnerCommand, logPath, logSince, deadline, signal, decision } = params;
   const readinessTimeoutMs =
     session.state === 'ready'
       ? Math.min(RUNNER_READY_PREFLIGHT_TIMEOUT_MS, deadline.remainingMs())
@@ -942,7 +951,7 @@ async function runRunnerReadinessPreflight(params: {
         timeoutMs: readinessTimeoutMs,
       },
     );
-    await parseRunnerResponse(readinessResponse, session, logPath);
+    await parseRunnerResponse(readinessResponse, session, logPath, logSince);
   } catch (error) {
     throw markRunnerReadinessPreflightError(error);
   }
@@ -979,12 +988,14 @@ export async function parseRunnerResponse(
   response: Response,
   session: Pick<RunnerSession, 'state'>,
   logPath?: string,
+  logSince?: RunnerLogOffset,
 ): Promise<Record<string, unknown>> {
   const payload = decodeRunnerResponseBody(await response.text());
   if (!isRunnerResponseOk(payload)) {
     throw await enrichRunnerFailureFromLog({
       error: buildRunnerResponseError(payload, logPath),
       logPath,
+      logSince,
     });
   }
   advanceRunnerSessionState(session, 'ready');
