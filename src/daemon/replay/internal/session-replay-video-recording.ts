@@ -1,11 +1,11 @@
 import path from 'node:path';
+import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import type {
-  ReplayDispatchOptions,
   ReplayRecordVideoRequest,
   ReplaySessionStore,
   ReplayTestVideoOwner,

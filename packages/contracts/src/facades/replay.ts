@@ -2,6 +2,8 @@ export type { RefFrameEffect } from '../ref-frame-effect.ts';
 export { REPLAY_TARGET_GUARD_MISMATCH_REASON, WAIT_LANDMARK_MISMATCH_REASON } from '../replay.ts';
 export type {
   ReplayCommandResult,
+  ReplayDispatchOptions,
+  ReplayOpenLifecycle,
   ReplayObservationAuthority,
   ReplayObservationAuthorityBinder,
   ReplayObservationCapture,

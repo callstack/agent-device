@@ -1,9 +1,9 @@
 import type { SessionAction } from '@agent-device/contracts/session';
+import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import type {
   ReplayCommand,
   ReplayCoordinator,
-  ReplayDispatchOptions,
   ReplayDispatchRequest,
   ReplaySessionState,
   ReplaySessionStore,

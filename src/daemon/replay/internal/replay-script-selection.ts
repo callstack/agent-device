@@ -8,6 +8,18 @@ import { isDeepLinkTarget, type CommandFlags } from '@agent-device/contracts/com
  * What a replay script says about the device it needs: the platform its recorded `open`/`runtime`
  * actions declare, and the static app target an iOS simulator resolution may key on. Request
  * binding reads the same vocabulary to lock a device before the handler runs.
+ *
+ * #1555 structural-quality review ("declaredScriptPlatform... move to
+ * packages/ad-script"): the platform half of this selection is
+ * `resolveDeclaredScriptPlatform` (`@agent-device/ad-script`) — a single
+ * shared scan, no longer a second copy kept in sync by hand with
+ * `packages/ad-replay/src/internal/inspect.ts`'s own plan-digest precedence.
+ * The app-target half stays its own pass here (never fused back into one
+ * loop with the platform scan): `resolveDeclaredScriptPlatform` stops at the
+ * first `open`, exactly where this function's own app-target search needs
+ * to look too, so a second, separate pass over the (typically tiny) actions
+ * array costs nothing observable and keeps the shared function free of a
+ * daemon-only concern.
  */
 export function readScriptReplaySelection(actions: SessionAction[]): {
   appTarget: string | undefined;
@@ -36,19 +48,6 @@ export function buildMaestroReplayTargetDeviceResolutionOptions(
   return appTargetResolutionOptions(appTarget) ?? {};
 }
 
-/**
- * #1555 structural-quality review ("declaredScriptPlatform... move to
- * packages/ad-script"): the platform half of this selection is
- * `resolveDeclaredScriptPlatform` (`@agent-device/ad-script`) — a single
- * shared scan, no longer a second copy kept in sync by hand with
- * `packages/ad-replay/src/internal/inspect.ts`'s own plan-digest precedence.
- * The app-target half stays its own pass here (never fused back into one
- * loop with the platform scan): `resolveDeclaredScriptPlatform` stops at the
- * first `open`, exactly where this function's own app-target search needs
- * to look too, so a second, separate pass over the (typically tiny) actions
- * array costs nothing observable and keeps the shared function free of a
- * daemon-only concern.
- */
 /** Applies a platform configured before the first open to replay dispatch. */
 export function buildReplayScriptPlatformFlags(
   flags: CommandFlags | undefined,

@@ -1,0 +1,6 @@
+{"type":"replay_test_attempt_start","ts":"2026-09-19T14:27:51.720Z","replayPath":"/tmp/agent-device-test-run-23838-sCm2rx/agent-device-maestro-remote-test-QE9WSU/02-flow.yaml","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1","requestId":"req-maestro-test-wire-undefined:test:2:02-flow.yaml:attempt:1"}
+{"type":"replay_test_attempt_stop","ts":"2026-09-19T14:27:51.720Z","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1","ok":true,"timedOut":false,"durationMs":0}
+{"type":"replay_test_finalize_start","ts":"2026-09-19T14:27:51.720Z","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1"}
+{"type":"replay_test_finalize_stop","ts":"2026-09-19T14:27:51.720Z","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1","ok":true,"durationMs":0}
+{"type":"replay_test_cleanup_start","ts":"2026-09-19T14:27:51.721Z","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1"}
+{"type":"replay_test_cleanup_stop","ts":"2026-09-19T14:27:51.721Z","session":"default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1","ok":true,"durationMs":0}

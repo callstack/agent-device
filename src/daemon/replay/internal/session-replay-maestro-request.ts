@@ -1,4 +1,8 @@
-import type { MaestroDaemonOperationRequest } from '@agent-device/maestro/daemon-runtime-port';
+import type {
+  MaestroDaemonDispatchOptions,
+  MaestroDaemonOperationRequest,
+} from '@agent-device/maestro/daemon-runtime-port';
+import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { ReplayDispatchRequest } from './command-types.ts';
 
@@ -14,7 +18,7 @@ export function maestroOperationDispatchRequest(
 ): ReplayDispatchRequest {
   const dispatch = stripUndefined({
     ...replay.dispatch,
-    ...operation.dispatch,
+    ...maestroDispatchOptions(operation.dispatch),
   });
   return stripUndefined({
     ...replay,
@@ -24,4 +28,19 @@ export function maestroOperationDispatchRequest(
     flags: operation.flags,
     dispatch: Object.keys(dispatch).length > 0 ? dispatch : undefined,
   });
+}
+
+/**
+ * Every dispatch option the Maestro port may set, named against the replay dispatch key. A key
+ * the port adds without a counterpart fails here, as does a key the mapping forgets.
+ */
+function maestroDispatchOptions(
+  dispatch: MaestroDaemonDispatchOptions | undefined,
+): Pick<ReplayDispatchOptions, keyof MaestroDaemonDispatchOptions> {
+  return stripUndefined({
+    closeAppOnly: dispatch?.closeAppOnly,
+    observationOnly: dispatch?.observationOnly,
+    gestureViewport: dispatch?.gestureViewport,
+    gestureExecutionProfile: dispatch?.gestureExecutionProfile,
+  } satisfies Record<keyof MaestroDaemonDispatchOptions, unknown>);
 }

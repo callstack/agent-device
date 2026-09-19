@@ -1,13 +1,11 @@
 import type { CommandFlags } from './command-flags.ts';
 import type {
+  DaemonInstallSource,
   LeaseBackend,
-  DaemonInstallSource as PublicDaemonInstallSource,
   DaemonRequestMeta as PublicDaemonRequestMeta,
   DaemonRequest as WireRequest,
 } from '@agent-device/kernel/contracts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
-
-export type DaemonInstallSource = PublicDaemonInstallSource;
 
 /**
  * Request metadata as a client may send it, with the two fields the daemon narrows past what the

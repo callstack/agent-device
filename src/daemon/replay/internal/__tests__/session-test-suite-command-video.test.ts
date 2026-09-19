@@ -289,8 +289,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
       if (nestedReq.command === 'open') {
         const provisionalSession = makeIosSession(nestedReq.session);
         sessionStore.set(nestedReq.session, provisionalSession);
-        const hookResponse =
-          await nestedReq.internal?.openLifecycle?.beforeDispatch?.(provisionalSession);
+        const hookResponse = await nestedReq.internal?.openLifecycle?.beforeDispatch?.();
         if (hookResponse && !hookResponse.ok) return hookResponse;
         events.push('open:dispatch');
       }

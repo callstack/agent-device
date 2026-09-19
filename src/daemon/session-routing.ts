@@ -9,7 +9,8 @@ import {
   publicPlatformString,
 } from '@agent-device/kernel/device';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionRef, SessionScope, SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from './session-store.ts';
 import { listSessionSelectorConflicts, type SessionSelectorConflict } from './session-selector.ts';
 

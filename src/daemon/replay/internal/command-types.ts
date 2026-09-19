@@ -1,17 +1,15 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
-import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
 import type {
+  ReplayDispatchOptions,
   ReplayObservationAuthorityBinder,
-  ReplayTargetGuardDenotation,
-  TargetAnnotationV1,
 } from '@agent-device/contracts/replay';
 import type { SessionAction, SessionScope } from '@agent-device/contracts/session';
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 /**
  * The slice of the daemon's live session record replay reads. The daemon passes its full
@@ -120,29 +118,6 @@ export type ReplaySession = Readonly<{
   coordinator: ReplayCoordinator;
 }>;
 
-/**
- * What a nested dispatch asks the daemon to honor beyond the wire request. Each field names the
- * daemon's own request-private key; the daemon folds the bag into the request's private half
- * before dispatch, so replay never composes that half itself.
- */
-export type ReplayDispatchOptions = Readonly<{
-  /** Every step a replay plan dispatches; the recorder reads it to classify authored provenance. */
-  replayPlanStep?: true;
-  resolvedSessionScope?: SessionScope;
-  replayTargetGuard?: ReplayTargetGuardDenotation;
-  replayTargetGuards?: Readonly<{
-    source: ReplayTargetGuardDenotation;
-    destination: ReplayTargetGuardDenotation;
-  }>;
-  replayLandmarkGuard?: TargetAnnotationV1;
-  /** Runs before an `open` dispatches; a failure response aborts the dispatch with it. */
-  openLifecycle?: Readonly<{ beforeDispatch: () => Promise<DaemonResponse | undefined> }>;
-  closeAppOnly?: boolean;
-  observationOnly?: true;
-  gestureViewport?: Rect;
-  gestureExecutionProfile?: GestureExecutionProfile;
-}>;
-
 export type ReplayDispatchRequest = DaemonWireRequest &
   Readonly<{ dispatch?: ReplayDispatchOptions }>;
 
@@ -157,8 +132,10 @@ export type ReplayDaemonDependencies = Readonly<{
 export type ReplayCommand = Readonly<{
   request: DaemonWireRequest;
   /**
-   * True when the request arrived over the daemon's public network surface: flow scripts are then
-   * untrusted, and `runScript` HTTP calls may not reach private addresses.
+   * True when the request reached the daemon over its public HTTP surface only: flow scripts are
+   * then untrusted, `runScript` HTTP calls may not reach private addresses, and the Maestro engine
+   * decides script trust from this input instead of reading `req.internal`. Absent means a local
+   * caller, which trusts its own scripts.
    */
   publicNetworkOnly?: true;
   /** The isolation scope the daemon already resolved for this request, when it did. */
@@ -170,13 +147,6 @@ export type ReplayCommand = Readonly<{
   dependencies: ReplayDaemonDependencies;
   tracePath?: string;
   onStep?: ReplayTestAttemptStepSink;
-  /**
-   * True when the request reached the daemon only over its public HTTP surface. The handler draws
-   * it from the request's daemon-private half and hands it here so the Maestro engine decides
-   * script trust from an explicit input instead of reading `req.internal`. Absent means a local
-   * caller, which trusts its own scripts.
-   */
-  publicNetworkOnly?: boolean;
 }>;
 
 type ReplayRequestContext = Readonly<{

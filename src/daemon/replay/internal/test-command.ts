@@ -3,11 +3,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
-import type { ReplaySuiteResult, ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
+import type {
+  ReplayDispatchOptions,
+  ReplaySuiteResult,
+  ReplayScriptSourceBundle,
+} from '@agent-device/contracts/replay';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
-import type { ReplayCommand, ReplayDispatchOptions, ReplayTestCommand } from './command-types.ts';
+import type { ReplayCommand, ReplayTestCommand } from './command-types.ts';
 import {
   runReplayTestSuite,
   type ReplayTestBindAttemptCancellation,
@@ -364,17 +368,46 @@ export function attachRemoteReplayTestArtifacts(
 }
 
 /**
- * Translates a daemon `test` request into the scheduler's neutral request (#1478 P3b).
- *
- * `replayBackend` is deliberately not carried across: it selects an engine, and it has already
- * been applied here when building the source-discovery and shard-target capabilities.
- */
-/**
  * #1802: a `test` request states the script sources its suite runs, because the daemon opens no
  * caller path. Absent entirely means a client too old to send them; it is rejected as a typed
  * `AppError` so it travels the same translation-failure path the shard/flag rejections already
  * take, rather than adding a second refusal shape to the handler.
  */
+function requireReplayTestScriptSources(
+  req: DaemonWireRequest,
+): readonly ReplayScriptSourceBundle[] {
+  const sources = req.flags?.replayScriptSources;
+  if (!sources) throw new AppError('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+  return sources;
+}
+
+/**
+ * Translates a daemon `test` request into the scheduler's neutral request (#1478 P3b).
+ *
+ * `replayBackend` is deliberately not carried across: it selects an engine, and it has already
+ * been applied here when building the source-discovery and shard-target capabilities.
+ */
+function toReplayTestSuiteRequest(
+  req: DaemonWireRequest,
+  sessionName: string,
+): ReplayTestSuiteRequest {
+  const flags = req.flags ?? {};
+  const cwd = req.meta?.cwd;
+  const artifactsDir = stringFlag(flags.artifactsDir);
+  return {
+    inputs: req.positionals ?? [],
+    sessionName,
+    cwd,
+    requestId: req.meta?.requestId,
+    platformFilter: flags.platform,
+    artifactsDir: artifactsDir === undefined ? undefined : expandSessionPath(artifactsDir, cwd),
+    failFast: flags.failFast === true,
+    retries: numberFlag(flags.retries),
+    timeoutMs: numberFlag(flags.timeoutMs),
+    shard: readReplayTestShardSelection(flags),
+  };
+}
+
 /**
  * One attempt's replay command inherits the suite command's admission facts and dispatch options;
  * the video open-lifecycle hook, when recording, rides beside the inherited options.
@@ -400,35 +433,6 @@ function nestedReplayCommand(
     ...(resolvedSessionScope ? { resolvedSessionScope } : {}),
     ...(nestedDispatch ? { dispatch: nestedDispatch } : {}),
     dependencies,
-  };
-}
-
-function requireReplayTestScriptSources(
-  req: DaemonWireRequest,
-): readonly ReplayScriptSourceBundle[] {
-  const sources = req.flags?.replayScriptSources;
-  if (!sources) throw new AppError('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
-  return sources;
-}
-
-function toReplayTestSuiteRequest(
-  req: DaemonWireRequest,
-  sessionName: string,
-): ReplayTestSuiteRequest {
-  const flags = req.flags ?? {};
-  const cwd = req.meta?.cwd;
-  const artifactsDir = stringFlag(flags.artifactsDir);
-  return {
-    inputs: req.positionals ?? [],
-    sessionName,
-    cwd,
-    requestId: req.meta?.requestId,
-    platformFilter: flags.platform,
-    artifactsDir: artifactsDir === undefined ? undefined : expandSessionPath(artifactsDir, cwd),
-    failFast: flags.failFast === true,
-    retries: numberFlag(flags.retries),
-    timeoutMs: numberFlag(flags.timeoutMs),
-    shard: readReplayTestShardSelection(flags),
   };
 }
 

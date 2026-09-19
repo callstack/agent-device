@@ -8,10 +8,10 @@ import {
   type DeviceSelectionResult,
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
-import type { SessionSurface } from '@agent-device/contracts/session';
+import type { SessionScope, SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionScope, SessionState } from '../../session-state.ts';
+import type { SessionState } from '../../session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
   armAuthoringOnOpen,
@@ -353,7 +353,7 @@ async function prepareOpenDispatchSession(params: {
   if (!beforeDispatch) return { type: 'session', session: existingSession };
   const provisionalSession = createProvisionalOpenDispatchSession(params);
   sessionStore.set(sessionName, provisionalSession);
-  const lifecycleResponse = await beforeDispatch(provisionalSession);
+  const lifecycleResponse = await beforeDispatch();
   if (lifecycleResponse && !lifecycleResponse.ok)
     return { type: 'response', response: lifecycleResponse };
   return { type: 'session', session: sessionStore.get(sessionName) ?? provisionalSession };

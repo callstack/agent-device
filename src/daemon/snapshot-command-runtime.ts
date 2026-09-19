@@ -31,7 +31,8 @@ import {
   type SnapshotRuntimeRouteParams,
 } from './snapshot-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
-import type { SessionScope, SessionState } from './session-state.ts';
+import type { SessionState } from './session-state.ts';
+import type { SessionScope } from '@agent-device/contracts/session';
 
 export type SnapshotRuntimeRecord =
   | { kind: 'snapshot'; nodes: number; truncated: boolean | undefined }

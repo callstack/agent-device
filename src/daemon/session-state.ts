@@ -8,11 +8,7 @@ import type {
   PerfProfileHandoff,
 } from '@agent-device/contracts/perf-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import type {
-  SessionAction,
-  SessionScope as PublicSessionScope,
-  SessionSurface,
-} from '@agent-device/contracts/session';
+import type { SessionAction, SessionScope, SessionSurface } from '@agent-device/contracts/session';
 import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
@@ -120,8 +116,6 @@ export type SessionRef = {
   address: string;
   session: SessionState;
 };
-
-export type SessionScope = PublicSessionScope;
 
 export type SessionState = {
   name: string;

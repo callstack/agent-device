@@ -7,7 +7,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { SessionStore } from '../session-store.ts';
 import { resolveEffectiveSessionName, resolveSessionScope } from '../session-routing.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
-import type { SessionScope, SessionState } from '../session-state.ts';
+import type { SessionState } from '../session-state.ts';
+import type { SessionScope } from '@agent-device/contracts/session';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeSession(name: string): SessionState {
