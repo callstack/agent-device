@@ -126,6 +126,22 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: depgraph }
 
+      # Model tests for the two module-shape reports (#2677) and the rename-resolved history
+      # model they share. All three run offline on a committed fixture mini-repo plus a live-tree
+      # smoke that needs the full history this job already fetches; the reports themselves
+      # (`pnpm coupling`, `pnpm legibility`) stay advisory and ungated.
+      - name: Check the repo-history model
+        uses: ./.github/actions/run-gate
+        with: { gate: repo-history }
+
+      - name: Check the coupling report model
+        uses: ./.github/actions/run-gate
+        with: { gate: coupling }
+
+      - name: Check the legibility report model
+        uses: ./.github/actions/run-gate
+        with: { gate: legibility }
+
       # Tests for the TMPDIR redirection itself.
       #
       # Deliberately NOT in Coverage next to `check:tmpdir-leaks`, where the subject matter

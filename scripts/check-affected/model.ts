@@ -61,6 +61,9 @@ export type CheckId =
   | 'gate-manifest'
   | 'gate-manifest-model'
   | 'depgraph'
+  | 'repo-history'
+  | 'coupling'
+  | 'legibility'
   | 'tmpdir-leaks'
   | 'tmpdir-leaks-model'
   | 'coverage-model'
@@ -127,6 +130,9 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'gate-manifest',
   'gate-manifest-model',
   'depgraph',
+  'repo-history',
+  'coupling',
+  'legibility',
   'tmpdir-leaks',
   'tmpdir-leaks-model',
   'coverage-model',

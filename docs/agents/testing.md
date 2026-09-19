@@ -138,6 +138,9 @@ pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`
 selects gates independently from the diff; it does not consume the depgraph report.
 
+`pnpm coupling` reports which families a module co-changes with. `pnpm legibility` scores placement
+from a reader's evidence; its `--ablation` pass measures how much of that is carried by names.
+
 ## Gate ownership
 
 `CHECK_CATALOG` is the executable check registry. CI owns a check only through the shared `run-gate`
