@@ -2,6 +2,7 @@ import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-re
 import { readOptionalInteger } from '@agent-device/contracts/command';
 import { emitRequestProgress, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionRecoveryOptions } from './session-recovery-hints.ts';
@@ -22,10 +23,18 @@ const DEVICE_CONTENTION_POLL_MS = 250;
  * declaration instead of trusting whichever surface assembled the request.
  */
 export function readOpenWaitBudgetMs(req: DaemonRequest): number | undefined {
-  const declaration = getFlagDefinitionsForKey('waitMs')[0];
-  return readOptionalInteger((req.flags ?? {}) as Record<string, unknown>, 'waitMs', {
-    min: declaration?.min,
-    max: declaration?.max,
+  const flags = (req.flags ?? {}) as Record<string, unknown>;
+  if (flags.waitMs === undefined) return undefined;
+  const [declaration] = getFlagDefinitionsForKey('waitMs');
+  if (!declaration) {
+    throw new AppError(
+      'INTERNAL_ERROR',
+      'The waitMs option has no flag declaration whose bounds the daemon can enforce.',
+    );
+  }
+  return readOptionalInteger(flags, 'waitMs', {
+    min: declaration.min,
+    max: declaration.max,
   });
 }
 
@@ -51,7 +60,7 @@ export function readOpenWaitAttempt(req: DaemonRequest): SessionRecoveryOptions 
 export function describeOpenWaitForRefusal(req: DaemonRequest): SessionRecoveryOptions {
   return {
     ...readOpenWaitAttempt(req),
-    offersDeviceWait: typeof req.flags?.waitMs !== 'number',
+    offersDeviceWait: req.command === 'open' && typeof req.flags?.waitMs !== 'number',
   };
 }
 
@@ -92,19 +101,18 @@ export type OpenDeviceWait = {
  *
  * `deviceId` is the device the request's own execution-lock plan reserves, so the wait and the
  * lock agree on which device is being waited for without resolving a target a second time.
+ * `budgetMs` must already have been read through {@link readOpenWaitBudgetMs}, allowing the request
+ * scope to reject an out-of-range budget before resolving that device.
  */
 export function beginOpenDeviceWait(params: {
   req: DaemonRequest;
+  budgetMs: number | undefined;
   sessionName: string;
   sessionStore: SessionStore;
   deviceId: string | undefined;
 }): OpenDeviceWait | undefined {
-  const { req, sessionName, sessionStore, deviceId } = params;
-  if (req.command !== 'open') return undefined;
-  // The budget is read before anything else, so a request carrying a budget it may not spend is
-  // refused whether or not its device turned out to be resolvable.
-  const budgetMs = readOpenWaitBudgetMs(req);
-  if (budgetMs === undefined) return undefined;
+  const { req, budgetMs, sessionName, sessionStore, deviceId } = params;
+  if (req.command !== 'open' || budgetMs === undefined) return undefined;
   if (deviceId === undefined || sessionStore.get(sessionName)) return undefined;
   return createOpenDeviceWait({ req, sessionName, sessionStore, deviceId, budgetMs });
 }

@@ -35,6 +35,15 @@ function openRequest(flags: CommandFlags): DaemonRequest {
   };
 }
 
+function beginWait(
+  params: Omit<Parameters<typeof beginOpenDeviceWait>[0], 'budgetMs'>,
+): ReturnType<typeof beginOpenDeviceWait> {
+  return beginOpenDeviceWait({
+    ...params,
+    budgetMs: readOpenWaitBudgetMs(params.req),
+  });
+}
+
 function session(address: string): SessionState {
   return {
     name: 'default',
@@ -102,22 +111,16 @@ test('the daemon holds a budget to the bounds its own option declares', () => {
       code: 'INVALID_ARGS',
     });
   }
-
-  // A budget that cannot be spent is refused before the device it was meant for is even in play.
-  expect(
-    thrownBy(() =>
-      beginOpenDeviceWait({
-        req: openRequest({ waitMs: (max ?? 0) + 1 }),
-        sessionName: OPENER_ADDRESS,
-        sessionStore: new SessionStore('/tmp/ad-wait-unresolved'),
-        deviceId: undefined,
-      }),
-    ),
-  ).toMatchObject({ code: 'INVALID_ARGS' });
 });
 
 test('a refusal offers the flag only to a caller that did not arrive carrying it', () => {
   expect(describeOpenWaitForRefusal(openRequest({}))).toEqual({ offersDeviceWait: true });
+
+  // An interaction has no `--wait` of its own, even though the shared refusal builder may one day
+  // receive its request.
+  expect(describeOpenWaitForRefusal({ ...openRequest({}), command: 'tap' })).toEqual({
+    offersDeviceWait: false,
+  });
 
   // The open that passed `--wait` and still hit a busy device is not being sent off to run the
   // same open with the flag it used.
@@ -133,7 +136,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
   const budget = openRequest({ waitMs: 5_000 });
 
   expect(
-    beginOpenDeviceWait({
+    beginWait({
       req: { ...budget, command: 'tap' },
       sessionName: OPENER_ADDRESS,
       sessionStore,
@@ -141,7 +144,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
     }),
   ).toBeUndefined();
   expect(
-    beginOpenDeviceWait({
+    beginWait({
       req: budget,
       sessionName: OPENER_ADDRESS,
       sessionStore,
@@ -149,7 +152,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
     }),
   ).toBeUndefined();
   expect(
-    beginOpenDeviceWait({
+    beginWait({
       req: openRequest({}),
       sessionName: OPENER_ADDRESS,
       sessionStore,
@@ -160,7 +163,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
   // An open onto a session that already exists is bound to a device nobody else is refused for.
   sessionStore.set(OPENER_ADDRESS, session(OPENER_ADDRESS));
   expect(
-    beginOpenDeviceWait({
+    beginWait({
       req: budget,
       sessionName: OPENER_ADDRESS,
       sessionStore,
@@ -174,7 +177,7 @@ test('a free device is read once in the store and records no wait', async () => 
   const store = makeSessionStore('agent-device-open-wait-');
   const looks = vi.spyOn(store, 'findByDevice');
 
-  const wait = beginOpenDeviceWait({
+  const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
     sessionStore: store,
@@ -194,7 +197,7 @@ test('a device that frees up ends the wait without claiming a spent budget', asy
 
   await waitUntil(
     () =>
-      beginOpenDeviceWait({
+      beginWait({
         req,
         sessionName: OPENER_ADDRESS,
         sessionStore: store,
@@ -212,7 +215,7 @@ test('an open yields the device lock to a session that took the device after the
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 30_000 });
   const store = makeSessionStore('agent-device-open-wait-');
-  const wait = beginOpenDeviceWait({
+  const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
     sessionStore: store,
@@ -253,7 +256,7 @@ test('a budget that runs out busy costs the whole budget, then lets the open ref
   const req = openRequest({ waitMs: 1000 });
   const store = storeWithHolder();
   const looks = vi.spyOn(store, 'findByDevice');
-  const wait = beginOpenDeviceWait({
+  const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
     sessionStore: store,
@@ -289,7 +292,7 @@ test('a request the client gave up on stops waiting at its next poll', async () 
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 60_000 });
   markRequestCanceled('req-open-wait');
-  const wait = beginOpenDeviceWait({
+  const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
     sessionStore: storeWithHolder(),

@@ -176,12 +176,10 @@ export async function createRequestExecutionScope(params: {
   }
   try {
     assertLockedLeaseAdmissionPreflight(scopedReq);
-    // An out-of-range `--wait` is refused before resolving the target device or taking any lock.
-    // `beginOpenDeviceWait` still needs the device id from the lock plan, but validating the budget
-    // is independent of that lookup.
-    if (scopedReq.command === 'open') {
-      readOpenWaitBudgetMs(scopedReq);
-    }
+    // Parse the budget once, before resolving the target device or taking any lock. The lock plan
+    // still supplies the device to wait for, but an out-of-range budget is refused before either.
+    const openWaitBudgetMs =
+      scopedReq.command === 'open' ? readOpenWaitBudgetMs(scopedReq) : undefined;
     const lockPlan: RequestExecutionLockPlan = shouldLockSessionExecution(command)
       ? await resolveRequestExecutionLockPlan({ req: scopedReq, sessionName, sessionStore })
       : { keys: [], deviceId: undefined };
@@ -190,6 +188,7 @@ export async function createRequestExecutionScope(params: {
     // needs, so waiting after taking it would have an open block its own recovery.
     const openWait = beginOpenDeviceWait({
       req: scopedReq,
+      budgetMs: openWaitBudgetMs,
       sessionName,
       sessionStore,
       deviceId: lockPlan.deviceId,
