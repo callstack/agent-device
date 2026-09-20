@@ -71,7 +71,7 @@ export type IosDeviceReadinessReport = Omit<
  * is how a non-zero `xcodebuild` arrives) or only in the thrown message (`message-only`, which is
  * how anything the exec layer raised as a plain `Error` arrives after the catch wraps `String(err)`).
  */
-export type RunnerStartupFailureCarrier = 'exec-details' | 'message-only';
+export type RunnerStartupFailureCarrier = 'exec-details' | 'message-only' | 'host-timeout';
 
 const UNOBSERVED = 'unobserved';
 
@@ -83,6 +83,8 @@ export type RunnerStartupFailureFixture = Readonly<{
   /** Which throw site receives this output. */
   site: RunnerStartupFailureSite;
   carrier?: RunnerStartupFailureCarrier;
+  /** The deadline the host killed this command at, for the `host-timeout` carrier. */
+  hostTimeoutMs?: number;
   /** The invocation that produced {@link RunnerStartupFailureFixture.output}, once one is recorded. */
   command?: string;
   /** `xcodebuild -version` recorded from that run, or `unobserved`. */
@@ -280,6 +282,19 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     note: 'The corroborated pairing (#2683 review): a build that names no cause, on a phone core read directly as reporting its image down. Naming the image beats cache-recovery advice; the state also travels as details.developerDiskImage.',
   },
   {
+    id: 'host-killed-build-on-device-with-image-down',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    carrier: 'host-timeout',
+    hostTimeoutMs: 900_000,
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "note: Using target 'AgentDeviceRunner' for build-for-testing\nbuilding project 'AgentDeviceRunner' toward destination 'Example iPhone'\nCompileSwiftFile normal (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n",
+    deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
+    note: "The build the host killed at its own `buildTimeoutMs`, on a phone reporting its image down (#2690 review). A slow build and a build the device refuses are different facts, and the second one is not available from a command that never finished: the reason stays unclassified with cache-recovery advice, and the image state rides along as a detail only. The shape follows the exec layer's timeout error; the 15-minute budget and the partial log are ours, so no capture stands behind them.",
+  },
+  {
     id: 'conflicting-settings-on-device-with-image-down',
     reason: 'build_failed_unclassified',
     site: 'build-for-testing',
@@ -378,6 +393,17 @@ export function buildForTestingExecFailure(
 ): unknown {
   if ((fixture.carrier ?? 'exec-details') === 'message-only') {
     return new Error(`xcodebuild exited with code ${exitCode}: ${fixture.output}`);
+  }
+  if (fixture.carrier === 'host-timeout') {
+    // The exec layer's own kill-at-deadline error, which `isCommandTimeoutError` answers for.
+    const timeoutMs = fixture.hostTimeoutMs ?? 900_000;
+    return new AppError('COMMAND_FAILED', `xcodebuild timed out after ${timeoutMs}ms`, {
+      cmd: 'xcodebuild',
+      args: fixture.args ?? ['build-for-testing'],
+      stdout: fixture.output,
+      stderr: '',
+      timeoutMs,
+    });
   }
   return new AppError('COMMAND_FAILED', `xcodebuild exited with code ${exitCode}`, {
     stdout: fixture.output,

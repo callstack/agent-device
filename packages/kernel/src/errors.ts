@@ -414,11 +414,20 @@ function booleanDetail(
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/**
+ * Facts a publisher leaves for a later catch in the same process, never for a caller: whether a rule
+ * row named this failure, and whether the host's own deadline ended the command behind it. Both
+ * describe our machinery rather than the caller's problem, and the caller was already handed the
+ * verdict those facts produced as `reason` and `hint` (#2690 review).
+ */
+const INTERNAL_PLUMBING_DETAIL_KEYS = ['startupRuleMatched', 'startupHostDeadlineHit'] as const;
+
 function stripDiagnosticMeta(
   details: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!details) return undefined;
   const output = { ...details };
+  for (const key of INTERNAL_PLUMBING_DETAIL_KEYS) delete output[key];
   delete output.hint;
   delete output.diagnosticId;
   delete output.logPath;

@@ -9,6 +9,7 @@ import {
   withProcessLock,
   emitRequestProgress,
   findProjectRoot,
+  isCommandTimeoutError,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -520,6 +521,7 @@ async function buildRunnerXctestrun(
       // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
       // switches on can never disagree with the advice it is handed.
       const { reason, hint, matched } = classifyRunnerStartupFailure(appErr);
+      const hostDeadlineHit = isCommandTimeoutError(appErr);
       // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
       // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
       // alone (#2690 review). The device's own state is attached further out, by the startup catch that
@@ -531,6 +533,7 @@ async function buildRunnerXctestrun(
         logPath: options.logPath,
         hint,
         startupRuleMatched: matched,
+        startupHostDeadlineHit: hostDeadlineHit,
       });
     }
   });

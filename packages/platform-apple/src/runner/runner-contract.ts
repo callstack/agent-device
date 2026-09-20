@@ -19,6 +19,7 @@ import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-comma
 import {
   getRequestSignal,
   isRequestCanceled,
+  isCommandTimeoutError,
   bootFailureHint,
   classifyBootFailure,
 } from './host.ts';
@@ -922,8 +923,11 @@ export type IosRunnerDeviceStates = Readonly<{
  * `devicectl` reports the image only while the tunnel is up and the phone is booted, so an
  * unavailable reading that reached here is a fact about the device rather than a snapshot of a sleeping
  * phone — but a failure that already named a cause, or that a row looked at and declined to name one
- * for, outranks a state that may have been cleared before the failure was written down. An error that
- * is not an `AppError` comes back untouched: a cancellation and a foreign failure keep their identity.
+ * for, outranks a state that may have been cleared before the failure was written down. And a command
+ * the host killed at its own deadline says nothing about the device either: the build that never
+ * finished cannot have been refused for want of developer support, so a timeout outranks a state too.
+ * An error that is not an `AppError` comes back untouched: a cancellation and a foreign failure keep
+ * their identity.
  */
 export function enrichRunnerStartupFailureWithDeviceStates(
   error: unknown,
@@ -933,17 +937,23 @@ export function enrichRunnerStartupFailureWithDeviceStates(
   const speaks =
     claimedStartupFailureReason(error) === undefined &&
     states.developerDiskImage === 'unavailable' &&
-    !startupFailureRuleMatched(error);
-  return new AppError(error.code, error.message, {
-    ...(error.details ?? {}),
-    ...(speaks
-      ? {
-          reason: 'device_developer_disk_image_unavailable',
-          hint: states.developerDiskImageHint,
-        }
-      : {}),
-    developerDiskImage: states.developerDiskImage,
-  });
+    !startupFailureRuleMatched(error) &&
+    !startupFailureHostDeadlineHit(error);
+  return new AppError(
+    error.code,
+    error.message,
+    {
+      ...(error.details ?? {}),
+      ...(speaks
+        ? {
+            reason: 'device_developer_disk_image_unavailable',
+            hint: states.developerDiskImageHint,
+          }
+        : {}),
+      developerDiskImage: states.developerDiskImage,
+    },
+    error.cause,
+  );
 }
 
 /**
@@ -951,6 +961,29 @@ export function enrichRunnerStartupFailureWithDeviceStates(
  * when nothing proved a cause. Without this discount the build catch's own
  * `build_failed_unclassified` would read as a claimed cause and silence the device everywhere.
  */
+function claimedStartupFailureReason(error: AppError): RunnerStartupFailureReason | undefined {
+  const reason = error.details?.reason;
+  if (typeof reason !== 'string' || reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) {
+    return undefined;
+  }
+  return reason as RunnerStartupFailureReason;
+}
+
+/**
+ * Whether the host's own execution deadline ended the command behind this failure. A build the host
+ * killed at `buildTimeoutMs` reaches the startup catch as `build_failed_unclassified` with nothing
+ * matched, and an unavailable image sitting on the device would then be named as the cause of a build
+ * that was simply too slow (#2690 review). A catch that published a classification carries the answer
+ * in `details.startupHostDeadlineHit` for the same reason it carries `startupRuleMatched`: its wrapper
+ * buries the tool error a level too deep to inspect. A failure that never passed through such a catch
+ * is read here, where the exec's own `timeoutMs` detail is still in reach.
+ */
+function startupFailureHostDeadlineHit(error: AppError): boolean {
+  const published = error.details?.startupHostDeadlineHit;
+  if (typeof published === 'boolean') return published;
+  return isCommandTimeoutError(error);
+}
+
 /**
  * Whether a rule row already reached this failure. A catch that published a classification carries its
  * own answer in `details.startupRuleMatched`, because its wrapper keeps the tool's text one level too
@@ -962,14 +995,6 @@ function startupFailureRuleMatched(error: AppError): boolean {
   const published = error.details?.startupRuleMatched;
   if (typeof published === 'boolean') return published;
   return classifyRunnerStartupFailure(error).matched;
-}
-
-function claimedStartupFailureReason(error: AppError): RunnerStartupFailureReason | undefined {
-  const reason = error.details?.reason;
-  if (typeof reason !== 'string' || reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) {
-    return undefined;
-  }
-  return reason as RunnerStartupFailureReason;
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {

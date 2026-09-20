@@ -117,6 +117,49 @@ for (const fixture of buildForTestingFixtures()) {
   });
 }
 
+/** The states of a phone whose developer disk image is down, as `preflightIosRunnerDeviceReadiness` reads them. */
+const DEVICE_WITH_IMAGE_DOWN = {
+  developerMode: 'enabled',
+  developerDiskImage: 'unavailable',
+  developerDiskImageHint: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+} as const;
+
+test('a command the host killed names no device cause even without the threaded fact', () => {
+  // The install and launch steps fail with the exec's own timeout error, which no build catch has
+  // wrapped, so the deadline has to be read off the error itself (#2690 review).
+  const killed = new AppError('COMMAND_FAILED', 'xcodebuild timed out after 900000ms', {
+    cmd: 'xcodebuild',
+    timeoutMs: 900_000,
+  });
+
+  const enriched = enrichRunnerStartupFailureWithDeviceStates(
+    killed,
+    DEVICE_WITH_IMAGE_DOWN,
+  ) as AppError;
+
+  assert.equal(enriched.details?.reason, undefined);
+  assert.equal(enriched.details?.hint, undefined);
+  assert.equal(enriched.details?.developerDiskImage, 'unavailable');
+});
+
+test('the device speaking for a failure keeps the error that caused it', () => {
+  const caused = new AppError(
+    'COMMAND_FAILED',
+    'xcodebuild build-for-testing failed',
+    { reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON },
+    new Error('xcodebuild was killed by the host'),
+  );
+
+  const enriched = enrichRunnerStartupFailureWithDeviceStates(
+    caused,
+    DEVICE_WITH_IMAGE_DOWN,
+  ) as AppError;
+
+  assert.equal(enriched.details?.reason, 'device_developer_disk_image_unavailable');
+  // The cause is what a reader of the daemon log follows to the command that actually died.
+  assert.equal(enriched.cause, caused.cause);
+});
+
 /**
  * Every startup failure reaches a caller through one envelope: the typed reason in `details`, its hint
  * and the log path hoisted to top level by `normalizeError`, and the tool output still reachable
@@ -142,6 +185,10 @@ function assertFailureEnvelope(
   assert.equal(envelope.details?.hint, undefined);
   assert.equal(envelope.details?.logPath, undefined);
   assert.equal(envelope.details?.diagnosticId, undefined);
+  // Plumbing one catch leaves for the next, never for a caller: `reason` and `hint` already carry the
+  // verdict these facts produced (#2690 review).
+  assert.equal(envelope.details?.startupRuleMatched, undefined);
+  assert.equal(envelope.details?.startupHostDeadlineHit, undefined);
   assertToolOutputReachable(envelope, fixture);
 }
 
@@ -155,7 +202,7 @@ function assertToolOutputReachable(
   envelope: NormalizedError,
   fixture: RunnerStartupFailureFixture,
 ): void {
-  if ((fixture.carrier ?? 'exec-details') !== 'exec-details') {
+  if ((fixture.carrier ?? 'exec-details') === 'message-only') {
     assert.equal(envelope.details?.details, undefined);
     return;
   }
