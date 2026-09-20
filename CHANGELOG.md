@@ -10,6 +10,15 @@
   second remote stop. The capture is always the whole simulator or emulator screen; `--fps` and
   `--hide-touches` are refused, and a recording cannot be reattached after a daemon restart. The
   web recorder now shares the same transport-recording runtime.
+- Added (ios): `action-button` presses the iPhone or iPad Action Button once, and `client.command.actionButton()`
+  does the same. XCUITest exposes `XCUIDevice.press(.action)` with no hold-duration overload, so there is no
+  `long-press` and no `--duration-ms`, and the slide surface on the same edge is Camera Control, which this
+  command does not drive. The press is dispatched without the runner's app-activation preflight and with no
+  post-action observation, so the session app keeps the state the press found; the runner asks the device for
+  the button with `hasHardwareButton(.action)` and refuses with `UNSUPPORTED_OPERATION` on a model that has
+  none, and Android, HarmonyOS, Vega, Linux, web, tvOS, macOS, and visionOS each state their own refusal.
+  Simulators run no Shortcuts or App Intents, so what a press triggers is verifiable only on a physical
+  iPhone (#2699).
 - Fixed (android): `clipboard read` and `clipboard write` stop reporting success on a build whose
   clipboard service has no shell command. Android 16 (API 36) answers every `adb shell cmd clipboard …`
   with the framework default `Binder.handleShellCommand` — `No shell command implementation.` on

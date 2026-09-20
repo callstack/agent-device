@@ -54,7 +54,7 @@ const keyboardCommandDescription =
 const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
-  'Press the iPhone Action Button. The press reaches the system exactly as a hardware press does, so a Shortcut or App Intent assigned to the button fires whether the app is foregrounded, backgrounded, or terminated. The app is never activated first and nothing is re-captured after: the press preserves the app state it found.';
+  'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
@@ -319,7 +319,7 @@ const clipboardCommandFacet = defineCommandFacet({
 const actionButtonCommandFacet = defineCommandFacet({
   name: ACTION_BUTTON_COMMAND_NAME,
   text: {
-    summary: 'Press the iPhone Action Button',
+    summary: 'Press the iPhone or iPad Action Button',
     cliDetail:
       'iPhone and iPad only. The runner asks the device for the button and reports unsupported when that model has none.',
   },
