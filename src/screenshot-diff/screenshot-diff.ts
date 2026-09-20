@@ -5,7 +5,7 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import {
   computeScreenshotDiffPixelsAsync,
-  decodePngAsync,
+  decodeScreenshotImageAsync,
   encodePngAsync,
 } from '@agent-device/capture-kit/png-worker-client';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
@@ -75,6 +75,11 @@ export type ScreenshotDiffOptions = {
 // Match the per-pixel square-root rounding so the maximum stays inclusive.
 const COLOR_DISTANCE_SCALE = Math.sqrt(3 * 255 ** 2);
 
+/**
+ * Compares two screenshots pixel by pixel. Each input may be PNG or JPEG: the container is sniffed
+ * from the bytes rather than the file name, so a baseline exported by any tool that writes JPEG
+ * still compares. The diff image itself is always PNG.
+ */
 export async function compareScreenshots(
   baselinePath: string,
   currentPath: string,
@@ -91,8 +96,8 @@ export async function compareScreenshots(
   ]);
 
   const [baseline, current] = await Promise.all([
-    decodePngAsync(baselineBuffer, 'baseline screenshot'),
-    decodePngAsync(currentBuffer, 'current screenshot'),
+    decodeScreenshotImageAsync(baselineBuffer, 'baseline screenshot'),
+    decodeScreenshotImageAsync(currentBuffer, 'current screenshot'),
   ]);
   validateMaxPixels(baseline.width, baseline.height, 'baseline screenshot', options.maxPixels);
   validateMaxPixels(current.width, current.height, 'current screenshot', options.maxPixels);

@@ -202,6 +202,10 @@
       "types": "./src/screenshot-diff-pixels.ts",
       "default": "./src/screenshot-diff-pixels.ts"
     },
+    "./screenshot-image": {
+      "types": "./src/screenshot-image.ts",
+      "default": "./src/screenshot-image.ts"
+    },
     "./screenshot-overlay": {
       "types": "./src/screenshot-overlay.ts",
       "default": "./src/screenshot-overlay.ts"

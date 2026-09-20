@@ -59,7 +59,7 @@ export const diffCommandFacet = defineCommandFacet({
   text: {
     summary: 'Diff snapshot or screenshot',
     cliDetail:
-      'Screenshot --threshold is a per-pixel RGB tolerance: 0 requires exact colors and 1 ignores color differences; image dimensions must still match. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
+      'Screenshot --threshold is a per-pixel RGB tolerance: 0 requires exact colors and 1 ignores color differences; image dimensions must still match. Both screenshot inputs are decoded from their bytes, so a baseline or current image may be PNG or JPEG, and the diff image is always PNG. JPEG is lossy, so keep --threshold above 0 whenever either input is JPEG. Live iOS simulator screenshot diffs normalize status-bar chrome by default; use screenshot --normalize-status-bar when capturing reusable baselines.',
   },
   metadata: diffCommandMetadata,
   run: (client, input) => client.capture.diff(input),

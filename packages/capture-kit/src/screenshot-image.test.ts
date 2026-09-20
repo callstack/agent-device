@@ -1,7 +1,11 @@
 import { expect, test } from 'vitest';
 import { encode as encodeJpeg } from 'jpeg-js';
 import { PNG } from './png.ts';
-import { detectScreenshotImageFormat, transcodeScreenshotToPng } from './png-transcode.ts';
+import {
+  decodeScreenshotImage,
+  detectScreenshotImageFormat,
+  transcodeScreenshotToPng,
+} from './screenshot-image.ts';
 
 function solidRgba(width: number, height: number, rgba: readonly [number, number, number, number]) {
   const data = Buffer.alloc(width * height * 4);
@@ -74,3 +78,58 @@ test('a truncated JPEG body is refused with the same typed decode error', () => 
     message: 'Failed to decode Limrun iOS screenshot as JPEG',
   });
 });
+
+test('decoding a PNG answers its pixels without re-encoding the container', () => {
+  const png = new PNG({ width: 3, height: 2 });
+  png.data = solidRgba(3, 2, [12, 240, 60, 255]);
+
+  const decoded = decodeScreenshotImage(PNG.sync.write(png), 'test screenshot');
+
+  expect([decoded.width, decoded.height]).toEqual([3, 2]);
+  expect([...decoded.data.subarray(0, 4)]).toEqual([12, 240, 60, 255]);
+});
+
+test('decoding a JPEG answers RGBA rows, with opaque alpha where the container has none', () => {
+  const jpeg = encodeJpeg({ width: 5, height: 3, data: solidRgba(5, 3, [12, 240, 60, 255]) }, 100);
+
+  const decoded = decodeScreenshotImage(jpeg.data, 'test screenshot');
+
+  expect([decoded.width, decoded.height]).toEqual([5, 3]);
+  expect(decoded.data.length).toBe(5 * 3 * 4);
+  const [r = -1, g = -1, b = -1, a = -1] = decoded.data.subarray(0, 4);
+  // JPEG is lossy; a flat field survives within a few levels per channel.
+  expect(Math.abs(r - 12)).toBeLessThanOrEqual(4);
+  expect(Math.abs(g - 240)).toBeLessThanOrEqual(4);
+  expect(Math.abs(b - 60)).toBeLessThanOrEqual(4);
+  expect(a).toBe(255);
+});
+
+test('decoding sniffs the container, so JPEG bytes answer JPEG pixels whatever they are called', () => {
+  const jpeg = encodeJpeg({ width: 4, height: 4, data: solidRgba(4, 4, [7, 9, 11, 255]) }, 90);
+
+  const fromJpeg = decodeScreenshotImage(jpeg.data, 'baseline.png');
+  const fromPng = decodeScreenshotImage(PNG.sync.write(toPng(fromJpeg)), 'baseline.png');
+
+  expect([...fromPng.data]).toEqual([...fromJpeg.data]);
+});
+
+test('decoding refuses bytes in neither container and a JPEG body that cannot be decoded', () => {
+  expect(thrownBy(() => decodeScreenshotImage(Buffer.from('GIF89a'), 'fixture'))).toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'fixture is neither PNG nor JPEG',
+    details: { label: 'fixture', leadingBytes: '47494638' },
+  });
+
+  const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0x41)]);
+  expect(thrownBy(() => decodeScreenshotImage(corrupt, 'fixture'))).toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Failed to decode fixture as JPEG',
+    details: { label: 'fixture', reason: expect.any(String) },
+  });
+});
+
+function toPng(image: { width: number; height: number; data: Buffer }): PNG {
+  const png = new PNG({ width: image.width, height: image.height });
+  png.data = Buffer.from(image.data);
+  return png;
+}

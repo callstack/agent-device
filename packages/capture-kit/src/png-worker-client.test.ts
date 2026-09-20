@@ -6,6 +6,7 @@ import {
   computePngRgbDifferenceAsync,
   computeScreenshotDiffPixelsAsync,
   decodePngAsync,
+  decodeScreenshotImageAsync,
   encodePngAsync,
   terminatePngWorker,
   transcodeScreenshotToPngAsync,
@@ -110,7 +111,7 @@ test('decodePngAsync rejects invalid PNG data with the canonical decode AppError
 
 test('transcodeScreenshotToPngAsync matches the synchronous transcoder byte for byte', async () => {
   const { encode } = await import('jpeg-js');
-  const { transcodeScreenshotToPng } = await import('./png-transcode.ts');
+  const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
   const rgba = Buffer.alloc(9 * 7 * 4, 0x66);
   const jpeg = encode({ width: 9, height: 7, data: rgba }, 90).data;
 
@@ -135,6 +136,47 @@ test('transcodeScreenshotToPngAsync rejects a corrupt JPEG with the canonical de
     assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
     assert.equal((error as AppError).details?.label, 'fixture');
     assert.ok(String((error as AppError).details?.reason).length > 0);
+    return true;
+  });
+});
+
+test('decodeScreenshotImageAsync answers the synchronous decoder for both containers', async () => {
+  const { encode } = await import('jpeg-js');
+  const { decodeScreenshotImage } = await import('./screenshot-image.ts');
+  const png = PNG.sync.write(buildPatternPng(11, 8, 4));
+  const jpeg = encode({ width: 11, height: 8, data: buildPatternPng(11, 8, 4).data }, 90).data;
+
+  for (const bytes of [png, jpeg]) {
+    const fromWorker = await decodeScreenshotImageAsync(bytes, 'fixture');
+    const fromSync = decodeScreenshotImage(bytes, 'fixture');
+
+    assert.deepEqual([fromWorker.width, fromWorker.height], [fromSync.width, fromSync.height]);
+    assert.deepEqual(fromWorker.data, fromSync.data);
+  }
+});
+
+test('decodeScreenshotImageAsync decodes a JPEG by its bytes, not its label', async () => {
+  const { encode } = await import('jpeg-js');
+  const jpeg = encode({ width: 9, height: 7, data: buildPatternPng(9, 7, 5).data }, 90).data;
+
+  const decoded = await decodeScreenshotImageAsync(jpeg, 'fixture.png');
+
+  assert.deepEqual([decoded.width, decoded.height], [9, 7]);
+  assert.equal(decoded.data.length, 9 * 7 * 4);
+});
+
+test('decodeScreenshotImageAsync rejects a container it cannot read with the canonical AppError', async () => {
+  await assert.rejects(decodeScreenshotImageAsync(Buffer.from('GIF89a'), 'fixture'), (error) => {
+    assert.equal(error instanceof AppError, true);
+    assert.equal((error as AppError).code, 'COMMAND_FAILED');
+    assert.equal((error as AppError).message, 'fixture is neither PNG nor JPEG');
+    assert.equal((error as AppError).details?.label, 'fixture');
+    return true;
+  });
+
+  const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16, 0)]);
+  await assert.rejects(decodeScreenshotImageAsync(corrupt, 'fixture'), (error) => {
+    assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
     return true;
   });
 });

@@ -39,6 +39,14 @@ test('usageForCommand documents screenshot diff normalization', async () => {
   assert.match(help, /screenshot --normalize-status-bar/);
 });
 
+test('usageForCommand documents the screenshot diff input containers', async () => {
+  const help = await usageForCommand('diff');
+  if (help === null) throw new Error('Expected diff help text');
+  assert.match(help, /a baseline or current image may be PNG or JPEG/);
+  assert.match(help, /the diff image is always PNG/);
+  assert.match(help, /keep --threshold above 0 whenever either input is JPEG/);
+});
+
 test('usageForCommand resolves longpress help', async () => {
   const help = await usageForCommand('longpress');
   assert.equal(help === null, false);

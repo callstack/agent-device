@@ -17,12 +17,18 @@ import {
  * `png-worker-client.ts`; published as the `internal/png-worker` build entry.
  */
 
-// The daemon prewarms this worker at startup, so the JPEG decoder loads only for a transcode job.
+// The daemon prewarms this worker at startup, so the JPEG decoder loads only for a job that can
+// carry JPEG bytes.
 async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
   switch (request.kind) {
     case 'decode': {
       const png = decodePng(toBuffer(request.png), request.label);
       return { kind: 'decode', width: png.width, height: png.height, data: png.data };
+    }
+    case 'decode-image': {
+      const { decodeScreenshotImage } = await import('./screenshot-image.ts');
+      const image = decodeScreenshotImage(toBuffer(request.image), request.label);
+      return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
     }
     case 'encode': {
       const png = new PNG({ width: request.width, height: request.height });
@@ -44,7 +50,7 @@ async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
       return { kind: 'diff-pixels', ...computeScreenshotDiffPixels(request) };
     }
     case 'jpeg-to-png': {
-      const { transcodeScreenshotToPng } = await import('./png-transcode.ts');
+      const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
       return {
         kind: 'jpeg-to-png',
         png: transcodeScreenshotToPng(toBuffer(request.image), request.label),
@@ -80,6 +86,7 @@ export function resultTransferList(result: PngWorkerJobResult): ArrayBuffer[] {
 function resultBufferViews(result: PngWorkerJobResult): Uint8Array[] {
   switch (result.kind) {
     case 'decode':
+    case 'decode-image':
       return [result.data];
     case 'encode':
       return [result.png];

@@ -201,6 +201,31 @@ export async function decodePngAsync(buffer: Buffer, label: string): Promise<PNG
     const png = decodePng(buffer, label);
     return { kind: 'decode', width: png.width, height: png.height, data: png.data };
   });
+  return toDecodedPng(result);
+}
+
+/**
+ * Decodes a screenshot in whatever container it arrived in into RGBA pixels, sniffing the container
+ * instead of trusting a file name. Use it where a command reads an image someone else produced; a
+ * command that rewrites a screenshot in place stays on `decodePngAsync`, which keeps the file's
+ * container honest. Decode failures carry the canonical `AppError`.
+ */
+export async function decodeScreenshotImageAsync(bytes: Buffer, label: string): Promise<PNG> {
+  const result = await runPngJob({ kind: 'decode-image', image: bytes, label }, async () => {
+    // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
+    // needs the worker's other jobs.
+    const { decodeScreenshotImage } = await import('./screenshot-image.ts');
+    const image = decodeScreenshotImage(bytes, label);
+    return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
+  });
+  return toDecodedPng(result);
+}
+
+/**
+ * Rebuilds the decoded-image handle on this side of the worker boundary. `PNG` is the shape every
+ * pixel reader here consumes: size plus RGBA rows.
+ */
+function toDecodedPng(result: { width: number; height: number; data: Uint8Array }): PNG {
   const png = new PNG({ width: result.width, height: result.height });
   png.data = toBuffer(result.data);
   return png;
@@ -267,7 +292,7 @@ export async function transcodeScreenshotToPngAsync(bytes: Buffer, label: string
   const result = await runPngJob({ kind: 'jpeg-to-png', image: bytes, label }, async () => {
     // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
     // needs the worker's other jobs.
-    const { transcodeScreenshotToPng } = await import('./png-transcode.ts');
+    const { transcodeScreenshotToPng } = await import('./screenshot-image.ts');
     return { kind: 'jpeg-to-png', png: transcodeScreenshotToPng(bytes, label) };
   });
   return toBuffer(result.png);
