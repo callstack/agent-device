@@ -1,5 +1,4 @@
 [
-  "@agent-device/contracts/action-button-runtime",
   "@agent-device/contracts/alert-contract",
   "@agent-device/contracts/alert-runtime",
   "@agent-device/contracts/android-clipboard-support",
