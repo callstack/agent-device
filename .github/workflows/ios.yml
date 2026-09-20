@@ -185,6 +185,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptDoesNotActivateAReplacementWithASharedButton \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDismissDoesNotActivateAReplacementWithTheSameTitle \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertCannotProveAnIdenticalReplacementAndDoesNotActivateIt \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertReplacementCommandDeadlineScalesWithMeasuredLatency \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDeadlineBeforeActivationLeavesTheOriginalUntouched \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertHittableProbeCompletingAfterDeadlineLeavesTheOriginalUntouched \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline \
