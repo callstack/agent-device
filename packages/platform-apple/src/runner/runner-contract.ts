@@ -14,6 +14,7 @@ import type { ClickButton } from '@agent-device/contracts/click-button';
 import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import type { IosDeveloperDiskImageState, IosDeveloperModeState } from './host.ts';
 import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
 import {
   getRequestSignal,
@@ -229,7 +230,10 @@ type RunnerErrorVerdicts = {
  * `devicectl device info details`, not what another tool's output implies about it. They are listed
  * apart because they are the members {@link classifyRunnerStartupFailure} does NOT produce — no
  * xcodebuild or host-tool text establishes them, and the code that reads the device publishes them
- * with the hint beside it.
+ * with the hint beside it. The two reach the caller at different moments, which is the whole
+ * asymmetry of #2683: a disabled Developer Mode toggle refuses the run up front, while an unavailable
+ * developer disk image is published onto a build that named no cause of its own, because iOS 17+
+ * mounts that image on demand during build and launch.
  */
 export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
   'device_developer_mode_disabled',
@@ -877,6 +881,42 @@ export function classifyRunnerStartupFailure(error: unknown): {
   return {
     reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
     hint: RUNNER_CACHE_RECOVERY_HINT,
+  };
+}
+
+/**
+ * What the startup carries forward from the device so a later failure can say what the phone said
+ * (#2683). The one thing that stops a run up front is a disabled Developer Mode toggle, which no
+ * later step can change; everything else the device reports is only worth publishing beside the
+ * failure it explains.
+ */
+export type IosRunnerDeviceStates = Readonly<{
+  developerMode: IosDeveloperModeState;
+  developerDiskImage: IosDeveloperDiskImageState;
+  /** The remedy for an unavailable image, worded by `core/devicectl.ts` and read, not rewritten. */
+  developerDiskImageHint: string;
+}>;
+
+/**
+ * What a corroborated device state can add to a failure the build already hit (#2683).
+ *
+ * `devicectl` reports the developer disk image only while the tunnel is up and the phone is booted,
+ * so an unavailable reading that reached us here is a fact about the device rather than a snapshot of
+ * a sleeping phone. On a build that names no cause of its own, that fact IS the cause worth naming,
+ * and it beats generic cache-recovery advice. On a build that already named one, the device stays
+ * quiet: xcodebuild's own sentence outranks a state that may well have been cleared by the time the
+ * build finished, and #2683's whole point is that the image is never restated as someone else's
+ * problem.
+ */
+export function corroborateRunnerBuildFailureWithDeviceStates(
+  classified: Readonly<{ reason: RunnerStartupFailureReason; hint: string }>,
+  states: IosRunnerDeviceStates | undefined,
+): Readonly<{ reason: RunnerStartupFailureReason; hint: string }> {
+  if (!states || states.developerDiskImage !== 'unavailable') return classified;
+  if (classified.reason !== RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) return classified;
+  return {
+    reason: 'device_developer_disk_image_unavailable',
+    hint: states.developerDiskImageHint,
   };
 }
 

@@ -196,20 +196,23 @@ async function startRunnerSessionWithLease(
   // Device first, host second: both answers can be wrong at once, and the phone's own state is the
   // one the caller can act on without admin rights. Probing the host first would publish only the
   // Mac's reason and hide the device's (#2683).
-  await measureRunnerStartupStep(startupTimings, 'verify_device_readiness', async () => {
-    // Read from the device rather than from any tool's opinion of it. Loaded here rather than at the
-    // top of the file because the runner subtree sits in the eager import closure of the seven Apple
-    // facades (eager-closure-budgets): a preflight only a physical device ever needs has no business
-    // being evaluated to answer a simulator request.
-    const { assertDeviceReadinessForIosRunner } = await import('./runner-device-readiness.ts');
-    await assertDeviceReadinessForIosRunner(device, {
-      budgetMs: Math.min(
-        RUNNER_DEVICE_READINESS_BUDGET_MS,
-        startupBudget.deadline?.remainingMs() ?? RUNNER_DEVICE_READINESS_BUDGET_MS,
-      ),
-      signal,
-    });
-  });
+  // Only a disabled Developer Mode toggle stops the run here; whatever else the device reports rides
+  // along onto the build below, because iOS 17+ mounts the developer disk image on demand during
+  // build and launch and refusing that state up front would refuse a state this build clears (#2683).
+  const deviceStates = await measureRunnerStartupStep(
+    startupTimings,
+    'verify_device_readiness',
+    async () =>
+      await (
+        await import('./runner-device-readiness.ts')
+      ).preflightIosRunnerDeviceReadiness(device, {
+        budgetMs: Math.min(
+          RUNNER_DEVICE_READINESS_BUDGET_MS,
+          startupBudget.deadline?.remainingMs() ?? RUNNER_DEVICE_READINESS_BUDGET_MS,
+        ),
+        signal,
+      }),
+  );
   await measureRunnerStartupStep(startupTimings, 'verify_host_dev_tools_security', async () => {
     // Loaded here for the same reason as the device probe above.
     const { assertDevToolsSecurityForIosRunner } = await import('./runner-dev-tools-security.ts');
@@ -235,6 +238,7 @@ async function startRunnerSessionWithLease(
       await ensureXctestrunArtifact(device, {
         ...options,
         budget: createRunnerPhaseBudget(options.buildTimeoutMs, signal),
+        deviceStates,
       }),
   );
   startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
@@ -772,7 +776,7 @@ export async function executeRunnerCommandWithSession(
   emitRunnerStartupTimings(session, command.command);
   // Drawn before anything is sent, including the preflight: whatever the runner writes from here on
   // is this command's attempt, and whatever is already in the log belongs to an earlier one (#2683).
-  const logAttempt = await captureRunnerLogAttempt(logPath);
+  const logAttempt = await captureRunnerLogAttempt(logPath, { timeoutMs, signal });
   const runnerCommand = withRunnerCommandId(command);
   const readOnlyCommand = isReadOnlyRunnerCommand(runnerCommand);
   const deadline = Deadline.fromTimeoutMs(timeoutMs);

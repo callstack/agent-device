@@ -161,23 +161,36 @@ Expected: exit non-zero with
 `hint` is top-level and names `Settings > Privacy & Security > Developer Mode`. Record what
 `developerDiskImage` says; either value is acceptable as long as the toggle stays the reason.
 
-### 4. Developer disk image down with the toggle on -> `device_developer_disk_image_unavailable`
+### 4. Developer disk image down with the toggle on -> carried onto the failure, not a refusal
 
 This is the pairing the old hint got wrong, so it is the evidence that matters. Reach it with a
 device whose iOS build is newer than the installed Xcode supports, or before Xcode finishes
 installing device support for a freshly paired phone, with Developer Mode on.
 
-Expected: `details.reason` is `device_developer_disk_image_unavailable`, `details.developerMode` is
-`enabled`, and the hint names device support WITHOUT mentioning `Settings > Privacy & Security`. If
-the toggle reason appears here instead, that is the bug this issue exists to fix: paste the whole
+This state does NOT stop the run before the build (#2683 review): since iOS 17 CoreDevice mounts the
+personalized disk image on demand during build and launch, a phone that has just been rebooted reports
+the image down while the very next build clears it. Run the `prepare ios-runner` command above and
+record which of the two outcomes you get — both are evidence, and the second one is the reason the
+pre-build refusal was removed:
+
+- **The build clears it**: the command succeeds. Paste the `ios_runner_session_startup` timings showing
+  `verify_device_readiness` ran and `ensure_xctestrun` followed it. Nothing may name device support.
+- **The build fails and names no cause of its own**: `details.reason` is
+  `device_developer_disk_image_unavailable` and `details.developerDiskImage` is `unavailable`, and the
+  hint names device support WITHOUT mentioning `Settings > Privacy & Security`.
+- **The build fails and names its own cause** (e.g. `signing_no_development_team`): that reason wins and
+  `details.developerDiskImage` is still `unavailable`. The device state never overwrites xcodebuild's
+  sentence.
+
+If the toggle reason appears here instead, that is the bug this issue exists to fix: paste the whole
 error and the `/tmp/device-details.json` payload rather than adjusting a rule.
 
-Capture the details payload at the same moment as the refusal, and check it says
-`tunnelState: "connected"` and `bootState: "booted"`. A `ddiServicesAvailable: false` read any other
-way is not this case: an asleep or unreachable device has the same field and no obstacle, and the run
-must not name device support for it. The hint you get here is the one `core/devicectl.ts` owns and the
-device report carries, so it is worded identically to the hint `devicectl` output produces for the
-same complaint — paste both strings and confirm they match character for character.
+Capture the details payload at the same moment as the run, and check it says `tunnelState:
+"connected"` and `bootState: "booted"`. A `ddiServicesAvailable: false` read any other way is not this
+case: an asleep or unreachable device has the same field and no obstacle, and the run must not name
+device support for it. The hint you get here is the one `core/devicectl.ts` owns and the device report
+carries, so it is worded identically to the hint `devicectl` output produces for the same complaint —
+paste both strings and confirm they match character for character.
 
 ### 5. A device that cannot be read claims nothing
 

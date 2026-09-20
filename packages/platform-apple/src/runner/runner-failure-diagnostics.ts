@@ -31,6 +31,12 @@ const IOS_RUNNER_MAIN_THREAD_TIMEOUT_HINT =
 export type RunnerLogAttempt = Readonly<{ logPath: string; byteOffset: number }>;
 
 /**
+ * How long drawing the boundary may take. It precedes a command that carries its own timeout, so the
+ * wait for the log writer is capped far below it rather than inheriting it (#2683 review).
+ */
+const RUNNER_LOG_FLUSH_BOUND_MS = 2_000;
+
+/**
  * Draws the boundary for one command: everything `runner.log` holds when this returns belongs to an
  * earlier command, and {@link enrichRunnerFailureFromLog} reads only what comes after it. Any append
  * still queued for that path is awaited first, so an earlier command cannot write its way into this
@@ -38,15 +44,28 @@ export type RunnerLogAttempt = Readonly<{ logPath: string; byteOffset: number }>
  *
  * A log that does not exist yet is reported as `byteOffset: 0` rather than skipped: every byte it
  * gets from here on belongs to this command, which is exactly the claim worth keeping.
+ *
+ * A writer that will not drain, or that reports the disk refused an append, yields no marker at all.
+ * That is the safe direction: with no boundary {@link enrichRunnerFailureFromLog} declines to read the
+ * tail, rather than crediting this command with bytes whose owner is unknown (#2683 review).
  */
 export async function captureRunnerLogAttempt(
   logPath: string | undefined,
+  budget: Readonly<{ timeoutMs?: number; signal?: AbortSignal }> = {},
 ): Promise<RunnerLogAttempt | undefined> {
   if (!logPath) return undefined;
   // The writer serialises appends on a promise chain, so an earlier command's crash can still be in
   // flight and land past whatever size `fs.stat` reports right now. Measuring without draining it
-  // first is what this whole marker exists to prevent (#2683).
-  await flushRunnerLogAppends(logPath);
+  // first is what this whole marker exists to prevent (#2683). Draining is a prelude to sending a
+  // command, so it is bounded below the command's own clock instead of spending it (#2683 review).
+  try {
+    await flushRunnerLogAppends(logPath, {
+      timeoutMs: Math.min(RUNNER_LOG_FLUSH_BOUND_MS, budget.timeoutMs ?? RUNNER_LOG_FLUSH_BOUND_MS),
+      signal: budget.signal,
+    });
+  } catch {
+    return undefined;
+  }
   try {
     return { logPath, byteOffset: (await fs.stat(logPath)).size };
   } catch {

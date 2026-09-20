@@ -107,6 +107,29 @@ test("an earlier command's bytes still in the writer are not this command's eith
   assert.equal(error.details?.runnerFailureReason, undefined);
 });
 
+test('a log the disk refuses leaves no marker', async () => {
+  // The writer no longer swallows a failed append (#2683 review), and the boundary has to say so: an
+  // offset measured over bytes that never landed would credit this command with output it did not
+  // produce, so the marker is withheld and the tail goes unread. `blocker` is a regular file standing
+  // where a directory has to be, which is the cheapest way to make every append fail with ENOTDIR.
+  const dir = mkdtempForTestSync('agent-device-runner-log-refused-');
+  onTestFinished(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'blocker'), '');
+  const logPath = path.join(dir, 'blocker', 'runner.log');
+  logChunk(AX_RUNTIME_CRASH, logPath);
+
+  assert.equal(await captureRunnerLogAttempt(logPath), undefined);
+});
+
+test('a command that already stopped waiting draws no marker', async () => {
+  // The boundary is a prelude to a command, so a caller that gave up gets no further delay and no
+  // claim about a log it is no longer reading (#2683 review).
+  const logPath = writeRunnerLog(PRELUDE);
+  const canceled = AbortSignal.abort();
+
+  assert.equal(await captureRunnerLogAttempt(logPath, { signal: canceled }), undefined);
+});
+
 async function expectFailure(
   logAttempt: Awaited<ReturnType<typeof captureRunnerLogAttempt>>,
 ): Promise<AppError> {

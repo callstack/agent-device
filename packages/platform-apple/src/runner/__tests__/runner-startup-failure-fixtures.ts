@@ -92,7 +92,11 @@ export type RunnerStartupFailureFixture = Readonly<{
   output: string;
   /** The argv the exec reported, which is never evidence of a cause (#2680). */
   args?: readonly string[];
-  /** The device's own states, which is the evidence the `device-readiness` site reads. */
+  /**
+   * The device's own states. On the `device-readiness` site this is the evidence the preflight reads;
+   * on a `build-for-testing` entry it is what the startup carried onto that build, which is the pairing
+   * the corroborated disk-image reason depends on (#2683).
+   */
   deviceReport?: IosDeviceReadinessReport;
   /** What the pending capture still has to show, and how to reach it. */
   note?: string;
@@ -263,6 +267,30 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     output:
       "note: Using provisioning profile \"match-development\" to sign the app bundle (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nwarning: The certificate \"Apple Development: Example Dev (ABCD1234)\" has expired.\nerror: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'The cross-line hazard a whole-log AND cannot see (#2688 review): a benign profile note three lines above an unrelated expired-certificate warning. Both phrases are in the captured log and neither qualifies the other, so the profile stays unclassified and the reader keeps cache-recovery advice rather than being sent to replace a profile that is fine.',
+  },
+  {
+    id: 'unclassified-build-on-device-with-image-down',
+    reason: 'device_developer_disk_image_unavailable',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
+    note: 'The corroborated pairing (#2683 review): a build that names no cause, on a phone core read directly as reporting its image down. Naming the image beats cache-recovery advice; the state also travels as details.developerDiskImage.',
+  },
+  {
+    id: 'team-id-failure-on-device-with-image-down',
+    reason: 'signing_no_development_team',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'shipped-sniff-trigger',
+    output:
+      "error: Signing for \"AgentDeviceRunner\" requires a development team (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
+    note: "A build that named its own cause keeps it: a corroborated device state never overwrites xcodebuild's own sentence (#2683).",
+  },
+  {
     id: 'device-mode-off',
     reason: 'device_developer_mode_disabled',
     site: 'device-readiness',
@@ -282,7 +310,7 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     provenance: 'invented-shape',
     output: '"developerModeStatus" : "enabled",\n"ddiServicesAvailable" : false,\n',
     deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
-    note: 'The decisive pairing, and the one #2682 used to answer with Developer Mode advice: the toggle is on and only the image is down. The enabled half is the captured state; a device waiting on device support has not been captured.',
+    note: 'The decisive pairing, and the one #2682 used to answer with Developer Mode advice: the toggle is on and only the image is down. It is NOT a pre-build refusal (#2683 review): iOS 17+ mounts the image on demand during build and launch, so this report has to survive to a failure — which is what `unclassified-build-on-device-with-image-down` records. The enabled half is captured on some devices; a device waiting on device support has not been captured.',
   },
   {
     id: 'devtools-security-disabled',

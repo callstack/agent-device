@@ -47,6 +47,11 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const CACHE_RECOVERY_HINT = /clean:xcuitest|apple-runner\/derived/;
 
+/** The device remedies are prose with parentheses in it, so they are matched as text, not as syntax. */
+function escapeRegExp(text: string): RegExp {
+  return new RegExp(text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`));
+}
+
 const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   bundle_identifier_already_registered: /AGENT_DEVICE_IOS_BUNDLE_ID/,
   signing_no_development_team: /AGENT_DEVICE_IOS_TEAM_ID/,
@@ -56,8 +61,8 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
   // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
   // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
   // preflight publishing them is asserted.
-  device_developer_mode_disabled: new RegExp(IOS_DEVICE_DEVELOPER_MODE_OFF_HINT),
-  device_developer_disk_image_unavailable: new RegExp(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT),
+  device_developer_mode_disabled: escapeRegExp(IOS_DEVICE_DEVELOPER_MODE_OFF_HINT),
+  device_developer_disk_image_unavailable: escapeRegExp(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT),
   build_failed_unclassified: CACHE_RECOVERY_HINT,
 };
 
@@ -102,7 +107,12 @@ afterEach(() => {
 
 for (const fixture of buildForTestingFixtures()) {
   test(`a build-for-testing failure publishes ${fixture.reason} for ${fixture.id}`, async () => {
-    assertFailureEnvelope(await driveBuildFailure(fixture), fixture);
+    const envelope = await driveBuildFailure(fixture);
+
+    assertFailureEnvelope(envelope, fixture);
+    // The device's answer travels on the failure it explains, and on nothing else: a fixture with no
+    // recorded device report must not grow one (#2683).
+    assert.equal(envelope.details?.developerDiskImage, fixture.deviceReport?.developerDiskImage);
   });
 }
 
@@ -256,7 +266,7 @@ test('a conflicting-settings failure is not answered with missing-profile advice
 
 /** Drives a recorded fixture through the real build catch and normalizes what it threw. */
 async function driveBuildFailure(fixture: RunnerStartupFailureFixture): Promise<NormalizedError> {
-  return normalizeThrown(await runBuildCatch(() => buildForTestingExecFailure(fixture)));
+  return normalizeThrown(await runBuildCatch(() => buildForTestingExecFailure(fixture), fixture));
 }
 
 /** Drives a hand-built rejection through the same real build catch. */
@@ -264,7 +274,7 @@ async function driveBuildRejection(rejection: unknown): Promise<NormalizedError>
   return normalizeThrown(await runBuildCatch(() => rejection));
 }
 
-async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
+async function runBuildCatch(buildRejection: () => unknown, fixture?: RunnerStartupFailureFixture) {
   runCmdStreaming.mockReset().mockImplementation(async () => {
     throw buildRejection();
   });
@@ -275,6 +285,13 @@ async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
       ensureXctestrunArtifact(IOS_DEVICE, {
         logPath,
         budget: createRunnerPhaseBudget(120_000, undefined),
+        // The states the startup would have carried from the device, which is the input the
+        // corroborated disk-image reason reads (#2683).
+        deviceStates: fixture?.deviceReport && {
+          developerMode: fixture.deviceReport.developerMode,
+          developerDiskImage: fixture.deviceReport.developerDiskImage,
+          developerDiskImageHint: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+        },
       }),
     (error: unknown) => {
       caught = error;
