@@ -521,6 +521,23 @@ extension RunnerTests {
     )
   }
 
+  func testXCTestRecordedFailureResponseFailsActionButtonSuccess() throws {
+    // The Action Button press carries no settle and no post-action observation, so this conversion is
+    // the only evidence the press landed. That is why the press is not classified runner-lifecycle:
+    // `isLifecycle` would silence the conversion here (#2699, #2702 review).
+    let command = try runnerCommandFixture(#"{"command":"actionButton","commandId":"action-button-1"}"#)
+    let response = Response(ok: true, data: DataPayload(message: "actionButton"))
+
+    let failureResponse = xctestRecordedFailureResponse(command: command, response: response)
+
+    XCTAssertEqual(failureResponse?.ok, false)
+    XCTAssertEqual(failureResponse?.error?.code, "XCTEST_RECORDED_FAILURE")
+    XCTAssertEqual(
+      failureResponse?.error?.message,
+      "XCTest recorded a failure while executing actionButton; the action may not have been performed."
+    )
+  }
+
   func testXCTestRecordedFailureResponseDoesNotWrapReadOnlyOrRunnerFatalResponses() throws {
     let snapshotCommand = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-1"}"#)
     let tapCommand = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
@@ -608,6 +625,17 @@ extension RunnerTests {
     currentBundleId = nil
 
     XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
+  }
+
+  func testActionButtonPressSkipsAppActivationPreflightWithoutBeingRunnerLifecycle() throws {
+    currentApp = nil
+    currentBundleId = nil
+    let press = try runnerCommandFixture(#"{"command":"actionButton","commandId":"action-button-1"}"#)
+
+    // The skip is its own decision, reached without the lifecycle flag that would also drop the
+    // recorded-failure conversion; no cached target and no foreground app is required for it.
+    XCTAssertFalse(isRunnerLifecycleCommand(.actionButton))
+    XCTAssertTrue(shouldSkipAppActivationPreflight(press))
   }
 
   func testPrepareActiveCommandContextRoutesBlockingSystemModalToSpringboard() throws {
@@ -2550,6 +2578,14 @@ extension RunnerTests {
   private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
     if command.command == .alert {
+      return true
+    }
+    // A hardware Action Button press belongs to the system, not to the session app: the Shortcut or
+    // App Intent behind it is expected to run whether that app is foregrounded, backgrounded, or
+    // terminated, and activating first would foreground exactly what the press should leave alone.
+    // The press keeps its recorded-failure conversion, which `isLifecycle` would have removed
+    // (#2699, #2702 review).
+    if command.command == .actionButton {
       return true
     }
     // Coordinate-only synthesized taps can run after an AX-fatal foreground screen because they do not
