@@ -1110,6 +1110,15 @@ advertise reverse support automatically; call `createAndroidPortReverseManager(p
 only when the provider supports `adb reverse` argument semantics. The manager makes duplicate setup
 idempotent for the same owner and rejects conflicting owners for the same local endpoint.
 
+The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
+every dynamic word is quoted before it reaches the device. An array that begins with `shell` or
+`exec-out` and did not come from those builders is refused with `INVALID_ARGS` and
+`details.reason: 'unguarded-device-shell-argv'` instead of being dispatched. A bridge that composes its
+own device commands calls `runAdbShell(executor, words, options?)` or
+`runAdbExecOut(executor, words, options?)` from `agent-device/android-adb`, passing each value as its
+own word; `runAndroidShell(device, words, options?)` and `runAndroidExecOut(device, words, options?)`
+resolve the executor from a device instead.
+
 ```ts
 import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/android-adb';
 import type { AndroidAdbExecutorOptions } from 'agent-device/android-adb';
@@ -1510,6 +1519,7 @@ agent-device app-switcher
 - Android: `shutdown --platform android --device <avd-name>` stops a running emulator.
 - `open [app|url] [url]` already boots/activates the selected target when needed.
 - `open <app> --timeout <ms>` is a startup budget for that boot. A never-booted iOS Simulator runs Apple's first-boot migration, which can take several minutes; without the flag the boot wait is capped at 120 seconds. When the budget runs out the command fails with `error.details.reason: boot_timeout` and the Simulator keeps booting, so a retry finds it further along.
+- `open <app> --wait <ms>` waits up to that budget for a device another session is holding instead of failing at once. The open reports each poll, then either opens the device or fails with `DEVICE_IN_USE` naming the owning session and saying the budget was spent. A wait that finds the device taken again keeps waiting for the rest of its budget, so several opens can queue on one device and none of them is refused before its budget is spent. Only session contention is waited for: a device claim held by another workspace's daemon is never retriable and returns its recovery command immediately. The wait extends the command's timeout envelope, so a long budget does not need a longer `--timeout`.
 - `open <url>` deep links are supported on Android and iOS.
 - `open <app> <url>` opens a deep link on iOS.
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
@@ -2204,8 +2214,9 @@ agent-device clipboard write ""   # clear clipboard
 - Treat `clipboard read` output as sensitive data; it can include secrets copied by the user or app.
 - `clipboard write <text>` updates clipboard text on the selected target.
 - Works with an active session device or explicit selectors (`--platform`, `--device`, `--udid`, `--serial`).
-- Supported on macOS, Android emulator/device, and iOS simulator.
+- Supported on macOS, iOS simulator, and Android builds whose clipboard service answers the `cmd clipboard` shell command.
 - iOS physical devices currently return `UNSUPPORTED_OPERATION` for clipboard commands.
+- Android reads and writes both go through `adb shell cmd clipboard`, which needs a build that implements that command. Android 16 (API 36) ships no implementation of it, so there both actions return `UNSUPPORTED_OPERATION` with a hint naming the substitute instead of an empty clipboard, and `capabilities` omits `clipboard`. Verify a copy flow on such a device by pasting into a focused field and reading that field back.
 
 ## Keyboard
 
@@ -2407,6 +2418,7 @@ agent-device record stop                # Stop active recording
 - Android uses `adb shell screenrecord`, which has a 180s platform limit. `record start` publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, `record stop` recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.
 - Android `screenrecord` encodes a frame only when the screen changes, so a clip ends at the last frame the recorder encoded instead of at `record stop`: a window that ends on an unchanged screen yields a shorter video, while every on-screen change inside the window stays at its real offset in it. `record stop` reports `durationMs` as host wall clock from `record start` until the export finished, and when the video can be measured it also reports `capturedDurationMs` and warns with how much of the window that video covers.
 - `record stop` is safe to repeat. When its request window ends while the daemon is still exporting — typical for a long touch-overlay burn-in on a remote daemon — the export keeps running there, and a second `record stop` in the same session returns that completed recording, including the caller-side output path, without starting another recording. A finished recording whose video file is already gone reports `no active recording`.
+- A recording answers two independent questions, and `record stop` reports both: whether a playable export exists, and whether the recorder stopped. `recorder` is `confirmed` when the recorder exited or acknowledged a stop meant for this recording, and `lost` when the session holding it died — an Apple recording invalidated by a runner restart. `nativePathDisposition` says what became of the artifact path the recorder itself writes to: `retirable` while that file still sits there owed a removal, and `retired` once its removal was verified. Both are optional disclosures — the export is served either way, a replay of a recording stopped before they existed omits them, and so does a backend whose recorder writes the served file itself. The vocabulary is deliberately wider than today's answers: `recorder: unconfirmed` (a probe that could not be read, or no exit inside the stop budget), the identity-mismatch reasons under `lost`, and `nativePathDisposition: pending` are declared by [ADR 0024](https://github.com/callstack/agent-device/blob/main/docs/adr/0024-screen-recording-provable-signal.md) for the steps that gain those probes, and no stop reports them yet.
 
 **Session app logs (token-efficient debugging):** Logging is off by default in normal flows. Enable it on demand for debugging. Logs are written to a file so agents can grep instead of loading full output into context.
 
@@ -3246,6 +3258,25 @@ This is an Apple platform constraint that affects all XCUITest-based automation 
 
 If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to the existing ASCII-only `adb shell input text` path and non-ASCII `fill`/`type` reports the gap.
 
+## Android: first helper install can wait on an OEM install dialog
+
+Some OEM builds gate the first install of a package behind the system package installer and keep `adb install` open until someone confirms it on the device screen. That applies to both `agent-device` helper APKs (the snapshot helper and the test IME), one time per package: on ColorOS, reported on an OPPO Find N6, the first install needs two taps — confirm the install, then dismiss the completion screen — and every later install of the same package is silent.
+
+An unattended first Android snapshot therefore times out with a helper install failure whose hint says to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry; if no dialog is showing, restart the ADB server as the hint says.
+
+## Android: no clipboard access over adb on Android 16
+
+`agent-device` reaches the Android clipboard through `adb shell cmd clipboard`. That command works only on a build whose clipboard service implements a shell command, and AOSP's `ClipboardService` does not: the class carries no shell command at `android13-release`, `android14-release`, `android15-release` or `android16-release`, nor on current AOSP `main`, and a physical device runs that same class. On Android 16 (API 36) every `cmd clipboard get text` and `cmd clipboard set text <text>` call is answered by the framework's default `Binder.handleShellCommand` — `No shell command implementation.` on stderr, exit status **0** — so the clipboard is never touched even though the call reports success.
+
+`agent-device` asks each device once whether its clipboard service answers, and refuses rather than repeating that silence:
+
+- `capabilities` omits `clipboard` on such a device;
+- `clipboard read` and `clipboard write` fail with `UNSUPPORTED_OPERATION` and a hint naming the missing shell command and the substitute, instead of answering `text: ""` and "Clipboard updated".
+
+**Workaround:** verify a copy flow from the app side — trigger the app's copy action, paste into a focused text field, and read that field back with `snapshot`. It proves the app's own clipboard write, which an adb-side read never did.
+
+On a build that does implement `cmd clipboard`, note that Android 10+ restricts clipboard reads to the app with input focus or the current input method service (adb is neither), so an adb-side read can still come back blank there. `agent-device` reports the empty clipboard it was given rather than guessing at a denial it has not observed; if you have such a build, file it with the output of `adb shell cmd clipboard get text; echo rc=$?`.
+
 
 
 ---
@@ -3286,6 +3317,8 @@ agent-device disconnect
 Limrun Android uses the direct ADB tunnel. Normal Android helper-backed snapshots, installs, and port reverse flow are available, including the usual Android reverse setup for a local Metro server.
 
 Limrun iOS uses the direct Limrun iOS client. It supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, and app installation. It cannot reverse a remote device port to a local host port. For iOS Metro or React DevTools, use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+
+iOS text entry is witnessed rather than assumed. `fill` taps the target, waits for that field to take text-entry focus, and only then types, so an app that exposes fields without ever publishing a globally focused element - Flutter forms are the common case - still fills and reports `textEntryReadiness: "focused-element"`. A tap that nothing answers fails with `text_entry_focus_not_observed` instead of typing into an unknown field; `type` stays the deliberate route into whichever field already holds focus.
 
 For MCP-only use, run `connect` in the same effective state directory before starting `agent-device mcp`. MCP exposes operational tools but not provider `connect` commands.
 
@@ -3946,6 +3979,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 - `replay-timing.ndjson` records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.
 - Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.
 - The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use `--verbose` to include step traces in completed-test progress output.
+- The default reporter prints a `Warnings:` section after the summary when any test accumulated composable warnings — for example a Maestro step with `optional: true` that was skipped — whether that test passed or failed. A failing `replay` run repeats the warnings it accumulated as `Warning:` lines after the error. `--json` carries the same strings in each test result's `warnings` array.
 - `--reporter` is repeatable. Built-ins are `default` for the console summary and `junit:<path>` for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include `--reporter default` when you also want terminal output. `--report-junit <path>` remains a compatibility alias for `--reporter junit:<path>`.
 - JUnit reports preserve legal Unicode and whitespace, and replace characters forbidden by XML 1.0 (such as terminal ESC or NUL) with `U+FFFD` (`�`) so CI parsers can read the report. JSON and other reporters retain the original suite values.
 - When `--fail-fast` and retries are both set, the current test still consumes its retries before the suite stops.
@@ -4390,6 +4424,14 @@ A never-booted iOS Simulator can take several minutes to finish its first boot. 
 ```bash
 agent-device open Settings --platform ios --udid <udid> --timeout 600000
 ```
+
+When the device is held by a session that will let go soon — a parallel agent finishing its run — `open --wait <ms>` blocks for the device instead of refusing at once, and reports who holds it while it waits:
+
+```bash
+agent-device open Demo --platform android --wait 60000
+```
+
+If the budget runs out with the device still busy, the open fails with `DEVICE_IN_USE` naming the owning session address, which `close --session <address>` releases. Every open waiting on a device gets its whole budget: when the holder lets go, the waiting open that did not get the device waits again for what is left of its own budget rather than refusing early, so several agents can queue on one device.
 
 Notes:
 
