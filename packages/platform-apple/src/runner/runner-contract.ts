@@ -178,6 +178,14 @@ type RunnerErrorMatch = {
    * the verdict this classifier already published can never carry a rule (#2680).
    */
   toolTextIncludesAll?: readonly string[];
+  /**
+   * Every entry must appear in the SAME line of the lowercased {@link runnerToolText} (#2688 review).
+   * {@link RunnerErrorMatch.toolTextIncludesAll} proves only that two phrases exist somewhere in a
+   * captured log, which is a weaker claim than one phrase qualifying the other: a note about the
+   * profile the build used, three lines above an unrelated expired-certificate warning, says nothing
+   * about the profile. A row whose evidence is a noun and its complaint asks for both on one line.
+   */
+  toolTextLineIncludesAll?: readonly string[];
   /** Required details evidence beyond code/message. */
   details?: RunnerErrorDetailsMatch;
 };
@@ -403,8 +411,11 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     },
   },
   {
+    // The identifier and its availability have to meet in one line: `App Identifier` and `not
+    // available` are two phrases a captured log can carry for reasons that have nothing to do with
+    // each other, which is the same hazard the profile rows just gave up (#2688 review).
     reason: 'bundle_identifier_unavailable',
-    match: { toolTextIncludesAll: ['app identifier', 'not available'] },
+    match: { toolTextLineIncludesAll: ['app identifier', 'not available'] },
     verdicts: {},
     buildFailure: {
       reason: 'bundle_identifier_already_registered',
@@ -435,25 +446,26 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     },
   },
   {
+    // "No profiles for 'com.example' were found" names the bundle id and the absence in one sentence,
+    // so the phrase alone is the complaint and needs no second phrase to qualify it.
     reason: 'signing_no_profiles_for_bundle_id',
     match: { toolTextIncludesAll: ['no profiles for'] },
     verdicts: {},
-    buildFailure: {
-      reason: 'signing_provisioning_profile_missing',
-      hint: 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.',
-    },
+    buildFailure: PROFILE_UNUSABLE,
   },
   // A profile named in the tool's output is only evidence when the output also says what is wrong with
-  // it (#2688 review). One bare `provisioning profile` substring was the shipped sniffer's trigger, and
-  // it is a phrase a failing build can print while talking about something else: the codesign command
-  // line, a build-settings dump, a note about the profile that was used. Each row below therefore
-  // requires the profile plus the complaint Xcode attaches to it, and a failure that merely mentions a
-  // profile stays unclassified rather than being sent to install a profile it already has.
+  // that profile, in the same line (#2688 review). One bare `provisioning profile` substring was the
+  // shipped sniffer's trigger, and it is a phrase a failing build can print while talking about
+  // something else: the codesign command line, a build-settings dump, a note about the profile that was
+  // used. Requiring a second phrase somewhere in the same log is no better — a note about the profile
+  // used above an unrelated `has expired` certificate warning would then name the profile. Each row
+  // below therefore asks for the profile and Xcode's complaint about it on one line, and a failure that
+  // merely mentions a profile stays unclassified rather than being sent to install one it already has.
   {
     // Xcode's own signing-error domain beside the profile it rejected: the machine-readable half of its
     // `IDEProvisioningErrorDomain` diagnostics, which accompanies the prose rather than replacing it.
     reason: 'signing_provisioning_profile_xcode_error',
-    match: { toolTextIncludesAll: ['provisioning profile', 'ideprovisioningerrordomain'] },
+    match: { toolTextLineIncludesAll: ['provisioning profile', 'ideprovisioningerrordomain'] },
     verdicts: {},
     buildFailure: PROFILE_UNUSABLE,
   },
@@ -461,15 +473,16 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // "Provisioning profile \"X\" doesn't include application identifier ..." — the profile that is
     // installed but does not cover this app or capability.
     reason: 'signing_provisioning_profile_does_not_cover',
-    match: { toolTextIncludesAll: ['provisioning profile', "doesn't include"] },
+    match: { toolTextLineIncludesAll: ['provisioning profile', "doesn't include"] },
     verdicts: {},
     buildFailure: PROFILE_UNUSABLE,
   },
   {
     // "Provisioning profile \"X\" has expired" — installing it again is not the fix; replacing it is,
-    // which is what the hint's "valid" is for.
+    // which is what the hint's "valid" is for. The full phrase, on the profile's own line: `expired`
+    // alone is what an expired certificate, a stale session, or a revoked key writes (#2688 review).
     reason: 'signing_provisioning_profile_expired',
-    match: { toolTextIncludesAll: ['provisioning profile', 'expired'] },
+    match: { toolTextLineIncludesAll: ['provisioning profile', 'has expired'] },
     verdicts: {},
     buildFailure: PROFILE_UNUSABLE,
   },
@@ -499,6 +512,7 @@ function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boole
   if (match.code !== undefined && error.code !== match.code) return false;
   if (!matchesRunnerErrorDetails(error, match.details)) return false;
   if (!matchesRunnerToolText(error, match.toolTextIncludesAll)) return false;
+  if (!matchesRunnerToolTextLine(error, match.toolTextLineIncludesAll)) return false;
   return matchesRunnerErrorMessage(error, match.messageIncludesAll);
 }
 
@@ -531,6 +545,18 @@ function matchesRunnerToolText(error: AppError, parts: readonly string[] | undef
   if (!parts) return true;
   const text = runnerToolText(error);
   return parts.every((part) => text.includes(part));
+}
+
+/**
+ * The same haystack read one line at a time, so a row can require its phrases to be in one sentence
+ * rather than merely in one file (#2688 review). A captured build log is thousands of lines long, and
+ * two unrelated lines can hold any pair of words.
+ */
+function matchesRunnerToolTextLine(error: AppError, parts: readonly string[] | undefined): boolean {
+  if (!parts) return true;
+  return runnerToolText(error)
+    .split('\n')
+    .some((line) => parts.every((part) => line.includes(part)));
 }
 
 function runnerErrorVerdict<Axis extends keyof RunnerErrorVerdicts>(

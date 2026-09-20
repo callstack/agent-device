@@ -1,4 +1,4 @@
-# Device evidence checklist
+# Runner-failure evidence checklist (#2680, #2683)
 
 Live evidence the coordinator runs serially on the connected iPhone. Each item names the exact
 command, the environment it needs, and the rendered error that proves the change. Do not paraphrase
@@ -71,13 +71,15 @@ env AGENT_DEVICE_IOS_TEAM_ID="<your team id>" \
   prepare ios-runner --platform ios --device "<physical iPhone name>"
 ```
 
-Expected: `details.reason` is `signing_provisioning_profile_missing`, and the profile row only fires
-when xcodebuild also says what is wrong with the profile — one of its `IDEProvisioningErrorDomain`
-diagnostics, "doesn't include ...", or "has expired" (#2688 review). Paste the whole error: which of
-those lines printed is what promotes the `profile-xcode-signing-error`,
-`profile-does-not-cover-app-id` and `profile-expired` fixtures from `invented-shape` to `captured`. A
-different reason is worth recording just as much: say which one and treat the fixtures as unconfirmed
-rather than editing the rules to fit.
+Expected: `details.reason` is `signing_provisioning_profile_missing`, and the profile rows only fire
+when xcodebuild says what is wrong with the profile **on the same line as the profile**: its
+`IDEProvisioningErrorDomain` diagnostic naming the profile, `doesn't include ...`, or `has expired`
+(#2688 review). Paste the whole error and keep the line breaks — which line carried which phrase is
+what promotes the `profile-xcode-signing-error`, `profile-does-not-cover-app-id` and `profile-expired`
+fixtures from `invented-shape` to `captured`, and a capture that splits the two phrases across lines
+belongs to `profile-note-above-an-expired-certificate` instead. A different reason is worth recording
+just as much: say which one and treat the fixtures as unconfirmed rather than editing the rules to
+fit.
 
 ### 4. The line that claims no reason yet -> `build_failed_unclassified`
 

@@ -7,7 +7,7 @@ import type { RunnerStartupFailureReason } from '../runner-contract.ts';
  * Provenance is the point of this file, so it is stated per entry and never as a blanket claim:
  *
  * - `captured` — `output` was pasted from a run, and `command` plus `xcodeVersion` (from
- *   `xcodebuild -version`) were recorded with it by `.device-evidence/CHECKLIST.md`.
+ *   `xcodebuild -version`) were recorded with it by `.device-evidence/CHECKLIST-runner-failures.md`.
  * - `shipped-sniff-trigger` — the substrings a rule matches are the ones shipped in
  *   `resolveSigningFailureHint` before #2680, which is evidence xcodebuild can emit them. The
  *   sentence around them is ours, so `command` and `xcodeVersion` stay unrecorded.
@@ -94,6 +94,16 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     note: 'Same text arriving in the thrown message instead of the exec details: the catch wraps a non-AppError with String(err), and the rule still has to see it.',
   },
   {
+    id: 'app-identifier-and-availability-in-different-lines',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: App Identifier 'com.yourname.agentdevice.runner' is invalid (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nnote: The simulator device is not available for this destination\n** TEST BUILD FAILED **\n",
+    note: 'The same cross-line hazard the profile rows gave up (#2688 review): one line faults the identifier and another says something is not available, and neither line pairs them. The reason needs both in one sentence, which is what `app-id-not-available` records.',
+  },
+  {
     id: 'no-profiles-for-bundle-id',
     reason: 'signing_provisioning_profile_missing',
     site: 'build-for-testing',
@@ -158,8 +168,8 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     xcodeVersion: UNOBSERVED,
     provenance: 'invented-shape',
     output:
-      "error: Provisioning profile \"match-development\" is not a valid provisioning profile (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nError Domain=IDEProvisioningErrorDomain Code=17\n** TEST BUILD FAILED **\n",
-    note: "Xcode names the profile beside its own IDEProvisioningErrorDomain diagnostics. Sentence and domain code are our reconstruction; Phase B capture has to record the real wording and this entry's xcodeVersion.",
+      "error: Provisioning profile \"match-development\" is not a valid provisioning profile (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nError Domain=IDEProvisioningErrorDomain Code=17 \"Provisioning profile 'match-development' is not a valid provisioning profile.\"\n** TEST BUILD FAILED **\n",
+    note: "Xcode repeats the profile inside the same line as its IDEProvisioningErrorDomain diagnostics, which is what the row reads: domain on one line and profile on another is two facts, not one complaint. Sentence and domain code are our reconstruction; Phase B capture has to record the real wording and this entry's xcodeVersion.",
   },
   {
     id: 'profile-does-not-cover-app-id',
@@ -190,6 +200,16 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     output:
       "note: Using provisioning profile \"match-development\" to sign the app bundle (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nerror: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
     note: 'The hazard the bare `provisioning profile` trigger carried (#2688 review): a failing build can print the profile it used while the failure is a compile error. A benign mention must keep cache-recovery advice; it also says nothing Xcode calls code signing, which is its own honest row.',
+  },
+  {
+    id: 'profile-note-above-an-expired-certificate',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "note: Using provisioning profile \"match-development\" to sign the app bundle (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nwarning: The certificate \"Apple Development: Example Dev (ABCD1234)\" has expired.\nerror: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'The cross-line hazard a whole-log AND cannot see (#2688 review): a benign profile note three lines above an unrelated expired-certificate warning. Both phrases are in the captured log and neither qualifies the other, so the profile stays unclassified and the reader keeps cache-recovery advice rather than being sent to replace a profile that is fine.',
   },
   {
     id: 'devtools-security-disabled',
