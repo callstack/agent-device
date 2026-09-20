@@ -23,12 +23,10 @@ const BUCKET_BY_LEVEL: Readonly<Record<CoverageClassificationLevel, CoverageBuck
  * mis-bucketed rollup, and a denominator that stopped matching the catalog.
  *
  * What it cannot catch is a row classified under the wrong `level`: the recount and the published
- * summary read the same rows, so a row moved between buckets moves both and stays consistent. Row
- * membership is gated where an independent enumeration of it exists — the Linux lane compares its
- * live set against the parsed replay script, the Android lane against each scenario's own command
- * declaration, the web lane against the commands its smoke scenario invokes. A platform whose live
- * claims have no enumeration behind them, macOS, is gated one way only: each claim must be executed
- * by the scenario that owns it, and adding a live claim therefore needs evidence.
+ * summary read the same rows, so a row moved between buckets moves both and stays consistent. That
+ * membership is gated by {@link assertLiveCoverageMatchesEvidence}, or by the equivalent enumeration
+ * a platform already reads — Linux parses its replay script, Android reads each scenario's own
+ * command declaration.
  */
 export function assertCoverageClassificationSummaryWiredToManifest(
   platform: string,
@@ -56,6 +54,29 @@ export function assertCoverageClassificationSummaryWiredToManifest(
     summary.live + summary.contract + summary.gap,
     summary.total,
     `${platform} coverage summary buckets do not sum to its total`,
+  );
+}
+
+/**
+ * Ties a platform's live bucket to an enumeration of the commands its own evidence executes, read
+ * from the scenario sources rather than from the manifest's `level` fields. Both directions matter:
+ * an executed command that is not claimed live means the platform is understating what it proves,
+ * and a live claim no scenario executes any more means the platform is overstating it. A platform
+ * with no independent enumeration behind a bucket can only assert the rollup above.
+ */
+export function assertLiveCoverageMatchesEvidence(
+  platform: string,
+  manifest: Readonly<Record<string, { level: CoverageClassificationLevel }>>,
+  evidenceCommands: Iterable<string>,
+): void {
+  const live = Object.entries(manifest)
+    .filter(([, entry]) => entry.level === 'live')
+    .map(([command]) => command)
+    .sort();
+  assert.deepEqual(
+    [...new Set(evidenceCommands)].sort(),
+    live,
+    `${platform} live claims are not the commands its own evidence executes`,
   );
 }
 

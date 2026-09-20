@@ -5,7 +5,10 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
+import {
+  assertCoverageClassificationSummaryWiredToManifest,
+  assertLiveCoverageMatchesEvidence,
+} from './support/coverage-classification.ts';
 import {
   WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
@@ -54,7 +57,11 @@ test('web coverage report counts every manifest classification', () => {
 test('web live claims are exactly the commands the smoke scenario invokes', () => {
   const smokeSource = fs.readFileSync(path.resolve(WEB_SMOKE_EVIDENCE.path), 'utf8');
   assert.ok(smokeSource.includes(WEB_SMOKE_TEST_NAME));
-  assert.deepEqual(invokedWebSmokeCommands(smokeSource), liveCommandsForWebSmoke().sort());
+  assertLiveCoverageMatchesEvidence(
+    'web',
+    WEB_PLATFORM_COVERAGE,
+    invokedWebSmokeCommands(smokeSource),
+  );
 });
 
 test('web contract claims name existing executable evidence', () => {
