@@ -24,6 +24,11 @@ import {
   type AppleRunnerCommandOptions,
 } from '../runner/index.ts';
 import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
+import {
+  appleSimulatorDisplayArgvFragment,
+  resolveAppleCaptureDisplay,
+  type AppleDeviceDisplay,
+} from './display-inventory.ts';
 import { ensureBootedSimulator } from './simulator.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
@@ -36,11 +41,17 @@ function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
   prepareStatusBarForScreenshot: (device: DeviceInfo) => Promise<() => Promise<void>>;
-  captureWithRetry: (device: DeviceInfo, outPath: string) => Promise<void>;
+  resolveCaptureDisplay: (device: DeviceInfo) => Promise<AppleDeviceDisplay | undefined>;
+  captureWithRetry: (
+    device: DeviceInfo,
+    outPath: string,
+    display: AppleDeviceDisplay | undefined,
+  ) => Promise<void>;
   normalizeDensity: (
     device: DeviceInfo,
     outPath: string,
     pixelDensity: number | undefined,
+    display: AppleDeviceDisplay | undefined,
   ) => Promise<void>;
   captureWithRunner: (
     device: DeviceInfo,
@@ -65,6 +76,7 @@ type SimulatorScreenshotFlowOptions = {
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
+  resolveCaptureDisplay: resolveAppleCaptureDisplay,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
   captureWithRunner: captureScreenshotViaRunner,
@@ -119,6 +131,13 @@ export async function captureSimulatorScreenshotWithFallback(
   if (!options.skipIosSimulatorBootCheck) {
     await deps.ensureBooted(device);
   }
+  // A foldable lights one panel at a time, so the capture must name the panel the
+  // system is currently showing rather than accept simctl's implicit default.
+  const display = await deps.resolveCaptureDisplay(device);
+  const captureAndNormalize = async () => {
+    await deps.captureWithRetry(device, outPath, display);
+    await deps.normalizeDensity(device, outPath, options.pixelDensity, display);
+  };
   let restoreStatusBar = async () => {};
   if (options.normalizeStatusBar === true) {
     try {
@@ -129,8 +148,7 @@ export async function captureSimulatorScreenshotWithFallback(
   }
   try {
     try {
-      await deps.captureWithRetry(device, outPath);
-      await deps.normalizeDensity(device, outPath, options.pixelDensity);
+      await captureAndNormalize();
       return;
     } catch (error) {
       let screenshotError = error;
@@ -140,8 +158,7 @@ export async function captureSimulatorScreenshotWithFallback(
       ) {
         await deps.ensureBooted(device);
         try {
-          await deps.captureWithRetry(device, outPath);
-          await deps.normalizeDensity(device, outPath, options.pixelDensity);
+          await captureAndNormalize();
           return;
         } catch (retryError) {
           screenshotError = retryError;
@@ -159,7 +176,10 @@ export async function captureSimulatorScreenshotWithFallback(
       options.fullscreen,
       options.runnerOptions,
     );
-    await deps.normalizeDensity(device, outPath, options.pixelDensity);
+    // The runner captures `XCUIScreen.main`, which is not necessarily the panel just
+    // resolved, so its scale stays unknown here. Applying the resolved panel's
+    // pointScale would rescale an image against a panel nobody measured.
+    await deps.normalizeDensity(device, outPath, options.pixelDensity, undefined);
   } finally {
     await restoreStatusBar().catch((error) =>
       emitStatusBarDiagnostic(device, 'restore_failed', error),
@@ -170,11 +190,19 @@ export async function captureSimulatorScreenshotWithFallback(
 export async function captureSimulatorScreenshotWithRetry(
   device: DeviceInfo,
   outPath: string,
+  display?: AppleDeviceDisplay,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS);
+  const argv = [
+    'io',
+    device.id,
+    'screenshot',
+    ...appleSimulatorDisplayArgvFragment(display),
+    outPath,
+  ];
   await retryWithPolicy(
     async ({ deadline: attemptDeadline }) => {
-      await runSimctl(device, ['io', device.id, 'screenshot', outPath], {
+      await runSimctl(device, argv, {
         timeoutMs: Math.max(
           1_000,
           attemptDeadline?.remainingMs() ?? IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
@@ -435,8 +463,13 @@ async function normalizeIosSimulatorScreenshotDensity(
   device: DeviceInfo,
   outPath: string,
   pixelDensity: number | undefined,
+  display?: AppleDeviceDisplay,
 ): Promise<void> {
-  const sourcePixelDensity = await readIosSimulatorMainScreenScale(device);
+  // `SIMULATOR_MAINSCREEN_SCALE` describes one fixed panel, so on a foldable it can
+  // disagree with the panel just captured. The captured panel reports its own scale.
+  const sourcePixelDensity = display
+    ? display.pointScale
+    : await readIosSimulatorMainScreenScale(device);
   const targetSize = computeDensityScaledScreenshotSize(
     await readPngSize(outPath),
     sourcePixelDensity,
