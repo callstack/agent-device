@@ -4,12 +4,12 @@
 
 - Added (diff): `diff screenshot` accepts a JPEG baseline or current image. Both inputs had to be PNG,
   so a capture exported by another tool had to be converted first and a HarmonyOS capture — which the
-  platform serves as JPEG — could never be compared. Each input is now decoded from its own bytes, so
-  the container is sniffed and a `.png` name holding JPEG decodes as JPEG. `png-transcode.ts` became
-  `screenshot-image.ts`, the one owner of that sniffing for both the decode and the provider transcode
-  path, and the PNG worker gained a `decode-image` job that answers pixels instead of PNG bytes.
-  `screenshot` still writes PNG and so does the `--out` diff image: crop, overlay, and resize rewrite a
-  screenshot in place, which a lossy container could not survive.
+  platform serves as JPEG under whatever name the command was given — could never be compared. Each
+  input is now decoded from its own bytes, so the container is sniffed and a `.png` name holding JPEG
+  decodes as JPEG. `png-transcode.ts` became `screenshot-image.ts`, the one owner of that sniffing for
+  both the decode and the provider transcode path, and the PNG worker gained a `decode-image` job that
+  answers pixels instead of PNG bytes. The `--out` diff image stays PNG, as do the crop, overlay, and
+  resize passes that rewrite a screenshot in place and could not survive a lossy container.
 
 - Added (limrun): `record start` and `record stop` on Limrun iOS and Android direct sessions. The
   runtime declared recording unavailable although the Limrun SDK exposes a server-side recorder.

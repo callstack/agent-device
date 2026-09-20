@@ -166,17 +166,23 @@ test('decodeScreenshotImageAsync decodes a JPEG by its bytes, not its label', as
 });
 
 test('decodeScreenshotImageAsync rejects a container it cannot read with the canonical AppError', async () => {
-  await assert.rejects(decodeScreenshotImageAsync(Buffer.from('GIF89a'), 'fixture'), (error) => {
-    assert.equal(error instanceof AppError, true);
-    assert.equal((error as AppError).code, 'COMMAND_FAILED');
-    assert.equal((error as AppError).message, 'fixture is neither PNG nor JPEG');
-    assert.equal((error as AppError).details?.label, 'fixture');
-    return true;
-  });
+  await assert.rejects(
+    () => decodeScreenshotImageAsync(Buffer.from('GIF89a'), 'fixture'),
+    (error) => {
+      assert.equal(error instanceof AppError, true);
+      assert.equal((error as AppError).code, 'COMMAND_FAILED');
+      assert.equal((error as AppError).message, 'fixture is neither PNG nor JPEG');
+      assert.equal((error as AppError).details?.label, 'fixture');
+      return true;
+    },
+  );
 
   const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16, 0)]);
-  await assert.rejects(decodeScreenshotImageAsync(corrupt, 'fixture'), (error) => {
-    assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
-    return true;
-  });
+  await assert.rejects(
+    () => decodeScreenshotImageAsync(corrupt, 'fixture'),
+    (error) => {
+      assert.match((error as AppError).message, /Failed to decode fixture as JPEG/);
+      return true;
+    },
+  );
 });

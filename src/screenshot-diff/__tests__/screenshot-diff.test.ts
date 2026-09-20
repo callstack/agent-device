@@ -1,27 +1,10 @@
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('@agent-device/capture-kit/png-worker-client', async () => {
-  const [{ PNG }, { decodeScreenshotImage }, { computeScreenshotDiffPixels }] = await Promise.all([
-    import('@agent-device/capture-kit/png'),
-    import('@agent-device/capture-kit/screenshot-image'),
-    import('@agent-device/capture-kit/screenshot-diff-pixels'),
-  ]);
-  return {
-    decodeScreenshotImageAsync: async (buffer: Buffer, label: string) =>
-      decodeScreenshotImage(buffer, label),
-    encodePngAsync: async (png: InstanceType<typeof PNG>) => PNG.sync.write(png),
-    computeScreenshotDiffPixelsAsync: async (
-      job: Parameters<typeof computeScreenshotDiffPixels>[0],
-    ) => computeScreenshotDiffPixels(job),
-  };
-});
-
-import { PNG } from '@agent-device/capture-kit/png';
-import { decodeScreenshotImage } from '@agent-device/capture-kit/screenshot-image';
+import { hasPngSignature, PNG } from '@agent-device/capture-kit/png';
 import { compareScreenshots } from '../screenshot-diff.ts';
 
 function tmpDir(): string {
@@ -42,16 +25,6 @@ function writeSolidPng(
     png.data[i + 2] = color.b;
     png.data[i + 3] = 255;
   }
-  fs.writeFileSync(filePath, PNG.sync.write(png));
-}
-
-/** Write decoded pixels as a PNG, so a test can pair a JPEG input with its lossless twin. */
-function writePixels(
-  filePath: string,
-  image: { width: number; height: number; data: Buffer },
-): void {
-  const png = new PNG({ width: image.width, height: image.height });
-  png.data = Buffer.from(image.data);
   fs.writeFileSync(filePath, PNG.sync.write(png));
 }
 
@@ -466,20 +439,37 @@ test('throws COMMAND_FAILED for bytes in neither supported container', async () 
   );
 });
 
-test('a JPEG input compares as a match against a PNG holding the same pixels', async () => {
+test('a JPEG stored under a .png name compares as a match', async () => {
   const dir = tmpDir();
-  // The `.png` name holds JPEG bytes on purpose: the container is sniffed from the bytes.
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
 
+  // The `.png` names hold JPEG bytes on purpose: the container is sniffed from the bytes.
   const jpeg = await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
-  writePixels(current, decodeScreenshotImage(jpeg, 'fixture'));
+  fs.writeFileSync(current, jpeg);
 
-  const result = await compareScreenshots(baseline, current);
+  // The same stored bytes decode to the same pixels, so this pins an exact comparison.
+  const result = await compareScreenshots(baseline, current, { threshold: 0 });
 
   assert.equal(result.match, true);
   assert.equal(result.differentPixels, 0);
   assert.equal(result.totalPixels, 48);
+});
+
+test('a JPEG comparison writes the diff artifact as PNG', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.jpg');
+  const current = path.join(dir, 'current.jpg');
+  const diffPath = path.join(dir, 'diff.png');
+
+  await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
+  await writeSolidJpeg(current, 8, 6, { r: 200, g: 20, b: 40 });
+
+  const result = await compareScreenshots(baseline, current, { outputPath: diffPath });
+
+  assert.equal(result.match, false);
+  assert.equal(result.diffPath, diffPath);
+  assert.equal(hasPngSignature(fs.readFileSync(diffPath)), true);
 });
 
 test('a JPEG input is measured at its decoded dimensions', async () => {

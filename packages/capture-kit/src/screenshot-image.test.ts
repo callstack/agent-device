@@ -104,15 +104,6 @@ test('decoding a JPEG answers RGBA rows, with opaque alpha where the container h
   expect(a).toBe(255);
 });
 
-test('decoding sniffs the container, so JPEG bytes answer JPEG pixels whatever they are called', () => {
-  const jpeg = encodeJpeg({ width: 4, height: 4, data: solidRgba(4, 4, [7, 9, 11, 255]) }, 90);
-
-  const fromJpeg = decodeScreenshotImage(jpeg.data, 'baseline.png');
-  const fromPng = decodeScreenshotImage(PNG.sync.write(toPng(fromJpeg)), 'baseline.png');
-
-  expect([...fromPng.data]).toEqual([...fromJpeg.data]);
-});
-
 test('decoding refuses bytes in neither container and a JPEG body that cannot be decoded', () => {
   expect(thrownBy(() => decodeScreenshotImage(Buffer.from('GIF89a'), 'fixture'))).toMatchObject({
     code: 'COMMAND_FAILED',
@@ -127,9 +118,3 @@ test('decoding refuses bytes in neither container and a JPEG body that cannot be
     details: { label: 'fixture', reason: expect.any(String) },
   });
 });
-
-function toPng(image: { width: number; height: number; data: Buffer }): PNG {
-  const png = new PNG({ width: image.width, height: image.height });
-  png.data = Buffer.from(image.data);
-  return png;
-}

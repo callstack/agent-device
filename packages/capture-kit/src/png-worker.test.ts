@@ -28,6 +28,18 @@ test('resultTransferList transfers a cropped encoding and skips an untouched fil
   assert.deepEqual(resultTransferList({ kind: 'crop', png: null }), []);
 });
 
+test('resultTransferList transfers decoded pixels for both screenshot decode jobs', () => {
+  const owned = Buffer.alloc(16); // Buffer.alloc never uses the shared pool
+  const pooled = new Uint8Array(new ArrayBuffer(32), 4, 8); // offset view, pooled-Buffer shape
+  const decoded = { width: 2, height: 2 };
+
+  assert.deepEqual(resultTransferList({ kind: 'decode', ...decoded, data: owned }), [owned.buffer]);
+  assert.deepEqual(resultTransferList({ kind: 'decode-image', ...decoded, data: owned }), [
+    owned.buffer,
+  ]);
+  assert.deepEqual(resultTransferList({ kind: 'decode-image', ...decoded, data: pooled }), []);
+});
+
 test('resultTransferList transfers only the fully-owned views of a mixed result', () => {
   const ownedDiffData = Buffer.alloc(16); // Buffer.alloc never uses the shared pool
   const pooledMask = new Uint8Array(new ArrayBuffer(32), 4, 8); // offset view, pooled-Buffer shape
