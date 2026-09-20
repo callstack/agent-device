@@ -88,6 +88,13 @@ to activate nothing, so a CI assertion on the disclosure measures `XCUIApplicati
 host rather than this feature. Tracked as callstack/agent-device#2696.
 
 Manual evidence stands in for it, and both are reproducible:
-- local simulator, first capture after the handoff: `{"reason":"stale_target","priorState":"runningBackground","otherActiveApplicationPid":33878}`
-  with the shared sentence appended to `warnings`; the following capture reports neither.
+- local simulator (`apex-2682-proto`), first capture after the handoff: the shared sentence in
+  `data.warnings`, printed under the snapshot node count and naming a non-foreground prior state and the
+  pid probe — `The session app was not foreground when this command
+  arrived (prior state runningBackground), so the runner activated it before answering (reason
+  stale_target). Any capture taken earlier in this session described the only app other than the
+  session app with an active accessibility session (pid 33878), not the session app. Re-capture now
+  that the session app answers, or drive the other app in its own session.` — and the following capture
+  carries no such line. On this head that sentence is the whole disclosure: the typed
+  `data.targetActivation` field beside it is PR2's daemon seam.
 - the physical device sequence below, which the coordinator runs.

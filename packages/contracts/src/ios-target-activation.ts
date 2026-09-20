@@ -22,6 +22,14 @@ export const IOS_TARGET_ACTIVATION_REASONS = [
 
 export type IosTargetActivationReason = (typeof IOS_TARGET_ACTIVATION_REASONS)[number];
 
+/** Whether `value` is a reason the runner can stamp; the only gate consumers apply to the field. */
+export function isIosTargetActivationReason(value: unknown): value is IosTargetActivationReason {
+  return (
+    typeof value === 'string' &&
+    (IOS_TARGET_ACTIVATION_REASONS as readonly string[]).includes(value)
+  );
+}
+
 /**
  * States an activation could have been needed for. `runningForeground` is excluded because the
  * runner skips `activate()` when the app is already foreground and never stamps a fact there.

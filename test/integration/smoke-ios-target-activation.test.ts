@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+import {
+  IOS_TARGET_ACTIVATION_PRIOR_STATES,
+  isIosTargetActivationReason,
+  iosTargetActivationDisclosure,
+  type IosTargetActivation,
+} from '@agent-device/contracts/ios-target-activation';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   cleanupSession,
@@ -17,6 +22,10 @@ import {
  * second capture answer as if nothing had moved. The disclosure can only come from the runner that
  * actually activated the bound app, so this drives the real runner on a real simulator — a mocked
  * runner response proves the decoder, not the fact.
+ *
+ * What it asserts is the `data.warnings` sentence, because that is everything this branch publishes:
+ * the typed `data.targetActivation` field is the daemon seam that lands in #2693, and a lane reading
+ * it here would time out against this head.
  *
  * MANUAL, ENV-GATED LANE. It is deliberately absent from the `ios.yml` and `replays-manual.yml` test
  * lists: on the CI-hosted simulator the runner reads its own target as `.runningForeground` while a
@@ -92,21 +101,7 @@ test(
       // Poll instead of sleeping a fixed window: the disclosure must arrive on the command that
       // paid for the repair, and a lane that never sees one is the regression this asserts against.
       const repaired = await captureUntilDisclosed(context);
-      const fact = repaired.json!.data.targetActivation;
-      assert.ok(
-        typeof fact.reason === 'string' && fact.reason.length > 0,
-        `disclosure carried no reason: ${JSON.stringify(fact)}`,
-      );
-      assert.match(
-        String(fact.priorState),
-        /^running(Background|BackgroundSuspended)$|^notRunning$|^unknown$/,
-        `prior state claims the repair's outcome, not its starting point: ${fact.priorState}`,
-      );
-      const warnings: unknown[] = repaired.json!.data.warnings ?? [];
-      assert.ok(
-        warnings.includes(iosTargetActivationDisclosure(fact)),
-        `warnings did not carry the shared disclosure sentence: ${JSON.stringify(warnings)}`,
-      );
+      activationFactFrom(repaired.json!.data.warnings ?? []);
 
       // The repair is a fact about one command, not a property of the session: with the app already
       // foreground again, the next capture must say nothing.
@@ -115,16 +110,11 @@ test(
         '-i',
       ]);
       assert.equal(
-        settled.json?.data?.targetActivation,
+        activationFactFrom(settled.json?.data?.warnings ?? []),
         undefined,
         `second capture re-disclosed a repair it did not perform: ${JSON.stringify(
           settled.json?.data?.warnings,
         )}`,
-      );
-      assert.equal(
-        String(settled.json?.data?.warning ?? '').includes('was not foreground'),
-        false,
-        'second capture re-disclosed a repair it did not perform',
       );
     } catch (error) {
       throw await withRunnerLogEvidence(context, error);
@@ -156,7 +146,7 @@ async function withRunnerLogEvidence(context: LiveContext, error: unknown): Prom
   return new Error(`${message}\n${note}`, { cause: error });
 }
 
-/** Poll `snapshot -i` until the runner reports the repair, or fail with the last response. */
+/** Poll `snapshot -i` until the runner discloses the repair, or fail with the last response. */
 async function captureUntilDisclosed(context: LiveContext) {
   const deadline = Date.now() + HANDOFF_DEADLINE_MS;
   let last: Awaited<ReturnType<typeof runStep>> | undefined;
@@ -164,13 +154,52 @@ async function captureUntilDisclosed(context: LiveContext) {
     last = await runStep(context, 'snapshot after handoff', ['snapshot', '-i'], {
       allowFailure: true,
     });
-    if (last.json?.data?.targetActivation !== undefined) return last;
+    if (activationFactFrom(last.json?.data?.warnings ?? []) !== undefined) return last;
     await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
   }
   assert.fail(
     `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ` +
       `${HANDOFF_URL}: ${JSON.stringify(last?.json ?? null)}`,
   );
+}
+
+/**
+ * Recovers the repair fact from the disclosure sentence in `data.warnings` and hands it back to the
+ * shared builder, which must reproduce the response's sentence exactly. That is what makes the lane
+ * assert the disclosure rather than a paraphrase of it, and it keeps the typed object out of the
+ * picture so the lane runs against a head that publishes only the warning. A prior state outside the
+ * declared set fails as a fact the runner could not have stamped — the declared set omits
+ * `runningForeground` because the runner never activates there.
+ */
+function activationFactFrom(warnings: unknown[]): IosTargetActivation | undefined {
+  const sentence = warnings.find(
+    (warning): warning is string =>
+      typeof warning === 'string' && warning.includes('The session app was not foreground'),
+  );
+  if (sentence === undefined) return undefined;
+  const priorState = IOS_TARGET_ACTIVATION_PRIOR_STATES.find(
+    (state) => state === /\(prior state ([A-Za-z]+)\)/.exec(sentence)?.[1],
+  );
+  const reason = /\(reason ([a-z_]+)\)/.exec(sentence)?.[1];
+  const pid = /active accessibility session \(pid (\d+)\)/.exec(sentence)?.[1];
+  assert.ok(
+    priorState !== undefined && isIosTargetActivationReason(reason),
+    `disclosure names no declared prior state and reason: ${sentence}`,
+  );
+  assert.match(
+    sentence,
+    /Re-capture now that the session app answers, or drive the other app in its own session/,
+  );
+  const fact: IosTargetActivation = {
+    reason,
+    priorState,
+    ...(pid === undefined ? {} : { otherActiveApplicationPid: Number(pid) }),
+  };
+  assert.ok(
+    warnings.includes(iosTargetActivationDisclosure(fact)),
+    `disclosure is not the shared builder's sentence: ${sentence}`,
+  );
+  return fact;
 }
 
 async function checksum(filePath: string): Promise<string> {

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { iosTargetActivationDisclosure } from './ios-target-activation.ts';
+import {
+  IOS_TARGET_ACTIVATION_REASONS,
+  isIosTargetActivationReason,
+  iosTargetActivationDisclosure,
+} from './ios-target-activation.ts';
 
 test('target activation disclosure names the repair and both agent routes', () => {
   const disclosure = iosTargetActivationDisclosure({
@@ -39,4 +43,17 @@ test('target activation disclosure never invents a pid the runner did not isolat
   });
   assert.match(disclosure, /no single other app with an active accessibility session/);
   assert.equal(disclosure.includes('pid'), false, disclosure);
+});
+
+/**
+ * The decoder's only gate on the stamped reason, and the live lane's check that a response named a
+ * reason the runner can actually stamp. Both read this predicate instead of casting, so it is what
+ * keeps an undeclared reason out of a disclosure.
+ */
+test('reason predicate accepts exactly the declared reasons', () => {
+  for (const reason of IOS_TARGET_ACTIVATION_REASONS) {
+    assert.equal(isIosTargetActivationReason(reason), true, reason);
+  }
+  assert.equal(isIosTargetActivationReason('already_foreground'), false);
+  assert.equal(isIosTargetActivationReason(undefined), false);
 });

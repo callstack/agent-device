@@ -5,7 +5,7 @@
  * through: an undisclosed repair is a bug, a fabricated one is worse.
  */
 import {
-  IOS_TARGET_ACTIVATION_REASONS,
+  isIosTargetActivationReason,
   type IosTargetActivation,
   type IosTargetActivationPriorState,
   type IosTargetActivationReason,
@@ -46,22 +46,16 @@ export function readTargetActivationFact(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const fact: Record<string, unknown> = { ...value };
   const reason = fact.reason;
-  if (
-    typeof reason !== 'string' ||
-    !(IOS_TARGET_ACTIVATION_REASONS as readonly string[]).includes(reason)
-  ) {
-    return undefined;
-  }
-  const stampedReason = reason as IosTargetActivationReason;
+  if (!isIosTargetActivationReason(reason)) return undefined;
   const rawPriorState = fact.priorState;
   if (typeof rawPriorState !== 'number' || !Number.isInteger(rawPriorState)) return undefined;
   const priorState = PRIOR_STATE_BY_RAW_VALUE[rawPriorState];
   if (priorState === undefined) {
-    onUnmappedPriorState?.({ reason: stampedReason, rawPriorState });
+    onUnmappedPriorState?.({ reason, rawPriorState });
   }
   const otherActiveApplicationPid = fact.otherActiveApplicationPid;
   return {
-    reason: stampedReason,
+    reason,
     // An unmapped raw value is the one case where the repair stays disclosed and only the state
     // degrades: the reason already proves `activate()` ran, and `unknown` is exactly what a raw value
     // this table never declared means. Dropping the fact there would trade a vague disclosure for the
