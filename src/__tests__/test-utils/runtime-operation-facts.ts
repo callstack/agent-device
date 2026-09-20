@@ -8,7 +8,10 @@ import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
-import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import {
+  createFullyUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
@@ -104,43 +107,9 @@ export function createUnavailableRuntimeFactsForTest(
   owner: RuntimeOwnerRef,
   fact: RuntimeOperationUnavailability = unavailable,
 ) {
-  return createUnavailablePlatformRuntimeFacts(device, owner, {
-    appLog: fact,
-    network: fact,
-    screenshot: fact,
-    viewport: fact,
-    focus: fact,
-    gesture: fact,
-    scroll: fact,
-    typeText: fact,
-    touch: fact,
-    elementText: fact,
-    back: fact,
-    home: fact,
-    orientation: fact,
-    tvRemote: fact,
-    keyboard: fact,
-    clipboard: fact,
-    appSwitcher: fact,
-    actionButton: fact,
-    triggerAppEvent: fact,
-    setSetting: fact,
-    readAlert: fact,
-    awaitAlert: fact,
-    acceptAlert: fact,
-    dismissAlert: fact,
-    audioProbeCapture: fact,
-    audioProbeQuery: fact,
-    lifecycle: applicationLifecycleOperationFacts({
-      resolveOpenTarget: fact,
-      prepareApplicationOpen: fact,
-      openApplication: fact,
-      applyRuntimeHints: fact,
-      clearRuntimeHints: fact,
-      closeApplication: fact,
-      finalizeApplicationClose: fact,
-      prepareAppleRunner: fact,
-      configureProviderPortReverse: fact,
-    }),
-  });
+  return createUnavailablePlatformRuntimeFacts(
+    device,
+    owner,
+    createFullyUnavailablePlatformRuntimeFacts(fact),
+  );
 }
