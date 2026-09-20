@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2688/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2688/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2688/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2688/static/js/index.02f94cefda.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2688/static/js/index.f40a068f70.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -314,11 +314,21 @@ bounded logcat capture.</p>
 advertise reverse support automatically; call <code>createAndroidPortReverseManager(providerOrExecutor)</code>
 only when the provider supports <code>adb reverse</code> argument semantics. The manager makes duplicate setup
 idempotent for the same owner and rejects conflicting owners for the same local endpoint.</p>
+<p>The device shell re-parses whatever follows <code>shell</code> or <code>exec-out</code>, so those commands are built for you:
+every dynamic word is rendered for the quoting its transport applies before it reaches the device. <code>adb</code>
+forwards words verbatim, so a word is single-quoted; <code>hdc</code> wraps each element it sends in double quotes,
+where <code>$</code>, a backquote, and <code>&quot;</code> stay live, so a word is escaped for that context instead. An array that
+begins with <code>shell</code> or <code>exec-out</code> and did not come from those builders is refused with <code>INVALID_ARGS</code> and
+<code>details.reason: &#x27;unguarded-device-shell-argv&#x27;</code> instead of being dispatched. A bridge that composes its
+own device commands calls <code>runAdbShell(executor, words, options?)</code> or
+<code>runAdbExecOut(executor, words, options?)</code> from <code>agent-device/android-adb</code>, passing each value as its
+own word; <code>runAndroidShell(device, words, options?)</code> and <code>runAndroidExecOut(device, words, options?)</code>
+resolve the executor from a device instead.</p>
 <div class="rp-codeblock language-ts"><div class="rp-codeblock__content"><div class="rp-codeblock__content__scroll-container rp-scrollbar rp-scrollbar--always"><pre class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)" tabindex="0" data-lang="ts"><code><span class="line"><span style="color:var(--shiki-token-keyword)">import</span><span style="color:var(--shiki-foreground)"> { getAndroidAppStateWithAdb</span><span style="color:var(--shiki-token-punctuation)">,</span><span style="color:var(--shiki-foreground)"> listAndroidAppsWithAdb } </span><span style="color:var(--shiki-token-keyword)">from</span><span style="color:var(--shiki-token-string-expression)"> &#x27;agent-device/android-adb&#x27;</span><span style="color:var(--shiki-foreground)">;</span></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">import</span><span style="color:var(--shiki-token-keyword)"> type</span><span style="color:var(--shiki-foreground)"> { AndroidAdbExecutorOptions } </span><span style="color:var(--shiki-token-keyword)">from</span><span style="color:var(--shiki-token-string-expression)"> &#x27;agent-device/android-adb&#x27;</span><span style="color:var(--shiki-foreground)">;</span></span>
 <span class="line"></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">const</span><span style="color:var(--shiki-token-constant)"> provider</span><span style="color:var(--shiki-token-keyword)"> =</span><span style="color:var(--shiki-foreground)"> {</span></span>
-<span class="line"><span style="color:var(--shiki-token-function)">  exec</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-keyword)"> async</span><span style="color:var(--shiki-foreground)"> (args</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-constant)"> string</span><span style="color:var(--shiki-foreground)">[]</span><span style="color:var(--shiki-token-punctuation)">,</span><span style="color:var(--shiki-foreground)"> options</span><span style="color:var(--shiki-token-keyword)">?:</span><span style="color:var(--shiki-token-function)"> AndroidAdbExecutorOptions</span><span style="color:var(--shiki-foreground)">) </span><span style="color:var(--shiki-token-keyword)">=&gt;</span></span>
+<span class="line"><span style="color:var(--shiki-token-function)">  exec</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-keyword)"> async</span><span style="color:var(--shiki-foreground)"> (args</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-keyword)"> readonly</span><span style="color:var(--shiki-token-constant)"> string</span><span style="color:var(--shiki-foreground)">[]</span><span style="color:var(--shiki-token-punctuation)">,</span><span style="color:var(--shiki-foreground)"> options</span><span style="color:var(--shiki-token-keyword)">?:</span><span style="color:var(--shiki-token-function)"> AndroidAdbExecutorOptions</span><span style="color:var(--shiki-foreground)">) </span><span style="color:var(--shiki-token-keyword)">=&gt;</span></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">    await</span><span style="color:var(--shiki-token-function)"> runAdbThroughRemoteTunnel</span><span style="color:var(--shiki-foreground)">(args</span><span style="color:var(--shiki-token-punctuation)">,</span><span style="color:var(--shiki-foreground)"> options)</span><span style="color:var(--shiki-token-punctuation)">,</span></span>
 <span class="line"><span style="color:var(--shiki-foreground)">};</span></span>
 <span class="line"></span>
