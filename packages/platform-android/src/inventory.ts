@@ -237,7 +237,7 @@ async function listStoppedAvds(
 }
 
 function adbShellArgv(serial: string, words: readonly ShellWord[]): readonly string[] {
-  return deviceShellArgv('shell', words, ['-s', serial]);
+  return deviceShellArgv('adb', 'shell', words, ['-s', serial]);
 }
 
 async function runAdbShell(

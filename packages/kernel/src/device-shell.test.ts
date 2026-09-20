@@ -14,13 +14,13 @@ const UNGUARDED = expect.objectContaining({
 
 describe('deviceShellArgv', () => {
   it('renders safe words byte-identical and quotes injection vectors', () => {
-    expect(deviceShellArgv('shell', ['am', 'force-stop', 'com.example.app'])).toEqual([
+    expect(deviceShellArgv('adb', 'shell', ['am', 'force-stop', 'com.example.app'])).toEqual([
       'shell',
       'am',
       'force-stop',
       'com.example.app',
     ]);
-    expect(deviceShellArgv('shell', ['input', 'text', 'hi; rm -rf / "$(id)"'])).toEqual([
+    expect(deviceShellArgv('adb', 'shell', ['input', 'text', 'hi; rm -rf / "$(id)"'])).toEqual([
       'shell',
       'input',
       'text',
@@ -31,6 +31,7 @@ describe('deviceShellArgv', () => {
   it('renders numbers, fragments, and a transport prefix', () => {
     expect(
       deviceShellArgv(
+        'adb',
         'exec-out',
         ['input', 'tap', 10, 20.5, shellFragment('| head -c 1')],
         ['-s', 'emulator-5554'],
@@ -39,7 +40,7 @@ describe('deviceShellArgv', () => {
   });
 
   it('quotes an empty word so the device shell receives an explicit empty argument', () => {
-    expect(deviceShellArgv('shell', ['settings', 'put', 'ns', 'key', ''])).toEqual([
+    expect(deviceShellArgv('adb', 'shell', ['settings', 'put', 'ns', 'key', ''])).toEqual([
       'shell',
       'settings',
       'put',
@@ -48,21 +49,74 @@ describe('deviceShellArgv', () => {
       "''",
     ]);
   });
+
+  it('escapes what HDC double-quoting leaves live instead of quoting around it', () => {
+    expect(
+      deviceShellArgv('hdc', 'shell', ['am', 'force-stop', 'com.example.app'], ['-t', 'target']),
+    ).toEqual(['-t', 'target', 'shell', 'am', 'force-stop', 'com.example.app']);
+    expect(
+      deviceShellArgv('hdc', 'shell', [
+        'uitest',
+        'uiInput',
+        'inputText',
+        307,
+        1334,
+        'a;b $(id) \'q\' "d" `tick` |wc > /tmp/harm-pwned',
+      ]),
+    ).toEqual([
+      'shell',
+      'uitest',
+      'uiInput',
+      'inputText',
+      '307',
+      '1334',
+      'a;b \\$(id) \'q\' \\"d\\" \\`tick\\` |wc > /tmp/harm-pwned',
+    ]);
+    expect(deviceShellArgv('hdc', 'shell', [String.raw`C:\Users\me\app.apk`])).toEqual([
+      'shell',
+      String.raw`C:\\Users\\me\\app.apk`,
+    ]);
+  });
+
+  it('refuses a shell fragment on the HDC transport, which cannot carry a script', () => {
+    expect(() => deviceShellArgv('hdc', 'shell', [shellFragment('hilog | tail -n 1')])).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({ reason: 'hdc-shell-fragment-unsupported' }),
+      }),
+    );
+  });
+
+  it('refuses an empty word on the HDC transport, which drops it on the way to the device', () => {
+    expect(() =>
+      deviceShellArgv('hdc', 'shell', ['uitest', 'uiInput', 'inputText', 1, 2, '']),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_ARGS',
+        details: expect.objectContaining({
+          reason: 'hdc-empty-word-unsupported',
+          hint: expect.any(String),
+        }),
+      }),
+    );
+  });
 });
 
 describe('assertDeviceShellArgv', () => {
   it('accepts non-shell argv and argv minted by deviceShellArgv', () => {
     expect(() => assertDeviceShellArgv(['install', '-r', 'app.apk'], 'test')).not.toThrow();
-    expect(() => assertDeviceShellArgv(deviceShellArgv('shell', ['id']), 'test')).not.toThrow();
     expect(() =>
-      assertDeviceShellArgv(deviceShellArgv('shell', ['id'], ['-s', 'serial']), 'test'),
+      assertDeviceShellArgv(deviceShellArgv('adb', 'shell', ['id']), 'test'),
+    ).not.toThrow();
+    expect(() =>
+      assertDeviceShellArgv(deviceShellArgv('adb', 'shell', ['id'], ['-s', 'serial']), 'test'),
     ).not.toThrow();
   });
 
   it('refuses a literal, variable-built, or plainly copied device-shell argv', () => {
     const subcommand = 'shell';
     const variableBuilt = [subcommand, 'input', 'text', 'x; reboot'];
-    const copied = [...deviceShellArgv('shell', ['id'])];
+    const copied = [...deviceShellArgv('adb', 'shell', ['id'])];
     for (const args of [['shell', 'id'], ['exec-out', 'screencap', '-p'], variableBuilt, copied]) {
       expect(() => assertDeviceShellArgv(args, 'test')).toThrow(UNGUARDED);
       expect(() => assertDeviceShellArgv(args, 'test')).toThrow(/deviceShellArgv/);
@@ -70,14 +124,19 @@ describe('assertDeviceShellArgv', () => {
   });
 
   it('keeps a minted command accepted after any number of other mints', () => {
-    const constant = deviceShellArgv('shell', ['dumpsys', 'window', 'windows']);
+    const constant = deviceShellArgv('adb', 'shell', ['dumpsys', 'window', 'windows']);
     for (let index = 0; index < 5_000; index += 1)
-      deviceShellArgv('shell', ['input', 'tap', index]);
+      deviceShellArgv('adb', 'shell', ['input', 'tap', index]);
     expect(() => assertDeviceShellArgv(constant, 'test')).not.toThrow();
   });
 
   it('keeps a command minted with its transport addressing after a transport removes it', () => {
-    const addressed = deviceShellArgv('shell', ['id'], ['-P', '15037', '-s', 'emulator-5554']);
+    const addressed = deviceShellArgv(
+      'adb',
+      'shell',
+      ['id'],
+      ['-P', '15037', '-s', 'emulator-5554'],
+    );
     const adopted = relayDeviceShellArgvWithoutOptions(addressed, 2, 2);
     expect(adopted).toEqual(['-P', '15037', 'shell', 'id']);
     expect(() => assertDeviceShellArgv(adopted, 'test')).not.toThrow();
@@ -87,7 +146,7 @@ describe('assertDeviceShellArgv', () => {
   });
 
   it('refuses a relay that reaches the device command, and one that never had a minted command', () => {
-    const addressed = deviceShellArgv('shell', ['id'], ['-s', 'emulator-5554']);
+    const addressed = deviceShellArgv('adb', 'shell', ['id'], ['-s', 'emulator-5554']);
     const truncated = relayDeviceShellArgvWithoutOptions(addressed, 3, 1);
     expect(() => assertDeviceShellArgv(truncated, 'test')).toThrow(UNGUARDED);
     const raw = ['-s', 'emulator-5554', 'shell', 'whoami'];

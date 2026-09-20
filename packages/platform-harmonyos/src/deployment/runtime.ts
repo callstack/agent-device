@@ -166,7 +166,11 @@ async function runHdcShell(
   timeoutMs = 15_000,
 ) {
   return await commands.run(
-    { executable: 'hdc', args: deviceShellArgv('shell', words, ['-t', device.id]), timeoutMs },
+    {
+      executable: 'hdc',
+      args: deviceShellArgv('hdc', 'shell', words, ['-t', device.id]),
+      timeoutMs,
+    },
     signal,
   );
 }

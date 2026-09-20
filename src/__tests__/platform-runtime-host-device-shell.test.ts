@@ -14,7 +14,7 @@ test('the host command port holds adb and hdc requests to the device-shell guard
     expect(() =>
       guardedHostCommandArgv({
         executable,
-        args: deviceShellArgv('shell', ['whoami'], ['-s', 'serial']),
+        args: deviceShellArgv('adb', 'shell', ['whoami'], ['-s', 'serial']),
       }),
     ).not.toThrow();
     expect(() => guardedHostCommandArgv({ executable, args: ['devices', '-l'] })).not.toThrow();
@@ -25,7 +25,7 @@ test('the host command port holds adb and hdc requests to the device-shell guard
 });
 
 test('the host command port dispatches the request array, not a copy of it', () => {
-  const args = deviceShellArgv('shell', ['id']);
+  const args = deviceShellArgv('adb', 'shell', ['id']);
   // A copy would be a different array, and the dispatch guard downstream recognizes the array the
   // funnel built — so the port has to hand on the very same one.
   expect(guardedHostCommandArgv({ executable: 'adb', args })).toBe(args);

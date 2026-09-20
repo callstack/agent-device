@@ -33,7 +33,12 @@ export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost) {
             runtimeHost,
             {
               executable: hdc,
-              args: deviceShellArgv('shell', ['pidof', input.appBundleId], ['-t', device.id]),
+              args: deviceShellArgv(
+                'hdc',
+                'shell',
+                ['pidof', input.appBundleId],
+                ['-t', device.id],
+              ),
               allowFailure: true,
               timeoutMs: 5_000,
             },
@@ -43,7 +48,7 @@ export function createHarmonyAppLogRuntime(host: AppLogRuntimeHost) {
           kind: 'host',
           request: {
             executable: hdc,
-            args: deviceShellArgv('shell', ['hilog', '-P', pid], ['-t', device.id]),
+            args: deviceShellArgv('hdc', 'shell', ['hilog', '-P', pid], ['-t', device.id]),
             allowFailure: true,
           },
         }),

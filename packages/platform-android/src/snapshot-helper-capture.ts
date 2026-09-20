@@ -178,7 +178,7 @@ export function buildAndroidSnapshotHelperArgs(
   options: AndroidSnapshotHelperResolvedCaptureOptions,
   session: Readonly<{ sessionPort?: number }> = {},
 ): readonly string[] {
-  return deviceShellArgv('shell', [
+  return deviceShellArgv('adb', 'shell', [
     'am',
     'instrument',
     '-w',

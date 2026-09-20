@@ -51,7 +51,7 @@ test('createDeviceAdbExecutor routes local commands through adb with the device 
     booted: true,
   });
 
-  const result = await adb(deviceShellArgv('shell', ['getprop', 'sys.boot_completed']), {
+  const result = await adb(deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed']), {
     timeoutMs: 1000,
   });
 
@@ -82,7 +82,7 @@ test('createDeviceAdbExecutor remains a local adb executor inside provider scope
       return { stdout: 'provider', stderr: '', exitCode: 0 };
     },
     { serial: 'emulator-5554' },
-    async () => await adb(deviceShellArgv('shell', ['echo', 'local'])),
+    async () => await adb(deviceShellArgv('adb', 'shell', ['echo', 'local'])),
   );
 
   assert.equal(result.stdout, 'ok');
@@ -112,8 +112,8 @@ test('scoped provider only resolves for the matching device serial', async () =>
     async () => {
       const adb = resolveAndroidAdbExecutor(otherDevice);
       const provider = resolveAndroidAdbProvider(otherDevice);
-      await provider.exec(deviceShellArgv('shell', ['echo', 'provider-fallback']));
-      return await adb(deviceShellArgv('shell', ['echo', 'executor-fallback']));
+      await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'provider-fallback']));
+      return await adb(deviceShellArgv('adb', 'shell', ['echo', 'executor-fallback']));
     },
   );
 
@@ -156,7 +156,7 @@ test('scoped background transport resolves only an explicitly supplied matching 
         details: { reason: 'unguarded-device-shell-argv' },
       });
       assert.equal(spawn.mock.calls.length, 0);
-      const logcat = deviceShellArgv('shell', ['logcat']);
+      const logcat = deviceShellArgv('adb', 'shell', ['logcat']);
       scopedSpawn(logcat, {});
       assert.deepEqual(spawn.mock.calls, [[logcat, {}]]);
       assert.deepEqual(
@@ -189,7 +189,7 @@ test('createLocalAndroidAdbProvider exposes exec, spawn, and reverse over local 
     booted: true,
   });
 
-  await provider.exec(deviceShellArgv('shell', ['echo', 'ok']));
+  await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'ok']));
   provider.spawn?.(['logcat'], { stdio: ['ignore', 'pipe', 'pipe'] });
   await provider.reverse?.ensure({ local: 'tcp:8081', remote: 'tcp:8081', ownerId: 'session-a' });
   await provider.reverse?.removeAllOwned('session-a');
@@ -252,7 +252,7 @@ test('createLocalAndroidAdbProvider carries a private server port through every 
     { serverPort: 15_037 },
   );
 
-  await provider.exec(deviceShellArgv('shell', ['echo', 'ok']));
+  await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'ok']));
   provider.spawn?.(['logcat']);
   await provider.reverse?.ensure({ local: 'tcp:8081', remote: 'tcp:8081' });
   await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4');
@@ -484,7 +484,7 @@ test('the local adb executor attaches classified hints to thrown command failure
     booted: true,
   });
 
-  const error = await adb(deviceShellArgv('shell', ['echo', 'hi'])).then(
+  const error = await adb(deviceShellArgv('adb', 'shell', ['echo', 'hi'])).then(
     () => assert.fail('expected the adb call to reject'),
     (error: unknown) => error,
   );
@@ -513,7 +513,7 @@ test('the local adb executor flags transient transport failures retriable', asyn
     booted: true,
   });
 
-  const error = await adb(deviceShellArgv('shell', ['echo', 'hi'])).then(
+  const error = await adb(deviceShellArgv('adb', 'shell', ['echo', 'hi'])).then(
     () => assert.fail('expected the adb call to reject'),
     (error: unknown) => error,
   );
@@ -742,7 +742,7 @@ test('provider-scoped adb failures get the same classified hints as local execut
     },
     { serial: 'emulator-5554' },
     async () =>
-      await resolveAndroidAdbExecutor(device)(deviceShellArgv('shell', ['echo', 'hi'])).then(
+      await resolveAndroidAdbExecutor(device)(deviceShellArgv('adb', 'shell', ['echo', 'hi'])).then(
         () => assert.fail('expected the provider-scoped call to reject'),
         (error: unknown) => error,
       ),

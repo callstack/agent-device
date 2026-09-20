@@ -34,7 +34,7 @@ async function readAndroidFocusWithExecutor(
 ): Promise<AppStateRuntimeResult | null> {
   for (const words of commands) {
     signal?.throwIfAborted();
-    const result = await run(deviceShellArgv('shell', words), { allowFailure: true });
+    const result = await run(deviceShellArgv('adb', 'shell', words), { allowFailure: true });
     signal?.throwIfAborted();
     const parsed = parseAndroidForegroundApp(result.stdout ?? '');
     if (parsed) return parsed;

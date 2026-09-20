@@ -159,7 +159,7 @@ async function readAndroidBootProp(
   return await runAndroidHostAdb(
     androidAdbInvocation(
       androidAdbSerialTarget(serial),
-      deviceShellArgv('shell', ['getprop', 'sys.boot_completed']),
+      deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed']),
     ),
     { allowFailure: true, signal, timeoutMs },
   );

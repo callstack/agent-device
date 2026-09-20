@@ -117,7 +117,7 @@ async function waitForBoot(
     const result = await host.commands.run(
       {
         executable: 'adb',
-        args: deviceShellArgv('shell', ['getprop', 'sys.boot_completed'], ['-s', serial]),
+        args: deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed'], ['-s', serial]),
         allowFailure: true,
         timeoutMs: Math.min(10_000, Math.max(1_000, deadline - host.clock.now())),
       },

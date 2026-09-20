@@ -69,7 +69,7 @@ async function doctorAndroidAppLogs(
         await host.commands.run(
           {
             executable: 'adb',
-            args: deviceShellArgv('shell', ['echo', 'ok'], ['-s', deviceId]),
+            args: deviceShellArgv('adb', 'shell', ['echo', 'ok'], ['-s', deviceId]),
             allowFailure: true,
             timeoutMs: 1_000,
           },
@@ -103,7 +103,7 @@ async function doctorAndroidAppLogs(
 function androidPidRequest(deviceId: string, appBundleId: string) {
   return {
     executable: 'adb',
-    args: deviceShellArgv('shell', ['pidof', appBundleId], ['-s', deviceId]),
+    args: deviceShellArgv('adb', 'shell', ['pidof', appBundleId], ['-s', deviceId]),
     allowFailure: true,
     timeoutMs: 5_000,
   } as const;

@@ -1,14 +1,21 @@
 import { AppError } from './errors.ts';
 
-// `adb shell`, `adb exec-out`, and `hdc shell` join the argv after the subcommand into one string
-// that the device's `sh` re-parses (adb deliberately does not escape, "just like ssh(1)"). The host
-// never runs a shell, so the injection surface is purely device-side: every dynamic element in a
-// device-shell command is a command injection unless it is quoted.
+// `adb shell`, `adb exec-out`, and `hdc shell` hand the argv after the subcommand to the device's
+// `sh`, which re-parses it. The host never runs a shell, so the injection surface is purely
+// device-side: every dynamic element in a device-shell command is a command injection unless the
+// transport's own quoting is respected.
 //
-// A device-shell command can only be produced by `deviceShellArgv`, which quotes every word, and
-// every dispatch boundary refuses a `shell`/`exec-out` command it did not produce. The one way to
-// hand the device shell an unquoted fragment is `shellFragment`, which is greppable and reviewed at
-// its call site.
+// The two transports quote differently, which is why a caller names the transport instead of
+// choosing quoting. `adb` deliberately escapes nothing ("just like ssh(1)"), so a word reaches the
+// device shell inside whatever quotes we put in it and POSIX single-quoting is correct. `hdc` wraps
+// every element it forwards in double quotes, so our quotes would arrive as data while `$`,
+// backquote, and `"` stay live at the device shell — an escaped word is correct there and a
+// single-quoted one is both corrupted and injectable.
+//
+// A device-shell command can only be produced by `deviceShellArgv`, which renders every word for its
+// transport, and every dispatch boundary refuses a `shell`/`exec-out` command it did not produce. The
+// one way to hand the device shell an unquoted fragment is `shellFragment`, which is greppable and
+// reviewed at its call site and is only available to a transport that forwards words verbatim.
 //
 // The same POSIX quoting rule also serves host-side needs — CLI hints and daemon recovery hints
 // quote for the user's shell, and the Apple runner host exports an environment value. Nothing here
@@ -44,6 +51,9 @@ export type ShellWord = string | number | ShellFragment;
 
 export type DeviceShellSubcommand = 'shell' | 'exec-out';
 
+/** The host tool that carries a device-shell command to the device, and therefore how it quotes. */
+export type DeviceShellTransport = 'adb' | 'hdc';
+
 declare const deviceShellArgvBrand: unique symbol;
 
 /**
@@ -59,16 +69,51 @@ export type DeviceShellArgv = readonly string[] & {
 // one rebuild a transport is allowed to do is {@link relayDeviceShellArgvWithoutOptions}.
 const mintedDeviceShellOptionRuns = new WeakMap<readonly string[], number>();
 
-function renderShellWord(word: ShellWord): string {
-  if (typeof word === 'number') return String(word);
-  if (typeof word === 'string') return shellQuoteIfNeeded(word);
-  return word.script;
-}
+/** The characters the device shell still acts on inside the double quotes `hdc` puts around elements. */
+const HDC_DOUBLE_QUOTED_LIVE_WORD = /[\\$"`]/g;
 
 /**
- * Builds a device-shell command from words: `deviceShellArgv('shell', ['am', 'force-stop',
- * packageName])` → `['shell', 'am', 'force-stop', <quoted packageName>]`. A bare safe word renders
- * byte-identical to itself, so only a value that would have been an injection vector changes.
+ * A backslash escape is what that shell consumes inside those double quotes, so escaping the live
+ * characters yields the word — while wrapping in quotes would deliver the quotes as data.
+ */
+function renderDoubleQuotedShellWord(word: string): string {
+  return word.replaceAll(HDC_DOUBLE_QUOTED_LIVE_WORD, (live) => `\\${live}`);
+}
+function renderShellWord(word: ShellWord, transport: DeviceShellTransport): string {
+  if (typeof word === 'number') return String(word);
+  if (typeof word === 'string') {
+    if (transport === 'hdc') {
+      if (word === '') {
+        throw new AppError(
+          'INVALID_ARGS',
+          'hdc drops an empty element instead of carrying it, so the device command would lose an operand.',
+          {
+            reason: 'hdc-empty-word-unsupported',
+            hint: 'Pass a value the transport can carry, or use a device action that needs no operand.',
+          },
+        );
+      }
+      return renderDoubleQuotedShellWord(word);
+    }
+    return shellQuoteIfNeeded(word);
+  }
+  if (transport === 'hdc') {
+    throw new AppError(
+      'INVALID_ARGS',
+      'hdc wraps every element in double quotes, so a shell fragment would reach the device as literal text instead of a script.',
+      { reason: 'hdc-shell-fragment-unsupported' },
+    );
+  }
+  return word.script;
+}
+/**
+ * Builds a device-shell command from words:
+ * `deviceShellArgv('adb', 'shell', ['am', 'force-stop', packageName])` →
+ * `['shell', 'am', 'force-stop', <quoted packageName>]`. A bare safe word renders byte-identical to
+ * itself on the adb transport, so only a value that would have been an injection vector changes.
+ *
+ * The transport is required because it decides quoting: `adb` forwards words verbatim while `hdc`
+ * double-quotes each one. A fragment is refused on `hdc`, where it cannot survive as a script.
  *
  * `prefix` carries transport options that must travel inside the same argv as the subcommand: the
  * `-t <target>` of an `hdc` command sent through the generic host command port, or an adb
@@ -76,11 +121,16 @@ function renderShellWord(word: ShellWord): string {
  * carries addressing as a typed target instead, mint the device command alone.
  */
 export function deviceShellArgv(
+  transport: DeviceShellTransport,
   subcommand: DeviceShellSubcommand,
   words: readonly ShellWord[],
   prefix: readonly string[] = [],
 ): DeviceShellArgv {
-  const argv = Object.freeze([...prefix, subcommand, ...words.map(renderShellWord)]);
+  const argv = Object.freeze([
+    ...prefix,
+    subcommand,
+    ...words.map((word) => renderShellWord(word, transport)),
+  ]);
   mintedDeviceShellOptionRuns.set(argv, prefix.length);
   return argv as DeviceShellArgv;
 }

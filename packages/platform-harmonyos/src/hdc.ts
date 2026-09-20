@@ -36,13 +36,13 @@ export async function runHarmonyHdc(
   });
 }
 
-/** Runs `hdc shell <words>` for the target; every word is quoted for the device shell. */
+/** Runs `hdc shell <words>` for the target; every word is escaped for HDC's double-quoted transport. */
 export async function runHarmonyShell(
   device: Pick<DeviceInfo, 'id'>,
   words: readonly ShellWord[],
   options?: HarmonyHdcOptions,
 ): Promise<ExecResult> {
-  return await runHarmonyHdc(device, deviceShellArgv('shell', words), options);
+  return await runHarmonyHdc(device, deviceShellArgv('hdc', 'shell', words), options);
 }
 
 /**

@@ -154,7 +154,7 @@ async function resolveAndroidPid(
     host,
     {
       executable: 'adb',
-      args: deviceShellArgv('shell', ['pidof', appBundleId], ['-s', deviceId]),
+      args: deviceShellArgv('adb', 'shell', ['pidof', appBundleId], ['-s', deviceId]),
       allowFailure: true,
     },
     signal,

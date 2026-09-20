@@ -98,9 +98,9 @@ test('outside any scope, resolution falls back to host adb for the device serial
     },
   });
 
-  await resolveAndroidAdbExecutor(DEVICE)(deviceShellArgv('shell', ['echo', 'ok']));
+  await resolveAndroidAdbExecutor(DEVICE)(deviceShellArgv('adb', 'shell', ['echo', 'ok']));
   const provider = resolveAndroidAdbProvider(DEVICE);
-  await provider.exec(deviceShellArgv('shell', ['echo', 'again']));
+  await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'again']));
 
   expect(serialCalls).toEqual([
     ['emulator-5554', ['shell', 'echo', 'ok']],
@@ -270,20 +270,20 @@ test('a managed port scope rejects foreign serials before host adb execution', a
     async () => {
       await runAndroidHostAdb(parseAndroidAdbArgv(['devices']));
       await runAndroidHostAdb(
-        androidAdbInvocation(androidAdbHostTarget(), deviceShellArgv('shell', ['id'])),
+        androidAdbInvocation(androidAdbHostTarget(), deviceShellArgv('adb', 'shell', ['id'])),
         { env: { ANDROID_SERIAL: OTHER.id } },
       );
       await runAndroidHostAdb(
         androidAdbInvocation(
           androidAdbSerialTarget(DEVICE.id),
-          deviceShellArgv('shell', ['getprop']),
+          deviceShellArgv('adb', 'shell', ['getprop']),
         ),
       );
       await expect(
         runAndroidHostAdb(
           androidAdbInvocation(
             androidAdbSerialTarget(OTHER.id),
-            deviceShellArgv('shell', ['getprop']),
+            deviceShellArgv('adb', 'shell', ['getprop']),
           ),
         ),
       ).rejects.toMatchObject({
@@ -395,15 +395,15 @@ test('private-port execution contains local transports constructed before enteri
     { exec: async () => ok() },
     { serial: DEVICE.id, serverPort: 15_037 },
     async () => {
-      await matching.exec(deviceShellArgv('shell', ['id']));
+      await matching.exec(deviceShellArgv('adb', 'shell', ['id']));
       matching.spawn?.(['logcat']);
-      await expect(foreign.exec(deviceShellArgv('shell', ['id']))).rejects.toMatchObject({
+      await expect(foreign.exec(deviceShellArgv('adb', 'shell', ['id']))).rejects.toMatchObject({
         details: { reason: 'managed-device-transport-mismatch' },
       });
       expect(() => foreign.spawn?.(['logcat'])).toThrowError(
         expect.objectContaining({ details: { reason: 'managed-device-transport-mismatch' } }),
       );
-      await expect(wrongPort(deviceShellArgv('shell', ['id']))).rejects.toMatchObject({
+      await expect(wrongPort(deviceShellArgv('adb', 'shell', ['id']))).rejects.toMatchObject({
         details: { reason: 'managed-device-transport-mismatch' },
       });
     },
@@ -455,7 +455,7 @@ test('a device route answers for the server it was built with, not one a call na
   // With no lease the port the route was built with is the one it addresses, so a per-call option
   // is not a second channel that can move the same request onto another adb server.
   const route = createLocalAndroidAdbProvider(DEVICE, { serverPort: 15_037 });
-  await route.exec(deviceShellArgv('shell', ['id']), { serverPort: 9_999 });
+  await route.exec(deviceShellArgv('adb', 'shell', ['id']), { serverPort: 9_999 });
   route.spawn?.(['logcat'], { serverPort: 9_999 });
   expect(calls).toEqual([scoped(DEVICE.id, 'shell', 'id'), scoped(DEVICE.id, 'logcat')]);
 
@@ -466,7 +466,7 @@ test('a device route answers for the server it was built with, not one a call na
     { serial: DEVICE.id, serverPort: 15_037 },
     async () => {
       await expect(
-        route.exec(deviceShellArgv('shell', ['id']), { serverPort: 9_999 }),
+        route.exec(deviceShellArgv('adb', 'shell', ['id']), { serverPort: 9_999 }),
       ).rejects.toMatchObject({
         details: { reason: 'managed-device-transport-mismatch' },
       });
@@ -515,7 +515,7 @@ test('a managed port scope keeps shell -s arguments on the private transport', a
       await runAndroidHostAdb(
         androidAdbInvocation(
           androidAdbHostTarget(),
-          deviceShellArgv('shell', ['echo', '-s', OTHER.id]),
+          deviceShellArgv('adb', 'shell', ['echo', '-s', OTHER.id]),
         ),
       );
       const shellCommand = captured?.('adb', ['shell', 'echo', '-s', OTHER.id], {});
@@ -608,7 +608,10 @@ test('managed port scopes remain isolated across concurrent requests', async () 
       { serial: DEVICE.id, serverPort: 15_037 },
       async () =>
         await runAndroidHostAdb(
-          androidAdbInvocation(androidAdbSerialTarget(DEVICE.id), deviceShellArgv('shell', ['id'])),
+          androidAdbInvocation(
+            androidAdbSerialTarget(DEVICE.id),
+            deviceShellArgv('adb', 'shell', ['id']),
+          ),
         ),
     ),
     withAndroidAdbProvider(
@@ -616,7 +619,10 @@ test('managed port scopes remain isolated across concurrent requests', async () 
       { serial: OTHER.id, serverPort: 15_038 },
       async () =>
         await runAndroidHostAdb(
-          androidAdbInvocation(androidAdbSerialTarget(OTHER.id), deviceShellArgv('shell', ['id'])),
+          androidAdbInvocation(
+            androidAdbSerialTarget(OTHER.id),
+            deviceShellArgv('adb', 'shell', ['id']),
+          ),
         ),
     ),
   ]);

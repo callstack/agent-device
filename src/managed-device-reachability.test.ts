@@ -160,7 +160,7 @@ test.skipIf(process.platform === 'win32')(
           wrongPortReason = (error as { details?: { reason?: string } }).details?.reason;
         }
         const provider = resolveAndroidAdbProvider(reachability.device);
-        const serial = await provider.exec(deviceShellArgv('shell', ['id']));
+        const serial = await provider.exec(deviceShellArgv('adb', 'shell', ['id']));
         return {
           inventory,
           host: JSON.parse(host.stdout),

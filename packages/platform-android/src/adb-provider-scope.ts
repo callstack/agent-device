@@ -341,7 +341,7 @@ export async function runAdbShell(
   words: readonly ShellWord[],
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
-  return await adb(deviceShellArgv('shell', words), options);
+  return await adb(deviceShellArgv('adb', 'shell', words), options);
 }
 
 /** Runs `adb exec-out <words>` (raw stdout) through an executor. */
@@ -350,7 +350,7 @@ export async function runAdbExecOut(
   words: readonly ShellWord[],
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
-  return await adb(deviceShellArgv('exec-out', words), options);
+  return await adb(deviceShellArgv('adb', 'exec-out', words), options);
 }
 
 /** Every adb entry point the cluster hands out refuses a device-shell command the funnel skipped. */

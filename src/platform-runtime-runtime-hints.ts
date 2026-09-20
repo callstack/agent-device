@@ -175,7 +175,7 @@ async function readAndroidDevPrefs(
 ): Promise<string> {
   const result = await runRuntimeHintsAndroidAdb(
     device,
-    deviceShellArgv('shell', ['run-as', packageName, 'cat', prefsPath]),
+    deviceShellArgv('adb', 'shell', ['run-as', packageName, 'cat', prefsPath]),
     { allowFailure: true },
   );
   if (result.exitCode !== 0) return DEFAULT_ANDROID_PREFS_XML;
@@ -199,7 +199,7 @@ async function assertAndroidAppSandboxAccessible(
   device: DeviceInfo,
   packageName: string,
 ): Promise<void> {
-  const probeArgs = deviceShellArgv('shell', ['run-as', packageName, 'id']);
+  const probeArgs = deviceShellArgv('adb', 'shell', ['run-as', packageName, 'id']);
   const probeResult = await runRuntimeHintsAndroidAdb(device, probeArgs, { allowFailure: true });
   if (probeResult.exitCode === 0) return;
   throw androidRuntimeHintsProbeError(probeResult, packageName, probeArgs);
@@ -232,12 +232,12 @@ async function writeAndroidDevPrefsFiles(
 ): Promise<void> {
   await runRuntimeHintsAndroidAdb(
     device,
-    deviceShellArgv('shell', ['run-as', packageName, 'mkdir', '-p', 'shared_prefs']),
+    deviceShellArgv('adb', 'shell', ['run-as', packageName, 'mkdir', '-p', 'shared_prefs']),
   );
   for (const file of files) {
     await runRuntimeHintsAndroidAdb(
       device,
-      deviceShellArgv('shell', ['run-as', packageName, 'tee', file.path]),
+      deviceShellArgv('adb', 'shell', ['run-as', packageName, 'tee', file.path]),
       { stdin: file.xml.trimEnd() },
     );
   }

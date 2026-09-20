@@ -186,8 +186,8 @@ function androidFingerprintCommandAttempts(
 ): (readonly string[])[] {
   const fingerprintId = action === 'match' ? '1' : '9999';
   const attempts: (readonly string[])[] = [
-    deviceShellArgv('shell', ['cmd', 'fingerprint', 'touch', fingerprintId]),
-    deviceShellArgv('shell', ['cmd', 'fingerprint', 'finger', fingerprintId]),
+    deviceShellArgv('adb', 'shell', ['cmd', 'fingerprint', 'touch', fingerprintId]),
+    deviceShellArgv('adb', 'shell', ['cmd', 'fingerprint', 'finger', fingerprintId]),
   ];
   if (device.kind === 'emulator') {
     attempts.push(['emu', 'finger', 'touch', fingerprintId]);

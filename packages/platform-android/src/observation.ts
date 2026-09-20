@@ -56,13 +56,18 @@ export function createAndroidObservationAdapter(
     async tap(device, x, y) {
       return await host.runAdb(
         device,
-        deviceShellArgv('shell', ['input', 'tap', String(Math.round(x)), String(Math.round(y))]),
+        deviceShellArgv('adb', 'shell', [
+          'input',
+          'tap',
+          String(Math.round(x)),
+          String(Math.round(y)),
+        ]),
         { allowFailure: true },
       );
     },
     openApp: async (device, appBundleId) => await host.openApp(device, appBundleId),
     async readScreenSize(device) {
-      const result = await host.runAdb(device, deviceShellArgv('shell', ['wm', 'size']));
+      const result = await host.runAdb(device, deviceShellArgv('adb', 'shell', ['wm', 'size']));
       const match = result.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
       if (!match) throw new AppError('COMMAND_FAILED', 'Unable to read screen size');
       return { width: Number(match[1]), height: Number(match[2]) };
@@ -80,7 +85,7 @@ function createDumpReader(host: AndroidObservationHost, device: DeviceInfo): Dum
     const pending =
       dumps.get(key) ??
       host
-        .runAdb(device, deviceShellArgv('shell', words), { allowFailure: true })
+        .runAdb(device, deviceShellArgv('adb', 'shell', words), { allowFailure: true })
         .then((result) => {
           recordSections(device, key, result.stdout);
           return result.stdout;

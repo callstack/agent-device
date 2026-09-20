@@ -88,13 +88,18 @@ async function probeHarmonyDevice(
     runHdc(
       host,
       hdc,
-      deviceShellArgv('shell', ['param', 'get', 'const.product.name'], ['-t', target]),
+      deviceShellArgv('hdc', 'shell', ['param', 'get', 'const.product.name'], ['-t', target]),
       scope,
     ),
     runHdc(
       host,
       hdc,
-      deviceShellArgv('shell', ['param', 'get', 'const.build.characteristics'], ['-t', target]),
+      deviceShellArgv(
+        'hdc',
+        'shell',
+        ['param', 'get', 'const.build.characteristics'],
+        ['-t', target],
+      ),
       scope,
     ),
   ]);

@@ -100,7 +100,7 @@ test('the funnels mint the command every route carries by reference and quote ev
   const adb = resolveAndroidAdbExecutor(DEVICE);
   await runAdbShell(adb, ['input', 'tap', 10, 20]);
   await runAdbExecOut(adb, ['cat', '/sdcard/a b.png']);
-  const minted = deviceShellArgv('shell', ['getprop', 'sys.boot_completed']);
+  const minted = deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed']);
   await adb(minted);
 
   expect(commands).toEqual([

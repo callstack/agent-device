@@ -7,7 +7,7 @@ vi.mock('@agent-device/platform-harmonyos', async () => {
   return {
     runHarmonyHdc: hdc,
     runHarmonyShell: (device: unknown, words: readonly string[], options: unknown) =>
-      hdc(device, deviceShellArgv('shell', words), options),
+      hdc(device, deviceShellArgv('adb', 'shell', words), options),
   };
 });
 

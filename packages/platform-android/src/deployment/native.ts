@@ -83,7 +83,7 @@ export async function pushAndroidNotification(
     appendBroadcastExtra(words, key, value);
     extrasCount += 1;
   }
-  const result = await runAdb(host, device, deviceShellArgv('shell', words), signal);
+  const result = await runAdb(host, device, deviceShellArgv('adb', 'shell', words), signal);
   assertCommandSuccess(result, 'adb push broadcast failed');
   return { action, extrasCount };
 }
@@ -174,7 +174,7 @@ async function listInstalledPackages(
   const result = await runAdb(
     host,
     device,
-    deviceShellArgv('shell', ['pm', 'list', 'packages']),
+    deviceShellArgv('adb', 'shell', ['pm', 'list', 'packages']),
     signal,
   );
   assertCommandSuccess(result, 'adb package inventory failed');

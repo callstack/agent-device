@@ -43,7 +43,7 @@ test('the root host refuses a device-shell command the funnel did not build', as
     runAndroidHostAdb(
       androidAdbInvocation(
         androidAdbSerialTarget('no-such-device-9999'),
-        deviceShellArgv('shell', ['getprop', 'sys.boot_completed']),
+        deviceShellArgv('adb', 'shell', ['getprop', 'sys.boot_completed']),
       ),
     ),
     (error: unknown) =>
@@ -133,16 +133,18 @@ test.skipIf(process.platform === 'win32')(
             serverPort: 15_037,
           });
           const adb = provider.exec;
-          const serial = JSON.parse((await adb(deviceShellArgv('shell', ['id']))).stdout) as {
+          const serial = JSON.parse(
+            (await adb(deviceShellArgv('adb', 'shell', ['id']))).stdout,
+          ) as {
             args: string[];
             port: string | null;
           };
           const serialOnItsOwnServer = JSON.parse(
-            (await adb(deviceShellArgv('shell', ['id'], ['-P', '15037']))).stdout,
+            (await adb(deviceShellArgv('adb', 'shell', ['id'], ['-P', '15037']))).stdout,
           ) as { args: string[]; port: string | null };
           const serialWithWrongEnvironment = JSON.parse(
             (
-              await adb(deviceShellArgv('shell', ['id']), {
+              await adb(deviceShellArgv('adb', 'shell', ['id']), {
                 env: {
                   ANDROID_ADB_SERVER_PORT: '9999',
                   ANDROID_ADB_SERVER_ADDRESS: 'foreign.example',
@@ -164,7 +166,7 @@ test.skipIf(process.platform === 'win32')(
           // A private adb server is not a channel a caller may retarget, so a `-P` naming another
           // one is refused before adb is asked anything. The port this route was built with is
           // accepted however it is spelled, including as the first token of argv.
-          await assert.rejects(adb(deviceShellArgv('shell', ['id'], ['-P', '9999'])), {
+          await assert.rejects(adb(deviceShellArgv('adb', 'shell', ['id'], ['-P', '9999'])), {
             details: { reason: 'managed-device-transport-mismatch' },
           });
           assert.throws(() => provider.spawn?.(['-P', '9999', 'logcat']), {
@@ -200,12 +202,15 @@ test.skipIf(process.platform === 'win32')(
             ['wait-for-device', 'disconnect'],
             ['wait-for-any-device', 'pair', 'foreign.example', '123456'],
           ]) {
-            await assert.rejects(adb(deviceShellArgv('shell', ['id'], selector)), {
+            await assert.rejects(adb(deviceShellArgv('adb', 'shell', ['id'], selector)), {
               details: { reason: 'managed-device-transport-mismatch' },
             });
-            assert.throws(() => provider.spawn?.(deviceShellArgv('shell', ['id'], selector)), {
-              details: { reason: 'managed-device-transport-mismatch' },
-            });
+            assert.throws(
+              () => provider.spawn?.(deviceShellArgv('adb', 'shell', ['id'], selector)),
+              {
+                details: { reason: 'managed-device-transport-mismatch' },
+              },
+            );
           }
 
           assert.deepEqual(serial, {
@@ -217,7 +222,7 @@ test.skipIf(process.platform === 'win32')(
           assert.deepEqual(serialOnItsOwnServer, serial);
           assert.deepEqual(serialWithWrongEnvironment, serial);
           const waited = JSON.parse(
-            (await adb(deviceShellArgv('shell', ['id'], ['wait-for-device']))).stdout,
+            (await adb(deviceShellArgv('adb', 'shell', ['id'], ['wait-for-device']))).stdout,
           );
           assert.deepEqual(waited, {
             ...serial,
@@ -302,7 +307,7 @@ test.skipIf(process.platform === 'win32')(
         const leakedOptions = { timeoutMs: 20 } as unknown as NonNullable<
           Parameters<typeof spawn>[1]
         >;
-        const child = spawn(deviceShellArgv('shell', ['logcat']), leakedOptions);
+        const child = spawn(deviceShellArgv('adb', 'shell', ['logcat']), leakedOptions);
         return await new Promise<{ code: number | null; signal: string | null }>((resolve) => {
           child.once('exit', (code, signal) => {
             resolve({ code, signal });

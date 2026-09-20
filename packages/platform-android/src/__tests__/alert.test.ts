@@ -11,7 +11,7 @@ const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]
 }));
 const runAndroidShell = vi.fn(
   async (device: DeviceInfo, words: ShellWord[]) =>
-    await runAndroidAdb(device, deviceShellArgv('shell', words)),
+    await runAndroidAdb(device, deviceShellArgv('adb', 'shell', words)),
 );
 vi.mock('../adb.ts', () => ({ runAndroidAdb, runAndroidShell }));
 // The dismissal re-check polls at the contract interval; the clock is the assertion, not the wait.
