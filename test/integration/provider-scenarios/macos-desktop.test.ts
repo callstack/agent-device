@@ -275,6 +275,24 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             expectData: { x: 116, y: 80 },
           },
           {
+            name: 'refresh frontmost refs before the repeat press',
+            command: 'snapshot',
+            flags: { snapshotInteractiveOnly: true },
+            assert: (snapshot) => {
+              const general = snapshot.json?.result?.data?.nodes?.find(
+                (node: { label?: string }) => node.label === 'General',
+              );
+              assert.equal(general?.ref, 'e2', JSON.stringify(snapshot.json));
+            },
+          },
+          {
+            name: 'double tap snapshot ref',
+            command: 'press',
+            positionals: ['@e2'],
+            flags: { doubleTap: true },
+            expectData: { x: 116, y: 80, doubleTap: true },
+          },
+          {
             name: 'switch to desktop surface',
             command: 'open',
             flags: {
@@ -505,6 +523,20 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           '116',
           '--y',
           '80',
+          '--bundle-id',
+          'com.apple.systempreferences',
+          '--surface',
+          'frontmost-app',
+        ]);
+        assertFlatToolCall(appleTool.calls, [
+          'macos-helper',
+          'press',
+          '--x',
+          '116',
+          '--y',
+          '80',
+          '--clicks',
+          '2',
           '--bundle-id',
           'com.apple.systempreferences',
           '--surface',

@@ -389,14 +389,32 @@ export async function runMacOsReadTextAction(
 export async function runMacOsPressAction(
   x: number,
   y: number,
-  options: { bundleId?: string; surface?: SessionSurface } = {},
+  options: {
+    bundleId?: string;
+    surface?: SessionSurface;
+    holdMs?: number;
+    clicks?: number;
+    intervalMs?: number;
+  } = {},
 ): Promise<{
   x: number;
   y: number;
+  holdMs?: number;
+  clicks?: number;
   bundleId?: string;
   surface?: SessionSurface;
 }> {
   const args = ['press', '--x', String(x), '--y', String(y)];
+  if (options.holdMs && options.holdMs > 0) {
+    args.push('--hold-ms', String(options.holdMs));
+  }
+  const clicks = options.clicks ?? 1;
+  if (clicks > 1) {
+    args.push('--clicks', String(clicks));
+    if (options.intervalMs !== undefined && options.intervalMs > 0) {
+      args.push('--interval-ms', String(options.intervalMs));
+    }
+  }
   appendMacOsHelperContextArgs(args, options);
   return await runMacOsHelper(args);
 }

@@ -11,8 +11,16 @@ let package = Package(
     ),
   ],
   targets: [
+    .target(
+      name: "AgentDeviceMacOSInput"
+    ),
     .executableTarget(
-      name: "AgentDeviceMacOSHelper"
+      name: "AgentDeviceMacOSHelper",
+      dependencies: ["AgentDeviceMacOSInput"]
+    ),
+    .testTarget(
+      name: "AgentDeviceMacOSInputTests",
+      dependencies: ["AgentDeviceMacOSInput"]
     ),
   ]
 )
