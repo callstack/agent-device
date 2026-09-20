@@ -78,7 +78,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // helpers packaged into `android/*/dist` (what the replay host verifies), where the
   // build script writes only the snapshot helper into `.tmp/`.
   gate('android-helpers', 'Android helper builds (snapshot + IME)', 'build:android', false),
-  gate('macos-helper', 'macOS helper build', 'build:macos-helper', false),
+  gate('macos-helper', 'macOS helper build and tests', 'check:macos-helper', false),
   gate('web-smoke', 'Live web platform smoke', 'test:smoke:web', false),
   // Needs full history and tags, so it runs in the shared fetch-depth: 0 job
   // rather than inside the shallow-clone-safe unit lane.
