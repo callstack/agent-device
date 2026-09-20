@@ -733,6 +733,22 @@ Rules:
   Prefer refs/selectors from the fresh snapshot for every step except the two documented coordinate fallbacks (empty-space long-press to enter edit mode, and the gallery search-result tap).
   This topic covers what already works by opening SpringBoard as the session app. It does not yet cover keeping an app session open while alternating individual commands against SpringBoard, or Live Activity/Dynamic Island semantics; those land separately.`,
   },
+  foldable: {
+    summary: 'Foldable Apple devices: panels, pose, and which screen you are on',
+    body: `agent-device help foldable
+
+A foldable Apple device (iPhone Duo) carries two integrated panels, which Apple calls the outer display and the inner display. Only one is lit at a time, and which one is lit is the device pose.
+
+Screens are handled for you:
+  Each iOS simulator capture resolves the CoreDevice display table, captures the lit panel explicitly, and normalizes density with that panel's own point scale. Do not add a screen flag to the normal loop; there is none, because the lit panel is always the only capturable one: the dark panel yields an all-black PNG.
+  The two panels are different sizes and different coordinate spaces (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across one.
+  Check which panel is lit before trusting a geometry claim: agent-device screenshot reports its point size, and 466x678 versus 669x951 says which panel you captured.
+
+Pose cannot be scripted:
+  iOS exposes fold state only to the app under test, as UIHinge.status (.closed/.partiallyOpen/.fullyOpen through UIHingeInteraction, or SwiftUI .onHingeChange). Nothing on the host sets it: simctl has no hinge/fold/pose subcommand, XCUITest has no hinge API, and devicectl only reports panel state (xcrun devicectl device info displays shows each panel's active/backlight state, which is how a closed device is detected). Do not write a step that changes pose, and do not claim a pose was set.
+  To exercise another pose, ask the operator to change it in Device Hub, then re-snapshot the iOS session. Driving Device Hub from a macOS session is possible in principle but its device surface exposes no accessibility nodes, so it is coordinate-only and needs Screen Recording permission; prefer asking the operator.
+  If a task asserts behavior for more than one pose, say which pose the current device is in, and state which poses remain unverified instead of assuming the device was folded.`,
+  },
   remote: {
     summary: 'Direct proxy, cloud profiles, and remote config',
     body: `agent-device help remote

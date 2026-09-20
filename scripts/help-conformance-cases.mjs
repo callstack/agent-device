@@ -761,4 +761,24 @@ Use the output already shown to determine whether the feed-search UI is present,
       { id: 'noPrematureClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
     ],
   },
+  {
+    id: 'foldable-pose-is-not-scriptable',
+    docs: ['--help:first30', 'foldable'],
+    task: 'Plan commands for the installed app com.example.notes on a foldable iPhone Duo simulator that is currently closed. Open the session, capture the screen the device is actually showing, snapshot it, press the visible Compose control, and close. The final report must state which fold poses the run did and did not cover.',
+    expectations: [
+      'validPlanCommands',
+      'fullPrefix',
+      'usesSnapshotI',
+      'usesSettleOnMutations',
+      'opensAndCloses',
+    ],
+    matchers: [{ id: 'capturesPanelEvidence', pattern: /\bagent-device\s+screenshot\b/i }],
+    forbidden: [
+      {
+        id: 'noInventedPoseCommand',
+        pattern: /\bagent-device\b[^\n]*(?:\bfold\b|\bunfold\b|half-unfold|\bhinge\b|\bpose\b)/i,
+      },
+      { id: 'noScreenSelectionFlag', pattern: /\s--(?:screen|display)\b/i },
+    ],
+  },
 ];
