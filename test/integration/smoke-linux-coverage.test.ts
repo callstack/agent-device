@@ -5,7 +5,7 @@ import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
+import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
 import {
   LINUX_COVERAGE_GAP_ISSUE,
   LINUX_COMMAND_EVIDENCE,
@@ -46,7 +46,7 @@ test('Linux coverage report has the expected classification counts', () => {
   // Focus (#1925), click, and type are live through the replay; the separate command-evidence
   // lane adds generic-command rows without changing it. Artifact inventory stays a gap because
   // local Linux screenshot paths are not daemon-downloadable.
-  assertCoverageClassificationSummaryDerivedFromManifest(
+  assertCoverageClassificationSummaryWiredToManifest(
     'Linux',
     LINUX_PLATFORM_COVERAGE,
     LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,

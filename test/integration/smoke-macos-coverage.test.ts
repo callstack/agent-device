@@ -5,7 +5,7 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
+import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
 import {
   MACOS_COVERAGE_GAP_ISSUE,
   MACOS_LIVE_SCENARIOS,
@@ -40,7 +40,7 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 });
 
 test('macOS coverage report counts every manifest classification', () => {
-  assertCoverageClassificationSummaryDerivedFromManifest(
+  assertCoverageClassificationSummaryWiredToManifest(
     'macOS',
     MACOS_PLATFORM_COVERAGE,
     MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
