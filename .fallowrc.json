@@ -147,9 +147,9 @@
       "exports": ["buildSimctlArgsForDevice"]
     },
     {
-      "comment": "The device-aware simctl argument builder is a named package entrypoint reached through dynamic platform-runtime imports. Fallow cannot connect those member reads to the re-export; keep the suppression limited to this one facade symbol.",
+      "comment": "The simctl façade symbols are named package entrypoints reached through dynamic platform-runtime imports. Fallow cannot connect those member reads to the re-exports; keep the suppression limited to these facade symbols.",
       "file": "packages/platform-apple/src/simctl-facade.ts",
-      "exports": ["buildSimctlArgsForDevice"]
+      "exports": ["buildSimctlArgsForDevice", "buildAppleSimulatorRecordVideoArgs"]
     },
     {
       "comment": "Apple runner mechanics are reached through the named runner operations façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the façade and its cleanup composition.",
