@@ -5,7 +5,7 @@ import test from 'node:test';
 
 import {
   IOS_TARGET_ACTIVATION_PRIOR_STATES,
-  isIosTargetActivationReason,
+  IOS_TARGET_ACTIVATION_REASONS,
   iosTargetActivationDisclosure,
   type IosTargetActivation,
 } from '@agent-device/contracts/ios-target-activation';
@@ -158,48 +158,81 @@ async function captureUntilDisclosed(context: LiveContext) {
     await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
   }
   assert.fail(
-    `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ` +
-      `${HANDOFF_URL}: ${JSON.stringify(last?.json ?? null)}`,
+    `no foreground disclosure within ${HANDOFF_DEADLINE_MS}ms of the handoff to ${HANDOFF_URL}. ` +
+      `${missingDisclosureEvidence(last)}${JSON.stringify(last?.json ?? null)}`,
   );
 }
 
 /**
- * Recovers the repair fact from the disclosure sentence in `data.warnings` and hands it back to the
- * shared builder, which must reproduce the response's sentence exactly. That is what makes the lane
- * assert the disclosure rather than a paraphrase of it, and it keeps the typed object out of the
- * picture so the lane runs against a head that publishes only the warning. A prior state outside the
- * declared set fails as a fact the runner could not have stamped — the declared set omits
- * `runningForeground` because the runner never activates there.
+ * Says which failure the lane actually hit. A warning that opens like the builder's stem but matches
+ * none of its rebuilds is a sentence that changed shape, which is a different bug from a device that
+ * never repaired anything — and the old 90-second timeout could not tell them apart.
+ */
+function missingDisclosureEvidence(last: Awaited<ReturnType<typeof runStep>> | undefined): string {
+  const stem = disclosureStem();
+  const warnings = ((last?.json?.data?.warnings ?? []) as unknown[]).filter(
+    (warning): warning is string => typeof warning === 'string',
+  );
+  return warnings.some((warning) => warning.startsWith(stem))
+    ? 'A warning opened like the shared disclosure sentence but no declared fact rebuilt it: '
+    : `No warning opened like the shared disclosure sentence ("${stem}…"). `;
+}
+
+/**
+ * Every fact the decoder can stamp: the declared sets, so a prior state the runner never activates in
+ * (`runningForeground`) is unprobeable here for the same reason the decoder drops it.
+ */
+const DECLARED_ACTIVATION_FACTS: IosTargetActivation[] = IOS_TARGET_ACTIVATION_PRIOR_STATES.flatMap(
+  (priorState) => IOS_TARGET_ACTIVATION_REASONS.map((reason) => ({ reason, priorState })),
+);
+
+/**
+ * A pid no live process can have, so the builder's own pid clause stays greppable inside the sentence
+ * it produces and can be opened into a capture group afterwards.
+ */
+const PID_PROBE = 88888888;
+
+/**
+ * Recognises the disclosure by rebuilding it, never by quoting it. Each declared fact goes through
+ * `iosTargetActivationDisclosure` — once bare, once with {@link PID_PROBE} where the real pid is
+ * captured — and only a response carrying one of those exact sentences counts. A reword of the
+ * builder therefore rewrites the probe with it instead of silently returning `undefined` here and
+ * reviving the old 90-second wait for a disclosure the lane had stopped being able to see.
  */
 function activationFactFrom(warnings: unknown[]): IosTargetActivation | undefined {
-  const sentence = warnings.find(
-    (warning): warning is string =>
-      typeof warning === 'string' && warning.includes('The session app was not foreground'),
+  const sentences = warnings.filter((warning): warning is string => typeof warning === 'string');
+  for (const fact of DECLARED_ACTIVATION_FACTS) {
+    if (sentences.includes(iosTargetActivationDisclosure(fact))) return fact;
+    const pidSentence = iosTargetActivationDisclosure({
+      ...fact,
+      otherActiveApplicationPid: PID_PROBE,
+    });
+    const pattern = new RegExp(
+      escapeRegExp(pidSentence).replace(String(PID_PROBE), String.raw`(\d+)`),
+    );
+    const disclosed = sentences.find((sentence) => pattern.test(sentence));
+    if (disclosed !== undefined) {
+      return { ...fact, otherActiveApplicationPid: Number(pattern.exec(disclosed)![1]) };
+    }
+  }
+  return undefined;
+}
+
+/** The longest opening every builder sentence shares — prose the lane never copies, only derives. */
+function disclosureStem(): string {
+  const sentences = DECLARED_ACTIVATION_FACTS.map((fact) => iosTargetActivationDisclosure(fact));
+  const [first = '', ...rest] = sentences;
+  return rest.reduce(
+    (stem, sentence) => {
+      const end = [...stem].findIndex((char, index) => sentence[index] !== char);
+      return end < 0 ? stem : stem.slice(0, end);
+    },
+    first.replace(/[^ ]*$/, ''),
   );
-  if (sentence === undefined) return undefined;
-  const priorState = IOS_TARGET_ACTIVATION_PRIOR_STATES.find(
-    (state) => state === /\(prior state ([A-Za-z]+)\)/.exec(sentence)?.[1],
-  );
-  const reason = /\(reason ([a-z_]+)\)/.exec(sentence)?.[1];
-  const pid = /active accessibility session \(pid (\d+)\)/.exec(sentence)?.[1];
-  assert.ok(
-    priorState !== undefined && isIosTargetActivationReason(reason),
-    `disclosure names no declared prior state and reason: ${sentence}`,
-  );
-  assert.match(
-    sentence,
-    /Re-capture now that the session app answers, or drive the other app in its own session/,
-  );
-  const fact: IosTargetActivation = {
-    reason,
-    priorState,
-    ...(pid === undefined ? {} : { otherActiveApplicationPid: Number(pid) }),
-  };
-  assert.ok(
-    warnings.includes(iosTargetActivationDisclosure(fact)),
-    `disclosure is not the shared builder's sentence: ${sentence}`,
-  );
-  return fact;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 async function checksum(filePath: string): Promise<string> {
