@@ -1,4 +1,3 @@
-import { AppError } from '@agent-device/kernel/errors';
 import type {
   Interactor,
   KeyboardDismissResult,
@@ -76,24 +75,6 @@ export function keyboardRuntimeOperationFacts(
 }
 
 /**
- * `Interactor.keyboardStatus`/`keyboardDismiss`/`keyboardEnter` are optional (parity with
- * `hover`): a platform with no keyboard concept for that action leaves it undefined. Facts admit
- * an operation only for owners whose interactor implements it, so a missing method at bind time
- * is a runtime-contract error, not a normal refusal.
- */
-function requireKeyboardMethod<Method>(
-  method: Method | undefined,
-  operation: string,
-): NonNullable<Method> {
-  if (method) return method as NonNullable<Method>;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `${operation} was admitted but its bound interactor has no implementation.`,
-    { reason: 'interactor-method-missing' },
-  );
-}
-
-/**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
  * resolution and this holds only what all three actions share: the runner context resolution.
@@ -129,7 +110,11 @@ export function bindKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
 ): Pick<KeyboardRuntimeOperations, Key> {
   const action = async (input: KeyboardActionInput) => {
     const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
-    const method = requireKeyboardMethod(interactor[key], KEYBOARD_ACTION_LABELS[key]);
+    // The guard every optional-member binder shares. Loaded on the call rather than at module
+    // evaluation because this facade's eager closure is held at its merge-base size
+    // (`eager-closure-budgets`); a static edge would grow it by one module.
+    const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+    const method = requireInteractorMethod(interactor[key], KEYBOARD_ACTION_LABELS[key]);
     return await (method as () => Promise<unknown>).call(interactor);
   };
   return Object.freeze({ [key]: action }) as Pick<KeyboardRuntimeOperations, Key>;
