@@ -36,6 +36,8 @@ vi.mock('../device-ready.ts', () => ({
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withSystemSurfaceDisclosure } from '../capture-disclosure.ts';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+import { TARGET_ACTIVATION_FACT } from './capture-disclosure-target-activation-fact.ts';
 
 // The occluding-shade capture every scenario below consumes: no application window content, one
 // active quick-settings surface. The Android capture route stamps systemSurfaceOnly on both the
@@ -367,4 +369,50 @@ test('the shared disclosure helper reports an iOS system surface on both outcome
   expect(failed.ok).toBe(false);
   if (failed.ok) return;
   expect(String(failed.error.details?.hint)).toContain(WEB_SIGN_IN_DISCLOSURE);
+});
+
+/**
+ * A timed-out `wait text` polled the device and the runner had to re-activate the session app to
+ * answer those polls (#2682). The disclosure arrives on the failure the same way the occlusion one
+ * does: in `error.details.hint`.
+ */
+test('wait timeout whose polls required a foreground repair discloses the repair', async () => {
+  const sessionStore = makeSessionStore();
+  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  legacyDispatchCapture.mockResolvedValue({
+    backend: 'xctest',
+    truncated: false,
+    targetActivation: TARGET_ACTIVATION_FACT,
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        label: 'General',
+        rect: { x: 16, y: 293, width: 370, height: 52 },
+        hittable: true,
+      },
+    ],
+  });
+
+  const response = await dispatchWaitViaRuntime({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'wait',
+      positionals: ['Bakery list', '250'],
+      flags: {},
+    } as DaemonRequest,
+    sessionName: 'default',
+    logPath: '/tmp/test.log',
+    sessionStore,
+    platformResourceCleanup,
+    ...snapshotRuntimeFixture(),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(String(response.error.details?.hint)).toContain(
+    iosTargetActivationDisclosure(TARGET_ACTIVATION_FACT),
+  );
 });

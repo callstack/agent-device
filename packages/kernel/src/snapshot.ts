@@ -429,9 +429,7 @@ export const IOS_TARGET_ACTIVATION_REASONS = [
 export type IosTargetActivationReason = (typeof IOS_TARGET_ACTIVATION_REASONS)[number];
 
 /** Whether `value` is a reason the runner can stamp; the only gate consumers apply to the field. */
-export function isIosTargetActivationReason(
-  value: unknown,
-): value is IosTargetActivationReason {
+export function isIosTargetActivationReason(value: unknown): value is IosTargetActivationReason {
   return (
     typeof value === 'string' &&
     (IOS_TARGET_ACTIVATION_REASONS as readonly string[]).includes(value)

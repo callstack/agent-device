@@ -1,11 +1,11 @@
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type {
-  IosTargetActivation,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
+import type { RequestActivationProof } from '../../capture-disclosure.ts';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
@@ -20,8 +20,6 @@ export type FindTargetTree = {
   iosSystemSurfaceBundleId?: string;
   /** The keyboard band this capture's producer measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
-  /** The runner re-activated the session app to serve this capture (#2682). */
-  targetActivation?: IosTargetActivation;
 };
 
 /**
@@ -40,6 +38,11 @@ export function createFindTargetCapture(
     sessionStore: SessionStore;
     sessionName: string;
     capture: BoundSelectorCapture;
+    /**
+     * Filled by whichever capture this find actually took, including a re-capture that replaced a
+     * sparse first tree — find's response is owed the repair its own first capture paid for.
+     */
+    activationProof: RequestActivationProof;
   }>,
 ): () => Promise<FindTargetTree> {
   const { device, session, req, logPath, locator, query, sessionStore, sessionName } = params;
@@ -51,6 +54,7 @@ export function createFindTargetCapture(
     req,
     logPath,
     capture: params.capture,
+    activationProof: params.activationProof,
   });
   return async () => {
     // Interaction targets need the full interactive tree so duplicate labels can
@@ -77,7 +81,6 @@ export function createFindTargetCapture(
       systemSurfaceOnly: snapshot.systemSurfaceOnly,
       iosSystemSurfaceBundleId: snapshot.iosSystemSurfaceBundleId,
       ...(snapshot.keyboard ? { keyboard: snapshot.keyboard } : {}),
-      ...(snapshot.targetActivation ? { targetActivation: snapshot.targetActivation } : {}),
     };
   };
 }

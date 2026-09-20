@@ -38,15 +38,14 @@ export function withSystemSurfaceDisclosure(
   const disclosure = snapshot?.iosSystemSurfaceBundleId
     ? iosSystemSurfaceDisclosure(snapshot.iosSystemSurfaceBundleId)
     : systemSurfaceDisclosure(snapshot);
-  return disclosure ? appendDisclosure(response, disclosure) : response;
+  return disclosure ? appendDisclosure(response, disclosure, 'warning') : response;
 }
 
 /**
  * Disclose a foreground repair the consumed capture carried (#2682). The fact applies to the whole
  * tree, so it travels as response-level metadata and its sentence is APPENDED — an earlier warning
- * (staleness, quality, an occluding surface) is never replaced. A route whose platform capture
- * already said the identical thing is not told twice: both spellings come from the one shared
- * disclosure function, so this is equality on a known sentence, not a text sniff.
+ * (staleness, quality, an occluding surface) is never replaced. The typed fact lands even when the
+ * sentence was already carried: the field is this response's own claim, independent of who spoke.
  */
 export function withTargetActivationDisclosure(
   response: DaemonResponse,
@@ -54,15 +53,9 @@ export function withTargetActivationDisclosure(
 ): DaemonResponse {
   const fact = snapshot?.targetActivation;
   if (!fact) return response;
-  if (!response.ok) return appendDisclosure(response, iosTargetActivationDisclosure(fact));
-  const disclosure = iosTargetActivationDisclosure(fact);
-  const warnings = responseWarnings(response.data?.warnings);
-  const data = {
-    ...response.data,
-    targetActivation: fact,
-    ...(warnings.includes(disclosure) ? {} : { warnings: [...warnings, disclosure] }),
-  };
-  return { ...response, data };
+  const disclosed = appendDisclosure(response, iosTargetActivationDisclosure(fact), 'warnings');
+  if (!disclosed.ok) return disclosed;
+  return { ...disclosed, data: { ...disclosed.data, targetActivation: fact } };
 }
 
 /**
@@ -83,24 +76,68 @@ export function withCaptureDisclosures(params: {
   );
 }
 
-function responseWarnings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => entry !== undefined) : [];
-}
+/**
+ * Which success-side field a disclosure enters. #2438's surface sentence shipped on the singular
+ * `warning`; the repair sentence ships on the `warnings` array beside the typed fact that travels
+ * with it. Failure has one carrier for both: `error.details.hint`.
+ */
+type DisclosureCarrier = 'warning' | 'warnings';
 
-function appendDisclosure(response: DaemonResponse, disclosure: string): DaemonResponse {
-  if (response.ok) {
-    const warning = appended(response.data?.warning, disclosure);
-    return { ...response, data: { ...response.data, warning } };
+/**
+ * The ONE gate every disclosure passes before it enters a response, whichever carrier that response
+ * uses. Routes nest — a failing `get text` under a repairing capture passes through the wrapper twice,
+ * once in the selector route and once in the interaction route — so a wrapper that spoke
+ * unconditionally would say it twice. Equality is on a sentence this module owns, never a text sniff:
+ * a response already carrying it comes back untouched.
+ */
+function appendDisclosure(
+  response: DaemonResponse,
+  disclosure: string,
+  carrier: DisclosureCarrier,
+): DaemonResponse {
+  if (carriesDisclosure(response, disclosure)) return response;
+  if (!response.ok) {
+    const details = response.error.details ?? {};
+    return {
+      ...response,
+      error: {
+        ...response.error,
+        details: { ...details, hint: appended(details.hint, disclosure) },
+      },
+    };
   }
-  const details = response.error.details ?? {};
+  if (carrier === 'warnings') {
+    return {
+      ...response,
+      data: {
+        ...response.data,
+        warnings: [...responseWarnings(response.data?.warnings), disclosure],
+      },
+    };
+  }
   return {
     ...response,
-    error: { ...response.error, details: { ...details, hint: appended(details.hint, disclosure) } },
+    data: { ...response.data, warning: appended(response.data?.warning, disclosure) },
   };
+}
+
+/**
+ * Every text a disclosure could already sit in, so a sentence spoken by an inner route cannot be
+ * spoken again by the wrapper around it.
+ */
+function carriesDisclosure(response: DaemonResponse, disclosure: string): boolean {
+  const carriers: unknown[] = response.ok
+    ? [response.data?.warning, ...responseWarnings(response.data?.warnings)]
+    : [response.error.details?.hint];
+  return carriers.some((carrier) => typeof carrier === 'string' && carrier.includes(disclosure));
 }
 
 function appended(existing: unknown, disclosure: string): string {
   return typeof existing === 'string' && existing.trim() !== ''
     ? `${existing}\n${disclosure}`
     : disclosure;
+}
+
+function responseWarnings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => entry !== undefined) : [];
 }

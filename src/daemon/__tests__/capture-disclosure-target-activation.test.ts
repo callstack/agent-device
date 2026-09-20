@@ -102,3 +102,55 @@ test('surface and foreground disclosures ride one response together', () => {
   assert.deepEqual(data.warnings, [iosTargetActivationDisclosure(FACT)]);
   assert.deepEqual(data.targetActivation, FACT);
 });
+
+/**
+ * The nested case the gate exists for: a failing selector read inside a repairing interaction passes
+ * through the wrapper twice, once in the selector route and once around it. The sentence belongs to
+ * the response once, in whichever carrier that response uses (#2682).
+ */
+test('a repair that passes through two wrappers is named once in the failure hint', () => {
+  const missed: DaemonResponse = {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'no node matches label="nope"',
+      details: { hint: 'Use snapshot to see the current tree.' },
+    },
+  };
+  const proof = { state: { targetActivation: FACT } };
+
+  const once = withCaptureDisclosures({
+    response: missed,
+    consumedTree: { targetActivation: FACT },
+    activationProof: proof,
+  });
+  const twice = withCaptureDisclosures({
+    response: once,
+    consumedTree: { targetActivation: FACT },
+    activationProof: proof,
+  });
+
+  assert.equal(twice.ok, false);
+  if (twice.ok) return;
+  const hint = String(twice.error.details?.hint);
+  assert.equal(
+    hint.split(iosTargetActivationDisclosure(FACT)).length - 1,
+    1,
+    `disclosure repeated in the hint: ${hint}`,
+  );
+  assert.match(hint, /Use snapshot to see the current tree\./);
+});
+
+/**
+ * A capture route can speak the sentence itself before the daemon wrapper runs. The wrapper still
+ * owns the typed field — the response is making its own claim — but it must not copy the words.
+ */
+test('a repair the capture already spoke keeps its typed field without a copied sentence', () => {
+  const response = withTargetActivationDisclosure(
+    okResponse({ warning: iosTargetActivationDisclosure(FACT) }),
+    { targetActivation: FACT },
+  );
+  const data = dataOf(response);
+  assert.equal(data.warnings, undefined);
+  assert.deepEqual(data.targetActivation, FACT);
+});

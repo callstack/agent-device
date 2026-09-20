@@ -1,5 +1,6 @@
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RequestActivationProof } from './capture-disclosure.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
@@ -18,6 +19,12 @@ type WaitCurrentSurfaceParams = {
    * it reuses the single admitted binding rather than reaching a second capture owner.
    */
   capture: BoundSelectorCapture;
+  /**
+   * Filled when the decoration capture is the one that had to re-activate the session app (#2682).
+   * A timed-out wait still consumed that capture to describe its surface, so the repair it paid for
+   * belongs to the response this module decorates.
+   */
+  activationProof?: RequestActivationProof;
 };
 
 type CurrentSurfaceDetails = {
@@ -81,6 +88,10 @@ async function inspectCurrentSurface(
         }),
       ),
   });
+  const activationProof = params.activationProof;
+  if (activationProof && activationProof.state === undefined && capture.snapshot.targetActivation) {
+    activationProof.state = capture.snapshot;
+  }
   const orderedNodes = [...capture.snapshot.nodes].sort(compareSurfacePriority);
   const labels = topSurfaceTexts(orderedNodes, 6, { includeIdentifiers: true });
   if (labels.length === 0) return null;

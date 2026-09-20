@@ -5,7 +5,7 @@ import {
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
 import type { RequestActivationProof } from './capture-disclosure.ts';
-import { withCaptureDisclosures } from './capture-disclosure.ts';
+import { withTargetActivationDisclosure } from './capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
@@ -79,13 +79,11 @@ export async function dispatchSnapshotViaRuntime(
       };
     },
   });
-  // The published snapshot is what this response describes, so the surface it describes rides the
-  // response that hands it over; the repair claim comes only from this request's capture (#2682).
-  return withCaptureDisclosures({
-    response,
-    consumedTree: params.sessionStore.get(params.sessionName)?.snapshot,
-    activationProof,
-  });
+  // Only this request's capture speaks here. The #2438 surface sentence already rides the capture's
+  // own annotations, so re-deriving it from the stored snapshot would copy a sentence the response
+  // already carries — and on a snapshot that failed before capturing, would credit it with a surface
+  // it never observed (#2682).
+  return withTargetActivationDisclosure(response, activationProof.state);
 }
 
 function publishedSnapshotGeneration(

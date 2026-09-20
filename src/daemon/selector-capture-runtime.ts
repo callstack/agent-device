@@ -114,11 +114,6 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
 
     const snapshot = await captureSelectorSnapshot({ params, request });
     request.signal?.throwIfAborted();
-    // First fact wins: a later capture in the same request (a poll, a recovery re-capture) that
-    // reports no repair must not erase the one that did.
-    if (params.activationProof && snapshot.targetActivation && !params.activationProof.state) {
-      params.activationProof.state = snapshot;
-    }
     const result = { snapshot };
     updateSessionSnapshot({ session, sessionStore, sessionName, snapshot });
     lastSnapshotAt = timestamp;
@@ -222,6 +217,14 @@ async function runCapture(
         }),
       ),
   });
+  // Recorded here rather than at the caller that consumes the result: a sparse recovery re-capture
+  // DISCARDS this tree and returns a fresh one, and the repair this capture paid for belongs to the
+  // request, not to whichever tree survives. First fact wins, so a later capture that reports no
+  // repair cannot erase the one that did (#2682).
+  const activationProof = params.activationProof;
+  if (activationProof && activationProof.state === undefined && capture.snapshot.targetActivation) {
+    activationProof.state = capture.snapshot;
+  }
   return capture.snapshot;
 }
 

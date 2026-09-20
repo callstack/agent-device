@@ -181,7 +181,14 @@ async function executeWaitRequest(
   });
   const enrichedResponse = waitOperations
     ? await maybeWaitTimeoutSurfaceResponse(
-        { req, logPath: params.logPath, session, device, capture: waitOperations.capture },
+        {
+          req,
+          logPath: params.logPath,
+          session,
+          device,
+          capture: waitOperations.capture,
+          activationProof: params.activationProof,
+        },
         response,
       )
     : response;
