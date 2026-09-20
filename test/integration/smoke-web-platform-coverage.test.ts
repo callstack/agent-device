@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
 import {
   WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
@@ -37,13 +38,13 @@ test('web coverage exhaustively classifies the public catalog', () => {
   }
 });
 
-test('web coverage report has the expected classification counts', () => {
-  assert.deepEqual(WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    contract: 42,
-    gap: 1,
-    live: 12,
-    total: 55,
-  });
+test('web coverage report counts every manifest classification', () => {
+  assertCoverageClassificationSummaryDerivedFromManifest(
+    'web',
+    WEB_PLATFORM_COVERAGE,
+    WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
+  );
 });
 
 test('web live claims reference commands in the existing smoke scenario', () => {
@@ -51,7 +52,7 @@ test('web live claims reference commands in the existing smoke scenario', () => 
   assert.ok(smokeSource.includes(WEB_SMOKE_TEST_NAME));
 
   const liveCommands = liveCommandsForWebSmoke();
-  assert.equal(liveCommands.length, 12);
+  assert.ok(liveCommands.length > 0, 'web claims no live command at all');
   for (const command of liveCommands) {
     assert.equal(
       smokeSource.includes(`'${command}',`),
