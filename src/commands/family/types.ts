@@ -10,6 +10,9 @@ import {
   resolveFacetText,
   type FacetCommandText,
 } from '@agent-device/command-registry/command-text';
+import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
+import type { InferCommandInput } from '../command-input.ts';
+import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
 
@@ -107,6 +110,37 @@ export function defineCommandFacet<
     cliOutputFormatter: command.cliOutputFormatter,
     text,
   };
+}
+
+/**
+ * A command whose only input is device selection: no fields, no positionals, no flags of its own.
+ * Its metadata, CLI schema, reader and daemon writer are fully determined by the name, so they
+ * are derived here once rather than restated by every such command.
+ */
+export function defineParameterlessCommandFacet<
+  const TCommandName extends string,
+  Result,
+  Formatter extends CliOutputFormatter | undefined = undefined,
+>(command: {
+  name: TCommandName;
+  description: string;
+  text: FacetCommandText;
+  run: (
+    client: AgentDeviceClient,
+    input: InferCommandInput<Record<never, never>>,
+  ) => Promise<Result>;
+  cliOutputFormatter?: Formatter;
+}): CommandFacet<TCommandName, Result, Formatter> {
+  return defineCommandFacet({
+    name: command.name,
+    text: command.text,
+    metadata: defineFieldCommandMetadata(command.name, command.description, {}),
+    run: command.run,
+    cliSchema: {},
+    cliReader: (_positionals, flags) => commonInputFromFlags(flags),
+    daemonWriter: direct(command.name),
+    cliOutputFormatter: command.cliOutputFormatter,
+  });
 }
 
 export function defineCommandFamilyFromFacets<

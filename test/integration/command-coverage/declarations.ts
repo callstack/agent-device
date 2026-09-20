@@ -19,12 +19,15 @@ import {
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
+  APPLE_ACTION_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
+  APPLE_NAVIGATION_FACTS_EVIDENCE,
   LINUX_HOVER_DENIAL_EVIDENCE,
   LINUX_PROVIDER_EVIDENCE,
   LINUX_RUNTIME_EVIDENCE,
   TVOS_AUDIO_EVIDENCE,
   TVOS_REMOTE_EVIDENCE,
+  WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE,
 } from './evidence.ts';
 
 const C = PUBLIC_COMMANDS;
@@ -406,8 +409,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     tvos: tvos.gap('No tvOS-specific clipboard command evidence exists yet'),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact rejects native clipboard operations on the web target',
     ),
     linux: linux.contract(
@@ -426,13 +429,13 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'real keyboard dismissal reports dismissed=true and visible=false',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects keyboard actions on the macOS AppKit desktop leaf',
     ),
     tvos: tvos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects keyboard input on the tvOS focus-only leaf',
     ),
     web: web.contract(
@@ -541,8 +544,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     tvos: tvos.gap('No tvOS-specific app-event command evidence exists yet'),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact rejects native app-event delivery on the web target',
     ),
     linux: linux.contract(
@@ -715,8 +718,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     tvos: tvos.gap('No tvOS-specific alert command evidence exists yet'),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact rejects native alert handling on the web target',
     ),
     linux: linux.contract(
@@ -740,8 +743,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     tvos: tvos.gap('No tvOS-specific settings command evidence exists yet'),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact rejects native device settings on the web target',
     ),
     linux: linux.contract(
@@ -1080,8 +1083,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'fixture AppState becomes non-active and system pixels replace foreground pixels',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects mobile Home navigation on the macOS leaf, which drives an already-running app with no springboard',
     ),
     tvos: tvos.contract(
@@ -1106,18 +1109,18 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'Android tv-remote admission is owned by its exact-owner runtime fact: available only for a real Android TV target, not the mobile emulator',
     ),
     iosSimulator: iosSimulator.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'tv-remote admission is owned by its exact-owner runtime fact: available only for the tvOS leaf, not the iOS mobile simulator',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact admits TV remote input only for the tvOS leaf, not macOS',
     ),
     tvos: tvos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact admits tv-remote for the tvOS leaf, which drives navigation through XCUIRemote presses',
     ),
     web: web.contract(
@@ -1141,13 +1144,13 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'native runner reads back exact landscape-left and portrait device states',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects device orientation changes on the macOS leaf',
     ),
     tvos: tvos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects device orientation changes on the tvOS leaf',
     ),
     web: web.contract(
@@ -1279,14 +1282,14 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'app switcher covers fixture controls and differs from Home before restoration',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
       'the exact-owner runtime fact rejects app-switcher navigation on the macOS host leaf',
     ),
     tvos: tvos.gap('No tvOS-specific app-switcher command evidence exists yet'),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact rejects native app-switcher navigation on the web target',
     ),
     linux: linux.contract(
@@ -1301,23 +1304,23 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'the Android runtime fact refuses an iPhone Action Button press on every kind',
     ),
     iosSimulator: iosSimulator.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies the action-button fact for the %s leaf',
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.path,
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.test,
       'the iOS simulator leaf advertises the Action Button press and binds it',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies the action-button fact for the %s leaf',
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.path,
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.test,
       'the exact-owner runtime fact refuses action-button on the macOS host leaf',
     ),
     tvos: tvos.contract(
-      'packages/platform-apple/src/runtime.test.ts',
-      'classifies the action-button fact for the %s leaf',
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.path,
+      APPLE_ACTION_BUTTON_FACT_EVIDENCE.test,
       'the exact-owner runtime fact refuses action-button on the tvOS leaf, whose remote has no such control',
     ),
     web: web.contract(
-      'packages/platform-web/src/runtime.test.ts',
-      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
       'the exact-owner runtime fact refuses an Action Button press on the web target',
     ),
     linux: linux.contract(

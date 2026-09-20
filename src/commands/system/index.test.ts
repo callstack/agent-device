@@ -12,24 +12,17 @@ import type { CommandResult } from '@agent-device/command-registry/command-resul
 import { readInputFromCli } from '../cli-grammar/registry.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
-  actionButtonCliReader,
-  actionButtonDaemonWriter,
-  appStateCliReader,
-  appStateDaemonWriter,
-  appSwitcherCliReader,
-  appSwitcherDaemonWriter,
   backCliReader,
   backDaemonWriter,
   clipboardCliReader,
   clipboardDaemonWriter,
-  homeCliReader,
-  homeDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
   orientationDaemonWriter,
   tvRemoteCliReader,
   tvRemoteDaemonWriter,
+  systemCommandFamily,
 } from './index.ts';
 import { systemCliOutputFormatters } from './output.ts';
 
@@ -68,30 +61,23 @@ describe('system command interface', () => {
     >();
   });
 
+  const parameterless = ['appstate', 'home', 'app-switcher', 'action-button'] as const;
+
   test('parameterless readers project common selection flags through', () => {
-    for (const reader of [
-      appStateCliReader,
-      homeCliReader,
-      appSwitcherCliReader,
-      actionButtonCliReader,
-    ]) {
-      expect(reader([], flags({ platform: 'ios' }))).toEqual({
+    for (const command of parameterless) {
+      expect(systemCommandFamily.cliReaders[command]([], flags({ platform: 'ios' }))).toEqual({
         platform: 'ios',
       });
     }
   });
 
   test('parameterless daemon writers emit command names with no positionals', () => {
-    expect(appStateDaemonWriter({})).toMatchObject({ command: 'appstate', positionals: [] });
-    expect(homeDaemonWriter({})).toMatchObject({ command: 'home', positionals: [] });
-    expect(appSwitcherDaemonWriter({})).toMatchObject({
-      command: 'app-switcher',
-      positionals: [],
-    });
-    expect(actionButtonDaemonWriter({})).toMatchObject({
-      command: 'action-button',
-      positionals: [],
-    });
+    for (const command of parameterless) {
+      expect(systemCommandFamily.daemonWriters?.[command]?.({})).toMatchObject({
+        command,
+        positionals: [],
+      });
+    }
   });
 
   test('back reader and writer normalize back mode', () => {

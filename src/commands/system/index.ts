@@ -19,7 +19,11 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { enumField, integerField, requiredField, stringField } from '../command-input.ts';
 import { compactRecord } from '../input-readers.ts';
-import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
+import {
+  defineCommandFacet,
+  defineCommandFamilyFromFacets,
+  defineParameterlessCommandFacet,
+} from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import {
   postActionObservationCliFlags,
@@ -58,22 +62,10 @@ const actionButtonCommandDescription =
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
-const appStateCommandMetadata = defineFieldCommandMetadata(
-  APPSTATE_COMMAND_NAME,
-  appStateCommandDescription,
-  {},
-);
-
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
   ...postActionObservationFields(BACK_COMMAND_NAME),
 });
-
-const homeCommandMetadata = defineFieldCommandMetadata(
-  HOME_COMMAND_NAME,
-  homeCommandDescription,
-  {},
-);
 
 const orientationCommandMetadata = defineFieldCommandMetadata(
   ORIENTATION_COMMAND_NAME,
@@ -81,18 +73,6 @@ const orientationCommandMetadata = defineFieldCommandMetadata(
   {
     orientation: requiredField(enumField(DEVICE_ROTATIONS)),
   },
-);
-
-const appSwitcherCommandMetadata = defineFieldCommandMetadata(
-  APP_SWITCHER_COMMAND_NAME,
-  appSwitcherCommandDescription,
-  {},
-);
-
-const actionButtonCommandMetadata = defineFieldCommandMetadata(
-  ACTION_BUTTON_COMMAND_NAME,
-  actionButtonCommandDescription,
-  {},
 );
 
 const keyboardCommandMetadata = defineFieldCommandMetadata(
@@ -126,19 +106,11 @@ const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const appStateCliSchema = {} as const satisfies CommandSchemaOverride;
-
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
   usageFlags: [],
   allowedFlags: ['backMode', ...postActionObservationCliFlags(BACK_COMMAND_NAME)],
 } as const satisfies CommandSchemaOverride;
-
-const homeCliSchema = {} as const satisfies CommandSchemaOverride;
-
-const appSwitcherCliSchema = {} as const satisfies CommandSchemaOverride;
-
-const actionButtonCliSchema = {} as const satisfies CommandSchemaOverride;
 
 const orientationCliSchema = {
   usageOverride: 'orientation <portrait|portrait-upside-down|landscape-left|landscape-right>',
@@ -163,12 +135,6 @@ const tvRemoteCliSchema = {
   positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],
 } as const satisfies CommandSchemaOverride;
-
-export const appStateCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
-export const homeCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
-export const appSwitcherCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
-export const actionButtonCliReader: CliReader = (_positionals, flags) =>
-  commonInputFromFlags(flags);
 
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -195,23 +161,15 @@ export const tvRemoteCliReader: CliReader = (positionals, flags) => ({
   ...readTvRemoteInput(positionals, flags.durationMs),
 });
 
-export const appStateDaemonWriter: DaemonWriter = direct(APPSTATE_COMMAND_NAME);
-
 export const backDaemonWriter: DaemonWriter = (input) =>
   request(BACK_COMMAND_NAME, [], {
     ...input,
     backMode: readBackMode(input.mode),
   });
 
-export const homeDaemonWriter: DaemonWriter = direct(HOME_COMMAND_NAME);
-
 export const orientationDaemonWriter: DaemonWriter = direct(ORIENTATION_COMMAND_NAME, (input) => [
   requiredDaemonString(input.orientation, 'orientation requires orientation'),
 ]);
-
-export const appSwitcherDaemonWriter: DaemonWriter = direct(APP_SWITCHER_COMMAND_NAME);
-
-export const actionButtonDaemonWriter: DaemonWriter = direct(ACTION_BUTTON_COMMAND_NAME);
 
 export const keyboardDaemonWriter: DaemonWriter = direct(KEYBOARD_COMMAND_NAME, (input) =>
   optionalString(input.action),
@@ -225,16 +183,13 @@ export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME,
   requiredDaemonString(input.button, 'tv-remote requires button'),
 ]);
 
-const appStateCommandFacet = defineCommandFacet({
+const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
+  description: appStateCommandDescription,
   text: {
     summary: 'Show the foreground app and activity',
   },
-  metadata: appStateCommandMetadata,
   run: (client, input) => client.command.appState(input),
-  cliSchema: appStateCliSchema,
-  cliReader: appStateCliReader,
-  daemonWriter: appStateDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.appstate,
 });
 
@@ -251,16 +206,13 @@ const backCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.back,
 });
 
-const homeCommandFacet = defineCommandFacet({
+const homeCommandFacet = defineParameterlessCommandFacet({
   name: HOME_COMMAND_NAME,
+  description: homeCommandDescription,
   text: {
     summary: 'Go to the device home screen',
   },
-  metadata: homeCommandMetadata,
   run: (client, input) => client.command.home(input),
-  cliSchema: homeCliSchema,
-  cliReader: homeCliReader,
-  daemonWriter: homeDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.home,
 });
 
@@ -277,16 +229,13 @@ const orientationCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.orientation,
 });
 
-const appSwitcherCommandFacet = defineCommandFacet({
+const appSwitcherCommandFacet = defineParameterlessCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
+  description: appSwitcherCommandDescription,
   text: {
     summary: 'Open the device app switcher',
   },
-  metadata: appSwitcherCommandMetadata,
   run: (client, input) => client.command.appSwitcher(input),
-  cliSchema: appSwitcherCliSchema,
-  cliReader: appSwitcherCliReader,
-  daemonWriter: appSwitcherDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['app-switcher'],
 });
 
@@ -316,18 +265,15 @@ const clipboardCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.clipboard,
 });
 
-const actionButtonCommandFacet = defineCommandFacet({
+const actionButtonCommandFacet = defineParameterlessCommandFacet({
   name: ACTION_BUTTON_COMMAND_NAME,
+  description: actionButtonCommandDescription,
   text: {
     summary: 'Press the iPhone or iPad Action Button',
     cliDetail:
       'iPhone and iPad only. The runner asks the device for the button and reports unsupported when that model has none.',
   },
-  metadata: actionButtonCommandMetadata,
   run: (client, input) => client.command.actionButton(input),
-  cliSchema: actionButtonCliSchema,
-  cliReader: actionButtonCliReader,
-  daemonWriter: actionButtonDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['action-button'],
 });
 

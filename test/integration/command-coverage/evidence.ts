@@ -61,9 +61,24 @@ export const TVOS_AUDIO_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'tvOS audio capture availability follows the exact host-owned runtime fact',
 };
+/** The Apple owner's one navigation-fact classification, cited by every leaf it refuses. */
+export const APPLE_NAVIGATION_FACTS_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+};
+export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'classifies the action-button fact for the %s leaf',
+};
 export const APPLE_HOVER_DENIAL_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial',
+};
+
+/** The web owner's one denial of the system-surface leaves, cited by every command it refuses. */
+export const WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-web/src/runtime.test.ts',
+  test: 'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
 };
 
 export const WEB_SMOKE_TEST_NAME = 'live web platform e2e smoke';
