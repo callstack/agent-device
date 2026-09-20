@@ -25,16 +25,16 @@ const localTransport: AppleSimulatorScreenRecordingTransport = Object.freeze({
   available: true,
   mode: 'local',
   async start({ device, outputPath, signal }) {
-    const [{ buildSimctlArgsForDevice }, { runCmdBackground }] = await Promise.all([
+    const [{ buildAppleSimulatorRecordVideoArgs }, { runCmdBackground }] = await Promise.all([
       import('@agent-device/platform-apple/simctl'),
       import('@agent-device/host-kit/command'),
     ]);
     signal?.throwIfAborted();
-    return runCmdBackground(
-      'xcrun',
-      buildSimctlArgsForDevice(device, ['io', device.id, 'recordVideo', outputPath]),
-      { allowFailure: true },
-    );
+    // The Apple package names the panel the device currently lights; simctl's implicit
+    // display default is the highest screen ID, i.e. the dark panel of a foldable.
+    const args = await buildAppleSimulatorRecordVideoArgs(device, outputPath, { signal });
+    signal?.throwIfAborted();
+    return runCmdBackground('xcrun', args, { allowFailure: true });
   },
 });
 
