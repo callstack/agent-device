@@ -753,8 +753,67 @@ agent-device apps --platform android --all
 ```
 
 - Android `appstate` reports live foreground package/activity.
-- iOS `appstate` is session-scoped and reports the app tracked by the active session on the target device.
+- iOS `appstate` is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer arrives as the [`targetActivation` disclosure](#foreground-repairs-on-ios), and the refusal's hint says so.
 - `apps` shows user-installed apps by default. Use `--all` when you need the full inventory, including system/OEM apps.
+
+## Foreground repairs on iOS
+
+An iOS session is bound to one app, but the app can leave the foreground without the session knowing:
+a deep link, a system sheet, or a `simctl openurl` hands the screen to another app. When the next
+command arrives, the runner brings the session app back so the command can be answered at all, and
+that repair is disclosed on the command that paid for it rather than applied silently:
+
+```bash
+agent-device open com.example.app --platform ios
+agent-device screenshot --platform ios            # Safari screen
+agent-device snapshot -i --platform ios           # answers with the app's tree
+```
+
+The `snapshot` response carries `targetActivation` plus an appended `warnings` entry naming the
+state the session app was found in and why the runner activated it:
+
+```json
+{
+  "targetActivation": {
+    "reason": "bundle_changed",
+    "priorState": "runningBackground",
+    "otherActiveApplicationPid": 4562
+  }
+}
+```
+
+- Read it as: anything captured earlier in this session described the other app, not the session app.
+  Re-capture now, or drive the other app in its own session.
+- `otherActiveApplicationPid` is present only when exactly one application other than the session app
+  held an active accessibility session at that moment. It is a liveness claim, not a foreground owner:
+  the runner's probe reports no ordering, so nothing here proves which app owned the screen. Absent
+  means the runner could not isolate one candidate, which is not a failure.
+- `priorState` is the session app's state read before the runner activated it, so it names what was
+  repaired rather than what the repair produced. It is never `runningForeground`.
+- `reason` names the check that found the app out of foreground: `bundle_changed` when the runner's
+  cached session target differs from the bundle the command asked for, `stale_target` when the cached
+  target matches but no longer answers as foreground, `missing_after_wait` when a wait for the app
+  never observed it, and `interaction_foreground_guard` when an interaction's own foreground guard
+  tripped before dispatching.
+- The disclosure rides capture-consuming commands — `snapshot`, `find`, `get`, `is`, `wait`, and an
+  interaction whose target tree was captured for it — at every response level, including
+  `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
+  from a cached or stored tree did no device work and reports no repair of its own.
+- In text mode the CLI prints every response warning as a `Warning:` line after the command's own
+  output, for every command — not only `snapshot`. Four commands declare their stdout to be the
+  value a caller pipes (`get`, `find`, `clipboard`, `record`) and print those lines on **stderr**
+  instead, so `value=$(agent-device get text …)` still captures exactly the value. `--json` keeps
+  them in `data.warnings` and writes neither line.
+- **Silence is not proof.** A command that consumes no capture — a coordinate `press`, a `press @ref`
+  answered from a live ref frame, or a `wait <text>` that its text observation answered on the first
+  poll — may still have had the runner re-activate the session app to serve it, and reports nothing:
+  the runner stamps that repair on the response, and the daemon decodes it only from a capture. A
+  `wait <text>` that timed out and re-activated while describing the surface does disclose. Do not
+  infer that the foreground held from a command that said nothing
+  ([#2694](https://github.com/callstack/agent-device/issues/2694) tracks closing that gap). When the
+  distinction matters, spend a `snapshot -i` and read its disclosure.
+- The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
+  came before it are never replaced.
 
 ## Clipboard
 
