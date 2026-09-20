@@ -70,9 +70,12 @@ toolchain per command:
   capturable — a capture of the dark panel exits 0 and writes an all-black PNG.
 - Pose is not scriptable. Ask the operator to fold or open the device in Device Hub, then
   re-snapshot; refs and coordinates do not survive the pose change.
-- Record a foldable with `record start --hide-touches`. The touch-overlay exporter returns a small
-  all-black video for the inner panel's `rot90` track, which reads as a capture failure but is not
-  one; the raw `simctl` capture behind it is correct. See ADR 0025.
+- When a recording must show touches, assume it cannot. The touch-overlay exporter loses the track
+  geometry whenever it has touch events to draw — `220x480` on a plain iPhone 17 as well as on the
+  inner panel — and returns all-black frames on long clips, always with exit 0. Record with
+  `record start --hide-touches` and make the interaction legible through its on-screen effect
+  (typed text, navigation, a counter) instead of a cursor. The raw `simctl` capture behind it is
+  correct. See ADR 0025 and #2707.
 - An app must adopt the UIScene lifecycle to launch on iOS 27.1 at all: a legacy
   `UIApplicationDelegate` app traps at launch inside
   `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, which reads like a broken

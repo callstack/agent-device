@@ -159,11 +159,18 @@ and honors it per panel; sampled mean luma over the whole frame:
 | no `--display` | 2006x2852 | 241.42 |
 
 `record start`/`record stop` exit 0 in both poses, and with `--hide-touches` the export keeps the
-captured geometry (`2006x2852`, mean luma 241.42). Without it, the touch-overlay exporter is broken
-for the inner panel's `rot90` track: it returns a `480x336` black video, and feeding an untouched
-raw `simctl` capture straight into `recording-overlay.swift` reproduces a `0x0` zero-duration
-output. That exporter defect is independent of panel selection — the same pipeline exports a
-non-rotated iPhone 17 recording intact (`1206x2622`, mean luma 228.30) — and is tracked separately.
+captured geometry (`2006x2852`, mean luma 241.42). Without it the touch-overlay exporter loses the
+track geometry, and on a long clip the frames too.
+
+The trigger is the overlay drawing touch events, not panel rotation. Measured on an iPhone 17
+(iOS 27.0), which has no rotated panel: four seconds with no interaction exports `1206x2622`
+intact, ten seconds containing two taps exports `220x480`, and the same two taps under
+`--hide-touches` export `1206x2622` with the screen content changing across frames. A 97-second
+recording with touches exported `480x220` at mean luma 0.00 throughout. An earlier draft of this
+section blamed the inner panel's `rot90` track, which was wrong: every failing sample then available
+had merely been captured on that panel, and the one non-rotated sample that looked intact had
+contained no touches to draw. Feeding an untouched raw `simctl` capture straight into
+`recording-overlay.swift` reproduces a `0x0` zero-duration output. Tracked in #2707.
 
 ## Verified on a booted Duo
 
