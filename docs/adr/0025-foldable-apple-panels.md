@@ -41,21 +41,24 @@ reader of CoreDevice display info.
   guessing dark would aim a capture at a panel that may be showing nothing.
 - **Panel identity.** A device is multi-screen when it reports more than one `type: integrated`
   panel. CoreDevice marks one panel `primary`; that panel is the outer display, because it is the
-  panel that stays lit while the device is closed. The inner display is the largest remaining panel,
-  because a foldable's inner surface encloses the outer one. A third and later panel stays unroled
-  rather than being labelled `inner`, and a device with no `primary` panel gets **no** roles at all:
-  inventing them from CoreDevice's array order would silently invert the naming. When the primary
-  panel is also the largest, the `primary` attribute still decides and the conflict is emitted as a
-  diagnostic rather than silently repaired by a geometry rule.
+  panel that stays lit while the device is closed. `primary` and the lit count are the whole model:
+  the inventory labels panels `outer`/`inner` nowhere, because no caller consumes a label — every
+  decision is made from `primary` plus panel power, and a name derived from array order or from
+  geometry would be a second source of truth ready to invert silently. When the primary panel is
+  also the largest, the `primary` attribute still decides and the conflict is emitted as
+  `apple_display_primary_geometry_conflict` rather than silently repaired by a geometry rule.
 - **Capture target.** `resolveAppleCaptureDisplay` returns a panel for every multi-panel device and
   `undefined` only for a single-panel device or an unresolved inventory. When panel power identifies
-  exactly one lit panel that panel is named; otherwise the `primary` panel is named anyway, the
-  pose is `unknown`, and `apple_display_capture_ambiguous` is emitted. A multi-panel device never
+  exactly one lit panel that panel is named; otherwise the `primary` panel is named anyway,
+  `ambiguous` is set, and `apple_display_capture_ambiguous` is emitted. A multi-panel device never
   receives a display-less capture, because the implicit default is precisely the black-and-exit-0
   failure being fixed; naming a possibly-dark panel is a visible, diagnosable miss instead.
-- **Pose.** `deriveDisplayPose` reads panel power only: exactly one lit panel and it is
-  `primary` → `closed`; exactly one lit panel and it is not → `fully-open`; anything else
-  (both, neither, no `primary`) → `unknown`.
+- **No pose field.** Panel power cannot separate Apple's `UIHinge.Status.fullyOpen` from
+  `.partiallyOpen` — both leave the inner panel lit and the outer panel dark — so a derived pose
+  could only ever mean "not closed" while looking like a fact. The inventory therefore reports what
+  it measured (`primary`, panel power, geometry, orientation) and leaves pose to the app under test,
+  which can read `UIHinge.status` exactly. A caller that needs the pose asks the operator and
+  re-snapshots.
 - **No cache.** The probe runs per capture. Which panel is lit is precisely what an operator
   changes by folding or opening the device, so a cached inventory would resume capturing the dark
   panel — the exact failure being fixed. The probe runs under
@@ -72,6 +75,7 @@ whose content is black, so every downstream consumer trusts a capture of nothing
 | Capture path | Before | After |
 | --- | --- | --- |
 | `screenshot` on a closed Duo | 669x951 @1x, mean luma 0.09 (black) | 466x678 @1x, mean luma 65.8 (the lit outer panel) |
+| `screenshot` on an open Duo | 951x669 @1x, mean luma 241 (correct by luck: the highest screen ID is the lit inner panel) | 951x669 @1x naming `LCD-1` explicitly |
 | `screenshot` on iPhone 17 | 402x874 @1x, mean luma 104.9 | unchanged |
 
 This is the failure behind reports that the tool "picks the wrong screen" on iPhone Duo. It was
@@ -145,11 +149,36 @@ coordinates do not survive it. `agent-device help foldable` states this and stat
 report which poses remain unverified rather than assume a pose was set.
 
 `simctl io recordVideo` has the same implicit-display default as `screenshot`, so recording names
-the lit panel through the same resolver.
+the lit panel through the same resolver. On an open Duo the 27.1 toolchain accepts the panel name
+and honors it per panel; sampled mean luma over the whole frame:
+
+| `recordVideo` argv | exported size | mean luma |
+| --- | --- | --- |
+| `--display=LCD-1` (lit inner) | 2006x2852 | 241.42 |
+| `--display=LCD` (dark outer) | 1398x2034 | 0.00 |
+| no `--display` | 2006x2852 | 241.42 |
+
+`record start`/`record stop` exit 0 in both poses, and with `--hide-touches` the export keeps the
+captured geometry (`2006x2852`, mean luma 241.42). Without it, the touch-overlay exporter is broken
+for the inner panel's `rot90` track: it returns a `480x336` black video, and feeding an untouched
+raw `simctl` capture straight into `recording-overlay.swift` reproduces a `0x0` zero-duration
+output. That exporter defect is independent of panel selection — the same pipeline exports a
+non-rotated iPhone 17 recording intact (`1206x2622`, mean luma 228.30) — and is tracked separately.
+
+## Verified on a booted Duo
+
+Closed pose: `screenshot` moved from `669x951` luma 0.09 to `466x678` luma 65.8; a tap on Safari's
+address field at `(191, 620)` opened the keyboard; and on the `examples/test-app` dev build a
+41-node `snapshot -i`, a tap that dismissed the dev-menu sheet at `(345, 301)`, and a Catalog-tab tap
+at `(128, 626)` that settled `+19 -15`.
+
+Open pose, after an operator opened the device: the capture names `LCD-1` at `951x669 @1x`,
+`snapshot -i` returns Safari's nodes on that surface, `tap @e4` resolves to `(590, 478)` inside it,
+and text sent with `type` is found again by `find text` — hit testing and read-back both follow the
+lit panel. A ref issued before the fold is refused afterwards as an expired frame rather than
+replayed at the new point size, which is the pose-change rule working as designed.
 
 ## Accepted evidence gaps
-
-Both gaps need an open-pose device, which no available command can produce.
 
 - **Runner screenshot fallback.** `XCUIScreen.main` is hardcoded in the runner's `screenshot`
   command and in the synthesized-gesture reference frame. The `simctl` path is the default for iOS
@@ -158,11 +187,9 @@ Both gaps need an open-pose device, which no available command can produce.
   `active` flag — only `screens` and `mainScreen` — so choosing the lit panel there cannot be done
   officially without pairing screenshots against panel geometry, which is the pixel heuristic this
   ADR rejects. Left unresolved rather than guessed.
-- **Inner-panel snapshot and interaction.** Closed-pose capture, snapshot, taps, and density are
-  verified on a booted Duo, on both a system app and a React Native one: 466x678 outer, luma 65.8
-  after vs 0.09 before; a tap on Safari's address field at 191,620 opened the keyboard; and on the
-  `examples/test-app` dev build a 41-node `snapshot -i`, a tap that dismissed the dev-menu sheet
-  (345,301), and a Catalog-tab tap (128,626) that settled `+19 -15`. Open-pose snapshot frames, tap
-  routing, and the quarter-turn detector (`currentOrientation: rot90` on the inner panel) are
-  unverified.
+- **Quarter-turn detection.** Both Duo panels report `currentOrientation: rot90`, and no available
+  path rotates a foldable, so the orientation half of the inventory is carried but never exercised
+  against a changed value.
+- **Pose control.** No official host API sets the hinge angle, so both poses above depend on an
+  operator opening or closing the device in Device Hub.
 
