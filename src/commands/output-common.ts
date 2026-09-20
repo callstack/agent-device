@@ -31,56 +31,63 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
 }
 
 /**
- * The response message plus one `Warning:` line per entry of the response's warnings — the
- * composable warnings channel (`open`, `debug`, and every capture route use it), so a warning the
- * daemon appended reaches the human CLI reader and not only `--json`.
+ * The response's composable warnings — the singular `warning` field, then the `warnings` array the
+ * capture routes append to (`open`, `debug`, and every capture consumer use it) — collapsed so each
+ * one renders on a single line.
  */
-export function messageWithWarningsText(result: Record<string, unknown>): string | null {
-  return appendWarningLinesText(readCommandMessage(result), result);
+function collectResponseWarnings(result: Record<string, unknown>): string[] {
+  return [
+    ...(typeof result.warning === 'string' && result.warning.trim() !== '' ? [result.warning] : []),
+    ...readResponseWarnings(result),
+  ]
+    .map((warning) => collapseWarningText(warning))
+    .filter((warning) => warning.length > 0);
 }
 
 /**
- * One `Warning:` line per response warning, after text a formatter rendered itself. Every
- * capture-consuming command routes its text through this so a disclosure cannot be visible on
- * `snapshot` and silent on the `get`/`is`/`find`/`wait`/`press` that consumed the same capture. A
- * warning already in the text is skipped: two renderers may wrap one response (a settle-capable
- * command's notes and its own line), and the second must not repeat the first.
+ * One `Warning:` line per response warning, after text a formatter rendered itself. A warning the
+ * text already carries is skipped: a report builder may render the channel inside its own text, and
+ * the dispatcher must then say it once, not twice.
  */
 export function appendWarningLinesText(
   text: string | null | undefined,
   result: Record<string, unknown>,
 ): string | null {
   const rendered = text ?? '';
-  const warnings = [
-    ...(typeof result.warning === 'string' && result.warning.trim() !== '' ? [result.warning] : []),
-    ...readResponseWarnings(result),
-  ]
-    .map((warning) => collapseWarningText(warning))
-    .filter((warning) => warning.length > 0 && !rendered.includes(warning))
+  const lines = collectResponseWarnings(result)
+    .filter((warning) => !rendered.includes(warning))
     .map((warning) => `Warning: ${warning}`);
-  if (warnings.length === 0) return text ?? null;
-  return [...(rendered === '' ? [] : [rendered]), ...warnings].join('\n');
+  if (lines.length === 0) return text ?? null;
+  return [...(rendered === '' ? [] : [rendered]), ...lines].join('\n');
 }
 
 /**
- * Appends the response's `Warning:` lines to a formatter's own text (#2682). A formatter that
- * returns its output synchronously stays synchronous: the note is text, not work.
+ * Where the single CLI dispatcher sends a response's warnings (#2682). `text` puts them after the
+ * command's own line; `stderr` is for a command whose stdout IS the value a caller parses
+ * (`CommandMetadata.parseableOutput`), where an appended line would corrupt it. No formatter chooses
+ * a route: `formatCliOutput` derives it from the command's descriptor once, which is why a new
+ * formatter cannot drop the disclosure and no wrapper can repeat it.
  */
-export function withResponseWarnings<TFormatter extends CliOutputFormatter>(
-  formatter: TFormatter,
-): TFormatter {
-  return ((params: CliOutputFormatterParams) => {
-    const output = formatter(params);
-    return output instanceof Promise
-      ? output.then((resolved) => withWarningLines(resolved))
-      : withWarningLines(output);
-  }) as TFormatter;
-}
+export type ResponseWarningRoute = 'text' | 'stderr';
 
-function withWarningLines(output: CliOutput): CliOutput {
+export function routeResponseWarnings(
+  output: CliOutput,
+  response: unknown,
+  route: ResponseWarningRoute,
+): CliOutput {
+  // The response is the source, not `output.data`: a formatter that rebuilds its own data payload
+  // (`close`, `devices`) would otherwise be able to swallow the warnings channel with it.
+  const data = (response ?? {}) as Record<string, unknown>;
+  if (route === 'text') return { ...output, text: appendWarningLinesText(output.text, data) };
+  const rendered = `${output.text ?? ''}\n${output.stderr ?? ''}`;
+  const lines = collectResponseWarnings(data)
+    .filter((warning) => !rendered.includes(warning))
+    .map((warning) => `Warning: ${warning}`);
+  if (lines.length === 0) return output;
+  const stderr = output.stderr ?? '';
   return {
-    data: output.data,
-    text: appendWarningLinesText(output.text, output.data as Record<string, unknown>),
+    ...output,
+    stderr: `${stderr}${stderr === '' || stderr.endsWith('\n') ? '' : '\n'}${lines.join('\n')}\n`,
   };
 }
 
@@ -88,14 +95,6 @@ function withWarningLines(output: CliOutput): CliOutput {
 export function collapseWarningText(warning: string): string {
   return warning.replaceAll(/\s*\n\s*/g, ' ');
 }
-
-/** `messageCliOutput` carrying {@link messageWithWarningsText} as its text. */
-export const messageWithWarningsOutput = resultOutput(
-  (result: Record<string, unknown>): CliOutput => ({
-    data: result,
-    text: messageWithWarningsText(result),
-  }),
-);
 
 /**
  * ADR 0014: a reusable ref in a PARTIAL result renders in ready-to-copy

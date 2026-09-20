@@ -91,3 +91,35 @@ test('replay human output keeps the composable warnings channel (#2560)', async 
   // The skipped optional step must be visible to the human reader, not only --json.
   assert.match(out, /Warning: Optional Maestro tapOn skipped at flow\.yaml:line 12/);
 });
+
+/**
+ * #2682: `type` has no formatter, and its target tree may have been captured after the runner
+ * re-activated the session app. A command that answers through the generic path owes the same
+ * disclosure as one with a formatter — otherwise the interaction that paid for the repair is the one
+ * command that stays silent.
+ */
+test('the generic CLI path prints the response warnings', async () => {
+  const warning =
+    'The session app was not foreground when this command arrived (prior state runningBackground), ' +
+    'so the runner activated it before answering (reason stale_target).';
+  const client = createAgentDeviceClient(
+    { session: 'qa' },
+    {
+      transport: async (req): Promise<DaemonResponse> => {
+        assert.equal(req.command, 'type');
+        return { ok: true, data: { message: 'Typed "hi"', warnings: [warning] } };
+      },
+    },
+  );
+
+  const out = await captureStdout(() =>
+    runGenericClientBackedCommand({
+      command: 'type' as ClientBackedCliCommandName,
+      positionals: ['hi'],
+      flags: {} as CliFlags,
+      client,
+    }),
+  );
+
+  assert.equal(out, `Typed "hi"\nWarning: ${warning}\n`);
+});

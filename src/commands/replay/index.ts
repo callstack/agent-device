@@ -1,5 +1,5 @@
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
-import { messageWithWarningsOutput } from '../output-common.ts';
+import { messageOutput } from '../output-common.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import {
   booleanField,
@@ -243,7 +243,7 @@ export const replayCommandFacet = defineCommandFacet({
   // Replay owns a composable warnings channel (`optional` step skips, capture degradations);
   // a run that reports success while warnings say otherwise must not render as a bare
   // success line (#2560).
-  cliOutputFormatter: messageWithWarningsOutput,
+  cliOutputFormatter: messageOutput,
 });
 
 export const testCommandFacet = defineCommandFacet({

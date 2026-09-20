@@ -104,6 +104,7 @@ const keyboardCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+// `clipboard read` prints the clipboard content verbatim, so its warnings belong on stderr.
 const clipboardCommandMetadata = defineFieldCommandMetadata(
   CLIPBOARD_COMMAND_NAME,
   clipboardCommandDescription,
@@ -111,6 +112,7 @@ const clipboardCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(CLIPBOARD_ACTION_VALUES)),
     text: stringField(),
   },
+  { parseableOutput: true },
 );
 
 const tvRemoteCommandMetadata = defineFieldCommandMetadata(

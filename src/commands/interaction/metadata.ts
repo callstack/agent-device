@@ -252,9 +252,9 @@ export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('focus', focusFields),
   defineInteractionCommandMetadata('type', typeFields),
   defineInteractionCommandMetadata('scroll', scrollFields),
-  defineInteractionCommandMetadata('get', getFields),
+  defineInteractionCommandMetadata('get', getFields, { parseableOutput: true }),
   defineInteractionCommandMetadata('is', isFields),
-  defineInteractionCommandMetadata('find', findFields),
+  defineInteractionCommandMetadata('find', findFields, { parseableOutput: true }),
   defineFieldCommandMetadata('gesture', interactionCommandDescriptions.gesture, gestureFields, {
     readInput: readGestureInput,
   }),
@@ -268,6 +268,6 @@ export function readGestureInput(input: unknown): GestureInput {
 function defineInteractionCommandMetadata<
   const TName extends InteractionCommandName,
   const TFields extends CommandFieldMap,
->(name: TName, fields: TFields) {
-  return defineFieldCommandMetadata(name, interactionCommandDescriptions[name], fields);
+>(name: TName, fields: TFields, options?: { parseableOutput?: true }) {
+  return defineFieldCommandMetadata(name, interactionCommandDescriptions[name], fields, options);
 }

@@ -803,9 +803,17 @@ state the session app was found in and why the runner activated it:
   interaction whose target tree was captured for it — at every response level, including
   `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
   from a cached or stored tree did no device work and reports no repair of its own.
+- In text mode the CLI prints every response warning as a `Warning:` line after the command's own
+  output, for every command — not only `snapshot`. Four commands declare their stdout to be the
+  value a caller pipes (`get`, `find`, `clipboard`, `record`) and print those lines on **stderr**
+  instead, so `value=$(agent-device get text …)` still captures exactly the value. `--json` keeps
+  them in `data.warnings` and writes neither line.
 - **Silence is not proof.** A command that consumes no capture — a coordinate `press`, a `press @ref`
-  answered from a live ref frame — may still have had the runner re-activate the session app to serve
-  it, and reports nothing. Do not infer that the foreground held from an interaction that said nothing
+  answered from a live ref frame, or a `wait <text>` that its text observation answered on the first
+  poll — may still have had the runner re-activate the session app to serve it, and reports nothing:
+  the runner stamps that repair on the response, and the daemon decodes it only from a capture. A
+  `wait <text>` that timed out and re-activated while describing the surface does disclose. Do not
+  infer that the foreground held from a command that said nothing
   ([#2694](https://github.com/callstack/agent-device/issues/2694) tracks closing that gap). When the
   distinction matters, spend a `snapshot -i` and read its disclosure.
 - The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that

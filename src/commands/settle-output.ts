@@ -1,6 +1,6 @@
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import type { CliOutput } from './command-contract.ts';
-import { appendWarningLinesText, pinnedRefText, type CliOutputFormatter } from './output-common.ts';
+import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
 
 /**
  * Compact `--settle` (#1101) rendering appended to a command's own success
@@ -26,7 +26,7 @@ type SettleTextView = {
   refsGeneration?: number;
 };
 
-/** A formatter's own success line plus the response's warning and settle notes. */
+/** A formatter's own success line plus the response's settled diff. */
 function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormatter {
   return ({ input, result }) => {
     const output = formatter({ input, result });
@@ -61,14 +61,14 @@ export function withSettleCapableNotes<Formatters extends Record<string, CliOutp
 }
 
 /**
- * The shared warning renderer owns the `Warning:` lines here too, so a settle response carries every
- * warning the capture route appended and not only the singular `warning` field this used to read.
+ * The settled diff only: response warnings are appended once by `formatCliOutput`, routed by the
+ * command's descriptor (#2682), so this wrapper cannot be the place a warning appears twice.
  */
 function appendResponseNotes(
   text: string | null | undefined,
   data: Record<string, unknown>,
 ): string {
-  return `${appendWarningLinesText(text, data) ?? ''}${formatSettleText(data.settle)}`;
+  return `${text ?? ''}${formatSettleText(data.settle)}`;
 }
 
 function formatSettleText(settle: unknown): string {
