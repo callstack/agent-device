@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 
 import { readAndroidDeviceEvidence, type AndroidAdbRead } from './device-evidence.ts';
 
@@ -42,11 +41,10 @@ test('a dropped process with a launcher activity reads as a crash and names the 
     }),
   );
 
-  const appProcess = section(evidence, 'app process');
-  assert.equal(appProcess, '', 'a dead process must read as an empty pid, not as noise');
-  assert.match(section(evidence, 'resumed activity'), /nexuslauncher\/\.NexusLauncherActivity/);
-  assert.match(section(evidence, 'crash buffer'), /FATAL EXCEPTION: mqt_native_modules/);
-  assert.match(section(evidence, 'crash buffer'), /RNGestureHandlerModule/);
+  expect(section(evidence, 'app process')).toBe('');
+  expect(section(evidence, 'resumed activity')).toMatch(/nexuslauncher\/\.NexusLauncherActivity/);
+  expect(section(evidence, 'crash buffer')).toMatch(/FATAL EXCEPTION: mqt_native_modules/);
+  expect(section(evidence, 'crash buffer')).toMatch(/RNGestureHandlerModule/);
 });
 
 test('an alive process keeps its record hash so a navigation is not mistaken for a restart', async () => {
@@ -61,13 +59,11 @@ test('an alive process keeps its record hash so a navigation is not mistaken for
     }),
   );
 
-  const activity = section(evidence, 'resumed activity');
-  assert.equal(section(evidence, 'app process'), '12345');
-  assert.match(
-    activity,
+  expect(section(evidence, 'app process')).toBe('12345');
+  expect(section(evidence, 'resumed activity')).toMatch(
     /ActivityRecord\{5f6a7b8 u0 com\.callstack\.agentdevicelab\/\.MainActivity/,
   );
-  assert.ok(!activity.includes('* Task{'), 'task rows carry no focus information');
+  expect(section(evidence, 'resumed activity')).not.toContain('* Task{');
 });
 
 test('one failing probe records its failure without taking the rest of the document down', async () => {
@@ -78,14 +74,14 @@ test('one failing probe records its failure without taking the rest of the docum
 
   const evidence = await readAndroidDeviceEvidence(TARGET, read);
 
-  assert.match(section(evidence, 'crash buffer'), /\(failed: adb: device offline\)/);
-  assert.equal(section(evidence, 'user_rotation'), '0');
-  assert.match(section(evidence, 'app process'), /^0$/);
+  expect(section(evidence, 'crash buffer')).toMatch(/\(failed: adb: device offline\)/);
+  expect(section(evidence, 'user_rotation')).toBe('0');
+  expect(section(evidence, 'app process')).toBe('0');
 });
 
+/** Sections are joined with a blank line, so each capture keeps the separator's newline. */
 function section(evidence: string, title: string): string {
   const match = new RegExp(`## ${title}\\n([\\s\\S]*?)(?=\\n## |$)`).exec(evidence);
-  assert.ok(match, `evidence is missing the "${title}" section`);
-  // Sections are joined with a blank line, so the capture always keeps the separator's newline.
-  return match[1]!.replace(/\n$/, '');
+  expect(match, `evidence is missing the "${title}" section`).not.toBeNull();
+  return match![1]!.replace(/\n$/, '');
 }
