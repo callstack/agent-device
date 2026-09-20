@@ -16,6 +16,7 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { resolveBoundBackRuntime } from '../back-runtime.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
+import { resolveBoundFoldRuntime } from '../fold-runtime.ts';
 import { resolveBoundGestureRuntime } from '../gesture-runtime.ts';
 import { resolveBoundOrientationRuntime } from '../orientation-runtime.ts';
 import type { ResolvedGenericExecution } from '../request-generic-dispatch.ts';
@@ -99,6 +100,10 @@ export const conformedRuntimeBindings = {
   back: {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundBackRuntime({ device, ...bindings })),
+  },
+  fold: {
+    resolve: async (device, bindings) =>
+      refusable(await resolveBoundFoldRuntime({ device, positionals: ['open'], ...bindings })),
   },
   focus: {
     resolve: async (device, bindings) =>

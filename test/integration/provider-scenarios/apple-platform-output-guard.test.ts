@@ -127,6 +127,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.tvRemote]: () => one(['select']),
   [PUBLIC_COMMANDS.appSwitcher]: () => one(),
   [PUBLIC_COMMANDS.actionButton]: () => one(),
+  [PUBLIC_COMMANDS.fold]: () => one(['open']),
 
   // -- orchestration (drive to an error response; still scanned) --
   [PUBLIC_COMMANDS.artifacts]: () => one(),

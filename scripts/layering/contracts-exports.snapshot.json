@@ -45,6 +45,7 @@
   "@agent-device/contracts/durable-resource-envelope",
   "@agent-device/contracts/element-text-runtime",
   "@agent-device/contracts/focus-runtime",
+  "@agent-device/contracts/fold-runtime",
   "@agent-device/contracts/gesture-admission",
   "@agent-device/contracts/gesture-input",
   "@agent-device/contracts/gesture-normalization",

@@ -44,6 +44,12 @@ export const ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvi
     [C.actionButton],
     'Android refuses the action-button fact on every kind',
   );
+export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.fold],
+    'Android refuses the fold fact on every kind',
+  );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'src/daemon/__tests__/viewport-runtime.test.ts',

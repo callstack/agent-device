@@ -16,6 +16,7 @@ import {
 import {
   ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
+  ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
@@ -1327,6 +1328,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'the exact-owner runtime fact refuses an Action Button press on the Linux desktop',
+    ),
+  },
+  [C.fold]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android runtime fact refuses a foldable hinge pose on every kind',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the fold fact for the %s leaf',
+      'the iOS simulator leaf advertises the hinge pose and binds it; a single-panel simulator is refused by the operation itself',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the fold fact for the %s leaf',
+      'the exact-owner runtime fact refuses fold on the macOS host leaf, which is not a simulator',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the fold fact for the %s leaf',
+      'the exact-owner runtime fact refuses fold on the tvOS leaf, which has no hinge',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      'the exact-owner runtime fact refuses a hinge pose on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses a hinge pose on the Linux desktop',
     ),
   },
   [C.installFromSource]: {
