@@ -364,11 +364,12 @@ export type Interactor = {
   appSwitcher(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
   /**
-   * Presses the iPhone Action Button. Required rather than optional for the same reason `tvRemote`
-   * is: an absent member would let an advertised press resolve as a no-op that reports success.
-   * Owners without the button throw `UNSUPPORTED_OPERATION`.
+   * Optional (parity with `keyboardDismiss`): presses the iPhone/iPad Action Button, hardware only
+   * the Apple owner carries. An owner without the button leaves it undefined; its fact refuses the
+   * press before binding, and the system-button binder fails closed rather than resolving an
+   * absent member as a successful no-op.
    */
-  actionButton(): Promise<void>;
+  actionButton?(): Promise<void>;
   /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */

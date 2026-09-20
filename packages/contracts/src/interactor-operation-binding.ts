@@ -16,6 +16,24 @@ export type LocalInteractorOperationResolver = (
 
 export type ProviderInteractorOperationResolver = (runner: RunnerContext) => Interactor | undefined;
 
+/**
+ * Optional `Interactor` members (keyboard, hover, the hardware buttons only some owners carry)
+ * are left undefined by a platform with no such concept. Facts admit an operation only for owners
+ * whose interactor implements it, so a missing method at bind time is a runtime-contract error,
+ * not a normal refusal — and never a no-op that reports success.
+ */
+export function requireInteractorMethod<Method>(
+  method: Method | undefined,
+  operation: string,
+): NonNullable<Method> {
+  if (method) return method as NonNullable<Method>;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${operation} was admitted but its bound interactor has no implementation.`,
+    { reason: 'interactor-method-missing' },
+  );
+}
+
 /** Resolves the already-selected local owner's interactor for one bound operation. */
 export function localInteractorSource(
   params: Readonly<{ device: DeviceInfo; resolveInteractor: LocalInteractorOperationResolver }>,

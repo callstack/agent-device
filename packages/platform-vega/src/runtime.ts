@@ -13,7 +13,7 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
@@ -143,13 +143,9 @@ const appEventUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'trigger-app-event is not supported on Vega OS.',
 );
-const appSwitcherUnavailable = vegaUnavailable(
+const systemButtonUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
-  'app-switcher is not supported on Vega OS.',
-);
-const actionButtonUnavailable = vegaUnavailable(
-  'unsupported-platform-leaf',
-  'action-button is not supported on Vega OS.',
+  'System buttons other than home are not supported on Vega OS.',
 );
 const clipboardUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
@@ -192,12 +188,10 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     touch: unsupportedPlatformLeaf,
     elementText: unsupportedPlatformLeaf,
     back: backUnavailable,
-    home: homeUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
     clipboard: clipboardUnavailable,
-    appSwitcher: appSwitcherUnavailable,
-    actionButton: actionButtonUnavailable,
+    systemButton: systemButtonUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
     readAlert: alertUnavailable,
@@ -228,7 +222,10 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       // Remote navigation is the Vega runtime's first available interaction surface: the
       // VVD-only gate the retired `vegaPlugin` closure applied to all three.
       ...backRuntimeOperationFacts({ back: supported ? lifecycleAvailable : backUnavailable }),
-      ...homeRuntimeOperationFacts({ home: supported ? lifecycleAvailable : homeUnavailable }),
+      ...systemButtonRuntimeOperationFacts({
+        unsupported: systemButtonUnavailable,
+        home: supported ? lifecycleAvailable : homeUnavailable,
+      }),
       ...tvRemoteRuntimeOperationFacts({
         tvRemote: supported ? lifecycleAvailable : tvRemoteUnavailable,
       }),

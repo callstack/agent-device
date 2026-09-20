@@ -20,7 +20,6 @@ const OPERATIONS = [
   'home',
   'setOrientation',
   'appSwitcher',
-  'actionButton',
   'tvRemote',
   'readClipboard',
   'writeClipboard',

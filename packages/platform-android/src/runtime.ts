@@ -35,11 +35,10 @@ import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -88,14 +87,14 @@ const hoverUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
 } as const);
 /**
- * The Action Button is physical iPhone hardware with no Android key event behind it: `input
- * keyevent` has no code that reaches a Shortcut the way an Action Button press does, so there is no
- * adb path to admit here even on the kinds every other Android cell admits.
+ * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
+ * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
+ * path to admit even on the kinds every other Android cell admits.
  */
-const actionButtonUnavailable = Object.freeze({
+const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'action-button presses iPhone Action Button hardware; Android has no equivalent key event.',
+  hint: 'Android has no key event for this system button.',
 } as const);
 const headlessUnavailable = Object.freeze({
   available: false,
@@ -357,11 +356,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
-        ...homeRuntimeOperationFacts({ home: androidTouchFact(device) }),
-        // `app-switcher` shares `home`'s cell: one `input keyevent`, admitted wherever the
-        // retired `ANDROID_ALL` bucket admitted it.
-        ...appSwitcherRuntimeOperationFacts({ appSwitcher: androidTouchFact(device) }),
-        actionButton: actionButtonUnavailable,
+        // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
+        // `ANDROID_ALL` bucket admitted them.
+        ...systemButtonRuntimeOperationFacts({
+          unsupported: systemButtonUnavailable,
+          home: androidTouchFact(device),
+          appSwitcher: androidTouchFact(device),
+        }),
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),

@@ -53,7 +53,6 @@ export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerCont
     home: () => homeHarmony(device),
     setOrientation: (orientation) => setHarmonyOrientation(device, orientation),
     appSwitcher: () => appSwitcherHarmony(device),
-    actionButton: unsupported('action-button'),
     tvRemote: unsupported('tv-remote'),
     keyboardDismiss: async () => {
       await pressHarmonyKeyboardKey(device, 'Back');

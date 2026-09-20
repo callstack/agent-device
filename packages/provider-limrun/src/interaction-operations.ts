@@ -16,11 +16,10 @@ import {
   bindProviderScrollInteractor,
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -142,16 +141,11 @@ const appSwitcherUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
 } as const);
-/**
- * Refused on both legs, so — unlike `limrunAppSwitcherOperationFacts`, whose Android leg rides the
- * local Android interactor — this needs no device-parameterized helper: the iOS session has no
- * Action Button transport, and the Android leg's own interactor refuses for the same reason the
- * local Android fact does.
- */
-export const LIMRUN_ACTION_BUTTON_UNAVAILABLE = Object.freeze({
+/** No Limrun session exposes a hardware button; only the springboard buttons split by leg. */
+const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'action-button presses iPhone Action Button hardware, which no Limrun session exposes.',
+  hint: 'No Limrun session exposes this system button.',
 } as const);
 
 /**
@@ -231,11 +225,11 @@ export function bindLimrunInteractionOperations(
 }
 
 /**
- * `back`/`home`/`orientation`/`tvRemote` differ by direct-session platform, unlike focus/type:
+ * `back`/`orientation`/`tvRemote` differ by direct-session platform, unlike focus/type:
  * the Android leg rides `session.dependencies.android.createInteractor` (`android.ts`) — the
  * SAME factory the local Android family binds, so it carries the identical cell table (parity
  * with the local owner, including the `device.target === 'tv'` gate for `tvRemote`). The iOS leg
- * (`ios.ts`) implements `back`/`setOrientation` but explicitly refuses `home`/`tvRemote`.
+ * (`ios.ts`) implements `back`/`setOrientation` but explicitly refuses `tvRemote`.
  */
 export function limrunNavigationOperationFacts(
   device: DeviceInfo,
@@ -244,7 +238,6 @@ export function limrunNavigationOperationFacts(
   if (liveSessionUnavailable) {
     return Object.freeze({
       ...backRuntimeOperationFacts({ back: liveSessionUnavailable }),
-      ...homeRuntimeOperationFacts({ home: liveSessionUnavailable }),
       ...orientationRuntimeOperationFacts({ orientation: liveSessionUnavailable }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: liveSessionUnavailable }),
     });
@@ -252,7 +245,6 @@ export function limrunNavigationOperationFacts(
   if (device.platform === 'android') {
     return Object.freeze({
       ...backRuntimeOperationFacts({ back: available }),
-      ...homeRuntimeOperationFacts({ home: available }),
       ...orientationRuntimeOperationFacts({ orientation: available }),
       ...tvRemoteRuntimeOperationFacts({
         tvRemote: device.target === 'tv' ? available : tvRemoteUnavailableAndroid,
@@ -261,7 +253,6 @@ export function limrunNavigationOperationFacts(
   }
   return Object.freeze({
     ...backRuntimeOperationFacts({ back: available }),
-    ...homeRuntimeOperationFacts({ home: homeUnavailableIos }),
     ...orientationRuntimeOperationFacts({ orientation: available }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailableIos }),
   });
@@ -325,24 +316,28 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * `app-switcher` splits the same way its siblings do: the Android leg rides
- * `session.dependencies.android.createInteractor` -- the SAME factory the local Android family
- * binds -- while the iOS leg's own `appSwitcher` throws.
+ * The system buttons split the way the navigation leaves do: the Android leg rides the local
+ * family's own interactor factory for `home` and `appSwitcher`, the iOS direct session refuses
+ * both, and no Limrun session exposes a hardware button on either leg.
  */
-export function limrunAppSwitcherOperationFacts(
+export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const cell =
-    liveSessionUnavailable ??
-    (device.platform === 'android' ? available : appSwitcherUnavailableIos);
-  return Object.freeze({ ...appSwitcherRuntimeOperationFacts({ appSwitcher: cell }) });
-}
-
-/** The Action Button refusal both Limrun legs share. */
-export function limrunActionButtonOperationFacts() {
-  return Object.freeze({
-    actionButton: LIMRUN_ACTION_BUTTON_UNAVAILABLE,
+  if (liveSessionUnavailable) {
+    return systemButtonRuntimeOperationFacts({ unsupported: liveSessionUnavailable });
+  }
+  if (device.platform === 'android') {
+    return systemButtonRuntimeOperationFacts({
+      unsupported: systemButtonUnavailable,
+      home: available,
+      appSwitcher: available,
+    });
+  }
+  return systemButtonRuntimeOperationFacts({
+    unsupported: systemButtonUnavailable,
+    home: homeUnavailableIos,
+    appSwitcher: appSwitcherUnavailableIos,
   });
 }
 

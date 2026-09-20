@@ -347,13 +347,6 @@ class LimrunIosInteractor implements Interactor {
     throw unsupported('app-switcher', 'Limrun iOS direct sessions do not expose app switcher yet.');
   }
 
-  async actionButton(): Promise<never> {
-    throw unsupported(
-      'action-button',
-      'Limrun iOS direct sessions do not expose the Action Button.',
-    );
-  }
-
   async tvRemote(): Promise<never> {
     throw unsupported('tv-remote', 'Limrun iOS direct sessions do not expose tv remote control.');
   }

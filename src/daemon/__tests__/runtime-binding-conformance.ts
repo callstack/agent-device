@@ -7,16 +7,16 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { commandRuntimeUseRequirements } from '@agent-device/command-registry/registry';
+import {
+  commandDescriptors,
+  commandRuntimeUseRequirements,
+} from '@agent-device/command-registry/registry';
 import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { resolveBoundActionButtonRuntime } from '../action-button-runtime.ts';
-import { resolveBoundAppSwitcherRuntime } from '../app-switcher-runtime.ts';
 import { resolveBoundBackRuntime } from '../back-runtime.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { resolveBoundGestureRuntime } from '../gesture-runtime.ts';
-import { resolveBoundHomeRuntime } from '../home-runtime.ts';
 import { resolveBoundOrientationRuntime } from '../orientation-runtime.ts';
 import type { ResolvedGenericExecution } from '../request-generic-dispatch.ts';
 import type {
@@ -25,6 +25,11 @@ import type {
   RuntimeAdmissionBindings,
 } from '../request-runtime-binding.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
+import {
+  isSystemButtonCommand,
+  resolveBoundSystemButtonRuntime,
+  type SystemButtonCommand,
+} from '../system-button-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
@@ -67,27 +72,33 @@ function refusable(resolved: ResolvedGenericExecution): RefusableResolution {
   return { ok: false, response: resolved.response };
 }
 
+/** The registry's system-button commands, each resolved through the one shared press route. */
+export const systemButtonCommands: readonly SystemButtonCommand[] = commandDescriptors
+  .map((descriptor) => descriptor.name)
+  .filter(isSystemButtonCommand);
+
+function systemButtonConformedBindings(): Record<SystemButtonCommand, ConformedRuntimeBinding> {
+  return Object.fromEntries(
+    systemButtonCommands.map((command) => [
+      command,
+      {
+        resolve: async (device, bindings) =>
+          refusable(await resolveBoundSystemButtonRuntime(command, { device, ...bindings })),
+      } satisfies ConformedRuntimeBinding,
+    ]),
+  ) as Record<SystemButtonCommand, ConformedRuntimeBinding>;
+}
+
 /**
  * Every daemon route whose refusal on an unavailable exact-owner fact is proven through the shared
  * conformance helper, keyed by registry command name. `runtime-binding-conformance-completeness`
  * checks this table against the registry's runtime-use declarations in both directions.
  */
 export const conformedRuntimeBindings = {
+  ...systemButtonConformedBindings(),
   back: {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundBackRuntime({ device, ...bindings })),
-  },
-  home: {
-    resolve: async (device, bindings) =>
-      refusable(await resolveBoundHomeRuntime({ device, ...bindings })),
-  },
-  'action-button': {
-    resolve: async (device, bindings) =>
-      refusable(await resolveBoundActionButtonRuntime({ device, ...bindings })),
-  },
-  'app-switcher': {
-    resolve: async (device, bindings) =>
-      refusable(await resolveBoundAppSwitcherRuntime({ device, ...bindings })),
   },
   focus: {
     resolve: async (device, bindings) =>

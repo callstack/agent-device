@@ -13,6 +13,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 
@@ -57,13 +58,11 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
-  home: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,
   ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
-  appSwitcher: unavailable,
-  actionButton: unavailable,
+  ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
   triggerAppEvent: unavailable,
   setSetting: unavailable,
   readAlert: unavailable,
@@ -116,13 +115,11 @@ export function createUnavailableRuntimeFactsForTest(
     touch: fact,
     elementText: fact,
     back: fact,
-    home: fact,
     orientation: fact,
     tvRemote: fact,
     keyboard: fact,
     clipboard: fact,
-    appSwitcher: fact,
-    actionButton: fact,
+    systemButton: fact,
     triggerAppEvent: fact,
     setSetting: fact,
     readAlert: fact,

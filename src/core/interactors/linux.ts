@@ -75,9 +75,6 @@ export function createLinuxInteractor(): Interactor {
     appSwitcher: () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'appSwitcher not yet supported on Linux');
     },
-    actionButton: () => {
-      throw new AppError('UNSUPPORTED_OPERATION', 'action-button not supported on Linux');
-    },
     tvRemote: () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'tv-remote not supported on Linux');
     },

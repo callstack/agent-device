@@ -205,11 +205,11 @@ test('Android refuses the action-button fact on every kind', async () => {
       runtimeDevice,
     );
     // No `input keyevent` reaches a Shortcut the way an iPhone Action Button press does, so this
-    // is a platform-leaf refusal on every kind rather than the shared touch gate `home` rides.
+    // is the system-button family refusal on every kind rather than the touch gate `home` rides.
     expect(binding.facts.operations.actionButton).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'action-button presses iPhone Action Button hardware; Android has no equivalent key event.',
+      hint: 'Android has no key event for this system button.',
     });
     expect(binding.operations.actionButton).toBeUndefined();
   }

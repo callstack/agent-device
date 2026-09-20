@@ -19,7 +19,7 @@ import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtim
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -193,15 +193,12 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     touch: focusKindUnavailable,
     elementText: elementTextKindUnavailable,
     back: backKindUnavailable,
-    home: homeKindUnavailable,
     orientation: linuxPlatformLeafUnavailable,
     tvRemote: linuxPlatformLeafUnavailable,
     clipboard: clipboardKindUnavailable,
-    // The Linux interactor's own `appSwitcher` throws unsupported, and the retired descriptor
-    // declared `linux: {}`, so no Linux cell was ever admitted.
-    appSwitcher: linuxPlatformLeafUnavailable,
-    // No Linux leaf has an Action Button; the interactor states the same refusal.
-    actionButton: linuxPlatformLeafUnavailable,
+    // `home` is the one system button with a desktop cell, declared below; the Linux interactor's
+    // own `appSwitcher` throws unsupported, and no Linux leaf has hardware buttons.
+    systemButton: linuxPlatformLeafUnavailable,
     // The retired `trigger-app-event` descriptor declared `linux: {}`.
     triggerAppEvent: linuxPlatformLeafUnavailable,
     // The retired `settings` descriptor declared `linux: {}` too.
@@ -266,7 +263,10 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       // Parity with the retired `back`/`home` capability bucket (`{ device: true }`): the desktop
       // is the only Linux cell with a target to drive.
       ...backRuntimeOperationFacts({ back: linuxDesktopFact(device, backKindUnavailable) }),
-      ...homeRuntimeOperationFacts({ home: linuxDesktopFact(device, homeKindUnavailable) }),
+      ...systemButtonRuntimeOperationFacts({
+        unsupported: linuxPlatformLeafUnavailable,
+        home: linuxDesktopFact(device, homeKindUnavailable),
+      }),
       // Parity with the retired `clipboard` capability bucket (`{ device: true }`): wl-clipboard
       // / xclip / xsel drive the desktop session's selection, and no other Linux cell has one.
       ...clipboardRuntimeOperationFacts({

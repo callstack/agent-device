@@ -64,10 +64,6 @@
       "types": "./src/app-state-runtime.ts",
       "default": "./src/app-state-runtime.ts"
     },
-    "./app-switcher-runtime": {
-      "types": "./src/app-switcher-runtime.ts",
-      "default": "./src/app-switcher-runtime.ts"
-    },
     "./apple-runner-request": {
       "types": "./src/apple-runner-request.ts",
       "default": "./src/apple-runner-request.ts"
@@ -219,10 +215,6 @@
     "./gesture-runtime": {
       "types": "./src/gesture-runtime.ts",
       "default": "./src/gesture-runtime.ts"
-    },
-    "./home-runtime": {
-      "types": "./src/home-runtime.ts",
-      "default": "./src/home-runtime.ts"
     },
     "./host-diagnostics": {
       "types": "./src/host-diagnostics.ts",
@@ -451,6 +443,10 @@
     "./startup-recovery-fence": {
       "types": "./src/startup-recovery-fence.ts",
       "default": "./src/startup-recovery-fence.ts"
+    },
+    "./system-button-runtime": {
+      "types": "./src/system-button-runtime.ts",
+      "default": "./src/system-button-runtime.ts"
     },
     "./tap-keyboard-occlusion": {
       "types": "./src/tap-keyboard-occlusion.ts",

@@ -21,12 +21,11 @@ import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
-import { homeRuntimeOperationFacts } from './home-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
-import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
+import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
@@ -58,13 +57,11 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   touch: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
   back: RuntimeOperationUnavailability;
-  home: RuntimeOperationUnavailability;
   orientation: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
   keyboard: RuntimeOperationUnavailability;
   clipboard: RuntimeOperationUnavailability;
-  appSwitcher: RuntimeOperationUnavailability;
-  actionButton: RuntimeOperationUnavailability;
+  systemButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
   setSetting: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
@@ -114,13 +111,11 @@ const UNAVAILABLE_CELLS = {
   touch: true,
   elementText: true,
   back: true,
-  home: true,
   orientation: true,
   tvRemote: true,
   keyboard: true,
   clipboard: true,
-  appSwitcher: true,
-  actionButton: true,
+  systemButton: true,
   triggerAppEvent: true,
   setSetting: true,
   readAlert: true,
@@ -235,13 +230,11 @@ export function createUnavailablePlatformRuntimeFacts(
       }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
       ...backRuntimeOperationFacts({ back: frozen.back }),
-      ...homeRuntimeOperationFacts({ home: frozen.home }),
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
-      ...appSwitcherRuntimeOperationFacts({ appSwitcher: frozen.appSwitcher }),
-      actionButton: frozen.actionButton,
+      ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),
       ...alertRuntimeOperationFacts({
