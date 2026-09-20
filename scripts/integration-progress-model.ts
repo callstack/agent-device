@@ -583,7 +583,9 @@ function readCommandContractBlocks(text) {
   const nameOf = (token) => token.match(/^['"]([^'"]+)['"]$/)?.[1] ?? constants.get(token);
 
   const starts = [
-    ...text.matchAll(/defineCommandFacet\(\s*\{[\s\S]*?\bname:\s*([A-Za-z0-9_]+|['"][^'"]+['"])/g),
+    ...text.matchAll(
+      /define(?:Parameterless)?CommandFacet\(\s*\{[\s\S]*?\bname:\s*([A-Za-z0-9_]+|['"][^'"]+['"])/g,
+    ),
     ...text.matchAll(/defineFieldCommand\(\s*(['"][^'"]+['"])/g),
     ...text.matchAll(/defineCommand\(\s*\{[\s\S]*?\bname:\s*(['"][^'"]+['"])/g),
   ]

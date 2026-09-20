@@ -32,3 +32,34 @@ test('integration progress counts explicit generic Apple host-tool usage only', 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('integration progress maps a parameterless facet to its client method', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-progress-'));
+  try {
+    const commandsDir = path.join(root, 'src/commands/system');
+    const scenarioDir = path.join(root, 'test/integration/provider-scenarios');
+    await mkdir(commandsDir, { recursive: true });
+    await mkdir(scenarioDir, { recursive: true });
+    await writeFile(
+      path.join(commandsDir, 'index.ts'),
+      [
+        "const HOME_COMMAND_NAME = 'home';",
+        'const homeCommandFacet = defineParameterlessCommandFacet({',
+        '  name: HOME_COMMAND_NAME,',
+        '  run: (client, input) => client.command.home(input),',
+        '});',
+      ].join('\n'),
+    );
+    await writeFile(
+      path.join(scenarioDir, 'system.test.ts'),
+      'const home = await client.command.home(selection);\n',
+    );
+
+    const progress = buildIntegrationProgressModel({ root });
+    const home = progress.publicCommandRows.find((row) => row.command === 'home');
+
+    assert.equal(home?.references, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
