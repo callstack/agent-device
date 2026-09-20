@@ -71,8 +71,13 @@ env AGENT_DEVICE_IOS_TEAM_ID="<your team id>" \
   prepare ios-runner --platform ios --device "<physical iPhone name>"
 ```
 
-Expected: `details.reason` is `signing_provisioning_profile_missing`. If a different reason appears,
-say which one did and treat the fixture as unconfirmed rather than editing the rule to fit.
+Expected: `details.reason` is `signing_provisioning_profile_missing`, and the profile row only fires
+when xcodebuild also says what is wrong with the profile — one of its `IDEProvisioningErrorDomain`
+diagnostics, "doesn't include ...", or "has expired" (#2688 review). Paste the whole error: which of
+those lines printed is what promotes the `profile-xcode-signing-error`,
+`profile-does-not-cover-app-id` and `profile-expired` fixtures from `invented-shape` to `captured`. A
+different reason is worth recording just as much: say which one and treat the fixtures as unconfirmed
+rather than editing the rules to fit.
 
 ### 4. The line that claims no reason yet -> `build_failed_unclassified`
 
@@ -88,7 +93,8 @@ env AGENT_DEVICE_IOS_TEAM_ID="<your team id>" \
   prepare ios-runner --platform ios --device "<physical iPhone name>"
 ```
 
-Expected: either `signing_provisioning_profile_missing` (xcodebuild complained about the profile
-first) or `build_failed_unclassified`. Paste the error and the `xcodebuild -version` either way: a
+Expected: either `signing_provisioning_profile_missing` (xcodebuild complained about the profile and
+said what was wrong with it) or `build_failed_unclassified` — which is also what a run that merely
+mentions the profile it used gets, since a name is not a complaint (#2688 review). Paste the error and the `xcodebuild -version` either way: a
 capture of the conflicting-settings line is what would let a follow-up name the cause, and the
 capture must show which build setting disagrees before any hint naming a lever is written.

@@ -148,6 +148,49 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     ],
     note: 'The argv we were asked to run is not xcodebuild evidence: a caller who pinned a profile still gets cache-recovery advice for a compile error (#2680).',
   },
+  // Narrowed profile rows (#2688 review): each of these requires the profile AND the complaint Xcode
+  // attaches to it. The bare phrase alone was the shipped sniffer's trigger and is not evidence, so the
+  // negative entry below is what keeps those rows honest.
+  {
+    id: 'profile-xcode-signing-error',
+    reason: 'signing_provisioning_profile_missing',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: Provisioning profile \"match-development\" is not a valid provisioning profile (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nError Domain=IDEProvisioningErrorDomain Code=17\n** TEST BUILD FAILED **\n",
+    note: "Xcode names the profile beside its own IDEProvisioningErrorDomain diagnostics. Sentence and domain code are our reconstruction; Phase B capture has to record the real wording and this entry's xcodeVersion.",
+  },
+  {
+    id: 'profile-does-not-cover-app-id',
+    reason: 'signing_provisioning_profile_missing',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: Provisioning profile \"match-development\" doesn't include application identifier 'com.yourname.agentdevice.runner' (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'The installed profile that does not cover this app id. Advice is the same lever, so the same reason is published; wording unrecorded.',
+  },
+  {
+    id: 'profile-expired',
+    reason: 'signing_provisioning_profile_missing',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: Provisioning profile \"match-development\" has expired (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'Reinstalling the same profile clears nothing; "a valid profile" in the hint is the operative word. Wording unrecorded.',
+  },
+  {
+    id: 'profile-mentioned-while-compiling',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "note: Using provisioning profile \"match-development\" to sign the app bundle (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nerror: cannot find 'AgentDeviceRunnerCommand' in scope (in target 'AgentDeviceRunnerUITests' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    note: 'The hazard the bare `provisioning profile` trigger carried (#2688 review): a failing build can print the profile it used while the failure is a compile error. A benign mention must keep cache-recovery advice; it also says nothing Xcode calls code signing, which is its own honest row.',
+  },
   {
     id: 'devtools-security-disabled',
     reason: 'devtools_security_developer_mode_disabled',

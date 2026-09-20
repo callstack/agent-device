@@ -271,6 +271,15 @@ type RunnerErrorRule = {
 };
 
 /**
+ * The advice the provisioning-profile rows share (#2688). Named once so the three rows that require a
+ * different complaint cannot drift into three different fixes for one lever.
+ */
+const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
+  reason: 'signing_provisioning_profile_missing',
+  hint: 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.',
+};
+
+/**
  * The one declaration of runner error classes (#1631), mirroring
  * RUNNER_COMMAND_TRAIT_MANIFEST's role for commands: every recovery predicate
  * below derives from this table instead of keeping its own substring chain,
@@ -434,14 +443,35 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
       hint: 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.',
     },
   },
+  // A profile named in the tool's output is only evidence when the output also says what is wrong with
+  // it (#2688 review). One bare `provisioning profile` substring was the shipped sniffer's trigger, and
+  // it is a phrase a failing build can print while talking about something else: the codesign command
+  // line, a build-settings dump, a note about the profile that was used. Each row below therefore
+  // requires the profile plus the complaint Xcode attaches to it, and a failure that merely mentions a
+  // profile stays unclassified rather than being sent to install a profile it already has.
   {
-    reason: 'signing_provisioning_profile_unusable',
-    match: { toolTextIncludesAll: ['provisioning profile'] },
+    // Xcode's own signing-error domain beside the profile it rejected: the machine-readable half of its
+    // `IDEProvisioningErrorDomain` diagnostics, which accompanies the prose rather than replacing it.
+    reason: 'signing_provisioning_profile_xcode_error',
+    match: { toolTextIncludesAll: ['provisioning profile', 'ideprovisioningerrordomain'] },
     verdicts: {},
-    buildFailure: {
-      reason: 'signing_provisioning_profile_missing',
-      hint: 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.',
-    },
+    buildFailure: PROFILE_UNUSABLE,
+  },
+  {
+    // "Provisioning profile \"X\" doesn't include application identifier ..." — the profile that is
+    // installed but does not cover this app or capability.
+    reason: 'signing_provisioning_profile_does_not_cover',
+    match: { toolTextIncludesAll: ['provisioning profile', "doesn't include"] },
+    verdicts: {},
+    buildFailure: PROFILE_UNUSABLE,
+  },
+  {
+    // "Provisioning profile \"X\" has expired" — installing it again is not the fix; replacing it is,
+    // which is what the hint's "valid" is for.
+    reason: 'signing_provisioning_profile_expired',
+    match: { toolTextIncludesAll: ['provisioning profile', 'expired'] },
+    verdicts: {},
+    buildFailure: PROFILE_UNUSABLE,
   },
   {
     // Signing is involved but nothing above names how: the reason says signing and the hint stays
