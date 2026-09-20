@@ -5,6 +5,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
+
 const execFileAsync = promisify(execFile);
 
 const DEVICE_PROBE_TIMEOUT_MS = 5_000;
@@ -35,18 +37,39 @@ export type AndroidAdbRead = (args: readonly string[]) => Promise<string>;
  */
 export async function readAndroidDeviceEvidence(
   target: AndroidDeviceEvidenceTarget,
-  read: AndroidAdbRead = createAdbRead(target.serial),
+  read: AndroidAdbRead = createAdbRead(),
 ): Promise<string> {
+  // Addressing travels inside the same argv as the subcommand, which is the prefix form
+  // `deviceShellArgv` documents for an adb `-s` route.
+  const addressing = ['-s', target.serial];
   const probes: readonly [string, readonly string[]][] = [
-    ['accelerometer_rotation', ['shell', 'settings', 'get', 'system', 'accelerometer_rotation']],
-    ['user_rotation', ['shell', 'settings', 'get', 'system', 'user_rotation']],
-    ['display rotation', ['shell', 'dumpsys', 'display']],
+    [
+      'accelerometer_rotation',
+      deviceShellArgv(
+        'adb',
+        'shell',
+        ['settings', 'get', 'system', 'accelerometer_rotation'],
+        addressing,
+      ),
+    ],
+    [
+      'user_rotation',
+      deviceShellArgv('adb', 'shell', ['settings', 'get', 'system', 'user_rotation'], addressing),
+    ],
+    ['display rotation', deviceShellArgv('adb', 'shell', ['dumpsys', 'display'], addressing)],
     // The tail, not the whole buffer: the emulator keeps 2MB and a loaded one takes seconds to
-    // dump it, which is what the group bound is for, not this read.
-    ['logcat rotation decisions', ['logcat', '-d', '-v', 'time', '-t', String(ROTATION_LOG_TAIL)]],
-    ['app process', ['shell', 'pidof', target.appId]],
-    ['resumed activity', ['shell', 'dumpsys', 'activity', 'activities']],
-    ['crash buffer', ['logcat', '-d', '-b', 'crash', '-v', 'time']],
+    // dump it, which is what the group bound is for, not this read. These two are host-side adb
+    // queries, so they carry addressing as plain argv and never reach the device shell.
+    [
+      'logcat rotation decisions',
+      [...addressing, 'logcat', '-d', '-v', 'time', '-t', String(ROTATION_LOG_TAIL)],
+    ],
+    ['app process', deviceShellArgv('adb', 'shell', ['pidof', target.appId], addressing)],
+    [
+      'resumed activity',
+      deviceShellArgv('adb', 'shell', ['dumpsys', 'activity', 'activities'], addressing),
+    ],
+    ['crash buffer', [...addressing, 'logcat', '-d', '-b', 'crash', '-v', 'time']],
   ];
   const sections: string[] = [];
   for (const [title, args] of probes) {
@@ -61,9 +84,9 @@ export async function readAndroidDeviceEvidence(
   return `${sections.join('\n\n')}\n`;
 }
 
-function createAdbRead(serial: string): AndroidAdbRead {
+function createAdbRead(): AndroidAdbRead {
   return async (args) => {
-    const { stdout } = await execFileAsync('adb', ['-s', serial, ...args], {
+    const { stdout } = await execFileAsync('adb', args, {
       maxBuffer: 64 * 1024 * 1024,
       timeout: DEVICE_PROBE_TIMEOUT_MS,
     });

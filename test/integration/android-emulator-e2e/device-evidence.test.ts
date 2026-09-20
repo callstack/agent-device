@@ -85,3 +85,24 @@ function section(evidence: string, title: string): string {
   expect(match, `evidence is missing the "${title}" section`).not.toBeNull();
   return match![1]!.replace(/\n$/, '');
 }
+
+test('the app id reaches the device shell as one word, never as a script', async () => {
+  const seen: string[][] = [];
+  const read: AndroidAdbRead = async (args) => {
+    seen.push([...args]);
+    return '0';
+  };
+
+  await readAndroidDeviceEvidence({ appId: 'com.lab', serial: 'emulator-5554' }, read);
+  await readAndroidDeviceEvidence({ appId: "com.lab'; reboot", serial: 'emulator-5554' }, read);
+
+  const pidof = seen.filter((args) => args.includes('pidof'));
+  expect(pidof[0]).toEqual(['-s', 'emulator-5554', 'shell', 'pidof', 'com.lab']);
+  expect(pidof[1]).toEqual([
+    '-s',
+    'emulator-5554',
+    'shell',
+    'pidof',
+    String.raw`'com.lab'\''; reboot'`,
+  ]);
+});
