@@ -7,7 +7,12 @@ import {
   type InferCommandInput,
 } from './command-input.ts';
 
-type FieldCommandOptions<TInput> = {
+type FieldCommandPresentationOptions = {
+  /** Declares the command's stdout as the value itself. See `CommandMetadata.parseableOutput`. */
+  parseableOutput?: true;
+};
+
+type FieldCommandOptions<TInput> = FieldCommandPresentationOptions & {
   /** For a command that reads its own fields (`batch` validates steps, `gesture` reads a union). */
   readInput: (input: unknown) => TInput;
 };
@@ -25,6 +30,7 @@ export function defineFieldCommandMetadata<
   name: TName,
   description: string,
   fields: TFields,
+  options?: FieldCommandPresentationOptions,
 ): CommandMetadata<TName, InferCommandInput<TFields>>;
 export function defineFieldCommandMetadata<const TName extends string, TInput>(
   name: TName,
@@ -36,7 +42,7 @@ export function defineFieldCommandMetadata(
   name: string,
   description: string,
   fields: CommandFieldMap,
-  options?: FieldCommandOptions<unknown>,
+  options?: FieldCommandPresentationOptions & Partial<FieldCommandOptions<unknown>>,
 ): CommandMetadata<string, unknown> {
   return defineCommandMetadata({
     name,
@@ -44,5 +50,6 @@ export function defineFieldCommandMetadata(
     inputSchema: fieldsInputSchema(fields),
     readInput: options?.readInput ?? ((input) => readFieldInput(input, fields)),
     inputAudience: fieldAudiences(fields),
+    ...(options?.parseableOutput ? { parseableOutput: true as const } : {}),
   });
 }

@@ -24,7 +24,7 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { messageWithWarningsOutput } from '../output-common.ts';
+import { messageOutput } from '../output-common.ts';
 
 const SETTINGS_COMMAND_NAME = 'settings';
 const settingsCommandDescription =
@@ -69,7 +69,7 @@ export const settingsCommandFacet = defineCommandFacet({
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,
   // Android permission revokes append a relaunch warning (#1796); render it for humans too.
-  cliOutputFormatter: messageWithWarningsOutput,
+  cliOutputFormatter: messageOutput,
 });
 
 // fallow-ignore-next-line complexity

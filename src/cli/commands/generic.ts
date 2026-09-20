@@ -1,5 +1,7 @@
 import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
+import { isParseableOutputCommand } from '../../commands/cli-output.ts';
+import { routeResponseWarnings } from '../../commands/output-common.ts';
 import type { CommandName } from '../../commands/command-metadata.ts';
 import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
@@ -68,8 +70,15 @@ async function writeGenericCliOutput(
       }),
     );
   }
-  await writeCommandOutput(flags, data, () =>
-    readCommandMessage(data as Record<string, unknown> | undefined),
+  // A command with no formatter still owes the response's warnings: it renders through the same
+  // router, on the stream its descriptor says its caller reads (#2682).
+  await writeCliOutput(
+    flags,
+    routeResponseWarnings(
+      { data, text: readCommandMessage(data as Record<string, unknown> | undefined) },
+      data,
+      isParseableOutputCommand(command as CommandName) ? 'stderr' : 'text',
+    ),
   );
   return 0;
 }

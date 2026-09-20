@@ -18,7 +18,8 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
-import { withSystemSurfaceDisclosure } from '../../system-surface-disclosure.ts';
+import type { RequestActivationProof } from '../../capture-disclosure.ts';
+import { withCaptureDisclosures } from '../../capture-disclosure.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
@@ -125,6 +126,10 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
   if (!boundSelector.ok) return boundSelector.response;
   const selectorExpression = parseFindSelectorExpression(locator, query);
+  // One proof for the whole request: whichever capture of find's (first pass or a sparse re-capture)
+  // activated the session app owns the disclosure, including when the re-capture's tree is the one
+  // that survives and gets answered from (#2682).
+  const activationProof: RequestActivationProof = {};
   const readTargetTree = createFindTargetCapture({
     device,
     session,
@@ -135,6 +140,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     sessionStore,
     sessionName,
     capture: boundSelector.capture,
+    activationProof,
   });
 
   const ctx: FindContext = {
@@ -155,7 +161,13 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
 
   const snapshotResult = await readTargetTree();
   if (isSparseSnapshotQualityVerdict(snapshotResult.snapshotQuality)) {
-    return sparseFindSnapshotResponse(snapshotResult.snapshotQuality);
+    // A sparse tree still consumed this request's capture, so the repair it paid for is owed here too
+    // — this return used to be the one find exit with no disclosure at all (#2682).
+    return withCaptureDisclosures({
+      response: sparseFindSnapshotResponse(snapshotResult.snapshotQuality),
+      consumedTree: snapshotResult,
+      activationProof,
+    });
   }
   const { nodes } = snapshotResult;
   const matchResult = resolveFindMatch({
@@ -168,7 +180,15 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
   // Matched and unmatched outcomes both consumed this capture: when it is an occluding system
   // surface, the response must disclose that app content is occluded.
-  if (!matchResult.ok) return withSystemSurfaceDisclosure(matchResult.response, snapshotResult);
+  // Find resolves its target from a capture it took itself, so the same tree is both what the
+  // response describes and what this request paid for.
+  if (!matchResult.ok) {
+    return withCaptureDisclosures({
+      response: matchResult.response,
+      consumedTree: snapshotResult,
+      activationProof,
+    });
+  }
   const node = matchResult.node;
   // Every node stage find's row declares, in one call.
   const target = await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.findAct, nodes, node);
@@ -189,7 +209,13 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   };
 
   const response = await dispatchFindAction(ctx, match, action, value);
-  return response ? withSystemSurfaceDisclosure(response, snapshotResult) : response;
+  return response
+    ? withCaptureDisclosures({
+        response,
+        consumedTree: snapshotResult,
+        activationProof,
+      })
+    : response;
 }
 
 /**

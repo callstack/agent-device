@@ -1,9 +1,9 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../client/client-types.ts';
-import type { CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
+import type { CliOutput, CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
-import { formatCliOutput } from '../commands/cli-output.ts';
+import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import {
   findCommandMetadata,
   isCommandName,
@@ -510,8 +510,20 @@ async function renderToolText(params: {
     input: params.input,
     result: params.result,
   });
-  if (typeof cliOutput?.text === 'string') return cliOutput.text;
-  return renderJsonText(cliOutput?.data ?? params.result);
+  if (typeof cliOutput?.text !== 'string') return renderJsonText(cliOutput?.data ?? params.result);
+  return toolTextWithWarnings(params.name, cliOutput);
+}
+
+/**
+ * A model reads one string and has no second stream, so a `parseableOutput` command's stderr-routed
+ * warnings (#2682) belong in the tool text. Nothing else moves: a formatter's own stderr note stays
+ * out of it, exactly as before.
+ */
+function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
+  const text = cliOutput.text ?? '';
+  if (!isParseableOutputCommand(name)) return text;
+  const stderr = cliOutput.stderr?.trimEnd() ?? '';
+  return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
 }
 
 function renderJsonText(value: unknown): string {

@@ -3,7 +3,13 @@ import type {
   CaptureSnapshotInput,
   SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
-import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
+import {
+  buildSnapshotPresentationKey,
+  type IosTargetActivation,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
+import type { DaemonResponse } from '../daemon-request.ts';
+import { type RequestActivationProof, withCaptureDisclosures } from '../capture-disclosure.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
@@ -189,6 +195,122 @@ test('sparse verdict recovery retries with query scope and stores recovered snap
     interactiveOnly: false,
     scope: 'Search',
   });
+});
+
+const REPAIR: IosTargetActivation = {
+  reason: 'stale_target',
+  priorState: 'runningBackground',
+  otherActiveApplicationPid: 4562,
+};
+
+function proofRuntime(params: {
+  sessionName: string;
+  storedSnapshot?: SnapshotState;
+  capturedTargetActivation?: IosTargetActivation;
+}) {
+  const sessionStore = makeSessionStore('agent-device-selector-capture-');
+  const session = makeIosSession(
+    params.sessionName,
+    params.storedSnapshot ? { snapshot: params.storedSnapshot } : {},
+  );
+  sessionStore.set(params.sessionName, session);
+  boundCapture.mockResolvedValue({
+    backend: 'xctest',
+    producer: 'apple-runner',
+    nodes: [{ index: 0, type: 'Button', label: 'Captured' }],
+    ...(params.capturedTargetActivation
+      ? { targetActivation: params.capturedTargetActivation }
+      : {}),
+  } as never);
+  const consumedSnapshot: { state?: SnapshotState } = {};
+  const activationProof: RequestActivationProof = {};
+  const runtime = createSelectorCaptureRuntime({
+    device: session.device,
+    session,
+    sessionStore,
+    sessionName: params.sessionName,
+    consumedSnapshot,
+    activationProof,
+    capture: boundCapture,
+    req: {
+      token: 't',
+      session: params.sessionName,
+      command: 'get',
+      positionals: [],
+      flags: {},
+    },
+  });
+  return { runtime, consumedSnapshot, activationProof };
+}
+
+/**
+ * A selector read answered from the tree an earlier command stored performed no device work, so it
+ * owns no foreground repair (#2682). The stored tree may still be disclosed as the surface the
+ * response describes (#2438); the repair sentence is a claim about THIS command and would be
+ * fabricated here.
+ */
+test('a session-snapshot cache hit consumes a repaired tree without earning the repair proof', async () => {
+  const holders = proofRuntime({
+    sessionName: 'selector-cache-hit-repair-proof',
+    storedSnapshot: {
+      createdAt: Date.now(),
+      presentationKey: buildSnapshotPresentationKey({}),
+      nodes: [{ ref: 'e1', index: 0, type: 'Button', label: 'Stored' }],
+      targetActivation: REPAIR,
+    },
+  });
+
+  await holders.runtime.capture({ flags: {}, cache: { useSessionSnapshot: true } });
+
+  expect(boundCapture).not.toHaveBeenCalled();
+  expect(holders.consumedSnapshot.state?.targetActivation).toEqual(REPAIR);
+  expect(holders.activationProof.state).toBeUndefined();
+
+  const response = withCaptureDisclosures({
+    response: { ok: true, data: { nodes: [] } } as DaemonResponse,
+    consumedTree: holders.consumedSnapshot.state,
+    activationProof: holders.activationProof,
+  });
+  expect(response.ok).toBe(true);
+  if (response.ok) {
+    expect(response.data?.targetActivation).toBeUndefined();
+    expect(response.data?.warnings).toBeUndefined();
+  }
+});
+
+test('a capture the request took itself earns the repair proof', async () => {
+  const holders = proofRuntime({
+    sessionName: 'selector-fresh-capture-repair-proof',
+    capturedTargetActivation: REPAIR,
+  });
+
+  await holders.runtime.capture({ flags: {}, cache: { useSessionSnapshot: true } });
+
+  expect(boundCapture).toHaveBeenCalledTimes(1);
+  expect(holders.activationProof.state?.targetActivation).toEqual(REPAIR);
+});
+
+/**
+ * A poll or a recovery re-capture inside one request can answer from an already-foreground app while
+ * an earlier capture in that same request reported the repair. The later fact-less tree must not
+ * erase the disclosure the request earned (#2682).
+ */
+test('a later fact-less capture does not erase an earlier repair proof', async () => {
+  const holders = proofRuntime({
+    sessionName: 'selector-second-capture-keeps-proof',
+    capturedTargetActivation: REPAIR,
+  });
+
+  await holders.runtime.capture({ flags: {}, cache: { forceFresh: true } });
+  boundCapture.mockResolvedValue({
+    backend: 'xctest',
+    producer: 'apple-runner',
+    nodes: [{ index: 0, type: 'Button', label: 'Quiet' }],
+  } as never);
+  await holders.runtime.capture({ flags: {}, cache: { forceFresh: true } });
+
+  expect(boundCapture).toHaveBeenCalledTimes(2);
+  expect(holders.activationProof.state?.targetActivation).toEqual(REPAIR);
 });
 
 function makeCaptureRuntime(sessionName: string) {

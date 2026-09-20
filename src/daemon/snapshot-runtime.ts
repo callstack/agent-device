@@ -4,6 +4,8 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
+import type { RequestActivationProof } from './capture-disclosure.ts';
+import { withTargetActivationDisclosure } from './capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from './snapshot-runtime-binding.ts';
@@ -13,7 +15,8 @@ import type { SessionState } from './session-state.ts';
 export async function dispatchSnapshotViaRuntime(
   params: SnapshotRuntimeRouteParams,
 ): Promise<DaemonResponse> {
-  return await dispatchSnapshotRuntimeCommand({
+  const activationProof: RequestActivationProof = {};
+  const response = await dispatchSnapshotRuntimeCommand({
     ...params,
     command: 'snapshot',
     execute: async ({
@@ -28,6 +31,11 @@ export async function dispatchSnapshotViaRuntime(
         // The session-resolved scope wins over the raw flag.
         scope: snapshotScope,
       });
+      // This request's own capture, read here rather than off the stored snapshot: a snapshot that
+      // failed before capturing must not inherit the previous command's repair (#2682).
+      if (result.targetActivation && !activationProof.state) {
+        activationProof.state = { targetActivation: result.targetActivation };
+      }
       const refsGeneration = publishedSnapshotGeneration(
         request,
         params.sessionStore.get(resolvedSessionName),
@@ -71,6 +79,11 @@ export async function dispatchSnapshotViaRuntime(
       };
     },
   });
+  // Only this request's capture speaks here. The #2438 surface sentence already rides the capture's
+  // own annotations, so re-deriving it from the stored snapshot would copy a sentence the response
+  // already carries — and on a snapshot that failed before capturing, would credit it with a surface
+  // it never observed (#2682).
+  return withTargetActivationDisclosure(response, activationProof.state);
 }
 
 function publishedSnapshotGeneration(

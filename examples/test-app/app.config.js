@@ -21,6 +21,7 @@ module.exports = {
     plugins: [
       'expo-router',
       'expo-secure-store',
+      'expo-status-bar',
       [
         'expo-audio',
         {

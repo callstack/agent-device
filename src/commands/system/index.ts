@@ -45,7 +45,8 @@ const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
 
-const appStateCommandDescription = 'Show foreground app/activity';
+const appStateCommandDescription =
+  'Show foreground app/activity (Android; iOS answers per command)';
 const backCommandDescription =
   'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
 const homeCommandDescription =
@@ -83,6 +84,7 @@ const keyboardCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+// `clipboard read` prints the clipboard content verbatim, so its warnings belong on stderr.
 const clipboardCommandMetadata = defineFieldCommandMetadata(
   CLIPBOARD_COMMAND_NAME,
   clipboardCommandDescription,
@@ -90,6 +92,7 @@ const clipboardCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(CLIPBOARD_ACTION_VALUES)),
     text: stringField(),
   },
+  { parseableOutput: true },
 );
 
 const tvRemoteCommandMetadata = defineFieldCommandMetadata(

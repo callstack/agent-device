@@ -5,7 +5,10 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
+import {
+  assertCoverageClassificationSummaryWiredToManifest,
+  assertLiveCoverageMatchesEvidence,
+} from './support/coverage-classification.ts';
 import {
   WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
@@ -39,7 +42,7 @@ test('web coverage exhaustively classifies the public catalog', () => {
 });
 
 test('web coverage report counts every manifest classification', () => {
-  assertCoverageClassificationSummaryDerivedFromManifest(
+  assertCoverageClassificationSummaryWiredToManifest(
     'web',
     WEB_PLATFORM_COVERAGE,
     WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
@@ -47,19 +50,18 @@ test('web coverage report counts every manifest classification', () => {
   );
 });
 
-test('web live claims reference commands in the existing smoke scenario', () => {
+// The manifest says which commands are live; the scenario says which ones it runs. Read together
+// they close the live bucket from both sides, which a count of either cannot: a command the scenario
+// runs but the manifest does not claim, or a claim the scenario stopped honouring, fails here and
+// names itself.
+test('web live claims are exactly the commands the smoke scenario invokes', () => {
   const smokeSource = fs.readFileSync(path.resolve(WEB_SMOKE_EVIDENCE.path), 'utf8');
   assert.ok(smokeSource.includes(WEB_SMOKE_TEST_NAME));
-
-  const liveCommands = liveCommandsForWebSmoke();
-  assert.ok(liveCommands.length > 0, 'web claims no live command at all');
-  for (const command of liveCommands) {
-    assert.equal(
-      smokeSource.includes(`'${command}',`),
-      true,
-      `${command} is not invoked by ${WEB_SMOKE_EVIDENCE.path}`,
-    );
-  }
+  assertLiveCoverageMatchesEvidence(
+    'web',
+    WEB_PLATFORM_COVERAGE,
+    invokedWebSmokeCommands(smokeSource),
+  );
 });
 
 test('web contract claims name existing executable evidence', () => {
@@ -141,6 +143,18 @@ test('web cleanup error is preserved when report writing also fails', async () =
     },
   );
 });
+
+/** Every catalog command the smoke scenario passes as an argv head, read off the scenario source. */
+function invokedWebSmokeCommands(smokeSource: string): string[] {
+  const catalogCommands: ReadonlySet<string> = new Set(publicCommands);
+  const invoked = new Set<string>();
+  for (const [, candidate] of smokeSource.matchAll(/\[\s*'([a-z][a-z-]*)'/g)) {
+    if (candidate !== undefined && catalogCommands.has(candidate)) {
+      invoked.add(candidate);
+    }
+  }
+  return [...invoked].sort();
+}
 
 function readCoverageReport(
   artifactDir: string,

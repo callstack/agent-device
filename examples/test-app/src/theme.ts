@@ -57,7 +57,7 @@ const lightColors: AppColors = {
   textSoft: '#00000099',
 };
 
-export function getAppColors(scheme?: ColorSchemeName): AppColors {
+export function getAppColors(scheme?: ColorSchemeName | null): AppColors {
   return scheme === 'light' ? lightColors : darkColors;
 }
 

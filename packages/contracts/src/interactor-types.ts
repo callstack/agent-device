@@ -18,6 +18,7 @@ import type {
   RawSnapshotNode,
   Point,
   Rect,
+  IosTargetActivation,
   SnapshotKeyboardBandFact,
   SnapshotOptions as BaseSnapshotOptions,
   SnapshotProvenance,
@@ -269,6 +270,11 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    * from `nodes`; see {@link SnapshotKeyboardBandFact}.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * Set when this capture's own command had to bring the session app back to the foreground, i.e.
+   * something else held it and an earlier observation described that instead (#2682).
+   */
+  targetActivation?: IosTargetActivation;
 } & SnapshotProvenance;
 
 export type SnapshotRuntimeAcquiredResult = Readonly<{

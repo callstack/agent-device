@@ -54,13 +54,27 @@ extension RunnerTests {
       bundleId: "com.example.previous",
       processIdentifier: 41
     )
+    // The happy path owes two things: no activation work at all, and no fact to disclose. Clearing
+    // first makes the nil below a claim about THIS call rather than whatever an earlier test left.
+    pendingTargetActivation = nil
     _ = activateTarget(bundleId: "com.example.foreground", reason: "unit_test")
     XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
     XCTAssertNil(textEntryTapWitness)
+    XCTAssertNil(
+      pendingTargetActivation,
+      "an already-foreground command performed no repair and must stamp nothing (#2682)"
+    )
 
     RunnerTargetActivationSpy.state = .runningBackground
     _ = activateTarget(bundleId: "com.example.background", reason: "unit_test")
     XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
+    // The stamped state is the one read BEFORE `activate()` ran, so the fact describes what was
+    // repaired. A value read after the repair would report `.runningForeground` here (#2682).
+    XCTAssertEqual(
+      pendingTargetActivation?.priorState,
+      Int(XCUIApplication.State.runningBackground.rawValue)
+    )
+    XCTAssertEqual(pendingTargetActivation?.reason, "unit_test")
   }
 #endif
 

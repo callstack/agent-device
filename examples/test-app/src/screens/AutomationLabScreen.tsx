@@ -12,6 +12,7 @@ import {
   useColorScheme,
   useWindowDimensions,
   View,
+  type AppStateStatus,
 } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { requireOptionalNativeModule } from 'expo-modules-core';
@@ -57,7 +58,15 @@ export function AutomationLabScreen(props: {
   const styles = createStyles(colors);
   const colorScheme = useColorScheme() ?? 'light';
   const dimensions = useWindowDimensions();
-  const [appState, setAppState] = useState(AppState.currentState);
+  const [appState, setAppState] = useState<AppStateStatus>(() => {
+    // RN types `currentState` as a plain string, so narrow it instead of casting.
+    const current = AppState.currentState;
+    return current === 'inactive' || current === 'background' || current === 'active'
+      ? current
+      : current === 'extension'
+        ? current
+        : 'unknown';
+  });
   const [lastNonActiveState, setLastNonActiveState] = useState('none');
   const [alertResult, setAlertResult] = useState('none');
   const [lastInput, setLastInput] = useState('none');

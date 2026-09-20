@@ -28,20 +28,28 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     .filter((node) => node.hittable === true && node.interactionBlocked !== 'covered')
     .slice(0, DIGEST_REF_LIMIT)
     .map((node) => ({ ref: node.ref, label: node.label ?? node.value ?? node.identifier }));
+  // Everything here is negotiable except the tree's own size and refs, so the optional signals are
+  // carried by name rather than by one spread per field (#1076 refs generation, #2682 target
+  // activation, and the occlusion/quality/visibility warnings a digest still has to surface).
+  const carriedFields = [
+    'visibility',
+    'snapshotQuality',
+    'targetActivation',
+    'warnings',
+    'fallbackScreenshotPath',
+    'artifacts',
+    'refsGeneration',
+  ] as const satisfies readonly (keyof DaemonResponseData)[];
+  const carried = Object.fromEntries(
+    carriedFields
+      .filter((field) => data[field] !== undefined)
+      .map((field) => [field, data[field]] as const),
+  );
   return {
     nodeCount: nodes.length,
     refs,
     truncated: data.truncated,
-    ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
-    ...(data.snapshotQuality !== undefined ? { snapshotQuality: data.snapshotQuality } : {}),
-    ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
-    ...(data.fallbackScreenshotPath !== undefined
-      ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
-      : {}),
-    ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
-    // #1076 versioned refs: the one-number generation is the pinning signal for
-    // the refs above — cheap, and dropping it would strand auto-pinning clients.
-    ...(data.refsGeneration !== undefined ? { refsGeneration: data.refsGeneration } : {}),
+    ...carried,
   };
 }
 

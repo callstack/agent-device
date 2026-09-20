@@ -5,12 +5,31 @@ import {
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type TextInputProps,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppColors, type AppColors } from './theme';
+
+/** The widest column the lab's prose reads well in across a wide panel. */
+const READABLE_MAX_WIDTH = 760;
+
+/** The frame's horizontal padding, which every route's content column sits inside. */
+const FRAME_PADDING_X = 18;
+
+/**
+ * The column a route's content actually gets once the frame's padding and the readable cap are
+ * applied, plus whether that cap bound. `capped` is false anywhere the cap would render identically
+ * to the frame, so nothing extra enters the tree at compact width.
+ */
+export function useReadableColumn(): { capped: boolean; width: number } {
+  const { width } = useWindowDimensions();
+  const available = width - FRAME_PADDING_X * 2;
+
+  return { capped: available > READABLE_MAX_WIDTH, width: Math.min(available, READABLE_MAX_WIDTH) };
+}
 
 export function ScreenTitle(props: {
   title: string;
@@ -208,6 +227,7 @@ export function InlineBadge(props: {
 export function AppFrame(props: { children: ReactNode }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const { capped } = useReadableColumn();
   const styles = createStyles(colors);
 
   return (
@@ -220,7 +240,7 @@ export function AppFrame(props: { children: ReactNode }) {
         },
       ]}
     >
-      {props.children}
+      {capped ? <View style={styles.readableColumn}>{props.children}</View> : props.children}
     </View>
   );
 }
@@ -435,7 +455,13 @@ function createStyles(colors: AppColors) {
     frame: {
       backgroundColor: colors.surface,
       flex: 1,
-      paddingHorizontal: 18,
+      paddingHorizontal: FRAME_PADDING_X,
+    },
+    readableColumn: {
+      alignSelf: 'center',
+      flex: 1,
+      maxWidth: READABLE_MAX_WIDTH,
+      width: '100%',
     },
     toastViewport: {
       left: 16,

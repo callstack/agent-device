@@ -118,6 +118,10 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 
 + (NSInteger)processIdentifierForApplication:(XCUIApplication *)application;
 
+/// Pids of the applications the AX client currently reports as active. Same private accessor the
+/// snapshot target match uses; pids only — the client resolves no bundle id for an arbitrary app.
++ (NSArray<NSNumber *> *)activeApplicationProcessIdentifiers;
+
 /// The frontier-extension loop, exposed for the runner unit bundle: a frontier
 /// whose element vanished or whose re-rooted request fails must count as
 /// missed (see the deepExtension keys above) — an all-miss extension reporting

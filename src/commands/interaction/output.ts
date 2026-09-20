@@ -12,15 +12,18 @@ import {
 } from '../output-common.ts';
 import { withSettleCapableNotes } from '../settle-output.ts';
 
-function getCliOutput(params: { result: CommandRequestResult; format?: string }): CliOutput {
+// `get`'s format is a required two-value field on every surface, so this is total over it rather
+// than a third branch no caller can reach. Its stdout is the read value, which is why the command
+// declares `parseableOutput` and its warnings land on stderr (#2682).
+function getCliOutput(params: {
+  result: CommandRequestResult;
+  format: 'text' | 'attrs';
+}): CliOutput {
   const data = params.result as Record<string, unknown>;
-  if (params.format === 'text') {
-    return { data, text: typeof data.text === 'string' ? data.text : '' };
-  }
   if (params.format === 'attrs') {
     return { data, text: JSON.stringify(data.node ?? {}, null, 2) };
   }
-  return defaultCommandCliOutput(data);
+  return { data, text: typeof data.text === 'string' ? data.text : '' };
 }
 
 function findCliOutput(result: CommandRequestResult): CliOutput {
@@ -38,7 +41,7 @@ function findCliOutput(result: CommandRequestResult): CliOutput {
   if (pinned) return { data, text: `Found: ${pinned}` };
   if (typeof data.found === 'boolean') return { data, text: `Found: ${data.found}` };
   if (data.node) return { data, text: JSON.stringify(data.node, null, 2) };
-  return defaultCommandCliOutput(data);
+  return messageCliOutput(data);
 }
 
 type FindMatchView = { ref?: string; node?: SnapshotNode };
@@ -74,14 +77,14 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
   const x = data.x;
   const y = data.y;
   if (!ref || typeof x !== 'number' || typeof y !== 'number') {
-    return defaultCommandCliOutput(data);
+    return messageCliOutput(data);
   }
   return { data, text: `Tapped @${ref} (${x}, ${y})` };
 }
 
-// #1652: settle-capable entries (click, press, fill, longpress, hover, scroll)
-// get the warning/settle notes appended by the trait-derived wrapper; the rest
-// of the map is returned untouched.
+// The settle wrapper is trait-derived (#1652): the settle-capable entries come back with their
+// settled diff appended and the rest of the map untouched. Response warnings are nobody's business
+// here — `formatCliOutput` appends them once, routed by each command's descriptor (#2682).
 export const interactionCliOutputFormatters = withSettleCapableNotes({
   click: resultOutput(tapCliOutput),
   press: resultOutput(tapCliOutput),
@@ -92,12 +95,8 @@ export const interactionCliOutputFormatters = withSettleCapableNotes({
   get: ({ input, result }) =>
     getCliOutput({
       result: result as CommandRequestResult,
-      format: input.format as Parameters<typeof getCliOutput>[0]['format'],
+      format: input.format === 'attrs' ? 'attrs' : 'text',
     }),
   is: resultOutput(isCliOutput),
   find: resultOutput(findCliOutput),
 } satisfies Record<string, CliOutputFormatter>);
-
-function defaultCommandCliOutput(result: CommandRequestResult): CliOutput {
-  return messageCliOutput(result as Record<string, unknown>);
-}

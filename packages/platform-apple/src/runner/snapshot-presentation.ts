@@ -25,11 +25,14 @@ import type {
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  IosTargetActivation,
 } from '@agent-device/kernel/snapshot';
 import {
   iosSystemSurfaceHost,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
+import { emitDiagnostic } from './host.ts';
+import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from './target-activation.ts';
 
 export type AppleRunnerSnapshotResult = Readonly<{
   nodes?: RawSnapshotNode[];
@@ -40,6 +43,8 @@ export type AppleRunnerSnapshotResult = Readonly<{
   runnerFatal?: boolean;
   systemSurface?: IosSystemSurfaceProvenance;
   keyboard?: SnapshotKeyboardBandFact;
+  /** Foreground repair this capture's own command had to perform (#2682). */
+  targetActivation?: IosTargetActivation;
 }>;
 
 export function readAppleSnapshotResult(
@@ -47,6 +52,13 @@ export function readAppleSnapshotResult(
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
   const keyboard = readSnapshotKeyboardBandFact(result.keyboard);
+  const targetActivation = readTargetActivationFact(result[TARGET_ACTIVATION_WIRE_KEY], (detail) =>
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_runner_target_activation_prior_state_unmapped',
+      data: detail,
+    }),
+  );
   return {
     nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
@@ -55,6 +67,7 @@ export function readAppleSnapshotResult(
     runnerFatal: result.runnerFatal === true,
     ...(keyboard ? { keyboard } : {}),
     ...(systemSurface ? { systemSurface } : {}),
+    ...(targetActivation ? { targetActivation } : {}),
     message:
       typeof result.message === 'string' && result.message.trim().length > 0
         ? result.message

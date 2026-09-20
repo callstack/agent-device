@@ -32,6 +32,8 @@ const recordCommandDescription =
 const traceCommandDescription =
   'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.';
 
+// `record stop` prints the artifact path, which callers capture into a variable.
+const recordCommandOptions = { parseableOutput: true } as const;
 export const recordCommandMetadata = defineFieldCommandMetadata(
   RECORD_COMMAND_NAME,
   recordCommandDescription,
@@ -44,6 +46,7 @@ export const recordCommandMetadata = defineFieldCommandMetadata(
     hideTouches: booleanField(),
     recordingScope: enumField(RECORDING_SCOPE_VALUES),
   },
+  recordCommandOptions,
 );
 
 export const traceCommandMetadata = defineFieldCommandMetadata(

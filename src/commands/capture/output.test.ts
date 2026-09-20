@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {
@@ -93,4 +94,32 @@ test('snapshot output presents the materialized fallback screenshot path', async
     output.text ?? '',
     /Captured a screenshot of this screen automatically as visual truth: \/client\/artifacts\/snapshot-fallback\.png/,
   );
+});
+
+/**
+ * The rendered surface an agent actually reads after the runner repaired foreground (#2682): the
+ * disclosure is printed, and the structured fact survives the JSON projection so a scripted caller
+ * never has to parse the sentence.
+ */
+test('a repaired capture renders the disclosure and keeps the structured fact', async () => {
+  const fact = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  } as const;
+  const output = await snapshotCliOutput({
+    result: {
+      ...buildResult(REPEATED_CHAIN),
+      warnings: [iosTargetActivationDisclosure(fact)],
+      targetActivation: fact,
+    } as CaptureSnapshotResult,
+  });
+
+  assert.match(String(output.text), /prior state runningBackground/);
+  assert.match(String(output.text), /drive the other app in its own session/);
+  assert.deepEqual((output.jsonData as { targetActivation?: unknown }).targetActivation, {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  });
 });

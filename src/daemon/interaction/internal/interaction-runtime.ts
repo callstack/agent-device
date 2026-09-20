@@ -12,6 +12,7 @@ import type { DaemonCommandContext } from '../../context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
 import { buildAppleRunnerRequestOptions } from '../../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
+import { recordActivationProof } from '../../capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { createDaemonRuntimeSessionStore } from '../../runtime-session.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
@@ -47,14 +48,16 @@ export function createInteractionRuntimeForRoute(
     flags: params.req.flags,
     session,
     contextFromFlags: params.contextFromFlags,
-    captureSnapshot: async (flags, options) =>
-      await params.captureSnapshotForSession(
+    captureSnapshot: async (flags, options) => {
+      const snapshot = await params.captureSnapshotForSession(
         session,
         flags,
         params.sessionStore,
         params.contextFromFlags,
         options,
-      ),
+      );
+      return recordActivationProof(params.activationProof, snapshot);
+    },
     runtimeSessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
       getSession: () => session,

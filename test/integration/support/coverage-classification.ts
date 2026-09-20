@@ -18,13 +18,17 @@ const BUCKET_BY_LEVEL: Readonly<Record<CoverageClassificationLevel, CoverageBuck
 };
 
 /**
- * Proves a published summary is the manifest's own rollup rather than a table kept aligned by
- * hand. The recount here is deliberately independent of {@link buildCoverageClassificationSummary},
- * and the denominator is the public command catalog, which the manifest's key set is asserted
- * against separately. A platform that wires its summary to the wrong array, or a manifest that
- * drops a command, fails on the line that owns the mistake.
+ * Proves a published summary is still the rollup of the manifest it is exported beside, and that the
+ * manifest still covers the public catalog. It catches a summary wired to the wrong array, a
+ * mis-bucketed rollup, and a denominator that stopped matching the catalog.
+ *
+ * What it cannot catch is a row classified under the wrong `level`: the recount and the published
+ * summary read the same rows, so a row moved between buckets moves both and stays consistent. That
+ * membership is gated by {@link assertLiveCoverageMatchesEvidence}, or by the equivalent enumeration
+ * a platform already reads — Linux parses its replay script, Android reads each scenario's own
+ * command declaration.
  */
-export function assertCoverageClassificationSummaryDerivedFromManifest(
+export function assertCoverageClassificationSummaryWiredToManifest(
   platform: string,
   manifest: Readonly<Record<string, { level: CoverageClassificationLevel }>>,
   summary: CoverageClassificationSummary,
@@ -50,6 +54,29 @@ export function assertCoverageClassificationSummaryDerivedFromManifest(
     summary.live + summary.contract + summary.gap,
     summary.total,
     `${platform} coverage summary buckets do not sum to its total`,
+  );
+}
+
+/**
+ * Ties a platform's live bucket to an enumeration of the commands its own evidence executes, read
+ * from the scenario sources rather than from the manifest's `level` fields. Both directions matter:
+ * an executed command that is not claimed live means the platform is understating what it proves,
+ * and a live claim no scenario executes any more means the platform is overstating it. A platform
+ * with no independent enumeration behind a bucket can only assert the rollup above.
+ */
+export function assertLiveCoverageMatchesEvidence(
+  platform: string,
+  manifest: Readonly<Record<string, { level: CoverageClassificationLevel }>>,
+  evidenceCommands: Iterable<string>,
+): void {
+  const live = Object.entries(manifest)
+    .filter(([, entry]) => entry.level === 'live')
+    .map(([command]) => command)
+    .sort();
+  assert.deepEqual(
+    [...new Set(evidenceCommands)].sort(),
+    live,
+    `${platform} live claims are not the commands its own evidence executes`,
   );
 }
 

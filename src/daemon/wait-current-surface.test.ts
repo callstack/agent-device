@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 
 import { ANDROID_EMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
+import type { RequestActivationProof } from './capture-disclosure.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 
@@ -94,4 +95,37 @@ test('an absent-target wait describes the current surface through its own reques
     labels: ['Checkout', 'Pay now'],
     buttons: ['Pay now'],
   });
+});
+
+/**
+ * The decoration capture is a real capture: when it is the command's own foreground repair, the
+ * timed-out wait that reads this surface owes the disclosure, and the proof has to be recorded where
+ * that capture happens (#2682).
+ */
+test('the decoration capture records the foreground repair it paid for', async () => {
+  const repair = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  };
+  const capture = vi.fn(async () => ({
+    backend: 'xctest',
+    targetActivation: repair,
+    nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Receipt' }],
+  })) as unknown as BoundSelectorCapture;
+  const activationProof: RequestActivationProof = {};
+
+  await maybeWaitTimeoutSurfaceResponse(
+    { req, session: undefined, device: ANDROID_EMULATOR, capture, activationProof },
+    {
+      ok: false as const,
+      error: {
+        code: 'COMMAND_FAILED' as const,
+        message: 'wait timed out for text: Agent Device Tester',
+        details: { reason: 'wait_target_absent' },
+      },
+    },
+  );
+
+  expect(activationProof.state).toMatchObject({ targetActivation: repair });
 });

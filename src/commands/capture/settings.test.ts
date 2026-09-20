@@ -2,6 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { formatCliOutput } from '../cli-output.ts';
 import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
 
 const MOBILE_TARGETS = [
@@ -55,26 +56,24 @@ describe('settings CLI', () => {
     });
   });
 
-  // #1796: the Android revoke warning rides `warnings`; the human CLI line must show it.
-  test('renders response warnings after the message', () => {
+  // #1796: the Android revoke warning rides `warnings`; the human CLI line must show it. The line is
+  // appended by `formatCliOutput` (#2682), so that is where the guarantee is asserted; the formatter
+  // itself only renders the response's own message.
+  test('renders response warnings after the message', async () => {
     const warning = 'android.permission.CAMERA was granted before this revoke, and Android …';
-    const output = settingsCommandFacet.cliOutputFormatter!({
-      input: {},
-      result: { setting: 'permission', state: 'reset', message: 'Updated setting: permission' },
-    });
-    expect(output.text).toBe('Updated setting: permission');
+    const response = {
+      setting: 'permission',
+      state: 'reset',
+      message: 'Updated setting: permission',
+      warnings: [warning],
+    };
 
-    const warned = settingsCommandFacet.cliOutputFormatter!({
-      input: {},
-      result: {
-        setting: 'permission',
-        state: 'reset',
-        message: 'Updated setting: permission',
-        warnings: [warning],
-      },
-    });
-    expect(warned.text).toBe(`Updated setting: permission\nWarning: ${warning}`);
-    expect(warned.data).toMatchObject({ warnings: [warning] });
+    const output = await formatCliOutput({ name: 'settings', input: {}, result: response });
+    expect(output?.text).toBe(`Updated setting: permission\nWarning: ${warning}`);
+    expect(output?.data).toMatchObject({ warnings: [warning] });
+
+    const rendered = settingsCommandFacet.cliOutputFormatter!({ input: {}, result: response });
+    expect(rendered.text).toBe('Updated setting: permission');
   });
 
   test('keeps the documented macOS permission form in the command detail', () => {

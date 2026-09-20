@@ -71,16 +71,11 @@ function genericByTraitCommands(): string[] {
     .map((descriptor) => descriptor.name);
 }
 
-function localCliCommands(): string[] {
-  return commandDescriptors
-    .filter((descriptor) => 'catalog' in descriptor && descriptor.catalog?.group === 'local-cli')
-    .map((descriptor) => descriptor.name);
-}
-
 test('catalog commands use generic routing only when intentionally passthrough or projected', () => {
+  // Local-CLI commands are excluded by construction: `CATALOG_COMMANDS` holds the public and
+  // internal groups, which a `catalog.group: 'local-cli'` descriptor is never projected into.
   const genericByAbsence = CATALOG_COMMANDS.filter(
-    (command) =>
-      !declaredDaemonTraitCommands().includes(command) && !localCliCommands().includes(command),
+    (command) => !declaredDaemonTraitCommands().includes(command),
   );
   assert.deepEqual(
     genericByAbsence,

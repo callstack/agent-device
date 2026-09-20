@@ -26,7 +26,7 @@ type SettleTextView = {
   refsGeneration?: number;
 };
 
-/** A formatter's own success line plus the response's warning and settle notes. */
+/** A formatter's own success line plus the response's settled diff. */
 function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormatter {
   return ({ input, result }) => {
     const output = formatter({ input, result });
@@ -60,12 +60,15 @@ export function withSettleCapableNotes<Formatters extends Record<string, CliOutp
   return derived as Formatters;
 }
 
+/**
+ * The settled diff only: response warnings are appended once by `formatCliOutput`, routed by the
+ * command's descriptor (#2682), so this wrapper cannot be the place a warning appears twice.
+ */
 function appendResponseNotes(
   text: string | null | undefined,
   data: Record<string, unknown>,
 ): string {
-  const warning = typeof data.warning === 'string' ? `\nWarning: ${data.warning}` : '';
-  return `${text ?? ''}${warning}${formatSettleText(data.settle)}`;
+  return `${text ?? ''}${formatSettleText(data.settle)}`;
 }
 
 function formatSettleText(settle: unknown): string {
