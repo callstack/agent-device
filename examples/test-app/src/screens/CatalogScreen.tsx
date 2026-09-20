@@ -17,8 +17,15 @@ import {
   ScreenTitle,
   SectionCard,
   TextField,
+  useReadableColumn,
 } from '../components';
 import { useAppColors, type AppColors } from '../theme';
+
+/** The gutter the grid owns; cards keep their own 12pt bottom margin for the vertical rhythm. */
+const GRID_GUTTER = 12;
+
+/** A card narrower than this cannot fit its price row and both action buttons side by side. */
+const MIN_GRID_CARD_WIDTH = 340;
 
 export interface CatalogScreenProps {
   activeCategory: ProductCategory;
@@ -36,6 +43,9 @@ export interface CatalogScreenProps {
 export function CatalogScreen(props: CatalogScreenProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
+  const { width: contentWidth } = useReadableColumn();
+  const cellWidth = (contentWidth - GRID_GUTTER) / 2;
+  const gridded = cellWidth >= MIN_GRID_CARD_WIDTH;
   const lastScrollOffset = useRef(0);
   const [scrollState, setScrollState] = useState<'top' | 'bottom' | 'down' | 'up'>('top');
 
@@ -54,6 +64,60 @@ export function CatalogScreen(props: CatalogScreenProps) {
       setScrollState('up');
     }
   }
+
+  // Compact width renders the card itself, so the tree there stays the one every e2e, smoke, and
+  // replay run against today. The cell only exists where there are actually two columns.
+  const productCards = props.products.map((product) => {
+    const favoriteLabel = props.favorites.has(product.id) ? 'Saved' : 'Save';
+    const cartCount = props.cart[product.id] ?? 0;
+    const card = (
+      <SectionCard
+        key={product.id}
+        subtitle={product.subtitle}
+        testID={`product-card-${product.id}`}
+        title={product.name}
+      >
+        <View style={styles.metaRow}>
+          <InlineBadge label={product.badge} tone="info" />
+          <Text style={styles.price}>{product.price}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Pressable
+            accessibilityLabel={`${favoriteLabel} ${product.name}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: props.favorites.has(product.id) }}
+            onPress={() => props.onToggleFavorite(product.id)}
+            style={({ pressed }) => [styles.favoritePill, pressed ? styles.pressed : null]}
+            testID={`favorite-${product.id}`}
+          >
+            <Text style={styles.favoriteLabel}>{favoriteLabel}</Text>
+          </Pressable>
+          <Text style={styles.cartCount}>In cart: {cartCount}</Text>
+        </View>
+        <View style={styles.buttonRow}>
+          <ActionButton
+            kind="secondary"
+            label="View details"
+            onPress={() => props.onOpenDetails(product.id)}
+            testID={`details-${product.id}`}
+          />
+          <ActionButton
+            label="Add to cart"
+            onPress={() => props.onAddToCart(product.id)}
+            testID={`add-${product.id}`}
+          />
+        </View>
+      </SectionCard>
+    );
+
+    return gridded ? (
+      <View key={product.id} style={{ width: cellWidth }}>
+        {card}
+      </View>
+    ) : (
+      card
+    );
+  });
 
   return (
     <ScrollView
@@ -99,50 +163,7 @@ export function CatalogScreen(props: CatalogScreenProps) {
         </View>
       </SectionCard>
 
-      {props.products.map((product) => {
-        const favoriteLabel = props.favorites.has(product.id) ? 'Saved' : 'Save';
-        const cartCount = props.cart[product.id] ?? 0;
-
-        return (
-          <SectionCard
-            key={product.id}
-            subtitle={product.subtitle}
-            testID={`product-card-${product.id}`}
-            title={product.name}
-          >
-            <View style={styles.metaRow}>
-              <InlineBadge label={product.badge} tone="info" />
-              <Text style={styles.price}>{product.price}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Pressable
-                accessibilityLabel={`${favoriteLabel} ${product.name}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: props.favorites.has(product.id) }}
-                onPress={() => props.onToggleFavorite(product.id)}
-                style={({ pressed }) => [styles.favoritePill, pressed ? styles.pressed : null]}
-                testID={`favorite-${product.id}`}
-              >
-                <Text style={styles.favoriteLabel}>{favoriteLabel}</Text>
-              </Pressable>
-              <Text style={styles.cartCount}>In cart: {cartCount}</Text>
-            </View>
-            <View style={styles.buttonRow}>
-              <ActionButton
-                kind="secondary"
-                label="View details"
-                onPress={() => props.onOpenDetails(product.id)}
-                testID={`details-${product.id}`}
-              />
-              <ActionButton
-                label="Add to cart"
-                onPress={() => props.onAddToCart(product.id)}
-                testID={`add-${product.id}`}
-              />
-            </View>
-          </SectionCard>
-        );
-      })}
+      {gridded ? <View style={styles.productGrid}>{productCards}</View> : productCards}
 
       <SectionCard
         subtitle="This footer card sits at the end of the list to force scroll-into-view on smaller screens."
@@ -162,6 +183,13 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     content: {
       paddingBottom: 28,
+    },
+    // Cards carry their own 12pt bottom margin, so the grid only owns the gutter between columns;
+    // asking for both would double the vertical rhythm the compact list already has.
+    productGrid: {
+      columnGap: GRID_GUTTER,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
     },
     chipRow: {
       flexDirection: 'row',
