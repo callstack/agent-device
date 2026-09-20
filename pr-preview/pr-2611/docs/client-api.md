@@ -274,8 +274,10 @@ only when the provider supports `adb reverse` argument semantics. The manager ma
 idempotent for the same owner and rejects conflicting owners for the same local endpoint.
 
 The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
-every dynamic word is quoted before it reaches the device. An array that begins with `shell` or
-`exec-out` and did not come from those builders is refused with `INVALID_ARGS` and
+every dynamic word is rendered for the quoting its transport applies before it reaches the device. `adb`
+forwards words verbatim, so a word is single-quoted; `hdc` wraps each element it sends in double quotes,
+where `$`, a backquote, and `"` stay live, so a word is escaped for that context instead. An array that
+begins with `shell` or `exec-out` and did not come from those builders is refused with `INVALID_ARGS` and
 `details.reason: 'unguarded-device-shell-argv'` instead of being dispatched. A bridge that composes its
 own device commands calls `runAdbShell(executor, words, options?)` or
 `runAdbExecOut(executor, words, options?)` from `agent-device/android-adb`, passing each value as its
