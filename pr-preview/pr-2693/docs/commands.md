@@ -49,6 +49,7 @@ agent-device home
 agent-device orientation portrait
 agent-device orientation landscape-left
 agent-device app-switcher
+agent-device action-button
 ```
 
 - `boot` ensures the selected target is ready without launching an app.
@@ -78,6 +79,12 @@ agent-device app-switcher
 - `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
 - `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
 - `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
+- `action-button` presses the iPhone Action Button once through the Apple runner. It takes no arguments and no `--duration-ms`: XCUITest exposes the press without a hold duration, so a long press is not expressible. The slide surface on the same edge belongs to Camera Control, which `action-button` does not drive.
+- `action-button` is an iPhone and iPad command. Android, web, Linux, HarmonyOS, and Vega refuse it, and so do tvOS, macOS, and visionOS leaves.
+- `action-button` asks the device whether it has the button before pressing it. A target whose model has none — an iPhone SE beside an iPhone 15, or most iPad simulators — fails with `UNSUPPORTED_OPERATION` rather than reporting a press that never happened.
+- `action-button` does not activate or relaunch the session's app, and it takes no `--settle`: pressing a hardware button is not a navigation, so the app stays where it was.
+- `action-button` reports that the press was dispatched, not what the system did with it. Simulators run no Shortcuts and no App Intents, so what a press triggers can only be verified on a physical iPhone; on a Simulator the command proves the press was accepted and that the session app was not brought forward.
+- `action-button` is not a cheap command to loop. On an iPhone 17 Pro Simulator the press itself spent about five seconds inside XCUITest, while `home` and `app-switcher` on the same session took under two seconds each.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
 - Commands that need one concrete device refuse to guess: if no `--device`/`--udid`/`--serial` is given and several candidates are equally preferred (for example two booted emulators), the command fails with `AMBIGUOUS_MATCH` and lists them, rather than picking one and returning a successful answer about a device you did not select. Preferences still apply first — virtual over physical, booted over offline — so one booted emulator beside offline ones resolves normally, as does any command running inside an existing session. `devices` lists everything as before.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.
@@ -313,7 +320,7 @@ agent-device snapshot -i --platform apple --target desktop
 - In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
 - Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
 - Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.
-- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `install`, `reinstall`, `install-from-source`, and `push`.
+- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `install`, `reinstall`, `install-from-source`, and `push`.
 
 Recommended loops:
 
@@ -792,9 +799,17 @@ state the session app was found in and why the runner activated it:
   interaction whose target tree was captured for it — at every response level, including
   `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
   from a cached or stored tree did no device work and reports no repair of its own.
+- In text mode the CLI prints every response warning as a `Warning:` line after the command's own
+  output, for every command — not only `snapshot`. Four commands declare their stdout to be the
+  value a caller pipes (`get`, `find`, `clipboard`, `record`) and print those lines on **stderr**
+  instead, so `value=$(agent-device get text …)` still captures exactly the value. `--json` keeps
+  them in `data.warnings` and writes neither line.
 - **Silence is not proof.** A command that consumes no capture — a coordinate `press`, a `press @ref`
-  answered from a live ref frame — may still have had the runner re-activate the session app to serve
-  it, and reports nothing. Do not infer that the foreground held from an interaction that said nothing
+  answered from a live ref frame, or a `wait <text>` that its text observation answered on the first
+  poll — may still have had the runner re-activate the session app to serve it, and reports nothing:
+  the runner stamps that repair on the response, and the daemon decodes it only from a capture. A
+  `wait <text>` that timed out and re-activated while describing the surface does disclose. Do not
+  infer that the foreground held from a command that said nothing
   ([#2694](https://github.com/callstack/agent-device/issues/2694) tracks closing that gap). When the
   distinction matters, spend a `snapshot -i` and read its disclosure.
 - The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
