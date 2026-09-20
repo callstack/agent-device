@@ -51,11 +51,13 @@ type HarnessOptions<Context, BehaviorId extends string> = {
     options?: { timeoutMs?: number },
   ) => Promise<CliJsonResult>;
   /**
-   * Platform-owned device facts for a failed step (rotation state, system logs), read outside
-   * agent-device so they describe the device even when the CLI path is what failed. Best-effort:
-   * a throw or undefined records nothing.
+   * Platform-owned device facts for a failed step (rotation state, whether the app process is
+   * alive, crash logs), read outside agent-device so they describe the device even when the CLI
+   * path is what failed. Best-effort: a throw or undefined records nothing.
    */
   deviceEvidence?: (context: Context) => Promise<string | undefined>;
+  /** Bound for `deviceEvidence` as a group. A platform that adds probes raises this with them. */
+  deviceEvidenceTimeoutMs?: number;
   writeCoverageReport: (context: Context) => void;
 };
 
@@ -200,6 +202,9 @@ export function createLiveDeviceHarness<
       stem: path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`),
       runCli: (args) => runCli(options.commonFlags(context, args), context.env),
       ...(deviceEvidence ? { deviceEvidence: () => deviceEvidence(context) } : {}),
+      ...(options.deviceEvidenceTimeoutMs === undefined
+        ? {}
+        : { deviceEvidenceTimeoutMs: options.deviceEvidenceTimeoutMs }),
     });
   }
 
