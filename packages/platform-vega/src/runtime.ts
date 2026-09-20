@@ -147,6 +147,10 @@ const systemButtonUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'System buttons other than home are not supported on Vega OS.',
 );
+const foldUnavailable = vegaUnavailable(
+  'unsupported-platform-leaf',
+  'fold is not supported on Vega OS.',
+);
 const clipboardUnavailable = vegaUnavailable(
   'unsupported-platform-leaf',
   'clipboard is not supported on Vega OS.',
@@ -192,6 +196,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     tvRemote: tvRemoteUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
+    fold: foldUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
     readAlert: alertUnavailable,

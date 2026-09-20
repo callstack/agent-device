@@ -18,7 +18,7 @@ import type {
 } from '@agent-device/platform-apple/runner';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import { createProviderScenarioLifecycleModule } from './provider-device-runtime.fixtures.ts';
 
@@ -129,6 +129,25 @@ test('provider transport carries the Action Button press without an app activati
       [],
       'an Action Button press must not activate the session app',
     );
+  });
+});
+
+// A hinge pose is posed through Xcode Device Hub on the host, which a provider-owned device has no
+// access to, so the provider fixture states the refusal cell and admission refuses before anything
+// reaches the transport: no runner call, no local Device Hub press.
+test('provider transport refuses a fold before any runner traffic', async () => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+    calls.runner.length = 0;
+    assertRpcError(
+      await daemon.callCommand('fold', ['open'], request.flags, request),
+      'UNSUPPORTED_OPERATION',
+      /fold/,
+    );
+    assert.deepEqual(calls.runner, [], 'a refused fold must not reach the provider transport');
   });
 });
 

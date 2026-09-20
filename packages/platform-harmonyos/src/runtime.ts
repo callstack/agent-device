@@ -278,6 +278,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           home: harmonyFocusFact(device),
           appSwitcher: harmonyFocusFact(device),
         }),
+        // HarmonyOS devices have no foldable hinge control for HDC to pose.
+        setFoldPose: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
         // The HDC-driven settings surface shares the interaction kind gate.

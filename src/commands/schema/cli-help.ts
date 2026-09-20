@@ -744,10 +744,12 @@ Screens are handled for you:
   The two panels are different sizes and different coordinate spaces (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across one.
   Check which panel is lit before trusting a geometry claim: agent-device screenshot reports its point size, and 466x678 versus 669x951 says which panel you captured.
 
-Pose cannot be scripted:
-  iOS exposes fold state only to the app under test, as UIHinge.status (.closed/.partiallyOpen/.fullyOpen through UIHingeInteraction, or SwiftUI .onHingeChange). Nothing on the host sets it: simctl has no hinge/fold/pose subcommand, XCUITest has no hinge API, and devicectl only reports panel state (xcrun devicectl device info displays shows each panel's active/backlight state, which is how a closed device is detected). Do not write a step that changes pose, and do not claim a pose was set.
-  To exercise another pose, ask the operator to change it in Device Hub, then re-snapshot the iOS session. Driving Device Hub from a macOS session is possible in principle but its device surface exposes no accessibility nodes, so it is coordinate-only and needs Screen Recording permission; prefer asking the operator.
-  If a task asserts behavior for more than one pose, say which pose the current device is in, and state which poses remain unverified instead of assuming the device was folded.`,
+Changing the pose:
+  agent-device fold closed | half-open | open
+  fold presses the pose control in the Xcode Device Hub window for this simulator (Closed, Book, Open) and then reads the hinge angle back from CoreDevice until it agrees: closed is 0 degrees, open is 180, and half-open is any angle between them (Device Hub's Book preset, 130 degrees on iOS 27.1), reported once the hinge stops moving or when the read budget ends while it still reads half-open. The response reports the verified pose, the hinge angle, and the panel the device now lights with its point size. A refusal never names the pose that was asked for: only a hinge whose last reading is some other pose fails, with COMMAND_FAILED and reason fold-pose-unverified. A single-panel simulator fails with UNSUPPORTED_OPERATION.
+  Expect a fold to take 10-16 seconds: each hinge read is a five-second devicectl stream, and half-open waits for the hinge to stop moving. Re-snapshot after every fold; refs and coordinates from before it are stale, and the command's message says so.
+  Requirements: an iOS simulator session on a foldable device, Xcode 27.1 or newer with Device Hub, and Accessibility permission for the host (agent-device settings permission grant accessibility --platform macos). The command launches Device Hub if needed, reopens its window when it shows none, and selects the simulator through its sidebar by UDID, so no operator step is needed. No official host API sets the pose; the app under test still reads it as UIHinge.status.
+  If a task asserts behavior for more than one pose, fold to each pose and re-snapshot, and report which poses the run covered.`,
   },
   remote: {
     summary: 'Direct proxy, cloud profiles, and remote config',

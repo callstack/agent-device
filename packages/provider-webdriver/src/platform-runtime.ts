@@ -241,6 +241,13 @@ const systemButtonUnavailable = Object.freeze({
   hint: 'No WebDriver backend presses this system button.',
 } as const);
 
+/** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
+const foldUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'fold poses a foldable iPhone simulator through Xcode Device Hub, which no WebDriver backend exposes.',
+} as const);
+
 /**
  * The WebDriver interactor's own `setSetting` always throws unsupported (its capability map
  * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
@@ -531,6 +538,7 @@ function webDriverFacts(
       keyboard: inactiveSession,
       clipboard: inactiveSession,
       systemButton: inactiveSession,
+      fold: foldUnavailable,
       triggerAppEvent: inactiveSession,
       setSetting: inactiveSession,
       readAlert: inactiveSession,
@@ -573,6 +581,7 @@ function webDriverFacts(
     keyboard: keyboardUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
+    fold: foldUnavailable,
     triggerAppEvent: appEventUnavailable,
     setSetting: settingsUnavailable,
     readAlert: alertUnavailable,
@@ -668,6 +677,7 @@ function webDriverFacts(
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
+      setFoldPose: foldUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command
       // drives on this provider.
       ...appEventRuntimeOperationFacts({

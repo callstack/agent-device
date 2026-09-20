@@ -19,8 +19,8 @@ device is in**. The first is answered by an official host API; the second only b
 | Panel power is ambiguous (zero or several lit panels) | Still name a panel — the `primary` one — emit `apple_display_capture_ambiguous`, and report the pose as `unknown` |
 | Device has one integrated panel | Keep the pre-panel behavior exactly: no display flag, no pose, unchanged scale probe |
 | Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture keeps the scale probe because `XCUIScreen.main` may be a different panel |
-| Pose must be reported | Report `closed`, `fully-open`, or `unknown` from panel power, and never narrower |
-| A pose change is requested | Refuse in guidance, not by inventing a command: no official host API sets pose |
+| Pose must be reported | From panel power alone, report `closed`, `fully-open`, or `unknown`, and never narrower; `fold` reports the exact pose because it reads the hinge angle |
+| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: press the pose control in the Device Hub window through macOS accessibility, then read the hinge angle back from CoreDevice until it agrees; refuse the pose if it never does |
 | An external display is attached | It is not a panel: it never makes the device multi-screen and never produces a pose |
 | CoreDevice cannot answer | Return an unresolved inventory and keep the single-panel capture path; a missing host feature is not a capture failure |
 
@@ -85,7 +85,37 @@ fix, and no screen-selection flag is warranted.
 `SIMULATOR_MAINSCREEN_SCALE` is likewise fixed to one panel while the captured panel can be the
 other, so density normalization now takes `pointScale` from the panel that was captured.
 
-## Pose is derived, and official control does not exist
+## Pose control: Device Hub's control, CoreDevice's verdict
+
+`agent-device fold` sets the pose, and the split above still holds: the press is not evidence,
+the read-back is. The pieces, each of which was checked on the shipping 27.1 toolchain:
+
+| Piece | Finding |
+| --- | --- |
+| Who sets the pose | Device Hub's `CoreDevicePopDeviceKitExtension` (the V68 device view with its `poses` action bar) hands a "vendor defined" orientation-control payload to `CoreDevicePopCoreDeviceExtension`, which sends it through CoreDevice's private HID channel. No CLI, `simctl`, `devicectl`, or XCUITest surface reaches that channel |
+| The public seam | The action bar's pose controls are ordinary `AXButton`s described `Closed`, `Book`, and `Open` in the Device Hub window; the simulated screen inside the same window is an `iOSContentGroup` with the app's own nodes. The earlier finding that the device surface exposes "zero accessibility nodes" was an artifact of System Events, which sees Device Hub with pid 0 because the app is launched through a trampoline; an `AXUIElement` built from the real pid works |
+| Reading the pose | `xcrun devicectl device motion hinge-angle --device <udid>` streams the hinge angle for the Duo simulator (`Range:0-180°`): Closed 0°, Book 130°, Open 180°. The stream does not end when `--session-timeout` elapses, so one read is bounded by devicectl's own `--timeout`, whose smallest accepted value is 5 seconds; the sample it printed before aborting itself is the reading |
+| Device identity | Device Hub titles the window `<name> – iOS 27.1`, which two simulators sharing a name cannot distinguish. Its sidebar rows carry `AXIdentifier` `TableRow.Device.<UDID>`, and setting `AXSelected` on a row switches the window to that device, so `fold` selects by UDID and only then presses |
+| No window | A simulator booted headlessly leaves Device Hub running with no window. LaunchServices cannot address the trampolined process by bundle id (`open -b`, `NSRunningApplication.activate` do nothing), but a `kAEReopenApplication` event sent to the pid restores the device window, the same event a Dock click sends |
+
+The rule this yields: `closed` and `open` are the hinge's end stops, so one read at the stop is
+the pose; every other angle is `half-open`, including the ones the hinge sweeps through on its way
+somewhere else, so `half-open` is reported once two consecutive reads agree within 0.5°, or when
+the four-read budget ends while the hinge still reads `half-open` — a refusal never names the pose
+that was asked for. Each read takes the last sample the five-second stream printed, so a moving
+hinge is reported where it is now. The live run that fixed the settle rule read 175.1° one stream
+after pressing Book and 130° two streams later. A hinge whose last reading is some other pose is
+refused as `fold-pose-unverified` with the angle CoreDevice still reports; the response of a verified pose carries the angle and the lit
+panel's point size, because the point size is what tells an agent its refs are stale.
+
+Requirements the command states in its own errors: Accessibility permission for the host
+(`accessibility-permission`), a running Device Hub (`fold` launches it in the background the way
+`open` does), a device window it can reopen (`device-hub-window-missing`), and a sidebar row for
+the UDID (`device-hub-device-missing`). A single-panel simulator is refused before anything is
+pressed (`single-panel-device`), and the leaf fact refuses physical devices and every non-iPhone
+simulator OS.
+
+## Pose is derived from panel power, and official control does not exist
 
 Apple ships fold state as an **app-side, read-only** API: `UIHinge.status`
 (`.closed`/`.partiallyOpen`/`.fullyOpen`) observed through `UIHingeInteraction`, and SwiftUI
@@ -117,22 +147,25 @@ claims:
   usable: it is still not an API, and the Device Hub device surface exposes zero accessibility
   nodes.
 
-Consequences that are now policy: no `fold`/`unfold`/`half-unfold` command, because a command that
-cannot do the thing is worse than no command, and because a private per-guest XPC channel is exactly
-the kind of undocumented hook that breaks without notice. Guidance in `agent-device help foldable`
-tells agents pose is operator-controlled, and a derived `fully-open` verdict is documented to cover
-Apple's `fullyOpen` **and** `partiallyOpen` — panel power cannot separate them, so only an in-app
-`UIHinge.status` read can.
+Consequences that are now policy: no private per-guest XPC channel is driven, because an undocumented
+hook is exactly the kind that breaks without notice; the one host control that exists is Device
+Hub's own, and `fold` drives it through the accessibility API and trusts only the CoreDevice
+read-back (see the section above). A pose derived from panel power alone is still documented to
+cover Apple's `fullyOpen` **and** `partiallyOpen` — panel power cannot separate them, so only the
+hinge angle or an in-app `UIHinge.status` read can.
 
 ## Refuted alternatives
 
 - **Pose commands backed by `simctl io screenConfig power`.** Rejected: it does not move
   `UIHinge.status`, so the app under test would not behave as folded. It would produce green tests
   of a state the device is not in.
-- **Pose commands backed by macOS UI automation of Device Hub.** Rejected: the Device Hub device
-  surface reports zero accessibility nodes, so it is coordinate-only and permission-bound
-  (Screen Recording), and no Xcode framework exposes the control it would press. Kept as a
-  documented possibility in help, not as shipped automation.
+- **Pose commands backed by coordinate clicks on Device Hub.** Rejected: a coordinate press is
+  blind to which window and which device it lands on and needs Screen Recording to aim. The
+  accessibility press `fold` uses names the control, the window, and the device row, needs only
+  Accessibility permission, and is still not trusted on its own: the hinge read-back is.
+- **A `fold` that reports the pose it requested.** Rejected: the press is dispatched to whatever
+  Device Hub window is frontmost for that device, and a press on the wrong window succeeds
+  silently. Only the CoreDevice hinge angle says the device moved.
 - **Luma or content heuristics to pick the lit panel.** Rejected: a black screenshot is legitimate
   content elsewhere, and the repo already forbids deciding on pixels when a typed fact exists.
   CoreDevice reports `active`/`backlightState` directly.
@@ -145,8 +178,8 @@ Apple's `fullyOpen` **and** `partiallyOpen` — panel power cannot separate them
 ## Consequences for agents
 
 A pose change moves the app to a different panel with different point size, so refs and
-coordinates do not survive it. `agent-device help foldable` states this and states that agents must
-report which poses remain unverified rather than assume a pose was set.
+coordinates do not survive it. `agent-device help foldable` states this, `fold` says so in its own
+message, and agents fold to each pose a task names and re-snapshot rather than assume one.
 
 `simctl io recordVideo` has the same implicit-display default as `screenshot`, so recording names
 the lit panel through the same resolver. On an open Duo the 27.1 toolchain accepts the panel name
@@ -197,6 +230,8 @@ replayed at the new point size, which is the pose-change rule working as designe
 - **Quarter-turn detection.** Both Duo panels report `currentOrientation: rot90`, and no available
   path rotates a foldable, so the orientation half of the inventory is carried but never exercised
   against a changed value.
-- **Pose control.** No official host API sets the hinge angle, so both poses above depend on an
-  operator opening or closing the device in Device Hub.
+- **Pose control on a second Device Hub instance.** `fold` drives the first `DeviceHub` process in
+  the process table. Two Xcodes each running a Device Hub is not a state this was verified in.
+- **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
+  and the hinge stream on one was not exercised.
 

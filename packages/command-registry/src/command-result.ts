@@ -13,6 +13,7 @@ import type {
   ActionButtonCommandResult,
   AppSwitcherCommandResult,
   BackCommandResult,
+  FoldCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
   TvRemoteCommandResult,
@@ -68,6 +69,7 @@ export interface CommandResultMap {
   doctor: DoctorCommandResult;
   fill: FillCommandResponseData;
   find: FindCommandResponseData;
+  fold: FoldCommandResult;
   home: HomeCommandResult;
   hover: HoverCommandResponseData;
   keyboard: KeyboardCommandResult;

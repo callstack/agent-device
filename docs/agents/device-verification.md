@@ -68,8 +68,13 @@ toolchain per command:
 
 - Panels: that command lists each integrated panel with `backlightState`. Only the lit panel is
   capturable — a capture of the dark panel exits 0 and writes an all-black PNG.
-- Pose is not scriptable. Ask the operator to fold or open the device in Device Hub, then
-  re-snapshot; refs and coordinates do not survive the pose change.
+- Pose: `agent-device fold closed|half-open|open` presses the Device Hub pose control and reads the
+  hinge back through `devicectl device motion hinge-angle`; re-snapshot afterwards, because refs
+  and coordinates do not survive the pose change. Expect 10-16s per fold. The host needs
+  Accessibility permission, and the command reopens Device Hub's window and selects the simulator
+  by UDID itself. To read the angle by hand:
+  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`
+  (the stream never ends on its own; 5 is the smallest timeout devicectl accepts).
 - When a recording must show touches, assume it cannot. The touch-overlay exporter loses the track
   geometry whenever it has touch events to draw — `220x480` on a plain iPhone 17 as well as on the
   inner panel — and returns all-black frames on long clips, always with exit 0. Record with

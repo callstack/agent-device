@@ -215,6 +215,26 @@ test('Android refuses the action-button fact on every kind', async () => {
   }
 });
 
+test('Android refuses the fold fact on every kind', async () => {
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    // A foldable hinge is posed through Xcode Device Hub; no adb surface poses one.
+    expect(binding.facts.operations.setFoldPose).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
+    });
+    expect(binding.operations.setFoldPose).toBeUndefined();
+  }
+});
+
 // R55 parity: the retired `clipboard` bucket was `ANDROID_ALL` (emulator/device/unknown) with no
 // Android admission closure, so `cmd clipboard get/set text` is admitted on every real kind and
 // refused only on the synthetic `simulator` row the bucket never listed. (`unknown` is the

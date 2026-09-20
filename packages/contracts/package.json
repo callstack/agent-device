@@ -188,6 +188,10 @@
       "types": "./src/element-text-runtime.ts",
       "default": "./src/element-text-runtime.ts"
     },
+    "./fold-runtime": {
+      "types": "./src/fold-runtime.ts",
+      "default": "./src/fold-runtime.ts"
+    },
     "./focus-runtime": {
       "types": "./src/focus-runtime.ts",
       "default": "./src/focus-runtime.ts"

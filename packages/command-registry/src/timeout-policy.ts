@@ -42,6 +42,19 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   onTimeout: 'reset-daemon',
 };
 
+/**
+ * `fold` spends up to four bounded CoreDevice hinge reads (`IOS_HINGE_ANGLE_TIMEOUT_MS` each on a
+ * wedged host) after one macOS helper press with its own 30s deadline, which can sum past the
+ * standard envelope; the envelope covers that worst case with the usual margin.
+ */
+const FOLD_REQUEST_TIMEOUT_MS = 150_000;
+
+export const FOLD_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  budget: { source: 'none' },
+  envelopeMs: FOLD_REQUEST_TIMEOUT_MS,
+  onTimeout: 'reset-daemon',
+};
+
 type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
 type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
 type RequestTimeoutInput = Readonly<{

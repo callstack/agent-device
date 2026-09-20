@@ -1,5 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
+import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -41,6 +41,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return 'Pressed Action Button';
     case PUBLIC_COMMANDS.orientation:
       return buildOrientationActionSummary(result);
+    case PUBLIC_COMMANDS.fold:
+      return buildFoldActionSummary(result);
     case PUBLIC_COMMANDS.viewport:
       return buildViewportActionSummary(result);
     case PUBLIC_COMMANDS.clipboard:
@@ -86,6 +88,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
       return compactDetails({ mode: readEnum(result.mode, BACK_MODES) });
     case PUBLIC_COMMANDS.orientation:
       return compactDetails({ orientation: readEnum(result.orientation, DEVICE_ROTATIONS) });
+    case PUBLIC_COMMANDS.fold:
+      return compactDetails({ pose: readEnum(result.pose, FOLD_POSES) });
     case PUBLIC_COMMANDS.viewport:
       return compactDetails({
         width: readSessionEventNumber(result.width),
@@ -172,6 +176,11 @@ function readScreenshotFileName(result: Record<string, unknown>): string | undef
 function buildBackActionSummary(result: Record<string, unknown>): string {
   const mode = readEnum(result.mode, BACK_MODES);
   return mode === 'system' ? 'Went back using system navigation' : 'Went back';
+}
+
+function buildFoldActionSummary(result: Record<string, unknown>): string {
+  const pose = readEnum(result.pose, FOLD_POSES);
+  return pose ? `Folded to ${pose}` : 'Changed fold pose';
 }
 
 function buildOrientationActionSummary(result: Record<string, unknown>): string {

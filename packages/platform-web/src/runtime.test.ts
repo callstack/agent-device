@@ -213,6 +213,8 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     'appSwitcher',
     // The Action Button is iPhone/iPad hardware with no web analogue at all.
     'actionButton',
+    // A foldable hinge is posed through Xcode Device Hub; the web target has none.
+    'setFoldPose',
     'triggerAppEvent',
     // R58/R59: the retired `settings` and `alert` descriptors declared no web leaf either.
     'setSetting',

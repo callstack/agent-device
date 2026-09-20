@@ -341,6 +341,18 @@ export function limrunSystemButtonOperationFacts(
   });
 }
 
+/** A foldable hinge is posed through the host's Xcode Device Hub, which no Limrun session has. */
+export const LIMRUN_FOLD_UNAVAILABLE = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'fold poses a foldable iPhone simulator through Xcode Device Hub on the host, which no Limrun session exposes.',
+} as const);
+
+/** The fold refusal both Limrun legs share. */
+export function limrunFoldOperationFacts() {
+  return Object.freeze({ setFoldPose: LIMRUN_FOLD_UNAVAILABLE });
+}
+
 /**
  * `trigger-app-event` is the one system leaf both direct-session legs genuinely serve: each
  * implements `open`, and a deep link is exactly what that method routes (`openUrl` on iOS, the

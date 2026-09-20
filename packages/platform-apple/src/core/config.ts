@@ -19,6 +19,16 @@ export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 // wedged CoreDevice must not spend the screenshot's own time and trip the
 // request-level daemon reset. Measured probe cost is ~0.2s.
 export const IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * The smallest `--timeout` devicectl accepts. The hinge-angle stream never ends on its own, so
+ * one read costs exactly this long and the exec deadline below only guards a wedged CoreDevice.
+ */
+export const IOS_HINGE_ANGLE_STREAM_SECONDS = 5;
+export const IOS_HINGE_ANGLE_TIMEOUT_MS = 20_000;
+/** How many hinge reads a pressed Device Hub pose control gets to reach its pose before the pose is refused. */
+export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 4;
+/** Two consecutive reads this close together mean the hinge has stopped moving. */
+export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;
 
 // CoreSimulator can briefly stall while it services the scale lookup immediately
 // after a keyboard transition. Keep this bounded below the full capture budget.

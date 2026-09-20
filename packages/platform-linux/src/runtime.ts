@@ -199,6 +199,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     // `home` is the one system button with a desktop cell, declared below; the Linux interactor's
     // own `appSwitcher` throws unsupported, and no Linux leaf has hardware buttons.
     systemButton: linuxPlatformLeafUnavailable,
+    fold: linuxPlatformLeafUnavailable,
     // The retired `trigger-app-event` descriptor declared `linux: {}`.
     triggerAppEvent: linuxPlatformLeafUnavailable,
     // The retired `settings` descriptor declared `linux: {}` too.

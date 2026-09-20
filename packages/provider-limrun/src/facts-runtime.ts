@@ -22,6 +22,7 @@ import {
   limrunSettingsOperationFacts,
   limrunAlertOperationFacts,
   limrunSystemButtonOperationFacts,
+  limrunFoldOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
@@ -194,6 +195,7 @@ export function limrunAppLogFacts(
       ...limrunKeyboardOperationFacts(device),
       ...limrunClipboardOperationFacts(device),
       ...limrunSystemButtonOperationFacts(device),
+      ...limrunFoldOperationFacts(),
       ...limrunAppEventOperationFacts(device),
       ...limrunSettingsOperationFacts(device),
       ...limrunAlertOperationFacts(device),
@@ -256,6 +258,7 @@ export function limrunAppLogRecoveryFacts(
       ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
       ...limrunClipboardOperationFacts(device, liveSessionUnavailable),
       ...limrunSystemButtonOperationFacts(device, liveSessionUnavailable),
+      ...limrunFoldOperationFacts(),
       ...limrunAppEventOperationFacts(device, liveSessionUnavailable),
       ...limrunSettingsOperationFacts(device, liveSessionUnavailable),
       ...limrunAlertOperationFacts(device, liveSessionUnavailable),

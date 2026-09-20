@@ -10,6 +10,19 @@
   and every stop the host applies mid-hold — a cancelled request, a dropped client, the deadline —
   reaches the helper as SIGTERM first so it releases the button before it exits; SIGKILL only
   follows a helper that has not exited a second later.
+- Added (ios): `fold <closed|half-open|open>` and `client.command.fold({ pose })` put a foldable
+  iPhone simulator (iPhone Duo) into a hinge pose. ADR 0025 recorded that no official host API sets
+  the pose and left it to the operator; the pose is now set the way the operator did it, by pressing
+  the pose control in the Xcode Device Hub window through macOS accessibility, and it is confirmed
+  the way ADR 0025 asked for, by reading the hinge angle back from CoreDevice
+  (`devicectl device motion hinge-angle`) until it agrees with the request. The response reports
+  the verified pose, the hinge angle, and the panel the device now lights with its point size, so an
+  agent can see that its refs and coordinates are stale without another capture. The macOS helper
+  gained a `device-hub pose` subcommand that finds Device Hub in the process table (LaunchServices
+  registers the trampolined app with no pid), reopens its window when it shows none, and selects the
+  simulator through the sidebar row keyed by its UDID so two simulators sharing a name cannot be
+  confused. Simulator-only; a single-panel simulator refuses with `UNSUPPORTED_OPERATION`, and every
+  other platform states its own refusal cell.
 - Added (diff): `diff screenshot` accepts a JPEG baseline or current image. Both inputs had to be PNG,
   so a capture exported by another tool had to be converted first and a HarmonyOS capture — which the
   platform serves as JPEG under whatever name the command was given — could never be compared. Each

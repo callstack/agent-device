@@ -1,5 +1,6 @@
 import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation } from './device-rotation.ts';
+import type { DeviceRotation, FoldPose } from './device-rotation.ts';
+import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 
@@ -45,6 +46,22 @@ export type OrientationCommandResult = {
   message: string;
   confirmed?: boolean;
   warning?: string;
+};
+
+/**
+ * `fold` — `{ action: 'fold', pose, hingeAngleDegrees, screen?, message }`.
+ *
+ * Unlike `orientation`, there is no unconfirmed variant: the Apple owner reads the hinge angle
+ * back from CoreDevice after pressing the Device Hub pose control, and reports a pose only when
+ * that reading agrees with the request. `screen` names the panel the device lights afterwards, in
+ * points, because a pose change moves the app to a different coordinate space (ADR 0025).
+ */
+export type FoldCommandResult = {
+  action: 'fold';
+  pose: FoldPose;
+  hingeAngleDegrees: number;
+  screen?: FoldScreenReport;
+  message: string;
 };
 
 /** `app-switcher` — `{ action: 'app-switcher', message: 'Opened app switcher' }`. */

@@ -66,6 +66,7 @@ import {
 } from './deployment/runtime.ts';
 import { appleNavigationFacts, createAppleNavigationOperations } from './navigation/runtime.ts';
 import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
+import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
@@ -309,6 +310,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
+        ...appleFoldableFacts(device),
         ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
           capture: appleAudioProbeCaptureFact(device),
@@ -437,6 +439,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         }),
         ...createAppleSystemOperations({
           host,
+          device: request.device,
+          signal: request.scope.signal,
+        }),
+        ...createAppleFoldableOperations({
           device: request.device,
           signal: request.scope.signal,
         }),

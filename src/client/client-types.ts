@@ -68,6 +68,7 @@ import type {
   AppOpenResult,
   AppPushOptions,
   ActionButtonCommandOptions,
+  FoldCommandOptions,
   AppStateCommandOptions,
   AppSwitcherCommandOptions,
   AppTriggerEventOptions,
@@ -165,6 +166,7 @@ export type AgentDeviceCommandClient = {
   back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
   home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
   orientation: (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>;
+  fold: (options: FoldCommandOptions) => Promise<CommandResult<'fold'>>;
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;

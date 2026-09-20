@@ -15,6 +15,7 @@ import {
 import { resolveWaitBudgetMs } from './wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
+  FOLD_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
   LEASE_ALLOCATE_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
@@ -40,6 +41,7 @@ import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
   alertRuntimePlanUses,
   actionButtonRuntimeUse,
+  foldRuntimeUse,
   appEventRuntimeUse,
   appStateRuntimeUses,
   appSwitcherRuntimeUse,
@@ -1427,6 +1429,18 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // the owner's `setOrientation` fact, and the only execution is the bound operation.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [orientationRuntimeUse] },
+  },
+  {
+    name: 'fold',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    // Admission is the owner's `setFoldPose` fact, the same ADR 0019 §9 shape as `orientation`.
+    // A pose change moves the app to a different panel with a different point size, so the
+    // generic mutating traits' ref-frame invalidation is load-bearing here (ADR 0025).
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    timeoutPolicy: FOLD_TIMEOUT_POLICY,
+    platformExecution: { kind: 'device-runtime', uses: [foldRuntimeUse] },
   },
   {
     name: 'scroll',

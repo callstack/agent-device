@@ -4,6 +4,7 @@ import type {
   AgentDeviceCommandClient,
   AppSwitcherCommandOptions,
   BackCommandOptions,
+  FoldCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
   TvRemoteCommandOptions,
@@ -16,6 +17,8 @@ import {
   backDaemonWriter,
   clipboardCliReader,
   clipboardDaemonWriter,
+  foldCliReader,
+  foldDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
@@ -49,6 +52,9 @@ describe('system command interface', () => {
     >();
     expectTypeOf<AgentDeviceCommandClient['orientation']>().toEqualTypeOf<
       (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['fold']>().toEqualTypeOf<
+      (options: FoldCommandOptions) => Promise<CommandResult<'fold'>>
     >();
     expectTypeOf<AgentDeviceCommandClient['appSwitcher']>().toEqualTypeOf<
       (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>
@@ -158,6 +164,24 @@ describe('system command interface', () => {
       'orientation requires an orientation',
     );
     expectInvalidArgs(() => orientationDaemonWriter({}), 'orientation requires orientation');
+  });
+
+  test('fold reader and writer normalize the pose', () => {
+    expect(foldCliReader(['book'], flags())).toMatchObject({ pose: 'half-open' });
+    expect(foldCliReader(['Unfolded'], flags({ platform: 'ios' }))).toMatchObject({
+      platform: 'ios',
+      pose: 'open',
+    });
+    expect(foldDaemonWriter({ pose: 'closed' })).toMatchObject({
+      command: 'fold',
+      positionals: ['closed'],
+    });
+  });
+
+  test('fold reader and writer reject a missing or unknown pose', () => {
+    expectInvalidArgs(() => foldCliReader([], flags()), 'fold requires a pose');
+    expectInvalidArgs(() => foldCliReader(['sideways'], flags()), 'Invalid fold pose');
+    expectInvalidArgs(() => foldDaemonWriter({}), 'fold requires pose');
   });
 
   test('keyboard reader maps aliases and validates arguments', () => {

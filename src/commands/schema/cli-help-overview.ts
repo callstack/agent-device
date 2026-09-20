@@ -56,6 +56,6 @@ Guides (agent-device help <topic>):
   manual-qa / dogfood / validate / debugging / scripting / gestures
   react-native / react-devtools / cdp / tv / web / macos / remote
   physical-device / ios-system-ui / maestro
-  foldable    iPhone Duo panels, pose, and why refs die on a pose change
+  foldable    iPhone Duo panels, the fold command, and why refs die on a pose change
 `;
 }

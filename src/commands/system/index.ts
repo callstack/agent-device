@@ -1,5 +1,11 @@
 import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
-import { DEVICE_ROTATIONS, parseDeviceRotation } from '@agent-device/contracts/device';
+import {
+  DEVICE_ROTATIONS,
+  FOLD_POSES,
+  FOLD_POSE_USAGE,
+  parseDeviceRotation,
+  parseFoldPose,
+} from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
   TV_REMOTE_BUTTONS,
@@ -35,6 +41,7 @@ const APPSTATE_COMMAND_NAME = 'appstate';
 const BACK_COMMAND_NAME = 'back';
 const HOME_COMMAND_NAME = 'home';
 const ORIENTATION_COMMAND_NAME = 'orientation';
+const FOLD_COMMAND_NAME = 'fold';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const ACTION_BUTTON_COMMAND_NAME = 'action-button';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
@@ -52,6 +59,8 @@ const backCommandDescription =
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription = 'Set device orientation on iOS and Android';
+const foldCommandDescription =
+  'Fold or unfold a foldable iPhone simulator (iPhone Duo) into the closed, half-open, or open pose by pressing the pose control in Xcode Device Hub, then read the hinge angle back from CoreDevice to confirm it. A pose change moves the app to a different panel with a different point size, so every ref and coordinate from before it is stale: re-snapshot after this command. Simulator-only; the device window must be open in Device Hub and the host needs Accessibility permission.';
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
@@ -75,6 +84,15 @@ const orientationCommandMetadata = defineFieldCommandMetadata(
     orientation: requiredField(enumField(DEVICE_ROTATIONS)),
   },
 );
+
+const foldCommandMetadata = defineFieldCommandMetadata(FOLD_COMMAND_NAME, foldCommandDescription, {
+  pose: requiredField(
+    enumField(
+      FOLD_POSES,
+      'The hinge pose to reach: closed lights the outer panel; half-open (Device Hub Book) and open light the inner panel.',
+    ),
+  ),
+});
 
 const keyboardCommandMetadata = defineFieldCommandMetadata(
   KEYBOARD_COMMAND_NAME,
@@ -120,6 +138,11 @@ const orientationCliSchema = {
   positionalArgs: ['orientation'],
 } as const satisfies CommandSchemaOverride;
 
+const foldCliSchema = {
+  usageOverride: `fold <${FOLD_POSE_USAGE}>`,
+  positionalArgs: ['pose'],
+} as const satisfies CommandSchemaOverride;
+
 const keyboardCliSchema = {
   usageOverride: 'keyboard [status|get|dismiss|enter|return]',
   positionalArgs: ['action?'],
@@ -149,6 +172,11 @@ export const orientationCliReader: CliReader = (positionals, flags) => ({
   orientation: parseDeviceRotation(positionals[0]),
 });
 
+export const foldCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  pose: parseFoldPose(positionals[0]),
+});
+
 export const keyboardCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   ...readKeyboardInput(positionals),
@@ -172,6 +200,10 @@ export const backDaemonWriter: DaemonWriter = (input) =>
 
 export const orientationDaemonWriter: DaemonWriter = direct(ORIENTATION_COMMAND_NAME, (input) => [
   requiredDaemonString(input.orientation, 'orientation requires orientation'),
+]);
+
+export const foldDaemonWriter: DaemonWriter = direct(FOLD_COMMAND_NAME, (input) => [
+  requiredDaemonString(input.pose, 'fold requires pose'),
 ]);
 
 export const keyboardDaemonWriter: DaemonWriter = direct(KEYBOARD_COMMAND_NAME, (input) =>
@@ -230,6 +262,21 @@ const orientationCommandFacet = defineCommandFacet({
   cliReader: orientationCliReader,
   daemonWriter: orientationDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.orientation,
+});
+
+const foldCommandFacet = defineCommandFacet({
+  name: FOLD_COMMAND_NAME,
+  text: {
+    summary: 'Fold or unfold a foldable iPhone simulator',
+    cliDetail:
+      'iPhone Duo simulators only. Presses the pose control in Xcode Device Hub and confirms the hinge angle through CoreDevice; refs and coordinates do not survive a pose change.',
+  },
+  metadata: foldCommandMetadata,
+  run: (client, input) => client.command.fold(input),
+  cliSchema: foldCliSchema,
+  cliReader: foldCliReader,
+  daemonWriter: foldDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.fold,
 });
 
 const appSwitcherCommandFacet = defineParameterlessCommandFacet({
@@ -301,6 +348,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     backCommandFacet,
     homeCommandFacet,
     orientationCommandFacet,
+    foldCommandFacet,
     appSwitcherCommandFacet,
     actionButtonCommandFacet,
     keyboardCommandFacet,

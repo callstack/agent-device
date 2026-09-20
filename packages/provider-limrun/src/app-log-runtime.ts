@@ -1,7 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { bindLimrunInteractionOperations } from './interaction-operations.ts';
+import {
+  LIMRUN_FOLD_UNAVAILABLE,
+  bindLimrunInteractionOperations,
+} from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
@@ -115,6 +118,7 @@ export function createLimrunPlatformRuntimeOwner(
             keyboard: liveSessionUnavailable,
             clipboard: liveSessionUnavailable,
             systemButton: liveSessionUnavailable,
+            fold: LIMRUN_FOLD_UNAVAILABLE,
             triggerAppEvent: liveSessionUnavailable,
             setSetting: liveSessionUnavailable,
             readAlert: liveSessionUnavailable,

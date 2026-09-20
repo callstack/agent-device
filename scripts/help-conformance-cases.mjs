@@ -762,9 +762,9 @@ Use the output already shown to determine whether the feed-search UI is present,
     ],
   },
   {
-    id: 'foldable-pose-is-not-scriptable',
+    id: 'foldable-pose-is-verified-by-fold',
     docs: ['--help:first30', 'foldable'],
-    task: 'Plan commands for the installed app com.example.notes on a foldable iPhone Duo simulator that is currently closed. Open the session, capture the screen the device is actually showing, snapshot it, press the visible Compose control, and close. The final report must state which fold poses the run did and did not cover.',
+    task: 'Plan commands for the installed app com.example.notes on a foldable iPhone Duo simulator that is currently closed. Open the session, snapshot the closed pose, unfold the device fully, snapshot again, press the visible Compose control, and close. The final report must state which fold poses the run covered.',
     expectations: [
       'validPlanCommands',
       'fullPrefix',
@@ -772,11 +772,18 @@ Use the output already shown to determine whether the feed-search UI is present,
       'usesSettleOnMutations',
       'opensAndCloses',
     ],
-    matchers: [{ id: 'capturesPanelEvidence', pattern: /\bagent-device\s+screenshot\b/i }],
+    matchers: [
+      { id: 'foldsToOpen', pattern: /(?:^|\n)agent-device\s+fold\s+open\b/i },
+      {
+        id: 'resnapshotsAfterFold',
+        pattern: /agent-device\s+fold\s+open\b[\s\S]*agent-device\s+snapshot\b[^\n]*\s-i\b/i,
+      },
+    ],
     forbidden: [
       {
         id: 'noInventedPoseCommand',
-        pattern: /\bagent-device\b[^\n]*(?:\bfold\b|\bunfold\b|half-unfold|\bhinge\b|\bpose\b)/i,
+        pattern:
+          /\bagent-device\b(?!\s+fold\b)[^\n]*(?:\bunfold\b|half-unfold|\bhinge\b|\bpose\b)/i,
       },
       { id: 'noScreenSelectionFlag', pattern: /\s--(?:screen|display)\b/i },
     ],

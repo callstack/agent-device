@@ -270,6 +270,8 @@ function providerScenarioRuntimeFacts(
       // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
       // Apple owner's fact reads instead of restating it (#2699).
       actionButton: hasAppleActionButton(device) ? fakeProviderAvailable : fakeProviderUnavailable,
+      // A provider session has no Device Hub on the host, so no fixture leg poses a hinge.
+      setFoldPose: fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({

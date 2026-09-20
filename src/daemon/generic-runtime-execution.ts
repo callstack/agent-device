@@ -10,6 +10,7 @@ import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
 import { isSystemButtonCommand, resolveBoundSystemButtonRuntime } from './system-button-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
+import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
@@ -72,6 +73,13 @@ export async function resolveGenericRuntimeExecution(
       });
     case 'orientation':
       return await resolveBoundOrientationRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
+    case 'fold':
+      return await resolveBoundFoldRuntime({
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,

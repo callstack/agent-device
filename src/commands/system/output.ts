@@ -46,6 +46,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   back: messageOutput,
   home: messageOutput,
   orientation: messageOutput,
+  fold: messageOutput,
   'app-switcher': messageOutput,
   'action-button': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),

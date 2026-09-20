@@ -99,6 +99,8 @@ test.each([
   // even on the kinds the hdc-driven navigation gate admits.
   expect(facts.operations.actionButton).toMatchObject({ available: false });
   expect(binding.operations.actionButton).toBeUndefined();
+  expect(facts.operations.setFoldPose).toMatchObject({ available: false });
+  expect(binding.operations.setFoldPose).toBeUndefined();
   // Public orientation and TV-remote operations remain unavailable unconditionally.
   expect(facts.operations.setOrientation).toEqual({
     available: false,

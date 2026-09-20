@@ -116,6 +116,7 @@ export type {
   AppSwitcherCommandOptions,
   BackCommandOptions,
   ClipboardCommandOptions,
+  FoldCommandOptions,
   DoctorCommandOptions,
   HomeCommandOptions,
   KeyboardCommandOptions,

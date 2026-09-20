@@ -74,6 +74,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'screenRecordingStart',
   'scrollDirection',
   'sendPushNotification',
+  'setFoldPose',
   'setOrientation',
   'setSetting',
   'setViewport',

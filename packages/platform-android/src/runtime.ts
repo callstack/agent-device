@@ -96,6 +96,16 @@ const systemButtonUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'Android has no key event for this system button.',
 } as const);
+/**
+ * Foldable Android emulators do carry a posture control (the emulator console's `fold` and
+ * `posture` commands), but nothing in this project drives it yet, so the cell refuses on every
+ * kind rather than advertising a pose it cannot set.
+ */
+const foldUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
+} as const);
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
@@ -363,6 +373,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
         }),
+        setFoldPose: foldUnavailable,
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),

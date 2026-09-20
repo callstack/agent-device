@@ -66,6 +66,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
+  setFoldPose: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
   readAlert: unavailable,

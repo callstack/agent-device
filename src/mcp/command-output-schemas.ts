@@ -5,7 +5,7 @@ import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/comm
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
-import { DEVICE_ROTATIONS } from '@agent-device/contracts/device';
+import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
@@ -517,6 +517,23 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     'action',
     'message',
   ]),
+  fold: objectSchema(
+    {
+      action: constSchema('fold'),
+      pose: enumSchema(FOLD_POSES),
+      hingeAngleDegrees: numberSchema('Hinge angle CoreDevice read back after the pose settled.'),
+      screen: objectSchema(
+        {
+          display: stringSchema('CoreDevice name of the panel the device now lights.'),
+          widthPt: numberSchema(),
+          heightPt: numberSchema(),
+        },
+        ['display', 'widthPt', 'heightPt'],
+      ),
+      message: stringSchema(),
+    },
+    ['action', 'pose', 'hingeAngleDegrees', 'message'],
+  ),
   'action-button': objectSchema({ action: constSchema('action-button'), message: stringSchema() }, [
     'action',
     'message',

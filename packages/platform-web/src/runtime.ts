@@ -423,6 +423,7 @@ function webRuntimeFacts(
         profileReport: navigationUnavailable,
       }),
       ...systemButtonRuntimeOperationFacts({ unsupported: navigationUnavailable }),
+      setFoldPose: navigationUnavailable,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),
       ...alertRuntimeOperationFacts({

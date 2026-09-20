@@ -255,6 +255,33 @@ test.each(Object.entries(leaves))(
   },
 );
 
+test.each(Object.entries(leaves))(
+  'classifies the fold fact for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    // A hinge can exist on the iPhone/iPad simulator leaf only: the macOS host is not a simulator,
+    // and no other simulator OS ships a foldable. Whether this simulator is actually a foldable is
+    // answered by the operation from CoreDevice's display table, not by the leaf fact.
+    const available =
+      device.kind === 'simulator' && (device.appleOs === 'ios' || device.appleOs === 'ipados');
+    expectOperationAvailability(binding, 'setFoldPose', available);
+    if (!available) {
+      expect(binding.facts.operations.setFoldPose).toHaveProperty(
+        'reason',
+        device.kind === 'simulator' ? 'unsupported-platform-leaf' : 'unsupported-device-kind',
+      );
+    }
+  },
+);
+
 /**
  * The Action Button is a physical control on iPhone and iPad leaves only. visionOS is the leaf that
  * separates this from `orientation`'s mobile-input reading: a headset has a Digital Crown and no
