@@ -1,6 +1,8 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-export { buildSimctlArgsForDevice } from './core/simctl.ts';
+import { buildSimctlArgsForDevice } from './core/simctl.ts';
+
+export { buildSimctlArgsForDevice };
 
 /**
  * Builds the `simctl io recordVideo` argv for one Apple simulator, naming the panel the device
@@ -18,7 +20,6 @@ export async function buildAppleSimulatorRecordVideoArgs(
   outputPath: string,
   options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<string[]> {
-  const { buildSimctlArgsForDevice } = await import('./core/simctl.ts');
   const { appleSimulatorDisplayArgvFragment, resolveAppleCaptureDisplay } =
     await import('./core/display-inventory.ts');
   const display = await resolveAppleCaptureDisplay(device, options);

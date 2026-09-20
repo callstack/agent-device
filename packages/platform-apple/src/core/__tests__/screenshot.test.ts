@@ -155,6 +155,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+        resolveCaptureDisplay: async () => undefined,
       },
     });
     assert.equal(ensureBootedCalls, 1);
@@ -200,6 +201,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+        resolveCaptureDisplay: async () => undefined,
       },
     });
     assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
@@ -267,6 +269,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+      resolveCaptureDisplay: async () => undefined,
     },
   });
 
@@ -304,6 +307,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+      resolveCaptureDisplay: async () => undefined,
     },
   });
 
@@ -387,6 +391,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
             normalizeDensity: async () => {},
             captureWithRunner: captureScreenshotViaRunner,
             shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+            resolveCaptureDisplay: async () => undefined,
           },
         });
       },

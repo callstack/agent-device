@@ -1,49 +1,25 @@
-import path from 'node:path';
-
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-import {
-  hostTemporaryDirectory,
-  readHostTextFile,
-  unlinkHostFile,
-} from '@agent-device/host-kit/host-file';
-import { hostProcessId } from '@agent-device/host-kit/process';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import { IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS } from './config.ts';
-import { runXcrun } from './tool-provider.ts';
-
-/**
- * Which physical panel a CoreDevice display entry describes on a device that
- * carries more than one integrated panel.
- *
- * Apple names these panels "outer display" and "inner display" for iPhone Duo,
- * and marks only the outer panel `primary` in CoreDevice display info.
- */
-export type AppleDisplayRole = 'outer' | 'inner';
-
-/**
- * Fold pose derived from panel power, which is the only pose evidence a host-side
- * probe can obtain.
- *
- * Display power cannot separate Apple's `UIHinge.Status.fullyOpen` from
- * `.partiallyOpen`: both leave the inner panel lit and the outer panel dark. A
- * `fully-open` verdict therefore means "not closed" and must never be narrowed.
- * Only an in-app `UIHinge.status` read distinguishes the two.
- */
-export type AppleDisplayPose = 'closed' | 'fully-open' | 'unknown';
+import { runIosDevicectlJsonRequest } from './devicectl.ts';
 
 export type AppleDeviceDisplay = {
   /** CoreDevice display name, which `simctl io --display` also accepts. */
   name: string;
   displayId: number;
-  role?: AppleDisplayRole;
   /**
    * Whether the panel is showing content. `active` is absent from real payloads
    * (a single-panel iPhone 17 reports only `backlightState`), so this is derived
    * from the strongest signal the payload actually carries.
    */
   power: ApplePanelPower;
+  /**
+   * CoreDevice's own `primary` flag. On a foldable this is the panel that stays lit
+   * while the device is closed, which makes it the fallback a multi-panel capture
+   * names when panel power decides nothing.
+   */
   primary: boolean;
   widthPx: number;
   heightPx: number;
@@ -69,12 +45,10 @@ export type AppleDisplayInventory = {
    */
   multiScreen: boolean;
   activeDisplay?: AppleDeviceDisplay;
-  /** Derived pose, present only for a multi-panel device. */
-  pose?: AppleDisplayPose;
   /**
    * True on a multi-panel device whose lit panel could not be decided, so the
-   * capture fell back to the primary panel. The capture is still named — never
-   * implicit — but the caller must not present it as a settled pose.
+   * capture fell back to the `primary` panel. The capture is still named — never
+   * implicit — but the caller must not present it as a settled panel choice.
    */
   ambiguous: boolean;
   /**
@@ -121,46 +95,36 @@ async function queryAppleDisplayInventory(
   device: DeviceInfo,
   options: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<AppleDisplayInventory> {
-  const jsonPath = path.join(
-    hostTemporaryDirectory(),
-    `agent-device-apple-displays-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-  );
-  const args = [
-    'devicectl',
-    'device',
-    'info',
-    'displays',
-    '--device',
-    device.id,
-    '--json-output',
-    jsonPath,
-  ];
   try {
-    const result = await runXcrun(args, {
-      allowFailure: true,
-      signal: options.signal,
+    const outcome = await runIosDevicectlJsonRequest({
+      jsonPrefix: 'agent-device-apple-displays',
+      args: ['devicectl', 'device', 'info', 'displays', '--device', device.id],
       timeoutMs: options.timeoutMs ?? IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS,
+      signal: options.signal,
     });
-    if (result.exitCode !== 0) {
-      emitUnresolvedDiagnostic(device, 'command-failed', result.stderr.trim());
+    if (!outcome.ok) {
+      emitUnresolvedDiagnostic(
+        device,
+        outcome.reason,
+        outcome.result ? outcome.result.stderr.trim() : (outcome.cause ?? ''),
+      );
       return unresolvedInventory();
     }
-    const payload = JSON.parse(await readHostTextFile(jsonPath)) as CoreDeviceDisplayPayload;
-    const displays = parseCoreDeviceDisplays(payload);
+    const displays = parseCoreDeviceDisplays(outcome.payload);
     if (displays.length === 0) {
       emitUnresolvedDiagnostic(device, 'empty-display-list', '');
       return unresolvedInventory();
     }
     return buildInventory(displays);
   } catch (error) {
+    // exec classifies its own kills, so a probe that never answered is told apart
+    // from a toolchain that refused the subcommand.
     emitUnresolvedDiagnostic(
       device,
-      error instanceof AppError ? 'unreadable-json-output' : 'probe-failed',
+      isCommandTimeoutError(error) ? 'probe-timed-out' : 'probe-failed',
       error instanceof Error ? error.message : String(error),
     );
     return unresolvedInventory();
-  } finally {
-    await unlinkHostFile(jsonPath).catch(() => {});
   }
 }
 
@@ -173,7 +137,9 @@ function emitUnresolvedDiagnostic(device: DeviceInfo, reason: string, detail: st
       deviceId: device.id,
       reason,
       ...(detail ? { detail } : {}),
-      ...(reason === 'command-failed' || reason === 'unreadable-json-output'
+      // Only a refusal to answer says the toolchain lacks the feature; a timeout or a
+      // canceled request says nothing about it.
+      ...(reason === 'command-failed' || reason === 'unreadable-json'
         ? { hint: DISPLAYS_UNSUPPORTED_HINT }
         : {}),
     },
@@ -280,24 +246,22 @@ function isIntegratedDisplayType(value: unknown): boolean {
 
 export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInventory {
   // Only built-in panels make a device a foldable. An attached external display
-  // on an iPad is not a second pose-bearing panel and must not turn the device
-  // into a multi-screen capture target or produce a pose.
+  // on an iPad is not a second panel and must not turn the device into a
+  // multi-screen capture target.
   const panels = displays.filter((display) => display.integrated);
   if (panels.length < 2) {
     return { displays, multiScreen: false, ambiguous: false, unresolved: false };
   }
 
-  const roleBearingPanels = assignDisplayRoles(panels);
-  const litPanels = roleBearingPanels.filter((display) => display.power === 'lit');
-  const primaryPanel = roleBearingPanels.find((display) => display.primary);
+  warnWhenPrimaryPanelIsNotTheSmallest(panels);
+  const litPanels = panels.filter((display) => display.power === 'lit');
+  const primaryPanel = panels.find((display) => display.primary);
   const decided = litPanels.length === 1;
   // A multi-panel device must never emit a display-less capture: simctl's implicit
   // choice is the highest screen ID, which is exactly how a foldable capture comes
   // back all black and exits 0. When panel power is ambiguous the primary panel is
   // named explicitly and the ambiguity is reported, not hidden.
-  const captureDisplay = decided
-    ? litPanels[0]!
-    : (primaryPanel ?? litPanels[0] ?? roleBearingPanels[0]!);
+  const captureDisplay = decided ? litPanels[0]! : (primaryPanel ?? litPanels[0] ?? panels[0]!);
   const ambiguous = !decided || primaryPanel === undefined;
   if (ambiguous) {
     emitDiagnostic({
@@ -307,62 +271,45 @@ export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInve
         reason: primaryPanel === undefined ? 'no-primary-panel' : 'lit-panel-count',
         litPanelCount: litPanels.length,
         capturedDisplay: captureDisplay.name,
-        hint: 'Panel power did not identify exactly one lit panel. The primary panel was captured explicitly and the pose is reported as unknown; read the device pose from the app under test with UIHinge.status.',
+        hint: 'Panel power did not identify exactly one lit panel, so the capture names the primary panel without claiming to know which panel the device is showing. Read the device pose from the app under test with UIHinge.status.',
       },
     });
   }
   return {
-    displays: roleBearingPanels,
+    displays: panels,
     multiScreen: true,
     activeDisplay: captureDisplay,
-    pose: decided && primaryPanel ? deriveDisplayPose(roleBearingPanels) : 'unknown',
     ambiguous,
     unresolved: false,
   };
 }
 
 /**
- * Marks the panels of a multi-panel device with Apple's own outer/inner naming.
+ * Sanity-checks the panel geometry against a foldable's shape.
  *
- * CoreDevice flags one panel `primary`, and that panel is the outer display: it is
- * the panel that stays lit while the device is closed. The inner display is the
- * largest remaining panel, because a foldable's inner surface encloses the outer
- * one. A device with no `primary` panel gets no roles at all — inventing them from
- * array order would silently invert the naming; the caller reports that ambiguity.
- * Any third and later panel stays unroled rather than being labelled `inner`.
+ * CoreDevice marks the panel that stays lit while the device is closed as
+ * `primary`, and that panel is the smaller one, because a foldable's inner surface
+ * encloses the outer one. A payload that inverts this still gets captured by
+ * `primary` — CoreDevice's flag is the authority — but the inversion is reported,
+ * because it means the device type contradicts the model this code runs on.
  */
-export function assignDisplayRoles(displays: AppleDeviceDisplay[]): AppleDeviceDisplay[] {
-  if (displays.length < 2) return displays;
-  const primary = displays.find((display) => display.primary);
-  if (!primary) return displays;
+function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): void {
+  const primary = panels.find((display) => display.primary);
+  if (!primary) return;
   const areaOf = (display: AppleDeviceDisplay) => display.widthPx * display.heightPx;
-  const inner = displays
+  const widest = panels
     .filter((display) => display !== primary)
-    .reduce((widest, display) => (areaOf(display) > areaOf(widest) ? display : widest));
-  if (areaOf(primary) >= areaOf(inner)) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'apple_display_role_geometry_conflict',
-      data: {
-        primaryDisplay: primary.name,
-        largestDisplay: inner.name,
-        hint: 'CoreDevice reported the primary panel as at least as large as the other panel. CoreDevice `primary` still selects the outer display; verify the device type capabilities.',
-      },
-    });
-  }
-  return displays.map((display) => {
-    if (display === primary) return { ...display, role: 'outer' as const };
-    if (display === inner) return { ...display, role: 'inner' as const };
-    return display;
+    .reduce((largest, display) => (areaOf(display) > areaOf(largest) ? display : largest));
+  if (areaOf(primary) < areaOf(widest)) return;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'apple_display_primary_geometry_conflict',
+    data: {
+      primaryDisplay: primary.name,
+      largestDisplay: widest.name,
+      hint: 'CoreDevice reported the primary panel as at least as large as the other panel. CoreDevice `primary` still selects the capture fallback; verify the device type capabilities.',
+    },
   });
-}
-
-export function deriveDisplayPose(displays: AppleDeviceDisplay[]): AppleDisplayPose {
-  const lit = displays.filter((display) => display.power === 'lit');
-  if (lit.length !== 1) return 'unknown';
-  const [litPanel] = lit;
-  if (litPanel!.primary) return 'closed';
-  return 'fully-open';
 }
 
 /**

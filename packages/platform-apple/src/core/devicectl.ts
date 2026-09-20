@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
+import { type ExecResult, execFailureDetails } from '@agent-device/host-kit/command';
 import {
   hostTemporaryDirectory,
   readHostTextFile,
@@ -171,6 +171,70 @@ export async function resolveIosDeviceAppProcesses(
   return { appBundleUrl, processes };
 }
 
+/**
+ * Why a devicectl JSON command produced no usable payload while `devicectl` itself
+ * stayed reachable. A command that never returned is not reported here: exec owns
+ * that classification and raises a typed timeout or cancellation error instead.
+ */
+export type IosDevicectlJsonFailureReason = 'command-failed' | 'unreadable-json';
+
+export type IosDevicectlJsonOutcome =
+  | { ok: true; payload: unknown }
+  | {
+      ok: false;
+      reason: IosDevicectlJsonFailureReason;
+      args: string[];
+      result?: ExecResult;
+      cause?: string;
+    };
+
+/**
+ * Runs one `devicectl` command with `--json-output` and reads the payload back,
+ * reporting an unusable answer as a typed outcome instead of throwing.
+ *
+ * This is the only implementation of the temp-path + `--json-output` + read +
+ * cleanup protocol. Callers that must fail the user go through
+ * {@link runIosDevicectlJsonCommand}, which adds the curated message and hint;
+ * callers that own a fallback path — a probe, for example — consume the outcome
+ * and keep their own diagnostics.
+ */
+export async function runIosDevicectlJsonRequest(options: {
+  jsonPrefix: string;
+  args: string[];
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  tolerateFailurePayload?: (payload: unknown) => boolean;
+}): Promise<IosDevicectlJsonOutcome> {
+  const jsonPath = path.join(
+    hostTemporaryDirectory(),
+    `${options.jsonPrefix}-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+  );
+  const args = [...options.args, '--json-output', jsonPath];
+  const result = await runXcrun(args, {
+    allowFailure: true,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
+  });
+
+  try {
+    if (result.exitCode !== 0) {
+      if (options.tolerateFailurePayload) {
+        const failurePayload = await readJsonFile(jsonPath).catch(() => undefined);
+        if (failurePayload !== undefined && options.tolerateFailurePayload(failurePayload)) {
+          return { ok: true, payload: failurePayload };
+        }
+      }
+      return { ok: false, reason: 'command-failed', args, result };
+    }
+    return { ok: true, payload: await readJsonFile(jsonPath) };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    return { ok: false, reason: 'unreadable-json', args, result, cause: String(error) };
+  } finally {
+    await unlinkHostFile(jsonPath).catch(() => {});
+  }
+}
+
 async function runIosDevicectlJsonCommand(
   device: DeviceInfo,
   options: {
@@ -180,53 +244,35 @@ async function runIosDevicectlJsonCommand(
     parseFailureMessage: string;
     fallbackHint?: string;
     tolerateFailurePayload?: (payload: unknown) => boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
   },
 ): Promise<unknown> {
-  const jsonPath = path.join(
-    hostTemporaryDirectory(),
-    `${options.jsonPrefix}-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-  );
-  const args = [...options.args, '--json-output', jsonPath];
-  const result = await runXcrun(args, {
-    allowFailure: true,
-    timeoutMs: IOS_DEVICECTL_TIMEOUT_MS,
-  });
+  const outcome = await runIosDevicectlJsonRequest(options);
+  if (outcome.ok) return outcome.payload;
 
-  try {
-    if (result.exitCode !== 0) {
-      const { stdout, stderr } = result;
-      if (options.tolerateFailurePayload) {
-        const failurePayload = await readJsonFile(jsonPath).catch(() => undefined);
-        if (failurePayload !== undefined && options.tolerateFailurePayload(failurePayload)) {
-          return failurePayload;
-        }
-      }
-      throw new AppError(
-        'COMMAND_FAILED',
-        options.failureMessage,
-        execFailureDetails(result, {
-          cmd: 'xcrun',
-          args,
-          stdout,
-          stderr,
-          deviceId: device.id,
-          hint:
-            resolveIosDevicectlHint(stdout, stderr) ??
-            options.fallbackHint ??
-            IOS_DEVICECTL_DEFAULT_HINT,
-        }),
-      );
-    }
-    return await readJsonFile(jsonPath);
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw new AppError('COMMAND_FAILED', options.parseFailureMessage, {
-      deviceId: device.id,
-      cause: String(error),
-    });
-  } finally {
-    await unlinkHostFile(jsonPath).catch(() => {});
+  if (outcome.reason === 'command-failed' && outcome.result) {
+    const { stdout, stderr } = outcome.result;
+    throw new AppError(
+      'COMMAND_FAILED',
+      options.failureMessage,
+      execFailureDetails(outcome.result, {
+        cmd: 'xcrun',
+        args: outcome.args,
+        stdout,
+        stderr,
+        deviceId: device.id,
+        hint:
+          resolveIosDevicectlHint(stdout, stderr) ??
+          options.fallbackHint ??
+          IOS_DEVICECTL_DEFAULT_HINT,
+      }),
+    );
   }
+  throw new AppError('COMMAND_FAILED', options.parseFailureMessage, {
+    deviceId: device.id,
+    cause: outcome.cause,
+  });
 }
 
 async function readJsonFile(jsonPath: string): Promise<unknown> {

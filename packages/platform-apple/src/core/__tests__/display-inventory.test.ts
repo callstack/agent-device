@@ -15,6 +15,10 @@ vi.mock('../tool-provider.ts', async (importOriginal) => {
     runXcrun: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
   };
 });
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn() };
+});
 vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/host-file')>();
   return {
@@ -27,9 +31,7 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
 
 import {
   appleSimulatorDisplayArgvFragment,
-  assignDisplayRoles,
   buildInventory,
-  deriveDisplayPose,
   parseCoreDeviceDisplays,
   readPanelPower,
   resolveAppleCaptureDisplay,
@@ -39,14 +41,17 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
 } from '../screenshot.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { runXcrun } from '../tool-provider.ts';
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
 import { runSimctlForDevice } from '../simctl.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
 const mockRunSimctlForDevice = vi.mocked(runSimctlForDevice);
 const mockRunXcrun = vi.mocked(runXcrun);
 const mockReadHostTextFile = vi.mocked(readHostTextFile);
+const mockEmitDiagnostic = vi.mocked(emitDiagnostic);
 
 /** Verbatim `devicectl device info displays` shape for a closed iPhone Duo. */
 const IPHONE_DUO_CLOSED = {
@@ -210,17 +215,16 @@ describe('parseCoreDeviceDisplays', () => {
 });
 
 describe('buildInventory', () => {
-  test('names the Duo panels outer/inner and reports the closed pose', () => {
+  test('names the lit primary panel of a closed Duo without falling through to simctl', () => {
     const inventory = buildInventory(parseCoreDeviceDisplays(IPHONE_DUO_CLOSED));
     assert.equal(inventory.unresolved, false);
     assert.equal(inventory.multiScreen, true);
     assert.equal(inventory.ambiguous, false);
-    assert.equal(inventory.pose, 'closed');
     assert.deepEqual(
-      inventory.displays.map((display) => [display.name, display.role]),
+      inventory.displays.map((display) => [display.name, display.primary, display.power]),
       [
-        ['LCD', 'outer'],
-        ['LCD-1', 'inner'],
+        ['LCD', true, 'lit'],
+        ['LCD-1', false, 'dark'],
       ],
     );
     assert.equal(inventory.activeDisplay?.name, 'LCD');
@@ -230,16 +234,14 @@ describe('buildInventory', () => {
     const inventory = buildInventory(parseCoreDeviceDisplays(duoPanelsWithoutActiveKey()));
     assert.equal(inventory.multiScreen, true);
     assert.equal(inventory.ambiguous, false);
-    assert.equal(inventory.pose, 'closed');
     assert.equal(inventory.activeDisplay?.name, 'LCD');
   });
 
-  test('reports the fully-open pose when the inner panel is lit', () => {
+  test('captures the inner panel when it is the lit one', () => {
     const inventory = buildInventory([
       { ...outerPanel, power: 'dark' },
       { ...innerPanel, power: 'lit' },
     ]);
-    assert.equal(inventory.pose, 'fully-open');
     assert.equal(inventory.ambiguous, false);
     assert.equal(inventory.activeDisplay?.name, 'LCD-1');
   });
@@ -259,53 +261,40 @@ describe('buildInventory', () => {
       const inventory = buildInventory(panels);
       assert.equal(inventory.multiScreen, true);
       assert.equal(inventory.ambiguous, true);
-      assert.equal(inventory.pose, 'unknown');
       assert.equal(inventory.activeDisplay?.name, 'LCD');
     }
   });
 
-  test('refuses to invent roles or a pose when no panel reports primary', () => {
+  test('names a capture even when no panel reports primary', () => {
     const inventory = buildInventory([
       { ...outerPanel, primary: false },
       { ...innerPanel, power: 'lit', primary: false },
     ]);
     assert.equal(inventory.multiScreen, true);
     assert.equal(inventory.ambiguous, true);
-    assert.equal(inventory.pose, 'unknown');
-    assert.deepEqual(
-      inventory.displays.map((display) => display.role),
-      [undefined, undefined],
-    );
     // A capture is still named: never the implicit black-producing default.
     assert.ok(inventory.activeDisplay);
   });
 
-  test('leaves a third panel unroled rather than labelling every extra panel inner', () => {
+  test('keeps choosing the lit panel when a third panel is present', () => {
     const inventory = buildInventory([
-      outerPanel,
-      innerPanel,
+      { ...outerPanel, power: 'dark' },
+      { ...innerPanel, power: 'lit' },
       displayWith({ name: 'LCD-2', displayId: 5, power: 'dark', primary: false }),
     ]);
-    assert.deepEqual(
-      inventory.displays.map((display) => [display.name, display.role]),
-      [
-        ['LCD', 'outer'],
-        ['LCD-1', 'inner'],
-        ['LCD-2', undefined],
-      ],
-    );
+    assert.equal(inventory.multiScreen, true);
+    assert.equal(inventory.activeDisplay?.name, 'LCD-1');
+    assert.equal(inventory.displays.length, 3);
   });
 
-  test('keeps a single-panel device single-screen with no pose', () => {
+  test('keeps a single-panel device single-screen', () => {
     const inventory = buildInventory(parseCoreDeviceDisplays(IPHONE_17_NO_ACTIVE_KEY));
     assert.equal(inventory.multiScreen, false);
     assert.equal(inventory.ambiguous, false);
-    assert.equal(inventory.pose, undefined);
     assert.equal(inventory.activeDisplay, undefined);
-    assert.equal(inventory.displays[0]!.role, undefined);
   });
 
-  test('treats an attached external display as neither a foldable panel nor a pose signal', () => {
+  test('treats an attached external display as neither a foldable panel nor a capture target', () => {
     const inventory = buildInventory([
       outerPanel,
       displayWith({
@@ -319,30 +308,8 @@ describe('buildInventory', () => {
       }),
     ]);
     assert.equal(inventory.multiScreen, false);
-    assert.equal(inventory.pose, undefined);
     // The external display is carried through for reporting but never selected.
     assert.equal(inventory.activeDisplay, undefined);
-  });
-});
-
-describe('deriveDisplayPose', () => {
-  test('refuses to name a pose when panel power is ambiguous', () => {
-    assert.equal(deriveDisplayPose([outerPanel, { ...innerPanel, power: 'lit' }]), 'unknown');
-    assert.equal(deriveDisplayPose([{ ...outerPanel, power: 'dark' }, innerPanel]), 'unknown');
-  });
-});
-
-describe('assignDisplayRoles', () => {
-  test('leaves a single-panel device unroled', () => {
-    const [only] = assignDisplayRoles([outerPanel]);
-    assert.equal(only!.role, undefined);
-  });
-
-  test('returns panels unroled when none is primary', () => {
-    const roles = assignDisplayRoles([{ ...outerPanel, primary: false }, innerPanel]).map(
-      (display) => display.role,
-    );
-    assert.deepEqual(roles, [undefined, undefined]);
   });
 });
 
@@ -351,6 +318,7 @@ describe('resolveAppleCaptureDisplay', () => {
     mockRunXcrun.mockClear();
     mockReadHostTextFile.mockReset();
     mockReadHostTextFile.mockResolvedValue('');
+    mockEmitDiagnostic.mockClear();
   });
 
   test('returns the lit panel for a multi-panel device', async () => {
@@ -387,6 +355,42 @@ describe('resolveAppleCaptureDisplay', () => {
       stderr: 'The specified device was not found',
     } as Awaited<ReturnType<typeof runXcrun>>);
     assert.equal(await resolveAppleCaptureDisplay(IOS_TEST_SIMULATOR), undefined);
+  });
+
+  function unresolvedReason(): string | undefined {
+    const call = mockEmitDiagnostic.mock.calls.find(
+      ([diagnostic]) => diagnostic.phase === 'apple_display_inventory_unresolved',
+    );
+    return call?.[0].data?.reason as string | undefined;
+  }
+
+  test('reports an exec timeout as a timeout, not as an unreadable payload', async () => {
+    mockRunXcrun.mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'xcrun timed out after 5000ms', {
+        cmd: 'xcrun',
+        args: ['devicectl'],
+        timeoutMs: 5_000,
+      }),
+    );
+    assert.equal(await resolveAppleCaptureDisplay(IOS_TEST_SIMULATOR), undefined);
+    assert.equal(unresolvedReason(), 'probe-timed-out');
+  });
+
+  test('blames the payload only when devicectl answered', async () => {
+    mockRunXcrun.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+    mockReadHostTextFile.mockResolvedValueOnce('{"result": ');
+    assert.equal(await resolveAppleCaptureDisplay(IOS_TEST_SIMULATOR), undefined);
+    assert.equal(unresolvedReason(), 'unreadable-json');
+  });
+
+  test('blames the toolchain when devicectl refused the subcommand', async () => {
+    mockRunXcrun.mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: "ERROR: Unknown command 'displays'",
+    });
+    assert.equal(await resolveAppleCaptureDisplay(IOS_TEST_SIMULATOR), undefined);
+    assert.equal(unresolvedReason(), 'command-failed');
   });
 
   test('bounds the probe below the capture it precedes', async () => {

@@ -19,9 +19,11 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
 
 import { buildAppleSimulatorRecordVideoArgs } from '../simctl-facade.ts';
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
+import { runXcrun } from '../core/tool-provider.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 
 const mockReadHostTextFile = vi.mocked(readHostTextFile);
+const mockRunXcrun = vi.mocked(runXcrun);
 
 /** Measured `devicectl device info displays` shape for a closed iPhone Duo. */
 const IPHONE_DUO_CLOSED = JSON.stringify({
@@ -71,6 +73,7 @@ describe('buildAppleSimulatorRecordVideoArgs', () => {
   beforeEach(() => {
     mockReadHostTextFile.mockReset();
     mockReadHostTextFile.mockResolvedValue('');
+    mockRunXcrun.mockClear();
   });
 
   test('names the lit panel instead of recording the dark default', async () => {
@@ -102,6 +105,8 @@ describe('buildAppleSimulatorRecordVideoArgs', () => {
     await buildAppleSimulatorRecordVideoArgs(IOS_SIMULATOR, '/tmp/rec.mp4', {
       signal: controller.signal,
     });
-    expect(controller.signal.aborted).toBe(false);
+    const probeCall = mockRunXcrun.mock.calls.find(([args]) => args[0] === 'devicectl');
+    expect(probeCall).toBeDefined();
+    expect(probeCall![1]?.signal).toBe(controller.signal);
   });
 });
