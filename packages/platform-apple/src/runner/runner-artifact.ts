@@ -12,11 +12,7 @@ import {
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  classifyRunnerStartupFailure,
-  corroborateRunnerBuildFailureWithDeviceStates,
-  type IosRunnerDeviceStates,
-} from './runner-contract.ts';
+import { classifyRunnerStartupFailure } from './runner-contract.ts';
 import { logChunk } from './runner-io.ts';
 import { withXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
 import {
@@ -86,13 +82,6 @@ type RunnerXctestrunBuildOptions = {
    * request cancels both (#2422).
    */
   budget?: RunnerPhaseBudget;
-  /**
-   * What the device said about itself before this build started (#2683). Nothing here stops the
-   * build — that decision was the readiness preflight's, and it refuses only for a disabled Developer
-   * Mode toggle. These states ride onto whatever failure this build produces, so the device's own
-   * answer surfaces beside the real failure instead of gating a run that this build would clear.
-   */
-  deviceStates?: IosRunnerDeviceStates;
 };
 
 export async function ensureXctestrunArtifact(
@@ -530,22 +519,18 @@ async function buildRunnerXctestrun(
         error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
       // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
       // switches on can never disagree with the advice it is handed.
-      const classified = classifyRunnerStartupFailure(appErr);
-      // A corroborated device state can name a build that named nothing; it never overwrites one that
-      // already named its own cause (#2683).
-      const { reason, hint } = corroborateRunnerBuildFailureWithDeviceStates(
-        classified,
-        options.deviceStates,
-      );
+      const { reason, hint, matched } = classifyRunnerStartupFailure(appErr);
+      // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
+      // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
+      // alone (#2690 review). The device's own state is attached further out, by the startup catch that
+      // can see this build and the launch after it.
       throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
         reason,
         error: appErr.message,
         details: appErr.details,
         logPath: options.logPath,
         hint,
-        ...(options.deviceStates
-          ? { developerDiskImage: options.deviceStates.developerDiskImage }
-          : {}),
+        startupRuleMatched: matched,
       });
     }
   });

@@ -12,6 +12,7 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
+  enrichRunnerStartupFailureWithDeviceStates,
   RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   RUNNER_ERROR_RULES,
   classifyRunnerStartupFailure,
@@ -47,23 +48,23 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const CACHE_RECOVERY_HINT = /clean:xcuitest|apple-runner\/derived/;
 
-/** The device remedies are prose with parentheses in it, so they are matched as text, not as syntax. */
-function escapeRegExp(text: string): RegExp {
-  return new RegExp(text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`));
-}
-
-const HINT_FOR_REASON: Record<RunnerStartupFailureReason, RegExp> = {
-  bundle_identifier_already_registered: /AGENT_DEVICE_IOS_BUNDLE_ID/,
-  signing_no_development_team: /AGENT_DEVICE_IOS_TEAM_ID/,
-  signing_provisioning_profile_missing: /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/,
-  signing_unspecified: /Automatic Signing/,
-  devtools_security_developer_mode_disabled: /DevToolsSecurity -enable/,
+/**
+ * The phrase each reason's advice has to contain. Kept as text rather than as syntax because two of
+ * them are quotations from `core/devicectl.ts`, and a fifth escaping helper for a prose remedy with
+ * parentheses in it is not this suite's job.
+ */
+const HINT_FOR_REASON: Record<RunnerStartupFailureReason, string> = {
+  bundle_identifier_already_registered: 'AGENT_DEVICE_IOS_BUNDLE_ID',
+  signing_no_development_team: 'AGENT_DEVICE_IOS_TEAM_ID',
+  signing_provisioning_profile_missing: 'AGENT_DEVICE_IOS_PROVISIONING_PROFILE',
+  signing_unspecified: 'Automatic Signing',
+  devtools_security_developer_mode_disabled: 'DevToolsSecurity -enable',
   // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
   // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
   // preflight publishing them is asserted.
-  device_developer_mode_disabled: escapeRegExp(IOS_DEVICE_DEVELOPER_MODE_OFF_HINT),
-  device_developer_disk_image_unavailable: escapeRegExp(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT),
-  build_failed_unclassified: CACHE_RECOVERY_HINT,
+  device_developer_mode_disabled: IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
+  device_developer_disk_image_unavailable: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  build_failed_unclassified: 'clean:xcuitest',
 };
 
 const runCmdSync = vi.fn();
@@ -129,7 +130,10 @@ function assertFailureEnvelope(
   assert.equal(envelope.code, 'COMMAND_FAILED');
   assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
   assert.equal(envelope.details?.reason, fixture.reason);
-  assert.match(String(envelope.hint), HINT_FOR_REASON[fixture.reason]);
+  assert.ok(
+    String(envelope.hint).includes(HINT_FOR_REASON[fixture.reason]),
+    `the ${fixture.reason} hint must carry "${HINT_FOR_REASON[fixture.reason]}"`,
+  );
   // No `logPath` was handed to `normalizeError`: the top-level value can only be the one the
   // build catch wrote into the error it throws.
   assert.equal(envelope.logPath, logPath);
@@ -264,9 +268,27 @@ test('a conflicting-settings failure is not answered with missing-profile advice
   assert.doesNotMatch(String(envelope.hint), /AGENT_DEVICE_IOS_PROVISIONING_PROFILE/);
 });
 
-/** Drives a recorded fixture through the real build catch and normalizes what it threw. */
+/**
+ * Drives a recorded fixture through the two steps a real startup runs in order: the build catch turns
+ * the tool's output into a typed reason, and the session's startup catch hands that failure to the
+ * device enrichment step (#2690 review). Both are the production functions; nothing here re-implements
+ * either.
+ */
 async function driveBuildFailure(fixture: RunnerStartupFailureFixture): Promise<NormalizedError> {
-  return normalizeThrown(await runBuildCatch(() => buildForTestingExecFailure(fixture), fixture));
+  const thrown = await runBuildCatch(() => buildForTestingExecFailure(fixture));
+  return normalizeThrown(
+    enrichRunnerStartupFailureWithDeviceStates(thrown, deviceStatesOf(fixture)),
+  );
+}
+
+/** The states `preflightIosRunnerDeviceReadiness` would have handed the startup for this fixture. */
+function deviceStatesOf(fixture: RunnerStartupFailureFixture | undefined) {
+  if (!fixture?.deviceReport) return undefined;
+  return {
+    developerMode: fixture.deviceReport.developerMode,
+    developerDiskImage: fixture.deviceReport.developerDiskImage,
+    developerDiskImageHint: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
+  };
 }
 
 /** Drives a hand-built rejection through the same real build catch. */
@@ -274,7 +296,7 @@ async function driveBuildRejection(rejection: unknown): Promise<NormalizedError>
   return normalizeThrown(await runBuildCatch(() => rejection));
 }
 
-async function runBuildCatch(buildRejection: () => unknown, fixture?: RunnerStartupFailureFixture) {
+async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
   runCmdStreaming.mockReset().mockImplementation(async () => {
     throw buildRejection();
   });
@@ -285,13 +307,6 @@ async function runBuildCatch(buildRejection: () => unknown, fixture?: RunnerStar
       ensureXctestrunArtifact(IOS_DEVICE, {
         logPath,
         budget: createRunnerPhaseBudget(120_000, undefined),
-        // The states the startup would have carried from the device, which is the input the
-        // corroborated disk-image reason reads (#2683).
-        deviceStates: fixture?.deviceReport && {
-          developerMode: fixture.deviceReport.developerMode,
-          developerDiskImage: fixture.deviceReport.developerDiskImage,
-          developerDiskImageHint: IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
-        },
       }),
     (error: unknown) => {
       caught = error;

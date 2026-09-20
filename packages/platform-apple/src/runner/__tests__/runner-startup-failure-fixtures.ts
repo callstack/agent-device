@@ -280,6 +280,17 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     note: 'The corroborated pairing (#2683 review): a build that names no cause, on a phone core read directly as reporting its image down. Naming the image beats cache-recovery advice; the state also travels as details.developerDiskImage.',
   },
   {
+    id: 'conflicting-settings-on-device-with-image-down',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      "error: \"AgentDeviceRunner\" has conflicting provisioning settings (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
+    deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
+    note: 'The pairing that made the enrichment key on "did a row match" rather than on the unclassified reason (#2690 review): a just-rebooted phone reports its image down while the failure is a settings disagreement a row already looked at and declined to name. The row answer wins and the cache-recovery hint stays; the image state still rides along as a detail.',
+  },
+  {
     id: 'team-id-failure-on-device-with-image-down',
     reason: 'signing_no_development_team',
     site: 'build-for-testing',

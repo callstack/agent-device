@@ -865,24 +865,38 @@ export async function buildRunnerEarlyExitError(params: {
  * Callers publish the pair as `details.reason` plus the top-level hint on a `COMMAND_FAILED`; the
  * code is `COMMAND_FAILED` for every reason, so the reason is the assertion.
  */
-export function classifyRunnerStartupFailure(error: unknown): {
-  reason: RunnerStartupFailureReason;
-  hint: string;
-} {
+export function classifyRunnerStartupFailure(error: unknown): RunnerStartupClassification {
   if (error instanceof AppError) {
     for (const rule of RUNNER_ERROR_RULES) {
       const buildFailure = rule.buildFailure;
       if (!buildFailure) continue;
       if (matchesRunnerErrorRule(error, rule.match)) {
-        return { reason: buildFailure.reason, hint: buildFailure.hint };
+        return { reason: buildFailure.reason, hint: buildFailure.hint, matched: true };
       }
     }
   }
   return {
     reason: RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
     hint: RUNNER_CACHE_RECOVERY_HINT,
+    matched: false,
   };
 }
+
+/**
+ * The verdict, the advice beside it, and whether a row reached either (#2690 review). `matched` is
+ * half the answer rather than an implementation detail: {@link RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON}
+ * is also what a row that deliberately claims no cause publishes, so reading the reason alone cannot
+ * tell "nothing spoke" from "a row spoke and declined to name a cause".
+ */
+export type RunnerStartupClassification = Readonly<{
+  reason: RunnerStartupFailureReason;
+  hint: string;
+  /**
+   * False only when no rule row matched at all. The catch that publishes this verdict carries it on
+   * `details.startupRuleMatched`, which is the half a caller cannot recover from the reason alone.
+   */
+  matched: boolean;
+}>;
 
 /**
  * What the startup carries forward from the device so a later failure can say what the phone said
@@ -898,26 +912,64 @@ export type IosRunnerDeviceStates = Readonly<{
 }>;
 
 /**
- * What a corroborated device state can add to a failure the build already hit (#2683).
+ * The device's turn on a startup failure (#2683, #2690 review), applied by the session's startup
+ * catch so it reaches every path that stops a runner before it serves a command: a cold build, a warm
+ * derived cache that fails at install, or an external xctestrun that never launches. The phone's own
+ * state rides along as `details.developerDiskImage` on all of them, because it is a fact whoever is
+ * reading this failure wants.
  *
- * `devicectl` reports the developer disk image only while the tunnel is up and the phone is booted,
- * so an unavailable reading that reached us here is a fact about the device rather than a snapshot of
- * a sleeping phone. On a build that names no cause of its own, that fact IS the cause worth naming,
- * and it beats generic cache-recovery advice. On a build that already named one, the device stays
- * quiet: xcodebuild's own sentence outranks a state that may well have been cleared by the time the
- * build finished, and #2683's whole point is that the image is never restated as someone else's
- * problem.
+ * It becomes the *reason* only when the failure carries no reason of its own and no rule row matched.
+ * `devicectl` reports the image only while the tunnel is up and the phone is booted, so an
+ * unavailable reading that reached here is a fact about the device rather than a snapshot of a sleeping
+ * phone — but a failure that already named a cause, or that a row looked at and declined to name one
+ * for, outranks a state that may have been cleared before the failure was written down. An error that
+ * is not an `AppError` comes back untouched: a cancellation and a foreign failure keep their identity.
  */
-export function corroborateRunnerBuildFailureWithDeviceStates(
-  classified: Readonly<{ reason: RunnerStartupFailureReason; hint: string }>,
+export function enrichRunnerStartupFailureWithDeviceStates(
+  error: unknown,
   states: IosRunnerDeviceStates | undefined,
-): Readonly<{ reason: RunnerStartupFailureReason; hint: string }> {
-  if (!states || states.developerDiskImage !== 'unavailable') return classified;
-  if (classified.reason !== RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) return classified;
-  return {
-    reason: 'device_developer_disk_image_unavailable',
-    hint: states.developerDiskImageHint,
-  };
+): unknown {
+  if (!states || !(error instanceof AppError)) return error;
+  const speaks =
+    claimedStartupFailureReason(error) === undefined &&
+    states.developerDiskImage === 'unavailable' &&
+    !startupFailureRuleMatched(error);
+  return new AppError(error.code, error.message, {
+    ...(error.details ?? {}),
+    ...(speaks
+      ? {
+          reason: 'device_developer_disk_image_unavailable',
+          hint: states.developerDiskImageHint,
+        }
+      : {}),
+    developerDiskImage: states.developerDiskImage,
+  });
+}
+
+/**
+ * The reason a startup failure already carries, discounting the placeholder the classifier publishes
+ * when nothing proved a cause. Without this discount the build catch's own
+ * `build_failed_unclassified` would read as a claimed cause and silence the device everywhere.
+ */
+/**
+ * Whether a rule row already reached this failure. A catch that published a classification carries its
+ * own answer in `details.startupRuleMatched`, because its wrapper keeps the tool's text one level too
+ * deep for the rows to read again — re-classifying the wrapper would report "nothing matched" for a
+ * failure whose cause a row had just declined to name (#2690 review). A failure that never passed
+ * through such a catch is classified here, which is the same answer its own publisher would have given.
+ */
+function startupFailureRuleMatched(error: AppError): boolean {
+  const published = error.details?.startupRuleMatched;
+  if (typeof published === 'boolean') return published;
+  return classifyRunnerStartupFailure(error).matched;
+}
+
+function claimedStartupFailureReason(error: AppError): RunnerStartupFailureReason | undefined {
+  const reason = error.details?.reason;
+  if (typeof reason !== 'string' || reason === RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON) {
+    return undefined;
+  }
+  return reason as RunnerStartupFailureReason;
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {

@@ -36,6 +36,7 @@ import {
   type RunnerCommand,
   resolveRunnerFatalErrorReason,
   isRunnerMainThreadOccupiedError,
+  enrichRunnerStartupFailureWithDeviceStates,
 } from './runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
@@ -231,40 +232,50 @@ async function startRunnerSessionWithLease(
   }
   // Read before the build, which is a phase of its own with its own budget (#2422).
   const startupTimeoutMs = requireRunnerPhaseRemainingMs(startupBudget, 'runner_session_startup');
-  const xctestrunArtifact = await measureRunnerStartupStep(
-    startupTimings,
-    'ensure_xctestrun',
-    async () =>
-      await ensureXctestrunArtifact(device, {
-        ...options,
-        budget: createRunnerPhaseBudget(options.buildTimeoutMs, signal),
-        deviceStates,
-      }),
-  );
-  startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
-  const port = await measureRunnerStartupStep(
-    startupTimings,
-    'allocate_port',
-    async () => await getFreePort(),
-  );
-  const { xctestrunPath, jsonPath } = await measureRunnerStartupStep(
-    startupTimings,
-    'prepare_xctestrun_env',
-    async () =>
-      await prepareXctestrunWithEnv(
-        xctestrunArtifact.xctestrunPath,
-        { AGENT_DEVICE_RUNNER_PORT: String(port) },
-        `session-${device.id}-${runnerOwnerToken()}-${port}`,
-        { iosXctestEnvDir: options.iosXctestEnvDir },
-      ),
-  );
-  const simulatorSetRedirect = await measureRunnerStartupStep(
-    startupTimings,
-    'simulator_set_redirect',
-    async () => await acquireXcodebuildSimulatorSetRedirect(device),
-  );
+  let xctestrunArtifact: Awaited<ReturnType<typeof ensureXctestrunArtifact>>;
+  let port: number;
+  let xctestrunPath: string;
+  let jsonPath: string;
+  let simulatorSetRedirect:
+    | Awaited<ReturnType<typeof acquireXcodebuildSimulatorSetRedirect>>
+    | undefined;
   let runnerProcess: LaunchedRunnerProcess;
+  // One catch for everything between here and a runner that answers, because the device's own answer
+  // belongs on all of it (#2690 review): a cold build, a warm derived cache that fails at install, and
+  // an external xctestrun that never launches are different steps, and a caller told "developer disk
+  // image" should not have to know which one this run happened to take.
   try {
+    xctestrunArtifact = await measureRunnerStartupStep(
+      startupTimings,
+      'ensure_xctestrun',
+      async () =>
+        await ensureXctestrunArtifact(device, {
+          ...options,
+          budget: createRunnerPhaseBudget(options.buildTimeoutMs, signal),
+        }),
+    );
+    startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
+    port = await measureRunnerStartupStep(
+      startupTimings,
+      'allocate_port',
+      async () => await getFreePort(),
+    );
+    ({ xctestrunPath, jsonPath } = await measureRunnerStartupStep(
+      startupTimings,
+      'prepare_xctestrun_env',
+      async () =>
+        await prepareXctestrunWithEnv(
+          xctestrunArtifact.xctestrunPath,
+          { AGENT_DEVICE_RUNNER_PORT: String(port) },
+          `session-${device.id}-${runnerOwnerToken()}-${port}`,
+          { iosXctestEnvDir: options.iosXctestEnvDir },
+        ),
+    ));
+    simulatorSetRedirect = await measureRunnerStartupStep(
+      startupTimings,
+      'simulator_set_redirect',
+      async () => await acquireXcodebuildSimulatorSetRedirect(device),
+    );
     if (xctestrunArtifact.buildMs > 0) {
       emitRequestProgress({
         type: 'command',
@@ -286,7 +297,7 @@ async function startRunnerSessionWithLease(
     );
   } catch (error) {
     await simulatorSetRedirect?.releaseBestEffort();
-    throw error;
+    throw enrichRunnerStartupFailureWithDeviceStates(error, deviceStates);
   }
   const sessionId = buildRunnerSessionId(device.id, port);
   const lease = buildRunnerLease({

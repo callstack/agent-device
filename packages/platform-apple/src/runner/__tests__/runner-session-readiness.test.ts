@@ -16,6 +16,7 @@ import {
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
+import { IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT } from '../../core/devicectl.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -600,4 +601,110 @@ const DEVELOPER_MODE_OFF_DETAILS_PAYLOAD = JSON.stringify({
 function jsonOutputPathOf(args: string[]): string | undefined {
   const index = args.indexOf('--json-output');
   return index >= 0 ? args[index + 1] : undefined;
+}
+
+/**
+ * The startup catch — not the build catch — is where the device's own answer attaches (#2690 review):
+ * a cold build, a warm derived cache that fails at install, and an external xctestrun that never
+ * launches are different steps, and a caller told "developer disk image" should not have to know which
+ * one this run happened to take. What each step throws below is the shape that step publishes; what is
+ * under test is what the session adds on the way out.
+ */
+test('a build that named no cause on a device with its image down gets the device answer', async () => {
+  const device = { ...IOS_DEVICE, id: 'runner-session-image-down-build' };
+  mockEnsureXctestrunArtifact.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
+      reason: 'build_failed_unclassified',
+      startupRuleMatched: false,
+      details: { stdout: "error: cannot find 'AgentDeviceRunnerCommand' in scope\n" },
+    }),
+  );
+
+  const error = await expectStartupFailure(device, deviceDetailsPayload('enabled', false));
+
+  assert.equal(error.details?.reason, 'device_developer_disk_image_unavailable');
+  assert.equal(error.details?.developerDiskImage, 'unavailable');
+  assert.ok(String(error.details?.hint).includes(IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT));
+});
+
+test('a warm cache that fails at launch still carries what the device said', async () => {
+  // The case the build-catch-only version missed: nothing had to compile, so the device's answer was
+  // never attached anywhere, and an install that cannot start the runner said only "build failed".
+  const device = { ...IOS_DEVICE, id: 'runner-session-image-down-launch' };
+  mockEnsureXctestrunArtifact.mockResolvedValue({
+    xctestrunPath: '/tmp/base-runner.xctestrun',
+    derived: '/tmp/derived',
+    cache: 'exact',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'manifest',
+  });
+  mockRunCmdBackground.mockImplementation(() => {
+    throw new AppError('COMMAND_FAILED', 'xcodebuild test-without-building exited unexpectedly');
+  });
+
+  const error = await expectStartupFailure(device, deviceDetailsPayload('enabled', false));
+
+  assert.equal(error.details?.reason, 'device_developer_disk_image_unavailable');
+  assert.equal(error.details?.developerDiskImage, 'unavailable');
+});
+
+test('a device whose image is available claims nothing for a failure it did not cause', async () => {
+  const device = { ...IOS_DEVICE, id: 'runner-session-image-available' };
+  mockEnsureXctestrunArtifact.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
+      reason: 'build_failed_unclassified',
+      startupRuleMatched: false,
+      details: { stdout: "error: cannot find 'AgentDeviceRunnerCommand' in scope\n" },
+    }),
+  );
+
+  const error = await expectStartupFailure(device, deviceDetailsPayload('enabled', true));
+
+  assert.equal(error.details?.reason, 'build_failed_unclassified');
+  assert.equal(error.details?.developerDiskImage, 'available');
+});
+
+/** `devicectl device info details` for a phone that is awake, connected, and reporting both states. */
+function deviceDetailsPayload(
+  developerModeStatus: 'enabled' | 'disabled',
+  ddiServicesAvailable: boolean,
+): string {
+  return JSON.stringify({
+    info: { outcome: 'success' },
+    result: {
+      deviceProperties: {
+        developerModeStatus,
+        ddiServicesAvailable,
+        bootState: 'booted',
+      },
+      connectionProperties: { tunnelState: 'connected' },
+    },
+  });
+}
+
+/** Starts a session against a device whose `devicectl` answers with `payload`, and returns the failure. */
+async function expectStartupFailure(device: typeof IOS_DEVICE, payload: string): Promise<AppError> {
+  let caught: unknown;
+  await assert.rejects(
+    () =>
+      withAppleToolProvider(
+        createLocalAppleToolProvider({
+          runCommand: async (_cmd: string, args: string[]) => {
+            const outputPath = jsonOutputPathOf(args);
+            if (outputPath) {
+              fs.writeFileSync(outputPath, payload);
+            }
+            return { exitCode: 0, stdout: '', stderr: '' };
+          },
+        }),
+        () => ensureRunnerSession(device, {}),
+      ),
+    (error: unknown) => {
+      caught = error;
+      return true;
+    },
+  );
+  assert.ok(caught instanceof AppError, 'startup must fail with an AppError');
+  return caught;
 }
