@@ -6,9 +6,9 @@ import test from 'node:test';
 import {
   IOS_TARGET_ACTIVATION_PRIOR_STATES,
   IOS_TARGET_ACTIVATION_REASONS,
-  iosTargetActivationDisclosure,
   type IosTargetActivation,
-} from '@agent-device/contracts/ios-target-activation';
+} from '@agent-device/kernel/snapshot';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   cleanupSession,

@@ -1,6 +1,5 @@
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
-import type { IosTargetActivation } from './ios-target-activation.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
@@ -19,6 +18,7 @@ import type {
   RawSnapshotNode,
   Point,
   Rect,
+  IosTargetActivation,
   SnapshotKeyboardBandFact,
   SnapshotOptions as BaseSnapshotOptions,
   SnapshotProvenance,

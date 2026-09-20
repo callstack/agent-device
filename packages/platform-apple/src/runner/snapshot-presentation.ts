@@ -25,6 +25,7 @@ import type {
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  IosTargetActivation,
 } from '@agent-device/kernel/snapshot';
 import {
   iosSystemSurfaceHost,
@@ -32,7 +33,6 @@ import {
 } from '@agent-device/contracts/ios-system-surface';
 import { emitDiagnostic } from './host.ts';
 import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from './target-activation.ts';
-import type { IosTargetActivation } from '@agent-device/contracts/ios-target-activation';
 
 export type AppleRunnerSnapshotResult = Readonly<{
   nodes?: RawSnapshotNode[];

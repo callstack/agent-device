@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
-import { IOS_TARGET_ACTIVATION_PRIOR_STATES } from '@agent-device/contracts/ios-target-activation';
+import { IOS_TARGET_ACTIVATION_PRIOR_STATES } from '@agent-device/kernel/snapshot';
 import {
   TARGET_ACTIVATION_WIRE_KEY,
   readTargetActivationFact,

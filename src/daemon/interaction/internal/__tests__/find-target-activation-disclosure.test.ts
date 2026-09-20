@@ -1,8 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import {
-  iosTargetActivationDisclosure,
-  type IosTargetActivation,
-} from '@agent-device/contracts/ios-target-activation';
+import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';

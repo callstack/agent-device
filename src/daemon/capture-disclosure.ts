@@ -25,6 +25,22 @@ export type RequestActivationProof = {
 };
 
 /**
+ * Note the repair a capture paid for, and hand that capture back. First fact wins: a later capture in
+ * the same request that reports no repair — a sparse recovery's fresh tree, a poll's fact-less read —
+ * cannot erase the capture that did (#2682). One rule, because three capture paths owe it and a
+ * hand-copied condition drifts from the other two the moment one of them learns something.
+ */
+export function recordActivationProof<T extends CaptureProvenance>(
+  proof: RequestActivationProof | undefined,
+  snapshot: T,
+): T {
+  if (proof !== undefined && proof.state === undefined && snapshot.targetActivation !== undefined) {
+    proof.state = snapshot;
+  }
+  return snapshot;
+}
+
+/**
  * Append the occluding-system-surface disclosure to a selector-route response whose consumed
  * snapshot was a system surface: an Android notification shade / quick settings, or an iOS in-place
  * system sheet such as web sign-in or Apple Pay (#2438). Both found and not-found outcomes must

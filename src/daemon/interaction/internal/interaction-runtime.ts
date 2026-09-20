@@ -12,6 +12,7 @@ import type { DaemonCommandContext } from '../../context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
 import { buildAppleRunnerRequestOptions } from '../../apple-runner-options.ts';
 import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
+import { recordActivationProof } from '../../capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { createDaemonRuntimeSessionStore } from '../../runtime-session.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
@@ -55,12 +56,7 @@ export function createInteractionRuntimeForRoute(
         params.contextFromFlags,
         options,
       );
-      // First fact wins: a later capture in the same request that reports no repair must not erase
-      // the capture that did (#2682).
-      if (params.activationProof && snapshot.targetActivation && !params.activationProof.state) {
-        params.activationProof.state = snapshot;
-      }
-      return snapshot;
+      return recordActivationProof(params.activationProof, snapshot);
     },
     runtimeSessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,

@@ -9,6 +9,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
+import { recordActivationProof } from './capture-disclosure.ts';
 import type { RequestActivationProof } from './capture-disclosure.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
@@ -219,13 +220,8 @@ async function runCapture(
   });
   // Recorded here rather than at the caller that consumes the result: a sparse recovery re-capture
   // DISCARDS this tree and returns a fresh one, and the repair this capture paid for belongs to the
-  // request, not to whichever tree survives. First fact wins, so a later capture that reports no
-  // repair cannot erase the one that did (#2682).
-  const activationProof = params.activationProof;
-  if (activationProof && activationProof.state === undefined && capture.snapshot.targetActivation) {
-    activationProof.state = capture.snapshot;
-  }
-  return capture.snapshot;
+  // request, not to whichever tree survives (#2682).
+  return recordActivationProof(params.activationProof, capture.snapshot);
 }
 
 function readReusableLastSnapshot(params: {

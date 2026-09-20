@@ -1,5 +1,6 @@
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { recordActivationProof } from './capture-disclosure.ts';
 import type { RequestActivationProof } from './capture-disclosure.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
@@ -88,10 +89,7 @@ async function inspectCurrentSurface(
         }),
       ),
   });
-  const activationProof = params.activationProof;
-  if (activationProof && activationProof.state === undefined && capture.snapshot.targetActivation) {
-    activationProof.state = capture.snapshot;
-  }
+  recordActivationProof(params.activationProof, capture.snapshot);
   const orderedNodes = [...capture.snapshot.nodes].sort(compareSurfacePriority);
   const labels = topSurfaceTexts(orderedNodes, 6, { includeIdentifiers: true });
   if (labels.length === 0) return null;

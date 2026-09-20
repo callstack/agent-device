@@ -9,7 +9,7 @@ import {
   type IosTargetActivation,
   type IosTargetActivationPriorState,
   type IosTargetActivationReason,
-} from '@agent-device/contracts/ios-target-activation';
+} from '@agent-device/kernel/snapshot';
 
 /** Why a prior-state raw value could not be named, for the caller that owns the request log. */
 export type UnmappedPriorStateDetail = Readonly<{

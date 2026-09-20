@@ -3,8 +3,11 @@ import type {
   CaptureSnapshotInput,
   SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
-import { buildSnapshotPresentationKey, type SnapshotState } from '@agent-device/kernel/snapshot';
-import type { IosTargetActivation } from '@agent-device/contracts/ios-target-activation';
+import {
+  buildSnapshotPresentationKey,
+  type IosTargetActivation,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from '../daemon-request.ts';
 import { type RequestActivationProof, withCaptureDisclosures } from '../capture-disclosure.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';

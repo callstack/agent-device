@@ -14,17 +14,6 @@
  */
 import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
 
-export type {
-  IosTargetActivation,
-  IosTargetActivationPriorState,
-  IosTargetActivationReason,
-} from '@agent-device/kernel/snapshot';
-export {
-  IOS_TARGET_ACTIVATION_PRIOR_STATES,
-  IOS_TARGET_ACTIVATION_REASONS,
-  isIosTargetActivationReason,
-} from '@agent-device/kernel/snapshot';
-
 /**
  * What the earlier captures showed. Naming the live pid is a pointer to the only candidate, never a
  * claim that it owned the screen; with no single candidate the reader is told exactly that instead.
