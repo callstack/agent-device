@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
@@ -52,26 +53,48 @@ test('specialized daemon routes are claimed by their handler chain', async () =>
   }
 });
 
+// The generic route is the router's fallthrough, so it has two ways in: a descriptor that declares
+// `daemon.route: 'generic'`, and a catalog command that declares no daemon facet at all and lands
+// on the `?? 'generic'` fallback. The first is a decision read from the declaration; the second is
+// what this test exists to keep rare, so it is enumerated alone and by name.
+const CATALOG_COMMANDS = [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)];
+
+function declaredDaemonTraitCommands(): string[] {
+  return commandDescriptors
+    .filter((descriptor) => 'daemon' in descriptor && descriptor.daemon !== undefined)
+    .map((descriptor) => descriptor.name);
+}
+
+function genericByTraitCommands(): string[] {
+  return commandDescriptors
+    .filter((descriptor) => 'daemon' in descriptor && descriptor.daemon?.route === 'generic')
+    .map((descriptor) => descriptor.name);
+}
+
+function localCliCommands(): string[] {
+  return commandDescriptors
+    .filter((descriptor) => 'catalog' in descriptor && descriptor.catalog?.group === 'local-cli')
+    .map((descriptor) => descriptor.name);
+}
+
 test('catalog commands use generic routing only when intentionally passthrough or projected', () => {
+  const genericByAbsence = CATALOG_COMMANDS.filter(
+    (command) =>
+      !declaredDaemonTraitCommands().includes(command) && !localCliCommands().includes(command),
+  );
+  assert.deepEqual(
+    genericByAbsence,
+    [PUBLIC_COMMANDS.installFromSource],
+    'a catalog command reaches the generic route by declaring no daemon facet; declare daemon.route instead',
+  );
+
   const intentionalGenericCatalogCommands = [
-    PUBLIC_COMMANDS.actionButton,
-    PUBLIC_COMMANDS.appSwitcher,
-    PUBLIC_COMMANDS.back,
-    PUBLIC_COMMANDS.focus,
-    PUBLIC_COMMANDS.home,
-    PUBLIC_COMMANDS.installFromSource,
-    PUBLIC_COMMANDS.orientation,
-    PUBLIC_COMMANDS.screenshot,
-    PUBLIC_COMMANDS.scroll,
-    PUBLIC_COMMANDS.tvRemote,
-    PUBLIC_COMMANDS.viewport,
+    ...genericByTraitCommands(),
+    ...genericByAbsence,
   ].sort();
-  const genericCatalogCommands = [
-    ...Object.values(PUBLIC_COMMANDS),
-    ...Object.values(INTERNAL_COMMANDS),
-  ]
-    .filter((command) => getDaemonCommandRoute(command) === 'generic')
-    .sort();
+  const genericCatalogCommands = CATALOG_COMMANDS.filter(
+    (command) => getDaemonCommandRoute(command) === 'generic',
+  ).sort();
 
   assert.deepEqual(genericCatalogCommands, intentionalGenericCatalogCommands);
 });

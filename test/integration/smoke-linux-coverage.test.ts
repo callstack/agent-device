@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
 import {
   LINUX_COVERAGE_GAP_ISSUE,
   LINUX_COMMAND_EVIDENCE,
@@ -42,20 +43,15 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
 });
 
 test('Linux coverage report has the expected classification counts', () => {
-  assert.deepEqual(LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    // focus (#1925), click, and type remain live via the existing replay. The separate
-    // command-evidence lane adds nine generic-command rows without changing that replay. Artifact
-    // inventory remains a gap because local Linux screenshot paths are not daemon-downloadable.
-    // Keyboard, orientation and tv-remote were already fact-owned command-contract rows rather
-    // than catalog denials; R56 moves app-switcher the same way, for the same reason.
-    contract: 29,
-    gap: 9,
-    live: 17,
-    total: 55,
-  });
-
-  const { contract, gap, live, total } = LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY;
-  assert.equal(contract + gap + live, total);
+  // Focus (#1925), click, and type are live through the replay; the separate command-evidence
+  // lane adds generic-command rows without changing it. Artifact inventory stays a gap because
+  // local Linux screenshot paths are not daemon-downloadable.
+  assertCoverageClassificationSummaryDerivedFromManifest(
+    'Linux',
+    LINUX_PLATFORM_COVERAGE,
+    LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
+  );
 });
 
 test('Linux live claims reference commands in the existing smoke replay', () => {

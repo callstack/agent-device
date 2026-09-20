@@ -5,6 +5,7 @@ import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
 import {
   MACOS_COVERAGE_GAP_ISSUE,
   MACOS_LIVE_SCENARIOS,
@@ -14,8 +15,9 @@ import {
 } from './macos-e2e/coverage.ts';
 import { writeCoverageReport } from './macos-e2e/coverage-report.ts';
 
+const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
+
 test('macOS coverage exhaustively classifies the public catalog', () => {
-  const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
   assert.deepEqual(Object.keys(MACOS_PLATFORM_COVERAGE).sort(), publicCommands);
 
   for (const command of publicCommands) {
@@ -38,17 +40,11 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 });
 
 test('macOS coverage report counts every manifest classification', () => {
-  assert.deepEqual(MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    contract: 22,
-    gap: 15,
-    live: 18,
-    total: 55,
-  });
-  assert.equal(
-    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.live +
-      MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.contract +
-      MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.gap,
-    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.total,
+  assertCoverageClassificationSummaryDerivedFromManifest(
+    'macOS',
+    MACOS_PLATFORM_COVERAGE,
+    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
   );
 });
 

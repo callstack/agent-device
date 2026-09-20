@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { assertCoverageClassificationSummaryDerivedFromManifest } from './support/coverage-classification.ts';
 import { ANDROID_EMULATOR_BEHAVIOR_COVERAGE } from './android-emulator-e2e/behavior-coverage.ts';
 import { ANDROID_PERMISSION_PROMPT_COMMAND } from './android-emulator-e2e/live-lifecycle-scenario.ts';
 import {
@@ -19,8 +20,9 @@ import {
   selectAndroidEmulatorScenarios,
 } from './android-emulator-e2e/scenarios.ts';
 
+const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
+
 test('Android emulator coverage exhaustively classifies the public catalog', () => {
-  const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
   assert.deepEqual(Object.keys(ANDROID_EMULATOR_E2E_COVERAGE).sort(), publicCommands);
   for (const command of publicCommands) {
     const entry = ANDROID_EMULATOR_E2E_COVERAGE[command];
@@ -38,14 +40,12 @@ test('Android emulator coverage exhaustively classifies the public catalog', () 
 });
 
 test('Android coverage report summary accounts for every manifest classification', () => {
-  const summary = ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY;
-  assert.deepEqual(summary, {
-    contract: 14,
-    gap: 0,
-    live: 41,
-    total: 55,
-  });
-  assert.equal(summary.live + summary.contract + summary.gap, summary.total);
+  assertCoverageClassificationSummaryDerivedFromManifest(
+    'Android emulator',
+    ANDROID_EMULATOR_E2E_COVERAGE,
+    ANDROID_EMULATOR_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
+  );
 });
 
 test('Android live command ownership is structural and exhaustive', () => {
