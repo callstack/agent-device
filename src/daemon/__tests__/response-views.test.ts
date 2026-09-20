@@ -46,6 +46,20 @@ test('default and full return today’s shape unchanged (same reference)', () =>
   expect(snapshotView!(SNAPSHOT_DATA, 'full')).toBe(SNAPSHOT_DATA);
 });
 
+/**
+ * A digest is what an agent keeps reading after the tree collapses. A foreground repair that dropped
+ * out of it would leave a repaired capture looking like every earlier one (#2682).
+ */
+test('digest carries the foreground repair of the tree it collapsed', () => {
+  const repair = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  };
+  const digest = snapshotView!({ ...SNAPSHOT_DATA, targetActivation: repair }, 'digest');
+  expect(digest.targetActivation).toEqual(repair);
+});
+
 test('digest tolerates missing/empty node trees', () => {
   const digest = snapshotView!({ truncated: true }, 'digest');
   expect(digest).toMatchObject({ nodeCount: 0, refs: [], truncated: true });

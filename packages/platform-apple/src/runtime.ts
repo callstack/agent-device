@@ -103,7 +103,7 @@ const focusKindUnavailable = Object.freeze({
 const appStateUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'Apple appstate reads the active session state; a sessionless runtime foreground probe is unavailable. Whether the session app actually held the foreground is answered per command instead: a capture whose command had to re-activate it carries a targetActivation disclosure (#2682).',
+  hint: 'Apple appstate is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).',
 } as const);
 const headlessUnavailable = Object.freeze({
   available: false,

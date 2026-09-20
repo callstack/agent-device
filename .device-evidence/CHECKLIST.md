@@ -102,7 +102,6 @@ pins that a cache-reused tree discloses nothing, and
 `src/daemon/interaction/internal/__tests__/interaction-target-activation-disclosure.test.ts` pins that
 a press which consumed no capture is not disclosed against an older tree.
 
-D
 ## Why the live activation lane is manual
 
 `test/integration/smoke-ios-target-activation.test.ts` is env-gated and deliberately absent from the

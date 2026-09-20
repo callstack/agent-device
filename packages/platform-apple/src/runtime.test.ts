@@ -98,7 +98,7 @@ test.each([
   expect(facts.operations.appState).toEqual({
     available: false,
     reason: 'unsupported-platform-leaf',
-    hint: expect.stringContaining('session state'),
+    hint: expect.stringContaining('no sessionless foreground probe'),
   });
   expect(binding.operations.appState).toBeUndefined();
   expect(facts.operations.networkDump).toEqual({ available: true });

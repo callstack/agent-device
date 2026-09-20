@@ -31,17 +31,57 @@ export function messageCliOutput(result: Record<string, unknown>): CliOutput {
 }
 
 /**
- * The response message plus one `Warning:` line per entry of the response's `warnings`
- * array — the composable warnings channel (`open`, `debug`, snapshot capture use it too),
- * so a warning the daemon appended reaches the human CLI reader, not only `--json`.
+ * The response message plus one `Warning:` line per entry of the response's warnings — the
+ * composable warnings channel (`open`, `debug`, and every capture route use it), so a warning the
+ * daemon appended reaches the human CLI reader and not only `--json`.
  */
 export function messageWithWarningsText(result: Record<string, unknown>): string | null {
-  const message = readCommandMessage(result);
-  const warnings = readResponseWarnings(result);
-  if (warnings.length === 0) return message;
-  return [message, ...warnings.map((warning) => `Warning: ${collapseWarningText(warning)}`)]
-    .filter(Boolean)
-    .join('\n');
+  return appendWarningLinesText(readCommandMessage(result), result);
+}
+
+/**
+ * One `Warning:` line per response warning, after text a formatter rendered itself. Every
+ * capture-consuming command routes its text through this so a disclosure cannot be visible on
+ * `snapshot` and silent on the `get`/`is`/`find`/`wait`/`press` that consumed the same capture. A
+ * warning already in the text is skipped: two renderers may wrap one response (a settle-capable
+ * command's notes and its own line), and the second must not repeat the first.
+ */
+export function appendWarningLinesText(
+  text: string | null | undefined,
+  result: Record<string, unknown>,
+): string | null {
+  const rendered = text ?? '';
+  const warnings = [
+    ...(typeof result.warning === 'string' && result.warning.trim() !== '' ? [result.warning] : []),
+    ...readResponseWarnings(result),
+  ]
+    .map((warning) => collapseWarningText(warning))
+    .filter((warning) => warning.length > 0 && !rendered.includes(warning))
+    .map((warning) => `Warning: ${warning}`);
+  if (warnings.length === 0) return text ?? null;
+  return [...(rendered === '' ? [] : [rendered]), ...warnings].join('\n');
+}
+
+/**
+ * Appends the response's `Warning:` lines to a formatter's own text (#2682). A formatter that
+ * returns its output synchronously stays synchronous: the note is text, not work.
+ */
+export function withResponseWarnings<TFormatter extends CliOutputFormatter>(
+  formatter: TFormatter,
+): TFormatter {
+  return ((params: CliOutputFormatterParams) => {
+    const output = formatter(params);
+    return output instanceof Promise
+      ? output.then((resolved) => withWarningLines(resolved))
+      : withWarningLines(output);
+  }) as TFormatter;
+}
+
+function withWarningLines(output: CliOutput): CliOutput {
+  return {
+    data: output.data,
+    text: appendWarningLinesText(output.text, output.data as Record<string, unknown>),
+  };
 }
 
 /** Warning text can embed runner newlines; rendered warning lines stay one-per-warning. */

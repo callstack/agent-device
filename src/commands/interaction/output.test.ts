@@ -309,3 +309,57 @@ describe('longpress CLI output', () => {
     );
   });
 });
+
+// #2682: every capture-consuming command in this family owes the agent the same disclosure the
+// snapshot route prints. `data.warnings` is the array the repair sentence arrives on, and before this
+// only the singular `warning` field was rendered — so a repaired capture could read clean on `press`,
+// `get`, `is`, and `find` while `snapshot` said it out loud.
+const REPAIR_WARNING =
+  'The session app was not foreground when this command arrived (prior state runningBackground), so the runner activated it before answering (reason stale_target). Re-capture now.';
+
+describe('capture disclosures in default-mode text', () => {
+  const format = (command: 'press' | 'get' | 'is' | 'find', result: Record<string, unknown>) =>
+    interactionCliOutputFormatters[command]({ input: {}, result });
+
+  test('press prints the warnings-array disclosure after its tap line', async () => {
+    const output = await format('press', {
+      message: 'Tapped (10, 20)',
+      x: 10,
+      y: 20,
+      warnings: [REPAIR_WARNING],
+    });
+    expect(output.text).toBe(`Tapped (10, 20)\nWarning: ${REPAIR_WARNING}`);
+  });
+
+  test('is prints the disclosure after its verdict', async () => {
+    const output = await format('is', {
+      predicate: 'visible',
+      result: true,
+      warnings: [REPAIR_WARNING],
+    });
+    expect(output.text).toBe(`Passed: is visible\nWarning: ${REPAIR_WARNING}`);
+  });
+
+  test('find prints the disclosure after its match list', async () => {
+    const output = await format('find', {
+      matches: [{ ref: '@e5', node: { ref: 'e5', type: 'Cell', label: 'General' } }],
+      warnings: [REPAIR_WARNING],
+    });
+    expect(output.text).toBe(
+      ['1 match:', '= @e5 [cell] "General"', `Warning: ${REPAIR_WARNING}`].join('\n'),
+    );
+  });
+
+  test('get prints the disclosure in default mode', async () => {
+    const output = await format('get', { message: 'General', warnings: [REPAIR_WARNING] });
+    expect(output.text).toBe(`General\nWarning: ${REPAIR_WARNING}`);
+  });
+
+  test('get --format attrs keeps its JSON parseable', async () => {
+    const output = await interactionCliOutputFormatters.get({
+      input: { format: 'attrs' },
+      result: { node: { type: 'Cell', label: 'General' }, warnings: [REPAIR_WARNING] },
+    });
+    expect(() => JSON.parse(String(output.text))).not.toThrow();
+  });
+});

@@ -1,6 +1,6 @@
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import type { CliOutput } from './command-contract.ts';
-import { pinnedRefText, type CliOutputFormatter } from './output-common.ts';
+import { appendWarningLinesText, pinnedRefText, type CliOutputFormatter } from './output-common.ts';
 
 /**
  * Compact `--settle` (#1101) rendering appended to a command's own success
@@ -60,12 +60,15 @@ export function withSettleCapableNotes<Formatters extends Record<string, CliOutp
   return derived as Formatters;
 }
 
+/**
+ * The shared warning renderer owns the `Warning:` lines here too, so a settle response carries every
+ * warning the capture route appended and not only the singular `warning` field this used to read.
+ */
 function appendResponseNotes(
   text: string | null | undefined,
   data: Record<string, unknown>,
 ): string {
-  const warning = typeof data.warning === 'string' ? `\nWarning: ${data.warning}` : '';
-  return `${text ?? ''}${warning}${formatSettleText(data.settle)}`;
+  return `${appendWarningLinesText(text, data) ?? ''}${formatSettleText(data.settle)}`;
 }
 
 function formatSettleText(settle: unknown): string {

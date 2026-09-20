@@ -17,7 +17,7 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { messageOutput } from '../output-common.ts';
+import { messageWithWarningsOutput } from '../output-common.ts';
 import { WAIT_KIND_VALUES } from './wait-command-contract.ts';
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
@@ -68,7 +68,7 @@ export const waitCommandFacet = defineCommandFacet({
   cliSchema: waitCliSchema,
   cliReader: waitCliReader,
   daemonWriter: waitDaemonWriter,
-  cliOutputFormatter: messageOutput,
+  cliOutputFormatter: messageWithWarningsOutput,
 });
 
 function waitInputToOptions(input: Record<string, unknown>): WaitCommandOptions {

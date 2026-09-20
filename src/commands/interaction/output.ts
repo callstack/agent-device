@@ -4,10 +4,12 @@ import type { CliOutput } from '../command-contract.ts';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import {
+  appendWarningLinesText,
   messageCliOutput,
-  messageOutput,
+  messageWithWarningsOutput,
   pinnedRefText,
   resultOutput,
+  withResponseWarnings,
   type CliOutputFormatter,
 } from '../output-common.ts';
 import { withSettleCapableNotes } from '../settle-output.ts';
@@ -20,7 +22,7 @@ function getCliOutput(params: { result: CommandRequestResult; format?: string })
   if (params.format === 'attrs') {
     return { data, text: JSON.stringify(data.node ?? {}, null, 2) };
   }
-  return defaultCommandCliOutput(data);
+  return withResponseWarningsText(defaultCommandCliOutput(data));
 }
 
 function findCliOutput(result: CommandRequestResult): CliOutput {
@@ -38,7 +40,7 @@ function findCliOutput(result: CommandRequestResult): CliOutput {
   if (pinned) return { data, text: `Found: ${pinned}` };
   if (typeof data.found === 'boolean') return { data, text: `Found: ${data.found}` };
   if (data.node) return { data, text: JSON.stringify(data.node, null, 2) };
-  return defaultCommandCliOutput(data);
+  return withResponseWarningsText(defaultCommandCliOutput(data));
 }
 
 type FindMatchView = { ref?: string; node?: SnapshotNode };
@@ -85,18 +87,30 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
 export const interactionCliOutputFormatters = withSettleCapableNotes({
   click: resultOutput(tapCliOutput),
   press: resultOutput(tapCliOutput),
-  fill: messageOutput,
-  longpress: messageOutput,
-  hover: messageOutput,
-  scroll: messageOutput,
+  fill: messageWithWarningsOutput,
+  longpress: messageWithWarningsOutput,
+  hover: messageWithWarningsOutput,
+  scroll: messageWithWarningsOutput,
   get: ({ input, result }) =>
     getCliOutput({
       result: result as CommandRequestResult,
       format: input.format as Parameters<typeof getCliOutput>[0]['format'],
     }),
-  is: resultOutput(isCliOutput),
-  find: resultOutput(findCliOutput),
+  is: withResponseWarnings(resultOutput(isCliOutput)),
+  find: withResponseWarnings(resultOutput(findCliOutput)),
 } satisfies Record<string, CliOutputFormatter>);
+
+/**
+ * The family's default text, with the response's warnings after it. `get --format attrs`/`text` and
+ * the JSON node dump deliberately stay untouched: those texts are piped, and a trailing `Warning:`
+ * line would corrupt them.
+ */
+function withResponseWarningsText(output: CliOutput): CliOutput {
+  return {
+    data: output.data,
+    text: appendWarningLinesText(output.text, output.data as Record<string, unknown>),
+  };
+}
 
 function defaultCommandCliOutput(result: CommandRequestResult): CliOutput {
   return messageCliOutput(result as Record<string, unknown>);
