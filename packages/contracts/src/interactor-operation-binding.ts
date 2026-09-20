@@ -1,10 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type {
-  NoArgumentInteractorInput,
-  NoArgumentInteractorOperations,
-} from './platform-runtime-operations.ts';
 
 /**
  * The two ways an interactor-backed operation reaches its mechanics, shared by every binder that
@@ -48,29 +44,4 @@ export function providerInteractorSource(
       { reason: 'provider-runtime-interactor-missing', deviceId: params.device.id },
     );
   };
-}
-
-/**
- * Binds the zero-argument interactor operations group: one fact admits each member, one interactor
- * call performs it, and the only thing that travels is runner metadata. Each entry point supplies
- * its own resolution, so this holds only what they share — the abort check, the runner context, and
- * the call. `home` and `app-switcher` carry the same shape in modules written before the shape had a
- * name; a new member is one entry in `NoArgumentInteractorOperations` and one line here, plus its
- * catalog row, rather than another module and export subpath.
- */
-export function bindNoArgumentInteractorOperations(
-  signal: AbortSignal,
-  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): NoArgumentInteractorOperations {
-  return Object.freeze({
-    actionButton: async (input: NoArgumentInteractorInput) => {
-      signal.throwIfAborted();
-      const interactor = await resolveInteractor({
-        ...input.execution,
-        appBundleId: input.options?.appBundleId,
-        signal,
-      });
-      await interactor.actionButton();
-    },
-  });
 }

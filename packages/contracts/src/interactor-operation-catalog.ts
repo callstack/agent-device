@@ -10,15 +10,41 @@ import { bindOrientation } from './orientation-runtime.ts';
 import { bindSetSetting } from './settings-runtime.ts';
 import { bindTvRemote } from './tv-remote-runtime.ts';
 import {
-  bindNoArgumentInteractorOperations,
   localInteractorSource,
   providerInteractorSource,
   type LocalInteractorOperationResolver,
   type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
+import type {
+  NoArgumentInteractorOperations,
+  PlatformRuntimeOperations,
+} from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
+
+/**
+ * Binds the zero-argument interactor group declared by `NoArgumentInteractorOperations`: one fact
+ * admits each member, one interactor call performs it, and the only thing that travels is runner
+ * metadata. Every other catalog row imports a binder from the module that owns that operation's
+ * contract; this group has no operation-specific mechanism to own, so binding it here is what keeps
+ * it one row rather than a module, an export subpath, and a facts helper.
+ */
+function bindNoArgumentInteractorOperations(
+  signal: AbortSignal,
+  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+): NoArgumentInteractorOperations {
+  return Object.freeze({
+    actionButton: async (input) => {
+      signal.throwIfAborted();
+      const interactor = await resolveInteractor({
+        ...input.execution,
+        appBundleId: input.options?.appBundleId,
+        signal,
+      });
+      await interactor.actionButton();
+    },
+  });
+}
 
 /**
  * How a facet turns one resolved interactor into its own typed operations. Every catalog member
