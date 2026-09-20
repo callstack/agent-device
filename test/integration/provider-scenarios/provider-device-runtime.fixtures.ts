@@ -46,7 +46,7 @@ import type {
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
 import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
-import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -266,13 +266,10 @@ function providerScenarioRuntimeFacts(
       listApps: fakeProviderUnavailable,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       captureSnapshot: fakeProviderAvailable,
-      // The Action Button press is an interactor-catalog operation riding the same runner
-      // transport, but the hardware only exists on the iPhone/iPad leaf (#2699), so the fixture
-      // states it the way the Apple owner does instead of granting it to every provider device.
-      actionButton:
-        device.appleOs === 'ios' || device.appleOs === 'ipados'
-          ? fakeProviderAvailable
-          : fakeProviderUnavailable,
+      // The press rides the same interactor transport as every other catalog operation, but the
+      // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
+      // Apple owner's fact reads instead of restating it (#2699).
+      actionButton: hasAppleActionButton(device) ? fakeProviderAvailable : fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({

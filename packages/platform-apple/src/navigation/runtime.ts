@@ -1,5 +1,4 @@
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
-import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
@@ -8,7 +7,12 @@ import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orient
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hasAppleActionButton,
+  isTvOsDevice,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
 
@@ -139,20 +143,15 @@ const actionButtonOsUnavailable = Object.freeze({
   hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
 } as const);
 /**
- * The Action Button is a physical side control on iPhone and iPad (M4+) only, so this is a
- * positive OS reading rather than a reuse of {@link appleMobileInputEligible}: that predicate is
- * `orientation`'s and admits visionOS, whose headset has a Digital Crown and no Action Button.
- *
- * Which *model* inside an admitted leaf actually carries the button is not something `DeviceInfo`
- * records — discovery fills platform, kind, and Apple OS, never a model identifier. The runner
- * answers that with `XCUIDevice.hasHardwareButton(.action)` and reports a typed
- * UNSUPPORTED_OPERATION, so this fact stays a claim about the leaf and never guesses at hardware
- * it cannot see.
+ * The leaf reading is {@link hasAppleActionButton}, the same rule a provider owner reads; what this
+ * owner adds is its kind gate. The leaf is the whole claim: which model inside it carries the button
+ * is a hardware question the runner answers with `hasHardwareButton(.action)`, never a guess here.
+ * iPhone and iPad is deliberately not {@link appleMobileInputEligible}, which is `orientation`'s
+ * reading and admits visionOS — a headset has a Digital Crown and no Action Button.
  */
 function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return actionButtonKindUnavailable;
-  const os = resolveDeviceAppleOs(device);
-  return os === 'ios' || os === 'ipados' ? available : actionButtonOsUnavailable;
+  return hasAppleActionButton(device) ? available : actionButtonOsUnavailable;
 }
 
 /**
@@ -168,9 +167,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
-    ...actionButtonRuntimeOperationFacts({
-      actionButton: appleActionButtonFact(device),
-    }),
+    actionButton: appleActionButtonFact(device),
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),

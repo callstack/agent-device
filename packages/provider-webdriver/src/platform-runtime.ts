@@ -28,7 +28,6 @@ import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
-import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
@@ -673,7 +672,7 @@ function webDriverFacts(
       ...appSwitcherRuntimeOperationFacts({
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
-      ...actionButtonRuntimeOperationFacts({ actionButton: actionButtonUnavailable }),
+      actionButton: actionButtonUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command
       // drives on this provider.
       ...appEventRuntimeOperationFacts({

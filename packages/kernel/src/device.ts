@@ -175,6 +175,19 @@ export function resolveDeviceAppleOs(
 }
 
 /**
+ * The Apple leaves that carry a physical Action Button: iPhone and iPad, in a simulator or on
+ * hardware. tvOS and visionOS have no such control. Which *model* inside an admitted leaf has one
+ * is not something `DeviceInfo` records — discovery fills platform, kind, and Apple OS, never a
+ * model identifier — so a runner answers that with `XCUIDevice.hasHardwareButton(.action)`.
+ */
+export function hasAppleActionButton(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs'>,
+): boolean {
+  const appleOs = resolveDeviceAppleOs(device);
+  return appleOs === 'ios' || appleOs === 'ipados';
+}
+
+/**
  * @internal Type guard exposed for unit tests.
  */
 export function isPlatform(value: unknown): value is Platform {

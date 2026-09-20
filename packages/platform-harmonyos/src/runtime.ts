@@ -29,7 +29,6 @@ import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtim
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
-import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -277,9 +276,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // App switcher rides the same HDC-driven key input as home, so it shares that cell.
         ...appSwitcherRuntimeOperationFacts({ appSwitcher: harmonyFocusFact(device) }),
         // HarmonyOS devices have no Action Button control for HDC to press.
-        ...actionButtonRuntimeOperationFacts({
-          actionButton: harmonyPlatformLeafUnavailable,
-        }),
+        actionButton: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
         // The HDC-driven settings surface shares the interaction kind gate.

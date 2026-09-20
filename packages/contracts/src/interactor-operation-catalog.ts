@@ -1,7 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindAlertLeg } from './alert-runtime.ts';
 import { bindAppEvent } from './app-event-runtime.ts';
-import { bindActionButton } from './action-button-runtime.ts';
 import { bindAppSwitcher } from './app-switcher-runtime.ts';
 import { bindBack } from './back-runtime.ts';
 import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
@@ -11,6 +10,7 @@ import { bindOrientation } from './orientation-runtime.ts';
 import { bindSetSetting } from './settings-runtime.ts';
 import { bindTvRemote } from './tv-remote-runtime.ts';
 import {
+  bindNoArgumentInteractorOperations,
   localInteractorSource,
   providerInteractorSource,
   type LocalInteractorOperationResolver,
@@ -75,7 +75,11 @@ export const INTERACTOR_OPERATIONS = [
   { operation: 'readClipboard', label: 'clipboard read', bind: bindClipboardRead },
   { operation: 'writeClipboard', label: 'clipboard write', bind: bindClipboardWrite },
   { operation: 'appSwitcher', label: 'app-switcher', bind: bindAppSwitcher },
-  { operation: 'actionButton', label: 'action-button', bind: bindActionButton },
+  {
+    operation: 'actionButton',
+    label: 'action-button',
+    bind: bindNoArgumentInteractorOperations,
+  },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
   {

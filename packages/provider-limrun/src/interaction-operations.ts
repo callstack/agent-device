@@ -21,7 +21,6 @@ import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
-import { actionButtonRuntimeOperationFacts } from '@agent-device/contracts/action-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -343,9 +342,7 @@ export function limrunAppSwitcherOperationFacts(
 /** The Action Button refusal both Limrun legs share. */
 export function limrunActionButtonOperationFacts() {
   return Object.freeze({
-    ...actionButtonRuntimeOperationFacts({
-      actionButton: LIMRUN_ACTION_BUTTON_UNAVAILABLE,
-    }),
+    actionButton: LIMRUN_ACTION_BUTTON_UNAVAILABLE,
   });
 }
 

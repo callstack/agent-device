@@ -1532,9 +1532,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     // Admission is the owner's `actionButton` fact, the same ADR 0019 §9 shape as `home`. The
     // generic mutating traits are load-bearing beyond their shared shape: no post-action
-    // observation is declared, because the Action Button's Shortcut/App Intent delivery is
-    // expected to reach a backgrounded or terminated app, and settling would re-capture (and so
-    // foreground) the app the press is supposed to leave alone (#2699).
+    // observation is declared, because the press is delivered to the system rather than to the
+    // session app, and settling would re-capture (and so foreground) the app the press is supposed
+    // to leave alone (#2699).
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [actionButtonRuntimeUse] },
   },

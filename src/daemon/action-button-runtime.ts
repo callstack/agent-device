@@ -1,5 +1,7 @@
-import type { ActionButtonInput } from '@agent-device/contracts/action-button-runtime';
-import { actionButtonRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  actionButtonRuntimeUse,
+  type NoArgumentInteractorInput,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '@agent-device/kernel/success-text';
@@ -9,7 +11,7 @@ import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './run
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 
 /** The neutral intent one Action Button press carries, projected from a resolved command context. */
-function actionButtonInput(context: DaemonCommandContext): ActionButtonInput {
+function actionButtonInput(context: DaemonCommandContext): NoArgumentInteractorInput {
   return {
     ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
     execution: runtimeExecutionFromContext(context),

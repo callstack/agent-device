@@ -27,7 +27,6 @@ import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
-import { actionButtonRuntimeOperationFacts } from './action-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
@@ -242,7 +241,7 @@ export function createUnavailablePlatformRuntimeFacts(
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...appSwitcherRuntimeOperationFacts({ appSwitcher: frozen.appSwitcher }),
-      ...actionButtonRuntimeOperationFacts({ actionButton: frozen.actionButton }),
+      actionButton: frozen.actionButton,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
       ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),
       ...alertRuntimeOperationFacts({

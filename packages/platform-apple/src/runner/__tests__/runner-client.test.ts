@@ -3,6 +3,7 @@ import {
   isRequestCanceledError,
   AppError,
 } from '@agent-device/kernel/errors';
+import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner-command-manifest.ts';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { beforeEach, test, onTestFinished, vi } from 'vitest';
 import assert from 'node:assert/strict';
@@ -312,44 +313,13 @@ test('resolveRunnerDestination uses simulator destination for simulators', () =>
 });
 
 test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
-  const commands = Object.keys(runnerProtocolCommandFixtures).sort();
-  assert.deepEqual(commands, [
-    'actionButton',
-    'activate',
-    'alert',
-    'appSwitcher',
-    'back',
-    'backInApp',
-    'backSystem',
-    'desktopScroll',
-    'drag',
-    'findText',
-    'gesture',
-    'gestureViewport',
-    'home',
-    'keyboardDismiss',
-    'keyboardReturn',
-    'longPress',
-    'mouseClick',
-    'querySelector',
-    'readText',
-    'recordStart',
-    'recordStop',
-    'remotePress',
-    'rotate',
-    'screenshot',
-    'scroll',
-    'sequence',
-    'shutdown',
-    'snapshot',
-    'status',
-    'swipe',
-    'tap',
-    'targetReset',
-    'terminate',
-    'type',
-    'uptime',
-  ]);
+  // The trait manifest is the exhaustive runner-command enumeration — it is `satisfies
+  // Record<RunnerCommand['command'], …>` — so the fixture set is checked against that declaration
+  // instead of against a second hand-maintained list that a new command has to remember to update.
+  assert.deepEqual(
+    Object.keys(runnerProtocolCommandFixtures).sort(),
+    Object.keys(RUNNER_COMMAND_TRAIT_MANIFEST).sort(),
+  );
 
   const roundTrip = JSON.parse(JSON.stringify(runnerProtocolCommandFixtures)) as Record<
     string,
