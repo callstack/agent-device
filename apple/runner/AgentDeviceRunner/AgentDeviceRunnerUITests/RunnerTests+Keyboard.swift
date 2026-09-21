@@ -212,6 +212,7 @@ extension RunnerTests {
     if tapKeyboardDismissControl(app: app) {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
       waitForScreenshotStability(
+        app: app,
         timeout: KeyboardDismissObservationTiming.settleTimeout,
         sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
         requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
@@ -240,23 +241,38 @@ extension RunnerTests {
   // so far, so it is unit-testable without a real screenshot pipeline; this loop
   // is the thin, untestable I/O shell around it.
   private func waitForScreenshotStability(
+    app: XCUIApplication,
     timeout: TimeInterval,
     sampleInterval: TimeInterval,
     requiredConsecutiveMatches: Int
   ) {
     let deadline = Date().addingTimeInterval(timeout)
-    var samples: [Data?] = [screenshotFingerprintForStabilityCheck()]
+    var samples: [Data?] = [screenshotFingerprintForStabilityCheck(app: app)]
     while Date() < deadline {
       sleepFor(sampleInterval)
-      samples.append(screenshotFingerprintForStabilityCheck())
+      samples.append(screenshotFingerprintForStabilityCheck(app: app))
       if runnerScreenshotStabilitySettled(samples, requiredConsecutiveMatches: requiredConsecutiveMatches) {
+        logScreenshotStability(samples: samples, settled: true)
         return
       }
     }
+    logScreenshotStability(samples: samples, settled: false)
   }
 
-  private func screenshotFingerprintForStabilityCheck() -> Data? {
-    guard let image = captureRunnerFrame() else { return nil }
+  /// Says what the settle actually looked at: samples that are all `nil` means the capture refused to
+  /// produce a frame, which is a different fact from a screen that never held still, and the two read
+  /// identically from the outside (#2728).
+  private func logScreenshotStability(samples: [Data?], settled: Bool) {
+    NSLog(
+      "AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=%ld captured=%ld settled=%@",
+      samples.count,
+      samples.compactMap { $0 }.count,
+      settled ? "yes" : "no"
+    )
+  }
+
+  private func screenshotFingerprintForStabilityCheck(app: XCUIApplication) -> Data? {
+    guard let image = captureRunnerFrame(app: app) else { return nil }
     return runnerPngData(for: image)
   }
 

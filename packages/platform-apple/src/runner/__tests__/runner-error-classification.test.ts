@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  classifyRunnerReportedError,
   RUNNER_ERROR_RULES,
+  RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
   isRetryableRunnerError,
   resolveRunnerFatalErrorReason,
   shouldRebuildCachedRunnerArtifact,
@@ -209,4 +211,20 @@ test('a terminal connect verdict refuses the restart even when the message match
   const both = commandFailed('xcodebuild exited early: runner did not accept connection');
   assert.equal(shouldRestartRunnerBeforeCommandSend(both), false);
   assert.equal(shouldRestartRunnerBeforeCommandSend(commandFailed('socket hang up')), false);
+});
+
+// The literals are what the Swift runner encodes, so they are the contract and not the constant
+// names: a rename on one side has to fail here rather than silently split the pair (#2728).
+test('a refused screen capture keeps the runner reason and stays off the wire code', () => {
+  assert.deepEqual([...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].sort(), [
+    'APP_SCREEN_CAPTURE_UNRENDERABLE',
+    'APP_SCREEN_UNRESOLVED',
+    'APP_SCREEN_WINDOW_UNRESOLVED',
+  ]);
+  for (const runnerCode of RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES) {
+    const classified = classifyRunnerReportedError(runnerCode);
+    assert.equal(classified.code, 'COMMAND_FAILED');
+    assert.equal(classified.details.runnerErrorCode, runnerCode);
+    assert.equal(classified.details.retriable, undefined);
+  }
 });

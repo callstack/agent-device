@@ -115,7 +115,7 @@ extension RunnerTests {
     guard let point = Self.topLeadingNavigationFallbackPoint(in: frame) else {
       return false
     }
-    let before = captureNavigationFallbackVisualState()
+    let before = captureNavigationFallbackVisualState(app: app)
     let context = synthesizedCoordinateContext(
       app: app,
       policy: synthesizedGesturePolicy(.coordinateTap)
@@ -124,33 +124,48 @@ extension RunnerTests {
       synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
     }
     if case .performed = synthesized.outcome {
-      return didNavigationFallbackChangeVisualState(before: before)
+      return didNavigationFallbackChangeVisualState(app: app, before: before)
     }
     let fallback = performGesture(app) {
       tapAt(app: app, x: point.x, y: point.y)
     }
     if case .performed = fallback.outcome {
-      return didNavigationFallbackChangeVisualState(before: before)
+      return didNavigationFallbackChangeVisualState(app: app, before: before)
     }
 #endif
     return false
   }
 
-  private func captureNavigationFallbackVisualState() -> Data? {
+  private func captureNavigationFallbackVisualState(app: XCUIApplication) -> Data? {
 #if os(iOS)
-    runnerPngData(for: XCUIScreen.main.screenshot().image)
+    // A visual check is optional evidence: a display that owns no window reports unknown by returning
+    // no sample, which the comparison below already reads as "nothing proved". It never reaches for
+    // a screen nobody is on, whose stable black would then be read as evidence that the tap did
+    // nothing (#2728).
+    guard case .success(let captured) = captureObservedScreen(app: app) else {
+      return nil
+    }
+    return runnerPngData(for: captured.image)
 #else
     return nil
 #endif
   }
 
-  private func didNavigationFallbackChangeVisualState(before: Data?) -> Bool {
+  private func didNavigationFallbackChangeVisualState(
+    app: XCUIApplication,
+    before: Data?
+  ) -> Bool {
     sleepFor(Self.navigationFallbackVerificationDelay)
-    let after = captureNavigationFallbackVisualState()
+    let after = captureNavigationFallbackVisualState(app: app)
     let changed = Self.didNavigationFallbackChangeVisualState(before: before, after: after)
-    if !changed {
-      NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_FALLBACK_NO_STATE_CHANGE")
-    }
+    // The sample sizes are what tells a refused capture apart from an unchanged screen, and the
+    // fallback is rare enough that saying so every time costs nothing (#2728).
+    NSLog(
+      "AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION beforeBytes=%ld afterBytes=%ld changed=%@",
+      before?.count ?? -1,
+      after?.count ?? -1,
+      changed ? "yes" : "no"
+    )
     return changed
   }
 

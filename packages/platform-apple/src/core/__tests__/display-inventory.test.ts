@@ -440,9 +440,41 @@ describe('captureSimulatorScreenshotWithRetry display targeting', () => {
 });
 
 describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
-  test('never rescales a runner capture with the resolved panel point scale', async () => {
-    const densityScales: (AppleDeviceDisplay | undefined)[] = [];
-    let runnerCaptures = 0;
+  test('rescales a runner capture with the scale that capture reported, not the resolved panel', async () => {
+    const sourceScales: (number | undefined)[] = [];
+    // A panel whose `pointScale` deliberately disagrees with the runner's report, so the assertion
+    // can tell the two sources apart rather than passing on a coincidence.
+    const litPanel = displayWith({ pointScale: 2 });
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
+      skipIosSimulatorBootCheck: true,
+      pixelDensity: 2,
+      deps: {
+        ensureBooted: async () => {},
+        resolveCaptureDisplay: async () => litPanel,
+        captureWithRetry: async () => {
+          throw new Error('simctl screenshot failed');
+        },
+        normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {
+          sourceScales.push(sourcePixelDensity);
+        },
+        captureWithRunner: async () => ({
+          displayID: 3,
+          pixelWidth: 2852,
+          pixelHeight: 2006,
+          pixelsPerPoint: 3,
+        }),
+        shouldFallbackToRunner: () => true,
+      },
+    });
+    assert.deepEqual(
+      sourceScales,
+      [3],
+      'the runner captured the panel hosting the app and reported that capture at scale 3',
+    );
+  });
+
+  test('keeps the source unmeasured when a runner reports no display facts', async () => {
+    const sourceScales: (number | undefined)[] = [];
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
       skipIosSimulatorBootCheck: true,
       pixelDensity: 2,
@@ -452,20 +484,36 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
         },
-        normalizeDensity: async (_device, _path, _density, display) => {
-          densityScales.push(display);
+        normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {
+          sourceScales.push(sourcePixelDensity);
         },
-        captureWithRunner: async () => {
-          runnerCaptures += 1;
-        },
+        captureWithRunner: async () => undefined,
         shouldFallbackToRunner: () => true,
       },
     });
-    assert.equal(runnerCaptures, 1);
     assert.deepEqual(
-      densityScales,
+      sourceScales,
       [undefined],
-      'the runner captures XCUIScreen.main, so no resolved panel scale may be applied',
+      'a runner that measured nothing leaves the source unmeasured rather than borrowing the resolved panel scale',
     );
+  });
+
+  test('names the resolved panel as the source for a simctl capture', async () => {
+    const sourceScales: (number | undefined)[] = [];
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
+      skipIosSimulatorBootCheck: true,
+      pixelDensity: 2,
+      deps: {
+        ensureBooted: async () => {},
+        resolveCaptureDisplay: async () => outerPanel,
+        captureWithRetry: async () => {},
+        normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {
+          sourceScales.push(sourcePixelDensity);
+        },
+        captureWithRunner: async () => undefined,
+        shouldFallbackToRunner: () => true,
+      },
+    });
+    assert.deepEqual(sourceScales, [outerPanel.pointScale]);
   });
 });

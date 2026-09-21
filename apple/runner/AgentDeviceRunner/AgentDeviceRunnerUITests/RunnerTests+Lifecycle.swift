@@ -42,7 +42,20 @@ enum RunnerInteractionIdleWaits {
 extension RunnerTests {
   // MARK: - Recording
 
-  func captureRunnerFrame() -> RunnerImage? {
+  /// One frame for the recording pump and the keyboard settle sample.
+  ///
+  /// On iOS the frame comes from the display owning a window, because a foldable's
+  /// `XCUIScreen.main` can be the dark outer panel while the app runs on the inner one — a stream of
+  /// identical black frames would then read as a settled screen and as a finished recording (#2728).
+  /// An observation with no session window falls to the system surface's window, which is what the
+  /// home screen is. macOS keeps recording the host display the way it always has.
+  func captureRunnerFrame(app: XCUIApplication) -> RunnerImage? {
+#if os(iOS)
+    guard case .success(let captured) = captureObservedScreen(app: app) else {
+      return nil
+    }
+    return captured.image
+#else
     var image: RunnerImage?
     let capture = {
       let screenshot = XCUIScreen.main.screenshot()
@@ -54,6 +67,7 @@ extension RunnerTests {
       DispatchQueue.main.sync(execute: capture)
     }
     return image
+#endif
   }
 
   func screenshotRoot(app: XCUIApplication) -> XCUIElement {
@@ -64,6 +78,54 @@ extension RunnerTests {
     }
 #endif
     return app
+  }
+
+  /// Answers a `screenshot` command with one encoded image: inline when the caller asked for bytes,
+  /// otherwise as a path the host reads out of the runner's own container. `metadata` carries the
+  /// display the image came from whenever the capture resolved one, so the host never has to guess
+  /// the density of a panel it did not measure (#2728).
+  func screenshotResponse(
+    pngData: Data,
+    inlineScreenshot: Bool,
+    metadata: ScreenshotMetadataPayload? = nil
+  ) -> Response {
+    if inlineScreenshot {
+      return Response(
+        ok: true,
+        data: DataPayload(imageBase64: pngData.base64EncodedString(), screenshotMetadata: metadata)
+      )
+    }
+    let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
+    let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
+    do {
+      try pngData.write(to: URL(fileURLWithPath: filePath))
+    } catch {
+      return Response(
+        ok: false,
+        error: ErrorPayload(message: "Failed to write screenshot: \(error.localizedDescription)")
+      )
+    }
+#if os(macOS)
+    return Response(ok: true, data: DataPayload(message: filePath, screenshotMetadata: metadata))
+#else
+    // Return path relative to app container root (tmp/ maps to NSTemporaryDirectory)
+    return Response(
+      ok: true,
+      data: DataPayload(message: "tmp/\(fileName)", screenshotMetadata: metadata)
+    )
+#endif
+  }
+
+  /// Encodes a captured image as PNG and answers with it, or with the failure to encode it.
+  func screenshotResponse(
+    image: RunnerImage,
+    inlineScreenshot: Bool,
+    metadata: ScreenshotMetadataPayload? = nil
+  ) -> Response {
+    guard let pngData = runnerPngData(for: image) else {
+      return Response(ok: false, error: ErrorPayload(message: "Failed to encode screenshot as PNG"))
+    }
+    return screenshotResponse(pngData: pngData, inlineScreenshot: inlineScreenshot, metadata: metadata)
   }
 
   func stopRecordingIfNeeded() {

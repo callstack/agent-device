@@ -49,6 +49,7 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
+  readRunnerScreenCaptureMetadata,
   resolveSimulatorRunnerScreenshotCandidatePaths,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
@@ -257,7 +258,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
       });
     }
   });
-  const captureWithRunner = vi.fn(async () => {});
+  const captureWithRunner = vi.fn(async () => undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
@@ -295,7 +296,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
       timeoutMs: 20_000,
     });
   });
-  const captureWithRunner = vi.fn(async () => {});
+  const captureWithRunner = vi.fn(async () => undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
@@ -495,6 +496,62 @@ test('captureScreenshotViaRunner reuses a verified simulator container path', as
   }
 });
 
+test('captureScreenshotViaRunner reports the display facts a runner capture measured', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-runner-metadata-');
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'duo.png');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-metadata' };
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-image', 'utf8');
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    message: 'tmp/duo.png',
+    screenshotMetadata: { displayID: 3, pixelWidth: 2852, pixelHeight: 2006, pixelsPerPoint: 3 },
+  });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  try {
+    const outPath = path.join(tmpDir, 'out.png');
+    const metadata = await captureScreenshotViaRunner(device, outPath);
+    assert.deepEqual(metadata, {
+      displayID: 3,
+      pixelWidth: 2852,
+      pixelHeight: 2006,
+      pixelsPerPoint: 3,
+    });
+    assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('captureScreenshotViaRunner reports no display facts for a pre-panel runner', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-runner-no-metadata-');
+  const containerPath = path.join(tmpDir, 'container');
+  const runnerImage = path.join(containerPath, 'tmp', 'legacy.png');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-no-metadata' };
+  await fs.mkdir(path.dirname(runnerImage), { recursive: true });
+  await fs.writeFile(runnerImage, 'runner-image', 'utf8');
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/legacy.png' });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  try {
+    const outPath = path.join(tmpDir, 'out.png');
+    assert.equal(await captureScreenshotViaRunner(device, outPath), undefined);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('captureScreenshotViaRunner copies macOS runner screenshots from the host', async () => {
   const tmpDir = await mkdtempForTest('agent-device-macos-screenshot-');
   const sourcePath = path.join(tmpDir, 'runner.png');
@@ -510,4 +567,53 @@ test('captureScreenshotViaRunner copies macOS runner screenshots from the host',
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
+});
+
+// The open-Duo row of the #2727 measurement: a resolved inner panel reports 2852x2006 at scale 3,
+// one pixel per axis smaller than the size CoreDevice calls the panel.
+const OPEN_DUO_CAPTURE = {
+  displayID: 3,
+  pixelWidth: 2852,
+  pixelHeight: 2006,
+  pixelsPerPoint: 3,
+};
+
+// The wire key is spelled as a literal because the Swift encoder, not this module, owns it (#2728).
+function runnerCapturePayload(metadata: unknown): Record<string, unknown> {
+  return { message: 'tmp/screenshot-1.png', screenshotMetadata: metadata };
+}
+
+test('reads the display facts a resolved runner capture reported', () => {
+  assert.deepEqual(
+    readRunnerScreenCaptureMetadata(runnerCapturePayload(OPEN_DUO_CAPTURE)),
+    OPEN_DUO_CAPTURE,
+  );
+  assert.deepEqual(
+    readRunnerScreenCaptureMetadata(
+      runnerCapturePayload({
+        displayID: 1,
+        pixelWidth: 1398,
+        pixelHeight: 2034,
+        pixelsPerPoint: 3,
+      }),
+    ),
+    { displayID: 1, pixelWidth: 1398, pixelHeight: 2034, pixelsPerPoint: 3 },
+  );
+});
+
+test('reports no source fact when the runner carried no metadata', () => {
+  assert.equal(readRunnerScreenCaptureMetadata({ message: 'tmp/screenshot-1.png' }), undefined);
+});
+
+test.each([
+  ['a non-object payload', 'not-an-object'],
+  ['an array payload', [OPEN_DUO_CAPTURE]],
+  ['the pre-panel scale probe value leaking in as zero', { ...OPEN_DUO_CAPTURE, displayID: 0 }],
+  ['a zero-scale image', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: 0 }],
+  ['a non-integer pixel box', { ...OPEN_DUO_CAPTURE, pixelWidth: 2852.5 }],
+  ['a missing side', { displayID: 3, pixelWidth: 2852, pixelsPerPoint: 3 }],
+  ['a negative scale', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: -3 }],
+  ['a non-numeric scale', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: '3' }],
+])('refuses %s rather than guessing a capture scale', (_case, metadata) => {
+  assert.equal(readRunnerScreenCaptureMetadata(runnerCapturePayload(metadata)), undefined);
 });

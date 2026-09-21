@@ -1466,7 +1466,7 @@ extension RunnerTests {
           fps: command.fps.map { Int32($0) }
         )
         try recorder.start { [weak self] in
-          return self?.captureRunnerFrame()
+          return self?.captureRunnerFrame(app: activeApp)
         }
         activeRecording = recorder
         return Response(ok: true, data: DataPayload(message: "recording started"))
@@ -2055,7 +2055,6 @@ extension RunnerTests {
     case .snapshot:
       return try executeSnapshotPrepared(command: command, activeApp: activeApp)
     case .screenshot:
-      let screenshot: XCUIScreenshot
 #if os(macOS)
       // macOS keeps the app-targeted capture behavior for window-level screenshots.
       if let bundleId = command.appBundleId, !bundleId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2065,6 +2064,7 @@ extension RunnerTests {
         // Brief wait for the app transition animation to complete
         sleepFor(0.5)
       }
+      let screenshot: XCUIScreenshot
       if command.fullscreen == true {
         screenshot = XCUIScreen.main.screenshot()
       } else if let bundleId = command.appBundleId, !bundleId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2072,30 +2072,52 @@ extension RunnerTests {
       } else {
         screenshot = XCUIScreen.main.screenshot()
       }
-#else
-      screenshot = XCUIScreen.main.screenshot()
-#endif
-      guard let pngData = runnerPngData(for: screenshot.image) else {
-        return Response(ok: false, error: ErrorPayload(message: "Failed to encode screenshot as PNG"))
-      }
-      if command.inlineScreenshot == true {
+      return screenshotResponse(
+        image: screenshot.image,
+        inlineScreenshot: command.inlineScreenshot == true
+      )
+    #elseif os(iOS)
+      // A foldable lights one panel at a time while `XCUIScreen.main` names one fixed panel, so an
+      // app on the other panel is captured as a valid PNG of nothing. The capture comes from the
+      // display owning a window, and a display that no window can name fails this required capture
+      // instead of answering with the main screen (#2728).
+      //
+      // `.screenshot` is a runner-lifecycle command, which skips the preflight that resolves the
+      // session app, so on a fresh runner process `activeApp` is still the runner host app. The
+      // requested bundle id is resolved here and never activated: an observation must not change
+      // which app is foregrounded in order to see which display it is on (#2728).
+      switch captureObservedScreen(app: resolveAppWithoutActivation(command: command)) {
+      case .failure(let failure):
         return Response(
-          ok: true,
-          data: DataPayload(imageBase64: pngData.base64EncodedString())
+          ok: false,
+          error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+        )
+      case .success(let captured):
+        // The facts travel to the host in the response and to the operator in runner.log, because a
+        // capture whose density is in question is argued from what the capture itself measured.
+        NSLog(
+          "AGENT_DEVICE_RUNNER_SCREEN_CAPTURE display=%lu pixels=%ldx%ld pixelsPerPoint=%g",
+          captured.displayID,
+          captured.pixelWidth,
+          captured.pixelHeight,
+          captured.pixelsPerPoint
+        )
+        return screenshotResponse(
+          image: captured.image,
+          inlineScreenshot: command.inlineScreenshot == true,
+          metadata: ScreenshotMetadataPayload(
+            displayID: captured.displayID,
+            pixelWidth: captured.pixelWidth,
+            pixelHeight: captured.pixelHeight,
+            pixelsPerPoint: captured.pixelsPerPoint
+          )
         )
       }
-      let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-      let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
-      do {
-        try pngData.write(to: URL(fileURLWithPath: filePath))
-      } catch {
-        return Response(ok: false, error: ErrorPayload(message: "Failed to write screenshot: \(error.localizedDescription)"))
-      }
-#if os(macOS)
-      return Response(ok: true, data: DataPayload(message: filePath))
 #else
-      // Return path relative to app container root (tmp/ maps to NSTemporaryDirectory)
-      return Response(ok: true, data: DataPayload(message: "tmp/\(fileName)"))
+      return screenshotResponse(
+        image: XCUIScreen.main.screenshot().image,
+        inlineScreenshot: command.inlineScreenshot == true
+      )
 #endif
     case .back, .backInApp:
       if tapInAppBackControl(app: activeApp) {

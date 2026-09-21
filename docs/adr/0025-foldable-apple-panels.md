@@ -19,7 +19,7 @@ device is in**. The first is answered by an official host API; the second only b
 | Device has more than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`; never rely on the implicit default |
 | Panel power is ambiguous (zero or several lit panels) | Still name a panel — the `primary` one — emit `apple_display_capture_ambiguous`, and report the pose as `unknown` |
 | Device has one integrated panel | Keep the pre-panel behavior exactly: no display flag, no pose, unchanged scale probe |
-| Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture keeps the scale probe because `XCUIScreen.main` names the outer panel even while the inner one is lit, which the Runner capture migration below would retire |
+| Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture uses the pixels-per-point that capture reported about itself |
 | Pose must be reported | From panel power alone, report `closed`, `fully-open`, or `unknown`, and never narrower; `fold` reports the exact pose because it reads the hinge angle |
 | A pose change is requested | `agent-device fold <closed\|half-open\|open>`: press the pose control in the Device Hub window through macOS accessibility, then read the hinge angle back from CoreDevice until it agrees — for `half-open`, until two consecutive readings agree; refuse the pose if it never does |
 | The hinge reaches `half-open` but keeps moving | Refuse it as `fold-pose-unsettled` with the observed and previous angles: an angle inside the open interval is an observed category, not a pose the hinge holds |
@@ -86,6 +86,45 @@ fix, and no screen-selection flag is warranted.
 
 `SIMULATOR_MAINSCREEN_SCALE` is likewise fixed to one panel while the captured panel can be the
 other, so density normalization now takes `pointScale` from the panel that was captured.
+
+### Runner capture follows the app's window (#2728)
+
+Naming the lit panel only helps a capture that asks CoreDevice. The runner captured
+`XCUIScreen.main`, one fixed panel, so a capture reached through the runner — the fallback when
+`simctl` fails, and every visual verification inside the runner — followed a panel chosen at build
+time instead of the app. The runner now resolves the app window first, reads the display off that
+same window instance, and encodes the capture upright, because the image handed back for a panel
+the system presents turned has its buffer sideways.
+
+The capture reports the display ID it used, the pixel size it encoded, and the pixels-per-point of
+that image, so density normalization reads the source it captured instead of applying a scale the
+host inferred. A runner that reports nothing measured nothing, and normalization keeps the pre-panel
+answer rather than borrowing a scale from a panel nobody captured.
+
+A capture asks the target app's window first and the system surface's window second. The home screen
+is SpringBoard's window, so a capture with no session app — or with one that is not running — still
+has a display that owns a window, and asking for it keeps the foldable rule intact: the answer is
+always a display a window actually occupies, never `XCUIScreen.main`, which on a Duo is the dark
+panel whenever the app is inside. A capture fails closed with a typed reason only when neither
+resolves a window. An app with no window is refused on the query's own `exists` answer as well as on
+its frame: a windowless app answers `frame` with `(0,0 0x0)` without raising, so geometry alone
+cannot say "no window".
+
+Both answers are measured rather than assumed. A session with no app, and one whose app was terminated while still bound, answer the window query with `resolved=no`, and the capture that follows names the lit panel — on an unfolded Duo that is `LCD-1`, and the resulting home-screen image contains no black pixel. An app suspended by `home` keeps answering with a usable window, so it takes the first branch and still captures the panel it is on.
+
+`screenshot` is a runner-lifecycle command and skips the app-activation preflight, which left its
+app as the runner host process on a fresh runner — a process with no window at all. It resolves the
+requested bundle id for observation instead, and never activates an app to learn what it is
+foregrounded on. Measured on a live Duo through the runner route, one command with unchanged flags:
+
+| Pose | Lit panel | Capture | Mean luma |
+| --- | --- | --- | --- |
+| Open (hinge 180°) | `LCD-1` (ID 3) | 951x669 @1x | 214 |
+| Half-open (hinge 130°) | `LCD-1` (ID 3) | 951x669 @1x | 214 |
+| Closed (hinge 0°) | `LCD` (ID 1) | 466x678 @1x | 177 |
+
+The closed row is the point: the same command followed the app onto the other panel without being
+told, and every row is real content where a main-screen capture of the unlit panel is black.
 
 ## Pose control: Device Hub's control, CoreDevice's verdict
 
@@ -369,27 +408,20 @@ incorrect viewport, not an inner-panel delivery prohibition.
 
 ## Accepted evidence gaps
 
-- **Runner capture migration.** `XCUIScreen.main` is six call expressions in four files, and the
-  iOS-reachable ones capture a dark panel once an unfolded Duo moves the app to the inner one: the
-  `screenshot` command's non-macOS branch in `RunnerTests+CommandExecution.swift`; its two `#if
-  os(macOS)` siblings are `XCUIScreen.main` captures too and only the branch between them captures
-  the app's own root, so the desktop's behavior stays unmeasured here and the desktop also reaches
-  the screen through Screen Capture Kit in `AgentDeviceMacOSHelper`. Then `captureRunnerFrame` in
-  `RunnerTests+Lifecycle.swift`, which feeds both the recorder and the keyboard stability
-  fingerprint in `RunnerTests+Keyboard.swift`; the in-app-back visual-state probe in
-  `RunnerTests+Navigation.swift`; and the synthesized-gesture reference frame in
-  `RunnerTests+Interaction.swift`, which only the unmerged #2724 replaces. All of them call the
-  expression the measurement above ran, so they follow by construction and not by measurement, and
-  two fail less visibly than a black screenshot: identical black samples satisfy
-  `runnerScreenshotStabilitySettled` on its first interval whatever the keyboard is doing, and an
-  unchanged black pair logs `AGENT_DEVICE_RUNNER_IN_APP_BACK_FALLBACK_NO_STATE_CHANGE` and reports
-  a back navigation that worked as one that failed. Host-side, `screenshot.ts` passes no scale
-  precisely because the runner captures `XCUIScreen.main`, `display-inventory.test.ts` asserts
-  that, and `commands.md` tells users the physical capture is built from
-  `XCUIScreen.main.screenshot()` frames, so all three move with the runner; #2727's comment carries
-  the line-numbered inventory. CoreDevice still names the panel, since `XCUIScreen` has no
-  panel-power fact to trade on. Physical devices compile the same source and no physical foldable
-  was measured, so that path stays unverified. - **Quarter-turn detection.** Both Duo panels report
+- **Runner capture on a physical foldable.** The runner resolves the app's own display and was
+  verified across the open, half-open, and closed poses on a simulated Duo, but the same route on a
+  physical foldable was never exercised.
+- **Runner observation paths that sample a frame.** Keyboard settling, screen recording, and the
+  navigation fallback now take their frame from the display owning a window and each states in
+  `runner.log` what it looked at, but none was watched on a device that changes panel under it. A
+  pose change mid-recording still changes the captured display under a writer sized from the first
+  frame, and that mismatch was never exercised.
+- **Desktop capture paths.** The two `#if os(macOS)` siblings of the `screenshot` capture in
+  `RunnerTests+CommandExecution.swift` keep capturing the desktop screen, which also reaches the
+  screen through Screen Capture Kit in `AgentDeviceMacOSHelper`; only the iOS branches changed
+  target, and the desktop behavior stays unmeasured here.
+
+- **Quarter-turn detection.** Both Duo panels report
   `currentOrientation: rot90`, and no available path rotates a foldable, so the orientation half of
   the inventory is carried but never exercised against a changed value. - **Pose control on a
   second Device Hub instance.** Discovery checks every matching process, but simultaneous Xcodes

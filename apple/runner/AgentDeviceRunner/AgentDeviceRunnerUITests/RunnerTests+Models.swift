@@ -260,6 +260,16 @@ extension Response {
   }
 }
 
+/// The display one runner screenshot came from, as the capture measured it rather than as the host
+/// could guess. A runner capture can come from a different panel than the one the host resolved, so
+/// density normalization has to read the scale of the image that was actually taken (#2728).
+struct ScreenshotMetadataPayload: Codable {
+  let displayID: UInt
+  let pixelWidth: Int
+  let pixelHeight: Int
+  let pixelsPerPoint: Double
+}
+
 /// Foreground repair the runner performed while serving one command (#2682). `priorState` is the
 /// bound app's `XCApplicationState` raw value read BEFORE `XCUIApplication.activate()` ran, so the
 /// fact describes what was repaired rather than what the repair produced. `otherActiveApplicationPid`
@@ -330,6 +340,9 @@ struct DataPayload: Codable {
   var failedStepIndex: Int?
   var sequenceResults: [SequenceStepResult]?
   var targetActivation: TargetActivationFactPayload?
+  /// Present on a screenshot the runner captured from a display it resolved, alongside the
+  /// `message` path or `imageBase64` payload that carries the image itself (#2728).
+  var screenshotMetadata: ScreenshotMetadataPayload?
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"

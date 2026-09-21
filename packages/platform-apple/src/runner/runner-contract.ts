@@ -696,6 +696,24 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
 export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
 
 /**
+ * The codes the XCTest runner answers with when a screenshot did not happen (#2728): no window
+ * resolved so no display could be named, the resolved window named no display, or the resolved
+ * display handed back an image it could not encode upright. They are the runner's own vocabulary, so
+ * they are declared here beside the set that keeps them off the wire, and a required capture fails
+ * closed on them rather than falling back to a screen nobody is on.
+ */
+const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
+const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
+const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
+
+/** Every runner code meaning "this capture did not happen", covering the display and the image. */
+export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
+  RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
+  RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
+  RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
+]);
+
+/**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
  * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet, and
@@ -706,6 +724,7 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlySet<string> = new Set([
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   ALERT_NOT_FOUND_RUNNER_CODE,
   SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
+  ...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
 ]);
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
