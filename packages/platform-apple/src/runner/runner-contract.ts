@@ -234,7 +234,10 @@ type RunnerErrorVerdicts = {
  * with the hint beside it. The two reach the caller at different moments, which is the whole
  * asymmetry of #2683: a disabled Developer Mode toggle refuses the run up front, while an unavailable
  * developer disk image is published onto a build that named no cause of its own, because iOS 17+
- * mounts that image on demand during build and launch.
+ * mounts that image on demand during build and launch. A connect-stage failure always claims a cause
+ * of its own (`IOS_RUNNER_CONNECT_TIMEOUT` unless a provisioning row matches first), so there the
+ * image state travels only as `details.developerDiskImage`, and
+ * `device_developer_disk_image_unavailable` is published only from the startup build catch.
  */
 export const RUNNER_DEVICE_READINESS_FAILURE_REASONS = [
   'device_developer_mode_disabled',
@@ -810,10 +813,11 @@ export function buildRunnerConnectError(params: {
   endpoints: string[];
   logPath?: string;
   lastError: unknown;
+  deviceStates?: IosRunnerDeviceStates;
 }): AppError {
-  const { port, endpoints, logPath, lastError } = params;
+  const { port, endpoints, logPath, lastError, deviceStates } = params;
   const message = 'Runner did not accept connection';
-  return new AppError('COMMAND_FAILED', message, {
+  const error = new AppError('COMMAND_FAILED', message, {
     port,
     endpoints,
     logPath,
@@ -825,6 +829,9 @@ export function buildRunnerConnectError(params: {
     }),
     hint: bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
   });
+  // The other way the connect stage gives up: `xcodebuild` is still alive at the deadline. It gets
+  // the same enrichment as the early exit below (#2683).
+  return enrichRunnerStartupFailureWithDeviceStates(error, deviceStates) as AppError;
 }
 
 export async function buildRunnerEarlyExitError(params: {

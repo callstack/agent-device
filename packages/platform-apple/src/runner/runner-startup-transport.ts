@@ -123,7 +123,13 @@ export async function waitForRunner(
   if (session?.child.exitCode !== null && session?.child.exitCode !== undefined) {
     throw await buildRunnerEarlyExitError({ session, port, logPath });
   }
-  throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
+  throw buildRunnerConnectError({
+    port,
+    endpoints: route.endpoints,
+    logPath,
+    lastError,
+    deviceStates: session?.startupDeviceStates,
+  });
 }
 
 type RunnerRouteResolver = ReturnType<typeof createRunnerCommandRouteResolver>['resolveRoute'];

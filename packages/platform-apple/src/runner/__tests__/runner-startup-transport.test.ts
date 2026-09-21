@@ -253,6 +253,42 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
   assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
 });
 
+test('waitForRunner carries the disk-image state when the runner is still alive at the connect deadline (#2683)', async () => {
+  // The alive-child twin of the early exit: `xcodebuild` never exits, the runner never answers, and
+  // the failure a locked phone produces this way must still say what the phone reported.
+  const session: RunnerSession = {
+    sessionId: 'starting-device-session',
+    device: xctestIosDevice,
+    deviceId: xctestIosDevice.id,
+    port: 8100,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    jsonPath: '/tmp/runner.json',
+    testPromise: new Promise(() => {}),
+    child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
+    state: 'starting',
+    startupDeviceStates: {
+      developerMode: 'enabled',
+      developerDiskImage: 'unavailable',
+      developerDiskImageHint: 'Unlock the iPhone so it can mount the developer disk image.',
+    },
+  };
+  mockUsbmuxPostCommand.mockRejectedValue(new Error('ECONNREFUSED'));
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+
+  await assert.rejects(
+    () =>
+      waitForRunner(xctestIosDevice, 8100, { command: 'uptime' }, '/tmp/runner.log', 100, session),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.message, 'Runner did not accept connection');
+      assert.equal(appError.details?.developerDiskImage, 'unavailable');
+      assert.equal(appError.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+      assert.doesNotMatch(String(appError.details?.hint), /Unlock the iPhone/);
+      return true;
+    },
+  );
+});
+
 test('waitForRunner reports the usbmux verdict for xctest devices without retrying', async () => {
   // Regression: an XCTest device has no tunnel, so retrying cannot attach a
   // cable. Before this was terminal, readiness preflight and read-only
