@@ -10,7 +10,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const packageScript = path.join(repoRoot, 'scripts', 'package-apple-runner-source.mjs');
 const runnerSnapshotSwiftPath = path.join(
   repoRoot,
-  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift',
+  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotAcquisition.swift',
 );
 
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
