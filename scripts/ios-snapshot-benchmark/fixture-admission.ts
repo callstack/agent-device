@@ -5,6 +5,14 @@ import type { Failure, ScreenFixture } from './types.ts';
 
 export type FixtureAnchorPhase = 'opened' | 'prepared' | 'sample';
 
+/**
+ * Setup reads are untimed, so an anchor read that lands before the app has mounted its first tree
+ * is waited out instead of stopping the run. The budget must stay far below the operation timeout
+ * it precedes; a fixture that never exposes its anchor still stops the run.
+ */
+export const FIXTURE_ANCHOR_ADMISSION_BUDGET_MS = 30_000;
+const FIXTURE_ANCHOR_POLL_INTERVAL_MS = 500;
+
 export type FixtureOperationResult = {
   ok: boolean;
   payload: unknown;
@@ -19,30 +27,62 @@ export type FixturePreparationDriver = {
   openAlert: () => FixtureOperationResult | Promise<FixtureOperationResult>;
 };
 
+export type FixturePreparationOptions = {
+  anchorBudgetMs?: number;
+  anchorPollMs?: number;
+};
+
 export async function prepareFixture(
   fixture: ScreenFixture,
   driver: FixturePreparationDriver,
+  options: FixturePreparationOptions = {},
 ): Promise<void> {
-  const opened = await driver.observe();
-  requireFixtureOperationSuccess(
-    opened,
-    `${fixture.id} semantic anchor observation`,
-    'fixture-anchor',
-  );
-  requireFixtureAnchor(opened.payload, fixture, 'opened', opened.command);
+  await observeFixtureAnchor(fixture, driver, 'opened', options);
   if (fixture.setupAction !== 'open-alert') return;
 
   const scrolled = await driver.scrollToBottom();
   requireFixtureOperationSuccess(scrolled, `${fixture.id} setup scroll`, 'cell-state');
   const alert = await driver.openAlert();
   requireFixtureOperationSuccess(alert, `${fixture.id} setup action`, 'cell-state');
-  const prepared = await driver.observe();
-  requireFixtureOperationSuccess(
-    prepared,
-    `${fixture.id} post-setup semantic anchor observation`,
-    'fixture-anchor',
-  );
-  requireFixtureAnchor(prepared.payload, fixture, 'prepared', prepared.command);
+  await observeFixtureAnchor(fixture, driver, 'prepared', options);
+}
+
+async function observeFixtureAnchor(
+  fixture: ScreenFixture,
+  driver: FixturePreparationDriver,
+  phase: Exclude<FixtureAnchorPhase, 'sample'>,
+  options: FixturePreparationOptions,
+): Promise<FixtureOperationResult> {
+  const budgetMs = options.anchorBudgetMs ?? FIXTURE_ANCHOR_ADMISSION_BUDGET_MS;
+  const pollMs = options.anchorPollMs ?? FIXTURE_ANCHOR_POLL_INTERVAL_MS;
+  const operation =
+    phase === 'opened'
+      ? `${fixture.id} semantic anchor observation`
+      : `${fixture.id} post-setup semantic anchor observation`;
+  const deadline = Date.now() + budgetMs;
+  for (;;) {
+    const result = await driver.observe();
+    requireFixtureOperationSuccess(result, operation, 'fixture-anchor');
+    if (hasFixtureAnchor(result.payload, fixture, phase)) return result;
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      throw new BenchmarkCellAdmissionError(
+        'fixture-anchor',
+        `Fixture ${fixture.id} ${phase} did not expose the exact anchor ` +
+          `${JSON.stringify(expectedAnchor(fixture, phase))} within ${budgetMs}ms.`,
+        result.command,
+      );
+    }
+    await sleep(Math.min(pollMs, remainingMs));
+  }
+}
+
+export function hasFixtureAnchor(
+  payload: unknown,
+  fixture: ScreenFixture,
+  phase: FixtureAnchorPhase,
+): boolean {
+  return snapshotHasAnchor(payload, expectedAnchor(fixture, phase));
 }
 
 export function requireFixtureAnchor(
@@ -51,13 +91,18 @@ export function requireFixtureAnchor(
   phase: FixtureAnchorPhase,
   command = 'agent-device snapshot',
 ): void {
-  const anchor = expectedAnchor(fixture, phase);
-  if (snapshotHasAnchor(payload, anchor)) return;
+  if (hasFixtureAnchor(payload, fixture, phase)) return;
   throw new BenchmarkCellAdmissionError(
     'fixture-anchor',
-    `Fixture ${fixture.id} ${phase} did not expose the exact anchor ${JSON.stringify(anchor)}.`,
+    `Fixture ${fixture.id} ${phase} did not expose the exact anchor ${JSON.stringify(
+      expectedAnchor(fixture, phase),
+    )}.`,
     command,
   );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function fixtureOperationFromCli(

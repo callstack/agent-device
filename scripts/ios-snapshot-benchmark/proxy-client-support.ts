@@ -19,6 +19,7 @@ import {
   fixtureOperationFromClient,
   prepareFixture,
   requireFixtureAnchor,
+  type FixturePreparationOptions,
 } from './fixture-admission.ts';
 import { type NetworkConditioner, type ProxyRpcRecord } from './proxy-conditioner.ts';
 import type { ProxyStartup } from './proxy-process.ts';
@@ -108,6 +109,7 @@ export async function openClientFixture(
   client: AgentClient,
   fixture: ScreenFixture,
   udid: string,
+  preparation: FixturePreparationOptions = {},
 ): Promise<void> {
   await client.apps.open({
     app: fixture.app,
@@ -117,31 +119,35 @@ export async function openClientFixture(
     relaunch: true,
     foreground: true,
   });
-  await prepareFixture(fixture, {
-    observe: async () =>
-      fixtureOperationFromClient(
-        await client.batch.run(snapshotBatchOptions()),
-        'agent-device client batch --steps snapshot',
-      ),
-    scrollToBottom: async () =>
-      fixtureOperationFromClient(
-        await client.interactions.scroll({
-          direction: 'bottom',
-          platform: 'ios',
-          udid,
-        }),
-        'agent-device client scroll bottom',
-      ),
-    openAlert: async () =>
-      fixtureOperationFromClient(
-        await client.interactions.click({
-          target: { kind: 'selector', selector: 'id="automation-open-alert"' },
-          platform: 'ios',
-          udid,
-        }),
-        'agent-device client click id="automation-open-alert"',
-      ),
-  });
+  await prepareFixture(
+    fixture,
+    {
+      observe: async () =>
+        fixtureOperationFromClient(
+          await client.batch.run(snapshotBatchOptions()),
+          'agent-device client batch --steps snapshot',
+        ),
+      scrollToBottom: async () =>
+        fixtureOperationFromClient(
+          await client.interactions.scroll({
+            direction: 'bottom',
+            platform: 'ios',
+            udid,
+          }),
+          'agent-device client scroll bottom',
+        ),
+      openAlert: async () =>
+        fixtureOperationFromClient(
+          await client.interactions.click({
+            target: { kind: 'selector', selector: 'id="automation-open-alert"' },
+            platform: 'ios',
+            udid,
+          }),
+          'agent-device client click id="automation-open-alert"',
+        ),
+    },
+    preparation,
+  );
 }
 
 export async function captureClientSample(

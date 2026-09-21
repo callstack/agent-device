@@ -75,8 +75,20 @@ test('persistent-client setup rejects a wrong prepared screen as fixture-anchor'
         clientWithSnapshots(['Automation lab', 'Settings'], []),
         alertFixture,
         'simulator',
+        { anchorBudgetMs: 40, anchorPollMs: 5 },
       ),
     (error: unknown) =>
       error instanceof BenchmarkCellAdmissionError && error.reason === 'fixture-anchor',
   );
+});
+
+test('persistent-client setup waits an unmounted opening screen out', async () => {
+  const calls: string[] = [];
+  await openClientFixture(
+    clientWithSnapshots(['Settings', 'Automation lab', 'Automation confirmation'], calls),
+    alertFixture,
+    'simulator',
+    { anchorBudgetMs: 2_000, anchorPollMs: 1 },
+  );
+  assert.deepEqual(calls, ['open', 'snapshot', 'snapshot', 'scroll', 'click', 'snapshot']);
 });
