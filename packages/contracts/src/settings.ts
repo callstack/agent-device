@@ -77,11 +77,18 @@ export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
  * one platform's own scale, and `platformValue` is what keeps a normalized answer auditable.
  */
 export type TextSizeSettingPayload = Readonly<{
+  setting: 'text-size';
   category: TextSizeCategory;
   platformValue: string;
 }>;
 
-/** The payload a readable setting answers with. A second readable setting joins this union. */
+/**
+ * The payload a readable setting answers with, keyed by the setting that answered. Each readable
+ * setting has its own shape — a category and a multiplier are not the same observation — so the
+ * discriminant is what lets a response be composed, recorded, and printed from one place without
+ * assuming every setting is a ladder rung. A second readable setting joins this union and supplies
+ * its own sentence in `describeSettingRead`, which is where the compiler then asks for it.
+ */
 export type ReadSettingResult = TextSizeSettingPayload;
 
 /** Builds the ladder's read payload, so no owner renames its keys or drops the platform value. */
@@ -89,7 +96,27 @@ export function textSizeSettingPayload(
   category: TextSizeCategory,
   platformValue: string,
 ): TextSizeSettingPayload {
-  return Object.freeze({ category, platformValue });
+  return Object.freeze({ setting: 'text-size', category, platformValue });
+}
+
+/** The one sentence a settings read answers with, per payload shape rather than per call site. */
+export function describeSettingRead(result: ReadSettingResult): string {
+  return `Text size is ${result.category}`;
+}
+
+/**
+ * The sentence a settings mutation answers with. It belongs to the vocabulary rather than the daemon
+ * because it is a claim about the setting: `clear-app-state` names the app it cleared and `text-size`
+ * names the rung it applied, and both are the same words whoever performs the write.
+ */
+export function describeSettingWrite(
+  setting: string,
+  state: string,
+  appBundleId: string | undefined,
+): string {
+  if (setting === 'clear-app-state') return `Cleared user data for ${appBundleId}`;
+  if (setting === 'text-size') return `Text size set to ${state}`;
+  return `Updated setting: ${setting}`;
 }
 
 export type SettingOptions = {

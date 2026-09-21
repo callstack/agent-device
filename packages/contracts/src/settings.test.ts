@@ -1,5 +1,7 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import {
+  describeSettingRead,
+  describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   MACOS_PERMISSION_TARGETS,
@@ -176,12 +178,29 @@ describe('text-size vocabulary', () => {
     expect(readTextSizeCategory(undefined)).toBeUndefined();
   });
 
-  test('the read payload keeps the platform value beside the normalized category', () => {
+  test('the read payload names the setting that answered, beside the platform value', () => {
     const payload = textSizeSettingPayload('accessibility-large', '1.75');
-    expect(payload).toEqual({ category: 'accessibility-large', platformValue: '1.75' });
+    expect(payload).toEqual({
+      setting: 'text-size',
+      category: 'accessibility-large',
+      platformValue: '1.75',
+    });
     // Owners build the payload through this builder; a frozen result is what stops one from
     // widening the payload the response is composed from.
     expect(Object.isFrozen(payload)).toBe(true);
+  });
+
+  test('each leg answers with the sentence its setting owns', () => {
+    // The response text is a claim about the setting, so it is composed here rather than at the call
+    // site that happens to run the request.
+    expect(describeSettingRead(textSizeSettingPayload('large', 'Small'))).toBe(
+      'Text size is large',
+    );
+    expect(describeSettingWrite('text-size', 'large', undefined)).toBe('Text size set to large');
+    expect(describeSettingWrite('clear-app-state', 'clear', 'com.example.app')).toBe(
+      'Cleared user data for com.example.app',
+    );
+    expect(describeSettingWrite('wifi', 'on', undefined)).toBe('Updated setting: wifi');
   });
 });
 

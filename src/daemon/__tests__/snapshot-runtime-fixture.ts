@@ -34,6 +34,7 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
+import { textSizeSettingPayload } from '@agent-device/contracts/settings';
 import { type DispatchContext } from '../../core/dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
@@ -62,11 +63,11 @@ export const fixtureSettingsMutations: SetSettingInput[] = [];
  */
 export const fixtureSettingsReads: ReadSettingInput[] = [];
 
-/** The value the fixture's owner holds. The daemon composes its response around whatever comes back. */
-const FIXTURE_SETTINGS_READ_RESULT: ReadSettingResult = {
-  category: 'extra-extra-large',
-  platformValue: 'extra-extra-large',
-};
+/** The value the fixture's owner holds, built the way an owner builds it. */
+const FIXTURE_SETTINGS_READ_RESULT: ReadSettingResult = textSizeSettingPayload(
+  'extra-extra-large',
+  'extra-extra-large',
+);
 
 /** Clears both recorders so a suite can assert "the owner was never reached" from a known zero. */
 export function resetSnapshotRuntimeFixture(): void {

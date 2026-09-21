@@ -47,6 +47,7 @@ test('setIosSetting text-size applies the category with simctl ui content_size',
         'accessibility-extra-large',
       );
       assert.deepEqual(result, {
+        setting: 'text-size',
         category: 'accessibility-extra-large',
         platformValue: 'accessibility-extra-large',
       });
@@ -128,6 +129,7 @@ test('readIosSetting text-size reports the category and the value the simulator 
     async ({ calls }) => {
       const result = await readIosSetting(IOS_TEST_SIMULATOR, 'text-size');
       assert.deepEqual(result, {
+        setting: 'text-size',
         category: 'extra-extra-large',
         platformValue: 'extra-extra-large',
       });
@@ -146,7 +148,11 @@ test('readIosSetting text-size normalizes the echo while keeping what the tool r
     },
     async () => {
       const result = await readIosSetting(IOS_TEST_SIMULATOR, 'text-size');
-      assert.deepEqual(result, { category: 'extra-small', platformValue: 'extra-Small' });
+      assert.deepEqual(result, {
+        setting: 'text-size',
+        category: 'extra-small',
+        platformValue: 'extra-Small',
+      });
     },
   );
 });

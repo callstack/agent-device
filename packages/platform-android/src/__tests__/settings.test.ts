@@ -150,7 +150,11 @@ test('setAndroidSetting text-size puts the category multiplier and reports it', 
   const store = fontScaleStore('1.0');
   await withFakeAdb(store.script, async ({ calls, device }) => {
     const result = await setAndroidSetting(device, 'text-size', 'accessibility-large');
-    assert.deepEqual(result, { category: 'accessibility-large', platformValue: '1.75' });
+    assert.deepEqual(result, {
+      setting: 'text-size',
+      category: 'accessibility-large',
+      platformValue: '1.75',
+    });
     assert.equal(store.held(), '1.75');
     assert.deepEqual(
       calls.map((args) => args.join(' ')),
@@ -165,7 +169,11 @@ test('setAndroidSetting text-size names the category it wrote rather than readin
   const store = fontScaleStore('1.0');
   await withFakeAdb(store.script, async ({ calls, device }) => {
     const result = await setAndroidSetting(device, 'text-size', 'extra-small');
-    assert.deepEqual(result, { category: 'extra-small', platformValue: '0.82' });
+    assert.deepEqual(result, {
+      setting: 'text-size',
+      category: 'extra-small',
+      platformValue: '0.82',
+    });
     assert.equal(
       calls.some((args) => args.join(' ') === GET),
       false,
@@ -228,7 +236,7 @@ test('the font_scale ladder maps every category to its own multiplier and back',
         [`shell settings put system font_scale ${fontScale}`],
       );
       const read = await readAndroidSetting(device, 'text-size');
-      assert.deepEqual(read, { category, platformValue: fontScale });
+      assert.deepEqual(read, { setting: 'text-size', category, platformValue: fontScale });
     });
   }
 });
@@ -236,7 +244,11 @@ test('the font_scale ladder maps every category to its own multiplier and back',
 test('readAndroidSetting text-size reports the multiplier the device holds', async () => {
   await withFakeAdb(fontScaleStore('2').script, async ({ calls, device }) => {
     const result = await readAndroidSetting(device, 'text-size');
-    assert.deepEqual(result, { category: 'accessibility-extra-large', platformValue: '2' });
+    assert.deepEqual(result, {
+      setting: 'text-size',
+      category: 'accessibility-extra-large',
+      platformValue: '2',
+    });
     assert.deepEqual(
       calls.map((args) => args.join(' ')),
       [GET],
@@ -250,7 +262,7 @@ test('readAndroidSetting text-size treats the null sentinel as the Android defau
   for (const unset of ['null', ' null \n']) {
     await withFakeAdb(fontScaleStore(unset).script, async ({ device }) => {
       const result = await readAndroidSetting(device, 'text-size');
-      assert.deepEqual(result, { category: 'large', platformValue: '1.0' });
+      assert.deepEqual(result, { setting: 'text-size', category: 'large', platformValue: '1.0' });
     });
   }
 });
@@ -260,7 +272,11 @@ test('readAndroidSetting text-size names the nearest rung for a multiplier it ne
   // multiplier rides along so a normalized answer stays auditable against the device.
   await withFakeAdb(fontScaleStore('1.2').script, async ({ device }) => {
     const result = await readAndroidSetting(device, 'text-size');
-    assert.deepEqual(result, { category: 'extra-extra-large', platformValue: '1.2' });
+    assert.deepEqual(result, {
+      setting: 'text-size',
+      category: 'extra-extra-large',
+      platformValue: '1.2',
+    });
   });
 });
 

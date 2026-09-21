@@ -6,6 +6,8 @@ import {
 } from '@agent-device/kernel/device';
 import {
   APPLE_TEXT_SIZE_LEAF_REFUSAL,
+  describeSettingRead,
+  describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   invalidTextSizeMessage,
@@ -244,9 +246,8 @@ async function executeSettingsRead(
     execution: runtimeExecutionFromContext(context),
   });
   const data = {
-    setting,
     ...payload,
-    ...successText(`Text size is ${payload.category}`),
+    ...successText(describeSettingRead(payload)),
   };
   recordIfSession(sessionStore, session, req, data);
   return { ok: true, data };
@@ -289,7 +290,7 @@ async function executeSettingsWrite(
       appBundleId,
       contextFromFlags(logPath, req.flags, appBundleId, session?.trace?.outPath),
     ),
-    writeSuccessMessage(setting, state, appBundleId),
+    describeSettingWrite(setting, state, appBundleId),
   );
   recordIfSession(sessionStore, session, req, data);
   return { ok: true, data };
@@ -374,14 +375,4 @@ function settingsWriteInput(
     ...(options === undefined ? {} : { options }),
     execution: runtimeExecutionFromContext(context),
   };
-}
-
-function writeSuccessMessage(
-  setting: string,
-  state: string,
-  appBundleId: string | undefined,
-): string {
-  if (setting === 'clear-app-state') return `Cleared user data for ${appBundleId}`;
-  if (setting === 'text-size') return `Text size set to ${state}`;
-  return `Updated setting: ${setting}`;
 }
