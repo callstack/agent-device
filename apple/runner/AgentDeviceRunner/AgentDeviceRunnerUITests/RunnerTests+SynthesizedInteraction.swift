@@ -377,7 +377,8 @@ extension RunnerTests {
   func synthesizedCoordinateContext(
     app: XCUIApplication,
     policy: SynthesizedGesturePolicy
-  ) -> SynthesizedCoordinateContext? {#if os(iOS)
+  ) -> SynthesizedCoordinateContext? {
+#if os(iOS)
     let health = runnerAccessibilityHealth
     let referenceFrame = onScreenWindowFrame(app: app)
     guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
