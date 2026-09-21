@@ -63,6 +63,10 @@ export async function completeAppleRecording(params: {
  * Turns the copy a stop collected into the export, and answers what became of the recorder's own
  * file (ADR 0024 2.3). The recorder's file is never finalized in place: the overlay and the telemetry
  * land on the export, and the recorder's file is retired only once that export exists.
+ *
+ * `overlayUnavailable` names a reason the caller was promised an overlay this export cannot carry,
+ * which is refused on the way in and disclosed on the way out rather than attempted with nothing to
+ * burn in and then apologised for.
  */
 export async function finalizeAppleRecordingFromCollected(
   params: Readonly<{
@@ -72,6 +76,7 @@ export async function finalizeAppleRecordingFromCollected(
     collectedPath: string;
     exportPath: string;
     nativePath: string;
+    overlayUnavailable?: string;
   }>,
 ): Promise<ScreenRecordingFinalization> {
   const { host, snapshot, targetLabel, collectedPath, exportPath, nativePath } = params;
@@ -80,13 +85,14 @@ export async function finalizeAppleRecordingFromCollected(
   if (snapshot.invalidatedReason && !snapshot.showTouches) {
     throw new Error(`recording invalidated: ${snapshot.invalidatedReason}`);
   }
+  const overlayUnavailability = params.overlayUnavailable ?? snapshot.invalidatedReason;
   let finalization: Awaited<ReturnType<typeof host.screenRecording.finalize.complete>>;
   try {
     await host.screenRecording.outputs.copy({ from: collectedPath, to: exportPath });
     finalization = await asAppErrorAsync(() =>
       host.screenRecording.finalize.complete({
         outputPath: exportPath,
-        showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
+        showTouches: overlayUnavailability === undefined && snapshot.showTouches,
         gestureEvents: snapshot.gestureEvents,
         exportQuality: snapshot.exportQuality ?? 'medium',
         targetLabel,
@@ -99,9 +105,9 @@ export async function finalizeAppleRecordingFromCollected(
   }
   return {
     ...finalization,
-    ...(snapshot.invalidatedReason
-      ? { overlayWarning: `overlay unavailable: ${snapshot.invalidatedReason}` }
-      : {}),
+    ...(overlayUnavailability === undefined
+      ? {}
+      : { overlayWarning: `overlay unavailable: ${overlayUnavailability}` }),
     nativePathDisposition:
       (await host.screenRecording.outputs.remove(nativePath)) === 'removed'
         ? 'retired'

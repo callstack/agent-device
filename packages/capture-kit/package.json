@@ -166,6 +166,10 @@
       "types": "./src/recording/artifact.fixtures.ts",
       "default": "./src/recording/artifact.fixtures.ts"
     },
+    "./recording-facts": {
+      "types": "./src/recording/recording-facts.ts",
+      "default": "./src/recording/recording-facts.ts"
+    },
     "./recording-mp4-fixtures": {
       "types": "./src/recording/mp4.fixtures.ts",
       "default": "./src/recording/mp4.fixtures.ts"

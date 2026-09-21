@@ -15,6 +15,13 @@ import { readStopCheckpoints, writeStopCheckpoint } from './stop-checkpoints.ts'
 /** Where a recorder writes when its file must stay separate from the export (ADR 0024 2.3). */
 export { collectedRecordingPath, nativeRecordingPath } from './artifact-paths.ts';
 
+/**
+ * What an earlier attempt of this stop journaled. A backend deciding whether a lost recording is still
+ * recoverable reads the same checkpoints this sequence resumes from, so the two cannot disagree about
+ * what a retry would still have to do.
+ */
+export { readStopCheckpoints } from './stop-checkpoints.ts';
+
 /** What a backend learned while asking its recorder to stop (ADR 0024 2.2). */
 export type RecorderStop = Readonly<{
   observation: StopObservation;

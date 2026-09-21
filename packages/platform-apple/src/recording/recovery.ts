@@ -15,14 +15,6 @@ import type {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { isRecord } from '@agent-device/kernel/record';
-import type { JsonObject } from '@agent-device/contracts/client';
-import {
-  isRecordingExportQuality,
-  isRecordingScope,
-  type RecordingAppIdentity,
-  type RecordingExportQuality,
-  type RecordingScope,
-} from '@agent-device/contracts/recording';
 import {
   SCREEN_RECORDING_RESOURCE_KIND,
   type ScreenRecordingCompletion,
@@ -31,6 +23,12 @@ import {
   type ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
+import {
+  RECORDING_FACTS_KEYS,
+  recordingFactsAreValid,
+} from '@agent-device/capture-kit/recording-facts';
+import type { RecordingStopProgress } from '@agent-device/contracts/recording-stop-progress';
+import { readStopCheckpoints } from '@agent-device/capture-kit/recording-stop-sequence';
 
 export type AppleScreenRecordingOperationHost = Readonly<{
   screenRecording: Pick<
@@ -48,16 +46,18 @@ export type AppleScreenRecordingOperationHost = Readonly<{
  * A manifest written before these coordinates existed cannot name an export it never recorded, so
  * the field stays optional and its absence is answered exactly as such a manifest was answered then.
  */
-export type AppleSimulatorExportCoordinates = Readonly<{
-  outPath: string;
-  startedAt: number;
-  clientOutPath?: string;
-  scope: RecordingScope;
-  showTouches: boolean;
-  recordOnlySession: boolean;
-  activeSessionApp?: RecordingAppIdentity;
-  exportQuality?: RecordingExportQuality;
-}>;
+/** The live-snapshot keys a recovered export is described by, which is the caller's own request. */
+const SIMULATOR_EXPORT_KEYS = [
+  'outPath',
+  'startedAt',
+  'clientOutPath',
+  ...RECORDING_FACTS_KEYS,
+] as const;
+
+export type AppleSimulatorExportCoordinates = Pick<
+  ScreenRecordingLiveSnapshot,
+  (typeof SIMULATOR_EXPORT_KEYS)[number]
+>;
 
 export type AppleRecordingDescriptor =
   | Readonly<{
@@ -86,9 +86,7 @@ const encodeAppleRecordingDescriptor: AppleRecordingDescriptorCodec['encode'] = 
       backend: descriptor.backend,
       outputPath: descriptor.outputPath,
       processes: descriptor.processes.map((process) => ({ ...process })),
-      ...(descriptor.recording === undefined
-        ? {}
-        : { recording: encodeSimulatorExportCoordinates(descriptor.recording) }),
+      ...(descriptor.recording === undefined ? {} : { recording: { ...descriptor.recording } }),
     };
     return encoded;
   }
@@ -128,45 +126,19 @@ export function createAppleRecordingEnvelope(params: {
   });
 }
 
-function encodeSimulatorExportCoordinates(recording: AppleSimulatorExportCoordinates): JsonObject {
-  return {
-    outPath: recording.outPath,
-    startedAt: recording.startedAt,
-    ...(recording.clientOutPath === undefined ? {} : { clientOutPath: recording.clientOutPath }),
-    scope: recording.scope,
-    showTouches: recording.showTouches,
-    recordOnlySession: recording.recordOnlySession,
-    ...(recording.activeSessionApp === undefined
-      ? {}
-      : { activeSessionApp: encodeRecordingAppIdentity(recording.activeSessionApp) }),
-    ...(recording.exportQuality === undefined ? {} : { exportQuality: recording.exportQuality }),
-  };
-}
-
-function encodeRecordingAppIdentity(app: RecordingAppIdentity): JsonObject {
-  return { bundleId: app.bundleId, ...(app.name === undefined ? {} : { name: app.name }) };
-}
-
 /**
- * The caller-facing facts of a live snapshot, which are everything a stop needs in order to produce
- * the same export after the daemon that started the recording is gone. Telemetry the recorder's own
- * process held (gesture events) is deliberately absent: recovery cannot invent it.
+ * The part of a live snapshot that outlives its daemon. What the recorder's own process held — gesture
+ * events, the touch reference frame, a runner's clock — is deliberately absent: recovery cannot invent
+ * it, and a recovered export states what it could not honour instead of pretending otherwise.
  */
 export function simulatorExportCoordinates(
   snapshot: ScreenRecordingLiveSnapshot,
 ): AppleSimulatorExportCoordinates {
-  return {
-    outPath: snapshot.outPath,
-    startedAt: snapshot.startedAt,
-    ...(snapshot.clientOutPath === undefined ? {} : { clientOutPath: snapshot.clientOutPath }),
-    scope: snapshot.scope,
-    showTouches: snapshot.showTouches,
-    recordOnlySession: snapshot.recordOnlySession,
-    ...(snapshot.activeSessionApp === undefined
-      ? {}
-      : { activeSessionApp: snapshot.activeSessionApp }),
-    ...(snapshot.exportQuality === undefined ? {} : { exportQuality: snapshot.exportQuality }),
-  };
+  const coordinates: Partial<AppleSimulatorExportCoordinates> = {};
+  for (const key of SIMULATOR_EXPORT_KEYS) {
+    if (snapshot[key] !== undefined) Object.assign(coordinates, { [key]: snapshot[key] });
+  }
+  return coordinates as AppleSimulatorExportCoordinates;
 }
 
 export async function cleanupAppleRecording(
@@ -256,26 +228,29 @@ async function cleanupRunner(
 }
 
 /** What a recovered simulator export needs besides the coordinates its manifest kept. */
-export type AppleSimulatorRecordingRestore = Readonly<{
+export type AppleSimulatorExportRestore = Readonly<{
   recording: AppleSimulatorExportCoordinates;
-  /** The file `simctl` wrote, which a resumed stop collects instead of signalling anything. */
+  /** The file `simctl` wrote, or the copy a first attempt already collected. */
   nativePath: string;
   cleanup(): Promise<CleanupOutcome>;
 }>;
 
-export type AppleRecordingReattachOutcome = ReattachOutcome<
-  ScreenRecordingLiveHandle,
-  ScreenRecordingCompletion
->;
+/**
+ * What an envelope allows next. `restore-export` is the answer when the recorder is gone and the export
+ * is still reachable: recovery holds the facts and runs no stop, so the runtime that owns the stop
+ * sequence builds the handle from them.
+ */
+export type AppleRecordingReattachment =
+  | ReattachOutcome<ScreenRecordingLiveHandle, ScreenRecordingCompletion>
+  | (AppleSimulatorExportRestore & Readonly<{ status: 'restore-export' }>);
 
 export async function reattachAppleRecording(
   params: Readonly<{
     host: AppleScreenRecordingOperationHost;
     device: DeviceInfo;
     envelope: DurableResourceEnvelope<typeof SCREEN_RECORDING_RESOURCE_KIND>;
-    restoreSimulatorExport?(input: AppleSimulatorRecordingRestore): ScreenRecordingLiveHandle;
   }>,
-): Promise<AppleRecordingReattachOutcome> {
+): Promise<AppleRecordingReattachment> {
   const { host, device, envelope } = params;
   const decoded = descriptorCodec.decode(envelope.descriptor.body);
   if (decoded.status !== 'decoded') {
@@ -298,14 +273,20 @@ export async function reattachAppleRecording(
  * coordinates plus that file are what a retried `record stop` still owes the caller, so this answers
  * with a handle that finishes the export instead of with a loss nobody observed.
  */
+/**
+ * A `simctl` recorder that is proven gone is the ordinary state of a recording whose daemon died, and it
+ * says nothing about what the export can still become (ADR 0024 2.2). So the answer comes from what a
+ * resumed stop would still have to read: nothing when the first attempt journaled a finalization, that
+ * copy when it journaled one, and otherwise the recorder's own file. Nothing reachable is reported as a
+ * loss.
+ */
 async function reattachSimulatorRecording(
   params: Readonly<{
     host: AppleScreenRecordingOperationHost;
     envelope: DurableResourceEnvelope<typeof SCREEN_RECORDING_RESOURCE_KIND>;
-    restoreSimulatorExport?(input: AppleSimulatorRecordingRestore): ScreenRecordingLiveHandle;
   }>,
   descriptor: Extract<AppleRecordingDescriptor, { backend: 'simctl' }>,
-): Promise<AppleRecordingReattachOutcome> {
+): Promise<AppleRecordingReattachment> {
   const ownership = await Promise.all(
     descriptor.processes.map(
       async (marker) => await params.host.screenRecording.apple.inspectProcess(marker),
@@ -320,30 +301,44 @@ async function reattachSimulatorRecording(
     );
   }
   const { recording } = descriptor;
-  const restore = params.restoreSimulatorExport;
+  const source = resumedExportSource(
+    readStopCheckpoints(params.envelope.metadata),
+    descriptor.outputPath,
+  );
   if (
     recording === undefined ||
-    restore === undefined ||
-    !(await simulatorRecordingRemains(params.host, descriptor.outputPath))
+    (source !== undefined && !(await recordingRemains(params.host, source)))
   ) {
     return { status: 'missing' };
   }
   return {
-    status: 'active',
-    handle: restore({
-      recording,
-      nativePath: descriptor.outputPath,
-      cleanup: async () =>
-        await cleanupSimulator(params.host, descriptor.processes, params.envelope.sessionId),
-    }),
+    status: 'restore-export',
+    recording,
+    nativePath: descriptor.outputPath,
+    cleanup: async () =>
+      await cleanupSimulator(params.host, descriptor.processes, params.envelope.sessionId),
   };
+}
+
+/**
+ * The file a resumed stop will still read, or `undefined` when it will read none. A journaled
+ * finalization is replayed as it stands and its copy is then discarded, a step that tolerates the copy
+ * already being gone; a journaled copy is what `finalize` runs from; and a stop that journaled neither
+ * collects from the recorder's own path again.
+ */
+function resumedExportSource(
+  learned: RecordingStopProgress,
+  nativePath: string,
+): string | undefined {
+  if (learned.finalization !== undefined) return undefined;
+  return learned.collectedPath ?? nativePath;
 }
 
 async function reattachRunnerRecording(
   host: AppleScreenRecordingOperationHost,
   device: DeviceInfo,
   descriptor: Extract<AppleRecordingDescriptor, { backend: 'runner' }>,
-): Promise<AppleRecordingReattachOutcome> {
+): Promise<AppleRecordingReattachment> {
   const ownership = await host.screenRecording.apple.inspectRunner(
     device,
     descriptor.runnerSessionId,
@@ -363,12 +358,17 @@ async function reattachRunnerRecording(
  * probe the stop itself runs on its collected copy, and it is the most this step can promise: a file
  * that fails it is exactly the recording a retry would refuse, so nothing is offered for it.
  */
-async function simulatorRecordingRemains(
+/**
+ * Whether a file the resumed stop would read can still become an export. The container sniff is the
+ * read-only probe the stop itself runs on that file, and it is the most this step can promise: a file
+ * that fails it is exactly the recording a retry would refuse.
+ */
+async function recordingRemains(
   host: AppleScreenRecordingOperationHost,
-  nativePath: string,
+  outputPath: string,
 ): Promise<boolean> {
   try {
-    await host.screenRecording.finalize.sniff({ outputPath: nativePath });
+    await host.screenRecording.finalize.sniff({ outputPath });
     return true;
   } catch {
     return false;
@@ -378,7 +378,7 @@ async function simulatorRecordingRemains(
 function unreattachableAppleRecording(
   reason: ResourceUnreattachableReason,
   message: string,
-): AppleRecordingReattachOutcome {
+): AppleRecordingReattachment {
   return { status: 'unreattachable', reason, message };
 }
 
@@ -422,23 +422,15 @@ function readSimulatorExportCoordinates(
 }
 
 /** The facts a recovered export computes on rather than repeats, whole or absent. */
-function isWholeExportCoordinates(value: Record<string, unknown>): boolean {
+function isWholeExportCoordinates(
+  value: Record<string, unknown>,
+): value is AppleSimulatorExportCoordinates {
   return (
     isNonemptyString(value.outPath) &&
     isFiniteNumber(value.startedAt) &&
-    isRecordingScope(value.scope) &&
-    typeof value.showTouches === 'boolean' &&
-    typeof value.recordOnlySession === 'boolean' &&
     isOptionalText(value.clientOutPath) &&
-    (value.exportQuality === undefined || isRecordingExportQuality(value.exportQuality)) &&
-    isOptionalAppIdentity(value.activeSessionApp)
+    recordingFactsAreValid(value)
   );
-}
-
-function isOptionalAppIdentity(value: unknown): value is RecordingAppIdentity | undefined {
-  if (value === undefined) return true;
-  if (!isRecord(value) || !isNonemptyString(value.bundleId)) return false;
-  return isOptionalText(value.name);
 }
 
 function decodeRunnerDescriptor(body: Record<string, unknown>, outputPath: string) {

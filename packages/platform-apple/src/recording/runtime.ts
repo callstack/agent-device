@@ -31,8 +31,7 @@ import {
   simulatorExportCoordinates,
   type AppleRecordingDescriptor,
   type AppleScreenRecordingOperationHost,
-  type AppleSimulatorExportCoordinates,
-  type AppleSimulatorRecordingRestore,
+  type AppleSimulatorExportRestore,
 } from './recovery.ts';
 import { validateAppleSimulatorRecording } from './validation.ts';
 
@@ -65,14 +64,12 @@ export function createAppleScreenRecordingOperations(params: {
   return Object.freeze({
     screenRecordingStart: async (input) =>
       await startAppleRecording({ host, device, owner, input, signal }),
-    screenRecordingReattach: async (input) =>
-      await reattachAppleRecording({
-        host,
-        device,
-        envelope: input.envelope,
-        restoreSimulatorExport: (restored) =>
-          reattachedSimulatorRecordingHandle({ host, restored }),
-      }),
+    screenRecordingReattach: async (input) => {
+      const reattached = await reattachAppleRecording({ host, device, envelope: input.envelope });
+      return reattached.status === 'restore-export'
+        ? { status: 'active', handle: simulatorExportHandle({ host, restored: reattached }) }
+        : reattached;
+    },
     screenRecordingCleanup: async (input) =>
       await cleanupAppleRecording(
         host,
@@ -215,20 +212,27 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
 }
 
 /**
- * A stop that reattaches to a `simctl` recording whose recorder is already gone has no recorder left
- * to signal and no gesture events left to burn in — those died with the daemon. Everything else the
- * first stop would have done is what this handle does: collect the file the recorder wrote, finalize
- * the export from the copy, and state on the response that the overlay cannot be honoured.
+ * The stop a `simctl` recording gets when its recorder died with its daemon. There is no recorder left
+ * to signal and no gesture event left to burn in, and every other step is the one the first stop would
+ * have run — including which of them are still owed, which the shared sequence decides from the
+ * checkpoints the first attempt journaled.
  */
-function reattachedSimulatorRecordingHandle(
+function simulatorExportHandle(
   params: Readonly<{
     host: AppleScreenRecordingOperationHost;
-    restored: AppleSimulatorRecordingRestore;
+    restored: AppleSimulatorExportRestore;
   }>,
 ): ScreenRecordingLiveHandle {
-  const { host, restored } = params;
-  const { recording, nativePath, cleanup } = restored;
-  return createScreenRecordingLiveHandle(reattachedSimulatorSnapshot(recording), {
+  const {
+    host,
+    restored: { recording, nativePath, cleanup },
+  } = params;
+  const snapshot: ScreenRecordingLiveSnapshot = Object.freeze({
+    ...recording,
+    backend: SIMULATOR_BACKEND_LABEL,
+    gestureEvents: [],
+  });
+  return createScreenRecordingLiveHandle(snapshot, {
     finish: (current, progress) =>
       stopAndExportScreenRecording({
         snapshot: current,
@@ -243,49 +247,27 @@ function reattachedSimulatorRecordingHandle(
           collect: async (collectedPath) => {
             await collectSimulatorRecording(host, nativePath, collectedPath);
           },
-          finalize: async ({ collectedPath, exportPath }) => {
-            const finalization = await finalizeAppleRecordingFromCollected({
+          finalize: async ({ collectedPath, exportPath }) =>
+            await finalizeAppleRecordingFromCollected({
               host,
               snapshot: current,
               targetLabel: SIMULATOR_TARGET_LABEL,
               collectedPath,
               exportPath,
               nativePath,
-            });
-            return recording.showTouches && finalization.overlayWarning === undefined
-              ? {
-                  ...finalization,
-                  overlayWarning:
-                    'overlay unavailable: the daemon that held the touch events ended before ' +
-                    'record stop, and they did not survive it.',
-                }
-              : finalization;
-          },
+              ...(recording.showTouches
+                ? {
+                    overlayUnavailable:
+                      'the daemon that held the touch events ended before record stop',
+                  }
+                : {}),
+            }),
           discard: async (collectedPath) => {
             await host.screenRecording.outputs.remove(collectedPath);
           },
         },
       }),
     forceCleanup: async () => await cleanup(),
-  });
-}
-
-function reattachedSimulatorSnapshot(
-  recording: AppleSimulatorExportCoordinates,
-): ScreenRecordingLiveSnapshot {
-  return Object.freeze({
-    backend: SIMULATOR_BACKEND_LABEL,
-    outPath: recording.outPath,
-    ...(recording.clientOutPath === undefined ? {} : { clientOutPath: recording.clientOutPath }),
-    startedAt: recording.startedAt,
-    scope: recording.scope,
-    showTouches: recording.showTouches,
-    recordOnlySession: recording.recordOnlySession,
-    ...(recording.activeSessionApp === undefined
-      ? {}
-      : { activeSessionApp: recording.activeSessionApp }),
-    ...(recording.exportQuality === undefined ? {} : { exportQuality: recording.exportQuality }),
-    gestureEvents: [],
   });
 }
 

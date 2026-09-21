@@ -1,4 +1,5 @@
 import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { recordingFactsAreValid } from '@agent-device/capture-kit/recording-facts';
 import { isStopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
   ScreenRecordingChunk,
@@ -53,20 +54,11 @@ function descriptorIdentityIsValid(value: Record<string, unknown>): boolean {
 }
 
 function descriptorRecordingIsValid(value: Record<string, unknown>): boolean {
-  return (
-    (value.clientOutputPath === undefined || typeof value.clientOutputPath === 'string') &&
-    isScope(value.scope) &&
-    typeof value.showTouches === 'boolean' &&
-    typeof value.recordOnlySession === 'boolean'
-  );
+  return isOptionalText(value.clientOutputPath) && recordingFactsAreValid(value);
 }
 
 function descriptorOptionsAreValid(value: Record<string, unknown>): boolean {
-  return (
-    isTransportMode(value.transportMode) &&
-    isOptionalQuality(value.exportQuality) &&
-    isOptionalApp(value.activeSessionApp)
-  );
+  return isTransportMode(value.transportMode);
 }
 
 function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
@@ -84,17 +76,13 @@ function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
 function manifestRecordingIsValid(candidate: Partial<NativeManifest>): boolean {
   return (
     typeof candidate.outputPath === 'string' &&
-    (candidate.clientOutputPath === undefined || typeof candidate.clientOutputPath === 'string') &&
-    isScope(candidate.scope) &&
-    typeof candidate.showTouches === 'boolean' &&
-    typeof candidate.recordOnlySession === 'boolean'
+    isOptionalText(candidate.clientOutputPath) &&
+    recordingFactsAreValid(candidate)
   );
 }
 
 function manifestOptionsAreValid(candidate: Partial<NativeManifest>): boolean {
   return (
-    isOptionalApp(candidate.activeSessionApp) &&
-    isOptionalQuality(candidate.exportQuality) &&
     isTransportMode(candidate.transportMode) &&
     (candidate.pendingRemotePath === undefined ||
       isNativeRecordingPath(candidate.pendingRemotePath))
@@ -153,12 +141,7 @@ function completionIdentityIsValid(candidate: Partial<ScreenRecordingCompletion>
 }
 
 function completionRecordingIsValid(candidate: Partial<ScreenRecordingCompletion>): boolean {
-  return (
-    isScope(candidate.scope) &&
-    typeof candidate.showTouches === 'boolean' &&
-    typeof candidate.recordOnlySession === 'boolean' &&
-    isOptionalApp(candidate.activeSessionApp)
-  );
+  return recordingFactsAreValid(candidate);
 }
 
 function isValidCompletionChunk(chunk: ScreenRecordingChunk, index: number): boolean {
@@ -229,25 +212,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isScope(value: unknown): value is 'app' | 'device' | 'system' {
-  return value === 'app' || value === 'device' || value === 'system';
-}
-
 function isTransportMode(value: unknown): value is AndroidRecordingDescriptor['transportMode'] {
   return value === 'local' || value === 'transport-composed';
 }
 
-function isOptionalQuality(value: unknown): boolean {
-  return value === undefined || value === 'medium' || value === 'high';
-}
-
-function isOptionalApp(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (isObject(value) &&
-      typeof value.bundleId === 'string' &&
-      (value.name === undefined || typeof value.name === 'string'))
-  );
+function isOptionalText(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
 }
 
 function isNativeRecordingPath(value: unknown): value is string {
