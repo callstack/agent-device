@@ -40,6 +40,13 @@ extension RunnerTests {
       in: frame,
       interfaceOrientation: orientation
     )
+    logSynthesizedDispatch(
+      kind: "drag",
+      start: start,
+      end: end,
+      referenceFrame: frame,
+      orientation: orientation
+    )
     let message = switch profile {
     case .continuous:
       RunnerSynthesizedGesture.synthesizeContinuousDrag(
@@ -116,6 +123,13 @@ extension RunnerTests {
       point: CGPoint(x: x, y: y),
       in: context.referenceFrame,
       interfaceOrientation: orientation
+    )
+    logSynthesizedDispatch(
+      kind: "tap",
+      start: point,
+      end: nil,
+      referenceFrame: context.referenceFrame,
+      orientation: orientation
     )
     if let message = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: app,
@@ -324,11 +338,46 @@ extension RunnerTests {
     )
   }
 
+  func logSynthesizedDispatch(
+    kind: String,
+    start: CGPoint,
+    end: CGPoint?,
+    referenceFrame: CGRect,
+    orientation: Int
+  ) {
+    if let end {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_SYNTHESIZED_DISPATCH kind=%@ start=(%.1f,%.1f) end=(%.1f,%.1f) reference=(%.1f,%.1f,%.1f,%.1f) orientation=%d",
+        kind,
+        Double(start.x),
+        Double(start.y),
+        Double(end.x),
+        Double(end.y),
+        Double(referenceFrame.origin.x),
+        Double(referenceFrame.origin.y),
+        Double(referenceFrame.width),
+        Double(referenceFrame.height),
+        orientation
+      )
+      return
+    }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_SYNTHESIZED_DISPATCH kind=%@ point=(%.1f,%.1f) reference=(%.1f,%.1f,%.1f,%.1f) orientation=%d",
+      kind,
+      Double(start.x),
+      Double(start.y),
+      Double(referenceFrame.origin.x),
+      Double(referenceFrame.origin.y),
+      Double(referenceFrame.width),
+      Double(referenceFrame.height),
+      orientation
+    )
+  }
+
   func synthesizedCoordinateContext(
     app: XCUIApplication,
     policy: SynthesizedGesturePolicy
-  ) -> SynthesizedCoordinateContext? {
-#if os(iOS)
+  ) -> SynthesizedCoordinateContext? {#if os(iOS)
     let health = runnerAccessibilityHealth
     let referenceFrame = onScreenWindowFrame(app: app)
     guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,

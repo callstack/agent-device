@@ -14,6 +14,11 @@ public enum RunnerInterfaceOrientation {
 }
 
 public enum CoordinateSpaceRotation {
+  // Dispatch rotates a point about the reference frame's top-left. The origin is localized away
+  // and never added back: an XCUIApplication session observes only its own scene surface, so its
+  // windows report (0,0)-anchored frames (measured on iPhone landscape both ways and on every
+  // system window in window-coordinate-space.json), and displacement between panels or panes is
+  // carried by the record's displayID, not by an origin.
   public static func native(
     point: CGPoint,
     in frame: CGRect,

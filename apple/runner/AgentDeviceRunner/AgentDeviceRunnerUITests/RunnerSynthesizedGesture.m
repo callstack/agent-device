@@ -339,6 +339,12 @@ static NSString * _Nullable RunnerCreateEventRecord(
   if (eventRecord == nil) {
     return @"private XCTest event synthesis failed: could not create event record";
   }
+  NSLog(
+    @"AGENT_DEVICE_RUNNER_SYNTHESIZED_RECORD name=%@ displayID=%lu interfaceOrientation=%ld",
+    recordName,
+    (unsigned long)displayID,
+    (long)interfaceOrientation
+  );
   ((RunnerMsgSendSetInteger)objc_msgSend)(
     eventRecord,
     bridge->core.setTargetProcessIDSelector,
