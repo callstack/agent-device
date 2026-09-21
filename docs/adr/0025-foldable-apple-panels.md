@@ -256,19 +256,19 @@ afterwards.
 
 ## Which XCTest capture surface sees the lit panel
 
-#2727 measured every `XCUIScreenshotProviding` surface a runner can reach against the
-`simctl io screenshot --display=<panel>` capture of the panel CoreDevice reports lit, on iPhone Duo
-(iOS 27.1, Xcode 27.1 beta) closed at hinge 0° and open at 180°, with a 130° session on different
-app content as the corroboration run and iPhone 17 (iOS 27.0) as the single-panel control. Poses came
-from the hinge read-back, not from the pose that was requested — the amendment above is why that is
-the only defensible source: the first two inner-panel sessions were booked as open and both read back
-130°, so they are recorded here as corroboration and the settled 180° session carries the table. A different app screen was shown per session, so neither
-panel could be mistaken for the other by content, and the app was left untouched between the oracle
-and the runner capture, so a luma gap is a source difference rather than a content one. Mean luma
-comes from a 48x48 resample; panel identity comes from CoreDevice's `displayId` and pixel agreement
-from comparing decoded pixels, so no claim here rests on luma. Captured dimensions are PNG header
-dimensions, which is the panel's native geometry — the capture's own orientation presents some of
-them turned.
+#2727 measured every `XCUIScreenshotProviding` surface a runner can reach against the `simctl io
+screenshot --display=<panel>` capture of the panel CoreDevice reports lit, on iPhone Duo (iOS 27.1,
+Xcode 27.1 beta) closed at hinge 0° and open at 180°, with a 130° session on different app content
+as the corroboration run and iPhone 17 (iOS 27.0) as the single-panel control. Poses came from the
+hinge read-back, not from the pose that was requested — the amendment above is why that is the only
+defensible source: the first two inner-panel sessions were booked as open and both read back 130°,
+so they are recorded here as corroboration and the settled 180° session carries the table. A
+different app screen was shown per session, so neither panel could be mistaken for the other by
+content, and the app was left untouched between the oracle and the runner capture, so a luma gap is
+a source difference rather than a content one. Mean luma comes from a 48x48 resample; panel
+identity comes from CoreDevice's `displayId` and pixel agreement from comparing decoded pixels, so
+no claim here rests on luma. Captured dimensions are PNG header dimensions, which is the panel's
+native geometry — the capture's own orientation presents some of them turned.
 
 | Capture surface | Outer panel lit (closed) | Inner panel lit (open, 180°) | Verdict |
 | --- | --- | --- | --- |
@@ -289,40 +289,40 @@ returns one element rather than a panel.
 
 Four facts the capture path cannot read off the image:
 
-- **Identity, and how little of it is declared.** `XCUIScreen.h` declares `screens` and `mainScreen`
-  alone, and documents `mainScreen` as "the primary screen of the device", so naming the outer panel
-  in every pose is the documented behavior and not a malfunction. `displayID`, `scale`, and `bounds`
-  answered KVC on every screen measured while `frame` and `name` raised `NSUnknownKeyException`, but
-  none of those keys appears in any XCTest header in this toolchain: the identity read is as
-  undocumented as the one #2724 already relies on for gesture routing, and #2728 inherits that
-  breakage risk whichever way it goes. It should reuse #2724's resolved-display read rather than open a
-  third route to the same private key. The ordering #2724 recorded held here: `app.screen` and an
-  unresolved window reported `displayID` `1` while the app was visibly on panel `3`, and the resolved
-  window reported `3`. `XCUIScreen` carries no panel-power fact and no `displayWithID:` lookup, so a
-  panel is chosen by filtering `XCUIScreen.screens` and `backlightState` stays CoreDevice's.
-- **Geometry.** The capture carries the panel's own scale (measured `3`, equal to that panel's
-  CoreDevice `pointScale`) in the panel's *native* geometry rather than the interface orientation: on
-  the `rot90` inner panel the PNG is `2006x2852` with the landscape content rotated inside it and the
-  `UIImage` carrying capture orientation raw value `3`, whose display size transposes the panel,
-  where `simctl` exports the same panel `2853x2007` upright. The runner's production encoder and
-  `XCUIScreenshot`'s produce 0 differing pixels for one capture from `358,402` and `328,181` encoded
-  bytes, so the turn belongs to the capture and not to an encoder. Rotating is not enough to compare
-  the two: the runner's canvas is `2006x2852` and `simctl`'s `2853x2007`, a pixel apart on each axis,
-  so #2729's normalization owes a rotation and a crop.
-- **Overlays.** A screen capture and a window capture are both display captures — the second cropped
-  to the window — so the software keyboard, a SpringBoard-hosted permission alert, and the status bar
-  all appear in either. It cuts the other way as well: that alert's own window resolved to
-  `displayID` `3`, the dark panel in the closed pose, and capturing it yielded a black `668x950` crop
-  indistinguishable from any capture of a dark panel. Whether a system window on the *lit* panel
-  captures was not measured, so a system surface is verified on the app's panel, not through its
-  window.
-- **Unresolved window.** Asking an element that does not exist for screenshot data raises
-  `Element Window (First Match) cannot request screenshot data because it does not exist` instead of
-  capturing anything, but that is the element route only: `XCUIAutomation` also contains `Could not
-  resolve displayID for snapshot %@; falling back to main display (id %lld)`, so an internal
-  snapshot-to-display resolution failure can reach the main display silently. A helper therefore
-  resolves the window itself and reports its own typed reason, and does not treat that message text as
-  the contract. Defaulting to `XCUIScreen.main` on that path would be this ADR's original bug, renamed.
+- **Identity, and how little of it is declared.** `XCUIScreen.h` declares `screens` and
+  `mainScreen` alone, and documents `mainScreen` as "the primary screen of the device", so naming
+  the outer panel in every pose is the documented behavior and not a malfunction. `displayID`,
+  `scale`, and `bounds` answered KVC on every screen measured while `frame` and `name` raised
+  `NSUnknownKeyException`, but none of those keys appears in any XCTest header in this toolchain:
+  the identity read is as undocumented as the one #2724 already relies on for gesture routing, and
+  #2728 inherits that breakage risk whichever way it goes. It should reuse #2724's resolved-display
+  read rather than open a third route to the same private key. The ordering #2724 recorded held
+  here: `app.screen` and an unresolved window reported `displayID` `1` while the app was visibly on
+  panel `3`, and the resolved window reported `3`. `XCUIScreen` carries no panel-power fact and no
+  `displayWithID:` lookup, so a panel is chosen by filtering `XCUIScreen.screens` and
+  `backlightState` stays CoreDevice's. - **Geometry.** The capture carries the panel's own scale
+  (measured `3`, equal to that panel's CoreDevice `pointScale`) in the panel's *native* geometry
+  rather than the interface orientation: on the `rot90` inner panel the PNG is `2006x2852` with the
+  landscape content rotated inside it and the `UIImage` carrying capture orientation raw value `3`,
+  whose display size transposes the panel, where `simctl` exports the same panel `2853x2007`
+  upright. The runner's production encoder and `XCUIScreenshot`'s produce 0 differing pixels for
+  one capture from `358,402` and `328,181` encoded bytes, so the turn belongs to the capture and
+  not to an encoder. Rotating is not enough to compare the two: the runner's canvas is `2006x2852`
+  and `simctl`'s `2853x2007`, a pixel apart on each axis, so #2729's normalization owes a rotation
+  and a crop. - **Overlays.** A screen capture and a window capture are both display captures — the
+  second cropped to the window — so the software keyboard, a SpringBoard-hosted permission alert,
+  and the status bar all appear in either. It cuts the other way as well: that alert's own window
+  resolved to `displayID` `3`, the dark panel in the closed pose, and capturing it yielded a black
+  `668x950` crop indistinguishable from any capture of a dark panel. Whether a system window on the
+  *lit* panel captures was not measured, so a system surface is verified on the app's panel, not
+  through its window. - **Unresolved window.** Asking an element that does not exist for screenshot
+  data raises `Element Window (First Match) cannot request screenshot data because it does not
+  exist` instead of capturing anything, but that is the element route only: `XCUIAutomation` also
+  contains `Could not resolve displayID for snapshot %@; falling back to main display (id %lld)`,
+  so an internal snapshot-to-display resolution failure can reach the main display silently. A
+  helper therefore resolves the window itself and reports its own typed reason, and does not treat
+  that message text as the contract. Defaulting to `XCUIScreen.main` on that path would be this
+  ADR's original bug, renamed.
 
 On the single-panel control every surface agreed: one screen, `1206x2622`, `rot0`, upright crops, no
 rotation to repair. A window-resolved source changes nothing there except that its identity becomes
@@ -332,45 +332,45 @@ explicit.
 
 - **Runner capture migration.** `XCUIScreen.main` is six call expressions in four files, and the
   iOS-reachable ones capture a dark panel once an unfolded Duo moves the app to the inner one: the
-  `screenshot` command's non-macOS branch in `RunnerTests+CommandExecution.swift`; its two
-  `#if os(macOS)` siblings are `XCUIScreen.main` captures too and only the branch between them
-  captures the app's own root, so the desktop's behavior stays unmeasured here and the desktop also
-  reaches the screen through Screen Capture Kit in `AgentDeviceMacOSHelper`. Then `captureRunnerFrame`
-  in `RunnerTests+Lifecycle.swift`, which feeds both the recorder and the keyboard stability
+  `screenshot` command's non-macOS branch in `RunnerTests+CommandExecution.swift`; its two `#if
+  os(macOS)` siblings are `XCUIScreen.main` captures too and only the branch between them captures
+  the app's own root, so the desktop's behavior stays unmeasured here and the desktop also reaches
+  the screen through Screen Capture Kit in `AgentDeviceMacOSHelper`. Then `captureRunnerFrame` in
+  `RunnerTests+Lifecycle.swift`, which feeds both the recorder and the keyboard stability
   fingerprint in `RunnerTests+Keyboard.swift`; the in-app-back visual-state probe in
   `RunnerTests+Navigation.swift`; and the synthesized-gesture reference frame in
   `RunnerTests+Interaction.swift`, which only the unmerged #2724 replaces. All of them call the
-  expression the measurement above ran, so they follow by construction and not by measurement, and two
-  fail less visibly than a black screenshot: identical black samples satisfy
+  expression the measurement above ran, so they follow by construction and not by measurement, and
+  two fail less visibly than a black screenshot: identical black samples satisfy
   `runnerScreenshotStabilitySettled` on its first interval whatever the keyboard is doing, and an
-  unchanged black pair logs `AGENT_DEVICE_RUNNER_IN_APP_BACK_FALLBACK_NO_STATE_CHANGE` and reports a
-  back navigation that worked as one that failed. Host-side, `screenshot.ts` passes no scale precisely
-  because the runner captures `XCUIScreen.main`, `display-inventory.test.ts` asserts that, and
-  `commands.md` tells users the physical capture is built from `XCUIScreen.main.screenshot()` frames,
-  so all three move with the runner; #2727's comment carries the line-numbered inventory. CoreDevice still names the
-  panel, since `XCUIScreen` has no panel-power fact to trade on. Physical devices compile the same
-  source and no physical foldable was measured, so that path stays unverified.
-- **Quarter-turn detection.** Both Duo panels report `currentOrientation: rot90`, and no available
-  path rotates a foldable, so the orientation half of the inventory is carried but never exercised
-  against a changed value.
-- **Pose control on a second Device Hub instance.** `fold` drives the first `DeviceHub` process in
-  the process table. Two Xcodes each running a Device Hub is not a state this was verified in.
-- **A hinge that settles slowly.** Four reads is twenty seconds of streams, and a Duo that needs
-  longer to come to rest inside `half-open` is now refused where the superseded rule would have
-  reported a pose. Every Duo run observed for this change settled inside the budget; no simulator
-  that needs longer was seen, so the budget stays as it is rather than growing on a hypothesis.
+  unchanged black pair logs `AGENT_DEVICE_RUNNER_IN_APP_BACK_FALLBACK_NO_STATE_CHANGE` and reports
+  a back navigation that worked as one that failed. Host-side, `screenshot.ts` passes no scale
+  precisely because the runner captures `XCUIScreen.main`, `display-inventory.test.ts` asserts
+  that, and `commands.md` tells users the physical capture is built from
+  `XCUIScreen.main.screenshot()` frames, so all three move with the runner; #2727's comment carries
+  the line-numbered inventory. CoreDevice still names the panel, since `XCUIScreen` has no
+  panel-power fact to trade on. Physical devices compile the same source and no physical foldable
+  was measured, so that path stays unverified. - **Quarter-turn detection.** Both Duo panels report
+  `currentOrientation: rot90`, and no available path rotates a foldable, so the orientation half of
+  the inventory is carried but never exercised against a changed value. - **Pose control on a
+  second Device Hub instance.** `fold` drives the first `DeviceHub` process in the process table.
+  Two Xcodes each running a Device Hub is not a state this was verified in. - **A hinge that
+  settles slowly.** Four reads is twenty seconds of streams, and a Duo that needs longer to come to
+  rest inside `half-open` is now refused where the superseded rule would have reported a pose.
+  Every Duo run observed for this change settled inside the budget; no simulator that needs longer
+  was seen, so the budget stays as it is rather than growing on a hypothesis.
 
 - **Pose control when two simulators share a name.** `fold` picks the device by the sidebar row's
   `AXIdentifier`, but `selectDevice` in `DeviceHubPose.swift` confirms the switch through
-  `windowShows(deviceName:)`, which reads the window title, and it skips the selection altogether when
-  no row was found and that title already matches — and two simulators named `iPhone Duo` are both
-  titled `iPhone Duo – iOS 27.1`. Observed while pressing the poses for the captures above, and
-  consistent with that path, a `fold open` aimed at one Duo pressed the pose control of the other,
-  which unfolded while the intended device stayed closed; the `apple_fold_pose_pressed` diagnostic
-  reports `selected` and nothing gates the press on it. The hinge read-back is what stopped the
-  command reporting a pose it had not achieved, yet the untargeted device had already moved. Selecting that device's row before pressing routed every later pose correctly, so the row is
-  the only device identity Device Hub offers and an unconfirmed selection leaves the press aimed at
-  whatever it happens to display.
-- **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
-  and the hinge stream on one was not exercised.
+  `windowShows(deviceName:)`, which reads the window title, and it skips the selection altogether
+  when no row was found and that title already matches — and two simulators named `iPhone Duo` are
+  both titled `iPhone Duo – iOS 27.1`. Observed while pressing the poses for the captures above,
+  and consistent with that path, a `fold open` aimed at one Duo pressed the pose control of the
+  other, which unfolded while the intended device stayed closed; the `apple_fold_pose_pressed`
+  diagnostic reports `selected` and nothing gates the press on it. The hinge read-back is what
+  stopped the command reporting a pose it had not achieved, yet the untargeted device had already
+  moved. Selecting that device's row before pressing routed every later pose correctly, so the row
+  is the only device identity Device Hub offers and an unconfirmed selection leaves the press aimed
+  at whatever it happens to display. - **Physical foldables.** Device Hub poses simulators only;
+  the leaf fact refuses a physical device, and the hinge stream on one was not exercised.
 
