@@ -277,6 +277,8 @@ test('waitForRunner carries the disk-image state when the runner is still alive 
     testPromise: new Promise(() => {}),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'starting',
+    inFlightCommands: 0,
+    hasAbandonedCommands: false,
     startupDeviceStates: {
       developerMode: 'enabled',
       developerDiskImage: 'unavailable',
