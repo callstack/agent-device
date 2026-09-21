@@ -844,7 +844,7 @@ export async function buildRunnerEarlyExitError(params: {
   // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
   // the trio is nested tool context under `xcodebuild`, classified into
   // `reason`/`hint` above — not a process-exit wrap.
-  return new AppError('COMMAND_FAILED', message, {
+  const error = new AppError('COMMAND_FAILED', message, {
     port,
     logPath,
     xcodebuild: {
@@ -855,6 +855,11 @@ export async function buildRunnerEarlyExitError(params: {
     reason,
     hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr, reason),
   });
+  // The build catch is not the only way a runner stops before serving a command. A locked phone lets
+  // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that
+  // catch and the disk-image state read before the build would be dropped. Same enrichment, applied
+  // to the failure this path actually produces (#2683).
+  return enrichRunnerStartupFailureWithDeviceStates(error, session.startupDeviceStates) as AppError;
 }
 
 /**

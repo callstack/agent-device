@@ -322,6 +322,7 @@ async function startRunnerSessionWithLease(
     startupRetryWake: runnerProcess.startupRetryWake,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(startupTimeoutMs),
     startupTimings,
+    startupDeviceStates: deviceStates,
     logicalLeaseContext,
     simulatorSetRedirect: simulatorSetRedirect ?? undefined,
     lease,

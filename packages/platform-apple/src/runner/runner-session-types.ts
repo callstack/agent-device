@@ -4,6 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
 import type { XcodebuildSimulatorSetRedirectHandle } from './runner-device-set.ts';
+import type { IosRunnerDeviceStates } from './runner-contract.ts';
 
 /**
  * Where one runner process stands in the lifecycle of the session that owns it (#2662). The state
@@ -86,6 +87,12 @@ export type RunnerSession = {
   speculative?: boolean;
   startupTimings?: Record<string, number>;
   startupTimingsReported?: boolean;
+  /**
+   * Device-readiness facts the pre-build probe read for this startup. An adopted session has none:
+   * it skipped the probe. Carried so a failure raised after the build still reports the disk image
+   * state the device was in, which is the only way a locked phone's early exit says why (#2683).
+   */
+  startupDeviceStates?: IosRunnerDeviceStates;
   logicalLeaseContext?: RunnerLogicalLeaseContext;
   simulatorSetRedirect?: XcodebuildSimulatorSetRedirectHandle;
   lease?: RunnerLease;

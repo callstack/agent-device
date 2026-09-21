@@ -16,7 +16,11 @@ const PROVISIONING_FAILURE_STDERR = [
   '** TEST EXECUTE FAILED **',
 ].join('\n');
 
-function sessionFailingWith(stdout: string, stderr: string): RunnerSession {
+function sessionFailingWith(
+  stdout: string,
+  stderr: string,
+  startupDeviceStates?: RunnerSession['startupDeviceStates'],
+): RunnerSession {
   return {
     sessionId: 'early-exit-session',
     device: { platform: 'apple', id: 'device-1', name: 'iPhone', kind: 'device', booted: true },
@@ -27,8 +31,15 @@ function sessionFailingWith(stdout: string, stderr: string): RunnerSession {
     testPromise: Promise.resolve({ exitCode: 1, stdout, stderr }),
     child: { pid: 4242, exitCode: 1 } as ExecBackgroundResult['child'],
     state: 'starting',
+    startupDeviceStates,
   };
 }
+
+const IMAGE_DOWN_STATES = {
+  developerMode: 'enabled' as const,
+  developerDiskImage: 'unavailable' as const,
+  developerDiskImageHint: 'Unlock the iPhone so it can mount the developer disk image.',
+};
 
 test('the early-exit error a user actually receives names the provisioning cause', async () => {
   // Regression: the reason was classified correctly while the hint was built
@@ -66,4 +77,45 @@ test('a busy connecting device keeps its own targeted hint', async () => {
   })) as AppError;
 
   assert.match(String(error.details?.hint), /still connecting/);
+});
+
+test('an early exit carries the disk-image state the device was read in (#2683)', async () => {
+  // A locked iPhone lets the build finish and kills `xcodebuild test-without-building` instead, so
+  // the startup build catch never runs and the readiness facts read before the build would be
+  // dropped. Captured on hardware: this is the failure an image-down locked phone actually produces.
+  const error = (await buildRunnerEarlyExitError({
+    session: sessionFailingWith(
+      '',
+      'xcodebuild: error: Timed out waiting for the test runner',
+      IMAGE_DOWN_STATES,
+    ),
+    port: 8100,
+  })) as AppError;
+
+  assert.equal(error.details?.developerDiskImage, 'unavailable');
+});
+
+test('an early exit that already names a cause keeps it, and only gains the fact (#2683)', async () => {
+  const error = (await buildRunnerEarlyExitError({
+    session: sessionFailingWith(
+      '',
+      'xcodebuild: error: Timed out waiting for the test runner',
+      IMAGE_DOWN_STATES,
+    ),
+    port: 8100,
+  })) as AppError;
+
+  // The connect reason was proved by the tool output, so the device's image state is never allowed
+  // to overwrite a claimed cause or swap the hint beside it.
+  assert.equal(error.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+  assert.match(String(error.details?.hint), /Retry runner startup/);
+});
+
+test('a session that never probed the device publishes no disk-image claim (#2683)', async () => {
+  const error = (await buildRunnerEarlyExitError({
+    session: sessionFailingWith('', 'xcodebuild: error: Timed out waiting for the test runner'),
+    port: 8100,
+  })) as AppError;
+
+  assert.equal('developerDiskImage' in (error.details ?? {}), false);
 });
