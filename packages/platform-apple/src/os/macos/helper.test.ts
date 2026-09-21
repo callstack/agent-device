@@ -141,12 +141,14 @@ test('macOS helper press keeps repeats independent and names a double-click expl
 test('macOS helper press outlives its own click schedule and forwards cancellation', async () => {
   let receivedTimeoutMs: number | undefined;
   let receivedSignal: AbortSignal | undefined;
+  let receivedKill: { signal: string; graceMs: number } | undefined;
   const controller = new AbortController();
   const provider = createLocalAppleToolProvider({
     macosHelper: {
       run: async (_args, options) => {
         receivedTimeoutMs = options?.timeoutMs;
         receivedSignal = options?.signal;
+        receivedKill = options?.kill;
         return helperReturn({ x: 1, y: 2, holdMs: 10_000, clicks: 4 });
       },
     },
@@ -170,6 +172,10 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
   assert.equal(scheduleMs, 40_360);
   assert.equal(receivedTimeoutMs, scheduleMs + 30_000);
   assert.equal(receivedSignal, controller.signal);
+  // The host stops the helper with SIGKILL on both routes, and a helper killed between a
+  // mouse-down and its mouse-up leaves the button stuck. The helper's release handler only
+  // runs if the stop reaches it as a catchable signal first.
+  assert.deepEqual(receivedKill, { signal: 'SIGTERM', graceMs: 1_000 });
 });
 
 test('macOS click schedule mirrors the helper floors for the timeout it derives', () => {

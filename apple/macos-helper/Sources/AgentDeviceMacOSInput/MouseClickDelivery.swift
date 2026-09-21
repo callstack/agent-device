@@ -35,7 +35,9 @@ public enum MouseClickDeliveryError: Error, Equatable {
 
 /// The button the helper currently holds down, kept where a signal handler can reach it.
 /// A helper killed between a mouse-down and its mouse-up would otherwise leave the system's
-/// primary button stuck down for whatever the user touches next.
+/// primary button stuck down for whatever the user touches next. The host stops the helper
+/// with SIGTERM before SIGKILL (`runMacOsHelper` in `helper.ts`) so that this handler runs
+/// on a deadline and on a cancelled request, not only on a signal sent by hand.
 nonisolated(unsafe) private var heldMouseButton: (point: CGPoint, clickState: Int)?
 
 private func releaseHeldMouseButton() {
@@ -105,7 +107,10 @@ public func postMouseClick(_ request: MouseClickRequest) throws {
     heldMouseButton = (point, press.clickState)
     down.post(tap: .cghidEventTap)
     usleep(UInt32(hold) * 1000)
-    heldMouseButton = nil
+    // The record clears only after the up is posted: a signal that lands between the two
+    // would otherwise find nothing to release and exit with the button still down. A signal
+    // that lands after the post releases a button already up, which is harmless.
     up.post(tap: .cghidEventTap)
+    heldMouseButton = nil
   }
 }

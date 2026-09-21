@@ -268,6 +268,14 @@ export async function startMacOsAudioProbeProcess(options: {
 }
 
 const MACOS_HELPER_TIMEOUT_MS = 30_000;
+/**
+ * Every stop the host applies to the helper — a deadline, a cancelled request, a client that
+ * dropped mid-command — reaches it as SIGTERM first. A helper posting a press may be holding
+ * the mouse button down at that moment, and its SIGTERM handler releases the button before it
+ * exits; SIGKILL would end it between the down and the up and leave the button stuck for
+ * whatever the user touches next. A helper that has not exited a second later is killed.
+ */
+const MACOS_HELPER_KILL_GRACE_MS = 1_000;
 
 async function runMacOsHelper<T extends Record<string, unknown>>(
   args: string[],
@@ -277,6 +285,7 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
     allowFailure: true,
     timeoutMs: options.timeoutMs ?? MACOS_HELPER_TIMEOUT_MS,
     signal: options.signal,
+    kill: { signal: 'SIGTERM' as const, graceMs: MACOS_HELPER_KILL_GRACE_MS },
   };
   const helperProvider = resolveAppleToolProvider().macosHelper;
   const helperPath = helperProvider

@@ -335,6 +335,67 @@ test.runIf(process.platform !== 'win32')(
   5_000,
 );
 
+// A child that holds something the kill would strand — the macOS helper with the mouse button
+// down — asks for a signal it can handle before SIGKILL. The trap script below stands in for
+// that helper: it records the release the signal handler performs, and its `sleep` is the
+// hold the kill interrupts.
+
+function releaseMarkerPath(label: string): string {
+  return path.join(mkdtempForTestSync(`agent-device-exec-${label}-`), 'released');
+}
+
+function holdUntilSignalledShellScript(markerPath: string): string {
+  return `trap 'printf released > ${shellQuote(markerPath)}; exit 143' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & wait`;
+}
+
+test.runIf(process.platform !== 'win32')(
+  'a cancelled command with a kill policy is signalled so it can release what it holds',
+  async () => {
+    const markerPath = releaseMarkerPath('graceful-abort');
+    const controller = new AbortController();
+    const held = runCmd('/bin/sh', ['-c', holdUntilSignalledShellScript(markerPath)], {
+      signal: controller.signal,
+      kill: { signal: 'SIGTERM', graceMs: 2_000 },
+    });
+    const rejection = settledRejection(held);
+    await sleep(100);
+
+    controller.abort();
+    const outcome = await rejection;
+
+    assert.ok(outcome, 'a cancelled command must not resolve');
+    const details = (outcome.error as { details?: Record<string, unknown> }).details;
+    assert.equal(details?.reason, 'request_canceled');
+    assert.equal(
+      fs.readFileSync(markerPath, 'utf8'),
+      'released',
+      'the child never saw the signal its handler releases on: it was killed outright',
+    );
+  },
+);
+
+test.runIf(process.platform !== 'win32')(
+  'a deadline with a kill policy still ends a child that ignores the first signal',
+  async () => {
+    const startedAt = Date.now();
+    await assert.rejects(
+      () =>
+        runCmd('/bin/sh', ['-c', `trap '' TERM; sleep ${HOLDER_LIFETIME_SECONDS} & wait`], {
+          timeoutMs: DEADLINE_MS,
+          kill: { signal: 'SIGTERM', graceMs: 200 },
+        }),
+      (error: unknown) => {
+        assert.equal(isCommandTimeoutError(error), true);
+        return true;
+      },
+    );
+    const elapsedMs = Date.now() - startedAt;
+    assert.ok(elapsedMs >= DEADLINE_MS + 200, `escalated before the grace passed: ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 2_000, `the grace became a way to outlive the deadline: ${elapsedMs}ms`);
+  },
+  10_000,
+);
+
 test.runIf(process.platform !== 'win32')(
   'runCmd that was never killed still drains output a descendant writes after its parent exited',
   async () => {

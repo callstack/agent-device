@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed (macos): `press` and `click` on the `frontmost-app`, `desktop`, and `menubar` surfaces post
+  clicks the way a trackpad does. The helper posted the release in the same tick as the press, so
+  AppKit dropped it and controls never activated; each press is now held (`--hold-ms`, 60 ms by
+  default, 40 ms at least). `--count` is that many independent clicks and `--double-tap` posts each
+  as a double-click pair, the helper's deadline follows the click schedule instead of a fixed 30 s,
+  and every stop the host applies mid-hold — a cancelled request, a dropped client, the deadline —
+  reaches the helper as SIGTERM first so it releases the button before it exits; SIGKILL only
+  follows a helper that has not exited a second later.
 - Added (diff): `diff screenshot` accepts a JPEG baseline or current image. Both inputs had to be PNG,
   so a capture exported by another tool had to be converted first and a HarmonyOS capture — which the
   platform serves as JPEG under whatever name the command was given — could never be compared. Each

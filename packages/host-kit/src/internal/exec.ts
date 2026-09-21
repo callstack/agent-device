@@ -27,6 +27,13 @@ export type ExecOptions = {
   signal?: AbortSignal;
   /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */
   maxBuffer?: number;
+  /**
+   * How a deadline or a cancelled request stops the child. Without this it is SIGKILL at
+   * once. A child that has to undo something before it dies — the macOS helper releasing a
+   * mouse button it is holding — is sent `signal` first, and SIGKILL only once `graceMs`
+   * pass without it exiting.
+   */
+  kill?: { readonly signal: NodeJS.Signals; readonly graceMs: number };
 };
 
 export type ExecStreamOptions = ExecOptions & {
@@ -206,7 +213,7 @@ function runSpawnedCommand(
     // group kill that would have ended the pipe holder can no longer run through a child
     // Node already reaped.
     const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options.detached),
+      killProcessTree: () => killProcessTree(child, options),
       settle,
     });
     const abort = watchCommandAbort(options, settlement.requestKill);
@@ -224,7 +231,7 @@ function runSpawnedCommand(
       if (abort.didAbort || didTimeout) return;
       if (isEpipeError(error)) return;
       fail(createStdinError(executable, cmd, args, error));
-      killProcessTree(child, options.detached);
+      killProcessTree(child, options);
     });
 
     child.stdout.on('data', (chunk) => {
@@ -470,7 +477,7 @@ export function runCmdBackground(
       resolve({ stdout, stderr, exitCode: finalExitCode });
     }
     const settlement = createCommandKillSettlement({
-      killProcessTree: () => killProcessTree(child, options.detached),
+      killProcessTree: () => killProcessTree(child, options),
       settle,
     });
     const abort = watchCommandAbort(options, settlement.requestKill);
@@ -910,9 +917,34 @@ export function signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals
  * waiting on. The one group-signal seam reports whether anything was reached rather than
  * throwing, and a group that is gone or not ours to signal is the case it reports false.
  */
-function killProcessTree(child: ChildProcess, detached: boolean | undefined): void {
+function killProcessTree(
+  child: ChildProcess,
+  options: Pick<ExecOptions, 'detached' | 'kill'>,
+): void {
+  if (!options.kill) {
+    signalProcessTree(child, options.detached, 'SIGKILL');
+    return;
+  }
+  // The child is given its chance to clean up, and the escalation is what keeps that
+  // chance from becoming a way to outlive the deadline. The timer holds nothing open:
+  // a child that exits on the first signal clears it, and a worker shutting down owes
+  // a child that ignored the signal nothing further.
+  signalProcessTree(child, options.detached, options.kill.signal);
+  const escalation = setTimeout(
+    () => signalProcessTree(child, options.detached, 'SIGKILL'),
+    options.kill.graceMs,
+  );
+  escalation.unref();
+  child.once('exit', () => clearTimeout(escalation));
+}
+
+function signalProcessTree(
+  child: ChildProcess,
+  detached: boolean | undefined,
+  signal: NodeJS.Signals,
+): void {
   if (detached && child.pid && process.platform !== 'win32') {
-    signalProcessGroupBestEffort(child.pid, 'SIGKILL');
+    signalProcessGroupBestEffort(child.pid, signal);
     return;
   }
   // A non-detached child leaves its pid free for the kernel to hand to an unrelated
@@ -920,7 +952,7 @@ function killProcessTree(child: ChildProcess, detached: boolean | undefined): vo
   // strike a stranger. Nothing waits for a kill of a child that is already gone:
   // settlement happens on `exit`.
   if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill('SIGKILL');
+  child.kill(signal);
 }
 
 /**
