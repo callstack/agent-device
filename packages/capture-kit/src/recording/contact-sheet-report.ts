@@ -5,6 +5,8 @@
 
 /** The host cannot extract frames at all: frame decoding is Apple AVFoundation tooling. */
 export const CONTACT_SHEET_UNSUPPORTED_HOST_REASON = 'contact_sheet_unsupported_host';
+/** The MP4 timeline could not be read, so no bounded sample grid can be planned. */
+export const CONTACT_SHEET_DURATION_REASON = 'contact_sheet_duration_unknown';
 /** Frame extraction ran and failed, rather than returning fewer frames. */
 export const CONTACT_SHEET_EXTRACTION_REASON = 'contact_sheet_frame_extraction_failed';
 /** Extraction returned nothing usable, so there is no sheet to draw. */
