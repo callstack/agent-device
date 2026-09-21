@@ -28,12 +28,16 @@ import {
   cleanupAppleRecording,
   createAppleRecordingEnvelope,
   reattachAppleRecording,
+  simulatorExportCoordinates,
   type AppleRecordingDescriptor,
   type AppleScreenRecordingOperationHost,
+  type AppleSimulatorExportCoordinates,
+  type AppleSimulatorRecordingRestore,
 } from './recovery.ts';
 import { validateAppleSimulatorRecording } from './validation.ts';
 
 const SIMULATOR_TARGET_LABEL = 'iOS recording';
+const SIMULATOR_BACKEND_LABEL = 'simctl recordVideo';
 
 export function appleScreenRecordingFacts(device: DeviceInfo) {
   if (device.appleOs === 'watchos')
@@ -62,7 +66,13 @@ export function createAppleScreenRecordingOperations(params: {
     screenRecordingStart: async (input) =>
       await startAppleRecording({ host, device, owner, input, signal }),
     screenRecordingReattach: async (input) =>
-      await reattachAppleRecording(host, device, input.envelope.descriptor.body),
+      await reattachAppleRecording({
+        host,
+        device,
+        envelope: input.envelope,
+        restoreSimulatorExport: (restored) =>
+          reattachedSimulatorRecordingHandle({ host, restored }),
+      }),
     screenRecordingCleanup: async (input) =>
       await cleanupAppleRecording(
         host,
@@ -147,24 +157,27 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
           }),
     };
   };
+  const startedSnapshot = snapshot(input, SIMULATOR_BACKEND_LABEL, {}, clockAnchor);
   return startResult({
     device,
     owner,
     input,
-    descriptor: { backend: 'simctl', outputPath: nativePath, processes },
-    snapshot: snapshot(input, 'simctl recordVideo', {}, clockAnchor),
+    descriptor: {
+      backend: 'simctl',
+      outputPath: nativePath,
+      processes,
+      recording: simulatorExportCoordinates(startedSnapshot),
+    },
+    snapshot: startedSnapshot,
     finish: (current, progress) =>
       stopAndExportScreenRecording({
         snapshot: current,
         progress,
         steps: {
           stop: stopSimulatorRecorder,
-          // The copy gets the container sniff before it is checkpointed; the full playability verdict
-          // runs once, on the export `finalize` writes from it.
           collect: async (collectedPath) => {
             try {
-              await host.screenRecording.outputs.copy({ from: nativePath, to: collectedPath });
-              await host.screenRecording.finalize.sniff({ outputPath: collectedPath });
+              await collectSimulatorRecording(host, nativePath, collectedPath);
             } catch (collectError) {
               throw recorderExitEndedTheRecording(collectError, recorderExit, recorderResult);
             }
@@ -199,6 +212,92 @@ async function startAppleSimulatorRecording(params: AppleRecordingStartParams) {
       return result;
     },
   });
+}
+
+/**
+ * A stop that reattaches to a `simctl` recording whose recorder is already gone has no recorder left
+ * to signal and no gesture events left to burn in — those died with the daemon. Everything else the
+ * first stop would have done is what this handle does: collect the file the recorder wrote, finalize
+ * the export from the copy, and state on the response that the overlay cannot be honoured.
+ */
+function reattachedSimulatorRecordingHandle(
+  params: Readonly<{
+    host: AppleScreenRecordingOperationHost;
+    restored: AppleSimulatorRecordingRestore;
+  }>,
+): ScreenRecordingLiveHandle {
+  const { host, restored } = params;
+  const { recording, nativePath, cleanup } = restored;
+  return createScreenRecordingLiveHandle(reattachedSimulatorSnapshot(recording), {
+    finish: (current, progress) =>
+      stopAndExportScreenRecording({
+        snapshot: current,
+        progress,
+        steps: {
+          stop: async () => ({
+            observation: { recorder: 'confirmed' as const },
+            warning:
+              'simctl recordVideo had already ended when record stop reattached to it; ' +
+              'the video covers only what the recorder wrote before it stopped.',
+          }),
+          collect: async (collectedPath) => {
+            await collectSimulatorRecording(host, nativePath, collectedPath);
+          },
+          finalize: async ({ collectedPath, exportPath }) => {
+            const finalization = await finalizeAppleRecordingFromCollected({
+              host,
+              snapshot: current,
+              targetLabel: SIMULATOR_TARGET_LABEL,
+              collectedPath,
+              exportPath,
+              nativePath,
+            });
+            return recording.showTouches && finalization.overlayWarning === undefined
+              ? {
+                  ...finalization,
+                  overlayWarning:
+                    'overlay unavailable: the daemon that held the touch events ended before ' +
+                    'record stop, and they did not survive it.',
+                }
+              : finalization;
+          },
+          discard: async (collectedPath) => {
+            await host.screenRecording.outputs.remove(collectedPath);
+          },
+        },
+      }),
+    forceCleanup: async () => await cleanup(),
+  });
+}
+
+function reattachedSimulatorSnapshot(
+  recording: AppleSimulatorExportCoordinates,
+): ScreenRecordingLiveSnapshot {
+  return Object.freeze({
+    backend: SIMULATOR_BACKEND_LABEL,
+    outPath: recording.outPath,
+    ...(recording.clientOutPath === undefined ? {} : { clientOutPath: recording.clientOutPath }),
+    startedAt: recording.startedAt,
+    scope: recording.scope,
+    showTouches: recording.showTouches,
+    recordOnlySession: recording.recordOnlySession,
+    ...(recording.activeSessionApp === undefined
+      ? {}
+      : { activeSessionApp: recording.activeSessionApp }),
+    ...(recording.exportQuality === undefined ? {} : { exportQuality: recording.exportQuality }),
+    gestureEvents: [],
+  });
+}
+
+async function collectSimulatorRecording(
+  host: AppleScreenRecordingOperationHost,
+  nativePath: string,
+  collectedPath: string,
+): Promise<void> {
+  // The copy gets the container sniff before it is checkpointed; the full playability verdict
+  // runs once, on the export `finalize` writes from it.
+  await host.screenRecording.outputs.copy({ from: nativePath, to: collectedPath });
+  await host.screenRecording.finalize.sniff({ outputPath: collectedPath });
 }
 
 async function startAppleRunnerRecording(params: AppleRecordingStartParams) {

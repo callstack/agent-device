@@ -65,6 +65,19 @@ export function recordingInput(
   };
 }
 
+export function simulatorRecorderStart(): Pick<
+  ScreenRecordingRuntimeHost['apple'],
+  'startSimulator'
+> {
+  return {
+    startSimulator: async () => ({
+      markers: [processIdentity],
+      wait: new Promise<never>(() => {}),
+      terminate: async () => {},
+    }),
+  };
+}
+
 export function appleRecordingHost(
   options: {
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
@@ -114,7 +127,13 @@ export function appleRecordingHost(
       apple,
       outputs: Object.assign({}, store.outputs, options.outputs),
       finalize: {
-        sniff: options.sniff ?? (async () => {}),
+        // The real sniff reads the file and refuses one that is not there or not a video, which is
+        // what lets a recovery ask whether a recorder's file can still become an export.
+        sniff:
+          options.sniff ??
+          (async ({ outputPath }: Readonly<{ outputPath: string }>) => {
+            if (!store.exists(outputPath)) throw new Error(`no recording file at ${outputPath}`);
+          }),
         complete: options.complete ?? (async () => ({})),
       },
       ownedProcesses: options.ownedProcesses ?? { replace: () => {}, clear: () => {} },
