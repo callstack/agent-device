@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
+import { CONTACT_SHEET_UNSUPPORTED_HOST_REASON } from '../contact-sheet-report.ts';
+import { assertContactSheetHostSupport } from '../contact-sheet-frames.ts';
 import { getRecordingOverlaySupportWarning } from '../overlay.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,10 +74,38 @@ test(
   SWIFT_TYPECHECK_TIMEOUT_MS,
 );
 
+test(
+  'recording frames Swift script typechecks',
+  async (t) => {
+    if (process.platform !== 'darwin') {
+      t.skip('Swift recording scripts are only validated on macOS');
+    }
+
+    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-frames.swift'), [
+      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
+    ]);
+  },
+  SWIFT_TYPECHECK_TIMEOUT_MS,
+);
+
 test('recording overlays are explicitly unsupported on non-macOS hosts', () => {
   assert.equal(
     getRecordingOverlaySupportWarning('linux'),
     'touch overlay burn-in is only available on macOS hosts; returning raw video plus gesture telemetry',
   );
   assert.equal(getRecordingOverlaySupportWarning('darwin'), undefined);
+});
+
+test('contact sheets are explicitly unsupported on non-macOS hosts', () => {
+  assert.throws(
+    () => assertContactSheetHostSupport('linux'),
+    (error: unknown) => {
+      return (
+        error instanceof AppError &&
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.details?.reason === CONTACT_SHEET_UNSUPPORTED_HOST_REASON
+      );
+    },
+  );
+  assert.doesNotThrow(() => assertContactSheetHostSupport('darwin'));
 });

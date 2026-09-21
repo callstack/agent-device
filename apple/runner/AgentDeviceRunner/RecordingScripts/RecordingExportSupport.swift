@@ -9,10 +9,13 @@ enum RecordingScriptError: Error, CustomStringConvertible {
   case invalidArgs(String)
   case missingVideoTrack
   case exportFailed(String)
+  case frameWriteFailed(String)
 
   var description: String {
     switch self {
     case .invalidArgs(let message):
+      return message
+    case .frameWriteFailed(let message):
       return message
     case .missingVideoTrack:
       return "Input video does not contain a video track."
