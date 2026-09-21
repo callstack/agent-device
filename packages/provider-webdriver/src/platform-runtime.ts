@@ -540,7 +540,7 @@ function webDriverFacts(
       systemButton: inactiveSession,
       fold: foldUnavailable,
       triggerAppEvent: inactiveSession,
-      setSetting: inactiveSession,
+      settings: inactiveSession,
       readAlert: inactiveSession,
       awaitAlert: inactiveSession,
       acceptAlert: inactiveSession,
@@ -583,7 +583,7 @@ function webDriverFacts(
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
     triggerAppEvent: appEventUnavailable,
-    setSetting: settingsUnavailable,
+    settings: settingsUnavailable,
     readAlert: alertUnavailable,
     awaitAlert: alertUnavailable,
     acceptAlert: alertUnavailable,
@@ -683,7 +683,10 @@ function webDriverFacts(
       ...appEventRuntimeOperationFacts({
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
-      ...settingsRuntimeOperationFacts({ setSetting: settingsUnavailable }),
+      ...settingsRuntimeOperationFacts({
+        setSetting: settingsUnavailable,
+        readSetting: settingsUnavailable,
+      }),
       // R59 cell delta, deliberate: the retired `supportsAlertSurface` closure ADMITTED `alert` on
       // a provider-owned physical iOS device (it keyed on `appleOs === 'ios'` alone), and the
       // handler then drove the LOCAL XCTest runner against a device living in someone else's

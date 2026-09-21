@@ -46,12 +46,81 @@ export type MobilePermissionTarget = (typeof MOBILE_PERMISSION_TARGETS)[number];
  */
 export type PermissionTarget = MobilePermissionTarget;
 
+/**
+ * The preferred-text-size ladder `settings text-size` accepts, in the order `settings` help lists
+ * it. Apple serves it natively — `simctl ui <device> content_size` reads and writes exactly these
+ * names — and Android serves it through its `system font_scale` multiplier, so this ladder is the
+ * cross-platform vocabulary and each owner maps it in its own native terms. Acceptance is not
+ * support: an owner that cannot serve the ladder refuses at admission, on its own fact.
+ */
+export const TEXT_SIZE_CATEGORIES = [
+  'extra-small',
+  'small',
+  'medium',
+  'large',
+  'extra-large',
+  'extra-extra-large',
+  'extra-extra-extra-large',
+  'accessibility-medium',
+  'accessibility-large',
+  'accessibility-extra-large',
+  'accessibility-extra-extra-large',
+  'accessibility-extra-extra-extra-large',
+] as const;
+
+export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
+
+/**
+ * The settings that answer `settings <setting>` with no state. A setting joins this list only when
+ * at least one owner can read it back; the read leg admits the owner's `readSetting` fact rather
+ * than its `setSetting` fact, so a readable setting never claims a mutation it does not perform.
+ */
+export const READABLE_SETTINGS = ['text-size'] as const;
+
+export type ReadableSetting = (typeof READABLE_SETTINGS)[number];
+
+/**
+ * What `text-size` answers with. The ladder is shared across platforms, so a read names the
+ * category the ladder calls the device's value *and* the value the platform itself reported: an
+ * Apple content-size name, or an Android `font_scale` multiplier. The ladder is coarser than any
+ * one platform's own scale, and `platformValue` is what keeps a normalized answer auditable.
+ */
+export type TextSizeSettingPayload = Readonly<{
+  category: TextSizeCategory;
+  platformValue: string;
+}>;
+
+/** The payload a readable setting answers with. A second readable setting joins this union. */
+export type ReadSettingResult = TextSizeSettingPayload;
+
+/** Builds the ladder's read payload, so no owner renames its keys or drops the platform value. */
+export function textSizeSettingPayload(
+  category: TextSizeCategory,
+  platformValue: string,
+): TextSizeSettingPayload {
+  return Object.freeze({ category, platformValue });
+}
+
 export type SettingOptions = {
   permissionTarget?: string;
   permissionMode?: string;
   latitude?: number;
   longitude?: number;
 };
+
+/**
+ * The one leg rule the command descriptor and the daemon request parser share: a settings request
+ * reads when it names a readable setting and nothing else, and the setting it named comes back
+ * narrowed. A request with a state is a mutation even when the setting is readable, which is why the
+ * rule sits beside the vocabulary rather than in either consumer — the recording effect, the session
+ * ref-frame effect, and the operation admitted all turn on it.
+ */
+export function resolveSettingsReadRequest(
+  positionals: readonly string[] | undefined,
+): ReadableSetting | undefined {
+  if (positionals === undefined || positionals[1] !== undefined) return undefined;
+  return findVocabularyName(READABLE_SETTINGS, positionals[0]);
+}
 
 const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
 const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';
@@ -62,19 +131,25 @@ const SETTINGS_TOUCHID_USAGE = 'touchid <match|nonmatch|enroll|unenroll>';
 const SETTINGS_FINGERPRINT_USAGE = 'fingerprint <match|nonmatch>';
 const SETTINGS_CLEAR_APP_STATE_USAGE = 'clear-app-state [app-id]';
 const SETTINGS_RESET_KEYCHAIN_USAGE = 'reset-keychain clear';
+/**
+ * The bracket is what makes `settings text-size` a read: the ladder is the write form, and the bare
+ * setting asks the owner for the category it currently holds.
+ */
+const SETTINGS_TEXT_SIZE_USAGE = `text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`;
 const SETTINGS_PERMISSION_USAGE = `permission <${PERMISSION_ACTIONS.join('|')}> <${MOBILE_PERMISSION_TARGETS.join('|')}> [${PERMISSION_MODES.join('|')}]`;
 /**
  * The macOS permission form. Its action list is the subset the macOS owner serves (`deny` is
  * refused there), so it stays a literal while the accepted names come from the vocabulary.
  */
 export const SETTINGS_MACOS_PERMISSION_USAGE = `permission <grant|reset> <${MACOS_PERMISSION_TARGETS.join('|')}>`;
-const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|location|animations remain unsupported on macOS.`;
+const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|location|animations|text-size remain unsupported on macOS.`;
 
 export const SETTINGS_USAGE_OVERRIDE = [
   `settings ${SETTINGS_WIFI_USAGE}`,
   `settings ${SETTINGS_LOCATION_SET_USAGE}`,
   `settings ${SETTINGS_ANIMATIONS_USAGE}`,
   `settings ${SETTINGS_APPEARANCE_USAGE}`,
+  `settings ${SETTINGS_TEXT_SIZE_USAGE}`,
   `settings ${SETTINGS_FACEID_USAGE}`,
   `settings ${SETTINGS_TOUCHID_USAGE}`,
   `settings ${SETTINGS_FINGERPRINT_USAGE}`,
@@ -84,7 +159,7 @@ export const SETTINGS_USAGE_OVERRIDE = [
   `settings ${SETTINGS_MACOS_PERMISSION_USAGE}`,
 ].join(' | ');
 
-export const SETTINGS_INVALID_ARGS_MESSAGE = `settings requires ${SETTINGS_WIFI_USAGE}, ${SETTINGS_LOCATION_SET_USAGE}, ${SETTINGS_ANIMATIONS_USAGE}, ${SETTINGS_APPEARANCE_USAGE}, ${SETTINGS_FACEID_USAGE}, ${SETTINGS_TOUCHID_USAGE}, ${SETTINGS_FINGERPRINT_USAGE}, ${SETTINGS_CLEAR_APP_STATE_USAGE}, ${SETTINGS_RESET_KEYCHAIN_USAGE}, ${SETTINGS_PERMISSION_USAGE}, or ${SETTINGS_MACOS_PERMISSION_USAGE}`;
+export const SETTINGS_INVALID_ARGS_MESSAGE = `settings requires ${SETTINGS_WIFI_USAGE}, ${SETTINGS_LOCATION_SET_USAGE}, ${SETTINGS_ANIMATIONS_USAGE}, ${SETTINGS_APPEARANCE_USAGE}, ${SETTINGS_TEXT_SIZE_USAGE}, ${SETTINGS_FACEID_USAGE}, ${SETTINGS_TOUCHID_USAGE}, ${SETTINGS_FINGERPRINT_USAGE}, ${SETTINGS_CLEAR_APP_STATE_USAGE}, ${SETTINGS_RESET_KEYCHAIN_USAGE}, ${SETTINGS_PERMISSION_USAGE}, or ${SETTINGS_MACOS_PERMISSION_USAGE}`;
 
 export function isMacOsSettingSupported(setting: string): boolean {
   const normalized = setting.trim().toLowerCase();
@@ -95,8 +170,29 @@ export function getUnsupportedMacOsSettingMessage(setting: string): string {
   return `Unsupported macOS setting: ${setting}. ${SETTINGS_MACOS_SUPPORTED_MESSAGE}`;
 }
 
-/** The one membership rule every permission parser shares: a name matches itself, any casing. */
-function findPermissionName<const TNames extends readonly string[]>(
+/**
+ * The category a caller asked for. `simctl` exits 0 with `Invalid argument` for a category it does
+ * not know, so a write must never delegate validation to the tool: every surface parses here
+ * first, and the refusal names the whole ladder.
+ */
+export function parseTextSizeCategory(value: string | undefined): TextSizeCategory {
+  const parsed = readTextSizeCategory(value);
+  if (parsed !== undefined) return parsed;
+  throw new AppError('INVALID_ARGS', invalidTextSizeMessage(value));
+}
+
+/** The refusal every surface that rejects an off-ladder category answers with. */
+export function invalidTextSizeMessage(value: string | undefined): string {
+  return `Invalid text size: ${value ?? ''}. Use ${TEXT_SIZE_CATEGORIES.join('|')}.`;
+}
+
+/** The category an owner reads back, or `undefined` for a value the ladder does not name. */
+export function readTextSizeCategory(value: string | undefined): TextSizeCategory | undefined {
+  return findVocabularyName(TEXT_SIZE_CATEGORIES, value);
+}
+
+/** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
+function findVocabularyName<const TNames extends readonly string[]>(
   names: TNames,
   value: string | undefined,
 ): TNames[number] | undefined {
@@ -105,7 +201,7 @@ function findPermissionName<const TNames extends readonly string[]>(
 }
 
 export function parsePermissionAction(action: string): PermissionAction {
-  const parsed = findPermissionName(PERMISSION_ACTIONS, action);
+  const parsed = findVocabularyName(PERMISSION_ACTIONS, action);
   if (parsed !== undefined) return parsed;
   throw new AppError(
     'INVALID_ARGS',
@@ -114,7 +210,7 @@ export function parsePermissionAction(action: string): PermissionAction {
 }
 
 export function parsePermissionTarget(value: string | undefined): PermissionTarget {
-  const parsed = findPermissionName(MOBILE_PERMISSION_TARGETS, value);
+  const parsed = findVocabularyName(MOBILE_PERMISSION_TARGETS, value);
   if (parsed !== undefined) return parsed;
   throw new AppError(
     'INVALID_ARGS',

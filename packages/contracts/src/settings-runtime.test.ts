@@ -14,7 +14,14 @@ const device = {
 
 test('builds the exact settings operation fact catalog', () => {
   const setSetting = { available: true } as const;
-  expect(settingsRuntimeOperationFacts({ setSetting })).toEqual({ setSetting });
+  const readSetting = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  } as const;
+  expect(settingsRuntimeOperationFacts({ setSetting, readSetting })).toEqual({
+    setSetting,
+    readSetting,
+  });
 });
 
 // The daemon has already parsed the CLI form, resolved the target app, and typed the coordinates

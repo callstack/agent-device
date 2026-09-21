@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { READABLE_SETTINGS } from '@agent-device/contracts/settings';
 import { test } from 'vitest';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
 import {
@@ -305,6 +306,76 @@ test('recordingEffect resolves request-sensitive observation and mutation subcom
     }),
     'mutates-app',
   );
+  // settings: the read leg observes, and the same word with a category mutates. Both legs come from
+  // the one vocabulary rule, so this is where the two halves of `text-size` are pinned apart.
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'settings', positionals: ['text-size'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'settings',
+      positionals: ['text-size', 'large'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
+});
+
+test('the registry read-only settings set stays the settings vocabulary readable list', () => {
+  // The registry declares `text-size` as a read-only setting locally, because the settings
+  // vocabulary module is too heavy for the CLI's eager command-registry closure. This is where the
+  // two are held together over the WHOLE settings vocabulary, in both directions: a setting that
+  // joins READABLE_SETTINGS without joining the registry's set would be classified as a mutation
+  // while the daemon runs it as a read, and a stale registry entry would claim observation for a
+  // request the daemon executes as a mutation.
+  const SETTINGS_SUBCOMMANDS = [
+    'wifi',
+    'airplane',
+    'location',
+    'animations',
+    'appearance',
+    'faceid',
+    'touchid',
+    'fingerprint',
+    'clear-app-state',
+    'reset-keychain',
+    'permission',
+    'text-size',
+  ] as const;
+  const readable = new Set<string>(READABLE_SETTINGS);
+  assert.ok(readable.size > 0, 'the settings vocabulary declares at least one readable setting');
+  for (const setting of SETTINGS_SUBCOMMANDS) {
+    const effect = resolveCommandRecordingEffect({
+      command: 'settings',
+      positionals: [setting],
+      flags: {},
+    });
+    assert.equal(
+      effect,
+      readable.has(setting) ? 'observes-app' : 'mutates-app',
+      `settings ${setting} alone must be ${readable.has(setting) ? 'observes-app' : 'mutates-app'}`,
+    );
+    // A state is a mutation even for a readable setting — that half of the rule must not drift
+    // either, or `settings text-size large` would be recorded as an observation.
+    assert.equal(
+      resolveCommandRecordingEffect({
+        command: 'settings',
+        positionals: [setting, 'some-state'],
+        flags: {},
+      }),
+      'mutates-app',
+      `settings ${setting} with a state mutates`,
+    );
+  }
+  // Every name the registry treats as readable must be a real settings subcommand, so the set
+  // cannot keep classifying a name the vocabulary has since dropped.
+  for (const setting of readable) {
+    assert.ok(
+      (SETTINGS_SUBCOMMANDS as readonly string[]).includes(setting),
+      `READABLE_SETTINGS names ${setting}, which is not a settings subcommand`,
+    );
+  }
 });
 
 test('frameworkTier is declared iff a command is public, and never elsewhere', () => {

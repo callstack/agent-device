@@ -64,7 +64,13 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   clipboard: RuntimeOperationUnavailability;
   systemButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
-  setSetting: RuntimeOperationUnavailability;
+  /**
+   * One cell for both settings halves: an owner that names no settings surface here refuses the
+   * write and the read alike, and an owner whose two halves genuinely differ (the Apple leaf, whose
+   * host can set an appearance it cannot read back) states them directly through
+   * `settingsRuntimeOperationFacts` instead of routing both through this denial.
+   */
+  settings: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
   awaitAlert: RuntimeOperationUnavailability;
   acceptAlert: RuntimeOperationUnavailability;
@@ -119,7 +125,7 @@ const UNAVAILABLE_CELLS = {
   clipboard: true,
   systemButton: true,
   triggerAppEvent: true,
-  setSetting: true,
+  settings: true,
   readAlert: true,
   awaitAlert: true,
   acceptAlert: true,
@@ -241,7 +247,10 @@ export function createUnavailablePlatformRuntimeFacts(
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
-      ...settingsRuntimeOperationFacts({ setSetting: frozen.setSetting }),
+      ...settingsRuntimeOperationFacts({
+        setSetting: frozen.settings,
+        readSetting: frozen.settings,
+      }),
       ...alertRuntimeOperationFacts({
         read: frozen.readAlert,
         wait: frozen.awaitAlert,

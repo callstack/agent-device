@@ -40,6 +40,10 @@ const EXPECTATIONS: {
     method: 'setSetting',
     input: { setting: 'appearance', state: 'dark' },
   },
+  readSetting: {
+    method: 'readSetting',
+    input: { setting: 'text-size' },
+  },
   readAlert: { method: 'readAlert', input: {} },
   awaitAlert: { method: 'awaitAlert', input: {} },
   acceptAlert: { method: 'acceptAlert', input: {} },

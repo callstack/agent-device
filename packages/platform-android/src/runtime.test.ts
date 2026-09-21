@@ -256,9 +256,12 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     // R57: the deep link opens through `am start` on the same cell.
     expect(binding.facts.operations.triggerAppEvent).toEqual({ available: true });
     expect(binding.operations.triggerAppEvent).toBeTypeOf('function');
-    // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too.
+    // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too, and
+    // so does the read leg (`settings get system font_scale`), which every Android kind can answer.
     expect(binding.facts.operations.setSetting).toEqual({ available: true });
     expect(binding.operations.setSetting).toBeTypeOf('function');
+    expect(binding.facts.operations.readSetting).toEqual({ available: true });
+    expect(binding.operations.readSetting).toBeTypeOf('function');
     // R59: all four alert legs read the same dump and tap with the same `input tap`.
     for (const operation of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
       expect(binding.facts.operations[operation]).toEqual({ available: true });

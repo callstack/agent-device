@@ -69,7 +69,7 @@ import {
   scrollRuntimePlanUses,
   selectorCaptureRuntimePlanUses,
   selectorTextCaptureRuntimePlanUses,
-  settingsRuntimeUse,
+  settingsRuntimePlanUses,
   shutdownTargetUse,
   snapshotRuntimePlanUses,
   swipeRuntimePlanUses,
@@ -245,6 +245,27 @@ const findRecordingEffect = (req: DispatchedCommand): RecordingEffect => {
 
 const clipboardRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
   readOnlySubactionRecordingEffect(req, new Set(['read']), '');
+
+// `settings <setting>` with nothing after it asks a readable setting for the value the device holds;
+// every other settings request changes device state — including `settings text-size <category>`,
+// which names the same word and performs a mutation. The read-only membership is declared here in
+// the shape `keyboard` and `alert` declare theirs: the settings vocabulary itself lives in
+// `contracts/settings.ts`, which the CLI's eager command-registry entries must not evaluate
+// (ratcheted by `scripts/__tests__/eager-closure-budgets.test.ts`), and the parity suite pins this
+// set against `READABLE_SETTINGS` so the classification cannot drift from the vocabulary.
+const SETTINGS_READ_ONLY_SETTINGS = new Set(['text-size']);
+
+function settingsRequestReads(req: DispatchedCommand): boolean {
+  const positionals = req.positionals;
+  if (positionals === undefined || positionals.length !== 1) return false;
+  return SETTINGS_READ_ONLY_SETTINGS.has(positionals[0]?.trim().toLowerCase() ?? '');
+}
+
+const settingsRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
+  settingsRequestReads(req) ? 'observes-app' : 'mutates-app';
+
+const settingsRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
+  settingsRequestReads(req) ? 'preserve' : 'may-invalidate';
 
 function readOnlySubactionRefFrameEffect(
   req: DispatchedCommand,
@@ -1155,15 +1176,17 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R58 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
-    // overlay membership together: admission is the owner's `setSetting` fact, and the only
-    // execution is that one bound operation. The macOS setting-name gate stays daemon-side —
-    // it keys on the requested setting, which is not a device fact.
+    // overlay membership together: a request admits one of the owner's two settings facts —
+    // `readSetting` for a bare readable setting, `setSetting` for everything else — and executes
+    // exactly that one bound operation, which is why the two effects above classify per request.
+    // The macOS setting-name gate stays daemon-side — it keys on the requested setting, which is
+    // not a device fact.
     recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    daemon: { route: 'snapshot', refFrameEffect: 'may-invalidate' },
+    recordingEffect: settingsRecordingEffect,
+    daemon: { route: 'snapshot', refFrameEffect: settingsRefFrameEffect },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
-    platformExecution: { kind: 'device-runtime', uses: [settingsRuntimeUse] },
+    platformExecution: { kind: 'device-runtime', uses: settingsRuntimePlanUses },
   },
 
   // -- specialized routes --

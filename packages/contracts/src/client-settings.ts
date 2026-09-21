@@ -6,6 +6,7 @@ import type {
   MOBILE_PERMISSION_TARGETS,
   PermissionAction,
   PermissionMode,
+  TextSizeCategory,
 } from './settings.ts';
 
 /**
@@ -44,6 +45,15 @@ export type SettingsUpdateOptions =
   | (DeviceCommandBaseOptions & {
       setting: 'appearance';
       state: 'light' | 'dark' | 'toggle';
+    })
+  /**
+   * One member, two legs: with a `state` it applies that rung, and without one it asks the target
+   * what it currently holds. The ladder is shared across platforms; an owner that serves neither
+   * leg refuses on its own runtime fact rather than answering an empty value.
+   */
+  | (DeviceCommandBaseOptions & {
+      setting: 'text-size';
+      state?: TextSizeCategory;
     })
   | (DeviceCommandBaseOptions & {
       setting: 'faceid' | 'touchid';

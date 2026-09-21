@@ -74,6 +74,19 @@ test('resolver commands classify per selected subaction', () => {
   assert.equal(resolveRefFrameEffect(makeRequest('alert', ['wait'])), 'preserve');
   assert.equal(resolveRefFrameEffect(makeRequest('alert', ['accept'])), 'may-invalidate');
   assert.equal(resolveRefFrameEffect(makeRequest('alert', ['dismiss'])), 'may-invalidate');
+  // settings: a bare readable setting asks for a value and touches nothing; a text size is a device
+  // mutation even though the same word names the read leg, and an argument-less `settings` is
+  // refused by the parser — which still classifies the shape conservatively.
+  assert.equal(resolveRefFrameEffect(makeRequest('settings', ['text-size'])), 'preserve');
+  assert.equal(resolveRefFrameEffect(makeRequest('settings')), 'may-invalidate');
+  assert.equal(
+    resolveRefFrameEffect(makeRequest('settings', ['text-size', 'accessibility-large'])),
+    'may-invalidate',
+  );
+  assert.equal(
+    resolveRefFrameEffect(makeRequest('settings', ['appearance', 'dark'])),
+    'may-invalidate',
+  );
 });
 
 test('representative literal classifications resolve as declared', () => {

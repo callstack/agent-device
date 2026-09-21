@@ -67,6 +67,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'prepareApplicationOpen',
   'readAlert',
   'readClipboard',
+  'readSetting',
   'readTextAtPoint',
   'resolveOpenTarget',
   'screenRecordingCleanup',

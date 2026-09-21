@@ -3,6 +3,8 @@ import {
   type MobilePermissionTarget,
   parsePermissionAction,
   parsePermissionTarget,
+  READABLE_SETTINGS,
+  type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
@@ -20,6 +22,7 @@ import {
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
+import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { runSimctl, simctlArgs } from './apps-simctl.ts';
 import {
@@ -148,6 +151,9 @@ export async function setIosSetting(
       await runSimctl(device, ['ui', device.id, 'appearance', target]);
       return;
     }
+    case 'text-size': {
+      return await setIosTextSize(device, state);
+    }
     case 'permission': {
       if (!appBundleId) {
         throw new AppError('INVALID_ARGS', 'permission setting requires an active app in session');
@@ -160,6 +166,29 @@ export async function setIosSetting(
     default:
       throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   }
+}
+
+/**
+ * The ONE place an Apple target answers `settings <setting>` with the value it holds. The command
+ * surface only ever sends a setting its own vocabulary declares readable, so a name outside this
+ * switch is a leaf mismatch rather than a user typo, and says so.
+ */
+export async function readIosSetting(
+  device: DeviceInfo,
+  setting: string,
+): Promise<ReadSettingResult> {
+  const normalized = setting.toLowerCase();
+  if (normalized === 'text-size') return await readIosTextSize(device);
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `Reading the "${setting}" setting back is not supported on Apple targets.`,
+    {
+      deviceId: device.id,
+      setting,
+      reason: 'setting-read-unsupported-on-leaf',
+      hint: `Apple targets read back ${READABLE_SETTINGS.join(', ')}.`,
+    },
+  );
 }
 
 async function clearIosSimulatorAppState(

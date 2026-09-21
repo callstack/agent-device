@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { formatCliOutput } from '../cli-output.ts';
 import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
@@ -153,6 +154,62 @@ describe('settings CLI permission vocabulary', () => {
       command: 'settings',
       positionals: ['permission', 'deny', 'screen-recording', 'full'],
     });
+  });
+});
+
+describe('settings CLI text-size', () => {
+  const LADDER_MESSAGE = `Invalid text size: gigantic. Use ${TEXT_SIZE_CATEGORIES.join('|')}.`;
+
+  test('reads with a lone positional and writes with a category', () => {
+    expect(settingsCliReader(['text-size'], flags())).toMatchObject({ setting: 'text-size' });
+    expect(settingsCliReader(['text-size'], flags())).not.toHaveProperty('state');
+    expect(settingsDaemonWriter(settingsCliReader(['text-size'], flags()))).toMatchObject({
+      command: 'settings',
+      positionals: ['text-size'],
+    });
+
+    const write = settingsCliReader(['text-size', 'accessibility-large'], flags());
+    expect(write).toMatchObject({ setting: 'text-size', state: 'accessibility-large' });
+    expect(settingsDaemonWriter(write)).toMatchObject({
+      command: 'settings',
+      positionals: ['text-size', 'accessibility-large'],
+    });
+  });
+
+  test.each([...TEXT_SIZE_CATEGORIES])('accepts the %s category', (category) => {
+    expect(settingsCliReader(['text-size', category], flags())).toMatchObject({ state: category });
+  });
+
+  test('refuses an off-ladder category and lists the whole ladder', () => {
+    expectInvalidArgs(() => settingsCliReader(['text-size', 'gigantic'], flags()), LADDER_MESSAGE);
+  });
+
+  test('publishes the read form in its usage', () => {
+    expect(settingsCommandFacet.metadata.inputSchema.properties?.state).toBeDefined();
+    expect(settingsCommandFacet.metadata.inputSchema.required).not.toContain('state');
+    const usage = (settingsCommandFacet.cliSchema as { usageOverride: string }).usageOverride;
+    expect(usage).toContain(`text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`);
+  });
+
+  test('a category is accepted exactly when it names a ladder rung, any casing or padding', () => {
+    // The deliberate contrast with `permission`, which refuses a target it would have to normalize:
+    // a text size has one spelling per rung and `simctl`/`font_scale` both take the canonical one,
+    // so the reader canonicalizes instead of refusing.
+    fc.assert(
+      fc.property(fc.string(), (value) => {
+        const canonical = value.trim().toLowerCase();
+        if ((TEXT_SIZE_CATEGORIES as readonly string[]).includes(canonical)) {
+          expect(settingsCliReader(['text-size', value], flags())).toMatchObject({
+            state: canonical,
+          });
+          return;
+        }
+        expect(() => settingsCliReader(['text-size', value], flags())).toThrow(
+          expect.objectContaining({ code: 'INVALID_ARGS' }),
+        );
+      }),
+      { numRuns: PROPERTY_RUNS },
+    );
   });
 });
 

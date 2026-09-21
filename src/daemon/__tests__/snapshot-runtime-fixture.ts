@@ -11,9 +11,11 @@ import {
   alertRuntimeOperationFacts,
 } from '@agent-device/contracts/alert-runtime';
 import {
+  type ReadSettingInput,
   type SetSettingInput,
   settingsRuntimeOperationFacts,
 } from '@agent-device/contracts/settings-runtime';
+import type { ReadSettingResult } from '@agent-device/contracts/settings';
 import {
   type CaptureScreenshotInput,
   screenshotRuntimeOperationFacts,
@@ -28,6 +30,7 @@ import {
   isApplePlatform,
   isIosFamily,
   isMacOs,
+  resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
@@ -52,10 +55,24 @@ export const fixtureScreenshotCaptures: CaptureScreenshotInput[] = [];
  */
 export const fixtureSettingsMutations: SetSettingInput[] = [];
 
+/**
+ * Every read the fixture's bound settings operation received, newest last. The read half of the
+ * surface is what the `settings <setting>` leg witnesses: that the request reached the owner and
+ * named the setting it asked about, with no state attached.
+ */
+export const fixtureSettingsReads: ReadSettingInput[] = [];
+
+/** The value the fixture's owner holds. The daemon composes its response around whatever comes back. */
+const FIXTURE_SETTINGS_READ_RESULT: ReadSettingResult = {
+  category: 'extra-extra-large',
+  platformValue: 'extra-extra-large',
+};
+
 /** Clears both recorders so a suite can assert "the owner was never reached" from a known zero. */
 export function resetSnapshotRuntimeFixture(): void {
   fixtureScreenshotCaptures.length = 0;
   fixtureSettingsMutations.length = 0;
+  fixtureSettingsReads.length = 0;
 }
 
 /** Request-scoped snapshot seam for handler tests that mock the legacy leaf dispatch. */
@@ -78,6 +95,10 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     const setSetting = async (input: SetSettingInput) => {
       fixtureSettingsMutations.push(input);
       return {};
+    };
+    const readSetting = async (input: ReadSettingInput) => {
+      fixtureSettingsReads.push(input);
+      return FIXTURE_SETTINGS_READ_RESULT;
     };
     // R59: the alert legs delegate to the Apple owner's own module, so the poll and retry windows
     // these suites exercise are the shipped ones rather than a fixture's imitation of them. The
@@ -104,6 +125,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           captureSnapshotWithoutActiveApp: captureSnapshot,
           captureScreenshot,
           setSetting,
+          readSetting,
           ...(appleInteractor
             ? {
                 readAlert: async (input: AlertRuntimeInput) =>
@@ -131,10 +153,27 @@ function appleHostOrSimulatorOnly(device: DeviceInfo): boolean {
   return device.platform === 'apple' && device.kind === 'device' && !isMacOs(device);
 }
 
+/**
+ * The narrower read refusal, stated the way the Apple owner states it: only an iPhone/iPad simulator
+ * has a content size `simctl ui` reports. `isIosFamily` would be too wide here — it covers tvOS and
+ * visionOS, whose content size was never verified and which production refuses.
+ */
+function appleSettingsReadRefused(device: DeviceInfo): boolean {
+  if (!isApplePlatform(device.platform)) return true;
+  const appleOs = resolveDeviceAppleOs(device);
+  return device.kind !== 'simulator' || !(appleOs === 'ios' || appleOs === 'ipados');
+}
+
 const settingsUnavailable = {
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
+} as const;
+
+const settingsReadUnavailable = {
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Reading a setting back is supported on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
 } as const;
 
 const alertUnavailable = {
@@ -181,6 +220,7 @@ async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformR
       // `platform-apple/src/system/runtime.test.ts`.
       ...settingsRuntimeOperationFacts({
         setSetting: appleHostOrSimulatorOnly(device) ? settingsUnavailable : available,
+        readSetting: appleSettingsReadRefused(device) ? settingsReadUnavailable : available,
       }),
       // R59: `alert` runs on the snapshot route too. Only the Apple legs are modeled — every
       // alert suite that reaches this fixture drives an Apple session — and the full per-owner

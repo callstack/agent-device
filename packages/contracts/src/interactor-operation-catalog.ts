@@ -5,7 +5,7 @@ import { bindBack } from './back-runtime.ts';
 import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
 import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
 import { bindOrientation } from './orientation-runtime.ts';
-import { bindSetSetting } from './settings-runtime.ts';
+import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
 import { bindTvRemote } from './tv-remote-runtime.ts';
 import {
   localInteractorSource,
@@ -88,6 +88,7 @@ export const INTERACTOR_OPERATIONS = [
   },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
+  { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },
   {
     operation: 'readAlert',
     label: 'alert get',

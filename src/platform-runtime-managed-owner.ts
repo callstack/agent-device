@@ -34,6 +34,9 @@ const REVIEWED_MANAGED_OPERATIONS: Partial<Record<ManagedOperationKey, 'both' | 
   deployMaterializedApp: 'both',
   sendPushNotification: 'both',
   setSetting: 'both',
+  // A managed device is a local emulator or simulator, so the read rides the same reviewed
+  // local-tool path as the write (`simctl ui ... content_size`, `settings get system font_scale`).
+  readSetting: 'both',
   readClipboard: 'both',
   writeClipboard: 'both',
   captureScreenshot: 'android',

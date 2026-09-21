@@ -378,7 +378,9 @@ export function limrunSettingsOperationFacts(
 ) {
   const cell =
     liveSessionUnavailable ?? (device.platform === 'android' ? available : settingsUnavailableIos);
-  return Object.freeze({ ...settingsRuntimeOperationFacts({ setSetting: cell }) });
+  return Object.freeze({
+    ...settingsRuntimeOperationFacts({ setSetting: cell, readSetting: cell }),
+  });
 }
 
 export function limrunKeyboardOperationFacts(

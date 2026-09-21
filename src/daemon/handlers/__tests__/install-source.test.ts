@@ -383,6 +383,7 @@ function sourceRuntimeFacts(
       setFoldPose: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
+      readSetting: unavailable,
       readAlert: unavailable,
       awaitAlert: unavailable,
       acceptAlert: unavailable,

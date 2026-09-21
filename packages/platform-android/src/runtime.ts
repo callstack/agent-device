@@ -378,8 +378,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
         // Settings run over adb (`appops`, `settings put`, `pm clear`, …) on every real kind, so
-        // the cell is the retired `ANDROID_ALL` bucket verbatim.
-        ...settingsRuntimeOperationFacts({ setSetting: androidTouchFact(device) }),
+        // both cells are the retired `ANDROID_ALL` bucket verbatim: the same `settings get`/`put`
+        // pair that writes a value reads it back.
+        ...settingsRuntimeOperationFacts({
+          setSetting: androidTouchFact(device),
+          readSetting: androidTouchFact(device),
+        }),
         // R59: Android reads alerts out of the same accessibility dump every interaction cell
         // depends on and presses their buttons with the same `input tap`, so all four legs take
         // that cell — the retired `ANDROID_ALL` bucket verbatim.

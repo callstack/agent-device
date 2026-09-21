@@ -119,6 +119,7 @@ export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const settingsRuntimeUse = defineUse({ required: ['setSetting'] });
+export const settingReadUse = defineUse({ required: ['readSetting'] });
 export const alertReadUse = defineUse({ required: ['readAlert'] });
 export const alertWaitUse = defineUse({ required: ['awaitAlert'] });
 export const alertAcceptUse = defineUse({ required: ['acceptAlert'] });
@@ -721,6 +722,14 @@ export const clipboardRuntimePlanUses = Object.freeze([
   clipboardReadUse,
   clipboardWriteUse,
 ] as const);
+
+/**
+ * `settings`' leg-selected uses (ADR 0019 §9: one bind per handler). `settings <setting> <state>`
+ * and the bare `settings <setting>` read are separate cells because an owner can hold one without
+ * the other — the macOS host can set an appearance it has no ladder to read back — so the daemon's
+ * `snapshot-settings.ts` admits and binds exactly the leg the parsed positionals name.
+ */
+export const settingsRuntimePlanUses = Object.freeze([settingsRuntimeUse, settingReadUse] as const);
 
 /**
  * `alert`'s action-selected uses (ADR 0019 §9: one bind per handler). The four legs differ in

@@ -129,6 +129,7 @@ describe('managed local runtime owner', () => {
       'deployMaterializedApp',
       'sendPushNotification',
       'setSetting',
+      'readSetting',
       'readClipboard',
       'writeClipboard',
     ];

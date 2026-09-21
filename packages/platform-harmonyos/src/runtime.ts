@@ -282,8 +282,12 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         setFoldPose: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
-        // The HDC-driven settings surface shares the interaction kind gate.
-        ...settingsRuntimeOperationFacts({ setSetting: harmonyFocusFact(device) }),
+        // The HDC-driven settings surface shares the interaction kind gate. No HDC leaf reads a
+        // setting back, so the read half states the platform-leaf denial it would otherwise throw.
+        ...settingsRuntimeOperationFacts({
+          setSetting: harmonyFocusFact(device),
+          readSetting: harmonyPlatformLeafUnavailable,
+        }),
         // HarmonyOS exposes no alert automation operation.
         ...alertRuntimeOperationFacts({
           read: harmonyPlatformLeafUnavailable,

@@ -1,6 +1,6 @@
 import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
 import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
-import { setIosSetting } from './core/app-settings.ts';
+import { readIosSetting, setIosSetting } from './core/app-settings.ts';
 import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts';
 import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
@@ -192,6 +192,7 @@ export function createAppleInteractor(
     writeClipboard: (text) => writeIosClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>
       setIosSetting(device, setting, state, appId, options),
+    readSetting: (setting) => readIosSetting(device, setting),
     readAlert: (options) => readAppleAlert(device, runnerOpts, options),
     awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options),
     acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options),
@@ -360,6 +361,7 @@ function withInjectedAppleRunnerTransport(
     readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
     writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
+    readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
   };
   return withMethodScope(providerInteractor, (task) =>
     withAppleRunnerProvider(

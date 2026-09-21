@@ -120,7 +120,7 @@ export function createLimrunPlatformRuntimeOwner(
             systemButton: liveSessionUnavailable,
             fold: LIMRUN_FOLD_UNAVAILABLE,
             triggerAppEvent: liveSessionUnavailable,
-            setSetting: liveSessionUnavailable,
+            settings: liveSessionUnavailable,
             readAlert: liveSessionUnavailable,
             awaitAlert: liveSessionUnavailable,
             acceptAlert: liveSessionUnavailable,

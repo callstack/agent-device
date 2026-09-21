@@ -198,7 +198,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
     triggerAppEvent: appEventUnavailable,
-    setSetting: settingsUnavailable,
+    settings: settingsUnavailable,
     readAlert: alertUnavailable,
     awaitAlert: alertUnavailable,
     acceptAlert: alertUnavailable,

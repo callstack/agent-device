@@ -28,6 +28,18 @@ const settingsLeafUnavailable = Object.freeze({
   hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const);
 /**
+ * The read half is narrower than the write half on every axis. Content size is the only value this
+ * surface exposes for reading, and `simctl ui <device> content_size` answers only on an iPhone/iPad
+ * simulator, so the macOS host (which serves an appearance write and reads an appearance only to
+ * implement `toggle`), a physical device (which has no `simctl`), and the tvOS/visionOS simulators
+ * (whose content size was never verified) all refuse a read their leaf can still perform a write on.
+ */
+const settingsReadHostUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Reading a setting back is supported on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
+} as const);
+/**
  * Parity with the retired `supportsHostOrSimulatorSurface` closure: the Apple pasteboard is
  * reachable through `simctl pbpaste`/`pbcopy` on any simulator, and directly on the macOS host;
  * a physical iOS/iPadOS/tvOS/visionOS device has neither route.
@@ -125,6 +137,20 @@ function appleClipboardFamilyUnavailable(device: DeviceInfo): RuntimeOperationUn
   return cell.available ? clipboardLeafUnavailable : cell;
 }
 
+/**
+ * The one leaf that can read a value back: an iOS-family simulator. `resolveDeviceAppleOs` is the
+ * same reading every other Apple cell takes, so watchOS stays closed for the reason it closes every
+ * interactor-backed operation — no constructible interactor — and the read refusal the host, a
+ * physical device, and the unverified simulator families share is stated once.
+ */
+function appleSettingsReadFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return settingsKindUnavailable;
+  const os = resolveDeviceAppleOs(device);
+  if (os === 'watchos') return appleWatchOsUnavailable;
+  if (device.kind === 'simulator' && (os === 'ios' || os === 'ipados')) return available;
+  return settingsReadHostUnavailable;
+}
+
 /** The system-surface cells: clipboard read/write, app-event delivery, settings, and alerts. */
 export function appleSystemFacts(device: DeviceInfo) {
   const clipboard = appleClipboardFact(device);
@@ -145,6 +171,7 @@ export function appleSystemFacts(device: DeviceInfo) {
         settingsKindUnavailable,
         settingsLeafUnavailable,
       ),
+      readSetting: appleSettingsReadFact(device),
     }),
   });
 }

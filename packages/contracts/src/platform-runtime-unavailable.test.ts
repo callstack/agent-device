@@ -51,7 +51,7 @@ const UNAVAILABLE_FACTS: UnavailablePlatformRuntimeFacts = {
   systemButton: { available: false, reason: 'unsupported-provider-mode' },
   fold: { available: false, reason: 'unsupported-provider-mode' },
   triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
-  setSetting: { available: false, reason: 'unsupported-provider-mode' },
+  settings: { available: false, reason: 'unsupported-provider-mode' },
   readAlert: { available: false, reason: 'unsupported-provider-mode' },
   awaitAlert: { available: false, reason: 'unsupported-provider-mode' },
   acceptAlert: { available: false, reason: 'unsupported-provider-mode' },

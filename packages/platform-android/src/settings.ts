@@ -2,7 +2,15 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
-import type { SettingOptions } from '@agent-device/contracts/settings';
+import {
+  parseTextSizeCategory,
+  READABLE_SETTINGS,
+  textSizeSettingPayload,
+  TEXT_SIZE_CATEGORIES,
+  type ReadSettingResult,
+  type SettingOptions,
+  type TextSizeSettingPayload,
+} from '@agent-device/contracts/settings';
 import {
   parseAppearanceAction,
   parseSettingState,
@@ -20,6 +28,41 @@ const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'transition_animation_scale',
   'animator_duration_scale',
 ] as const;
+
+/**
+ * The Android half of `settings text-size`. Android has no content-size category: its preferred text
+ * size is one `system font_scale` multiplier that every app scales its own fonts from. The shared
+ * ladder is therefore expressed here as multipliers, and only here — the command surface, the CLI,
+ * and the read payload all speak the ladder.
+ *
+ * The seven standard rungs are the Dynamic Type body ratios against the default size, rounded to two
+ * decimals: 14/17, 15/17, 16/17, 17/17, 19/17, 21/17, 23/17. The five accessibility rungs are
+ * Android's own larger range rather than an Apple ratio: Android has no accessibility tier below
+ * 1.4x, and 3.2 is the largest multiplier its own tooling documents. Every rung must stay strictly
+ * increasing and distinct, because a read names the nearest rung to whatever the device holds.
+ *
+ * This table lives beside the dispatcher that selects it rather than in its own module because
+ * `mechanics.ts` is a CLI-eager entry whose import closure is ratcheted by
+ * `scripts/__tests__/eager-closure-budgets.test.ts`: a new static module on this path is a growth
+ * the gate refuses.
+ */
+const TEXT_SIZE_FONT_SCALES = {
+  'extra-small': '0.82',
+  small: '0.88',
+  medium: '0.94',
+  large: '1.0',
+  'extra-large': '1.12',
+  'extra-extra-large': '1.24',
+  'extra-extra-extra-large': '1.35',
+  'accessibility-medium': '1.5',
+  'accessibility-large': '1.75',
+  'accessibility-extra-large': '2.0',
+  'accessibility-extra-extra-large': '2.5',
+  'accessibility-extra-extra-extra-large': '3.2',
+} as const satisfies Record<(typeof TEXT_SIZE_CATEGORIES)[number], string>;
+
+/** The scale a device with no `font_scale` row holds: Android's own default, which is `large`. */
+const DEFAULT_FONT_SCALE = TEXT_SIZE_FONT_SCALES.large;
 
 // fallow-ignore-next-line complexity
 export async function setAndroidSetting(
@@ -123,9 +166,85 @@ export async function setAndroidSetting(
       }
       return await setAndroidPermission(device, appPackage, state, options);
     }
+    case 'text-size': {
+      return await setAndroidTextSize(device, state);
+    }
     default:
       throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   }
+}
+
+/**
+ * The ONE place an Android target answers `settings <setting>` with the value it holds. The command
+ * surface only sends a setting its own vocabulary declares readable, so a name outside this switch
+ * is a leaf mismatch rather than a user typo, and says so.
+ */
+export async function readAndroidSetting(
+  device: DeviceInfo,
+  setting: string,
+): Promise<ReadSettingResult> {
+  if (setting.toLowerCase() === 'text-size') return await readAndroidTextSize(device);
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `Reading the "${setting}" setting back is not supported on Android targets.`,
+    {
+      deviceId: device.id,
+      setting,
+      reason: 'setting-read-unsupported-on-leaf',
+      hint: `Android targets read back ${READABLE_SETTINGS.join(', ')}.`,
+    },
+  );
+}
+
+async function setAndroidTextSize(
+  device: DeviceInfo,
+  state: string,
+): Promise<TextSizeSettingPayload> {
+  const category = parseTextSizeCategory(state);
+  const fontScale = TEXT_SIZE_FONT_SCALES[category];
+  await runAndroidShell(device, ['settings', 'put', 'system', 'font_scale', fontScale]);
+  return textSizeSettingPayload(category, fontScale);
+}
+
+/**
+ * Reads `font_scale` back as a ladder rung. A multiplier that is not one this module writes — an OEM
+ * default, or a value someone set by hand — still has a nearest rung, and the payload keeps the
+ * exact multiplier beside it so the normalization stays auditable rather than looking like a match.
+ */
+async function readAndroidTextSize(device: DeviceInfo): Promise<TextSizeSettingPayload> {
+  const result = await runAndroidShell(device, ['settings', 'get', 'system', 'font_scale']);
+  const reported = result.stdout.trim();
+  // `null` is the sentinel `settings get` prints for a row that was never written, and the only
+  // answer that means "the device holds its default". Empty output is a read that saw nothing, and
+  // inventing a multiplier for it would report a size the device was never asked to hold.
+  const fontScale = reported === 'null' ? DEFAULT_FONT_SCALE : reported;
+  // A strict decimal, not `parseFloat`'s longest numeric prefix: a device answering `1.2-beta` or
+  // `12 apples` has a value this ladder cannot order, and reporting it as a rung would hide that.
+  const scale = /^(\d+(\.\d+)?)$/.test(fontScale) ? Number(fontScale) : Number.NaN;
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Android reported an unusable font scale: ${reported || '(empty)'}`,
+      {
+        deviceId: device.id,
+        fontScale: reported,
+        hint: 'Run `adb shell settings get system font_scale` to see what the device holds.',
+      },
+    );
+  }
+  return textSizeSettingPayload(nearestTextSizeCategory(scale), fontScale);
+}
+
+function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[number] {
+  let nearest: (typeof TEXT_SIZE_CATEGORIES)[number] = TEXT_SIZE_CATEGORIES[0];
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const category of TEXT_SIZE_CATEGORIES) {
+    const distance = Math.abs(Number.parseFloat(TEXT_SIZE_FONT_SCALES[category]) - scale);
+    if (distance >= nearestDistance) continue;
+    nearest = category;
+    nearestDistance = distance;
+  }
+  return nearest;
 }
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';
