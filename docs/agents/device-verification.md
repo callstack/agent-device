@@ -75,7 +75,8 @@ toolchain per command:
   hinge back through `devicectl device motion hinge-angle`; re-snapshot afterwards, because refs
   and coordinates do not survive the pose change. Expect 10-16s per fold. The host needs
   Accessibility permission, and the command reopens Device Hub's window and selects the simulator
-  by UDID itself. To read the angle by hand:
+  by UDID itself — unless the sidebar row is missing and the window title already matches, which two
+  same-named simulators defeat (ADR 0025 records it). To read the angle by hand:
   `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`
   (the stream never ends on its own; 5 is the smallest timeout devicectl accepts).
 - When a recording must show touches, assume it cannot. The touch-overlay exporter loses the track
