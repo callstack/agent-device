@@ -495,7 +495,12 @@ test('a session that still owes a response is not handed off', async () => {
     30_000,
   );
   void inFlight.catch(() => {});
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  // The charge lands behind the preflight and deadline awaits, so wait for it instead of betting on a
+  // single macrotask: a loaded runner can sit anywhere on that path, and a session that had not been
+  // charged yet would look identical to one whose charge was wrongly dropped (#2681).
+  for (let tick = 0; tick < 500 && session.inFlightCommands === 0; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
   assert.equal(session.inFlightCommands, 1);
 
   const diagnostics = await captureDiagnostics(async () => {
