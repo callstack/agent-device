@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.1e22953fac.js"></script>
+<script defer src="/agent-device/static/js/index.350664f109.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -297,7 +297,7 @@ See <a href="/agent-device/docs/remote-proxy#human-takeover" class="rp-link">rem
 <li>In macOS app sessions, <code>screenshot</code> captures the target app window bounds rather than the full desktop.</li>
 <li>Prefer selector or <code>@ref</code>-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.</li>
 <li>Use <code>click --button secondary</code> for context menus on macOS, then run <code>snapshot -i</code> again.</li>
-<li>On <code>frontmost-app</code> and <code>menubar</code> surfaces, <code>press</code> and <code>click</code> post synthetic mouse events through the macOS helper (the <code>desktop</code> surface inspects only): <code>--hold-ms</code> is how long the button stays down (at least 40 ms, 60 ms by default, because AppKit drops a release posted in the same tick as its press), <code>--count</code> is that many independent clicks, and <code>--double-tap</code> posts each click as a double-click pair. A long schedule such as <code>--hold-ms 10000 --count 4</code> is given the time it needs, and a helper stopped mid-hold — by a cancelled request, a dropped client, or its deadline — releases the button before it exits. <code>--jitter-px</code> is not applied on these surfaces.</li>
+<li>On <code>frontmost-app</code> and <code>menubar</code> surfaces, <code>press</code> and <code>click</code> post synthetic mouse events through the macOS helper (the <code>desktop</code> surface inspects only): <code>--hold-ms</code> is how long the button stays down (at least 40 ms, 60 ms by default, because AppKit drops a release posted in the same tick as its press), <code>--count</code> is that many independent clicks (apps that detect a double-click by timing, such as Finder, still read two clicks at the default interval as one; pass an <code>--interval-ms</code> longer than the system double-click time to keep them apart), and <code>--double-tap</code> posts each click as a double-click pair. A long schedule such as <code>--hold-ms 10000 --count 4</code> is given the time it needs, and a helper stopped mid-hold — by a cancelled request, a dropped client, or its deadline — releases the button before it exits. <code>--jitter-px</code> is not applied on these surfaces.</li>
 <li>Mobile-only helpers remain unsupported on macOS: <code>boot</code>, <code>shutdown</code>, <code>home</code>, <code>orientation</code>, <code>app-switcher</code>, <code>action-button</code>, <code>fold</code>, <code>install</code>, <code>reinstall</code>, <code>install-from-source</code>, and <code>push</code>.</li>
 </ul>
 <p>Recommended loops:</p>
