@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.3d4f5bea5d.js"></script>
+<script defer src="/agent-device/static/js/index.1b897d3044.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -660,8 +660,9 @@ Two-finger <code>gesture pan</code> and <code>gesture transform</code> are suppo
 <li>Fingerprint simulation is supported on Android targets where <code>cmd fingerprint</code> or <code>adb emu finger</code> is available.
 On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li>
 <li>Permission actions are scoped to the active session app.</li>
-<li>iOS permission targets: <code>camera</code>, <code>microphone</code>, <code>photos</code> (<code>full</code> or <code>limited</code>), <code>contacts</code>, <code>notifications</code>.</li>
-<li>Android permission targets: <code>camera</code>, <code>microphone</code>, <code>photos</code>, <code>contacts</code>, <code>notifications</code>.</li>
+<li>iOS permission targets: <code>all</code>, <code>camera</code>, <code>microphone</code>, <code>photos</code> (<code>full</code> or <code>limited</code>), <code>contacts</code>, <code>contacts-limited</code>, <code>notifications</code>, <code>calendar</code>, <code>location</code>, <code>location-always</code>, <code>media-library</code>, <code>motion</code>, <code>reminders</code>, <code>siri</code>. <code>all</code> travels as one <code>simctl privacy … all</code> call.</li>
+<li>On iOS, which of those services a runtime actually changes is <code>simctl privacy</code>&#x27;s own verdict, not its help text: Xcode 26 omits <code>camera</code> from the list while granting it. A service the runtime refuses fails with <code>UNSUPPORTED_OPERATION</code> naming the service; on current runtimes that is <code>notifications</code>, which a targeted change cannot reach and <code>all</code> leaves untouched.</li>
+<li>Android permission targets: <code>all</code>, <code>calendar</code>, <code>camera</code>, <code>contacts</code>, <code>location</code>, <code>media-library</code>, <code>microphone</code>, <code>notifications</code>, <code>photos</code>. <code>contacts</code> fans out to <code>READ_CONTACTS</code>+<code>WRITE_CONTACTS</code>, <code>location</code> to <code>FINE</code>+<code>COARSE</code>, <code>calendar</code> to <code>READ</code>+<code>WRITE</code>; named multi-id targets intersect the package&#x27;s declared permissions so a coarse-only or read-only app still succeeds, while a target declaring none of its ids fails loudly. <code>all</code> resolves against the package&#x27;s declared permissions instead. <code>deny|reset</code> of a multi-id target returns a comma-joined <code>permission</code> list.</li>
 <li>macOS permission targets: <code>accessibility</code>, <code>screen-recording</code>, <code>input-monitoring</code>.</li>
 <li>On macOS, <code>settings permission grant ...</code> checks/request access and opens System Settings guidance when needed; it does not silently grant TCC permissions.</li>
 <li>On macOS, <code>settings permission deny ...</code> is intentionally unsupported.</li>
