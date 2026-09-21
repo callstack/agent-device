@@ -423,6 +423,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
     '@agent-device/capture-kit/recording-artifact-fixtures',
+    '@agent-device/capture-kit/recording-contact-sheet',
     '@agent-device/capture-kit/recording-facts',
     '@agent-device/capture-kit/recording-mp4-duration',
     '@agent-device/capture-kit/recording-mp4-fixtures',

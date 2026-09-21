@@ -166,6 +166,10 @@
       "types": "./src/recording/artifact.fixtures.ts",
       "default": "./src/recording/artifact.fixtures.ts"
     },
+    "./recording-contact-sheet": {
+      "types": "./src/recording/contact-sheet.ts",
+      "default": "./src/recording/contact-sheet.ts"
+    },
     "./recording-facts": {
       "types": "./src/recording/recording-facts.ts",
       "default": "./src/recording/recording-facts.ts"

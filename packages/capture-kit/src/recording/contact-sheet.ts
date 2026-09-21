@@ -33,6 +33,15 @@ import { readVideoContainerKind } from './video.ts';
 export { recordingContactSheetPath };
 
 /**
+ * Publishes what a caller has to name to read the answer: the report the pipeline returns, and the one
+ * refusal reason a caller can act on by retrying with another threshold. Every other reason already
+ * travels on the error the pipeline threw, so it stays in the module that raises it until some surface
+ * asks for it by name.
+ */
+export { CONTACT_SHEET_THRESHOLD_REASON } from './contact-sheet-report.ts';
+export type { RecordingContactSheetResult } from './contact-sheet-report.ts';
+
+/**
  * Builds the one PNG that lets a caller read a recording without playing it.
  *
  * Frames come out of the finished export, never from a parallel capture: the sheet is drawn from
