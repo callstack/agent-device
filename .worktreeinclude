@@ -1,6 +1,6 @@
-# Local environment
-.env
-.env.*
+# Local environment is never copied: a worktree is an agent's scratch space and gets
+# shared with transcripts, while the host's .env holds live credentials. No repo code
+# reads .env, so source the main checkout's copy when a command needs it.
 
 # Native build caches
 .expo/

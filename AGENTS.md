@@ -93,6 +93,9 @@ under `contracts/fixtures/`.
   repository-wide, not path-scoped.
 - A fresh worktree requires `pnpm install --frozen-lockfile && pnpm build`. Until then package and
   optional-peer resolution may point at another checkout and produce false failures.
+- Worktrees never receive `.env`; no repo code reads it. When a command needs a host credential,
+  source the main checkout's copy by absolute path (`set -a && . /path/to/main/checkout/.env && set +a`)
+  instead of copying it in or writing it into the worktree.
 - Parallel work needs disjoint edit ownership and distinct devices. Run one full gate per host;
   concurrent subprocess-backed suites can produce contention timeouts.
 - The layering scan reads tracked files only. Stage a new module before trusting its result.
