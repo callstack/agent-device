@@ -111,6 +111,20 @@ export function isIosFamily(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): b
   return isApplePlatform(device.platform) && !isMacOs(device);
 }
 
+/**
+ * The iPhone/iPad simulator leaf: a simulator of an Apple handheld OS. `simctl` surfaces that a
+ * phone or tablet simulator exposes and a television or headset one does not — content size is one
+ * — are confined to this leaf, which is strictly narrower than {@link isIosFamily} (that also covers
+ * tvOS and visionOS simulators) and excludes both the macOS host and every physical device.
+ */
+export function isHandheldAppleSimulator(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs' | 'kind'>,
+): boolean {
+  if (device.kind !== 'simulator') return false;
+  const appleOs = resolveDeviceAppleOs(device);
+  return appleOs === 'ios' || appleOs === 'ipados';
+}
+
 export function isMobilePlatform(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
   // Phone/tablet device family: Android plus every Apple OS except the macOS desktop
   // host. Preserves the pre-collapse `platform === 'ios' || platform === 'android'`

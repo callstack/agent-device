@@ -28,9 +28,9 @@ import {
 import {
   deviceShape,
   isApplePlatform,
+  isHandheldAppleSimulator,
   isIosFamily,
   isMacOs,
-  resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
@@ -154,14 +154,12 @@ function appleHostOrSimulatorOnly(device: DeviceInfo): boolean {
 }
 
 /**
- * The narrower read refusal, stated the way the Apple owner states it: only an iPhone/iPad simulator
- * has a content size `simctl ui` reports. `isIosFamily` would be too wide here — it covers tvOS and
- * visionOS, whose content size was never verified and which production refuses.
+ * The narrower read refusal, stated through the same predicate the Apple owner and the Apple runtime
+ * fact use: only an iPhone/iPad simulator has a content size `simctl ui` reports.
  */
 function appleSettingsReadRefused(device: DeviceInfo): boolean {
   if (!isApplePlatform(device.platform)) return true;
-  const appleOs = resolveDeviceAppleOs(device);
-  return device.kind !== 'simulator' || !(appleOs === 'ios' || appleOs === 'ipados');
+  return !isHandheldAppleSimulator(device);
 }
 
 const settingsUnavailable = {

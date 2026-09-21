@@ -1,10 +1,15 @@
 import {
+  APPLE_TEXT_SIZE_LEAF_REFUSAL,
   parseTextSizeCategory,
   readTextSizeCategory,
   textSizeSettingPayload,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
-import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleSimulator,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { runSimctl } from './apps-simctl.ts';
@@ -15,24 +20,22 @@ import { ensureBootedSimulator } from './simulator.ts';
  * the writer, and it names the ladder verbatim, so no translation table sits between the shared
  * vocabulary and the tool.
  *
- * Both halves are confined to the iPhone/iPad simulator leaf. The `settings` admission is one cell
- * for the whole command and covers every Apple simulator, so this is the per-setting refusal: the
- * content-size surface was only ever verified on that leaf, and a write that reached an Apple TV or
- * Vision Pro simulator would be reported as applied on a device whose setting may not exist.
+ * Both halves are confined to the iPhone/iPad simulator leaf. The daemon refuses a leaf outside it
+ * before it binds anything, so this guard is what an owner still enforces on its own when it is
+ * reached directly: the content-size surface was only ever verified on that leaf, and a write that
+ * reached an Apple TV or Vision Pro simulator would be reported as applied on a device whose setting
+ * may not exist. The leaf rule and the refusal are declared once — `isHandheldAppleSimulator` and
+ * `APPLE_TEXT_SIZE_LEAF_REFUSAL` — and the runtime's read fact reads the same predicate.
  */
 
-const TEXT_SIZE_LEAF_UNAVAILABLE =
-  'Reading or setting a text size is supported on iOS and iPadOS simulators.' as const;
-
 function requireTextSizeLeaf(device: DeviceInfo): void {
-  const appleOs = resolveDeviceAppleOs(device);
-  if (device.kind === 'simulator' && (appleOs === 'ios' || appleOs === 'ipados')) return;
-  throw new AppError('UNSUPPORTED_OPERATION', TEXT_SIZE_LEAF_UNAVAILABLE, {
+  if (isHandheldAppleSimulator(device)) return;
+  throw new AppError('UNSUPPORTED_OPERATION', APPLE_TEXT_SIZE_LEAF_REFUSAL.message, {
     deviceId: device.id,
-    appleOs,
+    appleOs: resolveDeviceAppleOs(device),
     deviceKind: device.kind,
-    reason: 'setting-unsupported-on-leaf',
-    hint: 'Run `xcrun simctl ui <device> content_size` on a booted iPhone or iPad simulator.',
+    reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
+    hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint,
   });
 }
 

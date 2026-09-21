@@ -23,7 +23,9 @@ import {
   makeSession,
   makeSessionStore,
   snapshotRequest,
+  tvOsSimulatorDevice,
 } from './snapshot-handler.fixtures.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
 
 vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -243,7 +245,9 @@ test('settings text-size refuses the macOS host on both legs with the same code'
 test('settings text-size applies a ladder category through the write leg', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-text-size-write';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  const session = makeSession(sessionName, iosSimulatorDevice);
+  activateCompleteRefFrame(session);
+  sessionStore.set(sessionName, session);
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', {
@@ -265,6 +269,36 @@ test('settings text-size applies a ladder category through the write leg', async
     state: 'accessibility-extra-large',
   });
   expect(fixtureSettingsReads).toHaveLength(0);
+  // ADR 0014: the admitted mutation leg expires the frame it is about to invalidate.
+  expect(refFrameState(session)).toBe('expired');
+});
+
+test('settings text-size refuses an Apple leaf with no content size before it expires the frame', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'tvos-text-size';
+  const session = makeSession(sessionName, tvOsSimulatorDevice);
+  activateCompleteRefFrame(session);
+  sessionStore.set(sessionName, session);
+
+  for (const positionals of [['text-size'], ['text-size', 'large']]) {
+    const response = await handleSnapshotCommands({
+      req: snapshotRequest(sessionName, 'settings', { positionals }),
+      sessionName,
+      logPath: '/tmp/daemon.log',
+      sessionStore,
+    });
+    expect(response?.ok).toBe(false);
+    if (response && !response.ok) {
+      expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+      expect(response.error.message).toMatch(/iOS and iPadOS simulators/i);
+    }
+  }
+  // The refusal is the point of checking before admission: the write leg expires the frame the
+  // moment it binds, so a request that never reached a device would otherwise have taken down a
+  // frame no mutation invalidated.
+  expect(refFrameState(session)).toBe('active');
+  expect(fixtureSettingsReads).toHaveLength(0);
+  expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
 test('settings text-size refuses an off-ladder category with the whole ladder', async () => {

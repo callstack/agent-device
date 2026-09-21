@@ -168,6 +168,21 @@ export function readTextSizeCategory(value: string | undefined): TextSizeCategor
   return findVocabularyName(TEXT_SIZE_CATEGORIES, value);
 }
 
+/**
+ * The one refusal an Apple target gives for a text-size request its leaf does not serve, shared by
+ * the three surfaces that can answer it: the daemon (before it binds, so a request that never touched
+ * a device also never expires the session ref frame), the Apple runtime's read fact, and the Apple
+ * owner's own guard. The Apple write fact is one claim for the whole simulator family and
+ * `simctl ui <device> content_size` is narrower than that, which is why a per-setting refusal has to
+ * exist at all; a per-setting runtime fact is where it belongs once the fact model carries one, and
+ * until then this is the single declaration rather than three copies of the prose.
+ */
+export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
+  message: 'Reading or setting a text size is supported on iOS and iPadOS simulators.',
+  hint: 'Run `xcrun simctl ui <device> content_size` on a booted iPhone or iPad simulator.',
+  reason: 'setting-unsupported-on-leaf',
+} as const);
+
 /** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
 function findVocabularyName<const TNames extends readonly string[]>(
   names: TNames,

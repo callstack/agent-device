@@ -8,7 +8,11 @@ import type {
   RuntimeOperationFact,
   RuntimeOperationUnavailability,
 } from '@agent-device/contracts/platform-runtime';
-import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleSimulator,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
 
@@ -32,12 +36,13 @@ const settingsLeafUnavailable = Object.freeze({
  * surface exposes for reading, and `simctl ui <device> content_size` answers only on an iPhone/iPad
  * simulator, so the macOS host (which serves an appearance write and reads an appearance only to
  * implement `toggle`), a physical device (which has no `simctl`), and the tvOS/visionOS simulators
- * (whose content size was never verified) all refuse a read their leaf can still perform a write on.
+ * (whose content size was never verified) all refuse a read their leaf may still perform a write of
+ * another setting on.
  */
 const settingsReadHostUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'Reading a setting back is supported on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
+  hint: 'Apple targets answer a settings read only on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
 } as const);
 /**
  * Parity with the retired `supportsHostOrSimulatorSurface` closure: the Apple pasteboard is
@@ -145,10 +150,9 @@ function appleClipboardFamilyUnavailable(device: DeviceInfo): RuntimeOperationUn
  */
 function appleSettingsReadFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return settingsKindUnavailable;
-  const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return appleWatchOsUnavailable;
-  if (device.kind === 'simulator' && (os === 'ios' || os === 'ipados')) return available;
-  return settingsReadHostUnavailable;
+  if (resolveDeviceAppleOs(device) === 'watchos') return appleWatchOsUnavailable;
+  // The same predicate the owner's own guard uses: one declaration of which leaf holds the value.
+  return isHandheldAppleSimulator(device) ? available : settingsReadHostUnavailable;
 }
 
 /** The system-surface cells: clipboard read/write, app-event delivery, settings, and alerts. */

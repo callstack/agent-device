@@ -134,7 +134,7 @@ test('the read refusal names the leaf that reports a content size back', () => {
     expect(appleSystemFacts(device).readSetting).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'Reading a setting back is supported on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
+      hint: 'Apple targets answer a settings read only on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
     });
   }
 });

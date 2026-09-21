@@ -60,6 +60,16 @@ export const macOsDevice: SessionState['device'] = {
   booted: true,
 };
 
+export const tvOsSimulatorDevice: SessionState['device'] = {
+  platform: 'apple',
+  appleOs: 'tvos',
+  id: 'sim-tv-1',
+  name: 'My Apple TV Simulator',
+  kind: 'simulator',
+  target: 'tv',
+  booted: true,
+};
+
 export const androidDevice: SessionState['device'] = {
   platform: 'android',
   id: 'emulator-5554',

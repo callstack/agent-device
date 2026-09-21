@@ -1,5 +1,11 @@
-import { isMacOs } from '@agent-device/kernel/device';
 import {
+  isApplePlatform,
+  isHandheldAppleSimulator,
+  isMacOs,
+  resolveDeviceAppleOs,
+} from '@agent-device/kernel/device';
+import {
+  APPLE_TEXT_SIZE_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   invalidTextSizeMessage,
@@ -290,11 +296,12 @@ async function executeSettingsWrite(
 }
 
 /**
- * The refusals both legs make before a device is touched. They key on the requested setting rather
- * than on the target's read or write fact, which is why they are daemon-side and not owner cells:
- * macOS serves `settings` and still refuses `wifi`. Both legs consult this one helper, so a target
- * answers a read and a write of the same setting with the same code instead of `INVALID_ARGS` on one
- * leg and `UNSUPPORTED_OPERATION` on the other.
+ * The refusals both legs make before a device is touched, so one target answers a read and a write of
+ * the same setting with the same code. They key on the requested setting, which an operation fact
+ * cannot express: macOS serves `settings` and still refuses `wifi`, and the Apple ladder needs a
+ * narrower leaf than the simulator-family write fact admits. Both are daemon-side stops ahead of
+ * admission — the mutation leg expires the session ref frame as soon as it is admitted, and a request
+ * this surface refuses must not expire it.
  */
 function settingsRequestRefusal(
   device: SessionState['device'],
@@ -302,6 +309,26 @@ function settingsRequestRefusal(
 ): DaemonResponse | undefined {
   if (isMacOs(device) && !isMacOsSettingSupported(setting)) {
     return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
+  }
+  // The Apple write fact is one claim covering every simulator, while the content-size ladder is
+  // confined to iPhone and iPad simulators. The refusal has to land before admission, because a
+  // settings mutation expires the session ref frame before the bound call, and a request that never
+  // reached a device must not take a live frame down with it.
+  if (
+    setting === 'text-size' &&
+    isApplePlatform(device.platform) &&
+    !isHandheldAppleSimulator(device)
+  ) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      APPLE_TEXT_SIZE_LEAF_REFUSAL.message,
+      {
+        deviceKind: device.kind,
+        appleOs: resolveDeviceAppleOs(device),
+        reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
+      },
+      { hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint },
+    );
   }
   return undefined;
 }
