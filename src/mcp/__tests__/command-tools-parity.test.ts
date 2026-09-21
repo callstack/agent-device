@@ -166,6 +166,40 @@ test('MCP fill projects target-bound unconfirmed verification through its advert
   assert.notDeepEqual(validateAgainstSchema(missingTarget, fillTool.outputSchema), []);
 });
 
+test('MCP fold advertises the native-panel discriminator and rejects a screen missing it', async () => {
+  const foldResult = {
+    action: 'fold',
+    pose: 'open',
+    hingeAngleDegrees: 180,
+    screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
+    message:
+      'Folded to open (hinge 180°, LCD-1 native panel 669x951pt, not snapshot coordinates); refs from before the pose change are stale',
+  } satisfies CommandExecutionResult<'fold'>;
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => foldResult,
+  });
+
+  const foldTool = listCommandTools().find((tool) => tool.name === 'fold');
+  assert.ok(foldTool?.outputSchema);
+  assert.equal(foldTool.outputSchema, COMMAND_OUTPUT_SCHEMAS.fold);
+
+  const result = await executor.execute('fold', { pose: 'open' });
+  assert.deepEqual(result.structuredContent, foldResult);
+  assert.deepEqual(validateAgainstSchema(result.structuredContent, foldTool.outputSchema), []);
+
+  // A panel report that drops the discriminator no longer validates: the coordinate-space contract
+  // is required, not inferable from the numbers alone.
+  const { coordinateSpace: _coordinateSpace, ...screenWithoutDiscriminator } = foldResult.screen;
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...foldResult, screen: screenWithoutDiscriminator },
+      foldTool.outputSchema,
+    ),
+    [],
+  );
+});
+
 test('MCP applies config-backed command defaults; explicit operator input is refused', async () => {
   const home = mkdtempForTestSync('agent-device-mcp-config-');
   temporaryDirectory = home;

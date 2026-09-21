@@ -88,7 +88,12 @@ test('resolves one admitted binding and reports the pose the owner read back', a
   const setFoldPose = vi.fn(async () => ({
     pose: 'open' as const,
     hingeAngleDegrees: 180,
-    screen: { display: 'LCD-1', widthPt: 669, heightPt: 951 },
+    screen: {
+      display: 'LCD-1',
+      coordinateSpace: 'native-panel' as const,
+      widthPt: 669,
+      heightPt: 951,
+    },
   }));
   const harness = runtimeHarness(
     foldRuntimeOperationFacts({ fold: available }).setFoldPose,
@@ -109,9 +114,9 @@ test('resolves one admitted binding and reports the pose the owner read back', a
     action: 'fold',
     pose: 'open',
     hingeAngleDegrees: 180,
-    screen: { display: 'LCD-1', widthPt: 669, heightPt: 951 },
+    screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
     message:
-      'Folded to open (hinge 180°, LCD-1 lit at 669x951pt); refs from before the pose change are stale',
+      'Folded to open (hinge 180°, LCD-1 native panel 669x951pt, not snapshot coordinates); refs from before the pose change are stale',
   });
   expect(setFoldPose).toHaveBeenCalledWith({ pose: 'open' });
 });

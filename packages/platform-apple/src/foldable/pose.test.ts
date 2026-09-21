@@ -99,7 +99,7 @@ test('presses the Device Hub control for the pose and reports the pose CoreDevic
   await expect(setAppleFoldPose(duo, 'open')).resolves.toEqual({
     pose: 'open',
     hingeAngleDegrees: 180,
-    screen: { display: 'LCD-1', widthPt: 669, heightPt: 951 },
+    screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
 
   expect(mockPress).toHaveBeenCalledWith({
@@ -109,6 +109,62 @@ test('presses the Device Hub control for the pose and reports the pose CoreDevic
     signal: undefined,
   });
   expect(mockHinge).toHaveBeenCalledTimes(2);
+});
+
+test('reports the closed outer panel in native points, not rotated to a snapshot viewport', async () => {
+  // The outer panel is 1398x2034 px at scale 3, i.e. 466x678 native points; the pose must not
+  // rotate that into the app window's shape, because a caller cannot place a tap from it.
+  mockInventory
+    .mockResolvedValueOnce(duoInventory('outer'))
+    .mockResolvedValueOnce(duoInventory('outer'));
+  mockHinge.mockResolvedValue(0);
+
+  await expect(setAppleFoldPose(duo, 'closed')).resolves.toEqual({
+    pose: 'closed',
+    hingeAngleDegrees: 0,
+    screen: { display: 'LCD', coordinateSpace: 'native-panel', widthPt: 466, heightPt: 678 },
+  });
+});
+
+test("reports native panel points regardless of the display's own currentOrientation", async () => {
+  // The same inner panel (2007x2853 px at scale 3) with a portrait orientation tag still measures
+  // 669x951: the report divides by point scale only and never swaps on `currentOrientation`.
+  const rot0Inner = buildInventory([
+    panel({ power: 'dark' }),
+    panel({
+      name: 'LCD-1',
+      displayId: 3,
+      primary: false,
+      power: 'lit',
+      widthPx: 2007,
+      heightPx: 2853,
+      currentOrientation: 'rot0',
+    }),
+  ]);
+  mockInventory.mockResolvedValueOnce(duoInventory('inner')).mockResolvedValueOnce(rot0Inner);
+  mockHinge.mockResolvedValue(180);
+
+  const result = await setAppleFoldPose(duo, 'open');
+  expect(result.screen).toEqual({
+    display: 'LCD-1',
+    coordinateSpace: 'native-panel',
+    widthPt: 669,
+    heightPt: 951,
+  });
+});
+
+test('omits the screen report when panel selection is ambiguous, never inventing a viewport', async () => {
+  // Two lit panels make the inventory ambiguous, so `readLitPanel` refuses to name one; the pose is
+  // still verified but carries no `screen` rather than guessing the app viewport.
+  const bothLit = buildInventory([panel({}), panel({ name: 'LCD-1', displayId: 3 })]);
+  expect(bothLit.ambiguous).toBe(true);
+  mockInventory.mockResolvedValueOnce(bothLit).mockResolvedValueOnce(bothLit);
+  mockHinge.mockResolvedValue(180);
+
+  await expect(setAppleFoldPose(duo, 'open')).resolves.toEqual({
+    pose: 'open',
+    hingeAngleDegrees: 180,
+  });
 });
 
 test('maps half-open onto the Book preset and reports it only once the hinge has stopped', async () => {
@@ -122,6 +178,7 @@ test('maps half-open onto the Book preset and reports it only once the hinge has
   await expect(setAppleFoldPose(duo, 'half-open')).resolves.toMatchObject({
     pose: 'half-open',
     hingeAngleDegrees: 130,
+    screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
   expect(mockPress).toHaveBeenCalledWith(expect.objectContaining({ pose: 'book' }));
   expect(mockHinge).toHaveBeenCalledTimes(3);

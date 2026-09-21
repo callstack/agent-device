@@ -8,13 +8,22 @@ import type { RuntimeOperationFact } from './platform-runtime.ts';
  */
 export type SetFoldPoseInput = Readonly<{ pose: FoldPose }>;
 
+/** Single source of truth for the discriminator the Apple owner sets and the MCP schema advertises. */
+export const FOLD_SCREEN_COORDINATE_SPACE = 'native-panel' as const;
+
 /**
- * The lit panel after the pose settled, in the points the next snapshot will use. Reported so an
- * agent can see that the coordinate space changed without a second capture.
+ * The panel the device lights after the pose settled, in that panel's own native points: its pixel
+ * size divided by its point scale, never rotated. `coordinateSpace` is always
+ * {@link FOLD_SCREEN_COORDINATE_SPACE}, and these numbers are NOT snapshot coordinates — the active
+ * app window can differ from the panel (iPhone Duo: a 669x951 inner panel hosts a 951x669 app
+ * window), so they cannot place a tap. A caller that needs the app viewport must take a fresh
+ * snapshot.
  */
 export type FoldScreenReport = Readonly<{
   /** The CoreDevice display name of the panel the device now lights. */
   display: string;
+  /** Marks these dimensions as the panel's native points, never a snapshot's app viewport. */
+  coordinateSpace: typeof FOLD_SCREEN_COORDINATE_SPACE;
   widthPt: number;
   heightPt: number;
 }>;

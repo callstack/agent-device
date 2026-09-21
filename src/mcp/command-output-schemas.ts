@@ -6,6 +6,7 @@ import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
 import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
+import { FOLD_SCREEN_COORDINATE_SPACE } from '@agent-device/contracts/fold-runtime';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
@@ -525,10 +526,15 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       screen: objectSchema(
         {
           display: stringSchema('CoreDevice name of the panel the device now lights.'),
-          widthPt: numberSchema(),
-          heightPt: numberSchema(),
+          coordinateSpace: constSchema(FOLD_SCREEN_COORDINATE_SPACE),
+          widthPt: numberSchema(
+            'Panel width in native panel points (pixels divided by point scale), NOT snapshot coordinates; take a fresh snapshot to place a tap.',
+          ),
+          heightPt: numberSchema(
+            'Panel height in native panel points (pixels divided by point scale), NOT snapshot coordinates; take a fresh snapshot to place a tap.',
+          ),
         },
-        ['display', 'widthPt', 'heightPt'],
+        ['display', 'coordinateSpace', 'widthPt', 'heightPt'],
       ),
       message: stringSchema(),
     },

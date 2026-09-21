@@ -1,5 +1,9 @@
 import { foldPoseForHingeAngle, type FoldPose } from '@agent-device/contracts/device';
-import type { FoldScreenReport, SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
+import {
+  FOLD_SCREEN_COORDINATE_SPACE,
+  type FoldScreenReport,
+  type SetFoldPoseResult,
+} from '@agent-device/contracts/fold-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -196,9 +200,11 @@ async function readLitPanel(
   return inventory.activeDisplay;
 }
 
+/** The panel's native points: pixels divided by its own point scale, never rotated by orientation. */
 function screenReport(display: AppleDeviceDisplay): FoldScreenReport {
   return {
     display: display.name,
+    coordinateSpace: FOLD_SCREEN_COORDINATE_SPACE,
     widthPt: Math.round(display.widthPx / display.pointScale),
     heightPt: Math.round(display.heightPx / display.pointScale),
   };

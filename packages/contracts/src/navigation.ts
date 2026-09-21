@@ -53,8 +53,9 @@ export type OrientationCommandResult = {
  *
  * Unlike `orientation`, there is no unconfirmed variant: the Apple owner reads the hinge angle
  * back from CoreDevice after pressing the Device Hub pose control, and reports a pose only when
- * that reading agrees with the request. `screen` names the panel the device lights afterwards, in
- * points, because a pose change moves the app to a different coordinate space (ADR 0025).
+ * that reading agrees with the request. `screen` names the panel the device lights afterwards and
+ * that panel's native point size (ADR 0025); it is the panel's geometry, not the app viewport, so a
+ * caller must take a fresh snapshot before placing a tap.
  */
 export type FoldCommandResult = {
   action: 'fold';

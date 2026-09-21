@@ -55,7 +55,7 @@ async function executeSetFoldPose(
     ...(screen ? { screen } : {}),
     ...successText(
       screen
-        ? `Folded to ${result.pose} (hinge ${result.hingeAngleDegrees}°, ${screen.display} lit at ${screen.widthPt}x${screen.heightPt}pt); refs from before the pose change are stale`
+        ? `Folded to ${result.pose} (hinge ${result.hingeAngleDegrees}°, ${screen.display} native panel ${screen.widthPt}x${screen.heightPt}pt, not snapshot coordinates); refs from before the pose change are stale`
         : `Folded to ${result.pose} (hinge ${result.hingeAngleDegrees}°); refs from before the pose change are stale`,
     ),
   };

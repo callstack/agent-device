@@ -41,13 +41,18 @@
   the pose control in the Xcode Device Hub window through macOS accessibility, and it is confirmed
   the way ADR 0025 asked for, by reading the hinge angle back from CoreDevice
   (`devicectl device motion hinge-angle`) until it agrees with the request. The response reports
-  the verified pose, the hinge angle, and the panel the device now lights with its point size, so an
-  agent can see that its refs and coordinates are stale without another capture. The macOS helper
+  the verified pose, the hinge angle, and the panel the device now lights with its native panel point
+  size, so an agent can see the lit panel changed without another capture. The macOS helper
   gained a `device-hub pose` subcommand that finds Device Hub in the process table (LaunchServices
   registers the trampolined app with no pid), reopens its window when it shows none, and selects the
   simulator through the sidebar row keyed by its UDID so two simulators sharing a name cannot be
   confused. Simulator-only; a single-panel simulator refuses with `UNSUPPORTED_OPERATION`, and every
   other platform states its own refusal cell.
+- Fixed (ios): the `fold` response's `screen` dimensions now match their coordinate-space contract. They
+  are the lit panel's own native points (pixels divided by its point scale, never rotated), so the
+  response carries the `coordinateSpace: "native-panel"` discriminator and the docs no longer claim
+  they are the next snapshot's coordinates. They cannot place a tap; take a fresh snapshot for the app
+  viewport.
 - Added (diff): `diff screenshot` accepts a JPEG baseline or current image. Both inputs had to be PNG,
   so a capture exported by another tool had to be converted first and a HarmonyOS capture — which the
   platform serves as JPEG under whatever name the command was given — could never be compared. Each
