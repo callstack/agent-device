@@ -103,6 +103,7 @@ vega device list
 - `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`
 - `AGENT_DEVICE_IOS_BUNDLE_ID` (optional runner bundle-id base override)
 - Free Apple Developer (Personal Team) accounts can fail with "bundle identifier is not available" for generic IDs; set `AGENT_DEVICE_IOS_BUNDLE_ID` to a unique reverse-DNS value (for example `com.yourname.agentdevice.runner`).
+- A runner build failure is typed, not prose: `error.details.reason` is one of `signing_no_development_team`, `signing_provisioning_profile_missing`, `bundle_identifier_already_registered`, `signing_unspecified`, `devtools_security_developer_mode_disabled` (the Mac's `DevToolsSecurity` setting, which says nothing about the device's Developer Mode toggle), or `build_failed_unclassified` when nothing proved a cause. Branch on `details.reason` and follow `hint`; the code stays `COMMAND_FAILED` for every reason.
 - If device setup is slow, keep the device connected and inspect daemon diagnostics after retrying.
 - If daemon startup reports stale metadata, remove stale files and retry:
   - `<state-dir>/daemon.json`
