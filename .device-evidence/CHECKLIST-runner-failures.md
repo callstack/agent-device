@@ -295,9 +295,15 @@ Image-down was reached by rebooting and holding the phone locked, watching `devi
   seconds of unlock, so an unlocked image-down device does not exist on iOS 27 and the capture this
   checklist asked for cannot be produced on it.
 - Inside that window `prepare` fails at the connect stage — `Runner did not accept connection
-  (xcodebuild exited early)`, exit 70 — and publishes no `developerDiskImage`, because the only call
-  site that attaches device states is the `launch_xcodebuild` catch. That path is what the connect
-  failure now routes through, so the fact travels on the failure a locked phone actually produces.
+  (xcodebuild exited early)`, exit 70 — and publishes no `developerDiskImage`. A rerun at `eaf411e`,
+  where both connect-stage failures carry the device states, gave the same error, exit 70 and
+  `IOS_RUNNER_CONNECT_TIMEOUT` with no `developerDiskImage`. The cause is the observability rule, not
+  the call site. Before the first unlock the tunnel never comes up: every `devicectl device info
+  details` read from 10:56 to 10:58 UTC, before and after that run, said `tunnelState: "unavailable"`,
+  `bootState: "booted"`, `ddiServicesAvailable: false`. So `readDeviceReadiness` returns
+  `available: false`, the session has no device states, and there is nothing to carry. On iOS 27 a
+  locked phone does not publish its image state at all. The connect-stage enrichment carries the
+  fact only when the preflight could observe it (tunnel connected, device booted).
 
 The host-deadline invariant also held under a real device fault: on a 25s budget the same
 image-down state produced `details.reason: prepare_deadline_expired` with **no** device reason and no
