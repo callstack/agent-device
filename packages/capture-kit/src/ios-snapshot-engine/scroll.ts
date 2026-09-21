@@ -60,11 +60,11 @@ function collectIosScrollIndicatorNodePresentation(
 /**
  * The scroll container an indicator reports on. XCTest publishes a UIScrollView's indicators as
  * children of that view, so the nearest scroll-typed ancestor is normally the owner. A UITextView
- * is a UIScrollView too but publishes as `TextView`, and its indicators sit inside the text: read
- * onto the list around it, they clip that list to one line of text and drop every row after it
- * (a post thread whose root post is selectable text lost all of its replies). An indicator whose
- * nearest scrolling ancestor is a text view belongs to that text view, which derives no viewport,
- * so it resolves no container.
+ * is a UIScrollView too but publishes as `TextView`, and its indicators sit inside the text. When
+ * such an indicator was treated as the surrounding list's, the list's viewport shrank to that one
+ * line of text and every row after it was clipped away (a post thread whose root post is
+ * selectable text lost all of its replies). An indicator whose nearest scrolling ancestor is a
+ * text view belongs to that text view, which derives no viewport, so it resolves no container.
  */
 function findScrollIndicatorContainer(
   node: RawSnapshotNode,
