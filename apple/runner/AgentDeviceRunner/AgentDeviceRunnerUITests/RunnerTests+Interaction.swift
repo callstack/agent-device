@@ -615,10 +615,9 @@ extension RunnerTests {
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
-    let frame = context.referenceFrame
     let point = CoordinateSpaceRotation.native(
       point: CGPoint(x: x, y: y),
-      in: frame,
+      in: context.referenceFrame,
       interfaceOrientation: orientation
     )
     if let message = RunnerSynthesizedGesture.synthesizeTap(
@@ -837,10 +836,14 @@ extension RunnerTests {
     let orientation = Int(
       RunnerSynthesizedGesture.interfaceOrientation(forApplication: app)
     )
-    guard let referenceFrame = orientedSynthesizedScreenshotReferenceFrame(
-      screenshotSize: XCUIScreen.main.screenshot().image.size,
-      interfaceOrientation: orientation
-    ) else {
+    // The rotation frame must be the exact frame capture normalized node rects into
+    // (SnapshotGeometrySpace.normalized uses the acquisition viewport = app.frame), so dispatch
+    // is that map's inverse on every panel. XCUIScreen.main is not it: on a foldable's lit inner
+    // panel it still reports the dark outer panel, drifting every synthesized gesture.
+    let referenceFrame = app.frame
+    guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
+      referenceFrame.width > 0, referenceFrame.height > 0
+    else {
       return nil
     }
     return SynthesizedCoordinateContext(
@@ -854,36 +857,6 @@ extension RunnerTests {
 #endif
   }
 
-  func orientedSynthesizedScreenshotReferenceFrame(
-    screenshotSize: CGSize,
-    interfaceOrientation: Int
-  ) -> CGRect? {
-    // Physical iOS screenshots can retain portrait dimensions after the interface rotates,
-    // while accessibility frames remain in the logical landscape coordinate space.
-    guard screenshotSize.width.isFinite, screenshotSize.height.isFinite,
-      screenshotSize.width > 0,
-      screenshotSize.height > 0
-    else {
-      return nil
-    }
-    let isLandscape = interfaceOrientation == RunnerInterfaceOrientation.landscapeLeft
-      || interfaceOrientation == RunnerInterfaceOrientation.landscapeRight
-    let isPortrait = interfaceOrientation == RunnerInterfaceOrientation.portrait
-      || interfaceOrientation == RunnerInterfaceOrientation.portraitUpsideDown
-    let width: CGFloat
-    let height: CGFloat
-    if isLandscape {
-      width = max(screenshotSize.width, screenshotSize.height)
-      height = min(screenshotSize.width, screenshotSize.height)
-    } else if isPortrait {
-      width = min(screenshotSize.width, screenshotSize.height)
-      height = max(screenshotSize.width, screenshotSize.height)
-    } else {
-      width = screenshotSize.width
-      height = screenshotSize.height
-    }
-    return CGRect(x: 0, y: 0, width: width, height: height)
-  }
 
   func keyboardAvoidingSynthesizedDragPoints(
     app: XCUIApplication,
@@ -1153,77 +1126,41 @@ extension RunnerTests {
 #endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testSynthesizedScreenshotReferenceFrameUsesScreenshotSize() throws {
-    let resolved = try XCTUnwrap(
-      orientedSynthesizedScreenshotReferenceFrame(
-        screenshotSize: CGSize(width: 430, height: 932),
-        interfaceOrientation: RunnerInterfaceOrientation.portrait
-      )
-    )
-
-    XCTAssertEqual(resolved, CGRect(x: 0, y: 0, width: 430, height: 932))
-  }
-
-  func testOrientedSynthesizedScreenshotReferenceFrameUsesLandscapeLogicalDimensions() {
-    let portraitCapture = CGSize(width: 430, height: 932)
-    let landscapeCapture = CGSize(width: 932, height: 430)
-
-    for orientation in [
-      RunnerInterfaceOrientation.landscapeLeft,
-      RunnerInterfaceOrientation.landscapeRight,
-    ] {
-      XCTAssertEqual(
-        orientedSynthesizedScreenshotReferenceFrame(
-          screenshotSize: portraitCapture,
-          interfaceOrientation: orientation
-        ),
-        CGRect(x: 0, y: 0, width: 932, height: 430)
-      )
-      XCTAssertEqual(
-        orientedSynthesizedScreenshotReferenceFrame(
-          screenshotSize: landscapeCapture,
-          interfaceOrientation: orientation
-        ),
-        CGRect(x: 0, y: 0, width: 932, height: 430)
-      )
+  func testSynthesizedDispatchInvertsCaptureOnEveryInterfaceOrientation() {
+    let frames = [
+      CGRect(x: 0, y: 0, width: 430, height: 932),
+      // iPhone Duo inner panel: 669x951 portrait app frame on a rot90 panel whose
+      // windows report landscape 951x669 frames in the display space.
+      CGRect(x: 0, y: 0, width: 669, height: 951),
+    ]
+    for frame in frames {
+      for orientation in [
+        RunnerInterfaceOrientation.portrait,
+        RunnerInterfaceOrientation.portraitUpsideDown,
+        RunnerInterfaceOrientation.landscapeLeft,
+        RunnerInterfaceOrientation.landscapeRight,
+      ] {
+        let corners = [
+          CGPoint(x: frame.minX + 1, y: frame.minY + 1),
+          CGPoint(x: frame.midX, y: frame.midY),
+          CGPoint(x: frame.maxX - 2, y: frame.maxY - 3),
+        ]
+        for displayed in corners {
+          let captured = CoordinateSpaceRotation.oriented(
+            point: displayed,
+            in: frame,
+            interfaceOrientation: orientation
+          )
+          let dispatched = CoordinateSpaceRotation.native(
+            point: captured,
+            in: frame,
+            interfaceOrientation: orientation
+          )
+          XCTAssertEqual(dispatched.x, displayed.x, accuracy: 0.001, "orientation \(orientation)")
+          XCTAssertEqual(dispatched.y, displayed.y, accuracy: 0.001, "orientation \(orientation)")
+        }
+      }
     }
-
-    for orientation in [
-      RunnerInterfaceOrientation.portrait,
-      RunnerInterfaceOrientation.portraitUpsideDown,
-    ] {
-      XCTAssertEqual(
-        orientedSynthesizedScreenshotReferenceFrame(
-          screenshotSize: portraitCapture,
-          interfaceOrientation: orientation
-        ),
-        CGRect(x: 0, y: 0, width: 430, height: 932)
-      )
-      XCTAssertEqual(
-        orientedSynthesizedScreenshotReferenceFrame(
-          screenshotSize: landscapeCapture,
-          interfaceOrientation: orientation
-        ),
-        CGRect(x: 0, y: 0, width: 430, height: 932)
-      )
-    }
-
-    XCTAssertEqual(
-      orientedSynthesizedScreenshotReferenceFrame(
-        screenshotSize: landscapeCapture,
-        interfaceOrientation: RunnerInterfaceOrientation.unknown
-      ),
-      CGRect(x: 0, y: 0, width: 932, height: 430)
-    )
-  }
-
-  func testSynthesizedScreenshotReferenceFrameRejectsInvalidSize() {
-    XCTAssertNil(
-      orientedSynthesizedScreenshotReferenceFrame(
-        screenshotSize: CGSize(width: CGFloat.infinity, height: 932),
-        interfaceOrientation: RunnerInterfaceOrientation.portrait
-      )
-    )
   }
 
   func testPlannedMultiTouchGestureAcceptsMatchingInBoundsTrajectories() throws {
