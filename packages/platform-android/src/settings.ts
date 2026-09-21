@@ -6,11 +6,11 @@ import {
   parseTextSizeCategory,
   textSizeSettingPayload,
   TEXT_SIZE_CATEGORIES,
+  type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
-import type { ReadableSetting } from '@agent-device/contracts/platform-runtime-operations';
 import {
   parseAppearanceAction,
   parseSettingState,

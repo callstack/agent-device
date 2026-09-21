@@ -71,6 +71,14 @@ export const TEXT_SIZE_CATEGORIES = [
 export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
 
 /**
+ * The settings that answer a bare `settings <setting>` with the value the target holds. This is the
+ * vocabulary every settings type and every settings owner reads it from; the matching value is
+ * `READABLE_SETTINGS` in `platform-runtime-operations.ts`, where the CLI hub can evaluate it, and
+ * that module pins the two equal in both directions at compile time.
+ */
+export type ReadableSetting = 'text-size';
+
+/**
  * What `text-size` answers with. The ladder is shared across platforms, so a read names the
  * category the ladder calls the device's value *and* the value the platform itself reported: an
  * Apple content-size name, or an Android `font_scale` multiplier. The ladder is coarser than any

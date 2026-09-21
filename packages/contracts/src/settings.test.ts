@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
+import { READABLE_SETTINGS } from './platform-runtime-operations.ts';
 import {
   describeSettingRead,
   describeSettingWrite,
@@ -19,6 +20,7 @@ import {
   textSizeSettingPayload,
   type PermissionAction,
   type PermissionTarget,
+  type ReadableSetting,
   type TextSizeCategory,
 } from './settings.ts';
 
@@ -202,6 +204,14 @@ describe('text-size vocabulary', () => {
     );
     expect(describeSettingWrite('wifi', 'on', undefined)).toBe('Updated setting: wifi');
   });
+});
+
+test('the readable-setting vocabulary is the names the read leg answers', () => {
+  // The type is the vocabulary; `READABLE_SETTINGS` beside it is the value the CLI hub evaluates.
+  // Both directions are pinned where the value is declared, so this is the one direction that has to
+  // be read: a name that joins the type without joining the value is a compile error there.
+  const readable: readonly ReadableSetting[] = READABLE_SETTINGS;
+  expect(readable).toEqual(['text-size']);
 });
 
 describe('parsePermissionTarget', () => {

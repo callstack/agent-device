@@ -1,7 +1,6 @@
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { ReadableSetting } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-import type { ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadableSetting, ReadSettingResult, SettingOptions } from './settings.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**

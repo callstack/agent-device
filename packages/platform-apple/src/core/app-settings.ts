@@ -3,10 +3,10 @@ import {
   type MobilePermissionTarget,
   parsePermissionAction,
   parsePermissionTarget,
+  type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
-import type { ReadableSetting } from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { readHostDirectory, removeHostPath } from '@agent-device/host-kit/host-file';

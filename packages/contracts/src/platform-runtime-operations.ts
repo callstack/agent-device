@@ -28,6 +28,7 @@ import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
+import type { ReadableSetting } from './settings.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
 import type { AudioProbeRuntimeOperations } from './audio-probe-runtime.ts';
@@ -733,12 +734,19 @@ export const settingsRuntimePlanUses = Object.freeze([settingsRuntimeUse, settin
 
 /**
  * The settings that answer a bare `settings <setting>` with the value the target holds, in the order
- * `settings` help lists them. A setting joins this list only when at least one owner can read it
- * back, which is what makes the read a second operation rather than a stateless write.
+ * `settings` help lists them. A setting joins the list only when at least one owner can read it back,
+ * which is what makes the read a second operation rather than a stateless write.
+ *
+ * The NAME lives in `settings.ts`, where every settings type and the settings owners already read it
+ * from; this is its VALUE, because the CLI's eager command-registry closure must evaluate the leg
+ * rule below and `contracts/settings.ts` is not in that closure — importing it here would add it
+ * (`scripts/__tests__/eager-closure-budgets.test.ts` ratchets the hub against growth) and importing
+ * this module from `settings.ts` would close a contracts type cycle the layering scan forbids. The
+ * two lines after this declaration pin the pair equal in both directions, so no test has to.
  */
-export const READABLE_SETTINGS = ['text-size'] as const;
-
-export type ReadableSetting = (typeof READABLE_SETTINGS)[number];
+export const READABLE_SETTINGS: readonly ReadableSetting[] = ['text-size'];
+const readableSettingsAreTheVocabulary: Record<ReadableSetting, true> = { 'text-size': true };
+void readableSettingsAreTheVocabulary;
 
 /** The leg one `settings` request is on, and the owner fact that leg admits. */
 export type SettingsRuntimePlan =

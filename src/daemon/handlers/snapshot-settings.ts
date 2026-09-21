@@ -13,6 +13,7 @@ import {
   invalidTextSizeMessage,
   readTextSizeCategory,
   SETTINGS_INVALID_ARGS_MESSAGE,
+  type ReadableSetting,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
 import type { SetSettingInput } from '@agent-device/contracts/settings-runtime';
@@ -20,7 +21,6 @@ import {
   resolveSettingsRuntimePlan,
   settingReadUse,
   settingsRuntimeUse,
-  type ReadableSetting,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { contextFromFlags } from '../context.ts';

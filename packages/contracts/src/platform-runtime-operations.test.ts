@@ -13,7 +13,6 @@ import {
 import {
   type PlatformRuntimeOperations,
   type PlatformRuntimeProviderModule,
-  type ReadableSetting,
   READABLE_SETTINGS,
   bootTargetHeadlessUse,
   bootTargetUse,
@@ -150,8 +149,6 @@ test('every readable setting is answered by the read use', () => {
   // The list is what both the descriptor's classification and the daemon's admitted operation are
   // built from, so a name that joins it without an owner answering it is caught where it is declared.
   assert.deepEqual([...READABLE_SETTINGS], ['text-size']);
-  const readableSettingIsAListedName: ReadableSetting = 'text-size';
-  void readableSettingIsAListedName;
   for (const setting of READABLE_SETTINGS) {
     assert.equal(resolveSettingsRuntimePlan([setting]).use, settingReadUse);
   }
