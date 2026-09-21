@@ -296,3 +296,51 @@ local bundle.
 The suite intentionally covers the compat layer syntax used by public Maestro suites:
 `runFlow` file/inline blocks, `when.platform`, config hooks, deterministic `repeat.times`,
 flow `env`, selectors, input, assertions, and swipe.
+
+## Local iPhone Duo pose-transition semantic checks (manual)
+
+`examples/test-app/foldable/duo-pose-semantic.mjs` drives one booted iPhone Duo through
+closed → half-open → open → closed and asserts the app reacts after **every** pose change —
+a Catalog tap is proved to activate by an absent→present `catalog-title` transition measured from
+the same snapshot that resolved the tap's ref (with `home-title` gone after), the Home reset is
+asserted before the next fold, Add to cart moves the cart counter, a scroll reveals a canary,
+a long press moves a dedicated count, and one multipointer pinch changes a recognized scale.
+It reuses the `agent-device` CLI/daemon and this fixture app; it adds no framework.
+
+This is **local/manual coverage only, never automatic regression coverage.** GitHub Actions
+cannot select it yet (no hosted iPhone Duo runtime, no registered Duo runner), so it is not a CI
+gate and does not change the ordinary iPhone lane.
+
+Requirements: `DEVELOPER_DIR` pinned to a Duo-capable Xcode (iOS 27.1 ships only with Xcode 27.1+);
+exactly one booted iPhone Duo not shared with a concurrent run (concurrent runs rebuild the shared
+Apple runner and race capture/pose state); Xcode Device Hub reachable with Accessibility permission
+(`fold` presses its pose control — a Device Hub window on a secondary display makes the control
+unreachable and reports `device-hub-window-missing`; move it to the main display); the Agent Device
+Tester app installed on that simulator.
+
+```bash
+# List booted Duo simulators, then run the scenario against one:
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID>
+
+# Prove the activation check is sensitive to targeting geometry: derive the pinch origin from a
+# different control's bounds. This flips the pinch scale check to FAIL (red is expected here):
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID> --demo-geometry-mutation
+
+# Prove the activation check is sensitive to a missed reset: skip the return-to-Home tap so a
+# closed/half-open activation or Home-reset check FAILS (red is expected here):
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID> --demo-skip-home-reset
+```
+
+A clean run prints `15/15 semantic checks passed` and exits 0; each pose's Catalog check reports a
+`catalog absent->present, home present->absent` transition. Failure snapshots land under
+`--artifacts-dir` (default `<state-dir>/artifacts`). The scenario never reuses a ref or coordinate
+across a pose change or mutation (a dropped session re-opens but never replays an `@ref`), saves
+failure artifacts, closes the session, and restores the starting pose.
+
+**Deferred GitHub Actions enablement (not a completion condition).** Wiring an automatic Duo job
+later requires, all at once: a Duo runtime/device type on the runner image, working Device Hub pose
+controls with Accessibility permission on the runner host, and one actual successful lane run — then
+re-check the runner-image inventories, which are dated, not permanent.
