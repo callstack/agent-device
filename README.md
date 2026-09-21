@@ -61,13 +61,50 @@ proof, regression records, and checksums. The immutable tag is
 `evidence/ios-snapshot/ae26f7afc0`. Timings are bounded observations under
 uncontrolled host load, not a general performance guarantee.
 
+## Convergence final corpus (#2188 gate)
+
+Raw results closing the exact-head evidence sweep that gated #2188 on #2199, measured at
+repository commit `7c434b575837e3291c51315bf9bb8b54c8ce7568` on `bench-2188-final`.
+The cold and first-interaction legs carry 10 samples per cell, warm/relaunch 20, and the
+proxy leg 20 per screen at each of 0, 20, and 80 ms of added RTT. Every leg completed with
+`revision.dirty: false` and no failed samples. The package-size leg ran inside
+`ios-snapshot-warm-relaunch-local-7c434b575.json`.
+
+Deviations from the baseline corpus above, stated in full:
+
+- Target and runtime: `bench-2188-final` on
+  `com.apple.CoreSimulator.SimRuntime.iOS-26-2`. The baseline ran on `bench-golden-v2` with
+  iOS 27.0, whose runtime was not installed on this host at measurement time.
+- Host: same machine model, shared with other agent sessions. The 1-minute load average
+  sampled during the legs was 4.2-31.2 for warm/relaunch, 6.4-30.3 for proxy, and 5.3-96.7
+  for cold. Timings are bounded observations under uncontrolled host load, not a general
+  performance guarantee.
+- Fixture app: the CI-built `AgentDeviceTester` for this lineage with the measured head's own
+  JavaScript bundle repacked in. Its trees differ from the baseline app (the catalog screen
+  exposes 31 nodes here against 35 at the baseline), so response sizes are not comparable
+  cell for cell.
+- Harness: the measured head is one benchmark-only commit ahead of `45e4c594a1824fc8152c5cce41fe1fac50a91bf0`,
+  which put a bounded anchor wait into the untimed setup admission. No `src/`, `packages/`,
+  app, or CLI runtime file differs between the two commits.
+
+| File | sha256 |
+| --- | --- |
+| `ios-snapshot-cold-local-7c434b575.json` | `4663897ee5104569ad54e2ac803c216b284280c1c70fd82a8b2cf7b675d8a8bd` |
+| `ios-snapshot-first-interaction-local-7c434b575.json` | `87c686336f5581e3f18111e160cf7b733cd726b41e79ed6d8e5b53e2ab40c3fb` |
+| `ios-snapshot-warm-relaunch-local-7c434b575.json` | `d49df3c3c943178f016a2b958449b257c6d46a44c8ffdf8fab75c1634ae1ebce` |
+| `ios-snapshot-proxy-7c434b575.json` | `5b5353831851f3a0f60e19d6bfd0cf50db47c3c4db52a283024c10bb17e71573` |
+
 ## Fetch into a checkout
 
 ```sh
 git fetch origin evidence/ios-snapshot
 for f in ios-snapshot-cold-local-71fb2483f.json \
          ios-snapshot-warm-relaunch-local-71fb2483f.json \
-         ios-snapshot-proxy-71fb2483f.json; do
+         ios-snapshot-proxy-71fb2483f.json \
+         ios-snapshot-cold-local-7c434b575.json \
+         ios-snapshot-first-interaction-local-7c434b575.json \
+         ios-snapshot-warm-relaunch-local-7c434b575.json \
+         ios-snapshot-proxy-7c434b575.json; do
   git show FETCH_HEAD:$f > scripts/ios-snapshot-benchmark/evidence/$f
 done
 shasum -a 256 scripts/ios-snapshot-benchmark/evidence/*.json
