@@ -14,7 +14,11 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
 }));
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { compileSwiftSourceFile, compileSwiftSourceText } from './swift-cache.ts';
+import {
+  buildRecordingScriptPathCandidates,
+  compileSwiftSourceFile,
+  compileSwiftSourceText,
+} from './swift-cache.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -246,3 +250,23 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
   expect(fs.readFileSync(firstExecutable, 'utf8')).toBe('compiled once');
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
 }
+
+test('recording script candidates include packaged dist apple-runner source', () => {
+  const packageRoot = path.join(tmpDir, 'package');
+  const scriptPath = path.join(
+    packageRoot,
+    'dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
+  );
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.writeFileSync(scriptPath, 'print("overlay")\n');
+
+  const candidates = buildRecordingScriptPathCandidates(
+    'recording-overlay.swift',
+    path.join(packageRoot, 'dist/src'),
+    packageRoot,
+    tmpDir,
+  );
+  const firstExisting = candidates.find((candidate) => fs.existsSync(candidate));
+
+  expect(firstExisting).toBe(scriptPath);
+});

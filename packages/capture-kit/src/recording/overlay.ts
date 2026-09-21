@@ -1,59 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildSwiftToolEnv, compileSwiftSourceFile } from './swift-cache.ts';
 import { findProjectRoot } from '@agent-device/host-kit/version';
+import {
+  buildSwiftToolEnv,
+  compileSwiftSourceFile,
+  resolveRecordingScriptPath,
+} from './swift-cache.ts';
 import { waitForPlayableVideo, waitForStableFile } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
 } from '@agent-device/contracts/recording';
-
-export function buildRecordingScriptPathCandidates(
-  scriptName: string,
-  moduleDir: string,
-  projectRoot: string,
-  cwd: string,
-): string[] {
-  const sourceScriptPath = `apple/runner/AgentDeviceRunner/RecordingScripts/${scriptName}`;
-  const packagedScriptPath = `dist/${sourceScriptPath}`;
-  return [
-    path.resolve(moduleDir, scriptName),
-    path.resolve(projectRoot, sourceScriptPath),
-    path.resolve(moduleDir, `../${sourceScriptPath}`),
-    path.resolve(moduleDir, `../../${sourceScriptPath}`),
-    path.resolve(moduleDir, `../../../${sourceScriptPath}`),
-    path.resolve(projectRoot, packagedScriptPath),
-    path.resolve(cwd, sourceScriptPath),
-  ];
-}
-
-function resolveRecordingScriptPath(scriptName: string): string {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const scriptCandidates = buildRecordingScriptPathCandidates(
-    scriptName,
-    moduleDir,
-    findProjectRoot(),
-    process.cwd(),
-  );
-
-  for (const candidate of scriptCandidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    hint: 'Ensure apple/runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled under dist/apple/runner in the package.',
-    scriptName,
-    searchedPaths: scriptCandidates,
-  });
-}
-
-let overlayScriptPath: string | undefined;
-let exportSupportScriptPath: string | undefined;
 
 export function getRecordingOverlaySupportWarning(
   hostPlatform: NodeJS.Platform = process.platform,
@@ -64,13 +23,19 @@ export function getRecordingOverlaySupportWarning(
   return 'touch overlay burn-in is only available on macOS hosts; returning raw video plus gesture telemetry';
 }
 
+let overlayScriptPath: string | undefined;
+let exportSupportScriptPath: string | undefined;
+
 function getOverlayScriptPath(): string {
-  overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift');
+  overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift', findProjectRoot());
   return overlayScriptPath;
 }
 
 function getExportSupportScriptPath(): string {
-  exportSupportScriptPath ??= resolveRecordingScriptPath('RecordingExportSupport.swift');
+  exportSupportScriptPath ??= resolveRecordingScriptPath(
+    'RecordingExportSupport.swift',
+    findProjectRoot(),
+  );
   return exportSupportScriptPath;
 }
 

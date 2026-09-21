@@ -28,7 +28,7 @@ vi.mock('../video.ts', () => ({
   waitForPlayableVideo: vi.fn(async () => {}),
 }));
 
-import { buildRecordingScriptPathCandidates, overlayRecordingTouches } from '../overlay.ts';
+import { overlayRecordingTouches } from '../overlay.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 
@@ -129,24 +129,4 @@ test('overlay forwards the requested high export preset', async () => {
   expect(helperScriptArgs()).toEqual(
     expect.arrayContaining(['--events', telemetryPath, '--quality', 'high']),
   );
-});
-
-test('recording script candidates include packaged dist apple-runner source', () => {
-  const packageRoot = path.join(tmpDir, 'package');
-  const scriptPath = path.join(
-    packageRoot,
-    'dist/apple/runner/AgentDeviceRunner/RecordingScripts/recording-overlay.swift',
-  );
-  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
-  fs.writeFileSync(scriptPath, 'print("overlay")\n');
-
-  const candidates = buildRecordingScriptPathCandidates(
-    'recording-overlay.swift',
-    path.join(packageRoot, 'dist/src'),
-    packageRoot,
-    tmpDir,
-  );
-  const firstExisting = candidates.find((candidate) => fs.existsSync(candidate));
-
-  expect(firstExisting).toBe(scriptPath);
 });

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -14,6 +15,59 @@ import {
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;
+const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
+
+/**
+ * Where a recording helper script can live, in the order a checkout, a source build, and a
+ * published package each answer from.
+ */
+export function buildRecordingScriptPathCandidates(
+  scriptName: string,
+  moduleDir: string,
+  projectRoot: string,
+  cwd: string,
+): string[] {
+  const sourceScriptPath = `${RECORDING_SCRIPT_SUBDIRECTORY}/${scriptName}`;
+  const packagedScriptPath = `dist/${sourceScriptPath}`;
+  return [
+    path.resolve(moduleDir, scriptName),
+    path.resolve(projectRoot, sourceScriptPath),
+    path.resolve(moduleDir, `../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../../${sourceScriptPath}`),
+    path.resolve(projectRoot, packagedScriptPath),
+    path.resolve(cwd, sourceScriptPath),
+  ];
+}
+
+/**
+ * Resolves one recording helper script: checkout, built package, or working-directory fallback.
+ * The caller names the project root it trusts, so this module stays free of host metadata lookup.
+ */
+export function resolveRecordingScriptPath(
+  scriptName: string,
+  projectRoot: string,
+  moduleDir = path.dirname(fileURLToPath(import.meta.url)),
+  cwd = process.cwd(),
+): string {
+  const scriptCandidates = buildRecordingScriptPathCandidates(
+    scriptName,
+    moduleDir,
+    projectRoot,
+    cwd,
+  );
+  for (const candidate of scriptCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
+    hint: `Ensure ${RECORDING_SCRIPT_SUBDIRECTORY} is present in this checkout or bundled under dist/${RECORDING_SCRIPT_SUBDIRECTORY} in the package.`,
+    scriptName,
+    searchedPaths: scriptCandidates,
+  });
+}
 
 export function buildSwiftToolEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const root = getSwiftCacheRoot();
