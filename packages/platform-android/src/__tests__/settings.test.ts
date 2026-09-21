@@ -291,17 +291,3 @@ test('readAndroidSetting text-size fails on a multiplier it cannot order', async
     });
   }
 });
-
-test('readAndroidSetting refuses a setting the Android read leg does not serve', async () => {
-  for (const setting of ['wifi', 'airplane', 'animations']) {
-    await withFakeAdb(
-      () => ({ stderr: `unexpected args: ${setting}`, exitCode: 1 }),
-      async ({ device }) => {
-        await assertRejectsAppError(() => readAndroidSetting(device, setting), {
-          code: 'UNSUPPORTED_OPERATION',
-          message: new RegExp(`Reading the "${setting}" setting back is not supported`),
-        });
-      },
-    );
-  }
-});

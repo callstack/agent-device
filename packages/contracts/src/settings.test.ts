@@ -9,9 +9,7 @@ import {
   parseTextSizeCategory,
   PERMISSION_ACTIONS,
   PERMISSION_MODES,
-  READABLE_SETTINGS,
   readTextSizeCategory,
-  resolveSettingsReadRequest,
   SETTINGS_INVALID_ARGS_MESSAGE,
   SETTINGS_MACOS_PERMISSION_USAGE,
   SETTINGS_USAGE_OVERRIDE,
@@ -19,7 +17,6 @@ import {
   textSizeSettingPayload,
   type PermissionAction,
   type PermissionTarget,
-  type ReadableSetting,
   type TextSizeCategory,
 } from './settings.ts';
 
@@ -185,24 +182,6 @@ describe('text-size vocabulary', () => {
     // Owners build the payload through this builder; a frozen result is what stops one from
     // widening the payload the response is composed from.
     expect(Object.isFrozen(payload)).toBe(true);
-  });
-});
-
-describe('readable settings', () => {
-  test('text-size is the setting that answers a bare `settings <setting>`', () => {
-    expect([...READABLE_SETTINGS]).toEqual(['text-size']);
-    expectTypeOf<ReadableSetting>().toEqualTypeOf<'text-size'>();
-  });
-
-  test('a request reads only when it names a readable setting and carries no state', () => {
-    expect(resolveSettingsReadRequest(['text-size'])).toBe('text-size');
-    expect(resolveSettingsReadRequest([' Text-Size '])).toBe('text-size');
-    expect(resolveSettingsReadRequest(undefined)).toBeUndefined();
-    expect(resolveSettingsReadRequest([])).toBeUndefined();
-    // A category is a mutation even for a readable setting: that is the write leg, and it admits
-    // the owner's `setSetting` fact rather than its `readSetting` one.
-    expect(resolveSettingsReadRequest(['text-size', 'large'])).toBeUndefined();
-    expect(resolveSettingsReadRequest(['wifi'])).toBeUndefined();
   });
 });
 

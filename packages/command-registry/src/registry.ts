@@ -64,6 +64,7 @@ import {
   perfRuntimePlanUses,
   pressRuntimeUses,
   resolveSelectorCaptureRuntimePlan,
+  resolveSettingsRuntimePlan,
   resolveSnapshotRuntimePlan,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
@@ -246,20 +247,13 @@ const findRecordingEffect = (req: DispatchedCommand): RecordingEffect => {
 const clipboardRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
   readOnlySubactionRecordingEffect(req, new Set(['read']), '');
 
-// `settings <setting>` with nothing after it asks a readable setting for the value the device holds;
-// every other settings request changes device state — including `settings text-size <category>`,
-// which names the same word and performs a mutation. The read-only membership is declared here in
-// the shape `keyboard` and `alert` declare theirs: the settings vocabulary itself lives in
-// `contracts/settings.ts`, which the CLI's eager command-registry entries must not evaluate
-// (ratcheted by `scripts/__tests__/eager-closure-budgets.test.ts`), and the parity suite pins this
-// set against `READABLE_SETTINGS` so the classification cannot drift from the vocabulary.
-const SETTINGS_READ_ONLY_SETTINGS = new Set(['text-size']);
-
-function settingsRequestReads(req: DispatchedCommand): boolean {
-  const positionals = req.positionals;
-  if (positionals === undefined || positionals.length !== 1) return false;
-  return SETTINGS_READ_ONLY_SETTINGS.has(positionals[0]?.trim().toLowerCase() ?? '');
-}
+// A settings request reads only when it names a readable setting with nothing after it; every other
+// settings request changes device state — including `settings text-size <category>`, which names the
+// same word and performs a mutation. The leg comes from the same resolver the daemon admits with, so
+// the classification and the operation it selects are one declaration rather than two that a test
+// holds together.
+const settingsRequestReads = (req: DispatchedCommand): boolean =>
+  resolveSettingsRuntimePlan(req.positionals).kind === 'read';
 
 const settingsRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
   settingsRequestReads(req) ? 'observes-app' : 'mutates-app';

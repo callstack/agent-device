@@ -1,4 +1,5 @@
 import type { Interactor, RunnerContext } from './interactor-types.ts';
+import type { ReadableSetting } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
@@ -21,11 +22,12 @@ export type SetSettingInput = Readonly<{
 
 /**
  * Neutral intent for one settings read. It carries no `state` because a read asks for the value the
- * device holds rather than asserting one; `setting` is the same owner-keyed vocabulary the write
- * uses, so an owner serves both halves of a setting from one switch.
+ * device holds rather than asserting one, and its `setting` is narrowed to the readable list: the leg
+ * resolver only ever names a setting some owner answers, so an owner's read switch is exhaustive over
+ * it rather than a default case that refuses.
  */
 export type ReadSettingInput = Readonly<{
-  setting: string;
+  setting: ReadableSetting;
   /** Same runner metadata a capture needs; reuses that type rather than restating it. */
   execution?: SnapshotRuntimeExecution;
 }>;

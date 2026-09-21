@@ -71,15 +71,6 @@ export const TEXT_SIZE_CATEGORIES = [
 export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
 
 /**
- * The settings that answer `settings <setting>` with no state. A setting joins this list only when
- * at least one owner can read it back; the read leg admits the owner's `readSetting` fact rather
- * than its `setSetting` fact, so a readable setting never claims a mutation it does not perform.
- */
-export const READABLE_SETTINGS = ['text-size'] as const;
-
-export type ReadableSetting = (typeof READABLE_SETTINGS)[number];
-
-/**
  * What `text-size` answers with. The ladder is shared across platforms, so a read names the
  * category the ladder calls the device's value *and* the value the platform itself reported: an
  * Apple content-size name, or an Android `font_scale` multiplier. The ladder is coarser than any
@@ -107,23 +98,6 @@ export type SettingOptions = {
   latitude?: number;
   longitude?: number;
 };
-
-/**
- * The leg rule the daemon request parser applies: a settings request reads when it names a readable
- * setting and nothing else, and the setting it named comes back narrowed. A request with a state is a
- * mutation even when the setting is readable, which is why the rule sits beside the vocabulary rather
- * than in the handler — the recording effect, the session ref-frame effect, and the operation admitted
- * all turn on it. The command descriptor cannot evaluate this module (the CLI's eager
- * command-registry closure is ratcheted by `scripts/__tests__/eager-closure-budgets.test.ts`), so it
- * declares the read-only membership itself and `src/__tests__/command-descriptor-parity.test.ts`
- * holds both copies to this vocabulary in both directions.
- */
-export function resolveSettingsReadRequest(
-  positionals: readonly string[] | undefined,
-): ReadableSetting | undefined {
-  if (positionals === undefined || positionals[1] !== undefined) return undefined;
-  return findVocabularyName(READABLE_SETTINGS, positionals[0]);
-}
 
 const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
 const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';

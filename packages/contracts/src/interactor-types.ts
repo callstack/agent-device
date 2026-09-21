@@ -6,6 +6,7 @@ import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadableSetting } from './platform-runtime-operations.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
@@ -391,12 +392,13 @@ export type Interactor = {
     options?: SettingOptions,
   ): Promise<Record<string, unknown> | void>;
   /**
-   * Optional: reads back the value a device holds for a readable setting (`READABLE_SETTINGS`),
-   * which is not every setting the write switch serves. An owner with no read path leaves it
-   * undefined; its fact refuses the read before binding, so an absent method can never resolve into
-   * an empty answer.
+   * Optional: reads back the value a device holds for one readable setting. The name is narrowed to
+   * `READABLE_SETTINGS`, which is not every setting the write switch serves, and an owner's dispatch
+   * is exhaustive over it — a setting joins the list only with an owner that answers it. An owner with
+   * no read path leaves the member undefined; its fact refuses the read before binding, so an absent
+   * method can never resolve into an empty answer.
    */
-  readSetting?(setting: string): Promise<ReadSettingResult>;
+  readSetting?(setting: ReadableSetting): Promise<ReadSettingResult>;
   /**
    * The four alert legs. Each owner runs its own observation and, where it needs one, its own
    * poll: an alert is a transient device surface, and how long to look for it — and how to press

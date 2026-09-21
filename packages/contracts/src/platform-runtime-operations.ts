@@ -732,6 +732,51 @@ export const clipboardRuntimePlanUses = Object.freeze([
 export const settingsRuntimePlanUses = Object.freeze([settingsRuntimeUse, settingReadUse] as const);
 
 /**
+ * The settings that answer a bare `settings <setting>` with the value the target holds, in the order
+ * `settings` help lists them. A setting joins this list only when at least one owner can read it
+ * back, which is what makes the read a second operation rather than a stateless write.
+ */
+export const READABLE_SETTINGS = ['text-size'] as const;
+
+export type ReadableSetting = (typeof READABLE_SETTINGS)[number];
+
+/** The leg one `settings` request is on, and the owner fact that leg admits. */
+export type SettingsRuntimePlan =
+  | Readonly<{ kind: 'read'; setting: ReadableSetting; use: typeof settingReadUse }>
+  | Readonly<{ kind: 'write'; use: typeof settingsRuntimeUse }>;
+
+const WRITE_SETTINGS_RUNTIME_PLAN: SettingsRuntimePlan = Object.freeze({
+  kind: 'write',
+  use: settingsRuntimeUse,
+});
+
+/**
+ * The ONE leg rule `settings` has, and the only place its readable-setting list is read. A request
+ * reads when it names a readable setting and nothing else; anything with a state is a mutation,
+ * including `settings text-size large`, which names the same word and changes the device. Both
+ * consumers resolve through here: the command descriptor turns `kind` into the recording and
+ * ref-frame effect, and the daemon admits `use` and reads the setting named — so the classification
+ * and the operation admitted cannot disagree. It sits beside the two uses rather than in the settings
+ * vocabulary because both consumers already evaluate this module, while the CLI's eager command-
+ * registry closure is ratcheted against growth by `scripts/__tests__/eager-closure-budgets.test.ts`.
+ */
+export function resolveSettingsRuntimePlan(
+  positionals: readonly string[] | undefined,
+): SettingsRuntimePlan {
+  const setting = normalizeVocabularyName(positionals?.[0]);
+  if (positionals?.length !== 1 || setting === undefined) return WRITE_SETTINGS_RUNTIME_PLAN;
+  return READABLE_SETTINGS.includes(setting)
+    ? Object.freeze({ kind: 'read', setting, use: settingReadUse })
+    : WRITE_SETTINGS_RUNTIME_PLAN;
+}
+
+/** Settings vocabulary normalization: the daemon lowercases its positionals, the CLI does not. */
+function normalizeVocabularyName(value: string | undefined): ReadableSetting | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return READABLE_SETTINGS.find((name) => name === normalized);
+}
+
+/**
  * `alert`'s action-selected uses (ADR 0019 §9: one bind per handler). The four legs differ in
  * what they do to the device — one observes, one waits, two press a button — so the daemon's
  * `snapshot-alert.ts` admits and binds exactly the one the parsed subcommand names.

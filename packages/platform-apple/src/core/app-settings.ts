@@ -3,10 +3,10 @@ import {
   type MobilePermissionTarget,
   parsePermissionAction,
   parsePermissionTarget,
-  READABLE_SETTINGS,
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
+import type { ReadableSetting } from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { readHostDirectory, removeHostPath } from '@agent-device/host-kit/host-file';
@@ -169,26 +169,20 @@ export async function setIosSetting(
 }
 
 /**
- * The ONE place an Apple target answers `settings <setting>` with the value it holds. The command
- * surface only ever sends a setting its own vocabulary declares readable, so a name outside this
- * switch is a leaf mismatch rather than a user typo, and says so.
+ * The Apple read leg, exhaustive over the readable list: a setting joins `READABLE_SETTINGS` only
+ * with an answer here, so a new readable name is a compile error on this map rather than a runtime
+ * refusal hidden in a default case. The leaf that holds the value still refuses on its own fact.
  */
+const IOS_READABLE_SETTINGS = {
+  'text-size': readIosTextSize,
+} as const satisfies Record<ReadableSetting, (device: DeviceInfo) => Promise<ReadSettingResult>>;
+
+/** Answers `settings <setting>` with the value the Apple leaf holds. */
 export async function readIosSetting(
   device: DeviceInfo,
-  setting: string,
+  setting: ReadableSetting,
 ): Promise<ReadSettingResult> {
-  const normalized = setting.toLowerCase();
-  if (normalized === 'text-size') return await readIosTextSize(device);
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    `Reading the "${setting}" setting back is not supported on Apple targets.`,
-    {
-      deviceId: device.id,
-      setting,
-      reason: 'setting-read-unsupported-on-leaf',
-      hint: `Apple targets read back ${READABLE_SETTINGS.join(', ')}.`,
-    },
-  );
+  return await IOS_READABLE_SETTINGS[setting](device);
 }
 
 async function clearIosSimulatorAppState(

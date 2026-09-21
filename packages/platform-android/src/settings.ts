@@ -4,13 +4,13 @@ import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import {
   parseTextSizeCategory,
-  READABLE_SETTINGS,
   textSizeSettingPayload,
   TEXT_SIZE_CATEGORIES,
   type ReadSettingResult,
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
+import type { ReadableSetting } from '@agent-device/contracts/platform-runtime-operations';
 import {
   parseAppearanceAction,
   parseSettingState,
@@ -179,21 +179,21 @@ export async function setAndroidSetting(
  * surface only sends a setting its own vocabulary declares readable, so a name outside this switch
  * is a leaf mismatch rather than a user typo, and says so.
  */
+/**
+ * The Android read leg, exhaustive over the readable list: a setting joins `READABLE_SETTINGS` only
+ * with an answer here, so a new readable name is a compile error on this map rather than a runtime
+ * refusal hidden in a default case.
+ */
+const ANDROID_READABLE_SETTINGS = {
+  'text-size': readAndroidTextSize,
+} as const satisfies Record<ReadableSetting, (device: DeviceInfo) => Promise<ReadSettingResult>>;
+
+/** Answers `settings <setting>` with the value the Android target holds. */
 export async function readAndroidSetting(
   device: DeviceInfo,
-  setting: string,
+  setting: ReadableSetting,
 ): Promise<ReadSettingResult> {
-  if (setting.toLowerCase() === 'text-size') return await readAndroidTextSize(device);
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    `Reading the "${setting}" setting back is not supported on Android targets.`,
-    {
-      deviceId: device.id,
-      setting,
-      reason: 'setting-read-unsupported-on-leaf',
-      hint: `Android targets read back ${READABLE_SETTINGS.join(', ')}.`,
-    },
-  );
+  return await ANDROID_READABLE_SETTINGS[setting](device);
 }
 
 async function setAndroidTextSize(

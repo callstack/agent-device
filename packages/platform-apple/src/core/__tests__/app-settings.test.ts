@@ -25,7 +25,7 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
-import { readIosSetting, setIosSetting } from '../app-settings.ts';
+import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -588,11 +588,4 @@ test('setIosSetting permission reports a runtime-refused service as unsupported'
       );
     },
   );
-});
-
-test('readIosSetting refuses a setting the Apple read leg does not serve', async () => {
-  await assertRejectsAppError(() => readIosSetting(IOS_TEST_SIMULATOR, 'wifi'), {
-    code: 'UNSUPPORTED_OPERATION',
-    message: /Reading the "wifi" setting back is not supported on Apple targets/,
-  });
 });
