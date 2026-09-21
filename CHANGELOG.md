@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed (ios): `fold half-open` no longer reports a pose the hinge never held. The command accepted
+  the requested category as the answer whenever its four-read budget happened to end on a
+  `half-open` angle, so a hinge still sweeping from 180° toward 0° — which passes through every
+  half-open angle on the way — came back as a settled Book pose. An angle inside that open interval
+  proves the category and nothing else, so `half-open` now requires two consecutive readings that
+  both fall inside it and agree within 0.5°; a pair straddling the 179° boundary is two poses, not
+  one hinge at rest. A budget ending on an unsettled angle fails with `COMMAND_FAILED` and
+  `details.reason: "fold-pose-unsettled"`, carrying `requestedPose`, `observedPose`,
+  `hingeAngleDegrees` and the previous reading, and says the hinge was observed half-open and did
+  not settle rather than claiming it never got there. `fold-pose-unverified` still covers a budget
+  that ends on another pose. Supersedes ADR 0025's budget-end exception (#2730).
 - Fixed (macos): `press` and `click` on the `frontmost-app`, `desktop`, and `menubar` surfaces post
   clicks the way a trackpad does. The helper posted the release in the same tick as the press, so
   AppKit dropped it and controls never activated; each press is now held (`--hold-ms`, 60 ms by

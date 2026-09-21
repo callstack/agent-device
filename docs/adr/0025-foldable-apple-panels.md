@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (2026-09-20). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and any Apple device that
-reports more than one integrated CoreDevice display.
+Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730). Covers iPhone Duo
+(iOS 27.1, `iPhone19,4`) and any Apple device that reports more than one integrated CoreDevice
+display.
 
 An iPhone Duo carries two integrated panels — Apple's **outer display** and **inner display** —
 and lights one of them at a time. Which one is lit is the device pose. Two independent facts
@@ -20,7 +21,8 @@ device is in**. The first is answered by an official host API; the second only b
 | Device has one integrated panel | Keep the pre-panel behavior exactly: no display flag, no pose, unchanged scale probe |
 | Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture keeps the scale probe because `XCUIScreen.main` may be a different panel |
 | Pose must be reported | From panel power alone, report `closed`, `fully-open`, or `unknown`, and never narrower; `fold` reports the exact pose because it reads the hinge angle |
-| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: press the pose control in the Device Hub window through macOS accessibility, then read the hinge angle back from CoreDevice until it agrees; refuse the pose if it never does |
+| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: press the pose control in the Device Hub window through macOS accessibility, then read the hinge angle back from CoreDevice until it agrees — for `half-open`, until two consecutive readings agree; refuse the pose if it never does |
+| The hinge reaches `half-open` but keeps moving | Refuse it as `fold-pose-unsettled` with the observed and previous angles: an angle inside the open interval is an observed category, not a pose the hinge holds |
 | An external display is attached | It is not a panel: it never makes the device multi-screen and never produces a pose |
 | CoreDevice cannot answer | Return an unresolved inventory and keep the single-panel capture path; a missing host feature is not a capture failure |
 
@@ -98,15 +100,18 @@ the read-back is. The pieces, each of which was checked on the shipping 27.1 too
 | Device identity | Device Hub titles the window `<name> – iOS 27.1`, which two simulators sharing a name cannot distinguish. Its sidebar rows carry `AXIdentifier` `TableRow.Device.<UDID>`, and setting `AXSelected` on a row switches the window to that device, so `fold` selects by UDID and only then presses |
 | No window | A simulator booted headlessly leaves Device Hub running with no window. LaunchServices cannot address the trampolined process by bundle id (`open -b`, `NSRunningApplication.activate` do nothing), but a `kAEReopenApplication` event sent to the pid restores the device window, the same event a Dock click sends |
 
-The rule this yields: `closed` and `open` are the hinge's end stops, so one read at the stop is
-the pose; every other angle is `half-open`, including the ones the hinge sweeps through on its way
-somewhere else, so `half-open` is reported once two consecutive reads agree within 0.5°, or when
-the four-read budget ends while the hinge still reads `half-open` — a refusal never names the pose
-that was asked for. Each read takes the last sample the five-second stream printed, so a moving
-hinge is reported where it is now. The live run that fixed the settle rule read 175.1° one stream
-after pressing Book and 130° two streams later. A hinge whose last reading is some other pose is
-refused as `fold-pose-unverified` with the angle CoreDevice still reports; the response of a verified pose carries the angle and the lit
-panel's point size, because the point size is what tells an agent its refs are stale.
+The rule this yields: `closed` and `open` are the hinge's two end stops, so one read at the stop is
+the pose. Every other angle is `half-open`, including the ones a hinge sweeps through on its way
+somewhere else, so an angle in that open interval proves only the category — the pose is the hinge
+*resting* there, which two consecutive reads show by both classifying as `half-open` and agreeing
+within 0.5°. Each read takes the last sample the five-second stream printed, so a moving hinge is
+reported where it is now. The run that first exposed the animation — before the amendment below —
+read 175.1° one stream after pressing Book and 130° two streams later; the run recorded under the
+amended rule is in "Verified on a booted Duo". A budget that ends with the hinge at some other pose is
+refused as `fold-pose-unverified` with the angle CoreDevice still reports; one that ends on an
+unsettled `half-open` angle is refused as `fold-pose-unsettled` (see the amendment below). The
+response of a verified pose carries the angle and the lit panel's point
+size, because the point size is what tells an agent its refs are stale.
 
 Requirements the command states in its own errors: Accessibility permission for the host
 (`accessibility-permission`), a running Device Hub (`fold` launches it in the background the way
@@ -114,6 +119,30 @@ Requirements the command states in its own errors: Accessibility permission for 
 the UDID (`device-hub-device-missing`). A single-panel simulator is refused before anything is
 pressed (`single-panel-device`), and the leaf fact refuses physical devices and every non-iPhone
 simulator OS.
+
+## Amendment: an observed half-open angle is not a settled pose (issue #2730)
+
+The rule above first ended the other way: `half-open` was also reported when the four-read budget
+ran out while the hinge still read `half-open`, because a refusal was not allowed to name the pose
+that was asked for. That reasoning confuses an observed category with a completed pose change.
+`half-open` is an open interval, so a hinge travelling between the end stops passes through it on
+every fold; four readings that each land inside the interval and never agree describe a hinge in
+motion, and reporting them as a pose tells an agent the Book preset is on screen when nothing is at
+rest there. The interval rule also cannot pin a value: Device Hub's Book preset measures 130° on
+this iOS 27.1 Duo, which is one device's measurement, not the success condition — stability is.
+
+So `fold half-open` succeeds only on two consecutive readings that both classify as `half-open` and
+differ by at most 0.5°. Numerical proximity is not agreement when the pair straddles a category
+boundary: 179° is `open` and 178.8° is `half-open` although they differ by 0.2°, and those are two
+poses, not one resting hinge. A budget that ends on an unsettled `half-open` angle fails with
+`COMMAND_FAILED`, `details.reason: "fold-pose-unsettled"`, `requestedPose`, `observedPose`,
+`hingeAngleDegrees` and the previous reading, and says the hinge was observed half-open and did not
+settle — never that it failed to reach half-open, which its own observed pose refutes.
+`fold-pose-unverified` stays for a budget ending on another pose, and keeps classifying from that
+final sample alone: a hinge that passed through `half-open` on its way to the end stop is refused as
+unverified, because the pose it ended in is not the one that was asked for.
+The attempt count, the per-read timeout, cancellation, and the open/closed end-stop
+rule are unchanged: an unsettled fold costs the same four hinge streams it always did.
 
 ## Pose is derived from panel power, and official control does not exist
 
@@ -218,6 +247,14 @@ and text sent with `type` is found again by `find text` — hit testing and read
 lit panel. A ref issued before the fold is refused afterwards as an expired frame rather than
 replayed at the new point size, which is the pose-change rule working as designed.
 
+Half-open pose under the amended settle rule, on a booted iPhone Duo (iOS 27.1) at this PR's head:
+`fold open` reported 180° on its end-stop reading, and `fold half-open` from that open pose reported
+130° naming `LCD-1` at `669x951pt`. The hinge was travelling when the press landed and still came to
+rest inside the interval, so requiring a settled pair did not lose the Book preset. A
+`devicectl device motion hinge-angle` stream read afterwards reported `Angle:130,0° Velocity:+0,0°/s`
+— the hinge is where the pair rule said it was. The run's session was closed and its daemon stopped
+afterwards.
+
 ## Accepted evidence gaps
 
 - **Runner screenshot fallback.** `XCUIScreen.main` is hardcoded in the runner's `screenshot`
@@ -232,6 +269,10 @@ replayed at the new point size, which is the pose-change rule working as designe
   against a changed value.
 - **Pose control on a second Device Hub instance.** `fold` drives the first `DeviceHub` process in
   the process table. Two Xcodes each running a Device Hub is not a state this was verified in.
+- **A hinge that settles slowly.** Four reads is twenty seconds of streams, and a Duo that needs
+  longer to come to rest inside `half-open` is now refused where the superseded rule would have
+  reported a pose. Every Duo run observed for this change settled inside the budget; no simulator
+  that needs longer was seen, so the budget stays as it is rather than growing on a hypothesis.
 - **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
   and the hinge stream on one was not exercised.
 

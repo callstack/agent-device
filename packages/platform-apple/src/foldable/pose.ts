@@ -30,6 +30,9 @@ const FOLDABLE_REQUIRED_HINT =
 const INVENTORY_REQUIRED_HINT =
   "fold needs 'devicectl device info displays' to tell a foldable from a single-panel simulator; update Xcode to a version that ships the display-information feature.";
 
+const POSE_UNSETTLED_HINT =
+  'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold, then read the angle directly with xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5 to see whether the simulator holds the pose.';
+
 /**
  * Puts a foldable simulator into `pose` and verifies it did get there.
  *
@@ -104,11 +107,10 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
  * stream, so the attempt count is the whole settle budget: the Device Hub press animates the
  * hinge, and a press that landed on some other device's window never moves this one.
  *
- * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. Every
- * other angle is `half-open`, including the ones a hinge sweeps through on its way somewhere
- * else, so that pose is reported once two consecutive reads agree the hinge has stopped. The rule
- * a refusal obeys is that it never names the pose that was asked for: when the budget ends while
- * the hinge still reads `half-open`, that is the pose, settled or not, and it is reported.
+ * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. A
+ * `half-open` angle proves only the category, because a hinge travelling between the stops passes
+ * through it, so that pose is the hinge *resting* inside the interval and two consecutive reads
+ * have to show it (ADR 0025).
  */
 async function awaitHingePose(
   device: DeviceInfo,
@@ -123,21 +125,64 @@ async function awaitHingePose(
     observed = await readAppleHingeAngle(device, { signal });
     if (foldPoseForHingeAngle(observed) !== pose) continue;
     if (pose !== 'half-open') return observed;
-    if (previous !== undefined && Math.abs(observed - previous) <= IOS_FOLD_POSE_STABLE_DEGREES) {
+    if (previous !== undefined && isSettledHalfOpenPair(observed, previous)) {
       return observed;
     }
   }
-  if (observed !== undefined && foldPoseForHingeAngle(observed) === pose) return observed;
-  throw new AppError(
+  if (observed !== undefined && pose === 'half-open' && foldPoseForHingeAngle(observed) === pose) {
+    throw unsettledHalfOpenPoseError(device, observed, previous);
+  }
+  throw unverifiedPoseError(device, pose, observed);
+}
+
+/**
+ * Whether two consecutive readings are one hinge at rest in `half-open`. Both must classify as
+ * `half-open`: two angles 0.2° apart on either side of the 179° boundary are two poses.
+ */
+function isSettledHalfOpenPair(observed: number, previous: number): boolean {
+  return (
+    foldPoseForHingeAngle(observed) === 'half-open' &&
+    foldPoseForHingeAngle(previous) === 'half-open' &&
+    Math.abs(observed - previous) <= IOS_FOLD_POSE_STABLE_DEGREES
+  );
+}
+
+function hingePoseDetails(device: DeviceInfo, pose: FoldPose, observed: number | undefined) {
+  return {
+    deviceId: device.id,
+    requestedPose: pose,
+    observedPose: observed === undefined ? undefined : foldPoseForHingeAngle(observed),
+    hingeAngleDegrees: observed,
+  };
+}
+
+/** The budget ended with the hinge classified as some pose other than the one requested. */
+function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: number | undefined) {
+  return new AppError(
     'COMMAND_FAILED',
     `${device.name} did not reach the ${pose} pose: CoreDevice still reports a hinge angle of ${observed}°`,
     {
-      deviceId: device.id,
+      ...hingePoseDetails(device, pose, observed),
       reason: 'fold-pose-unverified',
-      requestedPose: pose,
-      observedPose: observed === undefined ? undefined : foldPoseForHingeAngle(observed),
-      hingeAngleDegrees: observed,
       hint: 'The Device Hub pose control was pressed, but the hinge did not follow. If several Device Hub windows are titled with this device name, close the ones for other simulators so the press reaches this one, then retry.',
+    },
+  );
+}
+
+/** The hinge was seen `half-open` and never came to rest inside that interval. */
+function unsettledHalfOpenPoseError(
+  device: DeviceInfo,
+  observed: number,
+  previous: number | undefined,
+) {
+  return new AppError(
+    'COMMAND_FAILED',
+    `${device.name} was observed half-open at ${observed}° but did not settle: ${IOS_FOLD_POSE_SETTLE_ATTEMPTS} hinge reads never held two consecutive half-open angles within ${IOS_FOLD_POSE_STABLE_DEGREES}° of each other`,
+    {
+      ...hingePoseDetails(device, 'half-open', observed),
+      reason: 'fold-pose-unsettled',
+      ...(previous === undefined ? {} : { previousHingeAngleDegrees: previous }),
+      hint: POSE_UNSETTLED_HINT,
     },
   );
 }
