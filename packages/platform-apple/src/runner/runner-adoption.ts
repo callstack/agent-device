@@ -21,6 +21,7 @@ import {
 } from './runner-contract.ts';
 import {
   buildRunnerLease,
+  isLeaseRunnerProcessIntact,
   readRunnerLeaseForAdoption,
   verifyLeaseRunnerPidIdentity,
   writeRunnerLease,
@@ -73,6 +74,8 @@ type RunnerAdoptionRefusal =
   | 'expected_derived_unresolved'
   | 'artifact_fingerprint_mismatch'
   | 'probe_failed'
+  /** The runner answered but its lease could not be re-stamped, so nothing may claim it. */
+  | 'lease_write_failed'
   /** The startup phase had nothing left to probe with, so the rebuild starts on its own clock. */
   | 'probe_budget_exhausted';
 
@@ -126,7 +129,7 @@ export async function tryAdoptRunnerSessionFromLease(
   // The probe awaited network I/O — the xcodebuild can have exited and its pid
   // been recycled while the old port still answers. Re-verify before the
   // adopted lease re-stamps the pid; everything below is synchronous.
-  if (!leasedRunnerProcessIntact(lease, runnerPid)) {
+  if (!isLeaseRunnerProcessIntact(lease, runnerPid)) {
     return skip('runner_pid_recycled', lease);
   }
 
@@ -134,7 +137,7 @@ export async function tryAdoptRunnerSessionFromLease(
   try {
     writeRunnerLease(session.lease);
   } catch {
-    return null;
+    return skip('lease_write_failed', lease);
   }
   emitDiagnostic({
     level: 'info',
@@ -191,11 +194,6 @@ function verifyLeasedRunnerProcess(
   if (!isProcessAlive(runnerPid)) return { refusal: 'runner_process_dead' };
   if (!verifyLeaseRunnerPidIdentity(lease, runnerPid)) return { refusal: 'runner_pid_recycled' };
   return { value: runnerPid };
-}
-
-/** The same identity contract, re-checked after the probe awaited I/O. */
-function leasedRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
-  return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
 }
 
 /**

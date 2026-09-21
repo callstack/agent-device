@@ -556,6 +556,15 @@ async function cleanupLeasedRunnerProcesses(
  * pattern-based xcodebuild pkill in the cleanup adapter is unaffected and
  * still collects genuinely stray runner processes.
  */
+/**
+ * Whether a live pid is provably still the leased runner. The one place this contract is written, so
+ * the pid a caller is willing to signal and the pid adoption is willing to take over cannot drift
+ * apart (#2681).
+ */
+export function isLeaseRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
+  return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
+}
+
 function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
   const pid = lease.runnerPid ?? undefined;
   if (!pid || !isProcessAlive(pid)) return undefined;

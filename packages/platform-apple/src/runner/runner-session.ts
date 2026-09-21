@@ -17,7 +17,7 @@ import {
 } from './apple-runner-platform.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
-import { getFreePort, resolveRunnerLaunchLogPath } from './runner-io.ts';
+import { flushRunnerLogAppends, getFreePort, resolveRunnerLaunchLogPath } from './runner-io.ts';
 import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
@@ -292,17 +292,25 @@ async function startRunnerSessionWithLease(
         message: 'Starting XCTest runner...',
       });
     }
-    runnerProcess = await measureRunnerStartupStep(startupTimings, 'launch_xcodebuild', () =>
-      launchRunnerProcess({
-        device,
-        port,
-        xctestrunPath,
-        derivedPath: xctestrunArtifact.derived,
-        signal,
-        logPath: runnerLogPath,
-        traceLogPath: options.traceLogPath,
-        verbose: options.verbose,
-      }),
+    runnerProcess = await measureRunnerStartupStep(
+      startupTimings,
+      'launch_xcodebuild',
+      async () => {
+        // Build output reaches this same file through an async append queue, so the offset that marks
+        // where this generation's output starts is only trustworthy once those bytes have landed below
+        // it; otherwise a queued build line reads as the runner's own failure output (#2681).
+        await flushRunnerLogAppends(runnerLogPath).catch(() => {});
+        return await launchRunnerProcess({
+          device,
+          port,
+          xctestrunPath,
+          derivedPath: xctestrunArtifact.derived,
+          signal,
+          logPath: runnerLogPath,
+          traceLogPath: options.traceLogPath,
+          verbose: options.verbose,
+        });
+      },
     );
   } catch (error) {
     await simulatorSetRedirect?.releaseBestEffort();

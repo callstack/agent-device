@@ -860,7 +860,9 @@ export async function buildRunnerEarlyExitError(params: {
   // `reason`/`hint` above — not a process-exit wrap.
   const error = new AppError('COMMAND_FAILED', message, {
     port,
-    logPath: logPath ?? session.runnerLogPath,
+    // The quote always comes from the runner's own file, so that is the file the error has to name;
+    // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
+    logPath: session.runnerLogPath ?? logPath,
     xcodebuild: {
       exitCode: result.exitCode,
       // One merged file since #2681: the tail is reported under `stderr`, which is where readers
