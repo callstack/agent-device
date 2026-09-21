@@ -219,15 +219,25 @@ extension RunnerTests {
   // transformed subtrees, so a closed drawer at negative x inflates it and
   // out-of-window coordinates still pass containment. Falls back to app.frame
   // when no window frame is readable.
-  func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
-    let window = app.windows.element(boundBy: 0)
-    if window.exists {
+  /// The app window interactions and captures are booked against: the first window the app
+  /// reports with a non-empty frame, the application itself when none qualifies. The viewport,
+  /// the interaction root, and the synthesized reference frame all resolve through here, so a
+  /// fold, a sheet, or a rotation moves every consumer to the same window in the same pass.
+  /// On iOS the resolved element must be the one whose `screen.displayID` a gesture routes by;
+  /// reading the frame first is what makes that screen read mean the resolved window.
+  func resolveRunnerWindow(app: XCUIApplication) -> (element: XCUIElement, frame: CGRect) {
+    for window in app.windows.allElementsBoundByIndex {
+      guard window.exists else { continue }
       let frame = window.frame
       if !frame.isEmpty {
-        return frame
+        return (window, frame)
       }
     }
-    return app.frame
+    return (app, app.frame)
+  }
+
+  func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
+    resolveRunnerWindow(app: app).frame
   }
 
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) -> Response {
@@ -506,11 +516,7 @@ extension RunnerTests {
   }
 
   private func interactionRoot(app: XCUIApplication) -> XCUIElement {
-    let windows = app.windows.allElementsBoundByIndex
-    if let window = windows.first(where: { $0.exists && !$0.frame.isEmpty }) {
-      return window
-    }
-    return app
+    resolveRunnerWindow(app: app).element
   }
 
   private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {

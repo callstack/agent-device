@@ -68,6 +68,14 @@ extension RunnerTests {
       guard waitUntilAlertButtonHittable(button, deadline: deadline) else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
+      let buttonFrame = button.frame
+      NSLog(
+        "AGENT_DEVICE_RUNNER_ALERT_ACTIVATION action=%@ label=%@ frame=(%.1f,%.1f,%.1f,%.1f) point=(%.1f,%.1f)",
+        action,
+        button.label,
+        buttonFrame.origin.x, buttonFrame.origin.y, buttonFrame.size.width, buttonFrame.size.height,
+        buttonFrame.midX, buttonFrame.midY
+      )
       // The hittable read above is this activation's readiness gate, so XCTest's pre-synthesis wait
       // adds nothing and can cost more than the command has: the tap would land after the deadline
       // expired and the alert would be answered by a button the caller was told nothing about
