@@ -21,6 +21,8 @@ export const CONTACT_SHEET_CONTAINER_REASON = 'contact_sheet_container_unsupport
 export const CONTACT_SHEET_OUTPUT_WRITE_REASON = 'contact_sheet_output_write_failed';
 /** The output resolves to the recording itself, which a sheet must never replace. */
 export const CONTACT_SHEET_OUTPUT_COLLISION_REASON = 'contact_sheet_output_collides_with_input';
+/** The change threshold is not a finite share between 0 and 1. */
+export const CONTACT_SHEET_THRESHOLD_REASON = 'contact_sheet_threshold_invalid';
 
 export type RecordingContactSheetCell = {
   /** Presentation time of the decoded frame this cell shows, in milliseconds from the clip start. */

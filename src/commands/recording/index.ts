@@ -9,6 +9,7 @@ import {
 } from '@agent-device/contracts/recording';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import {
@@ -28,7 +29,7 @@ const TRACE_COMMAND_NAME = 'trace';
 const RECORDING_ACTION_VALUES = ['start', 'stop'] as const;
 
 const recordCommandDescription =
-  'Start or stop a screen recording for the active app session or, where supported, the selected device. Long Android recordings can return multiple video artifacts; HarmonyOS supports whole-screen recording on physical devices.';
+  'Start or stop a screen recording for the active app session or, where supported, the selected device, or build a contact-sheet PNG from a recording already exported. Long Android recordings can return multiple video artifacts; HarmonyOS supports whole-screen recording on physical devices.';
 const traceCommandDescription =
   'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.';
 
@@ -58,13 +59,33 @@ export const traceCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+/**
+ * Which `record` action reads which option.
+ *
+ * A new option has to name the action that reads it. That is what keeps one shared list from letting
+ * `record start --out take.mp4` look like it recorded to that path, and `record contact-sheet
+ * clip.mp4 --fps 30` look like frame sampling was configured. The parser is handed this table as
+ * `flagsByAction` and refuses an option the action cannot read.
+ */
+const RECORD_FLAGS_BY_ACTION: Readonly<Record<string, readonly FlagKey[]>> = {
+  start: ['recordingScope', 'fps', 'quality', 'hideTouches'],
+  // `record stop` takes a session and a target, and reads no recording option.
+  stop: [],
+  'contact-sheet': ['out'],
+};
+
+const RECORD_CLI_FLAGS: readonly FlagKey[] = [
+  ...new Set(Object.values(RECORD_FLAGS_BY_ACTION).flat()),
+];
+
 const recordCliSchema = {
   usageOverride:
-    'record start [path] [--scope <app|device|system>] [--fps <n>] [--quality <medium|high>] [--hide-touches] | record stop',
+    'record start [path] [--scope <app|device|system>] [--fps <n>] [--quality <medium|high>] [--hide-touches] | record stop | record contact-sheet <video.mp4> [--out <sheet.png>]',
   usageFlags: [],
-  listUsageOverride: 'record start [path] | record stop',
-  positionalArgs: ['start|stop', 'path?'],
-  allowedFlags: ['recordingScope', 'fps', 'quality', 'hideTouches'],
+  listUsageOverride: 'record start [path] | record stop | record contact-sheet <video>',
+  positionalArgs: ['start|stop|contact-sheet', 'path?'],
+  allowedFlags: RECORD_CLI_FLAGS,
+  flagsByAction: RECORD_FLAGS_BY_ACTION,
 } as const satisfies CommandSchemaOverride;
 
 const traceCliSchema = {
@@ -107,7 +128,7 @@ export const recordCommandFacet = defineCommandFacet({
   text: {
     summary: 'Start or stop screen recording',
     cliDetail:
-      'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Android screenrecord encodes a frame only when the screen changes, so a clip can end at the last frame the recorder encoded instead of at record stop; durationMs is host wall clock from record start until the export finished, and capturedDurationMs reports the video timeline when it can be measured, with a warning naming how much of the window that video covers. An Android manifest left by an unreachable recording is retired on the next start once its recorders are proven gone; one still owned refuses with non-retriable DEVICE_IN_USE and reason native_recovery_evidence_open naming the session to run record stop for, and a recorder that is still writing an artifact refuses with DEVICE_IN_USE and reason native_recording_artifact_claimed, which clears itself once that recorder ends at the 180s limit. HarmonyOS supports whole-screen recording on physical devices only: use --scope device/system; --fps, --quality, and --hide-touches are unsupported. Use --quality to choose medium or high export quality on supported backends. An iOS simulator host recording lock returns non-retriable DEVICE_IN_USE with reason apple_simulator_recording_busy. Stop the recording in its owning session; if a dead recorder left the host locked, ask the host operator to restart the CoreSimulator stream service. A record stop that cannot produce its export keeps what a retry reads back — on Android the device-side artifact and the native manifest — leaves the recording manifest of that session open, and returns its own error, so retry record stop in that session; only closing the session disposes them. Every stopped recording also reports what became of its recorder and of the file that recorder writes to: recorder is confirmed, or lost when the session holding it died, and nativePathDisposition is retirable while that file still owes a removal or retired once its removal was verified. Both are optional disclosures, not failures; ADR 0024 declares further states (unconfirmed, pending) for the steps that gain those probes, and no stop reports them yet.',
+      'The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Android screenrecord encodes a frame only when the screen changes, so a clip can end at the last frame the recorder encoded instead of at record stop; durationMs is host wall clock from record start until the export finished, and capturedDurationMs reports the video timeline when it can be measured, with a warning naming how much of the window that video covers. An Android manifest left by an unreachable recording is retired on the next start once its recorders are proven gone; one still owned refuses with non-retriable DEVICE_IN_USE and reason native_recovery_evidence_open naming the session to run record stop for, and a recorder that is still writing an artifact refuses with DEVICE_IN_USE and reason native_recording_artifact_claimed, which clears itself once that recorder ends at the 180s limit. HarmonyOS supports whole-screen recording on physical devices only: use --scope device/system; --fps, --quality, and --hide-touches are unsupported. Use --quality to choose medium or high export quality on supported backends. An iOS simulator host recording lock returns non-retriable DEVICE_IN_USE with reason apple_simulator_recording_busy. Stop the recording in its owning session; if a dead recorder left the host locked, ask the host operator to restart the CoreSimulator stream service. A record stop that cannot produce its export keeps what a retry reads back — on Android the device-side artifact and the native manifest — leaves the recording manifest of that session open, and returns its own error, so retry record stop in that session; only closing the session disposes them. Every stopped recording also reports what became of its recorder and of the file that recorder writes to: recorder is confirmed, or lost when the session holding it died, and nativePathDisposition is retirable while that file still owes a removal or retired once its removal was verified. Both are optional disclosures, not failures; ADR 0024 declares further states (unconfirmed, pending) for the steps that gain those probes, and no stop reports them yet. record contact-sheet <video.mp4> [--out <sheet.png>] is a local report over a file you already exported: it decodes frames out of that MP4 and writes one PNG holding the cells where the screen visibly changed, each labeled with its elapsed time on the clip timeline. It needs no session and no device, rebuilds any past recording, and works for every backend that exports MP4; a WebM recording is refused with reason contact_sheet_container_unsupported. The sample grid is bounded and spread across the whole clip, so it reports coverage rather than a review: a flash that opens and closes entirely between two sample times is not in the sheet, which is why the result also reports how many times it sampled and how many frames came back. Frame decoding is Apple AVFoundation tooling, so the command runs only on macOS hosts and refuses elsewhere with reason contact_sheet_unsupported_host.',
   },
   metadata: recordCommandMetadata,
   run: (client, input) => client.recording.record(input as RecordOptions),

@@ -51,6 +51,12 @@ steps 1-3, plus step 9.
   everything in `allowedFlags`. Keep a cross-cutting opt-in out of every synopsis with
   `usageHidden: true` on its flag definition. `src/commands/schema/usage.test.ts` fails a tail that names
   an option the command does not accept, or one the hand-written grammar already wrote.
+- A command whose first positional picks an action declares `flagsByAction` on its CLI schema, mapping
+  each action to the options it reads, and derives `allowedFlags` from that table. The parser then
+  refuses a typed option its action never reads, off the keys the caller provided: config, env, and
+  remote-config defaults fill `flags` without becoming a request, so `AGENT_DEVICE_FPS=30` never breaks
+  `record stop`. Keep an option every action reads out of the table — a row list is the only set the
+  parser refuses, and refusing `--json` would refuse the command.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
 - Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in

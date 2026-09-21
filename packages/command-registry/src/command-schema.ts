@@ -10,6 +10,17 @@ export type CommandSchema = {
   positionalArgs?: readonly string[];
   allowsExtraPositionals?: boolean;
   allowedFlags?: readonly FlagKey[];
+  /**
+   * For a command whose first positional selects an action: the options that action reads.
+   *
+   * `allowedFlags` is command-wide, because the parser does not know actions, so every option the
+   * command declares reaches every one of its actions. An option the action never reads is then
+   * dropped without a word: `record start --out take.mp4` looks like it recorded there, and
+   * `record contact-sheet clip.mp4 --fps 30` looks like it sampled frames. Declaring the split lets
+   * the parser refuse a typed option its action cannot read — on the keys the caller typed, never on
+   * the config, env, or remote-config defaults that also fill the flag bag.
+   */
+  flagsByAction?: Readonly<Record<string, readonly FlagKey[]>>;
   supportedFlags?: readonly FlagKey[];
   /**
    * Replaces the generated synopsis grammar in `--help`, for shapes the generator cannot express.

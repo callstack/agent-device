@@ -20,6 +20,7 @@ const dedicatedCliCommandHandlerLoaders = {
   replay: async () => (await import('./replay.ts')).replayCommand,
   screenshot: async () => (await import('./screenshot.ts')).screenshotCommand,
   diff: async () => (await import('./screenshot.ts')).diffCommand,
+  record: async () => (await import('./recording.ts')).recordingCommand,
 } satisfies ClientCommandHandlerMap;
 
 export async function tryRunClientBackedCommand(params: {

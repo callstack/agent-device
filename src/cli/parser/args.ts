@@ -197,6 +197,18 @@ export function finalizeParsedArgs(
       delete (flags as Record<string, unknown>)[entry.key];
     }
   }
+
+  const unread = findFlagsTheActionCannotRead(parsed);
+  if (unread.length > 0) {
+    const message = formatUnreadActionFlagMessage(parsed.command, parsed.positionals[0]!, unread);
+    if (strictFlags) {
+      throw new AppError('INVALID_ARGS', message);
+    }
+    warnings.push(message);
+    for (const entry of unread) {
+      delete (flags as Record<string, unknown>)[entry.key];
+    }
+  }
   for (const key of Object.keys(flags) as FlagKey[]) {
     if (flags[key] === undefined) continue;
     if (!isFlagSupportedForCommand(key, parsed.command)) {
@@ -371,6 +383,38 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
     };
   }
   return parsed;
+}
+
+/**
+ * The typed options the selected action of a command cannot read.
+ *
+ * Only the options the table splits across actions are its business: a global flag such as `--json`
+ * or `--no-record` is read by every action, and refusing one would refuse the command itself. A
+ * command without the table, or an action it does not list, is left to the rest of the parser.
+ *
+ * Config, env, and remote-config defaults never appear in `providedFlags`, which is why
+ * `AGENT_DEVICE_FPS=30` does not fail `record stop`: a default the action ignores was never requested.
+ */
+function findFlagsTheActionCannotRead(parsed: RawParsedArgs): ParsedFlagRecord[] {
+  const flagsByAction = getCommandSchema(parsed.command)?.flagsByAction;
+  const action = parsed.positionals[0];
+  if (flagsByAction === undefined || action === undefined) return [];
+  if (!Object.hasOwn(flagsByAction, action)) return [];
+  const reads = flagsByAction[action];
+  if (reads === undefined) return [];
+  const actionScoped = new Set(Object.values(flagsByAction).flat());
+  return parsed.providedFlags.filter(
+    (entry) => actionScoped.has(entry.key) && !reads.includes(entry.key),
+  );
+}
+
+function formatUnreadActionFlagMessage(
+  command: string | null,
+  action: string,
+  unread: ParsedFlagRecord[],
+): string {
+  const tokens = unread.map((entry) => entry.token).join(', ');
+  return `${command} ${action} does not read ${tokens}. Run \`${command} ${action} --help\` for the options it reads.`;
 }
 
 function formatUnsupportedFlagMessage(command: string | null, unsupported: string[]): string {

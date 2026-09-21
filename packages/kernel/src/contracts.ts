@@ -125,6 +125,7 @@ export type DaemonArtifactKnownType =
   | 'screenshot-diff'
   | 'screen-recording'
   | 'screen-recording-chunk'
+  | 'screen-recording-contact-sheet'
   | 'screen-recording-telemetry'
   | 'trace-log'
   | 'test-artifacts';
