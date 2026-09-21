@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { READABLE_SETTINGS } from '@agent-device/contracts/settings';
+import { READABLE_SETTINGS, SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
 import { test } from 'vitest';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
 import {
@@ -329,20 +329,22 @@ test('the registry read-only settings set stays the settings vocabulary readable
   // joins READABLE_SETTINGS without joining the registry's set would be classified as a mutation
   // while the daemon runs it as a read, and a stale registry entry would claim observation for a
   // request the daemon executes as a mutation.
+  // Derived from the usage line rather than copied here: `SETTINGS_USAGE_OVERRIDE` is the declaration
+  // of the settings subcommand surface, and a list maintained beside it would drift the same way the
+  // registry set would. A guard below keeps a malformed derivation from silently shrinking the pin.
   const SETTINGS_SUBCOMMANDS = [
-    'wifi',
-    'airplane',
-    'location',
-    'animations',
-    'appearance',
-    'faceid',
-    'touchid',
-    'fingerprint',
-    'clear-app-state',
-    'reset-keychain',
-    'permission',
-    'text-size',
-  ] as const;
+    ...new Set(
+      SETTINGS_USAGE_OVERRIDE.split(' | ').map(
+        (form) => form.replace(/^settings /, '').split(/[\s[<]/)[0]!,
+      ),
+    ),
+  ];
+  assert.ok(
+    SETTINGS_SUBCOMMANDS.length >= 10 &&
+      SETTINGS_SUBCOMMANDS.includes('text-size') &&
+      SETTINGS_SUBCOMMANDS.includes('appearance'),
+    `the usage line must yield the whole settings surface, got ${SETTINGS_SUBCOMMANDS.join(', ')}`,
+  );
   const readable = new Set<string>(READABLE_SETTINGS);
   assert.ok(readable.size > 0, 'the settings vocabulary declares at least one readable setting');
   for (const setting of SETTINGS_SUBCOMMANDS) {
@@ -372,7 +374,7 @@ test('the registry read-only settings set stays the settings vocabulary readable
   // cannot keep classifying a name the vocabulary has since dropped.
   for (const setting of readable) {
     assert.ok(
-      (SETTINGS_SUBCOMMANDS as readonly string[]).includes(setting),
+      SETTINGS_SUBCOMMANDS.includes(setting),
       `READABLE_SETTINGS names ${setting}, which is not a settings subcommand`,
     );
   }

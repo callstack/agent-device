@@ -109,11 +109,14 @@ export type SettingOptions = {
 };
 
 /**
- * The one leg rule the command descriptor and the daemon request parser share: a settings request
- * reads when it names a readable setting and nothing else, and the setting it named comes back
- * narrowed. A request with a state is a mutation even when the setting is readable, which is why the
- * rule sits beside the vocabulary rather than in either consumer — the recording effect, the session
- * ref-frame effect, and the operation admitted all turn on it.
+ * The leg rule the daemon request parser applies: a settings request reads when it names a readable
+ * setting and nothing else, and the setting it named comes back narrowed. A request with a state is a
+ * mutation even when the setting is readable, which is why the rule sits beside the vocabulary rather
+ * than in the handler — the recording effect, the session ref-frame effect, and the operation admitted
+ * all turn on it. The command descriptor cannot evaluate this module (the CLI's eager
+ * command-registry closure is ratcheted by `scripts/__tests__/eager-closure-budgets.test.ts`), so it
+ * declares the read-only membership itself and `src/__tests__/command-descriptor-parity.test.ts`
+ * holds both copies to this vocabulary in both directions.
  */
 export function resolveSettingsReadRequest(
   positionals: readonly string[] | undefined,

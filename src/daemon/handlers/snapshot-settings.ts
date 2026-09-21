@@ -210,6 +210,8 @@ async function executeSettingsRead(
   setting: ReadableSetting,
 ): Promise<DaemonResponse> {
   const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const refusal = settingsRequestRefusal(device, setting);
+  if (refusal !== undefined) return refusal;
   const admission = await admitRuntimeUse({
     command: `settings ${setting}`,
     device,
@@ -250,6 +252,8 @@ async function executeSettingsWrite(
 ): Promise<DaemonResponse> {
   const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
   const { setting, state } = parsed;
+  const refusal = settingsRequestRefusal(device, setting);
+  if (refusal !== undefined) return refusal;
   const admission = await admitRuntimeUse({
     command: 'settings',
     device,
@@ -258,13 +262,10 @@ async function executeSettingsWrite(
     bindDevice,
     ...(session ? {} : { readiness: {} }),
   });
-  // Explicit positional wins; the Maestro adapter's daemon-internal
-  // settingsAppBundleId overrides the session app for cross-app targeting.
-  const appBundleId =
-    parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
+  const appBundleId = settingsWriteAppId(req, parsed, session);
   if (admission.type === 'response') return admission.response;
-  const refusal = settingsWriteRefusal(device, parsed, appBundleId);
-  if (refusal !== undefined) return refusal;
+  const writeRefusal = settingsWriteRefusal(parsed, appBundleId);
+  if (writeRefusal !== undefined) return writeRefusal;
   // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
   // the bound call (settings is always classified may-invalidate). It runs here, ahead of the
   // diagnostic and the coordinate typing, because that is where the retired daemon route expired
@@ -289,19 +290,40 @@ async function executeSettingsWrite(
 }
 
 /**
- * The refusals a settings mutation makes after admission and before any device call. Both key on the
- * requested setting rather than on the device, which is why they are daemon-side and not owner facts:
- * macOS serves `settings` and still refuses `wifi`, and `clear-app-state` needs an app the session
- * may not carry.
+ * The refusals both legs make before a device is touched. They key on the requested setting rather
+ * than on the target's read or write fact, which is why they are daemon-side and not owner cells:
+ * macOS serves `settings` and still refuses `wifi`. Both legs consult this one helper, so a target
+ * answers a read and a write of the same setting with the same code instead of `INVALID_ARGS` on one
+ * leg and `UNSUPPORTED_OPERATION` on the other.
  */
-function settingsWriteRefusal(
+function settingsRequestRefusal(
   device: SessionState['device'],
+  setting: string,
+): DaemonResponse | undefined {
+  if (isMacOs(device) && !isMacOsSettingSupported(setting)) {
+    return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
+  }
+  return undefined;
+}
+
+/**
+ * The app a mutation targets: the explicit positional wins, then the Maestro adapter's daemon-internal
+ * `settingsAppBundleId`, which aims one request at another app than the session carries, and last the
+ * app the session is bound to.
+ */
+function settingsWriteAppId(
+  req: DaemonRequest,
+  parsed: ParsedSettingsArgs,
+  session: SessionState | undefined,
+): string | undefined {
+  return parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
+}
+
+/** The refusal a mutation adds on top of the shared one: an app the session may not carry. */
+function settingsWriteRefusal(
   parsed: ParsedSettingsArgs,
   appBundleId: string | undefined,
 ): DaemonResponse | undefined {
-  if (isMacOs(device) && !isMacOsSettingSupported(parsed.setting)) {
-    return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(parsed.setting));
-  }
   if (parsed.setting === 'clear-app-state' && !appBundleId) {
     return errorResponse(
       'INVALID_ARGS',

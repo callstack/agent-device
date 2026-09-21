@@ -211,22 +211,30 @@ test('settings text-size reads the category the owner holds without mutating any
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
-test('settings text-size refuses the macOS host, which serves no content size to read', async () => {
+test('settings text-size refuses the macOS host on both legs with the same code', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-text-size-read';
   sessionStore.set(sessionName, makeSession(sessionName, macOsDevice));
 
-  const response = await handleSnapshotCommands({
+  const read = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
     sessionStore,
   });
+  const write = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size', 'large'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
 
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toMatch(/text-size is not supported/i);
+  for (const response of [read, write]) {
+    expect(response?.ok).toBe(false);
+    if (response && !response.ok) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.message).toMatch(/Unsupported macOS setting: text-size/i);
+    }
   }
   expect(fixtureSettingsReads).toHaveLength(0);
   expect(fixtureSettingsMutations).toHaveLength(0);
