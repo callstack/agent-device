@@ -437,15 +437,17 @@ export function isIosTargetActivationReason(value: unknown): value is IosTargetA
 }
 
 /**
- * States an activation could have been needed for, in `XCApplicationState` raw order.
- * `runningForeground` is excluded because the runner skips `activate()` when the app is already
- * foreground and never stamps a fact there.
+ * States an activation could have been needed for, in `XCApplicationState` raw order: unknown 0,
+ * notRunning 1, suspended 2, plain background 3 — the SDK declares suspended on non-macOS platforms
+ * only. `runningForeground` is excluded because the runner skips `activate()` when the app is already
+ * foreground and never stamps a fact there. The decoder, which assigns raw values, is what keeps this
+ * order honest.
  */
 export const IOS_TARGET_ACTIVATION_PRIOR_STATES = [
   'unknown',
   'notRunning',
-  'runningBackground',
   'runningBackgroundSuspended',
+  'runningBackground',
 ] as const;
 
 export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_STATES)[number];

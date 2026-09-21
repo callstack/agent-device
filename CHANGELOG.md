@@ -20,6 +20,13 @@
   text showed the root and none of its replies, while the full snapshot showed all of them. An
   indicator whose nearest scrolling ancestor is a text view now belongs to that text view and
   derives no list viewport.
+- Fixed (ios): a foreground repair names the state the session app was really in. The decoder translated
+  the runner's raw `XCApplicationState` integer from a handwritten table that had
+  `runningBackgroundSuspended` (2) and `runningBackground` (3) the wrong way round, so a suspended app
+  was disclosed as merely backgrounded in `targetActivation.priorState` and in the appended warning —
+  as shipped in v0.21.7 and v0.21.8. The table now follows what the SDK declares, a runner XCTest pins
+  every integer against `XCUIApplication.State` itself, and the decoder test reads those pins, so the
+  two copies cannot drift apart unnoticed.
 - Fixed (macos): `press` and `click` on the `frontmost-app`, `desktop`, and `menubar` surfaces post
   clicks the way a trackpad does. The helper posted the release in the same tick as the press, so
   AppKit dropped it and controls never activated; each press is now held (`--hold-ms`, 60 ms by

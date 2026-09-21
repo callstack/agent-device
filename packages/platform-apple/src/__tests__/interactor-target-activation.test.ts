@@ -36,7 +36,7 @@ function interactorServing(payload: Record<string, unknown>) {
 test('a capture whose own command repaired foreground discloses it and keeps the fact', async () => {
   const snapshot = (await interactorServing({
     ...HEALTHY_TREE,
-    targetActivation: { reason: 'stale_target', priorState: 2, otherActiveApplicationPid: 4562 },
+    targetActivation: { reason: 'stale_target', priorState: 3, otherActiveApplicationPid: 4562 },
   }).snapshot()) as SnapshotResult;
 
   assert.deepEqual(snapshot.targetActivation, {
@@ -68,7 +68,7 @@ test('an activation fact the runner could not attribute to one app discloses no 
 
   assert.deepEqual(snapshot.targetActivation, {
     reason: 'interaction_foreground_guard',
-    priorState: 'runningBackground',
+    priorState: 'runningBackgroundSuspended',
   });
   assert.equal(snapshot.warnings?.[0]?.includes('pid'), false);
 });

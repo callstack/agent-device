@@ -22,16 +22,19 @@ export type UnmappedPriorStateDetail = Readonly<{
 export const TARGET_ACTIVATION_WIRE_KEY = 'targetActivation';
 
 /**
- * `XCApplicationState` raw value → declared state, declared by value and never by array position:
- * the enum ships in no public Xcode header this repo compiles against, so a reordering or a new
- * case must not silently relabel a repair. `runningForeground` is deliberately absent — the runner
- * skips `activate()` there and stamps no fact.
+ * `XCApplicationState` raw value → declared state, as the SDK's `XCUIAutomation/XCUIApplication.h`
+ * declares it: `RunningBackgroundSuspended = 2` (non-macOS only) and `RunningBackground = 3`. The
+ * table is keyed by value rather than by position, and
+ * `RunnerTests+ApplicationStateRawValueTests.swift` pins these integers against the SDK enum itself,
+ * because #2726 shipped 2 and 3 reversed and every suspended repair was reported as an ordinary
+ * background one. `runningForeground` — raw 4 — is deliberately absent: the runner skips `activate()`
+ * there and stamps no fact.
  */
 const PRIOR_STATE_BY_RAW_VALUE: Readonly<Record<number, IosTargetActivationPriorState>> = {
   0: 'unknown',
   1: 'notRunning',
-  2: 'runningBackground',
-  3: 'runningBackgroundSuspended',
+  2: 'runningBackgroundSuspended',
+  3: 'runningBackground',
 };
 
 export function readTargetActivationFact(

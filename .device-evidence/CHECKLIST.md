@@ -51,9 +51,11 @@ already-installed bundle id is not evidence.
 `XCUIApplication.activate()` runs, and the fact is stamped only in the branch where `activate()` is
 actually called. Assert the pair on the same device run:
 
-- `runner.log`: `AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=... reason=... priorState=2
-  otherActiveApplicationPid=<N>` — the same line's `priorState` is what the response must carry;
-  `state=` on the preceding `AGENT_DEVICE_RUNNER_ACTIVATE` must be non-foreground.
+- `runner.log`: `AGENT_DEVICE_RUNNER_ACTIVATE_FACT bundle=... reason=... priorState=<2|3>
+  otherActiveApplicationPid=<N>` — the same line's `priorState` is what the response must carry, named
+  by the raw values the SDK declares: 2 is `runningBackgroundSuspended`, 3 is `runningBackground`
+  (#2726 — the decoder had these two reversed). `state=` on the preceding
+  `AGENT_DEVICE_RUNNER_ACTIVATE` must be non-foreground.
 - The response can therefore never report `priorState: runningForeground`. Both directions are pinned
   in the runner unit lane (`UnitTests/RunnerTests+LifecycleCacheTests.swift`): the already-foreground
   call asserts `pendingTargetActivation == nil` and the backgrounded call asserts the stamped
