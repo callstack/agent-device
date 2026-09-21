@@ -1,6 +1,0 @@
-file: /tmp/agent-device-test-run-94227-XxlCsl/agent-device-maestro-remote-test-XmcOFG/02-flow.yaml
-session: default:test:req-maestro-test-wire-undefined:2-02-flow:attempt-1
-attempt: 1/1
-status: passed
-replayed: 1
-healed: 0

@@ -102,6 +102,7 @@ async function runWithTestNetworkFlag(publicNetworkOnly: boolean | undefined) {
     flags: {
       platform: 'ios',
       replayBackend: 'maestro',
+      artifactsDir: path.join(root, 'artifacts'),
       replayScriptSources: await Promise.all([
         maestroScriptSourceBundleFor(firstPath),
         maestroScriptSourceBundleFor(secondPath),
