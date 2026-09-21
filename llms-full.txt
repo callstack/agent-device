@@ -2161,6 +2161,9 @@ agent-device settings location off
 agent-device settings location set 37.3349 -122.009
 agent-device settings animations off
 agent-device settings animations on
+agent-device settings text-size
+agent-device settings text-size large
+agent-device settings text-size accessibility-extra-large
 agent-device settings appearance light
 agent-device settings appearance dark
 agent-device settings appearance toggle
@@ -2190,6 +2193,10 @@ agent-device settings permission reset screen-recording --platform macos
 - `settings wifi|airplane|location|animations` remain intentionally unsupported on macOS.
 - Android `settings animations off|on` toggles the global `window_animation_scale`, `transition_animation_scale`, and `animator_duration_scale` values. Use it as an opt-in stabilizer for automation runs with heavy system or app animations, then restore with `settings animations on` when needed.
 - `settings appearance` maps to macOS appearance, iOS simulator appearance, and Android night mode.
+- `settings text-size` reads the preferred text size the target holds; `settings text-size <category>` applies one. Categories: `extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large`. The read response reports the normalized `category` plus the `platformValue` the target answered with: the exact `font_scale` multiplier on Android, and the content-size name `simctl` echoes on iOS (which it sometimes capitalizes, e.g. `extra-Small`).
+- `settings text-size` is supported on iPhone and iPad simulators (`xcrun simctl ui <device> content_size`) and on Android targets (system `font_scale`). tvOS and visionOS simulators, iOS physical devices, macOS, HarmonyOS, Vega, Linux, and web refuse both the read and the write: the content-size surface was verified only on the iPhone/iPad simulator leaf, and a size nobody observed a leaf holding would otherwise be reported as applied.
+- Android has no category ladder, only a `font_scale` multiplier, so the two are mapped: `large` is `1.0` up through `accessibility-extra-extra-extra-large` at `3.2`. A device holding a multiplier off that ladder reads back as the nearest rung with the exact multiplier as `platformValue`, and an unset `font_scale` reads as `large`/`1.0`.
+- A text size change is a configuration change: an app already running adopts it on its next configuration change, so relaunch the app under test (`open <app> --relaunch`) when asserting rendered sizes.
 - `settings location set <lat> <lon>` sets precise coordinates on iOS simulators and Android emulators.
 - `settings clear-app-state [app-id]` clears the active session app data, or the provided app id. Android uses `pm clear`, which removes SharedPreferences, databases, files, and cache. iOS simulator removes the app data container contents. iOS physical devices and macOS are unsupported. It does not touch the keychain, so keychain-backed credentials (e.g. Firebase auth) survive it.
 - `settings reset-keychain clear` resets the iOS simulator's keychain (`xcrun simctl keychain <device> reset`), removing keychain-backed credentials such as Firebase auth tokens that `clear-app-state` leaves behind. simctl has no per-app keychain reset, so this clears the keychain for every app installed on that simulator, not only the app under test — treat it as a whole-simulator, opt-in operation and pair it with `clear-app-state` for a full fresh-install reset. iOS physical devices, Android, and macOS are unsupported.
