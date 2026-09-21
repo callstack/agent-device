@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
-import { runMacOsPressAction, runMacOsSnapshotAction } from './helper.ts';
+import { macOsClickScheduleMs, runMacOsPressAction, runMacOsSnapshotAction } from './helper.ts';
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -86,7 +86,7 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
   assert.equal(result.holdMs, 800);
 });
 
-test('macOS helper press leaves the repeat gap to the click schedule by default', async () => {
+test('macOS helper press carries an explicit zero interval instead of dropping it', async () => {
   let receivedArgs: string[] = [];
   const provider = createLocalAppleToolProvider({
     macosHelper: {
@@ -103,7 +103,82 @@ test('macOS helper press leaves the repeat gap to the click schedule by default'
   );
 
   assert.ok(receivedArgs.includes('--clicks'), receivedArgs.join(' '));
-  assert.equal(receivedArgs.includes('--interval-ms'), false);
+  assert.deepEqual(
+    receivedArgs.slice(
+      receivedArgs.indexOf('--interval-ms'),
+      receivedArgs.indexOf('--interval-ms') + 2,
+    ),
+    ['--interval-ms', '0'],
+  );
+});
+
+test('macOS helper press keeps repeats independent and names a double-click explicitly', async () => {
+  let receivedArgs: string[] = [];
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ x: 7, y: 8, holdMs: 60, clicks: 3, doubleClick: true });
+      },
+    },
+  });
+
+  await withAppleToolProvider(
+    provider,
+    async () =>
+      await runMacOsPressAction(7, 8, { surface: 'frontmost-app', clicks: 3, doubleClick: true }),
+  );
+
+  // `--count 3 --double-tap` is three double-clicks: the count stays the press count and the
+  // rising click state is a separate flag, never derived from the count.
+  assert.deepEqual(
+    receivedArgs.slice(receivedArgs.indexOf('--clicks'), receivedArgs.indexOf('--clicks') + 2),
+    ['--clicks', '3'],
+  );
+  assert.ok(receivedArgs.includes('--double-click'), receivedArgs.join(' '));
+});
+
+test('macOS helper press outlives its own click schedule and forwards cancellation', async () => {
+  let receivedTimeoutMs: number | undefined;
+  let receivedSignal: AbortSignal | undefined;
+  const controller = new AbortController();
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async (_args, options) => {
+        receivedTimeoutMs = options?.timeoutMs;
+        receivedSignal = options?.signal;
+        return helperReturn({ x: 1, y: 2, holdMs: 10_000, clicks: 4 });
+      },
+    },
+  });
+
+  await withAppleToolProvider(
+    provider,
+    async () =>
+      await runMacOsPressAction(1, 2, {
+        surface: 'desktop',
+        holdMs: 10_000,
+        clicks: 4,
+        intervalMs: 120,
+        signal: controller.signal,
+      }),
+  );
+
+  // Four ten-second holds are 40.36s of schedule; a fixed 30s timeout would kill the helper
+  // inside the third hold with the button down.
+  const scheduleMs = macOsClickScheduleMs({ holdMs: 10_000, clicks: 4, intervalMs: 120 });
+  assert.equal(scheduleMs, 40_360);
+  assert.equal(receivedTimeoutMs, scheduleMs + 30_000);
+  assert.equal(receivedSignal, controller.signal);
+});
+
+test('macOS click schedule mirrors the helper floors for the timeout it derives', () => {
+  assert.equal(macOsClickScheduleMs({}), 60);
+  assert.equal(macOsClickScheduleMs({ holdMs: 5 }), 40);
+  assert.equal(
+    macOsClickScheduleMs({ clicks: 2, doubleClick: true, intervalMs: 100 }),
+    4 * 60 + 2 * 80 + 100,
+  );
 });
 
 test('macOS helper press stays a single held click when nothing is repeated', async () => {

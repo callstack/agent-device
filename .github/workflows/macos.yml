@@ -138,7 +138,7 @@ jobs:
           path: .tmp/xctest-host
           if-no-files-found: warn
 
-      - name: Build macOS helper
+      - name: macOS helper build and tests
         uses: ./.github/actions/run-gate
         with: { gate: macos-helper }
 

@@ -67,6 +67,7 @@ struct PressResponse: Encodable {
   /// Hold actually posted; a short request is raised to the deliverable floor.
   let holdMs: Int
   let clicks: Int
+  let doubleClick: Bool
   let bundleId: String?
   let surface: String?
 }
@@ -401,6 +402,7 @@ struct AgentDeviceMacOSHelper {
       default: 120
     )
 
+    let doubleClick = arguments.contains("--double-click")
     let bundleId = try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
     let surface = optionValue(arguments: arguments, name: "--surface")
     let request = MouseClickRequest(
@@ -408,6 +410,7 @@ struct AgentDeviceMacOSHelper {
       y: y,
       holdMs: holdMs,
       clicks: clicks,
+      doubleClick: doubleClick,
       intervalMs: intervalMs
     )
     try pressAtPosition(request)
@@ -417,6 +420,7 @@ struct AgentDeviceMacOSHelper {
         y: y,
         holdMs: mouseClickHoldMs(requestedMs: holdMs),
         clicks: clicks,
+        doubleClick: doubleClick,
         bundleId: bundleId,
         surface: surface
       )
