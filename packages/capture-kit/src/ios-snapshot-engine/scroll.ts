@@ -4,8 +4,9 @@ import {
   inferVerticalScrollIndicatorDirections,
   isSystemScrollIndicatorLabel,
 } from '@agent-device/kernel/scroll-indicator';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import {
-  findNearestScrollableContainer,
+  findNearestAncestor,
   isScrollableSnapshotType,
   mergeReplacement,
   updateReplacement,
@@ -45,9 +46,7 @@ function collectIosScrollIndicatorNodePresentation(
 ): void {
   const suppressed = !isScrollableSnapshotType(node.type) || context.isSuppressed(node);
   const directions = inferVerticalScrollIndicatorDirections(node.label?.trim() ?? '', node.value);
-  const container = directions
-    ? findNearestScrollableContainer(node, byIndex, { includeSelf: true })
-    : undefined;
+  const container = directions ? findScrollIndicatorContainer(node, byIndex) : undefined;
   if (suppressed) context.suppressNode(node, container ? [container] : []);
   if (
     container &&
@@ -56,6 +55,32 @@ function collectIosScrollIndicatorNodePresentation(
   ) {
     derivedScrollContainerIndexes.add(container.index);
   }
+}
+
+/**
+ * The scroll container an indicator reports on. XCTest publishes a UIScrollView's indicators as
+ * children of that view, so the nearest scroll-typed ancestor is normally the owner. A UITextView
+ * is a UIScrollView too but publishes as `TextView`, and its indicators sit inside the text: read
+ * onto the list around it, they clip that list to one line of text and drop every row after it
+ * (a post thread whose root post is selectable text lost all of its replies). An indicator whose
+ * nearest scrolling ancestor is a text view belongs to that text view, which derives no viewport,
+ * so it resolves no container.
+ */
+function findScrollIndicatorContainer(
+  node: RawSnapshotNode,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
+): RawSnapshotNode | null {
+  if (isScrollableSnapshotType(node.type)) return node;
+  const host = findNearestAncestor(
+    node,
+    byIndex,
+    (ancestor) => isScrollableSnapshotType(ancestor.type) || isTextViewType(ancestor.type),
+  );
+  return host && isScrollableSnapshotType(host.type) ? host : null;
+}
+
+function isTextViewType(type: string | undefined): boolean {
+  return normalizeType(type ?? '') === 'textview';
 }
 
 function clipDescendantsToDerivedScrollViewports(

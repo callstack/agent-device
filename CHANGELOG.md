@@ -13,6 +13,13 @@
   `hingeAngleDegrees` and the previous reading, and says the hinge was observed half-open and did
   not settle rather than claiming it never got there. `fold-pose-unverified` still covers a budget
   that ends on another pose. Supersedes ADR 0025's budget-end exception (#2730).
+- Fixed (ios): an interactive snapshot of a list whose row holds selectable text (a `TextView`) no
+  longer drops every row after that text. A UITextView is a scroll view too, and XCTest publishes
+  its scroll indicator inside the text; the presentation read that indicator onto the list around
+  it and clipped the list's viewport to one line, so a post thread whose root post is selectable
+  text showed the root and none of its replies, while the full snapshot showed all of them. An
+  indicator whose nearest scrolling ancestor is a text view now belongs to that text view and
+  derives no list viewport.
 - Fixed (macos): `press` and `click` on the `frontmost-app`, `desktop`, and `menubar` surfaces post
   clicks the way a trackpad does. The helper posted the release in the same tick as the press, so
   AppKit dropped it and controls never activated; each press is now held (`--hold-ms`, 60 ms by
