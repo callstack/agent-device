@@ -100,3 +100,49 @@ said what was wrong with it) or `build_failed_unclassified` — which is also wh
 mentions the profile it used gets, since a name is not a complaint (#2688 review). Paste the error and the `xcodebuild -version` either way: a
 capture of the conflicting-settings line is what would let a follow-up name the cause, and the
 capture must show which build setting disagrees before any hint naming a lever is written.
+
+## Results — coordinator run, 2026-09-20
+
+Built from `15808ae228` on `thymikee-iphone` (iPhone 17 Pro, iOS 27.0, build 24A437), cabled.
+
+```
+$ xcodebuild -version
+Xcode 26.2
+Build version 17C52
+```
+
+Section 3 is captured. A device build pointed at a team with no certificate, on a fresh derived
+path so no cached artifact short-circuits it, reaches signing and fails with one long `error:` line
+per target:
+
+```
+.../AgentDeviceRunner.xcodeproj: error: No Accounts: Add a new account in Accounts settings. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')
+.../AgentDeviceRunner.xcodeproj: error: No profiles for 'com.callstack.agentdevice.runner' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'com.callstack.agentdevice.runner'. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')
+```
+
+`details.reason` is `signing_provisioning_profile_missing` with the profile hint, and the fixture
+`no-profiles-for-bundle-id` is now `captured` with this transcript verbatim. This is the run that
+answers the wrapping question the rows were held on: the matched phrase arrives inside one `error:`
+line, so the sibling rows in the same provisioning family do not split the way a wrapped line would.
+
+Sections 1 and 2 are blocked on this account, and the mechanism is worth recording because it is the
+same for all of them: against a signed-in account with a valid identity, `xcodebuild` is invoked with
+`-allowProvisioningUpdates`, so the build either signs successfully or dies earlier than the
+diagnostic a row keys on.
+
+- Unsetting `AGENT_DEVICE_IOS_TEAM_ID` **succeeds** — automatic signing resolves the team from the
+  installed identity and reuses an installed team profile. So section 1's `signing_no_development_team`
+  cannot be induced here; it needs an account signed in with no development team.
+- `AGENT_DEVICE_IOS_BUNDLE_ID=com.apple.TestFlight` **succeeds** for the same reason, and a bogus
+  `AGENT_DEVICE_IOS_PROVISIONING_PROFILE` is repaired rather than honoured. So section 2's
+  `bundle_identifier_already_registered` needs an app id owned by a different team that automatic
+  signing cannot register.
+- The same gating applies to `bundle_identifier_unavailable` (`App Identifier` + `not available`),
+  `profile-does-not-cover-app-id` (`Provisioning profile` + `doesn't include`) and `profile-expired`
+  (`Provisioning profile` + `has expired`): each needs a profile or app id already claimed elsewhere,
+  which this account will not produce. Recorded beside the fixtures in
+  `runner-startup-failure-fixtures.ts` so the rows read as host-gated, not unexamined.
+
+Section 4 needs a build that fails for an unrelated reason while naming no signing fact; the
+classifier's behaviour there is pinned by `runner-startup-failure-reasons.test.ts` and needs no
+device claim to hold.

@@ -17,6 +17,22 @@ import type { RunnerStartupFailureReason } from '../runner-contract.ts';
  * Until Phase B captures the real runs, every entry is `unobserved` for `xcodeVersion` and carries
  * no `command`: an invocation we did not run is not provenance. Nothing in the classifier reads
  * these fields; they exist so a reason can be traced to an observation instead of to a guess.
+ *
+ * Blocked on the host, not unexamined. One Phase B run on `thymikee-iphone` / Xcode 26.2 settled the
+ * shape question these rows were held on — `No profiles for '<id>' were found` arrives as one long
+ * `error:` line, not a wrapped one — and `no-profiles-for-bundle-id` below is now `captured`. The
+ * rest are gated on an Apple account this machine does not have, and they need it for the same
+ * reason: the build either signs successfully or dies before reaching the diagnostic a row keys on.
+ * `requires-development-team` and `requires-development-team-message-only` need an account that is
+ * signed in with no development team; automatic signing resolves the team from any installed
+ * identity, so unsetting `AGENT_DEVICE_IOS_TEAM_ID` builds successfully.
+ * `bundle-id-registration-failed`, `app-id-not-available` and the `bundle_identifier_unavailable`
+ * rule it feeds, plus `profile-does-not-cover-app-id` (`Provisioning profile` + `doesn't include`)
+ * and `profile-expired` (`Provisioning profile` + `has expired`), all need a profile and an app id
+ * already claimed by someone else: against a working account `-allowProvisioningUpdates` registers
+ * or repairs the id, so the conflict text is never printed and the build reaches signing success.
+ * Each of those rows is therefore uninducible here rather than untested, and none of them should be
+ * read as waiting on effort this machine can supply.
  */
 
 export type RunnerStartupFailureSite = 'build-for-testing' | 'host-dev-tools-security';
@@ -107,11 +123,13 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     id: 'no-profiles-for-bundle-id',
     reason: 'signing_provisioning_profile_missing',
     site: 'build-for-testing',
-    xcodeVersion: UNOBSERVED,
-    provenance: 'shipped-sniff-trigger',
+    command:
+      'agent-device prepare ios-runner --platform ios --device <iPhone> --json  # AGENT_DEVICE_IOS_TEAM_ID=ZZZZZZZZZZ, fresh AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH',
+    xcodeVersion: 'Xcode 26.2 / Build version 17C52',
+    provenance: 'captured',
     output:
-      "error: No profiles for 'com.yourname.agentdevice.runner' were found (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n** TEST BUILD FAILED **\n",
-    note: 'Capture with AGENT_DEVICE_IOS_PROVISIONING_PROFILE naming a profile that is not installed.',
+      "/Users/thymikee/.t3/worktrees/agent-device/apex-2680/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj: error: No Accounts: Add a new account in Accounts settings. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n/Users/thymikee/.t3/worktrees/agent-device/apex-2680/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj: error: No profiles for 'com.callstack.agentdevice.runner' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'com.callstack.agentdevice.runner'. (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\n",
+    note: 'Captured on `thymikee-iphone`, iPhone 17 Pro, iOS 27.0. Reached by pointing `AGENT_DEVICE_IOS_TEAM_ID` at a team with no certificate on a machine that is not signed into Xcode, with a fresh derived path so no cached artifact short-circuits the build. One `error:` line per target: the phrase the rule matches is not wrapped, which is the evidence the sibling rows were held for. Note the `No Accounts` line above it names nothing the rule reads — the profile row wins on its own line.',
   },
   {
     id: 'conflicting-provisioning-settings',
