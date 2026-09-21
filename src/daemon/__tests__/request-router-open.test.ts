@@ -29,7 +29,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return {
     ...actual,
-    detachIosSimulatorRunnerSessionsForShutdown: vi.fn(async () => {}),
+    detachIosRunnerSessionsForShutdown: vi.fn(async () => {}),
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     prewarmAppleRunnerCache: vi.fn(async () => {}),
     prewarmIosRunnerSession: vi.fn(async () => {}),

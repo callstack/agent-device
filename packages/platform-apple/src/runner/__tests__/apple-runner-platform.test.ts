@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   resolveRunnerDestination,
+  resolveRunnerHandoffTarget,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
   resolveRunnerXctestrunHints,
@@ -103,5 +104,79 @@ test('existing platform xctestrun disallowed hints stay unchanged when visionOS 
       iosSim({ id: 'vision-sim-1', name: 'Apple Vision Pro', appleOs: 'visionos' }),
     ).disallowed,
     ['xros', 'iphoneos', 'iphonesimulator', 'appletvos', 'appletvsimulator', 'macos'],
+  );
+});
+
+function iosDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
+  return {
+    platform: 'apple',
+    id: 'device-1',
+    name: 'iPhone 17 Pro',
+    kind: 'device',
+    target: 'mobile',
+    appleOs: 'ios',
+    booted: true,
+    ...overrides,
+  };
+}
+
+test('handoff covers Apple simulators, including tvOS simulators as before #2681', () => {
+  assert.deepEqual(resolveRunnerHandoffTarget(iosSim()), { handoff: true, lane: 'simulator' });
+  assert.deepEqual(resolveRunnerHandoffTarget(iosSim({ target: 'tv', appleOs: 'tvos' })), {
+    handoff: true,
+    lane: 'simulator',
+  });
+});
+
+test('handoff covers a physical iOS device reached through CoreDevice', () => {
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice()), {
+    handoff: true,
+    lane: 'physical_coredevice',
+  });
+  assert.deepEqual(
+    resolveRunnerHandoffTarget(iosDevice({ iosPhysicalDeviceBackend: 'coredevice' })),
+    { handoff: true, lane: 'physical_coredevice' },
+  );
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice({ appleOs: 'ipados', name: 'iPad Pro' })), {
+    handoff: true,
+    lane: 'physical_coredevice',
+  });
+});
+
+test('the macOS desktop host is refused although it is also kind device', () => {
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice({ appleOs: 'macos', target: 'desktop' })), {
+    handoff: false,
+    reason: 'macos_host',
+  });
+});
+
+test('physical tvOS and visionOS runners are refused: kind device is not physical iOS', () => {
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice({ appleOs: 'tvos', target: 'tv' })), {
+    handoff: false,
+    reason: 'physical_non_ios_os',
+  });
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice({ appleOs: 'visionos' })), {
+    handoff: false,
+    reason: 'physical_non_ios_os',
+  });
+});
+
+test('the usbmux-only xctest backend is refused while coredevice is named explicitly', () => {
+  assert.deepEqual(resolveRunnerHandoffTarget(iosDevice({ iosPhysicalDeviceBackend: 'xctest' })), {
+    handoff: false,
+    reason: 'xctest_backend',
+  });
+});
+
+test('a non-Apple target is refused instead of defaulting into the physical lane', () => {
+  assert.deepEqual(
+    resolveRunnerHandoffTarget({
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel 8',
+      kind: 'device',
+      target: 'mobile',
+    }),
+    { handoff: false, reason: 'non_apple_target' },
   );
 });

@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { IOS_SIMULATOR } from './device-fixtures.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { resolveRunnerLaunchLogPath } from '../runner-io.ts';
+import type { RunnerSession } from '../runner-session-types.ts';
 import {
+  captureDiagnostics,
   makeClassifyOwnerLivenessViaMocks,
   assertRunnerCommand,
   makeBackgroundRunner,
   runnerResponse,
   redirectHandle,
+  redirectRelease,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -125,7 +132,7 @@ import { disposeRunnerSession } from '../runner-disposal.ts';
 import { hasLiveIosRunnerSession } from '../runner-client.ts';
 import {
   abortAllIosRunnerSessions,
-  detachIosSimulatorRunnerSessionsForShutdown,
+  detachIosRunnerSessionsForShutdown,
   ensureRunnerSession,
   executeRunnerCommandWithSession,
   invalidateRunnerSession,
@@ -185,7 +192,12 @@ beforeEach(async () => {
   });
   mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(redirectHandle);
+  // Faithful to `acquireXcodebuildSimulatorSetRedirect`, which never holds a redirect for a
+  // non-simulator. Tests covering the default simulator set, where the real helper also returns
+  // no handle, override with null (#2681).
+  mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async (device: DeviceInfo) =>
+    device.kind === 'simulator' ? redirectHandle : null,
+  );
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
@@ -340,16 +352,261 @@ test('shutdown detach moves a handed-off session to stopped without killing its 
   const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-detach' };
   mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(null);
   const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
   const runnerPid = session.child.pid;
   assert.ok(runnerPid);
   runnerStateTransitions.length = 0;
 
-  assert.equal(await detachIosSimulatorRunnerSessionsForShutdown(), 1);
+  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
 
   assert.equal(session.state, 'stopped');
   assert.deepEqual(runnerStateTransitions, ['stopped']);
   assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(mockIsProcessAlive(runnerPid), true);
+  assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
+});
+
+test('a scoped simulator-set session stays on the kill path that restores the redirect', async () => {
+  const device = {
+    ...IOS_SIMULATOR,
+    id: 'runner-lifecycle-detach-scoped-sim',
+    simulatorSetPath: '/tmp/custom-device-set',
+  };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  assert.equal(mockAcquireXcodebuildSimulatorSetRedirect.mock.calls.length, 1);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  // The redirect-holding session must stay for disposal, which restores the
+  // XCTestDevices symlink; detach never releases the redirect itself.
+  assert.match(diagnostics, /"reason":"simulator_set_redirect"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+  assert.equal(redirectRelease.mock.calls.length, 0);
+});
+
+// #2681: the handoff lanes and every gate that keeps a runner on the kill path.
+async function serveOneCommand(device: DeviceInfo, session: RunnerSession): Promise<void> {
+  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));
+  await executeRunnerCommandWithSession(
+    device,
+    session,
+    { command: 'snapshot', appBundleId: 'com.example.demo' },
+    '/tmp/runner.log',
+    30_000,
+  );
+}
+
+function leaseRaw(deviceId: string): string {
+  return fs.readFileSync(
+    path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR ?? '', `${deviceId}.json`),
+    'utf8',
+  );
+}
+
+test('a runner that served a command is handed off on the physical lane', async () => {
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-device' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  runnerStateTransitions.length = 0;
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  });
+
+  assert.equal(session.state, 'stopped');
+  assert.equal(readRunnerSessionLiveness(device.id), null);
+  assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
+  assert.match(diagnostics, /"phase":"ios_runner_session_detached"/);
+  assert.match(diagnostics, /"lane":"physical_coredevice"/);
+
+  // What a client of the next daemon is told to read, so the handoff must name the file and keep it
+  // writable by the runner this process no longer follows (#2681).
+  const runnerLogPath = resolveRunnerLaunchLogPath(undefined, device.id);
+  assert.ok(diagnostics.includes(`"runnerLogPath":${JSON.stringify(runnerLogPath)}`));
+  fs.appendFileSync(runnerLogPath, 'written after the handoff\n');
+  assert.match(fs.readFileSync(runnerLogPath, 'utf8'), /written after the handoff/);
+});
+
+test('a runner that never served a command is torn down instead of handed off', async () => {
+  // Physical startup runs tens of seconds: handing off a runner that never reached its listener
+  // would give the next daemon a lease over a process that may not be serving at all.
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-shutdown-mid-startup' };
+  const session = await ensureRunnerSession(device, {});
+  assert.equal(session.state, 'starting');
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.deepEqual(readRunnerSessionLiveness(device.id), {
+    sessionId: session.sessionId,
+    liveness: 'starting',
+  });
+  assert.match(diagnostics, /"reason":"runner_never_served_a_command"/);
+
+  // The shutdown's own stop path, which runs right after the detach pass, is what tears it down.
+  await abortAllIosRunnerSessions();
+  assert.equal(session.state, 'stopped');
+  assert.equal(readRunnerSessionLiveness(device.id), null);
+});
+
+test('a runner reporting main-thread work still draining is not handed off', async () => {
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-busy' };
+  const session = await ensureRunnerSession(device, {});
+  mockWaitForRunner.mockResolvedValueOnce(
+    runnerResponse({ nodes: [], truncated: false, runnerMainThreadBusy: true }),
+  );
+  await executeRunnerCommandWithSession(
+    device,
+    session,
+    { command: 'snapshot', appBundleId: 'com.example.demo' },
+    '/tmp/runner.log',
+    30_000,
+  );
+  assert.equal(session.state, 'ready');
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"main_thread_occupied"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
+test('a session that still owes a response is not handed off', async () => {
+  // The occupancy mirror only describes the last COMPLETED exchange, so a command abandoned while the
+  // runner holds it would otherwise hand off a runner with work on its main thread (#2681).
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-in-flight' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  // `terminate` answers the preflight gate itself, so the only exchange left hanging is the one the
+  // runner is holding.
+  mockSendRunnerCommandOnce.mockImplementation(
+    () => new Promise<Response>(() => {}) as Promise<Response>,
+  );
+  const inFlight = executeRunnerCommandWithSession(
+    device,
+    session,
+    { command: 'terminate', appBundleId: 'com.example.demo' },
+    '/tmp/runner.log',
+    30_000,
+  );
+  void inFlight.catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(session.inFlightCommands, 1);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"command_in_flight"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
+test('a command abandoned by a cancelled transport keeps the runner occupied', async () => {
+  // Cancelling ends every wait this side holds, but the runner is still executing what it took, so a
+  // shutdown that read only live waits would hand off a runner with work on its main thread. The
+  // charge is sticky until an answered exchange proves the runner serves requests again (#2681).
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-abandoned' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  const controller = new AbortController();
+  mockSendRunnerCommandOnce.mockImplementationOnce(async () => {
+    controller.abort();
+    throw new Error('Request was aborted');
+  });
+
+  await assert.rejects(
+    executeRunnerCommandWithSession(
+      device,
+      session,
+      { command: 'terminate', appBundleId: 'com.example.demo' },
+      '/tmp/runner.log',
+      30_000,
+      controller.signal,
+    ),
+  );
+  assert.equal(session.hasAbandonedCommands, true);
+
+  const refused = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+  assert.match(refused, /"reason":"command_in_flight"/);
+
+  // Any answered exchange forgives the abandoned charge: the runner is serving again, and stamps
+  // whatever is still draining onto that very reply.
+  await serveOneCommand(device, session);
+  assert.equal(session.inFlightCommands, 0);
+  assert.equal(session.hasAbandonedCommands, false);
+  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+});
+
+test('the macOS host runner is never handed off, although it is kind device', async () => {
+  const device: DeviceInfo = { ...MACOS_DEVICE, id: 'runner-lifecycle-detach-macos' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"macos_host"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
+test('a physical tvOS runner is never handed off, although it is kind device too', async () => {
+  const device: DeviceInfo = {
+    ...IOS_DEVICE,
+    id: 'runner-lifecycle-detach-tv-device',
+    name: 'Apple TV',
+    target: 'tv',
+    appleOs: 'tvos',
+  };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"physical_non_ios_os"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
+test('a usbmux-only xctest backend runner is never handed off', async () => {
+  const device: DeviceInfo = {
+    ...IOS_DEVICE,
+    id: 'runner-lifecycle-detach-xctest-backend',
+    iosPhysicalDeviceBackend: 'xctest',
+  };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+
+  const diagnostics = await captureDiagnostics(async () => {
+    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  });
+
+  assert.match(diagnostics, /"reason":"xctest_backend"/);
+  assert.ok(readRunnerSessionLiveness(device.id));
+});
+
+test("the handoff releases this daemon's log bookkeeping only after the lease says so", async () => {
+  const device: DeviceInfo = { ...IOS_DEVICE, id: 'runner-lifecycle-detach-order' };
+  const session = await ensureRunnerSession(device, {});
+  await serveOneCommand(device, session);
+  // What a release done too early would show: the lease this callback reads back is still owned.
+  const tokenWhenReleased: string[] = [];
+  session.endOutputObservation = () => {
+    tokenWhenReleased.push(leaseRaw(device.id));
+  };
+
+  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+
+  assert.equal(tokenWhenReleased.length, 1);
+  assert.match(tokenWhenReleased[0]!, /"ownerToken": "detached-owner-/);
 });
 
 test('a registered runner whose process died is recycled instead of reused', async () => {

@@ -26,6 +26,10 @@ import {
 import type { BootFailureReason } from '@agent-device/provision-kit/boot-diagnostics';
 import type { RunnerSession } from './runner-session-types.ts';
 
+// What an early-exit error quotes of the runner's own log: enough for the boot-failure anchors
+// (signing, tunneld, device busy), bounded so a wedged xcodebuild cannot ship a megabyte in details.
+const RUNNER_EARLY_EXIT_LOG_TAIL_BYTES = 64 * 1024;
+
 /**
  * The runner's own code for "an earlier command exceeded the execution watchdog and its abandoned
  * main-thread work is still draining" (#1105). It is transient by construction — past the wedge
@@ -842,10 +846,13 @@ export async function buildRunnerEarlyExitError(params: {
   const { session, port, logPath } = params;
   const result = await session.testPromise;
   const message = 'Runner did not accept connection (xcodebuild exited early)';
+  // The runner writes its own output file, so the exec result holds nothing for a file-backed
+  // child; that file is what an early exit can quote (#2681).
+  const output = session.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '';
   const reason = classifyBootFailure({
     message,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    stdout: output,
+    stderr: output,
     context: { platform: 'ios', phase: 'connect' },
   });
   // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
@@ -853,14 +860,15 @@ export async function buildRunnerEarlyExitError(params: {
   // `reason`/`hint` above — not a process-exit wrap.
   const error = new AppError('COMMAND_FAILED', message, {
     port,
-    logPath,
+    logPath: logPath ?? session.runnerLogPath,
     xcodebuild: {
       exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      // One merged file since #2681: the tail is reported under `stderr`, which is where readers
+      // already look, next to the file it came from.
+      stderr: output,
     },
     reason,
-    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr, reason),
+    hint: resolveRunnerEarlyExitHint(message, output, output, reason),
   });
   // The build catch is not the only way a runner stops before serving a command. A locked phone lets
   // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that

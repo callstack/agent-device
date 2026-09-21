@@ -13,11 +13,11 @@ import { isUncommittedRepairSession } from '../session-replay-transaction.ts';
 //
 // The window mirrors the iOS runner idle-stop default
 // (AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS, 5 minutes, see runner-session.ts):
-// graceful daemon shutdown already hands off a healthy retained simulator
-// runner for the next daemon to adopt (detachIosSimulatorRunnerSessionsForShutdown),
-// so reaping the daemon process itself on the same timescale does not force a
-// runner rebuild in the common case - it only pays the cheap daemon
-// bootstrap (socket/HTTP listen) on the next command.
+// graceful daemon shutdown already hands off a healthy retained runner -
+// simulator or physical iOS - for the next daemon to adopt
+// (detachIosRunnerSessionsForShutdown), so reaping the daemon process itself on
+// the same timescale does not force a runner rebuild in the common case - it
+// only pays the cheap daemon bootstrap (socket/HTTP listen) on the next command.
 const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 
 // AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS overrides the window; 0 disables idle

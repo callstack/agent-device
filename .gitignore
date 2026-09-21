@@ -10,6 +10,7 @@ coverage/
 .tmp/
 # Per-project agent-device output: test artifacts, metro and tunnel logs
 /.agent-device/
+.device-evidence/
 .DS_Store
 
 # Host-local Codex state and embedded worktree clones
