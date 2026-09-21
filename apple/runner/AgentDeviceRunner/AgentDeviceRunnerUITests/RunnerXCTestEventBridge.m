@@ -1,4 +1,6 @@
 #import "RunnerXCTestEventBridge.h"
+#import <CoreGraphics/CoreGraphics.h>
+#import <math.h>
 
 NSString * _Nullable RunnerResolveXCTestEventBridge(
   id application,
@@ -86,4 +88,23 @@ NSString *RunnerFormatXCTestException(NSException *exception, NSString *fallback
   NSString *name = exception.name ?: @"NSException";
   NSString *reason = exception.reason ?: fallbackReason;
   return [NSString stringWithFormat:@"%@: %@", name, reason];
+}
+
+NSString * _Nullable RunnerResolveApplicationDisplayID(id application, NSUInteger *displayID) {
+  id window = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
+  NSValue *frameValue = [window valueForKey:@"frame"];
+  CGRect frame = CGRectNull;
+  [frameValue getValue:&frame size:sizeof(frame)];
+  if (CGRectIsEmpty(frame) || CGRectIsInfinite(frame) || CGRectIsNull(frame)
+      || !isfinite(frame.origin.x) || !isfinite(frame.origin.y)
+      || !isfinite(frame.size.width) || !isfinite(frame.size.height)) {
+    return @"private XCTest event synthesis unavailable: no resolved application window";
+  }
+  // The frame read resolves the window snapshot. Before resolution its screen can name main.
+  NSNumber *identifier = [[window valueForKey:@"screen"] valueForKey:@"displayID"];
+  if (![identifier isKindOfClass:NSNumber.class] || identifier.unsignedIntegerValue == 0) {
+    return @"private XCTest event synthesis unavailable: no resolved window display ID";
+  }
+  *displayID = identifier.unsignedIntegerValue;
+  return nil;
 }

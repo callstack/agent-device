@@ -6,13 +6,13 @@
 
 static NSString *const RunnerGestureSynthesisSurface = @"event";
 
-typedef id (*RunnerMsgSendInitRecord)(id, SEL, NSString *, NSInteger);
+typedef id (*RunnerMsgSendInitRecord)(id, SEL, NSString *, NSUInteger, NSInteger);
 typedef id (*RunnerMsgSendInitPath)(id, SEL, CGPoint, NSTimeInterval);
 typedef void (*RunnerMsgSendPathMove)(id, SEL, CGPoint, NSTimeInterval);
 typedef void (*RunnerMsgSendPathOffset)(id, SEL, NSTimeInterval);
 
-// Gesture-specific extension of the shared bridge: the 2-arg
-// `initWithName:interfaceOrientation:` record initializer and the touch-path
+// Gesture-specific extension of the shared bridge: the display-aware
+// `initWithName:displayID:interfaceOrientation:` record initializer and the touch-path
 // factory/mutator selectors, none of which text-entry synthesis needs.
 typedef struct {
   RunnerXCTestEventBridge core;
@@ -271,14 +271,14 @@ static NSString * _Nullable RunnerResolveGestureEventBridge(
   NSString *missing = RunnerResolveXCTestEventBridge(application, RunnerGestureSynthesisSurface, &core);
   if (missing != nil) return missing;
 
-  SEL initRecordSelector = NSSelectorFromString(@"initWithName:interfaceOrientation:");
+  SEL initRecordSelector = NSSelectorFromString(@"initWithName:displayID:interfaceOrientation:");
   SEL interfaceOrientationSelector = NSSelectorFromString(@"interfaceOrientation");
   SEL initPathSelector = NSSelectorFromString(@"initForTouchAtPoint:offset:");
   SEL moveSelector = NSSelectorFromString(@"moveToPoint:atOffset:");
   SEL liftSelector = NSSelectorFromString(@"liftUpAtOffset:");
 
   missing = RunnerRequireSelector(
-    core.recordClass, initRecordSelector, @"initWithName:interfaceOrientation:", RunnerGestureSynthesisSurface
+    core.recordClass, initRecordSelector, @"initWithName:displayID:interfaceOrientation:", RunnerGestureSynthesisSurface
   );
   if (missing != nil) return missing;
   missing = RunnerRequireSelector(
@@ -318,6 +318,9 @@ static NSString * _Nullable RunnerCreateEventRecord(
   NSString *missing = RunnerResolveGestureEventBridge(application, bridge);
   if (missing != nil) return missing;
 
+  NSUInteger displayID = 0;
+  NSString *displayError = RunnerResolveApplicationDisplayID(application, &displayID);
+  if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =
     ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);
   NSInteger targetProcessID =
@@ -330,6 +333,7 @@ static NSString * _Nullable RunnerCreateEventRecord(
     [bridge->core.recordClass alloc],
     bridge->initRecordSelector,
     recordName,
+    displayID,
     interfaceOrientation
   );
   if (eventRecord == nil) {

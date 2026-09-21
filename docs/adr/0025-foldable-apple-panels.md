@@ -344,6 +344,29 @@ On the single-panel control every surface agreed: one screen, `1206x2622`, `rot0
 rotation to repair. A window-resolved source changes nothing there except that its identity becomes
 explicit.
 
+## Interaction display and viewport
+
+On an unfolded Duo, `XCUIApplication.frame` reports the inner panel in native portrait
+coordinates (669x951), while the app window and its controls report landscape coordinates
+(951x669). The iOS capture viewport and synthesized gesture reference frame therefore come
+from the resolved app window. Normalizing against the application frame rotates an already
+oriented window; inverting that normalization alone does not produce native digitizer coordinates.
+The measured inner-panel button row in `contracts/fixtures/window-coordinate-space.json` maps
+window (476,226) to native digitizer (226,475).
+
+Synthesized gesture records use `initWithName:displayID:interfaceOrientation:` and the resolved
+window's `screen.displayID`. Reading the window frame must precede reading its screen: an
+unresolved element can still report the main screen. `app.screen` is not the display authority
+for interactions on this device. Coordinate-based XCTest actions also originate at the resolved
+window, so long presses and coordinate fallbacks carry its display identity.
+
+CoreDevice remains the capture-panel authority for host screenshots and recordings. Gesture
+routing follows the window hosting the target app, without a hard-coded panel ID or cached pose.
+Verification must observe a fresh app-visible outcome: event synthesis success and
+`TouchEventsCompleted` alone do not prove a hit. On iOS 27.1, explicit inner-panel events reach
+UIKit; the silent misses investigated here came from the default outer-display route and the
+incorrect viewport, not an inner-panel delivery prohibition.
+
 ## Accepted evidence gaps
 
 - **Runner capture migration.** `XCUIScreen.main` is six call expressions in four files, and the

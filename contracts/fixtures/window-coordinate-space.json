@@ -159,6 +159,13 @@
       "app": { "x": 0, "y": 0, "width": 402, "height": 874 },
       "native": { "x": 3, "y": 68, "width": 99, "height": 54 },
       "oriented": { "x": 300, "y": 752, "width": 99, "height": 54 }
+    },
+    {
+      "name": "Duo inner panel automation button: native digitizer to landscape window (measured UITouch)",
+      "interfaceOrientation": 4,
+      "app": { "x": 0, "y": 0, "width": 951, "height": 669 },
+      "native": { "x": 226, "y": 475, "width": 0, "height": 0 },
+      "oriented": { "x": 476, "y": 226, "width": 0, "height": 0 }
     }
   ]
 }

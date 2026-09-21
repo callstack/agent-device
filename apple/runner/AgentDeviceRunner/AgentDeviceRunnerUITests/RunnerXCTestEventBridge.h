@@ -10,7 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 //
 // Each caller additionally resolves whichever XCSynthesizedEventRecord init
 // overload and XCPointerEventPath factory/mutator selectors its own event kind
-// needs: gesture uses the 2-arg `initWithName:interfaceOrientation:` plus
+// needs: gesture uses `initWithName:displayID:interfaceOrientation:` plus
 // touch-path selectors (`initForTouchAtPoint:offset:`, `moveToPoint:atOffset:`,
 // `liftUpAtOffset:`); text entry uses the 1-arg `initWithName:` plus text-input
 // selectors (`initForTextInput`, `typeText:atOffset:typingSpeed:shouldRedact:`,
@@ -41,6 +41,11 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveXCTestEventBridge(
   id application,
   NSString *surface,
   RunnerXCTestEventBridge *bridge
+);
+
+FOUNDATION_EXPORT NSString * _Nullable RunnerResolveApplicationDisplayID(
+  id application,
+  NSUInteger *displayID
 );
 
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(

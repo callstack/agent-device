@@ -71,6 +71,9 @@ toolchain per command:
 
 - Panels: that command lists each integrated panel with `backlightState`. Only the lit panel is
   capturable — a capture of the dark panel exits 0 and writes an all-black PNG.
+- Input routing: verify a fresh control after each pose change. A successful synthesis acknowledgement
+  does not prove a hit. Inspect the runner and simulator `testmanagerd`/BackBoard logs for display
+  identity and delivery; the resolved app window owns gesture coordinates and its target screen.
 - Pose: `agent-device fold closed|half-open|open` presses the Device Hub pose control and reads the
   hinge back through `devicectl device motion hinge-angle`; re-snapshot afterwards, because refs
   and coordinates do not survive the pose change. Expect 10-16s per fold. The host needs
