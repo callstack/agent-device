@@ -40,6 +40,8 @@ type AssertResultOptions = {
 export type RecordingInspectionManifest = {
   generatedAt: string;
   inputPath: string;
+  renderWidth: number;
+  renderHeight: number;
   items: Array<{
     index: number;
     kind: string;

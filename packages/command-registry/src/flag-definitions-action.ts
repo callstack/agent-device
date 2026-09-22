@@ -52,7 +52,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--quality <medium|high>',
     usageDescription:
-      'Record: output quality preset; Android maps this to screenrecord bitrate, Apple targets use it for export/encoding, Limrun sessions map medium to recorder quality 5 and high to 8. Legacy numeric values 5-7 map to medium; 8-10 map to high',
+      'Record: output quality preset; Android maps this to screenrecord bitrate, Limrun sessions map medium to recorder quality 5 and high to 8; Apple export always preserves the captured resolution, so it has no effect there. Legacy numeric values 5-7 map to medium; 8-10 map to high',
     projectConfig: true,
     recorded: true,
   },

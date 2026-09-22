@@ -1135,7 +1135,7 @@ tail -50 ~/.agent-device/sessions/default/app.log
 - Physical iOS device capture is best-effort: dropped frames are expected and true 60 FPS is not guaranteed even with `--fps 60`.
 - Physical-device capture defaults to 15 FPS.
 - `--fps <n>` (1-120) applies to physical iOS device recording as an explicit FPS cap.
-- `--quality <medium|high>` controls recording output quality. Android maps it to `adb shell screenrecord --bit-rate`; Apple targets use it for export/encoding; Limrun sessions map it to the provider recorder's quality (`medium` to 5, `high` to 8). `medium` is the default; pass `high` for evidence, release notes, or debugging visual artifacts. Legacy numeric values are still accepted for compatibility: `5`-`7` map to `medium`, and `8`-`10` map to `high`.
+- `--quality <medium|high>` controls recording output quality. Android maps it to `adb shell screenrecord --bit-rate`; Limrun sessions map it to the provider recorder's quality (`medium` to 5, `high` to 8). Apple export always preserves the captured resolution, so `--quality` has no effect on Apple output size. `medium` is the default; pass `high` for evidence, release notes, or debugging visual artifacts. Legacy numeric values are still accepted for compatibility: `5`-`7` map to `medium`, and `8`-`10` map to `high`.
 
 ## Tracing
 

@@ -12,6 +12,107 @@ import {
 
 const recordingE2EEnabled = isTruthy(process.env.AGENT_DEVICE_RECORDING_E2E);
 
+test(
+  'recording tap overlay keeps the raw track size on iOS simulator',
+  {
+    skip: shouldSkipIosRecordingE2E(),
+  },
+  () => {
+    // #2707: the composited overlay used to be re-encoded through a fixed 480px preset, collapsing a
+    // touch recording to ~220x480 while `--hide-touches` kept the capture. "File exists and is
+    // non-zero bytes" passed every broken export, so this compares the touched export to a control
+    // that skipped the overlay and asserts the same track size for the same scripted tap.
+    const integration = createRecordingIntegrationContext('ios', 'recording-ios-tap-size');
+    const session = ['--session', 'recording-ios-tap-size'];
+    const controlPath = path.join(integration.artifactDir(), 'ios-tap-raw.mp4');
+    const touchesPath = path.join(integration.artifactDir(), 'ios-tap-overlay.mp4');
+    let recordingStarted = false;
+    let recordingStopped = false;
+    try {
+      integration.runStep('open settings', [
+        'open',
+        'com.apple.Preferences',
+        '--platform',
+        'ios',
+        '--relaunch',
+        '--json',
+        ...session,
+      ]);
+      // AVFoundation owns the track geometry the same way the overlay tool does: read each export's
+      // transform-applied render size back through the inspect tool, no second MP4 parser.
+      const control = recordTap(
+        integration,
+        session,
+        controlPath,
+        ['--hide-touches'],
+        'ios-tap-raw',
+      );
+      const touches = recordTap(integration, session, touchesPath, [], 'ios-tap-overlay');
+      recordingStarted = true;
+      recordingStopped = true;
+      const controlSize = {
+        width: control.manifest.renderWidth,
+        height: control.manifest.renderHeight,
+      };
+      const touchesSize = {
+        width: touches.manifest.renderWidth,
+        height: touches.manifest.renderHeight,
+      };
+      assert.deepEqual(
+        touchesSize,
+        controlSize,
+        'a touched recording must export at the raw capture size (#2707)',
+      );
+      assert.ok(
+        touchesSize.width > 480 && touchesSize.height > 480,
+        `expected the overlay export above the 480px collapse (#2707), saw ${touchesSize.width}x${touchesSize.height}`,
+      );
+      // Matching size alone is not enough: a dropped overlay would keep the raw capture and match too.
+      // Prove the compositor kept its overlay (no warning) and that the touch actually drew.
+      assert.equal(
+        touches.stop.json?.data?.overlayWarning,
+        undefined,
+        'the compositor must not drop the overlay for a black or wrong-size export (#2707)',
+      );
+      assertOverlayForKind(touches.manifest, 'tap', { minPixelCount: 180, maxCenterDistance: 80 });
+    } finally {
+      cleanupRecordingSession(integration, session, recordingStarted, recordingStopped);
+    }
+  },
+);
+
+type TapRecording = {
+  stop: ReturnType<typeof runCliJson>;
+  manifest: RecordingInspectionManifest;
+};
+
+function recordTap(
+  integration: ReturnType<typeof createRecordingIntegrationContext>,
+  session: string[],
+  outPath: string,
+  startFlags: string[],
+  inspectPrefix: string,
+): TapRecording {
+  integration.runStep('record start', [
+    'record',
+    'start',
+    outPath,
+    '--json',
+    ...startFlags,
+    ...session,
+  ]);
+  integration.runStep('tap general', ['click', 'role=cell', 'label=General', '--json', ...session]);
+  const stop = integration.runStep('record stop', ['record', 'stop', '--json', ...session]);
+  assertRecordingArtifacts(stop, outPath);
+  const manifest = inspectRecording(
+    outPath,
+    String(stop.json?.data?.telemetryPath),
+    integration.artifactDir(),
+    inspectPrefix,
+  );
+  return { stop, manifest };
+}
+
 test('recording tap overlay on iOS simulator', { skip: shouldSkipIosRecordingE2E() }, () => {
   runRecordingOverlayCase({
     platform: 'ios',

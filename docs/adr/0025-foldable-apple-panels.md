@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730). Covers iPhone Duo
-(iOS 27.1, `iPhone19,4`) and any Apple device that reports more than one integrated CoreDevice
-display.
+Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730; the touch-overlay
+export diagnosis corrected 2026-09-22 under #2707). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and
+any Apple device that reports more than one integrated CoreDevice display.
 
 An iPhone Duo carries two integrated panels — Apple's **outer display** and **inner display** —
 and lights one of them at a time. Which one is lit is the device pose. Two independent facts
@@ -307,18 +307,56 @@ and honors it per panel; sampled mean luma over the whole frame:
 | no `--display` | 2006x2852 | 241.42 |
 
 `record start`/`record stop` exit 0 in both poses, and with `--hide-touches` the export keeps the
-captured geometry (`2006x2852`, mean luma 241.42). Without it the touch-overlay exporter loses the
-track geometry, and on a long clip the frames too.
+captured geometry (`2006x2852`, mean luma 241.42). Without it, and before #2707 was fixed, the
+touch-overlay exporter lost the track geometry, and on a long clip the frames too.
 
-The trigger is the overlay drawing touch events, not panel rotation. Measured on an iPhone 17
-(iOS 27.0), which has no rotated panel: four seconds with no interaction exports `1206x2622`
-intact, ten seconds containing two taps exports `220x480`, and the same two taps under
-`--hide-touches` export `1206x2622` with the screen content changing across frames. A 97-second
-recording with touches exported `480x220` at mean luma 0.00 throughout. An earlier draft of this
-section blamed the inner panel's `rot90` track, which was wrong: every failing sample then available
-had merely been captured on that panel, and the one non-rotated sample that looked intact had
-contained no touches to draw. Feeding an untouched raw `simctl` capture straight into
-`recording-overlay.swift` reproduces a `0x0` zero-duration output. Tracked in #2707.
+### The touch-overlay export lost geometry for any capture, not a rotated one (#2707)
+
+The trigger was the overlay drawing touch events, not panel rotation. The #2707 report measured this
+on an iPhone 17 simulator (iOS 27.0, non-rot90 panel), Xcode 27.1 beta: four seconds with no
+interaction exported `1206x2622` intact, ten seconds containing two taps exported `220x480`, and the
+same two taps under `--hide-touches` exported `1206x2622` with the screen content changing across
+frames. A 97-second recording with touches exported `480x220` at mean luma 0.00 throughout.
+
+An earlier draft of this section blamed the inner panel's `rot90` track. That was wrong and predated
+this matrix: every failing sample then available had merely been captured on that panel, and the one
+non-rotated sample that looked intact had contained no touches to draw. Feeding an untouched raw
+`simctl` capture straight into `recording-overlay.swift` just copies it through, which is why
+`--hide-touches` and an empty gesture list kept the capture intact — the collapse lived in the
+overlay export path, not the panel.
+
+The cause was the export preset, measured against a synthetic capture on this host: the burn-in is a
+full re-encode through `AVAssetExportSession`, and the default `medium` tier selected
+`AVAssetExportPresetMediumQuality`, a fixed-canvas preset that rescales the long edge to 480px — a
+`1206x2622` capture lands on `220x480`, a landscape capture on `480x220`. Only
+`AVAssetExportPresetHighestQuality` preserves arbitrary capture geometry, and the hardware encoder
+makes the full-resolution re-encode cheap: 90s at `1206x2622` re-encoded in ~1–2s, so `high` was
+never actually slower.
+
+`recording-overlay.swift` now always exports through the geometry-preserving preset at both quality
+tiers, so `--quality` no longer trades capture resolution away. It also verifies its own output
+before the caller adopts it — the composited track's resolved size must match the capture, and a
+track that went uniformly black while the raw had visible content is rejected — and on either failure
+it throws instead of publishing a broken file, so the overlay is dropped, the raw capture is kept,
+and the choice is reported on the `record stop` response as `overlayWarning`. Feeding the fixed tool
+the same synthetic captures re-measures the failing rows as matching `--hide-touches`:
+
+| Overlay | Interactions | Exported size (before → after) | Black? |
+| --- | --- | --- | --- |
+| default | two taps, 1206x2622 source | `220x480` → `1206x2622` | no |
+| default | taps + scroll, landscape source | `480x220` → source size | no |
+| `--hide-touches` | two taps | `1206x2622` → `1206x2622` | no |
+
+The `after` column is this host's offline synthetic harness, which reproduces the collapse and
+confirms the fix preserves geometry. The completion condition's on-device re-measure of these rows on
+a non-rot90 target and on the Duo inner panel is carried by `test/integration/recording-overlay.test.ts`,
+a device-lane case gated behind `AGENT_DEVICE_RECORDING_E2E` that compares a touched export to a
+`--hide-touches` control, asserts the same track size, and asserts the overlay actually drew.
+
+The device-lane test reads each export's transform-applied size back through AVFoundation —
+`test/integration/support/recording-inspect.swift` reports `renderWidth`/`renderHeight` from the same
+`resolvedRenderSize` the overlay tool uses — so a `rot90` panel is compared upright rather than on its
+sideways coding grid, and no second MP4 geometry parser is added to the shipped packages.
 
 ## Verified on a booted Duo
 

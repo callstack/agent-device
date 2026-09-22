@@ -11,6 +11,13 @@ let minimumPinchVisibility: CFTimeInterval = 0.5
 let swipeVisibilityTail: CFTimeInterval = 0.16
 let trailOpacityKeyTimes: [NSNumber] = [0.0, 0.08, 0.62, 1.0]
 
+// A compositor that cannot render frames still completes with an empty track, so a whole frame at
+// or below this mean luma counts as black.
+let compositedBlackFrameLuma: Double = 1.0
+// Above this mean luma the raw capture is taken to hold visible content worth preserving. Below it
+// the recording itself is dark, so a dark composite is the content and not a compositor failure.
+let sourceVisibleFrameLuma: Double = 2.0
+
 struct GestureEnvelope: Decodable {
   let events: [GestureEvent]
 }
@@ -126,10 +133,10 @@ func run() throws {
     in: parentLayer
   )
 
-  // Overlay burn-in forces a full re-encode; medium quality keeps simulator videos readable
-  // while avoiding very slow highest-quality exports. Pass --quality high to opt into
-  // the slower highest-quality export.
-  let presetName = exportPresetName(for: parsedArgs.exportQuality, compatibleWith: composition)
+  // Overlay burn-in forces a full re-encode. The export has to keep the captured track's own
+  // dimensions, so it uses the one preset that preserves arbitrary capture geometry; the hardware
+  // encoder makes the full-resolution re-encode cheap (measured ~1-2s for a 90s 1206x2622 clip).
+  let presetName = try exportPresetName(compatibleWith: composition)
   let exporter = try makeRecordingExporter(
     composition,
     presetName: presetName,
@@ -141,17 +148,19 @@ func run() throws {
     timeoutMessage: "Touch overlay export timed out.",
     failureMessage: "Touch overlay export failed."
   )
+  try verifyCompositedOverlay(
+    input: inputURL,
+    output: outputURL,
+    expectedRenderSize: renderSize
+  )
 }
 
 func parseArguments(
   _ arguments: [String]
-) throws -> (inputPath: String, outputPath: String, eventsPath: String, exportQuality: ExportQuality) {
+) throws -> (inputPath: String, outputPath: String, eventsPath: String) {
   var inputPath: String?
   var outputPath: String?
   var eventsPath: String?
-  // Export quality defaults to medium so existing callers keep the fast, simulator-friendly
-  // export. Pass --quality high to opt into a slower highest-quality export.
-  var exportQuality: ExportQuality = .medium
   var index = 0
 
   while index < arguments.count {
@@ -168,11 +177,13 @@ func parseArguments(
       eventsPath = try recordingOptionValue(arguments, nextIndex, "--events")
       index += 2
     case "--quality":
+      // Accepted for CLI parity with the other backends and still validated, but the composited
+      // export always preserves the captured geometry (see `exportPresetName`), so the tier never
+      // picks a resolution-capping preset and is not retained.
       let rawValue = try recordingOptionValue(arguments, nextIndex, "--quality")
-      guard let parsed = ExportQuality(rawValue: rawValue) else {
+      guard ExportQuality(rawValue: rawValue) != nil else {
         throw RecordingScriptError.invalidArgs("--quality must be one of: medium, high")
       }
-      exportQuality = parsed
       index += 2
     default:
       throw RecordingScriptError.invalidArgs("Unknown argument: \(argument)")
@@ -184,29 +195,138 @@ func parseArguments(
       "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>]"
     )
   }
-  return (inputPath, outputPath, eventsPath, exportQuality)
+  return (inputPath, outputPath, eventsPath)
 }
 
-func exportPresetName(
-  for exportQuality: ExportQuality,
-  compatibleWith asset: AVAsset
-) -> String {
-  switch exportQuality {
-  case .high:
-    return AVAssetExportPresetHighestQuality
-  case .medium:
-    // Prefer the faster medium preset, falling back to highest quality only when medium is
-    // not available for this composition.
-    let compatible = AVAssetExportSession.exportPresets(compatibleWith: asset)
-    return compatible.contains(AVAssetExportPresetMediumQuality)
-      ? AVAssetExportPresetMediumQuality
-      : AVAssetExportPresetHighestQuality
+/// The composited overlay must keep the captured track's dimensions, so it can only use a preset
+/// that preserves source geometry. The fixed-canvas presets rescale the long edge —
+/// `AVAssetExportPresetMediumQuality` caps it at 480px, which is exactly what collapsed every
+/// touch-bearing recording to ~220x480 (#2707). Only `HighestQuality` preserves the capture, and it
+/// is the export for every quality tier, so `--quality` never trades capture resolution away. If a
+/// composition offers no geometry-preserving preset the export refuses rather than rescaling.
+func exportPresetName(compatibleWith asset: AVAsset) throws -> String {
+  guard AVAssetExportSession.exportPresets(compatibleWith: asset).contains(AVAssetExportPresetHighestQuality) else {
+    throw RecordingScriptError.exportFailed(
+      "No geometry-preserving export preset is available; refusing to rescale the capture."
+    )
   }
+  return AVAssetExportPresetHighestQuality
 }
 
 func resolvedRenderSize(for track: AVAssetTrack) -> CGSize {
   let transformed = track.naturalSize.applying(track.preferredTransform)
   return CGSize(width: abs(transformed.width), height: abs(transformed.height))
+}
+
+/// Guards the compositor's own contract before the caller adopts its output: the burn-in must keep
+/// the captured track's dimensions, must produce frames, and must not silently become an all-black
+/// track. Any failure throws, dropping the overlay and keeping the raw capture rather than
+/// publishing a broken file with a success exit.
+func verifyCompositedOverlay(input: URL, output: URL, expectedRenderSize: CGSize) throws {
+  let composited = AVURLAsset(url: output)
+  guard let track = composited.tracks(withMediaType: .video).first else {
+    throw RecordingScriptError.exportFailed("Touch overlay export produced no video track.")
+  }
+
+  let producedSize = resolvedRenderSize(for: track)
+  if !renderSizeMatches(producedSize, expectedRenderSize) {
+    throw RecordingScriptError.exportFailed(
+      "Touch overlay export changed the track geometry: \(Int(producedSize.width))x\(Int(producedSize.height)) instead of \(Int(expectedRenderSize.width))x\(Int(expectedRenderSize.height))."
+    )
+  }
+
+  // A compositor that produced no decodable frames is a failure, not an absence of evidence.
+  guard let compositedLuma = meanFrameLuma(of: composited) else {
+    throw RecordingScriptError.exportFailed("Touch overlay export produced no decodable frames.")
+  }
+
+  let source = AVURLAsset(url: input)
+  let sourceDuration = CMTimeGetSeconds(source.duration)
+  let producedDuration = CMTimeGetSeconds(composited.duration)
+  if sourceDuration.isFinite, sourceDuration > 1, producedDuration.isFinite,
+    producedDuration < sourceDuration * 0.5
+  {
+    throw RecordingScriptError.exportFailed(
+      "Touch overlay export truncated the track to \(Int(producedDuration))s of \(Int(sourceDuration))s."
+    )
+  }
+
+  if compositedLuma <= compositedBlackFrameLuma,
+    let sourceLuma = meanFrameLuma(of: source),
+    sourceLuma > sourceVisibleFrameLuma
+  {
+    throw RecordingScriptError.exportFailed(
+      "Touch overlay export produced an all-black track while the raw capture had visible content."
+    )
+  }
+}
+
+func renderSizeMatches(_ produced: CGSize, _ expected: CGSize) -> Bool {
+  // The encoder rounds the stored frame to its coding-block grid, so an honest match tolerates a
+  // few pixels regardless of size. A geometry collapse (the #2707 failure) misses by hundreds.
+  let tolerance: CGFloat = 32
+  return abs(produced.width - expected.width) <= tolerance
+    && abs(produced.height - expected.height) <= tolerance
+}
+
+func meanFrameLuma(of asset: AVURLAsset, sampleCount: Int = 5) -> Double? {
+  let duration = CMTimeGetSeconds(asset.duration)
+  guard duration.isFinite, duration > 0 else { return nil }
+  let generator = AVAssetImageGenerator(asset: asset)
+  generator.appliesPreferredTrackTransform = true
+  generator.requestedTimeToleranceBefore = .positiveInfinity
+  generator.requestedTimeToleranceAfter = .positiveInfinity
+  // Only the mean brightness is wanted, so decode a thumbnail rather than the full frame.
+  generator.maximumSize = CGSize(width: 64, height: 64)
+
+  var total = 0.0
+  var sampled = 0
+  for index in 0..<sampleCount {
+    let fraction = (Double(index) + 0.5) / Double(sampleCount)
+    let time = CMTime(seconds: fraction * duration, preferredTimescale: 600)
+    guard let image = try? generator.copyCGImage(at: time, actualTime: nil),
+      let luma = frameMeanLuma(image)
+    else { continue }
+    total += luma
+    sampled += 1
+  }
+  guard sampled > 0 else { return nil }
+  return total / Double(sampled)
+}
+
+func frameMeanLuma(_ image: CGImage) -> Double? {
+  let width = image.width
+  let height = image.height
+  guard width > 0, height > 0 else { return nil }
+  let bytesPerRow = width * 4
+  var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
+  let drawn = pixels.withUnsafeMutableBytes { raw -> Bool in
+    guard
+      let context = CGContext(
+        data: raw.baseAddress,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      )
+    else { return false }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    return true
+  }
+  guard drawn else { return nil }
+
+  var total = 0.0
+  var count = 0
+  for offset in stride(from: 0, to: bytesPerRow * height, by: 4) {
+    total += 0.299 * Double(pixels[offset])
+      + 0.587 * Double(pixels[offset + 1])
+      + 0.114 * Double(pixels[offset + 2])
+    count += 1
+  }
+  guard count > 0 else { return nil }
+  return total / Double(count)
 }
 
 func resolvedFrameDuration(for track: AVAssetTrack) -> CMTime {

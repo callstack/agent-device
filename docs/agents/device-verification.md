@@ -81,12 +81,15 @@ toolchain per command:
   three poses, active panel capture, and an app interaction. Duo coverage remains local until GHA
   supports the runtime. To inspect the angle independently:
   `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
-- When a recording must show touches, assume it cannot. The touch-overlay exporter loses the track
-  geometry whenever it has touch events to draw — `220x480` on a plain iPhone 17 as well as on the
-  inner panel — and returns all-black frames on long clips, always with exit 0. Record with
-  `record start --hide-touches` and make the interaction legible through its on-screen effect
-  (typed text, navigation, a counter) instead of a cursor. The raw `simctl` capture behind it is
-  correct. See ADR 0025 and #2707.
+- Touch overlays export at the captured track size again (#2707). The burn-in used to re-encode
+  through a fixed 480px preset, so a recording with touches collapsed to `220x480` (landscape
+  `480x220`) on any panel — not just the `rot90` inner one — and went all-black on long clips,
+  always with exit 0. That preset is gone: both quality tiers export through the one
+  geometry-preserving preset, and the compositor now checks its own output (size and non-black)
+  against the raw before publishing it — on failure it drops the overlay, keeps the raw capture, and
+  reports it as `overlayWarning` on `record stop` rather than returning a broken file. Only reach
+  for `record start --hide-touches` when you want the fastest raw capture, not to dodge the defect.
+  See ADR 0025 and #2707.
 - An app must adopt the UIScene lifecycle to launch on iOS 27.1 at all: a legacy
   `UIApplicationDelegate` app traps at launch inside
   `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, which reads like a broken
