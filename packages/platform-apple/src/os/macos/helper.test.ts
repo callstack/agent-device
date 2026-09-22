@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
-import { macOsClickScheduleMs, runMacOsPressAction, runMacOsSnapshotAction } from './helper.ts';
+import {
+  macOsClickScheduleMs,
+  runMacOsPressAction,
+  runMacOsSnapshotAction,
+  runMacOsDeviceHubPoseAction,
+} from './helper.ts';
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -206,4 +211,43 @@ test('macOS helper press stays a single held click when nothing is repeated', as
   assert.equal(receivedArgs.includes('--clicks'), false);
   assert.equal(receivedArgs.includes('--hold-ms'), false);
   assert.equal(receivedArgs.includes('--interval-ms'), false);
+});
+
+test('Device Hub window read failures preserve AX status and process diagnostics', async () => {
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async () => ({
+        exitCode: 1,
+        stdout: JSON.stringify({
+          ok: false,
+          error: {
+            message: "Could not read Device Hub's accessible windows",
+            details: {
+              reason: 'device-hub-window-read-failed',
+              processIDs: '10,20',
+              axWindowReadStatuses: '10:-25204',
+              hostDisplayIDs: '1,2',
+            },
+          },
+        }),
+        stderr: '',
+      }),
+    },
+  });
+  await withAppleToolProvider(provider, async () => {
+    await assert.rejects(
+      runMacOsDeviceHubPoseAction({ udid: 'duo', deviceName: 'iPhone Duo', pose: 'open' }),
+      (error: unknown) => {
+        expect(error).toMatchObject({
+          details: {
+            reason: 'device-hub-window-read-failed',
+            processIDs: '10,20',
+            axWindowReadStatuses: '10:-25204',
+            hostDisplayIDs: '1,2',
+          },
+        });
+        return true;
+      },
+    );
+  });
 });

@@ -4,12 +4,7 @@ import ApplicationServices
 import Darwin
 import Foundation
 
-/// The Xcode Device Hub application. Its device windows carry an action bar whose pose controls
-/// are the only public seam onto the private channel that folds a simulator.
-private let deviceHubBundleId = "com.apple.dt.Devices"
-
-/// How long a reopen gets to restore a window, and a sidebar selection to switch the window's
-/// device, before the press is refused.
+/// How long sidebar selection and pose-control discovery may each wait before refusing a press.
 private let deviceHubSettleDeadline: TimeInterval = 8
 private let deviceHubPoll: TimeInterval = 0.25
 
@@ -51,16 +46,15 @@ func handleDeviceHub(arguments: [String]) throws -> any Encodable {
       details: ["reason": "accessibility-permission", "permission": "accessibility"]
     )
   }
-  guard let pid = deviceHubProcessIdentifier() else {
-    throw HelperError.commandFailed(
-      "Xcode Device Hub is not running",
-      details: ["reason": "device-hub-not-running", "bundleId": deviceHubBundleId]
-    )
+  let discovery = try discoverDeviceHubWindow(udid: udid, deviceName: deviceName)
+  let window = discovery.window
+  defer {
+    if discovery.revealedSidebar {
+      _ = setDeviceHubSidebar(visible: false, window: window,
+        deadline: ProcessInfo.processInfo.systemUptime + 0.5)
+    }
   }
-
-  let appElement = AXUIElementCreateApplication(pid)
-  let (window, reopened) = try deviceHubWindow(in: appElement, pid: pid, deviceName: deviceName)
-  let selected = try selectDevice(udid: udid, deviceName: deviceName, in: window, appElement: appElement)
+  let selected = try selectDevice(row: discovery.row, deviceName: deviceName, in: window)
   let windowTitle = stringAttribute(window, attribute: kAXTitleAttribute as String) ?? ""
   guard let button = awaitPoseButton(in: window, description: control) else {
     throw HelperError.commandFailed(
@@ -84,62 +78,10 @@ func handleDeviceHub(arguments: [String]) throws -> any Encodable {
       pose: pose.rawValue,
       control: control,
       windowTitle: windowTitle,
-      reopened: reopened,
+      reopened: discovery.reopened,
       selected: selected
     )
   )
-}
-
-/// Device Hub is launched through a trampoline, so LaunchServices registers it with no process
-/// identifier (`NSRunningApplication.processIdentifier` is -1) and an accessibility element built
-/// from that identifier is invalid. The process table is the only place its real pid appears.
-private func deviceHubProcessIdentifier() -> pid_t? {
-  let executableSuffix = deviceHubExecutableSuffix
-  let byteCount = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-  guard byteCount > 0 else { return nil }
-  var pids = [pid_t](repeating: 0, count: Int(byteCount) / MemoryLayout<pid_t>.size + 64)
-  let filled = proc_listpids(
-    UInt32(PROC_ALL_PIDS), 0, &pids, Int32(pids.count * MemoryLayout<pid_t>.size)
-  )
-  guard filled > 0 else { return nil }
-  var path = [CChar](repeating: 0, count: 4096)
-  for pid in pids.prefix(Int(filled) / MemoryLayout<pid_t>.size) where pid > 0 {
-    guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { continue }
-    if String(cString: path).hasSuffix(executableSuffix) {
-      return pid
-    }
-  }
-  return nil
-}
-
-/// A device window to drive: the one already showing this device when there is one, otherwise
-/// any device window, since its sidebar can switch it to the device. A Device Hub with no window
-/// at all — a simulator booted headlessly leaves it that way — is asked to reopen one.
-private func deviceHubWindow(
-  in appElement: AXUIElement,
-  pid: pid_t,
-  deviceName: String
-) throws -> (window: AXUIElement, reopened: Bool) {
-  if let window = preferredWindow(in: appElement, deviceName: deviceName) {
-    return (window, false)
-  }
-  try sendReopenEvent(to: pid)
-  let deadline = Date().addingTimeInterval(deviceHubSettleDeadline)
-  while Date() < deadline {
-    Thread.sleep(forTimeInterval: deviceHubPoll)
-    if let window = preferredWindow(in: appElement, deviceName: deviceName) {
-      return (window, true)
-    }
-  }
-  throw HelperError.commandFailed(
-    "Device Hub shows no device window to drive",
-    details: ["reason": "device-hub-window-missing", "deviceName": deviceName]
-  )
-}
-
-private func preferredWindow(in appElement: AXUIElement, deviceName: String) -> AXUIElement? {
-  let candidates = windows(of: appElement)
-  return candidates.first { windowShows(deviceName: deviceName, $0) } ?? candidates.first
 }
 
 private func windowShows(deviceName: String, _ window: AXUIElement) -> Bool {
@@ -152,7 +94,7 @@ private func windowShows(deviceName: String, _ window: AXUIElement) -> Bool {
 /// `kAEReopenApplication` is what the Dock sends when an app with no open windows is clicked, and
 /// it is the one event Device Hub answers by restoring the device window. Sent to the process
 /// directly, because LaunchServices cannot address a trampolined app by bundle identifier.
-private func sendReopenEvent(to pid: pid_t) throws {
+func sendDeviceHubReopenEvent(to pid: pid_t, timeout: TimeInterval) throws {
   let target = NSAppleEventDescriptor(processIdentifier: pid)
   let event = NSAppleEventDescriptor(
     eventClass: AEEventClass(kCoreEventClass),
@@ -162,7 +104,7 @@ private func sendReopenEvent(to pid: pid_t) throws {
     transactionID: AETransactionID(kAnyTransactionID)
   )
   do {
-    _ = try event.sendEvent(options: [.noReply], timeout: 5)
+    _ = try event.sendEvent(options: [.noReply], timeout: min(5, max(0.001, timeout)))
   } catch {
     let code = (error as NSError).code
     throw HelperError.commandFailed(
@@ -178,66 +120,43 @@ private func sendReopenEvent(to pid: pid_t) throws {
 /// Switches the window to the device through its sidebar row, whose accessibility identifier is
 /// `TableRow.Device.<udid>` — the one place Device Hub exposes a device identity that two
 /// simulators sharing a name cannot confuse. A window already titled with the device still gets
-/// the selection when the row is visible, because the title alone cannot tell such twins apart.
+/// the selection, because the title alone cannot tell such twins apart.
 private func selectDevice(
-  udid: String,
+  row: AXUIElement,
   deviceName: String,
-  in window: AXUIElement,
-  appElement: AXUIElement
+  in window: AXUIElement
 ) throws -> Bool {
-  var shownSidebar = false
-  var row = deviceRow(udid: udid, in: window)
-  if row == nil, showSidebar(appElement: appElement) {
-    shownSidebar = true
-    let deadline = Date().addingTimeInterval(deviceHubSettleDeadline)
-    while row == nil, Date() < deadline {
-      Thread.sleep(forTimeInterval: deviceHubPoll)
-      row = deviceRow(udid: udid, in: window)
-    }
-  }
-  defer {
-    if shownSidebar { _ = pressMenuItem(appElement: appElement, menu: "View", item: "Hide Sidebar") }
-  }
-  guard let row else {
-    if windowShows(deviceName: deviceName, window) {
-      return false
-    }
-    throw HelperError.commandFailed(
-      "Device Hub lists no device \(udid) in its sidebar",
-      details: ["reason": "device-hub-device-missing", "udid": udid, "deviceName": deviceName]
-    )
-  }
+  let deadline = ProcessInfo.processInfo.systemUptime + deviceHubSettleDeadline
+  AXUIElementSetMessagingTimeout(row, 0.25)
+  AXUIElementSetMessagingTimeout(window, 0.25)
   let status = AXUIElementSetAttributeValue(row, kAXSelectedAttribute as CFString, kCFBooleanTrue)
-  guard status == .success else {
+  guard status == .success || status == .cannotComplete else {
     throw HelperError.commandFailed(
       "Device Hub refused to select \(deviceName) in its sidebar",
       details: ["reason": "device-hub-select-failed", "status": "\(status.rawValue)"]
     )
   }
-  let deadline = Date().addingTimeInterval(deviceHubSettleDeadline)
-  while !windowShows(deviceName: deviceName, window), Date() < deadline {
+  while ProcessInfo.processInfo.systemUptime < deadline {
+    var selected: CFTypeRef?
+    if AXUIElementCopyAttributeValue(row, kAXSelectedAttribute as CFString, &selected) == .success,
+      (selected as? Bool) == true, windowShows(deviceName: deviceName, window) { return true }
     Thread.sleep(forTimeInterval: deviceHubPoll)
   }
-  guard windowShows(deviceName: deviceName, window) else {
-    throw HelperError.commandFailed(
-      "Device Hub did not switch its window to \(deviceName)",
-      details: [
-        "reason": "device-hub-select-unconfirmed",
-        "windowTitle": stringAttribute(window, attribute: kAXTitleAttribute as String) ?? "",
-      ]
-    )
-  }
-  return true
+  throw HelperError.commandFailed(
+    "Device Hub did not confirm selection of \(deviceName)",
+    details: ["reason": "device-hub-select-unconfirmed", "status": "\(status.rawValue)"]
+  )
 }
 
-private func deviceRow(udid: String, in window: AXUIElement) -> AXUIElement? {
-  guard let label = findElement(root: window, depth: 0, where: {
+func deviceHubDeviceRow(udid: String, in window: AXUIElement, deadline: TimeInterval) -> AXUIElement? {
+  guard let label = findDeviceHubElement(root: window, depth: 0, deadline: deadline, where: {
     stringAttribute($0, attribute: "AXIdentifier") == deviceHubDeviceRowIdentifier(udid: udid)
   }) else {
     return nil
   }
   var current: AXUIElement? = label
-  while let element = current {
+  while let element = current, ProcessInfo.processInfo.systemUptime < deadline {
+    AXUIElementSetMessagingTimeout(element, Float(max(0.001, min(0.25, deadline - ProcessInfo.processInfo.systemUptime))))
     if stringAttribute(element, attribute: kAXRoleAttribute as String) == "AXRow" {
       return element
     }
@@ -246,36 +165,16 @@ private func deviceRow(udid: String, in window: AXUIElement) -> AXUIElement? {
   return nil
 }
 
-private func showSidebar(appElement: AXUIElement) -> Bool {
-  return pressMenuItem(appElement: appElement, menu: "View", item: "Show Sidebar")
-}
-
-private func pressMenuItem(appElement: AXUIElement, menu: String, item: String) -> Bool {
-  guard let menuBar = elementAttribute(appElement, attribute: kAXMenuBarAttribute as String) else {
-    return false
-  }
-  for menuBarItem in children(of: menuBar)
-  where stringAttribute(menuBarItem, attribute: kAXTitleAttribute as String) == menu {
-    for submenu in children(of: menuBarItem) {
-      for menuItem in children(of: submenu)
-      where stringAttribute(menuItem, attribute: kAXTitleAttribute as String) == item {
-        return AXUIElementPerformAction(menuItem, kAXPressAction as CFString) == .success
-      }
-    }
-  }
-  return false
-}
-
 /// The action bar is rebuilt for the device the window shows, so right after a sidebar selection
 /// the window already carries the new title while the pose controls are still being laid out.
 /// The controls are therefore awaited, not looked up once.
 private func awaitPoseButton(in window: AXUIElement, description: String) -> AXUIElement? {
-  let deadline = Date().addingTimeInterval(deviceHubSettleDeadline)
+  let deadline = ProcessInfo.processInfo.systemUptime + deviceHubSettleDeadline
   while true {
-    if let button = poseButton(in: window, description: description) {
+    if let button = poseButton(in: window, description: description, deadline: deadline) {
       return button
     }
-    guard Date() < deadline else { return nil }
+    guard ProcessInfo.processInfo.systemUptime < deadline else { return nil }
     Thread.sleep(forTimeInterval: deviceHubPoll)
   }
 }
@@ -283,29 +182,35 @@ private func awaitPoseButton(in window: AXUIElement, description: String) -> AXU
 /// The pose controls sit in the window's action bar as `AXButton`s described by their preset
 /// name; the simulated screen inside the same window is an iOS content group whose own buttons
 /// carry app labels, never these three.
-private func poseButton(in window: AXUIElement, description: String) -> AXUIElement? {
-  return findElement(root: window, depth: 0) {
+private func poseButton(in window: AXUIElement, description: String, deadline: TimeInterval) -> AXUIElement? {
+  return findDeviceHubElement(root: window, depth: 0, deadline: deadline) {
     stringAttribute($0, attribute: kAXRoleAttribute as String) == "AXButton"
       && stringAttribute($0, attribute: kAXDescriptionAttribute as String) == description
   }
 }
 
-private func findElement(
+func findDeviceHubElement(
   root: AXUIElement,
   depth: Int,
+  deadline: TimeInterval,
   where matches: (AXUIElement) -> Bool
 ) -> AXUIElement? {
-  if depth > 14 {
+  let remaining = deadline - ProcessInfo.processInfo.systemUptime
+  if depth > 14 || remaining <= 0 {
     return nil
   }
+  AXUIElementSetMessagingTimeout(root, Float(min(0.25, remaining)))
   for child in children(of: root) {
+    let remaining = deadline - ProcessInfo.processInfo.systemUptime
+    guard remaining > 0 else { return nil }
+    AXUIElementSetMessagingTimeout(child, Float(min(0.25, remaining)))
     if matches(child) {
       return child
     }
     if stringAttribute(child, attribute: kAXSubroleAttribute as String) == "iOSContentGroup" {
       continue
     }
-    if let nested = findElement(root: child, depth: depth + 1, where: matches) {
+    if let nested = findDeviceHubElement(root: child, depth: depth + 1, deadline: deadline, where: matches) {
       return nested
     }
   }
