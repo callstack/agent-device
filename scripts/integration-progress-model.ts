@@ -156,6 +156,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['intervalMs', 'repeated press interval'],
     ['delayMs', 'typing/fill delay'],
     ['recordAs', 'parameterized fill publication for recorded scripts'],
+    ['keyframes', 'timed fold trajectory'],
     ['durationMs', 'scroll, gesture, and TV remote duration'],
     ['holdMs', 'press hold duration'],
     ['jitterPx', 'press jitter'],
