@@ -584,12 +584,23 @@ extension RunnerTests {
 
 #if !os(tvOS)
   private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
+#if os(iOS)
+    // Coordinate taps, double taps, long presses, and drags anchor at the app origin, not the
+    // resolved window: on iOS the snapshot hands back app-space points, and the first qualifying
+    // window is not always the one under the finger — a SpringBoard `alert accept` can live in an
+    // alert window while the wallpaper or status-bar window qualifies first, so a window-relative
+    // anchor misses the button. Reference frames and the synthesized display ID still resolve
+    // through `resolveRunnerWindow`, so a foldable tap keeps its panel and stays on its display.
+    let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    return origin.withOffset(CGVector(dx: x, dy: y))
+#else
     let resolved = resolveRunnerWindow(app: app)
     let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
     let offsetX = x - Double(resolved.frame.origin.x)
     let offsetY = y - Double(resolved.frame.origin.y)
     return origin.withOffset(CGVector(dx: offsetX, dy: offsetY))
+#endif
   }
 #endif
 
