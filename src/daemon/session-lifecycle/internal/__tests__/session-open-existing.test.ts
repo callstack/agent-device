@@ -59,6 +59,56 @@ test('open web URL on iOS device session without active app falls back to Safari
   expect(dispatchedContext?.appBundleId).toBe('com.apple.mobilesafari');
 });
 
+test('open web URL on iOS simulator session without active app falls back to Safari', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-session';
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'apple',
+      id: 'ios-simulator-1',
+      name: 'iPhone Simulator',
+      kind: 'simulator',
+      booted: true,
+    }),
+  );
+
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'apple',
+    id: 'ios-simulator-1',
+    name: 'iPhone Simulator',
+    kind: 'simulator',
+    booted: true,
+  });
+
+  let dispatchedContext: Record<string, unknown> | undefined;
+  mockDispatch.mockImplementation(async (_device, _command, _positionals, _out, context) => {
+    dispatchedContext = context as Record<string, unknown> | undefined;
+    return {};
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['https://example.com/path'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  const updated = sessionStore.get(sessionName);
+  expect(updated?.appBundleId).toBe('com.apple.mobilesafari');
+  expect(updated?.appName).toBe('https://example.com/path');
+  expect(dispatchedContext?.appBundleId).toBe('com.apple.mobilesafari');
+});
+
 test('open app and URL on existing iOS device session keeps app context', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-session';

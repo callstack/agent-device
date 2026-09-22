@@ -1,4 +1,5 @@
 import {
+  IOS_SAFARI_BUNDLE_ID,
   isDeepLinkTarget,
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
@@ -115,7 +116,8 @@ async function resolveIosBundleIdForOpen(
         currentAppBundleId ?? (await tryResolveIosSimulatorDeepLinkBundleId(device, openTarget))
       );
     }
-    return undefined;
+    // simctl openurl opens a web URL in Safari, so Safari is the target app for later interactions.
+    return IOS_SAFARI_BUNDLE_ID;
   }
   return await tryResolveIosAppBundleId(device, openTarget);
 }
