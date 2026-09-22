@@ -333,9 +333,10 @@ static NSString * _Nullable RunnerCreateEventRecord(
   if (missing != nil) return missing;
 
   NSUInteger displayID = 0;
-  NSString *displayError = resolvedWindow != nil
-    ? RunnerResolveWindowDisplayID(resolvedWindow, &displayID)
-    : RunnerResolveApplicationDisplayID(application, &displayID);
+  if (resolvedWindow == nil) {
+    return @"private XCTest event synthesis unavailable: no resolved application window";
+  }
+  NSString *displayError = RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
   if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =
     ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);
