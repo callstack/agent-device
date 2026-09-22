@@ -52,6 +52,8 @@ export async function sendSimulatorFoldPose(
     const sent = await runXcrun(['simctl', 'spawn', udid, binary, payload], {
       signal,
       timeoutMs: durationMs + 10_000,
+      // simctl must forward termination to the guest before the host kills it.
+      kill: { signal: 'SIGTERM', graceMs: 1000 },
       allowFailure: true,
     });
     if (sent.exitCode !== 0) {

@@ -59,6 +59,7 @@ test('streams all keyframes in one process with a duration-derived timeout', asy
           dispatches++;
           expect(JSON.parse(args.at(-1)!)).toEqual(keyframes);
           expect(options?.timeoutMs).toBe(70000);
+          expect(options?.kill).toEqual({ signal: 'SIGTERM', graceMs: 1000 });
         }
         return { stdout: '', stderr: '', exitCode: 0 };
       },
