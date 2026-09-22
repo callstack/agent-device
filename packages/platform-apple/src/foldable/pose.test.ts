@@ -8,14 +8,7 @@ vi.mock('../core/hinge-angle.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../core/hinge-angle.ts')>();
   return { ...actual, readAppleHingeAngle: vi.fn() };
 });
-vi.mock('../core/simulator.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../core/simulator.ts')>();
-  return { ...actual, openIosSimulatorApp: vi.fn(async () => {}) };
-});
-vi.mock('../os/macos/helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../os/macos/helper.ts')>();
-  return { ...actual, runMacOsDeviceHubPoseAction: vi.fn() };
-});
+vi.mock('./simulator-hid.ts', () => ({ sendSimulatorFoldPose: vi.fn() }));
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
   return { ...actual, emitDiagnostic: vi.fn() };
@@ -28,12 +21,12 @@ import {
   type AppleDeviceDisplay,
 } from '../core/display-inventory.ts';
 import { readAppleHingeAngle } from '../core/hinge-angle.ts';
-import { runMacOsDeviceHubPoseAction } from '../os/macos/helper.ts';
+import { sendSimulatorFoldPose } from './simulator-hid.ts';
 import { setAppleFoldPose } from './pose.ts';
 
 const mockInventory = vi.mocked(queryAppleDisplayInventory);
 const mockHinge = vi.mocked(readAppleHingeAngle);
-const mockPress = vi.mocked(runMacOsDeviceHubPoseAction);
+const mockSend = vi.mocked(sendSimulatorFoldPose);
 
 const duo: DeviceInfo = {
   platform: 'apple',
@@ -79,17 +72,11 @@ function duoInventory(lit: 'outer' | 'inner') {
 beforeEach(() => {
   mockInventory.mockReset();
   mockHinge.mockReset();
-  mockPress.mockReset();
-  mockPress.mockResolvedValue({
-    pose: 'open',
-    control: 'Open',
-    windowTitle: 'iPhone Duo – iOS 27.1',
-    reopened: false,
-    selected: true,
-  });
+  mockSend.mockReset();
+  mockSend.mockResolvedValue(undefined);
 });
 
-test('presses the Device Hub control for the pose and reports the pose CoreDevice read back', async () => {
+test('sends the simulator HID pose and reports the pose CoreDevice read back', async () => {
   mockInventory
     .mockResolvedValueOnce(duoInventory('outer'))
     .mockResolvedValueOnce(duoInventory('inner'));
@@ -102,12 +89,7 @@ test('presses the Device Hub control for the pose and reports the pose CoreDevic
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
 
-  expect(mockPress).toHaveBeenCalledWith({
-    udid: duo.id,
-    deviceName: 'iPhone Duo',
-    pose: 'open',
-    signal: undefined,
-  });
+  expect(mockSend).toHaveBeenCalledWith(duo.id, 'open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
 });
 
@@ -167,7 +149,7 @@ test('omits the screen report when panel selection is ambiguous, never inventing
   });
 });
 
-test('maps half-open onto the Book preset and reports it only once the hinge has stopped', async () => {
+test('sends half-open and reports it only once the hinge has stopped', async () => {
   mockInventory
     .mockResolvedValueOnce(duoInventory('inner'))
     .mockResolvedValueOnce(duoInventory('inner'));
@@ -180,7 +162,7 @@ test('maps half-open onto the Book preset and reports it only once the hinge has
     hingeAngleDegrees: 130,
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
-  expect(mockPress).toHaveBeenCalledWith(expect.objectContaining({ pose: 'book' }));
+  expect(mockSend).toHaveBeenCalledWith(duo.id, 'half-open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(3);
 });
 
@@ -315,18 +297,18 @@ test('propagates a cancellation raised by a hinge read and stops polling', async
   expect(mockHinge).toHaveBeenCalledTimes(1);
 });
 
-test('refuses a single-panel simulator before pressing anything', async () => {
+test('refuses a single-panel simulator before sending anything', async () => {
   mockInventory.mockResolvedValueOnce(buildInventory([panel({})]));
 
   await expect(setAppleFoldPose({ ...duo, name: 'iPhone 17' }, 'open')).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: expect.objectContaining({ reason: 'single-panel-device' }),
   });
-  expect(mockPress).not.toHaveBeenCalled();
+  expect(mockSend).not.toHaveBeenCalled();
   expect(mockHinge).not.toHaveBeenCalled();
 });
 
-test('refuses a physical device and an unreadable display table before pressing anything', async () => {
+test('refuses a physical device and an unreadable display table before sending anything', async () => {
   await expect(setAppleFoldPose({ ...duo, kind: 'device' }, 'open')).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
   });
@@ -340,5 +322,5 @@ test('refuses a physical device and an unreadable display table before pressing 
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({ hint: expect.stringContaining('displays') }),
   });
-  expect(mockPress).not.toHaveBeenCalled();
+  expect(mockSend).not.toHaveBeenCalled();
 });

@@ -15,21 +15,11 @@ import {
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
 import { readAppleHingeAngle } from '../core/hinge-angle.ts';
-import { openIosSimulatorApp, requireSimulatorDevice } from '../core/simulator.ts';
-import { runMacOsDeviceHubPoseAction, type MacOsDeviceHubPose } from '../os/macos/helper.ts';
-
-/**
- * The Device Hub action-bar control each pose maps to. Device Hub labels its presets after the
- * shape of the device (Closed, Book, Open); the command names them after what the app sees.
- */
-const DEVICE_HUB_POSE_CONTROLS = {
-  closed: 'closed',
-  'half-open': 'book',
-  open: 'open',
-} as const satisfies Record<FoldPose, MacOsDeviceHubPose>;
+import { requireSimulatorDevice } from '../core/simulator.ts';
+import { sendSimulatorFoldPose } from './simulator-hid.ts';
 
 const FOLDABLE_REQUIRED_HINT =
-  'fold drives the pose controls Xcode Device Hub shows for a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
+  'fold sets the hinge angle of a foldable simulator such as iPhone Duo; this simulator reports one integrated panel, so it has no hinge to pose.';
 
 const INVENTORY_REQUIRED_HINT =
   "fold needs 'devicectl device info displays' to tell a foldable from a single-panel simulator; update Xcode to a version that ships the display-information feature.";
@@ -37,44 +27,22 @@ const INVENTORY_REQUIRED_HINT =
 const POSE_UNSETTLED_HINT =
   'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold, then read the angle directly with xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5 to see whether the simulator holds the pose.';
 
-/**
- * Puts a foldable simulator into `pose` and verifies it did get there.
- *
- * No official host API sets a hinge pose (ADR 0025): Device Hub sends it to the simulator through
- * a private CoreDevice channel, and the only public seam onto that channel is the pose control in
- * Device Hub's own window. The press is therefore a macOS accessibility action on that control,
- * and the truth of the outcome comes from CoreDevice, not from the press: the hinge angle is read
- * back until it agrees with the request, and the pose is refused if it never does.
- */
+/** Sets a simulator hinge through guest HID and verifies the pose through CoreDevice. */
 export async function setAppleFoldPose(
   device: DeviceInfo,
   pose: FoldPose,
   options: { signal?: AbortSignal } = {},
 ): Promise<SetFoldPoseResult> {
+  options.signal?.throwIfAborted();
   requireSimulatorDevice(device, 'fold');
   const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
   requireFoldableInventory(device, inventory);
 
-  // A headless boot leaves Device Hub unlaunched; the same launch `open` performs brings it up
-  // in the background, and the helper then drives whichever window it shows.
-  await openIosSimulatorApp({ deviceHub: true, background: true, signal: options.signal });
-  const pressed = await runMacOsDeviceHubPoseAction({
-    udid: device.id,
-    deviceName: device.name,
-    pose: DEVICE_HUB_POSE_CONTROLS[pose],
-    signal: options.signal,
-  });
+  await sendSimulatorFoldPose(device.id, pose, options.signal);
   emitDiagnostic({
     level: 'info',
-    phase: 'apple_fold_pose_pressed',
-    data: {
-      deviceId: device.id,
-      pose,
-      control: pressed.control,
-      windowTitle: pressed.windowTitle,
-      reopened: pressed.reopened,
-      selected: pressed.selected,
-    },
+    phase: 'apple_fold_pose_dispatched',
+    data: { deviceId: device.id, pose },
   });
 
   const hingeAngleDegrees = await awaitHingePose(device, pose, options.signal);
@@ -108,8 +76,8 @@ function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInv
 
 /**
  * Reads the hinge until it reports the requested pose. Each read costs one bounded devicectl
- * stream, so the attempt count is the whole settle budget: the Device Hub press animates the
- * hinge, and a press that landed on some other device's window never moves this one.
+ * stream, so the attempt count is the whole settle budget. HID delivery alone cannot prove
+ * the runtime accepted the requested hinge state.
  *
  * `closed` and `open` are the hinge's two end stops, so one read at the stop is the pose. A
  * `half-open` angle proves only the category, because a hinge travelling between the stops passes
@@ -168,7 +136,7 @@ function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: numbe
     {
       ...hingePoseDetails(device, pose, observed),
       reason: 'fold-pose-unverified',
-      hint: 'The Device Hub pose control was pressed, but the hinge did not follow. If several Device Hub windows are titled with this device name, close the ones for other simulators so the press reaches this one, then retry.',
+      hint: 'The simulator HID command completed, but the hinge did not follow. Verify that the selected Xcode and simulator runtime support foldable HID control, then retry.',
     },
   );
 }

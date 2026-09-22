@@ -127,8 +127,6 @@ struct AgentDeviceMacOSHelper {
       return try handleScreenshot(arguments: Array(arguments.dropFirst()))
     case "audio-probe":
       return try handleAudioProbe(arguments: Array(arguments.dropFirst()))
-    case "device-hub":
-      return try handleDeviceHub(arguments: Array(arguments.dropFirst()))
     default:
       throw HelperError.invalidArgs("unknown command: \(command)")
     }

@@ -60,7 +60,7 @@ const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription = 'Set device orientation on iOS and Android';
 const foldCommandDescription =
-  'Fold or unfold a foldable iPhone simulator (iPhone Duo) into the closed, half-open, or open pose by pressing the pose control in Xcode Device Hub, then read the hinge angle back from CoreDevice to confirm it. A pose change moves the app to a different panel with a different point size, so every ref and coordinate from before it is stale: re-snapshot after this command. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator-only; the device window must be open in Device Hub and the host needs Accessibility permission.';
+  'Fold or unfold a foldable iPhone simulator (iPhone Duo) into the closed, half-open, or open pose by sending a simulator HID hinge event, then read the hinge angle back from CoreDevice to confirm it. A pose change moves the app to a different panel with a different point size, so every ref and coordinate from before it is stale: re-snapshot after this command. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator-only; requires the iOS simulator SDK; Device Hub and host Accessibility permission are not required.';
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
@@ -89,7 +89,7 @@ const foldCommandMetadata = defineFieldCommandMetadata(FOLD_COMMAND_NAME, foldCo
   pose: requiredField(
     enumField(
       FOLD_POSES,
-      'The hinge pose to reach: closed lights the outer panel; half-open (Device Hub Book) and open light the inner panel.',
+      'The hinge pose to reach: closed lights the outer panel; half-open (130 degrees) and open light the inner panel.',
     ),
   ),
 });
@@ -269,7 +269,7 @@ const foldCommandFacet = defineCommandFacet({
   text: {
     summary: 'Fold or unfold a foldable iPhone simulator',
     cliDetail:
-      'iPhone Duo simulators only. Presses the pose control in Xcode Device Hub and confirms the hinge angle through CoreDevice; refs and coordinates do not survive a pose change.',
+      'iPhone Duo simulators only. Sends a simulator HID hinge event and confirms the hinge angle through CoreDevice; refs and coordinates do not survive a pose change.',
   },
   metadata: foldCommandMetadata,
   run: (client, input) => client.command.fold(input),

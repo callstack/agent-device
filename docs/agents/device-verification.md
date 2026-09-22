@@ -74,14 +74,13 @@ toolchain per command:
 - Input routing: verify a fresh control after each pose change. A successful synthesis acknowledgement
   does not prove a hit. Inspect the runner and simulator `testmanagerd`/BackBoard logs for display
   identity and delivery; the resolved app window owns gesture coordinates and its target screen.
-- Pose: `agent-device fold closed|half-open|open` presses the Device Hub pose control and reads the
-  hinge back through `devicectl device motion hinge-angle`; re-snapshot afterwards, because refs
-  and coordinates do not survive the pose change. Expect 10-16s per fold. The host needs
-  Accessibility permission, and the command reopens Device Hub's window and selects the simulator
-  by UDID itself — unless the sidebar row is missing and the window title already matches, which two
-  same-named simulators defeat (ADR 0025 records it). To read the angle by hand:
-  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`
-  (the stream never ends on its own; 5 is the smallest timeout devicectl accepts).
+- Pose: `agent-device fold closed|half-open|open` sends private HID inside the simulator and reads
+  the hinge back through `devicectl device motion hinge-angle`. Device Hub and host Accessibility
+  permission are not required. Re-snapshot afterwards: refs and coordinates do not survive folds.
+  Verify locally with Device Hub stopped and the simulator booted through `simctl boot`; test all
+  three poses, active panel capture, and an app interaction. Duo coverage remains local until GHA
+  supports the runtime. To inspect the angle independently:
+  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
 - When a recording must show touches, assume it cannot. The touch-overlay exporter loses the track
   geometry whenever it has touch events to draw — `220x480` on a plain iPhone 17 as well as on the
   inner panel — and returns all-black frames on long clips, always with exit 0. Record with

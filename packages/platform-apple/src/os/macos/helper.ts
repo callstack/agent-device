@@ -471,41 +471,6 @@ export async function runMacOsPressAction(
   });
 }
 
-export type MacOsDeviceHubPose = 'closed' | 'book' | 'open';
-
-/**
- * Presses one pose control in the Xcode Device Hub window for a foldable simulator. The helper
- * asks Device Hub to reopen a window when it shows none, switches that window to the device
- * through the sidebar row keyed by the simulator's UDID, and only then presses the control; it
- * reports which of those steps it had to take.
- */
-export async function runMacOsDeviceHubPoseAction(options: {
-  udid: string;
-  deviceName: string;
-  pose: MacOsDeviceHubPose;
-  signal?: AbortSignal;
-}): Promise<{
-  pose: MacOsDeviceHubPose;
-  control: string;
-  windowTitle: string;
-  reopened: boolean;
-  selected: boolean;
-}> {
-  return await runMacOsHelper(
-    [
-      'device-hub',
-      'pose',
-      '--udid',
-      options.udid,
-      '--device-name',
-      options.deviceName,
-      '--pose',
-      options.pose,
-    ],
-    { signal: options.signal },
-  );
-}
-
 export async function runMacOsScreenshotAction(
   outPath: string,
   options: { surface?: SessionSurface; fullscreen?: boolean } = {},

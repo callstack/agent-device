@@ -21,7 +21,7 @@ device is in**. The first is answered by an official host API; the second only b
 | Device has one integrated panel | Keep the pre-panel behavior exactly: no display flag, no pose, unchanged scale probe |
 | Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture uses the pixels-per-point that capture reported about itself |
 | Pose must be reported | From panel power alone, report `closed`, `fully-open`, or `unknown`, and never narrower; `fold` reports the exact pose because it reads the hinge angle |
-| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: press the pose control in the Device Hub window through macOS accessibility, then read the hinge angle back from CoreDevice until it agrees — for `half-open`, until two consecutive readings agree; refuse the pose if it never does |
+| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: send private HID inside the simulator (see headless amendment), then read the hinge angle back from CoreDevice until it agrees — for `half-open`, until two consecutive readings agree; refuse the pose if it never does |
 | The hinge reaches `half-open` but keeps moving | Refuse it as `fold-pose-unsettled` with the observed and previous angles: an angle inside the open interval is an observed category, not a pose the hinge holds |
 | An external display is attached | It is not a panel: it never makes the device multi-screen and never produces a pose |
 | CoreDevice cannot answer | Return an unresolved inventory and keep the single-panel capture path; a missing host feature is not a capture failure |
@@ -125,6 +125,24 @@ foregrounded on. Measured on a live Duo through the runner route, one command wi
 
 The closed row is the point: the same command followed the app onto the other panel without being
 told, and every row is real content where a main-screen capture of the unlit panel is black.
+
+## Amendment: headless simulator HID replaces Device Hub (2026-09-22)
+
+The guest HID experiment supersedes the Device Hub pose decision and its private-API rejection
+below. UI discovery and sidebar sections, and their outstanding evidence gaps, are historical.
+`fold` now runs a small Objective-C helper through `simctl spawn <udid>` with no Device Hub or
+host Accessibility requirement. The optional `open --device-hub` UI choice remains independent.
+The helper serializes `{provider: "com.apple.Virtualization.VirtualMachines", source:
+"hinge-slider-control", type: "range", value: angle}` with IOCFSerialize and dispatches a vendor
+HID event (usage page 0xff61, usage 0x5b, version 0) inside the simulator. Requested angles are
+0°, 130°, and 180°; half-open preserves the observed Book angle, without promising UI animation
+or orientation parity. CoreDevice readback and the half-open stability rule remain authoritative.
+This explicitly accepts the private HID dependency for simulator folding. The selected Xcode
+compiles the packaged source into a unique temporary directory per request; cleanup follows both
+success and failure. Build and dispatch are bounded and cancellable, with no UI fallback.
+Local headless tests verified all three poses, panel switching, and an inner-panel screenshot.
+Physical devices, logged-out hosts, and hosted CI are unverified; Duo coverage remains local.
+Absence of a public setter did not establish that Device Hub was required.
 
 ## Pose control: Device Hub's control, CoreDevice's verdict
 

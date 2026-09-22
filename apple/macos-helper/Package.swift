@@ -14,20 +14,13 @@ let package = Package(
     .target(
       name: "AgentDeviceMacOSInput"
     ),
-    .target(
-      name: "AgentDeviceMacOSDeviceHub"
-    ),
     .executableTarget(
       name: "AgentDeviceMacOSHelper",
-      dependencies: ["AgentDeviceMacOSInput", "AgentDeviceMacOSDeviceHub"]
+      dependencies: ["AgentDeviceMacOSInput"]
     ),
     .testTarget(
       name: "AgentDeviceMacOSInputTests",
       dependencies: ["AgentDeviceMacOSInput"]
-    ),
-    .testTarget(
-      name: "AgentDeviceMacOSDeviceHubTests",
-      dependencies: ["AgentDeviceMacOSDeviceHub"]
     ),
   ]
 )
