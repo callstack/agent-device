@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { paintPng, RED, solidPng } from '../png-pixels.fixtures.ts';
+import { paintPng, type Rgba, RED, solidPng } from '../png-pixels.fixtures.ts';
 import {
   MAX_CONTACT_SHEET_CELLS,
   selectContactSheetCells,
@@ -15,6 +15,20 @@ function sample(timeMs: number, changedPixels: number, offset = 0): ContactSheet
       solidPng(FRAME_SIZE, FRAME_SIZE),
       { x: offset, y: 0, width: changedPixels, height: 1 },
       RED,
+    ),
+  };
+}
+
+/** A change encoder noise can produce: visible to a pixel-exact share, invisible to a box. */
+const NOISE: Rgba = [0, 0, 9, 255];
+
+function noiseSample(timeMs: number, changedPixels: number): ContactSheetSample {
+  return {
+    timeMs,
+    image: paintPng(
+      solidPng(FRAME_SIZE, FRAME_SIZE),
+      { x: 0, y: 0, width: changedPixels, height: 1 },
+      NOISE,
     ),
   };
 }
@@ -59,6 +73,26 @@ describe('selectContactSheetCells', () => {
 
     expect(selection.cells.map((cell) => cell.timeMs)).toEqual([0, 500]);
     expect(selection.cells[1]?.changedPixelRatio).toBeCloseTo(0.1, 10);
+  });
+
+  test('reports where a kept cell moved', () => {
+    const selection = selectContactSheetCells([sample(0, 0), sample(250, FRAME_SIZE)], 0.1);
+
+    expect(selection.cells[1]?.changedRegion).toEqual({ x: 0, y: 0, width: 10, height: 1 });
+  });
+
+  test('reports no region for the opening cell, which nothing preceded', () => {
+    const selection = selectContactSheetCells([sample(0, 0), sample(250, FRAME_SIZE)], 0.1);
+
+    expect(selection.cells[0]?.changedRegion).toBeNull();
+  });
+
+  test('keeps a noise-only frame without claiming a region it cannot point at', () => {
+    const selection = selectContactSheetCells([sample(0, 0), noiseSample(250, FRAME_SIZE)], 0.01);
+    const kept = selection.cells[1];
+
+    expect(kept?.changedPixelRatio).toBeCloseTo(0.1, 10);
+    expect(kept?.changedRegion).toBeNull();
   });
 
   test('keeps a frame whose shape changed', () => {

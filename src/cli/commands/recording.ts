@@ -35,6 +35,7 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   const result = await runtime.recording.contactSheet({
     video: { kind: 'path', path: recordingPath },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
+    ...(flags.noDiffOverlay ? { diffOverlay: false } : {}),
   });
 
   await writeCommandOutput(flags, result, () => formatContactSheetSummary(result));
@@ -55,10 +56,12 @@ function readRequiredPositional(value: string | undefined): string {
  */
 function formatContactSheetSummary(result: RecordingContactSheetCommandResult): string {
   const seconds = (result.durationMs / 1000).toFixed(result.durationMs % 1000 === 0 ? 0 : 1);
+  const coverage = `${result.sampledFrameCount} sample times, ${result.decodedFrameCount} frames decoded`;
   const lines = [
     result.path,
-    `${result.cells.length} cells over ${seconds}s ` +
-      `(${result.sampledFrameCount} sample times, ${result.decodedFrameCount} frames decoded)`,
+    `${result.cells.length} cells over ${seconds}s (${coverage}${
+      result.diffOverlay ? '' : ', diff overlay off'
+    })`,
   ];
   return result.warning ? [...lines, result.warning].join('\n') : lines.join('\n');
 }

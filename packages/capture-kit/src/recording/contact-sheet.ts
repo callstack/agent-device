@@ -54,11 +54,18 @@ export async function buildRecordingContactSheet(
     outputPath?: string;
     maxPixels: number;
     changedPixelThreshold?: number;
+    /**
+     * Whether each cell is boxed where it changed from the cell before it. On by default: a sheet
+     * that only shows frames asks the reader to diff them by eye, which is the work this command
+     * exists to spare. Off for a caller who wants the frames unmarked.
+     */
+    diffOverlay?: boolean;
     hostPlatform?: NodeJS.Platform;
     signal?: AbortSignal;
   }>,
 ): Promise<RecordingContactSheetResult> {
   assertContactSheetHostSupport(input.hostPlatform ?? process.platform);
+  const diffOverlay = input.diffOverlay ?? true;
   const videoPath = path.resolve(input.videoPath);
   const outputPath = path.resolve(input.outputPath ?? recordingContactSheetPath(videoPath));
   assertOutputDoesNotReplaceRecording(videoPath, outputPath);
@@ -96,7 +103,11 @@ export async function buildRecordingContactSheet(
       samples,
       input.changedPixelThreshold ?? CONTACT_SHEET_CHANGED_PIXEL_THRESHOLD,
     );
-    const sheet = renderContactSheet({ cells: selection.cells, maxPixels: input.maxPixels });
+    const sheet = renderContactSheet({
+      cells: selection.cells,
+      maxPixels: input.maxPixels,
+      diffOverlay,
+    });
     writeContactSheetFile(outputPath, sheet.bytes);
 
     return {
@@ -109,6 +120,7 @@ export async function buildRecordingContactSheet(
       decodedFrameCount: extracted.frames.length,
       skippedSampleCount: extracted.skippedSampleCount,
       changedPixelThreshold: input.changedPixelThreshold ?? CONTACT_SHEET_CHANGED_PIXEL_THRESHOLD,
+      diffOverlay,
       cells: selection.cells.map(toCellSummary),
       ...joinContactSheetWarnings(selection, extracted),
     };

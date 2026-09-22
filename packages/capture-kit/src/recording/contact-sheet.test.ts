@@ -10,7 +10,7 @@ import {
   CONTACT_SHEET_UNSUPPORTED_HOST_REASON,
 } from './contact-sheet-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { BLACK, RED, WHITE, paintPng, solidPng } from '../png-pixels.fixtures.ts';
+import { BLACK, RED, WHITE, paintPng, type Rectangle, solidPng } from '../png-pixels.fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { decodePng } from '../png.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
@@ -57,13 +57,35 @@ function unknownable(durationMs: number): number {
   return durationMs < 0 ? 0xffffffff : durationMs;
 }
 
-function frame(timeMs: number, changed: boolean): StubFrame {
+/** A change that stays inside a corner, which is what makes a box worth drawing. */
+const LOCAL_CHANGE = { x: 1, y: 1, width: 4, height: 3 };
+const OVERLAY_BORDER = [229, 72, 77];
+
+function frame(timeMs: number, changed: boolean | Rectangle): StubFrame {
   return {
     png: changed
-      ? paintPng(solidPng(8, 8, BLACK), { x: 0, y: 0, width: 8, height: 8 }, RED)
+      ? paintPng(
+          solidPng(8, 8, BLACK),
+          changed === true ? { x: 0, y: 0, width: 8, height: 8 } : changed,
+          RED,
+        )
       : solidPng(8, 8, BLACK),
     actualTimeMs: timeMs,
   };
+}
+
+function countColor(png: { data: Buffer }, color: readonly number[]): number {
+  let count = 0;
+  for (let offset = 0; offset < png.data.length; offset += 4) {
+    if (
+      png.data[offset] === color[0] &&
+      png.data[offset + 1] === color[1] &&
+      png.data[offset + 2] === color[2]
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /**
@@ -75,13 +97,20 @@ function answerForGrid(
     timesMs: readonly number[];
     presentMs?: readonly number[];
     changedMs?: readonly number[];
+    /** Times whose change stays inside a corner, so the sheet has a region to box. */
+    regionMs?: readonly number[];
   }>,
 ): void {
   const present = new Set(input.presentMs ?? input.timesMs);
   const changed = new Set(input.changedMs ?? []);
+  const local = new Set(input.regionMs ?? []);
   const byRequestedTime = new Map<number, StubFrame>();
   for (const timeMs of input.timesMs) {
-    if (present.has(timeMs)) byRequestedTime.set(timeMs, frame(timeMs, changed.has(timeMs)));
+    if (!present.has(timeMs)) continue;
+    byRequestedTime.set(
+      timeMs,
+      frame(timeMs, local.has(timeMs) ? LOCAL_CHANGE : changed.has(timeMs)),
+    );
   }
   mockRunCmd.mockImplementation(async (_cmd, args) =>
     writeDecodedFrames({ args: args as string[], framesByRequestedTimeMs: byRequestedTime }),
@@ -144,6 +173,31 @@ describe('buildRecordingContactSheet', () => {
         (name) => name.endsWith('.writing') || name.endsWith('.tmp'),
       ),
     ).toBe(false);
+  });
+
+  test('boxes what moved inside a cell and reports the boxes', async () => {
+    const video = recording('boxed', 500);
+    answerForGrid({ timesMs: [0, 250, 500], regionMs: [250] });
+
+    const sheet = await build(video);
+
+    expect(sheet.diffOverlay).toBe(true);
+    expect(
+      countColor(decodePng(fs.readFileSync(sheet.path), 'boxed sheet'), OVERLAY_BORDER),
+    ).toBeGreaterThan(0);
+  });
+
+  test('prints the same cells unmarked when the overlay is off', async () => {
+    const video = recording('unmarked', 500);
+    answerForGrid({ timesMs: [0, 250, 500], regionMs: [250] });
+
+    const sheet = await build(video, { diffOverlay: false });
+
+    expect(sheet.diffOverlay).toBe(false);
+    expect(sheet.cells.map((cell) => cell.timeMs)).toEqual([0, 250, 500]);
+    expect(
+      countColor(decodePng(fs.readFileSync(sheet.path), 'unmarked sheet'), OVERLAY_BORDER),
+    ).toBe(0);
   });
 
   test('honours an explicit output path', async () => {
