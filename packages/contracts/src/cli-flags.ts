@@ -101,6 +101,8 @@ export type CliFlags = CloudProviderProfileFields &
     quality?: RecordingExportQuality | string;
     hideTouches?: boolean;
     recordingScope?: RecordingScope;
+    /** `record contact-sheet`: print the frames without the box marking what changed in each. */
+    noDiffOverlay?: boolean;
     intervalMs?: number;
     delayMs?: number;
     /** Fill: publish the live text as a late-bound ${VAR} in a recorded .ad script. */
