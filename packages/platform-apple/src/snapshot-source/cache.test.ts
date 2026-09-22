@@ -3,7 +3,6 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 
 import path from 'node:path';
 import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { createSnapshotSourceHost } from './host.ts';
 import { ensureSnapshotBridgeBinary } from './cache.ts';
@@ -11,6 +10,7 @@ import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
+import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt or stale entries', async () => {
@@ -286,11 +286,7 @@ test('a compile exec killed at its budget reports the bridge build, not the exec
         return await buildHost.run(command, args, options);
       }
       compileTimeoutMs = options?.timeoutMs ?? 0;
-      throw new AppError('COMMAND_FAILED', `xcrun timed out after ${compileTimeoutMs}ms`, {
-        cmd: command,
-        args,
-        timeoutMs: compileTimeoutMs,
-      });
+      throw await execKillTimeoutError();
     },
   };
 

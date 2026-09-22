@@ -5,6 +5,7 @@ import { createSnapshotSourceHost } from './host.ts';
 import { readSnapshotSourceToolchain } from './cache-identity.ts';
 import { createSnapshotSourceDeadline, type SnapshotSourceDeadline } from './deadline.ts';
 import { SnapshotSourceError } from './errors.ts';
+import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
 import {
   isCommandTimeoutError,
   type ExecOptions,
@@ -23,10 +24,10 @@ test('a cold-start toolchain probe recovers on retry, and the retry gets only wh
   const clock = { nowMs: 0 };
   const timeouts: number[] = [];
   let calls = 0;
-  const host = fakeToolchainHost((command, args, options) => {
+  const host = fakeToolchainHost(async (command, args, options) => {
     calls += 1;
     timeouts.push(options.timeoutMs ?? 0);
-    if (calls === 1) throw blockForWholeTimeout(clock, command, options);
+    if (calls === 1) throw await blockForWholeTimeout(clock, options);
     return toolchainAnswer(command, args);
   });
 
@@ -69,9 +70,9 @@ test('the toolchain identity execs one Xcode-owned binary, and no xcrun', async 
 test('a toolchain host that never returns reports the stalled probe after one retry', async () => {
   const clock = { nowMs: 0 };
   const timeouts: number[] = [];
-  const host = fakeToolchainHost((command, _args, options) => {
+  const host = fakeToolchainHost(async (_command, _args, options) => {
     timeouts.push(options.timeoutMs ?? 0);
-    throw blockForWholeTimeout(clock, command, options);
+    throw await blockForWholeTimeout(clock, options);
   });
 
   await assert.rejects(
@@ -92,11 +93,12 @@ test('a toolchain host that never returns reports the stalled probe after one re
 test('a later probe that stalls out names that probe and its own attempts', async () => {
   const clock = { nowMs: 0 };
   let macosBuildCalls = 0;
-  const host = fakeToolchainHost((command, args, options) => {
-    if (command !== 'sw_vers' || !args.includes('-buildVersion'))
+  const host = fakeToolchainHost(async (command, args, options) => {
+    if (command !== 'sw_vers' || !args.includes('-buildVersion')) {
       return toolchainAnswer(command, args);
+    }
     macosBuildCalls += 1;
-    throw blockForWholeTimeout(clock, command, options);
+    throw await blockForWholeTimeout(clock, options);
   });
 
   await assert.rejects(
@@ -206,13 +208,13 @@ test.each(CANCELLATION_CASES)('cancellation matrix: $label', async (testCase) =>
   const request = new AbortController();
   if (testCase.aborts === 'before-the-deadline') request.abort();
   let execs = 0;
-  const host = fakeToolchainHost((command, args, options) => {
+  const host = fakeToolchainHost(async (command, args, options) => {
     execs += 1;
     if (execs > 1 || !testCase.firstProbe) return toolchainAnswer(command, args);
     if (testCase.aborts === 'while-it-blocks') request.abort();
     const failure =
       testCase.firstProbe === 'exec-timeout'
-        ? blockForWholeTimeout(clock, command, options)
+        ? await blockForWholeTimeout(clock, options)
         : // No `timeoutMs` detail: the tool failed on its own, so nothing retries it.
           new AppError('COMMAND_FAILED', `${command}: unexpected error`, { cmd: command });
     if (testCase.aborts === 'as-it-unwinds') request.abort();
@@ -283,15 +285,16 @@ function fakeClockDeadline(timeoutMs: number, clock: { nowMs: number }): Snapsho
   return createSnapshotSourceDeadline(timeoutMs, undefined, () => clock.nowMs);
 }
 
-/** A probe that blocked for its whole timeout and was then killed, as the exec layer reports it. */
-function blockForWholeTimeout(
+/**
+ * A probe that blocked for its whole timeout and was then killed. The fake clock advances by the
+ * budget the probe was handed, and the failure is the one `exec.ts` really raises for that kill.
+ */
+async function blockForWholeTimeout(
   clock: { nowMs: number },
-  command: string,
   options: ExecOptions,
-): AppError {
-  const timeoutMs = options.timeoutMs ?? 0;
-  clock.nowMs += timeoutMs;
-  return new AppError('COMMAND_FAILED', `${command} timed out after ${timeoutMs}ms`, { timeoutMs });
+): Promise<unknown> {
+  clock.nowMs += options.timeoutMs ?? 0;
+  return await execKillTimeoutError();
 }
 
 /**
@@ -310,7 +313,7 @@ function toolchainAnswer(command: string, args: string[]): ExecResult {
 }
 
 function fakeToolchainHost(
-  run: (command: string, args: string[], options: ExecOptions) => ExecResult,
+  run: (command: string, args: string[], options: ExecOptions) => ExecResult | Promise<ExecResult>,
 ): SnapshotSourceHost {
   const real = createSnapshotSourceHost();
   return {
