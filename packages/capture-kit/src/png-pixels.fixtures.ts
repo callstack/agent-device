@@ -1,11 +1,12 @@
 import { PNG } from './png.ts';
+import { setPngPixel, type PngGlyphColor } from './screenshot-overlay-draw.ts';
 
 /**
  * Decoded-frame builders for tests that reason about pixels: a solid fill and one painted rectangle
  * name exactly what a test claims changed between two frames.
  */
 
-export type Rgba = readonly [number, number, number, number];
+export type Rgba = PngGlyphColor;
 export type Rectangle = Readonly<{ x: number; y: number; width: number; height: number }>;
 
 export const BLACK: Rgba = [0, 0, 0, 255];
@@ -31,12 +32,7 @@ export function paintPng(source: PNG, rectangle: Rectangle, color: Rgba): PNG {
 function fillPng(png: PNG, paint: (column: number, row: number) => boolean, color: Rgba): PNG {
   for (let row = 0; row < png.height; row += 1) {
     for (let column = 0; column < png.width; column += 1) {
-      if (!paint(column, row)) continue;
-      const offset = (row * png.width + column) * 4;
-      png.data[offset] = color[0];
-      png.data[offset + 1] = color[1];
-      png.data[offset + 2] = color[2];
-      png.data[offset + 3] = color[3];
+      if (paint(column, row)) setPngPixel(png, column, row, color);
     }
   }
   return png;

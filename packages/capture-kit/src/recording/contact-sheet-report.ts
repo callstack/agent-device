@@ -11,3 +11,5 @@ export const CONTACT_SHEET_DURATION_REASON = 'contact_sheet_duration_unknown';
 export const CONTACT_SHEET_EXTRACTION_REASON = 'contact_sheet_frame_extraction_failed';
 /** Extraction returned nothing usable, so there is no sheet to draw. */
 export const CONTACT_SHEET_NO_FRAMES_REASON = 'contact_sheet_no_frames';
+/** The requested sheet would exceed the caller's image pixel budget even at the smallest cell. */
+export const CONTACT_SHEET_PIXEL_BUDGET_REASON = 'contact_sheet_pixel_budget_exceeded';

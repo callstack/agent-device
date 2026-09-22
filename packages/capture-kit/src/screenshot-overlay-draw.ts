@@ -3,20 +3,28 @@ import type { PNG } from './png.ts';
 import { clamp } from './screenshot-overlay-rects.ts';
 
 /**
- * Rasterizing one overlay ref onto a decoded PNG: border, badge, and the bitmap glyphs the badge
- * needs. Which node earns a ref, and where its rect lands, is `screenshot-overlay.ts`'s question —
- * this module only paints what it is handed.
+ * Rasterizing onto a decoded PNG: border, badge, and the elapsed-time labels other annotators paint.
+ * Which node earns a ref, and where its rect lands, is `screenshot-overlay.ts`'s question — this
+ * module only paints what it is handed.
  */
-const BORDER_COLOR = [255, 59, 48, 255] as const;
-const BADGE_COLOR = [255, 214, 10, 255] as const;
-const TEXT_COLOR = [0, 0, 0, 255] as const;
-const FONT_WIDTH = 5;
-const FONT_HEIGHT = 7;
-const FONT_SPACING = 1;
+const BORDER_COLOR: PngGlyphColor = [255, 59, 48, 255];
+const BADGE_COLOR: PngGlyphColor = [255, 214, 10, 255];
+const TEXT_COLOR: PngGlyphColor = [0, 0, 0, 255];
+const GLYPH_WIDTH = 5;
+const GLYPH_HEIGHT = 7;
+const GLYPH_SPACING = 1;
+const GLYPH_PITCH = GLYPH_WIDTH + GLYPH_SPACING;
 const BADGE_PADDING_X = 3;
 const BADGE_PADDING_Y = 2;
 const BADGE_MARGIN = 2;
 const BORDER_THICKNESS = 2;
+
+/**
+ * The bitmap glyph table every capture annotator paints with. It covers the characters those labels
+ * are built from — the `e` ref prefix, digits, and the separator and decimal point of an elapsed
+ * time — and nothing else, so an unsupported character paints as blank rather than inventing a
+ * shape nobody reviewed.
+ */
 const FONT: Record<string, readonly string[]> = {
   e: ['01110', '10000', '11110', '10000', '10000', '10001', '01110'],
   '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
@@ -29,20 +37,79 @@ const FONT: Record<string, readonly string[]> = {
   '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
   '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
   '9': ['01110', '10001', '10001', '01111', '00001', '00001', '01110'],
-} as const;
-// Badges currently render only `eN` refs, so the bitmap font intentionally covers `e` and digits.
+  ':': ['00000', '00100', '00100', '00000', '00100', '00100', '00000'],
+  '.': ['00000', '00000', '00000', '00000', '00000', '00110', '00110'],
+};
+
+/** One RGBA pixel, in the order PNG rows store them. */
+export type PngGlyphColor = readonly [number, number, number, number];
 
 export function drawOverlayRef(png: PNG, overlayRef: ScreenshotOverlayRef): void {
   drawRectBorder(png, overlayRef.overlayRect, BORDER_COLOR, BORDER_THICKNESS);
   drawBadge(png, overlayRef.overlayRect, overlayRef.ref);
 }
 
-function drawRectBorder(
+/** Width the painted text occupies at scale 1, with no trailing inter-character gap. */
+function measurePngGlyphTextWidth(text: string): number {
+  if (text === '') return 0;
+  return text.length * GLYPH_PITCH - GLYPH_SPACING;
+}
+
+export function measurePngGlyphTextHeight(scale = 1): number {
+  return GLYPH_HEIGHT * scale;
+}
+
+/**
+ * Paints `text` at `x, y`, each glyph block `scale` pixels wide and tall, clipping at the image
+ * edge. A character the table does not cover still advances the cursor, so a partially supported
+ * label keeps its layout.
+ */
+export function drawPngGlyphText(
   png: PNG,
-  rect: Rect,
-  color: readonly [number, number, number, number],
-  thickness: number,
+  input: Readonly<{
+    x: number;
+    y: number;
+    text: string;
+    color: PngGlyphColor;
+    scale?: number;
+  }>,
 ): void {
+  const scale = input.scale ?? 1;
+  let cursorX = input.x;
+  for (const character of input.text.toLowerCase()) {
+    const glyph = FONT[character];
+    if (glyph) drawGlyph(png, glyph, cursorX, input.y, scale, input.color);
+    cursorX += GLYPH_PITCH * scale;
+  }
+}
+
+function drawGlyph(
+  png: PNG,
+  glyph: readonly string[],
+  x: number,
+  y: number,
+  scale: number,
+  color: PngGlyphColor,
+): void {
+  for (let row = 0; row < glyph.length; row += 1) {
+    for (let column = 0; column < glyph[row]!.length; column += 1) {
+      if (glyph[row]![column] !== '1') continue;
+      fillRect(png, x + column * scale, y + row * scale, scale, scale, color);
+    }
+  }
+}
+
+/** Writes one pixel, dropping anything outside the image. */
+export function setPngPixel(png: PNG, x: number, y: number, color: PngGlyphColor): void {
+  if (x < 0 || y < 0 || x >= png.width || y >= png.height) return;
+  const index = (png.width * y + x) * 4;
+  png.data[index] = color[0];
+  png.data[index + 1] = color[1];
+  png.data[index + 2] = color[2];
+  png.data[index + 3] = color[3];
+}
+
+function drawRectBorder(png: PNG, rect: Rect, color: PngGlyphColor, thickness: number): void {
   for (let offset = 0; offset < thickness; offset += 1) {
     drawHorizontalLine(png, rect.x, rect.x + rect.width - 1, rect.y + offset, color);
     drawHorizontalLine(
@@ -64,9 +131,8 @@ function drawRectBorder(
 }
 
 function drawBadge(png: PNG, rect: Rect, text: string): void {
-  const badgeWidth =
-    BADGE_PADDING_X * 2 + text.length * FONT_WIDTH + Math.max(0, text.length - 1) * FONT_SPACING;
-  const badgeHeight = BADGE_PADDING_Y * 2 + FONT_HEIGHT;
+  const badgeWidth = BADGE_PADDING_X * 2 + measurePngGlyphTextWidth(text);
+  const badgeHeight = BADGE_PADDING_Y * 2 + GLYPH_HEIGHT;
   const x = clamp(rect.x, 0, Math.max(0, png.width - badgeWidth));
   const preferredY = rect.y - badgeHeight - BADGE_MARGIN;
   const y =
@@ -74,29 +140,12 @@ function drawBadge(png: PNG, rect: Rect, text: string): void {
       ? preferredY
       : clamp(rect.y + BADGE_MARGIN, 0, Math.max(0, png.height - badgeHeight));
   fillRect(png, x, y, badgeWidth, badgeHeight, BADGE_COLOR);
-  drawText(png, x + BADGE_PADDING_X, y + BADGE_PADDING_Y, text, TEXT_COLOR);
-}
-
-function drawText(
-  png: PNG,
-  x: number,
-  y: number,
-  text: string,
-  color: readonly [number, number, number, number],
-): void {
-  let cursorX = x;
-  for (const character of text.toLowerCase()) {
-    const glyph = FONT[character];
-    if (glyph) {
-      for (let row = 0; row < glyph.length; row += 1) {
-        for (let column = 0; column < glyph[row]!.length; column += 1) {
-          if (glyph[row]![column] !== '1') continue;
-          setPixel(png, cursorX + column, y + row, color);
-        }
-      }
-    }
-    cursorX += FONT_WIDTH + FONT_SPACING;
-  }
+  drawPngGlyphText(png, {
+    x: x + BADGE_PADDING_X,
+    y: y + BADGE_PADDING_Y,
+    text,
+    color: TEXT_COLOR,
+  });
 }
 
 function fillRect(
@@ -105,11 +154,11 @@ function fillRect(
   y: number,
   width: number,
   height: number,
-  color: readonly [number, number, number, number],
+  color: PngGlyphColor,
 ): void {
   for (let row = 0; row < height; row += 1) {
     for (let column = 0; column < width; column += 1) {
-      setPixel(png, x + column, y + row, color);
+      setPngPixel(png, x + column, y + row, color);
     }
   }
 }
@@ -119,10 +168,10 @@ function drawHorizontalLine(
   startX: number,
   endX: number,
   y: number,
-  color: readonly [number, number, number, number],
+  color: PngGlyphColor,
 ): void {
   for (let x = startX; x <= endX; x += 1) {
-    setPixel(png, x, y, color);
+    setPngPixel(png, x, y, color);
   }
 }
 
@@ -131,23 +180,9 @@ function drawVerticalLine(
   x: number,
   startY: number,
   endY: number,
-  color: readonly [number, number, number, number],
+  color: PngGlyphColor,
 ): void {
   for (let y = startY; y <= endY; y += 1) {
-    setPixel(png, x, y, color);
+    setPngPixel(png, x, y, color);
   }
-}
-
-function setPixel(
-  png: PNG,
-  x: number,
-  y: number,
-  color: readonly [number, number, number, number],
-): void {
-  if (x < 0 || y < 0 || x >= png.width || y >= png.height) return;
-  const index = (png.width * y + x) * 4;
-  png.data[index] = color[0];
-  png.data[index + 1] = color[1];
-  png.data[index + 2] = color[2];
-  png.data[index + 3] = color[3];
 }

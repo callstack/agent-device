@@ -39,7 +39,7 @@ export async function resizePngFile(
   await fs.writeFile(filePath, await encodePngAsync(resizePngBox(source, width, height)));
 }
 
-function resizePngBox(source: PNG, width: number, height: number): PNG {
+export function resizePngBox(source: PNG, width: number, height: number): PNG {
   const output = new PNG({ width, height });
   for (let y = 0; y < height; y += 1) {
     const sourceTop = (y * source.height) / height;

@@ -5,6 +5,8 @@ import { AppError } from '@agent-device/kernel/errors';
 export const CONTACT_SHEET_SAMPLE_INTERVAL_MS = 250;
 /** Sample times one sheet asks the decoder for, however long the clip runs. */
 export const MAX_CONTACT_SHEET_SAMPLED_FRAMES = 48;
+/** Width the decoder is asked to return frames at, which is also the widest cell the sheet draws. */
+export const CONTACT_SHEET_FRAME_WIDTH = 360;
 
 /**
  * The times to sample from a clip of `durationMs`, spread evenly across the whole timeline.
