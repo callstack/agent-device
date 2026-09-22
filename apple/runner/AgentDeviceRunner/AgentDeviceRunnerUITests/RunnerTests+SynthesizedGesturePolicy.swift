@@ -61,7 +61,7 @@ struct SynthesizedCoordinateContext {
   let referenceFrame: CGRect
   /// The window `referenceFrame` was measured on. Synthesized records route their display ID
   /// through this same window so geometry and routing can never name different windows.
-  let resolvedWindow: XCUIElement?
+  let resolvedWindow: XCUIElement
   let keyboardPolicy: SynthesizedKeyboardPolicy
   let fallbackPolicy: SynthesizedFallbackPolicy
   let accessibilityHealth: RunnerAccessibilityHealth

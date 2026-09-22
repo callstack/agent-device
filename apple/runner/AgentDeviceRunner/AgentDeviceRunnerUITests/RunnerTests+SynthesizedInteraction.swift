@@ -25,7 +25,7 @@ extension RunnerTests {
       policy: synthesizedGesturePolicy(.synthesizedDrag)
     ) else {
       return .unsupported(
-        message: "synthesized coordinate drag could not resolve a finite screen frame",
+        message: "synthesized coordinate drag could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
@@ -118,7 +118,7 @@ extension RunnerTests {
       policy: synthesizedGesturePolicy(.coordinateTap)
     ) else {
       return .unsupported(
-        message: "synthesized coordinate tap could not resolve a finite screen frame",
+        message: "synthesized coordinate tap could not resolve an app window with a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
       )
     }
@@ -381,6 +381,9 @@ extension RunnerTests {
 #if os(iOS)
     let health = runnerAccessibilityHealth
     let resolved = resolveRunnerWindow(app: app)
+    guard let window = resolved.window else {
+      return nil
+    }
     let referenceFrame = resolved.frame
     guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
       referenceFrame.width > 0, referenceFrame.height > 0
@@ -389,7 +392,7 @@ extension RunnerTests {
     }
     return SynthesizedCoordinateContext(
       referenceFrame: referenceFrame,
-      resolvedWindow: resolved.window,
+      resolvedWindow: window,
       keyboardPolicy: policy.keyboardPolicy,
       fallbackPolicy: policy.fallbackPolicy,
       accessibilityHealth: health
