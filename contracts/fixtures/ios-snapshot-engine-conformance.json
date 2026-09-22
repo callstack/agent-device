@@ -1165,6 +1165,173 @@
           }
         ]
       }
+    },
+    {
+      "name": "scroll indicator owned by a parent web view keeps list rows",
+      "swift": false,
+      "projection": "regular",
+      "interactiveOnly": true,
+      "depth": null,
+      "scope": null,
+      "foldPolicy": "cursor-projected",
+      "truncated": false,
+      "residue": [],
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "label": "App",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 0
+        },
+        {
+          "index": 1,
+          "type": "Table",
+          "label": "Feed",
+          "rect": { "x": 0, "y": 40, "width": 320, "height": 200 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 1,
+          "parentIndex": 0
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "label": "Story",
+          "rect": { "x": 16, "y": 60, "width": 288, "height": 22 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 3,
+          "type": "WebView",
+          "label": "Story",
+          "rect": { "x": 16, "y": 60, "width": 288, "height": 22 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 3,
+          "parentIndex": 2
+        },
+        {
+          "index": 4,
+          "type": "Other",
+          "label": "Vertical scroll bar, 1 page",
+          "value": "0%",
+          "rect": { "x": 300, "y": 60, "width": 10, "height": 22 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 4,
+          "parentIndex": 3
+        },
+        {
+          "index": 5,
+          "type": "Button",
+          "label": "Reply",
+          "rect": { "x": 16, "y": 100, "width": 60, "height": 28 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 6,
+          "type": "Button",
+          "label": "Like",
+          "rect": { "x": 16, "y": 140, "width": 60, "height": 28 },
+          "enabled": true,
+          "hittable": true,
+          "depth": 2,
+          "parentIndex": 1
+        },
+        {
+          "index": 7,
+          "type": "Other",
+          "label": "Vertical scroll bar, 3 pages",
+          "value": "0%",
+          "rect": { "x": 306, "y": 40, "width": 10, "height": 150 },
+          "enabled": true,
+          "hittable": false,
+          "depth": 2,
+          "parentIndex": 1
+        }
+      ],
+      "expected": {
+        "outcome": "success",
+        "truncated": false,
+        "residue": [],
+        "nodes": [
+          {
+            "index": 0,
+            "type": "Application",
+            "label": "App",
+            "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+            "depth": 0,
+            "parentIndex": null,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 1,
+            "type": "Table",
+            "label": "Feed",
+            "rect": { "x": 0, "y": 40, "width": 320, "height": 150 },
+            "depth": 1,
+            "parentIndex": 0,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": true
+          },
+          {
+            "index": 2,
+            "type": "Other",
+            "label": "Story",
+            "rect": { "x": 16, "y": 60, "width": 288, "height": 22 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 3,
+            "type": "WebView",
+            "label": "Story",
+            "rect": { "x": 16, "y": 60, "width": 288, "height": 22 },
+            "depth": 3,
+            "parentIndex": 2,
+            "hittable": false,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 4,
+            "type": "Button",
+            "label": "Reply",
+            "rect": { "x": 16, "y": 100, "width": 60, "height": 28 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          },
+          {
+            "index": 5,
+            "type": "Button",
+            "label": "Like",
+            "rect": { "x": 16, "y": 140, "width": 60, "height": 28 },
+            "depth": 2,
+            "parentIndex": 1,
+            "hittable": true,
+            "hiddenContentAbove": false,
+            "hiddenContentBelow": false
+          }
+        ]
+      }
     }
   ]
 }

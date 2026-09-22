@@ -16,8 +16,8 @@ walking up past the indicator's parent, and that guess decided which nodes exist
 
 | Situation | Behavior |
 | --- | --- |
-| Which scroll view an indicator reports on | Its **parent**, when that parent is a scroll type (or the scroll host itself when it carries the label — open, below). UIKit publishes an indicator inside its own scroll view, and the producer's tree already says so |
-| An indicator whose parent is not a scroll type — `TextView`, `WebView`, a cell | Owns nothing. No band, no clip, and the host's own scrollability stays with that host |
+| Which scroll view an indicator reports on | Its **parent**, when that parent is a scroll type. UIKit publishes an indicator inside its own scroll view, and the producer's tree already says so. Ownership also passes **up through ancestors that share their own parent's exact frame** — the producer's transparent wrappers around one scroll region (Safari nests `Other` → `WebView` → `WebView` above a `WKWebView`'s `ScrollView`, all one frame). A node that is **itself** a scroll type and carries the label describes itself, not its parent, so it owns nothing (resolved: #2754 step 1 — banding its parent would clip a sibling list to the host's band, mirroring #2214 upward) |
+| An indicator whose nearest scroll-typed ancestor is reached only across a frame change — a smaller `TextView`/`WebView`/cell host | Owns nothing. No band, no clip, and the host's own scrollability stays with that host. The frame change, not a label or type, is what ends the walk (resolved: #2754 step 3 on a real `WKWebView` capture) |
 | The visible band | Derived by presentation from the owner's frame and the indicator's track. Never reported by a producer |
 | Removing a node **because a scroll band hides it** | Requires evidence: the clip fold's result, or a band whose owner is the indicator's parent. A guess about ownership may not do it |
 | Removing a node by semantic delegation — a collapsed row, a duplicate label, a wrapper's content | Out of scope here. That is compaction, and it keeps its own authority |
@@ -33,6 +33,14 @@ because every scroll host iOS can emit is regular-eligible, so projection re-par
 that host: `REGULAR_ELIGIBLE_TYPES` in `ios-snapshot-engine/projection.ts` and `eligibleInteractiveTypes`
 in `SnapshotPresentationProjection.swift` both carry `Cell`, `CollectionView`, `ScrollView`, `Table`,
 `TextView`, and `WebView`. Those two lists are one fact in two languages and must stay in step.
+
+Passing ownership up through **same-frame** ancestors keeps ownership read rather than inferred: the
+producer states two nodes are the same rectangle, which is a structural fact, not a label or type guess.
+It is needed because a `WKWebView`'s page indicator is published under `WebView` wrappers that fill the
+`ScrollView` exactly (#1784/#1797, and real captures in #2754 step 3); strict parent-edge ownership left
+that scroller unbanded and returned content scrolled under the toolbar. The walk stops at the first frame
+change, so a host that is smaller than its parent — a `WebView` row in a list — is a different scroll
+region and still owns nothing, which is the #2214 bug the pass-through must not reintroduce.
 
 That eligibility claim is scoped to iOS, and `scrollarea` is why. `isScrollableSnapshotType` accepts it,
 neither eligible set contains it, and the iOS runner never emits it — it originates in the macOS helper's
@@ -92,17 +100,24 @@ source of truth.
 
 ## Consequences and open evidence
 
-- **Under-clipping is the new risk.** Dropping the walk means a tree that places an indicator under a
-  labelled wrapper rather than directly under its scroll view gets no band, so content scrolled under the
-  chrome survives in the output. That is a leak of a different kind from the one the clip fold owns
-  (#1797, with #1784 adjacent on private-AX projection); it is the band's own job, and nothing else covers
-  it. Measured so far: the full unit suite passes with parent-edge ownership, and a synthetic `WebView` row
-  keeps rows that `main` drops. Real captured trees must be surveyed for that wrapper shape before landing.
-- **The `WebView` instance is synthetic.** The mechanism is confirmed in a hand-built tree; that XCTest
-  publishes a `WKWebView`'s indicator the same way is unverified.
-- **The self case is unpinned.** The rule also treats a scroll-typed node carrying an indicator label as
-  its own owner. No test exercises that branch — parent-only ownership without it passes the full suite —
-  so #2754 step 1 keeps it with a case or deletes it deliberately, rather than inheriting it.
+- **Under-clipping was the open risk; same-frame pass-through resolves the real instance.** Strict
+  parent-edge ownership left a `WKWebView` page scroller unbanded because the page indicator is published
+  under `WebView` wrappers, leaking content under the toolbar (#1797, with #1784 adjacent). #2754 step 3
+  surveyed real captures (Settings, Settings › Privacy & Security, a Safari `WKWebView` page — 25 indicators,
+  18 under a non-scroll parent) and found exactly this shape on the web surface. Resolved by passing
+  ownership through same-frame ancestors, which reproduces `main`'s clip on all three real captures while
+  the smaller-host row cases (#2214) still own nothing. A genuinely frame-mismatched non-scroll wrapper
+  would still under-clip, but no captured iOS tree has that shape.
+- **The `WebView` shape is now confirmed on real data.** A Safari `snapshot -i --raw` capture shows the
+  `WKWebView`'s indicator published under `Other` → `WebView` → `WebView` ancestors that fill the
+  `ScrollView` exactly; the fixture in `runner-presentation.test.ts` reduces that live tree.
+- **The self case is resolved: a scroll-typed indicator owns nothing.** #2754 step 1 deleted the
+  self-ownership branch. Reading a scroll-typed node labelled as an indicator onto its own band is a
+  no-op (the indicator and container are the same rect, which `deriveScrollableViewportRect` refuses),
+  while reading it onto its parent clips a sibling list to that host — the #2214 failure mirrored
+  upward. So `findScrollIndicatorContainer` returns null when the node is itself a scroll type;
+  `runner-presentation.test.ts` pins a scroll host labelled as an indicator leaving its parent list's
+  band intact.
 - **macOS is already a second consumer of these rules.** Desktop capture runs the engine through
   `snapshot-desktop-surface.ts` → `ios-snapshot-runtime.ts` → `publishIosSnapshot`, and its trees carry
   `ScrollArea`, which neither eligible set admits. The parent-edge rule needs its own decision there

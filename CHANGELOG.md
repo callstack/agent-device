@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed (ios): an interactive snapshot no longer drops the rows of a list whose row hosts a scroll
+  view of its own. Ownership of a scroll indicator is now read from its parent edge — a visible band
+  derives only when the indicator's parent is itself a scroll type — instead of walking ancestors for
+  the nearest scrollable or text node. #2740 closed the class for `TextView` alone; the walk still
+  misattributed the indicator of any other scroll-shaped host that publishes as a non-scroll type (a
+  `WebView`, a map view, a paged cell) to the enclosing list and clipped that list to the host's
+  one-line band. Ownership still passes up through ancestors that share the scroller's exact frame, so a
+  `WKWebView` page — whose indicator sits under `WebView` wrappers that fill the scroll view — keeps its
+  visible band; the walk stops at the first frame change, so a host smaller than its list still owns
+  nothing. ADR 0026.
 - Fixed (ios): `fold half-open` no longer reports a pose the hinge never held. The command accepted
   the requested category as the answer whenever its four-read budget happened to end on a
   `half-open` angle, so a hinge still sweeping from 180° toward 0° — which passes through every
