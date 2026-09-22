@@ -21,6 +21,8 @@ export type RecordingContactSheetCommandOptions = CommandContext & {
   video: FileInputRef;
   out?: FileOutputRef;
   changedPixelThreshold?: number;
+  /** Print the cells unmarked instead of boxing what moved in each. On by default. */
+  diffOverlay?: boolean;
 };
 
 export type RecordingContactSheetCommandResult = RecordingContactSheetResult & {
@@ -65,6 +67,7 @@ export const contactSheetCommand: RuntimeCommand<
       ...(options.changedPixelThreshold === undefined
         ? {}
         : { changedPixelThreshold: options.changedPixelThreshold }),
+      ...(options.diffOverlay === undefined ? {} : { diffOverlay: options.diffOverlay }),
       signal: options.signal ?? runtime.signal,
     });
     const artifact = await output.publish();

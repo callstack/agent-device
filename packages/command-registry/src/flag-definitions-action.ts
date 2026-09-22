@@ -67,6 +67,16 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'noDiffOverlay',
+    names: ['--no-diff-overlay'],
+    type: 'boolean',
+    usageLabel: '--no-diff-overlay',
+    usageDescription:
+      'record contact-sheet: print each cell unmarked instead of boxing the region that moved since the cell before it',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'intervalMs',
     names: ['--interval-ms'],
     type: 'int',

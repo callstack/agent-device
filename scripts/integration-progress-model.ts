@@ -313,6 +313,7 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'args, CLI, debug-symbols, screenshot-diff, and batch tests',
       keys: [
         'artifact',
+        'noDiffOverlay',
         'dsym',
         'githubActionsArtifact',
         'snapshotDiff',

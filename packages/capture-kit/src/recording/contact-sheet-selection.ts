@@ -1,4 +1,8 @@
-import { computePngChangedPixelRatio, type PngRgbImage } from '../png-changed-pixel-ratio.ts';
+import {
+  computePngChangedPixels,
+  type PngChangedRegion,
+  type PngRgbImage,
+} from '../png-changed-pixels.ts';
 
 /**
  * Which sampled frames earn a cell of their own.
@@ -6,7 +10,7 @@ import { computePngChangedPixelRatio, type PngRgbImage } from '../png-changed-pi
  * A cell is kept when it moves enough of the frame relative to the cell kept *before* it, not
  * relative to its immediate predecessor. Comparing with the previous kept cell is what lets small
  * changes add up: a list that scrolls one row per frame keeps nothing against its own predecessor
-" * and everything against the last frame that was shown.
+ * and everything against the last frame that was shown.
  *
  * Calibrated on iOS simulator recordings at this sheet's 360px comparison width: an idle status-bar
  * clock tick measures up to 0.009, while the smallest change worth a cell — a pane arriving over
@@ -27,6 +31,8 @@ export type ContactSheetSample = Readonly<{
 export type ContactSheetCell = Readonly<{
   timeMs: number;
   changedPixelRatio: number;
+  /** Where the frame moved against the cell before it, or null when there is nothing to point at. */
+  changedRegion: PngChangedRegion | null;
   image: PngRgbImage;
 }>;
 
@@ -47,12 +53,12 @@ export function selectContactSheetCells(
   let baseline: PngRgbImage | undefined;
 
   for (const sample of samples) {
-    const changedPixelRatio = baseline
-      ? changedRatioAgainst(baseline, sample.image)
+    const change: MeasuredChange = baseline
+      ? measureChangeAgainst(baseline, sample.image)
       : // The first frame has nothing to differ from; it establishes the sheet's starting state.
-        1;
-    if (changedPixelRatio < threshold) continue;
-    kept.push({ timeMs: sample.timeMs, changedPixelRatio, image: sample.image });
+        { changedPixelRatio: 1, changedRegion: null };
+    if (change.changedPixelRatio < threshold) continue;
+    kept.push({ timeMs: sample.timeMs, ...change, image: sample.image });
     baseline = sample.image;
   }
 
@@ -82,15 +88,20 @@ function keepFinalState(kept: ContactSheetCell[], samples: readonly ContactSheet
   if (!previous || previous.timeMs === final.timeMs) return;
   kept.push({
     timeMs: final.timeMs,
-    changedPixelRatio: changedRatioAgainst(previous.image, final.image),
+    ...measureChangeAgainst(previous.image, final.image),
     image: final.image,
   });
 }
 
-function changedRatioAgainst(baseline: PngRgbImage, candidate: PngRgbImage): number {
-  const result = computePngChangedPixelRatio(baseline, candidate);
+type MeasuredChange = Pick<ContactSheetCell, 'changedPixelRatio' | 'changedRegion'>;
+
+function measureChangeAgainst(baseline: PngRgbImage, candidate: PngRgbImage): MeasuredChange {
+  const change = computePngChangedPixels(baseline, candidate);
   // A frame that changed shape reshaped the whole picture, which is the largest change there is.
-  return result.status === 'compared' ? result.changedPixelRatio : 1;
+  // Nothing is left to point at inside a frame that was resized, so it reports no region.
+  return change.status === 'compared'
+    ? { changedPixelRatio: change.changedPixelRatio, changedRegion: change.region }
+    : { changedPixelRatio: 1, changedRegion: null };
 }
 
 function thinEvenly(

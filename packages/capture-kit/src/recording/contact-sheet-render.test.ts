@@ -10,9 +10,16 @@ import {
 } from './contact-sheet-render.ts';
 import type { ContactSheetCell } from './contact-sheet-selection.ts';
 
-function cell(timeMs: number, width = 20, height = 10): ContactSheetCell {
-  return { timeMs, changedPixelRatio: 1, image: solidPng(width, height, BLACK) };
+function cell(
+  timeMs: number,
+  width = 20,
+  height = 10,
+  changedRegion: ContactSheetCell['changedRegion'] = null,
+): ContactSheetCell {
+  return { timeMs, changedPixelRatio: 1, changedRegion, image: solidPng(width, height, BLACK) };
 }
+
+const OVERLAY_BORDER = [229, 72, 77];
 
 function countPixels(png: ReturnType<typeof decodePng>, color: readonly number[]): number {
   let count = 0;
@@ -84,5 +91,33 @@ describe('renderContactSheet', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
     }
+  });
+
+  test('boxes the region where a cell changed', () => {
+    const sheet = renderContactSheet({
+      cells: [cell(0), cell(250, 20, 10, { x: 4, y: 2, width: 6, height: 4 })],
+      maxPixels: 20_000_000,
+    });
+
+    const decoded = decodePng(sheet.bytes, 'contact sheet');
+    expect(countPixels(decoded, OVERLAY_BORDER)).toBeGreaterThan(0);
+  });
+
+  test('leaves the frames unmarked when the caller asks for no overlay', () => {
+    const cells = [cell(0), cell(250, 20, 10, { x: 4, y: 2, width: 6, height: 4 })];
+    const sheet = renderContactSheet({ cells, maxPixels: 20_000_000, diffOverlay: false });
+
+    const decoded = decodePng(sheet.bytes, 'contact sheet');
+    expect(countPixels(decoded, OVERLAY_BORDER)).toBe(0);
+  });
+
+  test('skips a box that would cover the cell rather than point inside it', () => {
+    const sheet = renderContactSheet({
+      cells: [cell(0), cell(250, 20, 10, { x: 0, y: 0, width: 20, height: 10 })],
+      maxPixels: 20_000_000,
+    });
+
+    const decoded = decodePng(sheet.bytes, 'contact sheet');
+    expect(countPixels(decoded, OVERLAY_BORDER)).toBe(0);
   });
 });

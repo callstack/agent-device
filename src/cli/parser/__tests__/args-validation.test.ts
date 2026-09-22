@@ -41,6 +41,10 @@ test('parseArgs refuses a record option the chosen action never reads', () => {
     [['record', 'stop', '--fps', '30'], 'record stop does not read --fps'],
     [['record', 'stop', '--hide-touches'], 'record stop does not read --hide-touches'],
     [
+      ['record', 'start', './capture.mp4', '--no-diff-overlay'],
+      'record start does not read --no-diff-overlay',
+    ],
+    [
       ['record', 'contact-sheet', './clip.mp4', '--fps', '30'],
       'record contact-sheet does not read --fps',
     ],

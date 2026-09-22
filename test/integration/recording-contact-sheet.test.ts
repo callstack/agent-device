@@ -79,7 +79,8 @@ test(
         sheetPath,
         '--json',
       ]);
-      assertContactSheet(sheet, videoPath, sheetPath);
+      const data = assertContactSheet(sheet, videoPath, sheetPath);
+      assertOverlayIsAnOptOut(integration, videoPath, sheetPath, data);
     } finally {
       if (recordingStarted && !recordingStopped) {
         integration.runCleanupStep('cleanup record stop', [
@@ -105,6 +106,7 @@ type ContactSheetData = {
   decodedFrameCount?: number;
   skippedSampleCount?: number;
   changedPixelThreshold?: number;
+  diffOverlay?: boolean;
   cells?: Array<{ timeMs?: number; changedPixelRatio?: number }>;
 };
 
@@ -134,6 +136,39 @@ function assertContactSheet(
   assertCoverage(data);
   assertCells(data);
   return data;
+}
+
+/**
+ * Proves the boxes are real pixels rather than a reported intention: the same recording built with
+ * the overlay off has to produce the same grid at the same size and different bytes.
+ */
+function assertOverlayIsAnOptOut(
+  integration: { runStep: (name: string, args: string[]) => CliJsonResult },
+  videoPath: string,
+  sheetPath: string,
+  boxed: ContactSheetData,
+): void {
+  assert.equal(boxed.diffOverlay, true, 'expected the sheet to report its boxes');
+  const unmarkedPath = path.join(path.dirname(sheetPath), 'contact-sheet-unmarked.png');
+  const result = integration.runStep('record contact-sheet without the overlay', [
+    'record',
+    'contact-sheet',
+    videoPath,
+    '--out',
+    unmarkedPath,
+    '--no-diff-overlay',
+    '--json',
+  ]);
+  const unmarked = assertContactSheet(result, videoPath, unmarkedPath);
+
+  assert.equal(unmarked.diffOverlay, false);
+  assert.deepEqual(unmarked.cells, boxed.cells, 'the overlay must not change which cells are kept');
+  assert.deepEqual([unmarked.width, unmarked.height], [boxed.width, boxed.height]);
+  assert.notDeepEqual(
+    readFileSync(unmarkedPath),
+    readFileSync(sheetPath),
+    'expected the overlay to leave visible pixels',
+  );
 }
 
 function assertPngHeader(bytes: Buffer): void {

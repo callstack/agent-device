@@ -49,6 +49,11 @@ export type RecordingContactSheetResult = {
   readonly skippedSampleCount: number;
   /** Changed-pixel share a frame had to exceed to earn its own cell. */
   readonly changedPixelThreshold: number;
+  /**
+   * Whether the PNG boxes the region that moved in each cell. A sheet read back from disk cannot say
+   * which way it was drawn, so the report that named it says so.
+   */
+  readonly diffOverlay: boolean;
   readonly cells: readonly RecordingContactSheetCell[];
   readonly warning?: string;
 };

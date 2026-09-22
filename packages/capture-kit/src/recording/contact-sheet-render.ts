@@ -36,10 +36,23 @@ const LABEL_SCALE = 2;
 const LABEL_COLOR = [255, 255, 255, 255] as const;
 const SHEET_BACKGROUND = [17, 24, 39, 255] as const;
 const LABEL_HEIGHT = measurePngGlyphTextHeight(LABEL_SCALE) + LABEL_INSET * 2;
+const DIFF_OVERLAY_BORDER = [229, 72, 77, 255] as const satisfies PngGlyphColor;
+/** Share of a cell's RGB the wash adds to, enough to read as highlighted without hiding the frame. */
+const DIFF_OVERLAY_WASH = 0.16;
+/**
+ * Largest region share worth drawing.
+ *
+ * A push transition repaints nearly every pixel, and a box over 90% of a cell is a pink rectangle
+ * standing where a frame should be. Below this the box still leaves the unchanged surroundings
+ * visible, which is the whole claim it makes.
+ */
+const MAX_DIFF_OVERLAY_SHARE = 0.6;
 
 export type ContactSheetRenderInput = Readonly<{
   cells: readonly ContactSheetCell[];
   maxPixels: number;
+  /** Whether each cell is boxed where it changed. Off means the sheet shows frames unmarked. */
+  diffOverlay?: boolean;
 }>;
 
 export type ContactSheetRenderResult = Readonly<{
@@ -70,6 +83,7 @@ export function renderContactSheet(input: ContactSheetRenderInput): ContactSheet
       cell,
       layout.cellWidth,
       layout.cellHeight,
+      input.diffOverlay ?? true,
     );
   });
 
@@ -88,6 +102,7 @@ function drawCell(
   cell: ContactSheetCell,
   cellWidth: number,
   cellHeight: number,
+  diffOverlay: boolean,
 ): void {
   drawPngGlyphText(canvas, {
     x: x + LABEL_INSET,
@@ -96,7 +111,57 @@ function drawCell(
     color: LABEL_COLOR,
     scale: LABEL_SCALE,
   });
-  blit(canvas, resizePngBox(toPng(cell.image), cellWidth, cellHeight), x, y + LABEL_HEIGHT);
+  const imageY = y + LABEL_HEIGHT;
+  blit(canvas, resizePngBox(toPng(cell.image), cellWidth, cellHeight), x, imageY);
+  if (diffOverlay) drawChangedRegion(canvas, cell, x, imageY, cellWidth, cellHeight);
+}
+
+/**
+ * Boxes the part of a cell that moved, scaled into the cell the viewer actually sees.
+ *
+ * The box is drawn over the finished cell rather than over the decoded frame so its border survives
+ * at one pixel: a border painted at frame resolution and then shrunk arrives as a smear, which is
+ * the difference between "this changed" and "something happened here".
+ */
+function drawChangedRegion(
+  canvas: PNG,
+  cell: ContactSheetCell,
+  x: number,
+  y: number,
+  cellWidth: number,
+  cellHeight: number,
+): void {
+  const region = cell.changedRegion;
+  if (!region) return;
+  const framePixels = Math.max(1, cell.image.width * cell.image.height);
+  if ((region.width * region.height) / framePixels > MAX_DIFF_OVERLAY_SHARE) return;
+
+  const left = scaleCoordinate(region.x, cellWidth, cell.image.width);
+  const top = scaleCoordinate(region.y, cellHeight, cell.image.height);
+  const right = scaleCoordinate(region.x + region.width, cellWidth, cell.image.width);
+  const bottom = scaleCoordinate(region.y + region.height, cellHeight, cell.image.height);
+  for (let row = top; row < bottom; row += 1) {
+    for (let column = left; column < right; column += 1) {
+      const edge = column === left || column === right - 1 || row === top || row === bottom - 1;
+      drawOverlayPixel(canvas, x + column, y + row, edge);
+    }
+  }
+}
+
+/** Maps a frame coordinate onto a cell, keeping the far edge inside the cell it lands in. */
+function scaleCoordinate(coordinate: number, cellSize: number, frameSize: number): number {
+  return Math.max(0, Math.min(cellSize, Math.round((coordinate * cellSize) / frameSize)));
+}
+
+function drawOverlayPixel(canvas: PNG, x: number, y: number, edge: boolean): void {
+  const offset = (y * canvas.width + x) * 4;
+  const mix = edge ? 1 : DIFF_OVERLAY_WASH;
+  setPngPixel(canvas, x, y, [
+    Math.round(canvas.data[offset]! * (1 - mix) + DIFF_OVERLAY_BORDER[0] * mix),
+    Math.round(canvas.data[offset + 1]! * (1 - mix) + DIFF_OVERLAY_BORDER[1] * mix),
+    Math.round(canvas.data[offset + 2]! * (1 - mix) + DIFF_OVERLAY_BORDER[2] * mix),
+    255,
+  ]);
 }
 
 type ContactSheetLayout = Readonly<{

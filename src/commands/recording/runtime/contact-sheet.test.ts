@@ -78,6 +78,7 @@ function sheetResult(path: string) {
     decodedFrameCount: 5,
     skippedSampleCount: 0,
     changedPixelThreshold: 0.02,
+    diffOverlay: true,
     cells: [{ timeMs: 0, changedPixelRatio: 1 }],
   };
 }
@@ -116,6 +117,19 @@ test('record contact-sheet passes the pixel budget and honours an explicit outpu
   assert.equal(input.outputPath, '/tmp/named/sheet.png');
   assert.equal(input.maxPixels, 20_000_000);
   assert.equal(input.changedPixelThreshold, 0.2);
+});
+
+test('record contact-sheet leaves the overlay decision to the sheet unless the caller opts out', async () => {
+  await device().recording.contactSheet({
+    video: { kind: 'path', path: '/tmp/recording.mp4' },
+  });
+  assert.equal('diffOverlay' in mockBuild.mock.calls[0]![0], false);
+
+  await device().recording.contactSheet({
+    video: { kind: 'path', path: '/tmp/recording.mp4' },
+    diffOverlay: false,
+  });
+  assert.equal(mockBuild.mock.calls[1]![0].diffOverlay, false);
 });
 
 test('record contact-sheet reports the caller-visible path of a downloaded artifact', async () => {
