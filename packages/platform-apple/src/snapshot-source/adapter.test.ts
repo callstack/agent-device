@@ -51,7 +51,8 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       hint,
     });
     assert.equal(fixture.builds, 1);
-    assert.equal(fixture.runs, 6);
+    // Four identity probes and one clang build: the identity read execs one Xcode-owned binary.
+    assert.equal(fixture.runs, 5);
     assert.equal(result.stage, 'acquired');
     assert.equal(result.acquisition.producer, 'simulator-ax-bridge');
     assert.equal(result.acquisition.intent, 'full');
@@ -92,7 +93,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(outcome.stage, 'failed');
     if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'stale-target');
-    assert.equal(fixture.runs, 6);
+    assert.equal(fixture.runs, 5);
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { withProcessLock } from '@agent-device/host-kit/file';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs, type SnapshotSourceDeadline } from './deadline.ts';
@@ -88,37 +89,12 @@ export async function ensureSnapshotBridgeBinary(
         remainingSnapshotSourceMs(deadline, 'native-build-deadline');
         await input.host.ensureDirectory(temporaryPath);
         const outputPath = path.join(temporaryPath, BRIDGE_FILENAME);
-        const result = await input.host.run(
-          'xcrun',
-          [
-            '--sdk',
-            'iphonesimulator',
-            'clang',
-            '-arch',
-            toolchain.architecture,
-            '-mios-simulator-version-min=15.0',
-            '-fobjc-arc',
-            '-Werror',
-            '-Wall',
-            '-Wextra',
-            '-framework',
-            'Foundation',
-            '-framework',
-            'CoreGraphics',
-            ...SNAPSHOT_BRIDGE_COMPILE_FILENAMES.map((sourceFile) =>
-              path.join(sourceRoot, sourceFile),
-            ),
-            '-o',
-            outputPath,
-          ],
-          {
-            signal: deadline.signal,
-            timeoutMs: Math.min(
-              BUILD_TIMEOUT_MS,
-              remainingSnapshotSourceMs(deadline, 'native-build-deadline'),
-            ),
-            allowFailure: true,
-          },
+        const result = await compileSnapshotBridge(
+          input.host,
+          deadline,
+          toolchain.architecture,
+          sourceRoot,
+          outputPath,
         );
         if (result.exitCode !== 0 || !input.host.exists(outputPath)) {
           throw snapshotSourceError('unsupported', 'native-build-failed', {
@@ -157,6 +133,64 @@ export async function ensureSnapshotBridgeBinary(
       }
     },
   });
+}
+
+/**
+ * One clang invocation for the bridge sources. A compile exec this module asked to be killed is
+ * reported with the budget it hit: after the identity read stopped opening `xcrun` of its own
+ * (#2712), this is the process's first `xcrun` exec, and the exec layer's bare
+ * `xcrun timed out after Nms` would land on a job as an unattributed command failure again.
+ */
+async function compileSnapshotBridge(
+  host: SnapshotSourceHost,
+  deadline: SnapshotSourceDeadline,
+  architecture: SnapshotSourceToolchainIdentity['architecture'],
+  sourceRoot: string,
+  outputPath: string,
+): Promise<ExecResult> {
+  const timeoutMs = Math.min(
+    BUILD_TIMEOUT_MS,
+    remainingSnapshotSourceMs(deadline, 'native-build-deadline'),
+  );
+  try {
+    return await host.run(
+      'xcrun',
+      [
+        '--sdk',
+        'iphonesimulator',
+        'clang',
+        '-arch',
+        architecture,
+        '-mios-simulator-version-min=15.0',
+        '-fobjc-arc',
+        '-Werror',
+        '-Wall',
+        '-Wextra',
+        '-framework',
+        'Foundation',
+        '-framework',
+        'CoreGraphics',
+        ...SNAPSHOT_BRIDGE_COMPILE_FILENAMES.map((sourceFile) => path.join(sourceRoot, sourceFile)),
+        '-o',
+        outputPath,
+      ],
+      { signal: deadline.signal, timeoutMs, allowFailure: true },
+    );
+  } catch (error) {
+    if (!isCommandTimeoutError(error)) throw error;
+    throw snapshotSourceError(
+      'timeout',
+      'native-build-stalled',
+      {
+        timeoutMs,
+        hint:
+          `The Simulator SDK toolchain did not answer within ${timeoutMs}ms, which stopped the bridge ` +
+          `build before clang reported anything. Run \`xcrun --sdk iphonesimulator clang --version\` ` +
+          `by hand until it answers, then retry.`,
+      },
+      error,
+    );
+  }
 }
 
 function resolveSnapshotBridgeSourceRoot(host: SnapshotSourceHost): string {
