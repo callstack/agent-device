@@ -1,127 +1,86 @@
-# ADR 0026: Scroll Clip Authority — Inference May Reshape, Never Eject
+# ADR 0026: Scroll Clip Authority — Ownership Is the Parent Edge
 
 ## Status
 
-Proposed (2026-09-22). Refines ADR 0004's acquisition/presentation boundary for scroll geometry; it
-does not supersede it. Implementation contract: #2754.
+Proposed (2026-09-22), revised after review. Refines ADR 0004's fact/interpretation boundary for scroll
+geometry; does not supersede it. Implementation contract: #2754.
 
-An interactive iOS snapshot dropped every list row after a row holding selectable text. A `UITextView`
-is a UIScrollView and XCTest publishes its scroll indicator inside the text, so the indicator was
-attributed to the surrounding list and the list's visible band became one 22 px line; everything below
-it was clipped out of `snapshot -i`. The root cause is not the wrong type: it is that a **tree-walking
-guess about which scroll view an indicator describes was given the power to decide which nodes exist
-in the output.** This ADR separates those two powers.
+An interactive iOS snapshot of a list dropped every row after a row holding selectable text. A
+`UITextView` is a UIScrollView and XCTest publishes its scroll indicator inside the text, so the
+indicator was attributed to the surrounding list, the list's visible band became one 22 px line, and
+everything below it was clipped out of `snapshot -i` (#2214 in 0.21.0, patched for that one type by
+#2740). The root cause is not the unrecognised type — it is that presentation **inferred** an owner by
+walking up past the indicator's parent, and that guess decided which nodes existed in the output.
 
 ## Rules at a glance
 
 | Situation | Behavior |
 | --- | --- |
-| Which scroll view an indicator reports on | A **reported** fact from the producer: the owner element, named capture-locally |
-| Producer cannot report ownership (private-AX, tree backends) | An **inferred** attribution, explicitly typed as inferred |
-| An inferred attribution | May add directional hints (`hiddenContentAbove` / `hiddenContentBelow`). May not rewrite a container's rect or remove a node |
-| A reported attribution | May additionally establish that container's visible band |
-| Indicator inside a `TextView`, `WebView`, or other host that scrolls but publishes as a non-scroll type | Ownership terminates at that host. The enclosing list keeps its own band and loses no rows |
-| Visible clip for an acquired input | The clip fold's viewport-intersected container frame, unchanged |
-| Visible clip for a runner-presented input | The same fold rule, refined only by reported ownership |
-| Any rule that removes a node from output | Must go through the eject surface with a typed reason |
-| "Is this a scroll container?" | A capability matrix (`mayOwnIndicator`, `mayEstablishViewportClip`, `terminatesAncestorOwnership`), never one boolean |
-| Interactive output shrinks | Every removed source has a recorded disposition, and a gate says so |
-| Producer proposes a visible band | Refused. The band is interpretation, not evidence |
+| Which scroll view an indicator reports on | Its **parent**, when that parent is a scroll type. UIKit publishes an indicator inside its own scroll view, and the producer's tree already says so |
+| An indicator whose parent is not a scroll type — `TextView`, `WebView`, a cell | Owns nothing. No band, no clip, and the host's own scrollability stays with that host |
+| The visible band | Derived by presentation from the owner's frame and the indicator's track. Never reported by a producer |
+| Removing a node from output | Requires evidence: a clip fold result, or a parent-edge owner. A guess about ownership may not do it |
+| Weaker evidence than a parent edge | Directional hints (`hiddenContentAbove` / `hiddenContentBelow`) and nothing that changes membership |
+| Every removed source | Ends with a typed disposition. Internal evidence, never wire vocabulary |
 
 ## Contracts
 
-**1. Ownership is a fact; the band is interpretation.** ADR 0004 kept interpretation on the host so no
-backend carried its own copy of it. Indicator→owner attribution is a fact about what the producer
-traversed — XCTest knows which UIScrollView it took the indicator from — so the runner publishes it and
-the host still decides the clip. The producer reports **no** band: a producer-computed band moves the
-interpretation back across the process boundary it was removed from.
+**Ownership is read, not inferred.** A scroll view's indicators arrive as its children, so the parent
+edge is the producer's own claim and no new contract field, cross-language ownership table, or
+capture-local index remapping is needed. That edge survives to presentation on both input stages
+because every scroll host is regular-eligible, so projection re-parents an indicator only to that host:
+`REGULAR_ELIGIBLE_TYPES` in `ios-snapshot-engine/projection.ts` and `eligibleInteractiveTypes` in
+`SnapshotPresentationProjection.swift` both carry `Cell`, `CollectionView`, `ScrollView`, `Table`,
+`TextView`, and `WebView`. Those two lists are one fact in two languages and must stay in step.
 
-The fact belongs with the payload, not with the validation claims: `IosRunnerPresentation`, beside
-`payload` (`packages/contracts/src/ios-snapshot.ts:165-189`), not `IosSnapshotValidationFacts`, whose
-members are viewport, hittability, lineage, and residue.
+**Why the band exists at all.** XCTest reports a scroll view's frame spanning the bars and the safe
+area, not the visible track. In the pinned Settings tree the `CollectionView` frame is the whole screen,
+0–874, while its indicator track is 116–812 (`runner-presentation.test.ts`). The frame alone therefore
+cannot express visibility, and deleting indicator clipping would return content that is scrolled under
+the chrome. The band is necessary; only *who owns it* was ever in question.
 
-**2. The owner reference is capture-local.** Swift reindexes presented nodes after eligibility, scope,
-and depth (`apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotPresentationProjection.swift:59-87`).
-An owner index must therefore be consumed or remapped before host compaction, never carried across a
-reindex. A producer-side ancestor walk that merely relocates today's heuristic is not a reported fact
-and does not earn band authority.
-
-**3. Reshape and eject are different authorities.** The presentation rule seam
-(`packages/capture-kit/src/ios-snapshot-engine/semantic-index.ts:9-18`) currently hands all five passes
-one context whose `suppressNode` is unrestricted
-(`packages/capture-kit/src/ios-snapshot-engine/tree.ts:5-13`). Split it:
-
-```ts
-type ReshapeApi = {
-  current(index: number): RawSnapshotNode;
-  replaceFacts(index: number, patch: Partial<RawSnapshotNode>): void;
-  addScrollHint(index: number, hint: { above?: true; below?: true }): void;
-};
-
-type MembershipApi = ReshapeApi & {
-  eject(index: number, reason: EjectionReason): void;
-};
-
-type EjectionReason =
-  | { kind: 'semantic-representative'; representativeIndexes: readonly number[] }
-  | { kind: 'noise' }
-  | { kind: 'viewport-clip'; authority: 'fold' | 'reported-ownership' };
-```
-
-Scroll-indicator interpretation receives `ReshapeApi`. Only the single clip-application rule receives
-`MembershipApi`. "Low-confidence geometry cannot change membership" is then a compile-time property of
-which argument a rule is handed, not a convention inside the rule body.
-
-**4. Scroll capability is a matrix.** `mayOwnIndicator`, `mayEstablishViewportClip`, and
-`terminatesAncestorOwnership` are three different questions and today get one boolean answered five
-different ways: `ios-snapshot-engine/tree.ts:171-179`, `geometry-policy.ts:6`, `invariants.ts:12`,
-`SnapshotVisibilityFold.swift:18`, `RunnerTests+Snapshot.swift:128-132`. A text or web host answers
-`mayOwnIndicator: true, terminatesAncestorOwnership: true, mayEstablishViewportClip: false`. Adding
-`TextView`/`WebView` to a universal scroll-container set is refused for the same reason the fix in #2740
-was insufficient: it would let those hosts establish clips as well.
-
-**5. One clip resolver, evidence-gated.** The acquired path folds
-(`ios-snapshot-engine/engine.ts:108-132`, anchor rule `geometry-policy.ts:179`); the runner path skips
-the fold and clips to an indicator band instead (`runner-presentation.ts:104-115`). One resolver, with
-the viewport-intersected container frame as the safe default and reported ownership as the only
-refinement. The band remains necessary — XCTest reports a UIScrollView's frame as its content extent, so
-the container's own frame cannot express visibility alone — but it may only be applied to a container
-whose ownership is reported.
-
-**6. Ancestors are read from one tree.** Indicator detection reads presented nodes while ownership walks
-source nodes (`ios-snapshot-engine/scroll.ts:22` vs `:74`), so a rule that rewrites a type — `web.ts:26-29`
-turns `element(58)` into `WebView` — is invisible to the ownership walk that runs after it. Predicates see
-the effective view.
-
-**7. Ejections are accounted for.** Every source index ends with a disposition: presented (with its
-representatives) or ejected (with at least one reason). The ledger is internal evidence; reasons stay off
-the public snapshot wire.
-
-**8. Differential coverage covers both stages.** `assertProjectionSubsets`
-(`ios-snapshot-engine/properties.test.ts:107-133`) builds acquired inputs only, and the Swift differential
-drops interactive cases (`scripts/ios-snapshot-differential.test.ts:24`). The subset property must run
-`stage: 'presented'` inputs too. Assert source-level membership plus dispositions — not literally
-`interactive ⊆ full`, which is false because the full projection skips semantic compaction
-(`engine.ts:121-126`).
+**Ejection needs evidence, and is recorded.** Removing a node from the regular output is the one
+decision a weak signal must not make. Directional hints are the safe outlet for anything short of a
+parent-edge owner. Every source index ends either presented, with its representatives, or removed with a
+typed reason — which makes the ledger complete by construction rather than gated. The existing
+`presentedIndexesBySourceIndex` in `ios-snapshot-engine/semantic-index.ts` is the shape to extend; a
+second parallel ledger would be a second source of truth.
 
 ## Refuted alternatives
 
-- **Producer-computed visible band.** Reopens the per-backend interpretation ADR 0004 closed.
-- **The indicator band as the single global clip authority.** Recreates this incident for every host
-  whose indicator is not its own; deleting indicator clipping instead breaks the contract pinned by
-  `runner-presentation.test.ts:17-34`.
-- **A universal "is scroll container" set.** Five sites already diverge, and some divergence is real:
-  `ScrollArea` comes from the macOS helper's `AXScrollArea` mapping
-  (`apple/macos-helper/Sources/AgentDeviceMacOSHelper/SnapshotTraversal.swift:597`) and may reach shared
-  rules deliberately. Unifying without characterizing each site is a behavior change in disguise.
-- **A generic rule graph or effect system.** The two interfaces above are the enforcement; a framework
-  would be a larger thing to get wrong.
-- **Cross-language parity asserted early.** Indicator cases join the Swift golden fixture only when Swift
-  implements the behavior.
+- **A producer-reported ownership field.** The first draft of this ADR required one on
+  `IosRunnerPresentation`, plus capture-local indexing and remapping. The parent edge already carries the
+  fact, so the field, its validation, and its hazards are all unnecessary.
+- **Producer-computed visible bands.** Moves interpretation back across the process boundary ADR 0004
+  removed it from. The band stays host-side.
+- **An owner found by walking ancestors.** That walk is the incident. Skipping only the types known to
+  scroll — #2740's fix — leaves the next scroll-shaped host (`WebView`, a map view, a paged cell) to
+  reopen it.
+- **One universal "is a scroll container" set, or a capability matrix of ownership/clip/termination
+  booleans.** Five sites answer variants of this question today (`ios-snapshot-engine/tree.ts`,
+  `geometry-policy.ts`, `invariants.ts`, `SnapshotVisibilityFold.swift`, `RunnerTests+Snapshot.swift`)
+  and at least one divergence is deliberate. Characterise them before reshaping them; with parent-edge
+  ownership the shape this rule needs is the existing `isScrollableSnapshotType`.
+- **A rule-graph or effect system, and a two-API reshape/eject split.** Rejected on the shape of the
+  code: `suppressNode` already has ~23 call sites across ten rules, most legitimately ejecting, so
+  handing `MembershipApi` to "one clip rule" restores the convention it claims to enforce. A reshape
+  surface that still accepts `rect` would permit the exact rewrite that caused this incident. Inventory
+  the ejection sites in #2754 first; redesign only what the inventory justifies.
+- **A runtime guard substituting for the differential.** The subset property exists
+  (`assertProjectionSubsets`, `ios-snapshot-engine/properties.test.ts`) but builds acquired inputs only,
+  and the Swift differential drops interactive cases. Extending it to `stage: 'presented'` is what makes
+  any future shrinkage visible.
 
-## Evidence gaps kept open
+## Consequences and open evidence
 
-- 0.20.8 produced 74 nodes on the reporting screen, this fix 67. No captured artifact explains the
-  difference; neither number is an acceptance baseline until one exists.
-- Whether `ScrollArea` reaches the iOS engine rules on purpose, and what each of the five scroll-type
-  sites actually needs, must be characterized before any set is unified.
+- **Under-clipping is the new risk.** Dropping the walk means a tree that places an indicator under a
+  labelled wrapper rather than directly under its scroll view gets no band, so content scrolled under
+  the chrome can survive in the output — the leak class #1784/#1797 removed. Measured so far: the full
+  unit suite passes with parent-edge ownership, and a synthetic `WebView` row keeps rows that `main`
+  drops. Real captured trees must be surveyed for that wrapper shape before landing.
+- **The `WebView` instance is synthetic.** The mechanism is confirmed in a hand-built tree; that XCTest
+  publishes a `WKWebView`'s indicator the same way is unverified.
+- **Ejection inventory precedes any API change.** ~23 suppression sites, ten rules, and at least two
+  that rewrite rects as well as eject.
+- **The 74 → 67 node delta on the reporting screen is unexplained.** No captured artifact exists, so
+  neither number is an acceptance baseline.
