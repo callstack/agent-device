@@ -76,7 +76,7 @@ extension RunnerTests {
 
   private func performCoordinateBackGesture(app: XCUIApplication) {
 #if !os(tvOS)
-    let target = app.windows.firstMatch.exists ? app.windows.firstMatch : app
+    let target = resolveRunnerWindow(app: app).window ?? app
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
     start.press(forDuration: 0.05, thenDragTo: end)
@@ -106,7 +106,7 @@ extension RunnerTests {
 
   private func performCoordinateAppSwitcherGesture(app: XCUIApplication) {
 #if !os(tvOS)
-    let target = app.windows.firstMatch.exists ? app.windows.firstMatch : app
+    let target = resolveRunnerWindow(app: app).window ?? app
     let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
     let end = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
     start.press(forDuration: 0.6, thenDragTo: end)
@@ -220,20 +220,30 @@ extension RunnerTests {
   // out-of-window coordinates still pass containment. Falls back to app.frame
   // when no window frame is readable.
   /// The app window interactions and captures are booked against: the first window the app
-  /// reports with a non-empty frame, the application itself when none qualifies. The viewport,
-  /// the interaction root, and the synthesized reference frame all resolve through here, so a
+  /// reports with a non-empty frame, and no window at all when none qualifies. The viewport,
+  /// the interaction anchor, and the synthesized reference frame all resolve through here, so a
   /// fold, a sheet, or a rotation moves every consumer to the same window in the same pass.
-  /// On iOS the resolved element must be the one whose `screen.displayID` a gesture routes by;
-  /// reading the frame first is what makes that screen read mean the resolved window.
-  func resolveRunnerWindow(app: XCUIApplication) -> (element: XCUIElement, frame: CGRect) {
-    for window in app.windows.allElementsBoundByIndex {
-      guard window.exists else { continue }
-      let frame = window.frame
-      if !frame.isEmpty {
-        return (window, frame)
+  /// Synthesized gestures route their display ID through the returned window so the record's
+  /// display can never name a different window than the one the reference frame was measured on.
+  func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
+    let windows = app.windows.allElementsBoundByIndex
+    var frames: [CGRect?] = []
+    for window in windows {
+      frames.append(window.exists ? window.frame : nil)
+    }
+    if let index = Self.firstUsableWindowIndex(frames: frames) {
+      return (windows[index], frames[index] ?? .zero)
+    }
+    return (nil, app.frame)
+  }
+
+  static func firstUsableWindowIndex(frames: [CGRect?]) -> Int? {
+    for (index, frame) in frames.enumerated() {
+      if let frame, !frame.isEmpty {
+        return index
       }
     }
-    return (app, app.frame)
+    return nil
   }
 
   func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
@@ -515,10 +525,6 @@ extension RunnerTests {
     return performCoordinateDrag(app: app, x: x, y: y, x2: x2, y2: y2, holdDuration: holdDuration)
   }
 
-  private func interactionRoot(app: XCUIApplication) -> XCUIElement {
-    resolveRunnerWindow(app: app).element
-  }
-
   private func performCoordinateTap(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
 #if os(tvOS)
     return .unsupported(
@@ -578,11 +584,11 @@ extension RunnerTests {
 
 #if !os(tvOS)
   private func interactionCoordinate(app: XCUIApplication, x: Double, y: Double) -> XCUICoordinate {
-    let root = interactionRoot(app: app)
+    let resolved = resolveRunnerWindow(app: app)
+    let root = resolved.window ?? app
     let origin = root.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-    let rootFrame = root.frame
-    let offsetX = x - Double(rootFrame.origin.x)
-    let offsetY = y - Double(rootFrame.origin.y)
+    let offsetX = x - Double(resolved.frame.origin.x)
+    let offsetY = y - Double(resolved.frame.origin.y)
     return origin.withOffset(CGVector(dx: offsetX, dy: offsetY))
   }
 #endif

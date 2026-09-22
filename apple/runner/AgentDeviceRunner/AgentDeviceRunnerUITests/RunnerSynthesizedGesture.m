@@ -37,6 +37,7 @@ static NSString * _Nullable RunnerResolveGestureEventBridge(
 );
 static NSString * _Nullable RunnerCreateEventRecord(
   id application,
+  id _Nullable resolvedWindow,
   NSString *recordName,
   RunnerGestureEventBridge *bridge,
   id *record
@@ -74,13 +75,14 @@ static id RunnerSampledDragPointerPath(
 static double RunnerSmoothstepProgress(double t);
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
+  id _Nullable resolvedWindow,
   CGPoint start,
   CGPoint end,
   double durationMs,
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory
 );
-static NSString * _Nullable RunnerTrySynthesizeTap(id application, CGPoint point);
+static NSString * _Nullable RunnerTrySynthesizeTap(id application, id _Nullable resolvedWindow, CGPoint point);
 // XCTest's proven swipe profile reaches the endpoint in 100 ms, then holds for the planned
 // fling duration. Fast movement is what lets UIKit distinguish a fling from a timed pan.
 static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
@@ -94,14 +96,16 @@ static id RunnerTapPointerPath(
 @implementation RunnerSynthesizedGesture
 
 + (NSString * _Nullable)synthesizeSwipeWithApplication:(id)application
-                                                    x:(double)x
-                                                    y:(double)y
-                                                   x2:(double)x2
-                                                   y2:(double)y2
+                                        resolvedWindow:(id _Nullable)resolvedWindow
+                                                     x:(double)x
+                                                     y:(double)y
+                                                    x2:(double)x2
+                                                    y2:(double)y2
                                             durationMs:(double)durationMs {
   @try {
     return RunnerTrySynthesizeDrag(
       application,
+      resolvedWindow,
       CGPointMake(x, y),
       CGPointMake(x2, y2),
       durationMs,
@@ -114,6 +118,7 @@ static id RunnerTapPointerPath(
 }
 
 + (NSString * _Nullable)synthesizeContinuousDragWithApplication:(id)application
+                                                resolvedWindow:(id _Nullable)resolvedWindow
                                                              x:(double)x
                                                              y:(double)y
                                                             x2:(double)x2
@@ -122,6 +127,7 @@ static id RunnerTapPointerPath(
   @try {
     return RunnerTrySynthesizeDrag(
       application,
+      resolvedWindow,
       CGPointMake(x, y),
       CGPointMake(x2, y2),
       durationMs,
@@ -134,14 +140,16 @@ static id RunnerTapPointerPath(
 }
 
 + (NSString * _Nullable)synthesizeControlledScrollWithApplication:(id)application
+                                                 resolvedWindow:(id _Nullable)resolvedWindow
                                                                 x:(double)x
                                                                 y:(double)y
                                                                x2:(double)x2
-                                                                y2:(double)y2
-                                                        durationMs:(double)durationMs {
+                                                               y2:(double)y2
+                                                       durationMs:(double)durationMs {
   @try {
     return RunnerTrySynthesizeDrag(
       application,
+      resolvedWindow,
       CGPointMake(x, y),
       CGPointMake(x2, y2),
       durationMs,
@@ -154,22 +162,25 @@ static id RunnerTapPointerPath(
 }
 
 + (NSString * _Nullable)synthesizeTapWithApplication:(id)application
+                                      resolvedWindow:(id _Nullable)resolvedWindow
                                                    x:(double)x
                                                    y:(double)y {
   @try {
-    return RunnerTrySynthesizeTap(application, CGPointMake(x, y));
+    return RunnerTrySynthesizeTap(application, resolvedWindow, CGPointMake(x, y));
   } @catch (NSException *exception) {
     return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
   }
 }
 
 + (NSString * _Nullable)synthesizeGestureWithApplication:(id)application
+                                          resolvedWindow:(id _Nullable)resolvedWindow
                                           pointerSamples:(NSArray<NSArray<NSDictionary<NSString *, NSNumber *> *> *> *)pointerSamples {
   @try {
     RunnerGestureEventBridge bridge;
     id record = nil;
     NSString *error = RunnerCreateEventRecord(
       application,
+      resolvedWindow,
       @"agent-device-gesture-plan",
       &bridge,
       &record
@@ -224,6 +235,7 @@ static id RunnerTapPointerPath(
 
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
+  id _Nullable resolvedWindow,
   CGPoint start,
   CGPoint end,
   double durationMs,
@@ -232,7 +244,7 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
 ) {
   RunnerGestureEventBridge bridge;
   id record = nil;
-  NSString *error = RunnerCreateEventRecord(application, recordName, &bridge, &record);
+  NSString *error = RunnerCreateEventRecord(application, resolvedWindow, recordName, &bridge, &record);
   if (error != nil) return error;
 
   id path = pathFactory(&bridge, start, end, durationMs);
@@ -244,11 +256,12 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   return RunnerSynthesizeEventRecord(&bridge, record);
 }
 
-static NSString * _Nullable RunnerTrySynthesizeTap(id application, CGPoint point) {
+static NSString * _Nullable RunnerTrySynthesizeTap(id application, id _Nullable resolvedWindow, CGPoint point) {
   RunnerGestureEventBridge bridge;
   id record = nil;
   NSString *error = RunnerCreateEventRecord(
     application,
+    resolvedWindow,
     @"agent-device-tap",
     &bridge,
     &record
@@ -311,6 +324,7 @@ static NSString * _Nullable RunnerResolveGestureEventBridge(
 
 static NSString * _Nullable RunnerCreateEventRecord(
   id application,
+  id _Nullable resolvedWindow,
   NSString *recordName,
   RunnerGestureEventBridge *bridge,
   id *record
@@ -319,7 +333,9 @@ static NSString * _Nullable RunnerCreateEventRecord(
   if (missing != nil) return missing;
 
   NSUInteger displayID = 0;
-  NSString *displayError = RunnerResolveApplicationDisplayID(application, &displayID);
+  NSString *displayError = resolvedWindow != nil
+    ? RunnerResolveWindowDisplayID(resolvedWindow, &displayID)
+    : RunnerResolveApplicationDisplayID(application, &displayID);
   if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =
     ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);

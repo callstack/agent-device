@@ -90,8 +90,7 @@ NSString *RunnerFormatXCTestException(NSException *exception, NSString *fallback
   return [NSString stringWithFormat:@"%@: %@", name, reason];
 }
 
-NSString * _Nullable RunnerResolveApplicationDisplayID(id application, NSUInteger *displayID) {
-  id window = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
+NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *displayID) {
   NSValue *frameValue = [window valueForKey:@"frame"];
   CGRect frame = CGRectNull;
   [frameValue getValue:&frame size:sizeof(frame)];
@@ -107,4 +106,9 @@ NSString * _Nullable RunnerResolveApplicationDisplayID(id application, NSUIntege
   }
   *displayID = identifier.unsignedIntegerValue;
   return nil;
+}
+
+NSString * _Nullable RunnerResolveApplicationDisplayID(id application, NSUInteger *displayID) {
+  id window = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
+  return RunnerResolveWindowDisplayID(window, displayID);
 }

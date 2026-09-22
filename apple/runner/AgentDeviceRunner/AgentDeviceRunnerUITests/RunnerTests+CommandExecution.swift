@@ -5,9 +5,10 @@ import AgentDeviceSnapshotPresentation
 import ObjectiveC.runtime
 
 private final class RunnerSynthesizedSwipeFailureStub: NSObject {
-  @objc(synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:)
+  @objc(synthesizeSwipeWithApplication:resolvedWindow:x:y:x2:y2:durationMs:)
   class func synthesizeSwipe(
     application: XCUIApplication,
+    resolvedWindow: Any?,
     x: Double,
     y: Double,
     x2: Double,
@@ -19,8 +20,8 @@ private final class RunnerSynthesizedSwipeFailureStub: NSObject {
 }
 
 private final class RunnerSynthesizedTapFailureStub: NSObject {
-  @objc(synthesizeTapWithApplication:x:y:)
-  class func synthesizeTap(application: XCUIApplication, x: Double, y: Double) -> String? {
+  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:)
+  class func synthesizeTap(application: XCUIApplication, resolvedWindow: Any?, x: Double, y: Double) -> String? {
     "forced private synthesis failure"
   }
 }
@@ -261,7 +262,7 @@ extension RunnerTests {
 #if os(iOS)
   func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
     let selector = NSSelectorFromString(
-      "synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:"
+      "synthesizeSwipeWithApplication:resolvedWindow:x:y:x2:y2:durationMs:"
     )
     guard
       let synthesizedSwipeMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
@@ -305,7 +306,7 @@ extension RunnerTests {
   }
 
   func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:x:y:")
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:")
     guard
       let synthesizedTapMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
       let failureStubMethod = class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector)

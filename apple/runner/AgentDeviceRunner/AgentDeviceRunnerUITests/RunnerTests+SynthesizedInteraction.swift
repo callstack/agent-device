@@ -51,6 +51,7 @@ extension RunnerTests {
     case .continuous:
       RunnerSynthesizedGesture.synthesizeContinuousDrag(
         withApplication: app,
+        resolvedWindow: context.resolvedWindow,
         x: Double(start.x),
         y: Double(start.y),
         x2: Double(end.x),
@@ -60,6 +61,7 @@ extension RunnerTests {
     case .controlledScroll:
       RunnerSynthesizedGesture.synthesizeControlledScroll(
         withApplication: app,
+        resolvedWindow: context.resolvedWindow,
         x: Double(start.x),
         y: Double(start.y),
         x2: Double(end.x),
@@ -69,6 +71,7 @@ extension RunnerTests {
     case .fastSwipe:
       RunnerSynthesizedGesture.synthesizeSwipe(
         withApplication: app,
+        resolvedWindow: context.resolvedWindow,
         x: Double(start.x),
         y: Double(start.y),
         x2: Double(end.x),
@@ -133,6 +136,7 @@ extension RunnerTests {
     )
     if let message = RunnerSynthesizedGesture.synthesizeTap(
       withApplication: app,
+      resolvedWindow: context.resolvedWindow,
       x: Double(point.x),
       y: Double(point.y)
     ) {
@@ -179,8 +183,7 @@ extension RunnerTests {
       return original
     }
 
-    let window = app.windows.firstMatch
-    let appFrame = window.exists && !window.frame.isEmpty ? window.frame : app.frame
+    let appFrame = onScreenWindowFrame(app: app)
     guard !appFrame.isEmpty else {
       return original
     }
@@ -250,12 +253,9 @@ extension RunnerTests {
   }
 
   func resolvedTouchReferenceFrame(app: XCUIApplication, appFrame: CGRect) -> CGRect {
-    let window = app.windows.firstMatch
-    if window.exists {
-      let windowFrame = window.frame
-      if !windowFrame.isEmpty {
-        return frameAvoidingKeyboard(app: app, frame: windowFrame)
-      }
+    let resolved = resolveRunnerWindow(app: app)
+    if resolved.window != nil {
+      return frameAvoidingKeyboard(app: app, frame: resolved.frame)
     }
     if !appFrame.isEmpty {
       return frameAvoidingKeyboard(app: app, frame: appFrame)
@@ -380,7 +380,8 @@ extension RunnerTests {
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = runnerAccessibilityHealth
-    let referenceFrame = onScreenWindowFrame(app: app)
+    let resolved = resolveRunnerWindow(app: app)
+    let referenceFrame = resolved.frame
     guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
       referenceFrame.width > 0, referenceFrame.height > 0
     else {
@@ -388,6 +389,7 @@ extension RunnerTests {
     }
     return SynthesizedCoordinateContext(
       referenceFrame: referenceFrame,
+      resolvedWindow: resolved.window,
       keyboardPolicy: policy.keyboardPolicy,
       fallbackPolicy: policy.fallbackPolicy,
       accessibilityHealth: health
@@ -556,8 +558,10 @@ extension RunnerTests {
         ]
       }
     }
+    let resolvedWindow = resolveRunnerWindow(app: app).window
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
+      resolvedWindow: resolvedWindow,
       pointerSamples: pointerSamples
     ) {
       return .unsupported(

@@ -59,6 +59,9 @@ struct SynthesizedGesturePolicy: Equatable, Hashable {
 
 struct SynthesizedCoordinateContext {
   let referenceFrame: CGRect
+  /// The window `referenceFrame` was measured on. Synthesized records route their display ID
+  /// through this same window so geometry and routing can never name different windows.
+  let resolvedWindow: XCUIElement?
   let keyboardPolicy: SynthesizedKeyboardPolicy
   let fallbackPolicy: SynthesizedFallbackPolicy
   let accessibilityHealth: RunnerAccessibilityHealth
@@ -66,6 +69,7 @@ struct SynthesizedCoordinateContext {
   func withReferenceFrame(_ frame: CGRect) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
       referenceFrame: frame,
+      resolvedWindow: resolvedWindow,
       keyboardPolicy: keyboardPolicy,
       fallbackPolicy: fallbackPolicy,
       accessibilityHealth: accessibilityHealth

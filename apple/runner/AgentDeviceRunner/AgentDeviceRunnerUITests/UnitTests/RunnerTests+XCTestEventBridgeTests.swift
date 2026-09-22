@@ -55,5 +55,34 @@ extension RunnerTests {
       XCTAssertEqual(displayID, 99)
     }
   }
+
+  func testSynthesizedDisplayRoutesByTheResolvedWindow() {
+    let emptyWindow = DisplayWindowFixture(frame: .zero, displayID: 3)
+    var applicationDisplayID: UInt = 99
+    XCTAssertNotNil(
+      RunnerResolveApplicationDisplayID(DisplayApplicationFixture(emptyWindow), &applicationDisplayID)
+    )
+    let litWindow = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 951, height: 669), displayID: 3)
+    var resolvedDisplayID: UInt = 0
+    XCTAssertNil(RunnerResolveWindowDisplayID(litWindow, &resolvedDisplayID))
+    XCTAssertEqual(resolvedDisplayID, 3)
+  }
+
+  func testSynthesizedDisplayRefusesWindowWithoutQualifyingFrame() {
+    for frame in [CGRect.zero, .null, .infinite] {
+      let window = DisplayWindowFixture(frame: frame, displayID: 3)
+      var displayID: UInt = 99
+      XCTAssertNotNil(RunnerResolveWindowDisplayID(window, &displayID))
+      XCTAssertEqual(displayID, 99)
+    }
+  }
+
+  func testFirstUsableWindowSkipsAbsentAndEmptyWindows() {
+    let lit = CGRect(x: 0, y: 0, width: 402, height: 874)
+    XCTAssertEqual(RunnerTests.firstUsableWindowIndex(frames: [lit]), 0)
+    XCTAssertEqual(RunnerTests.firstUsableWindowIndex(frames: [nil, .zero, lit]), 2)
+    XCTAssertNil(RunnerTests.firstUsableWindowIndex(frames: [nil, .zero, nil]))
+    XCTAssertNil(RunnerTests.firstUsableWindowIndex(frames: []))
+  }
 }
 #endif
