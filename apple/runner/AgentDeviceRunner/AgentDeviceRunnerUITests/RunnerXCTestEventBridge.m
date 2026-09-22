@@ -215,10 +215,20 @@ BOOL RunnerResolveApplicationScreen(
 // its frame is read before its screen, and a window that answers empty or raises fails closed with
 // the same reasons the application walk gives.
 NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *displayID) {
-  NSValue *frameValue = [window valueForKey:@"frame"];
-  CGRect frame = CGRectNull;
-  [frameValue getValue:&frame size:sizeof(frame)];
-  if (!RunnerUsableWindowFrame(frame)) {
+  __block CGRect frame = CGRectNull;
+  NSString *frameException = [RunnerObjCExceptionCatcher catchException:^{
+    NSValue *frameValue = [window valueForKey:@"frame"];
+    [frameValue getValue:&frame size:sizeof(frame)];
+  }];
+  if (frameException != nil || !RunnerUsableWindowFrame(frame)) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=window frame=(%g,%g %gx%g) raised=%@",
+      frame.origin.x,
+      frame.origin.y,
+      frame.size.width,
+      frame.size.height,
+      frameException != nil ? @"yes" : @"no"
+    );
     return [NSString stringWithFormat:
       @"private XCTest event synthesis unavailable: %@",
       RunnerApplicationScreenFailureDescription(RunnerApplicationScreenFailureUnresolvedWindow)

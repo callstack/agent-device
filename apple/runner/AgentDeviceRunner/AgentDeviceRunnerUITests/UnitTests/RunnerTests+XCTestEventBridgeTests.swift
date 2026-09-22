@@ -6,8 +6,9 @@ private final class DisplayScreenFixture: NSObject {
   init(_ displayID: UInt) { self.displayID = displayID }
 }
 
-/// A window that only reports the display it was built with once its frame has been read, which is
-/// when XCTest resolves the snapshot. Before that read, `screen` still names main.
+/// A window the runtime answers only once its query has resolved. `frame` is the read that
+/// resolves it: while the query is unresolved `screen` names main, which is what a fresh runner
+/// process that has not queried this app yet reports (#2728).
 private final class DisplayWindowFixture: NSObject {
   private let windowFrame: CGRect
   private let resolvedDisplayID: UInt
@@ -58,7 +59,7 @@ extension RunnerTests {
     var displayID: UInt = 0
     XCTAssertNil(RunnerResolveWindowDisplayID(window, &displayID))
     XCTAssertEqual(displayID, 3)
-    XCTAssertTrue(window.resolved)
+    XCTAssertTrue(window.resolved, "the window path must resolve the frame before reading its screen")
   }
 
   func testSynthesizedDisplayPreservesPrimaryWindowIdentity() {
@@ -68,18 +69,26 @@ extension RunnerTests {
     XCTAssertEqual(displayID, 1)
   }
 
-  func testSynthesizedDisplayRefusesDisplaylessWindow() {
-    let window = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 951, height: 669), displayID: 0)
-    var displayID: UInt = 99
-    XCTAssertNotNil(RunnerResolveWindowDisplayID(window, &displayID))
-    XCTAssertEqual(displayID, 99)
-  }
-
   func testSynthesizedDisplayRefusesWindowWithoutQualifyingFrame() {
     for frame in [CGRect.zero, .null, .infinite] {
       let window = DisplayWindowFixture(frame: frame, displayID: 3)
       var displayID: UInt = 99
       XCTAssertNotNil(RunnerResolveWindowDisplayID(window, &displayID))
+      XCTAssertEqual(displayID, 99)
+    }
+  }
+
+  func testSynthesizedDisplayRefusesWindowWithNoDisplayIDOrNoScreenAnswer() {
+    let noDisplayWindow = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 951, height: 669), displayID: 0)
+    let screenlessWindow = ScreenlessWindowFixture()
+    for window in [noDisplayWindow, screenlessWindow] as [NSObject] {
+      var displayID: UInt = 99
+      let error = RunnerResolveWindowDisplayID(window, &displayID)
+      XCTAssertNotNil(error)
+      XCTAssertTrue(
+        error?.contains("no resolved window display ID") ?? false,
+        "expected the typed screen refusal, got \(error ?? "nil")"
+      )
       XCTAssertEqual(displayID, 99)
     }
   }
