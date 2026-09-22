@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again carries the
+  accessibility `selected` state, so `is selected`, a `selected=true` selector, and a Maestro
+  `selected:` qualifier match the active control. When 0.21.0 made the AX bridge the Simulator's
+  snapshot source, the bridge's node reader mapped the traits word into `enabled` but never into
+  `selected`, so an active bottom tab, chosen segment, or checked row published no `selected` field
+  and every `selected:` match failed on the iOS Simulator — a fact the 0.20.x XCTest tree had always
+  supplied and that `snapshots.md` still promises. The reader now derives `selected` from the
+  selected-trait bit of the same traits word, publishing `selected: true` only when set and omitting
+  it otherwise so the two producers cannot be told apart by a `selected:` selector. The bit is pinned
+  by the guest's real captured words, so a producer encoding change cannot drop the fact silently
+  again.
 - Fixed (ios): an interactive snapshot no longer drops the rows of a list whose row hosts a scroll
   view of its own. Ownership of a scroll indicator is now read from its parent edge — a visible band
   derives only when the indicator's parent is itself a scroll type — instead of walking ancestors for

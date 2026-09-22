@@ -190,6 +190,51 @@ test('the bridge tree reads enabled from the NotEnabled trait', () => {
   assert.throws(() => decode(''), traitsInvalid);
 });
 
+test('the bridge tree reads selected from the selected trait, matching the XCTest tree', () => {
+  const tab = (word?: unknown) => ({
+    [automationType]: 9,
+    [label]: 'Albums',
+    [frame]: { X: 20, Y: 700, Width: 120, Height: 48 },
+    ...(word === undefined ? {} : { [traits]: word }),
+    [children]: [],
+  });
+  const decode = (word?: unknown) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'Application', [children]: [tab(word)] },
+      { truncated: false },
+      limits,
+    ).nodes[1];
+  const selected = (word?: unknown) => decode(word)?.selected;
+  const enabled = (word?: unknown) => decode(word)?.enabled;
+
+  const buttonTrait = 1n;
+  const selectedTrait = 1n << 3n;
+  const privateHighTrait = 1n << 60n;
+  const word = (traits: bigint) => traits.toString();
+  // Real guest captures from a React Navigation bottom tab bar: the active tab differs from the
+  // inactive tabs by exactly bit 3, and the active tab also carries the label. This pins the bit so
+  // a producer change cannot silently drop `selected:` matching the way the 0.21.0 bridge did.
+  const selectedTabTraits = 8858370057n;
+  const inactiveTabTraits = 8858370049n;
+
+  assert.equal(selected(word(buttonTrait | selectedTrait)), true);
+  assert.equal(selected(word(selectedTabTraits)), true, 'active tab reports selected');
+  assert.equal(selected(word(inactiveTabTraits)), undefined, 'inactive tab omits selected');
+  assert.equal(selected(word(buttonTrait)), undefined, 'unselected omits selected');
+  assert.equal(selected(word(0n)), undefined, 'no selected bit omits selected');
+  assert.equal(
+    selected(word(privateHighTrait | selectedTrait)),
+    true,
+    'a word past double precision keeps bit 3',
+  );
+  assert.equal(selected(word(privateHighTrait | 7n)), undefined, 'no carry into bit 3');
+  assert.equal(selected(), undefined, 'no traits word leaves selected unknown');
+  // The two facts are read from one word without interfering: bit 3 is selection, bit 8 is disabled.
+  const disabledSelected = word(selectedTabTraits | (1n << 8n));
+  assert.equal(selected(disabledSelected), true);
+  assert.equal(enabled(disabledSelected), false);
+});
+
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {
   assert.throws(
     () => decodeSnapshotBridgeTree({ [children]: [], unknown: true }, { truncated: false }, limits),

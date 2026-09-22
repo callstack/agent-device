@@ -119,6 +119,14 @@ const NODE_KEYS = new Set<string>(Object.values(ATTRIBUTE));
 const NOT_ENABLED_TRAIT = 1n << 8n;
 
 /**
+ * The selected-state trait the guest reader reports for a control the app marked selected — the
+ * active tab in a tab bar, a chosen segment, a checked row. The runner path answers
+ * `selected: true` for the same node, so the bridge derives the fact from this bit. A node that is
+ * not selected omits the field, matching the runner, which publishes `selected` only when true.
+ */
+const SELECTED_TRAIT = 1n << 3n;
+
+/**
  * A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
  * tree as an `AXRemoteElement` under the web view, with its children in that other process. The
  * guest reader snapshots one process, so it delivers that element as a leaf (#2484). Such a leaf
@@ -220,7 +228,11 @@ function nodeFacts(
   const baseClass = optionalString(value[ATTRIBUTE.elementBaseType]);
   const automationType = optionalInteger(value[ATTRIBUTE.automationType]);
   const frame = frameFromGuest(value[ATTRIBUTE.frame]);
-  const enabled = enabledFromTraits(value[ATTRIBUTE.traits]);
+  const traits = traitsFromGuest(value[ATTRIBUTE.traits]);
+  const enabled = traits === undefined ? undefined : (traits & NOT_ENABLED_TRAIT) === 0n;
+  // Publishes `selected: true` only when the selected bit is set and omits it otherwise — the same
+  // shape the XCTest tree produces, so a `selected:` selector cannot tell the producers apart.
+  const selected = traits === undefined || (traits & SELECTED_TRAIT) === 0n ? undefined : true;
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
@@ -240,6 +252,7 @@ function nodeFacts(
       : {}),
     ...(frame ? { rect: frame } : {}),
     ...(enabled === undefined ? {} : { enabled }),
+    ...(selected === undefined ? {} : { selected }),
     depth,
   };
 }
@@ -342,13 +355,17 @@ function optionalScalar(value: unknown): string | undefined {
   return undefined;
 }
 
-/** The guest sends the uint64 traits word as a decimal string so no bit is lost to a double. */
-function enabledFromTraits(value: unknown): boolean | undefined {
+/**
+ * The guest sends the uint64 traits word as a decimal string so no bit is lost to a double. One
+ * parse feeds every trait fact the tree publishes — `enabled` and `selected` — so a malformed word
+ * fails the same way no matter which fact is read.
+ */
+function traitsFromGuest(value: unknown): bigint | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'string' || !/^\d{1,20}$/.test(value)) {
     throw snapshotSourceError('malformed-tree', 'traits-invalid');
   }
-  return (BigInt(value) & NOT_ENABLED_TRAIT) === 0n;
+  return BigInt(value);
 }
 
 function optionalInteger(value: unknown): number | undefined {
