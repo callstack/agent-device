@@ -4,27 +4,66 @@ extension RunnerTests {
   static let navigationBackKeywords = ["back", "close", "cancel"]
   static let navigationFallbackVerificationDelay: TimeInterval = 0.25
 
-  func tapInAppBackControl(app: XCUIApplication) -> Bool {
+  /// What one in-app `back` attempt concluded. `.unverified` carries the typed capture failure the
+  /// display refused with, so an optional visual check that could not run reports an unknown instead
+  /// of the false "no back control exists" that a `nil` sample would otherwise become (#2728).
+  enum InAppBackOutcome {
+    case performed
+    case unavailable
+    case unverified(ErrorPayload)
+  }
+
+  /// The three answers a before/after visual comparison can give. `unobserved` is not evidence of
+  /// "no change": a display that refuses to be sampled proves nothing either way (#2728).
+  enum NavigationVisualObservation: Equatable {
+    case changed
+    case unchanged
+    case unobserved
+
+    var logToken: String {
+      switch self {
+      case .changed: return "yes"
+      case .unchanged: return "no"
+      case .unobserved: return "unknown"
+      }
+    }
+  }
+
+  /// One navigation-fallback capture: the encoded frame when the display answered, and the typed
+  /// reason it refused otherwise. Only iOS produces a refusal; other platforms capture nothing here.
+  struct NavigationVisualSample {
+    let data: Data?
+    let refusalCode: String?
+    let refusalHint: String?
+
+    init(data: Data?, refusalCode: String? = nil, refusalHint: String? = nil) {
+      self.data = data
+      self.refusalCode = refusalCode
+      self.refusalHint = refusalHint
+    }
+  }
+
+  func tapInAppBackControl(app: XCUIApplication) -> InAppBackOutcome {
 #if os(macOS)
     if let back = macOSNavigationBackElement(app: app) {
       tapElementCenter(app: app, element: back)
-      return true
+      return .performed
     }
-    return false
+    return .unavailable
 #elseif os(tvOS)
     _ = pressTvRemote(.menu)
-    return true
+    return .performed
 #else
     let buttons = app.navigationBars.buttons.allElementsBoundByIndex
     if let back = buttons.first(where: { $0.isHittable }) {
       back.tap()
-      return true
+      return .performed
     }
     if isSnapshotXCTestChannelPenalized(bundleId: currentBundleId) {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", currentBundleId ?? "")
     } else if let back = topNavigationBackElement(app: app) {
       tapElementCenter(app: app, element: back)
-      return true
+      return .performed
     }
     return tapTopLeadingNavigationFallback(app: app)
 #endif
@@ -109,11 +148,11 @@ extension RunnerTests {
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
   }
 
-  private func tapTopLeadingNavigationFallback(app: XCUIApplication) -> Bool {
+  private func tapTopLeadingNavigationFallback(app: XCUIApplication) -> InAppBackOutcome {
 #if os(iOS)
     let frame = onScreenWindowFrame(app: app)
     guard let point = Self.topLeadingNavigationFallbackPoint(in: frame) else {
-      return false
+      return .unavailable
     }
     let before = captureNavigationFallbackVisualState(app: app)
     let context = synthesizedCoordinateContext(
@@ -124,54 +163,96 @@ extension RunnerTests {
       synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
     }
     if case .performed = synthesized.outcome {
-      return didNavigationFallbackChangeVisualState(app: app, before: before)
+      return verifyNavigationFallbackOutcome(app: app, before: before)
     }
     let fallback = performGesture(app) {
       tapAt(app: app, x: point.x, y: point.y)
     }
     if case .performed = fallback.outcome {
-      return didNavigationFallbackChangeVisualState(app: app, before: before)
+      return verifyNavigationFallbackOutcome(app: app, before: before)
     }
 #endif
-    return false
+    return .unavailable
   }
 
-  private func captureNavigationFallbackVisualState(app: XCUIApplication) -> Data? {
+  private func captureNavigationFallbackVisualState(app: XCUIApplication) -> NavigationVisualSample {
 #if os(iOS)
-    // A visual check is optional evidence: a display that owns no window reports unknown by returning
-    // no sample, which the comparison below already reads as "nothing proved". It never reaches for
-    // a screen nobody is on, whose stable black would then be read as evidence that the tap did
-    // nothing (#2728).
-    guard case .success(let captured) = captureObservedScreen(app: app) else {
-      return nil
+    // A visual check is optional evidence, and the check is about THIS app's screen after the tap.
+    // It uses the app's own resolved screen, never the system-surface fallback: sampling SpringBoard's
+    // home screen twice would read as "unchanged" for an app that resolved no window, laundering a
+    // wrong-process sample into the same false "no back control" verdict a `nil` sample produces (#2728).
+    switch captureResolvedAppScreen(app: app) {
+    case .success(let captured):
+      guard let png = runnerPngData(for: captured.image) else {
+        // The display resolved but the image would not encode: name it as the capture failure it is,
+        // not as an unnamed no-sample that would default to "no display resolved" (#2728).
+        let refusal = RunnerAppScreenCaptureFailure.unrenderableImage
+        return NavigationVisualSample(data: nil, refusalCode: refusal.rawValue, refusalHint: refusal.hint)
+      }
+      return NavigationVisualSample(data: png)
+    case .failure(let failure):
+      return NavigationVisualSample(
+        data: nil,
+        refusalCode: failure.rawValue,
+        refusalHint: failure.hint
+      )
     }
-    return runnerPngData(for: captured.image)
 #else
-    return nil
+    return NavigationVisualSample(data: nil)
 #endif
   }
 
-  private func didNavigationFallbackChangeVisualState(
+  private func verifyNavigationFallbackOutcome(
     app: XCUIApplication,
-    before: Data?
-  ) -> Bool {
+    before: NavigationVisualSample
+  ) -> InAppBackOutcome {
     sleepFor(Self.navigationFallbackVerificationDelay)
     let after = captureNavigationFallbackVisualState(app: app)
-    let changed = Self.didNavigationFallbackChangeVisualState(before: before, after: after)
-    // The sample sizes are what tells a refused capture apart from an unchanged screen, and the
-    // fallback is rare enough that saying so every time costs nothing (#2728).
+    let observation = Self.navigationVisualObservation(before: before.data, after: after.data)
+    // The sample sizes and the observation name together tell a refused capture apart from an
+    // unchanged screen, and the fallback is rare enough that saying so every time costs nothing.
     NSLog(
       "AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION beforeBytes=%ld afterBytes=%ld changed=%@",
-      before?.count ?? -1,
-      after?.count ?? -1,
-      changed ? "yes" : "no"
+      before.data?.count ?? -1,
+      after.data?.count ?? -1,
+      observation.logToken
     )
-    return changed
+    switch observation {
+    case .changed:
+      return .performed
+    case .unchanged:
+      return .unavailable
+    case .unobserved:
+      // No sample is not evidence of no navigation change: the fallback ran, so report the display
+      // refusal it hit rather than laundering an unobservable result into "back is not available".
+      return .unverified(Self.navigationFallbackErrorPayload(after: after, before: before))
+    }
   }
 
-  static func didNavigationFallbackChangeVisualState(before: Data?, after: Data?) -> Bool {
-    guard let before, let after else { return false }
-    return before != after
+  static func navigationVisualObservation(
+    before: Data?,
+    after: Data?
+  ) -> NavigationVisualObservation {
+    guard let before, let after else { return .unobserved }
+    return before != after ? .changed : .unchanged
+  }
+
+  /// The refusal the fallback most recently hit wins, so the code names the last thing it looked at
+  /// before giving up. A missing reason on both sides is unreachable on iOS (every nil sample carries
+  /// one) and defaults to the plain display-unresolved code.
+  static func navigationFallbackErrorPayload(
+    after: NavigationVisualSample,
+    before: NavigationVisualSample
+  ) -> ErrorPayload {
+    ErrorPayload(
+      code:
+        after.refusalCode
+        ?? before.refusalCode
+        ?? RunnerAppScreenCaptureFailure.unresolvedScreen.rawValue,
+      message:
+        "The in-app back fallback was dispatched, but no display could be sampled to confirm the result. This is an unknown outcome, not evidence that a back control is absent.",
+      hint: after.refusalHint ?? before.refusalHint
+    )
   }
 
   private func macOSNavigationBackElement(app: XCUIApplication) -> XCUIElement? {
@@ -234,21 +315,53 @@ extension RunnerTests {
     XCTAssertFalse(Self.isTopNavigationControlFrame(.infinite, in: window))
   }
 
-  func testNavigationFallbackRequiresObservedVisualChange() {
-    XCTAssertTrue(
-      Self.didNavigationFallbackChangeVisualState(
-        before: Data([1, 2, 3]),
-        after: Data([1, 2, 4])
-      )
+  func testNavigationVisualVerificationSeparatesNoChangeFromNoSample() {
+    XCTAssertEqual(
+      Self.navigationVisualObservation(before: Data([1, 2, 3]), after: Data([1, 2, 4])),
+      .changed
     )
-    XCTAssertFalse(
-      Self.didNavigationFallbackChangeVisualState(
-        before: Data([1, 2, 3]),
-        after: Data([1, 2, 3])
-      )
+    XCTAssertEqual(
+      Self.navigationVisualObservation(before: Data([1, 2, 3]), after: Data([1, 2, 3])),
+      .unchanged
     )
-    XCTAssertFalse(Self.didNavigationFallbackChangeVisualState(before: nil, after: Data([1])))
-    XCTAssertFalse(Self.didNavigationFallbackChangeVisualState(before: Data([1]), after: nil))
+    // A missing sample is neither a change nor a no-change; treating it as "unchanged" would let a
+    // capture that refused become the reason the `back` command claims no control exists (#2728).
+    XCTAssertEqual(Self.navigationVisualObservation(before: nil, after: Data([1])), .unobserved)
+    XCTAssertEqual(Self.navigationVisualObservation(before: Data([1]), after: nil), .unobserved)
+    XCTAssertEqual(Self.navigationVisualObservation(before: nil, after: nil), .unobserved)
+  }
+
+  func testNavigationFallbackReportsTheRefusalItHitNotADefaultCode() {
+    // The refusal from the most recent sample wins, so the code names what the fallback last looked at
+    // before giving up; an earlier refusal is reported only when the later sample carried none (#2728).
+    let after = NavigationVisualSample(
+      data: nil,
+      refusalCode: "APP_SCREEN_WINDOW_UNRESOLVED",
+      refusalHint: "after hint"
+    )
+    let before = NavigationVisualSample(
+      data: nil,
+      refusalCode: "APP_SCREEN_UNRESOLVED",
+      refusalHint: "before hint"
+    )
+    let laterWins = Self.navigationFallbackErrorPayload(after: after, before: before)
+    XCTAssertEqual(laterWins.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+    XCTAssertEqual(laterWins.hint, "after hint")
+
+    let onlyBefore = Self.navigationFallbackErrorPayload(
+      after: NavigationVisualSample(data: nil),
+      before: before
+    )
+    XCTAssertEqual(onlyBefore.code, "APP_SCREEN_UNRESOLVED")
+    XCTAssertEqual(onlyBefore.hint, "before hint")
+
+    // Neither side named a reason (unreachable on iOS): a real capture code, never a bare failure.
+    let unnamed = Self.navigationFallbackErrorPayload(
+      after: NavigationVisualSample(data: nil),
+      before: NavigationVisualSample(data: nil)
+    )
+    XCTAssertEqual(unnamed.code, "APP_SCREEN_UNRESOLVED")
+    XCTAssertTrue(unnamed.message.contains("unknown outcome"))
   }
 #endif
 }

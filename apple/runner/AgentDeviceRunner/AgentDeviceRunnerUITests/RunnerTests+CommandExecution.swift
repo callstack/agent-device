@@ -1466,13 +1466,14 @@ extension RunnerTests {
           fps: command.fps.map { Int32($0) }
         )
         try recorder.start { [weak self] in
-          return self?.captureRunnerFrame(app: activeApp)
+          guard let self else { return .failure(.unresolvedScreen) }
+          return self.captureRunnerFrameResult(app: activeApp)
         }
         activeRecording = recorder
         return Response(ok: true, data: DataPayload(message: "recording started"))
       } catch {
         activeRecording = nil
-        return Response(ok: false, error: ErrorPayload(message: "failed to start recording: \(error.localizedDescription)"))
+        return Response(ok: false, error: Self.recordingStartErrorPayload(for: error))
       }
     case .recordStop:
       guard let recorder = activeRecording else {
@@ -2120,11 +2121,20 @@ extension RunnerTests {
       )
 #endif
     case .back, .backInApp:
-      if tapInAppBackControl(app: activeApp) {
+      switch tapInAppBackControl(app: activeApp) {
+      case .performed:
         let message = command.command == .back ? "back" : "backInApp"
         return Response(ok: true, data: DataPayload(message: message))
+      case .unavailable:
+        return Response(
+          ok: false,
+          error: ErrorPayload(message: "in-app back control is not available")
+        )
+      case .unverified(let error):
+        // The fallback gesture ran but the display refused to be sampled. Reporting the typed refusal
+        // keeps an unknown outcome from being laundered into a definitive "no back control" (#2728).
+        return Response(ok: false, error: error)
       }
-      return Response(ok: false, error: ErrorPayload(message: "in-app back control is not available"))
     case .backSystem:
       if performSystemBackAction(app: activeApp) {
         return Response(ok: true, data: DataPayload(message: "backSystem"))

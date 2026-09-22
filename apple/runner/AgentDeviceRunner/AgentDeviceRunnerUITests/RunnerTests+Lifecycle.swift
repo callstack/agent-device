@@ -42,31 +42,59 @@ enum RunnerInteractionIdleWaits {
 extension RunnerTests {
   // MARK: - Recording
 
-  /// One frame for the recording pump and the keyboard settle sample.
+  /// One frame for a caller that tolerates a dropped one — keyboard settling, which skips a sample it
+  /// cannot take and keeps polling. A frame that must exist goes through `captureRunnerFrameResult`,
+  /// which says why it refused.
   ///
   /// On iOS the frame comes from the display owning a window, because a foldable's
   /// `XCUIScreen.main` can be the dark outer panel while the app runs on the inner one — a stream of
-  /// identical black frames would then read as a settled screen and as a finished recording (#2728).
-  /// An observation with no session window falls to the system surface's window, which is what the
-  /// home screen is. macOS keeps recording the host display the way it always has.
+  /// identical black frames would then read as a settled screen (#2728). An observation with no
+  /// session window falls to the system surface's window, which is what the home screen is. macOS
+  /// keeps the host display it always recorded.
   func captureRunnerFrame(app: XCUIApplication) -> RunnerImage? {
-#if os(iOS)
-    guard case .success(let captured) = captureObservedScreen(app: app) else {
+    switch captureRunnerFrameResult(app: app) {
+    case .success(let captured):
+      return captured.image
+    case .failure:
       return nil
     }
-    return captured.image
+  }
+
+  /// The same frame as `captureRunnerFrame`, but carrying the reason it refused, so a required first
+  /// frame — a recording's bootstrap, which sizes the whole writer from it — fails closed with a
+  /// typed code rather than a message. The ongoing pump reads the same result and ignores a refusal
+  /// the way it ignored the `nil` it used to get; only a frame that must exist owes a reason (#2728).
+  func captureRunnerFrameResult(
+    app: XCUIApplication
+  ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+#if os(iOS)
+    return captureObservedScreen(app: app)
 #else
-    var image: RunnerImage?
+    var outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> = .failure(
+      .unrenderableImage
+    )
     let capture = {
-      let screenshot = XCUIScreen.main.screenshot()
-      image = screenshot.image
+      let image = XCUIScreen.main.screenshot().image
+      if let cgImage = runnerCGImage(from: image) {
+        // The host display has no resolved-panel facts to report; the recorder reads only the image
+        // and its pixel size, so these two are inert placeholders, not measurements the host scales by.
+        outcome = .success(
+          CapturedAppScreen(
+            image: image,
+            displayID: 0,
+            pixelWidth: cgImage.width,
+            pixelHeight: cgImage.height,
+            pixelsPerPoint: 1
+          )
+        )
+      }
     }
     if Thread.isMainThread {
       capture()
     } else {
       DispatchQueue.main.sync(execute: capture)
     }
-    return image
+    return outcome
 #endif
   }
 

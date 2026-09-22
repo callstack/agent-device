@@ -696,11 +696,15 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
 export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
 
 /**
- * The codes the XCTest runner answers with when a screenshot did not happen (#2728): no window
- * resolved so no display could be named, the resolved window named no display, or the resolved
- * display handed back an image it could not encode upright. They are the runner's own vocabulary, so
- * they are declared here beside the set that keeps them off the wire, and a required capture fails
- * closed on them rather than falling back to a screen nobody is on.
+ * The codes the XCTest runner answers with when a resolved-display capture it was asked to make did
+ * not happen (#2728): no window resolved so no display could be named, the resolved window named no
+ * display, or the resolved display handed back an image it could not encode upright. The runner emits
+ * them from every consumer of that helper — the `screenshot` command's fallback, `record start`'s
+ * required first frame, and an optional visual check such as the `back` fallback's before/after
+ * sample. They are the runner's own vocabulary, so they are declared here beside the set that keeps
+ * them off the wire; a required capture fails closed on them rather than falling back to a screen
+ * nobody is on, and an optional one reports the refusal as an unknown. Only the `screenshot` route
+ * consumes the set for its own simctl-to-runner decision, but the set names the whole family.
  */
 const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
 const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';

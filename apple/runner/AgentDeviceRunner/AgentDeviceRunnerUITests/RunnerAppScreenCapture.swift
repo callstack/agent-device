@@ -140,6 +140,12 @@ extension RunnerTests {
     guard let cgImage = runnerCGImage(from: upright) else {
       return .failure(.unrenderableImage)
     }
+    // A zero-pixel image is a capture that did not happen, not a tiny one. Refusing it here — at the
+    // type that owns the fact — keeps a required consumer (a recording sizing its writer from this
+    // frame) from mistaking it for a usable frame and falling back to an untyped error (#2728).
+    guard cgImage.width > 0, cgImage.height > 0 else {
+      return .failure(.unrenderableImage)
+    }
     return .success(
       CapturedAppScreen(
         image: upright,

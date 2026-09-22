@@ -30,7 +30,9 @@ extension RunnerTests {
       self.fps = fps
     }
 
-    func start(captureFrame: @escaping () -> RunnerImage?) throws {
+    func start(
+      capture: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
+    ) throws {
       let url = URL(fileURLWithPath: outputPath)
       let directory = url.deletingLastPathComponent()
       try FileManager.default.createDirectory(
@@ -44,21 +46,34 @@ extension RunnerTests {
 
       var dimensions: CGSize = .zero
       var bootstrapImage: RunnerImage?
+      var lastFailure: RunnerAppScreenCaptureFailure?
       let bootstrapDeadline = Date().addingTimeInterval(2.0)
       while Date() < bootstrapDeadline {
-        if let image = captureFrame(), let cgImage = runnerCGImage(from: image) {
-          bootstrapImage = image
-          dimensions = CGSize(width: cgImage.width, height: cgImage.height)
+        switch capture() {
+        case .success(let captured):
+          bootstrapImage = captured.image
+          dimensions = CGSize(width: captured.pixelWidth, height: captured.pixelHeight)
+        case .failure(let failure):
+          lastFailure = failure
+        }
+        if dimensions.width > 0, dimensions.height > 0 {
           break
         }
         Thread.sleep(forTimeInterval: 0.05)
       }
       guard dimensions.width > 0, dimensions.height > 0 else {
-        throw NSError(
-          domain: "AgentDeviceRunner.Record",
-          code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "failed to capture initial frame"]
-        )
+        // The bootstrap frame is required: the writer is sized from it. A capture that refused names
+        // why (no window, no display, unencodable image) so the host sees a typed reason rather than
+        // the generic "no frame" it used to collapse every refusal into (#2728). macOS keeps its
+        // host-display behavior and its original error, because nothing here is a panel question.
+        #if os(iOS)
+        throw RunnerTests.recordingBootstrapError(from: lastFailure)
+        #else
+        // macOS/tvOS preserve their original untyped record error regardless of why the host capture
+        // refused; the reason is read here only so the shared bootstrap loop carries no dead write.
+        _ = lastFailure
+        throw RunnerTests.recordingBootstrapError(from: nil)
+        #endif
       }
 
       let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -114,8 +129,8 @@ extension RunnerTests {
       timer.setEventHandler { [weak self] in
         guard let self else { return }
         if self.shouldStop() { return }
-        guard let image = captureFrame() else { return }
-        self.append(image: image)
+        guard case .success(let captured) = capture() else { return }
+        self.append(image: captured.image)
       }
       self.timer = timer
       timer.resume()
@@ -266,6 +281,31 @@ extension RunnerTests {
       return pixelBuffer
     }
 
+  }
+}
+
+extension RunnerTests {
+  /// The error a `record start` bootstrap raises when no initial frame arrived. On iOS the last capture
+  /// refusal (if any) is the honest reason and travels as its own typed code; only when nothing
+  /// refused — a macOS host capture, or a deadline that elapsed before any answer — does it fall back
+  /// to the original untyped record error, which keeps pre-panel behavior intact (#2728).
+  static func recordingBootstrapError(from lastFailure: RunnerAppScreenCaptureFailure?) -> Error {
+    lastFailure
+      ?? NSError(
+        domain: "AgentDeviceRunner.Record",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "failed to capture initial frame"]
+      )
+  }
+
+  /// Maps a `record start` failure to the wire payload. A capture that refused carries a typed
+  /// `APP_SCREEN_*` reason, so a no-window bootstrap reaches the host as that code rather than the
+  /// generic record error it used to collapse into; a genuine writer failure keeps its message.
+  static func recordingStartErrorPayload(for error: Error) -> ErrorPayload {
+    if let failure = error as? RunnerAppScreenCaptureFailure {
+      return ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+    }
+    return ErrorPayload(message: "failed to start recording: \(error.localizedDescription)")
   }
 }
 

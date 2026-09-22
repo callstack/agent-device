@@ -23,5 +23,39 @@ extension RunnerTests {
     // The helper records each returned value as an accepted frame.
     XCTAssertEqual(recorder.allocateTimestampForTesting(0), 101)
   }
+
+  func testRecordingBootstrapErrorKeepsTheTypedRefusalAndFallsBackGenerically() {
+    // A capture that refused is the honest bootstrap error; nothing refusing keeps the pre-panel
+    // untyped record error, so the iOS typed path and the macOS generic path are both pinned (#2728).
+    let typed = RunnerTests.recordingBootstrapError(from: .unresolvedWindow)
+    XCTAssertEqual(
+      (typed as? RunnerAppScreenCaptureFailure)?.rawValue,
+      "APP_SCREEN_WINDOW_UNRESOLVED"
+    )
+
+    let generic = RunnerTests.recordingBootstrapError(from: nil)
+    XCTAssertNil(generic as? RunnerAppScreenCaptureFailure)
+    XCTAssertEqual((generic as NSError).code, 1)
+  }
+
+  func testRecordingStartSurfacesACaptureRefusalAsATypedCode() {
+    // The bootstrap frame is required, so a no-window refusal must travel as its own code rather than
+    // the generic record error it used to collapse into; a real writer failure keeps its message (#2728).
+    let refusal = RunnerTests.recordingStartErrorPayload(
+      for: RunnerAppScreenCaptureFailure.unresolvedWindow
+    )
+    XCTAssertEqual(refusal.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+    XCTAssertNotNil(refusal.hint)
+
+    let writerFailure = NSError(
+      domain: "AgentDeviceRunner.Record",
+      code: 5,
+      userInfo: [NSLocalizedDescriptionKey: "failed to append frame"]
+    )
+    let generic = RunnerTests.recordingStartErrorPayload(for: writerFailure)
+    XCTAssertNil(generic.code)
+    XCTAssertTrue(generic.message.contains("failed to start recording"))
+    XCTAssertTrue(generic.message.contains("failed to append frame"))
+  }
 #endif
 }

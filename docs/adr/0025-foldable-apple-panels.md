@@ -110,6 +110,21 @@ resolves a window. An app with no window is refused on the query's own `exists` 
 its frame: a windowless app answers `frame` with `(0,0 0x0)` without raising, so geometry alone
 cannot say "no window".
 
+A visual *check* on an app's own transition is a different question, and the system surface's second
+answer would fabricate it. The `back` fallback's before/after comparison asks whether THIS app's
+screen changed under a leading tap the app itself received; two SpringBoard captures of the home
+screen are byte-identical no matter what the app did, so a system-surface sample would report
+"unchanged" for exactly the failure it is meant to catch. The check therefore observes the app's own
+resolved window and nothing else: an app that resolves no window reports the typed refusal as an
+unknown outcome, not as the false no-change a second process would produce (#2728).
+
+Required and optional consumers of the same helper split on the frame they are owed. `screenshot` and
+`record start`'s bootstrap frame are required — the recording sizes its whole writer from that first
+image — and each names why the capture did not happen with the shared `APP_SCREEN_*` reason, so a
+no-window runtime is a typed failure and never a generic one. The keyboard stability pump and the
+recording pump keep a nil-tolerant frame, because a dropped frame between polls is normal and says
+nothing about which display a window is on (#2728).
+
 Both answers are measured rather than assumed. A session with no app, and one whose app was terminated while still bound, answer the window query with `resolved=no`, and the capture that follows names the lit panel — on an unfolded Duo that is `LCD-1`, and the resulting home-screen image contains no black pixel. An app suspended by `home` keeps answering with a usable window, so it takes the first branch and still captures the panel it is on.
 
 `screenshot` is a runner-lifecycle command and skips the app-activation preflight, which left its
