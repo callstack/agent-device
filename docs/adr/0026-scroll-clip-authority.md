@@ -28,10 +28,18 @@ walking up past the indicator's parent, and that guess decided which nodes exist
 **Ownership is read, not inferred.** A scroll view's indicators arrive as its children, so the parent
 edge is the producer's own claim and no new contract field, cross-language ownership table, or
 capture-local index remapping is needed. That edge survives to presentation on both input stages
-because every scroll host is regular-eligible, so projection re-parents an indicator only to that host:
-`REGULAR_ELIGIBLE_TYPES` in `ios-snapshot-engine/projection.ts` and `eligibleInteractiveTypes` in
-`SnapshotPresentationProjection.swift` both carry `Cell`, `CollectionView`, `ScrollView`, `Table`,
+because every scroll host iOS can emit is regular-eligible, so projection re-parents an indicator only to
+that host: `REGULAR_ELIGIBLE_TYPES` in `ios-snapshot-engine/projection.ts` and `eligibleInteractiveTypes`
+in `SnapshotPresentationProjection.swift` both carry `Cell`, `CollectionView`, `ScrollView`, `Table`,
 `TextView`, and `WebView`. Those two lists are one fact in two languages and must stay in step.
+
+`scrollarea` is the named exception, scoped to iOS. `isScrollableSnapshotType` accepts it, neither
+eligible set contains it, and the iOS runner never emits it — it originates in the macOS helper's
+`AXScrollArea` mapping. That helper's trees do reach these rules, through `snapshot-desktop-surface.ts`
+→ `ios-snapshot-runtime.ts` → `publishIosSnapshot`, so on that surface a `ScrollArea` host can be dropped
+by eligibility while its children re-parent past it, which leaves a parent-edge lookup with no owner.
+Reusing this rule for macOS therefore needs a `ScrollArea` eligibility decision made there, not carried
+over from the iOS claim above.
 
 **Why the band exists at all.** XCTest reports a scroll view's frame spanning the bars and the safe
 area, not the visible track. In the pinned Settings tree the `CollectionView` frame is the whole screen,
@@ -59,7 +67,8 @@ second parallel ledger would be a second source of truth.
 - **One universal "is a scroll container" set, or a capability matrix of ownership/clip/termination
   booleans.** Five sites answer variants of this question today (`ios-snapshot-engine/tree.ts`,
   `geometry-policy.ts`, `invariants.ts`, `SnapshotVisibilityFold.swift`, `RunnerTests+Snapshot.swift`)
-  and at least one divergence is deliberate. Characterise them before reshaping them; with parent-edge
+  and their contents already differ: only `tree.ts` accepts `scrollarea`, the type the macOS helper emits
+  and the iOS runner never does. Characterise each site before reshaping any of them; with parent-edge
   ownership the shape this rule needs is the existing `isScrollableSnapshotType`.
 - **A rule-graph or effect system, and a two-API reshape/eject split.** Rejected on the shape of the
   code: `suppressNode` already has ~23 call sites across ten rules, most legitimately ejecting, so
@@ -80,7 +89,12 @@ second parallel ledger would be a second source of truth.
   drops. Real captured trees must be surveyed for that wrapper shape before landing.
 - **The `WebView` instance is synthetic.** The mechanism is confirmed in a hand-built tree; that XCTest
   publishes a `WKWebView`'s indicator the same way is unverified.
-- **Ejection inventory precedes any API change.** ~23 suppression sites, ten rules, and at least two
-  that rewrite rects as well as eject.
+- **macOS is already a second consumer of these rules.** Desktop capture runs the engine through
+  `snapshot-desktop-surface.ts` → `ios-snapshot-runtime.ts` → `publishIosSnapshot`, and its trees carry
+  `ScrollArea`, which neither eligible set admits. The parent-edge rule needs its own decision there
+  before it is reused, not a carry-over from the iOS claim.
+- **Ejection inventory precedes any API change.** 23 suppression sites across ten rules, and two of them
+  (`scroll`, `noise-overlay`) already rewrite rects on other nodes while ejecting — the combination the
+  proposed API split claimed to make impossible.
 - **The 74 → 67 node delta on the reporting screen is unexplained.** No captured artifact exists, so
   neither number is an acceptance baseline.
