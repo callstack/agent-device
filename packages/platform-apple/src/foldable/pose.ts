@@ -1,7 +1,6 @@
 import {
   type SetFoldPoseInput,
   foldPoseForHingeAngle,
-  parseFoldInput,
   type FoldPose,
 } from '@agent-device/contracts/device';
 import {
@@ -40,7 +39,7 @@ export async function setAppleFoldPose(
 ): Promise<SetFoldPoseResult> {
   options.signal?.throwIfAborted();
   requireSimulatorDevice(device, 'fold');
-  const intent = parseFoldInput(input);
+  const intent = input;
   const targetAngle = intent.keyframes?.at(-1)?.angle;
   const pose = intent.pose ?? foldPoseForHingeAngle(targetAngle!)!;
   const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
@@ -56,7 +55,7 @@ export async function setAppleFoldPose(
   const hingeAngleDegrees = await awaitHingePose(device, pose, options.signal, targetAngle);
   const litPanel = await readLitPanel(device, options.signal);
   return {
-    pose,
+    pose: foldPoseForHingeAngle(hingeAngleDegrees)!,
     hingeAngleDegrees,
     ...(litPanel ? { screen: screenReport(litPanel) } : {}),
   };
@@ -104,14 +103,36 @@ async function awaitHingePose(
     signal?.throwIfAborted();
     previous = observed;
     observed = await readAppleHingeAngle(device, { signal });
-    if (!matchesTargetAngle(observed, targetAngle)) continue;
-    if (foldPoseForHingeAngle(observed) !== pose) continue;
-    if (pose !== 'half-open') return observed;
-    if (previous !== undefined && isSettledHalfOpenPair(observed, previous)) {
-      return observed;
-    }
+    if (isVerifiedHingePose(observed, previous, pose, targetAngle)) return observed;
   }
   throw hingeVerificationError(device, pose, observed, previous, targetAngle);
+}
+
+function isVerifiedHingePose(
+  observed: number,
+  previous: number | undefined,
+  pose: FoldPose,
+  targetAngle: number | undefined,
+): boolean {
+  if (targetAngle !== undefined) return isSettledTargetAngle(observed, previous, targetAngle);
+  if (foldPoseForHingeAngle(observed) !== pose) return false;
+  return (
+    pose !== 'half-open' || (previous !== undefined && isSettledHalfOpenPair(observed, previous))
+  );
+}
+
+function isSettledTargetAngle(
+  observed: number,
+  previous: number | undefined,
+  targetAngle: number,
+): boolean {
+  if (!matchesTargetAngle(observed, targetAngle)) return false;
+  if (targetAngle === 0 || targetAngle === 180) return true;
+  return (
+    previous !== undefined &&
+    matchesTargetAngle(previous, targetAngle) &&
+    Math.abs(observed - previous) <= IOS_FOLD_POSE_STABLE_DEGREES
+  );
 }
 
 function matchesTargetAngle(
@@ -139,8 +160,10 @@ function hingeVerificationError(
       deviceId: device.id,
     });
   }
+  if (targetAngle !== undefined && observed !== undefined)
+    return unsettledPoseError(device, foldPoseForHingeAngle(observed)!, observed, previous);
   if (observed !== undefined && pose === 'half-open' && foldPoseForHingeAngle(observed) === pose) {
-    return unsettledHalfOpenPoseError(device, observed, previous);
+    return unsettledPoseError(device, pose, observed, previous);
   }
   return unverifiedPoseError(device, pose, observed);
 }
@@ -180,16 +203,17 @@ function unverifiedPoseError(device: DeviceInfo, pose: FoldPose, observed: numbe
 }
 
 /** The hinge was seen `half-open` and never came to rest inside that interval. */
-function unsettledHalfOpenPoseError(
+function unsettledPoseError(
   device: DeviceInfo,
+  pose: FoldPose,
   observed: number,
   previous: number | undefined,
 ) {
   return new AppError(
     'COMMAND_FAILED',
-    `${device.name} was observed half-open at ${observed}° but did not settle: ${IOS_FOLD_POSE_SETTLE_ATTEMPTS} hinge reads never held two consecutive half-open angles within ${IOS_FOLD_POSE_STABLE_DEGREES}° of each other`,
+    `${device.name} was observed ${pose} at ${observed}° but did not settle: ${IOS_FOLD_POSE_SETTLE_ATTEMPTS} hinge reads never held two consecutive angles within ${IOS_FOLD_POSE_STABLE_DEGREES}° of each other`,
     {
-      ...hingePoseDetails(device, 'half-open', observed),
+      ...hingePoseDetails(device, pose, observed),
       reason: 'fold-pose-unsettled',
       ...(previous === undefined ? {} : { previousHingeAngleDegrees: previous }),
       hint: POSE_UNSETTLED_HINT,

@@ -406,7 +406,7 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     return action;
   }
 
-  if (command === 'swipe' || command === 'type' || command === 'gesture') {
+  if (command === 'swipe' || command === 'type' || command === 'gesture' || command === 'fold') {
     const parsed = parseReplaySeriesFlags(command, args);
     Object.assign(action.flags, parsed.flags);
     action.positionals = parsed.positionals;

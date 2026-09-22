@@ -3,12 +3,12 @@ import { expect, test } from 'vitest';
 import fc from 'fast-check';
 import { parseFoldInput, parseFoldKeyframesJson } from './device-rotation.ts';
 
-const cases: Array<{ name: string; valid: boolean; keyframes: unknown }> = JSON.parse(
+const cases: Array<{ name: string; valid: boolean; keyframesJson: string }> = JSON.parse(
   readFileSync(new URL('../../../contracts/fixtures/fold-keyframes.json', import.meta.url), 'utf8'),
 );
-test.each(cases)('keyframes: $name', ({ valid, keyframes }) => {
-  const parse = () => parseFoldKeyframesJson(JSON.stringify(keyframes));
-  if (valid) expect(parse()).toEqual(keyframes);
+test.each(cases)('keyframes: $name', ({ valid, keyframesJson }) => {
+  const parse = () => parseFoldKeyframesJson(keyframesJson);
+  if (valid) expect(parse()).toEqual(JSON.parse(keyframesJson));
   else expect(parse).toThrow(expect.objectContaining({ code: 'INVALID_ARGS' }));
 });
 

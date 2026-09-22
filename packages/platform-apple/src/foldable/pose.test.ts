@@ -360,3 +360,24 @@ test('reports a custom final angle only after it reaches and holds that angle', 
   });
   expect(mockSend).toHaveBeenCalledWith(duo.id, keyframes, undefined);
 });
+
+test.each([
+  [1.3, 0.9, 'closed'],
+  [178.7, 179.1, 'open'],
+  [0.8, 1.2, 'half-open'],
+])(
+  'custom target %s accepts stable readback %s across a category boundary',
+  async (target, observed, pose) => {
+    mockInventory.mockResolvedValue(duoInventory('inner'));
+    mockHinge.mockResolvedValue(Number(observed));
+    await expect(
+      setAppleFoldPose(duo, {
+        keyframes: [
+          { atMs: 0, angle: 100 },
+          { atMs: 100, angle: Number(target) },
+        ],
+      }),
+    ).resolves.toMatchObject({ pose, hingeAngleDegrees: observed });
+    expect(mockHinge).toHaveBeenCalledTimes(2);
+  },
+);

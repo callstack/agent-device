@@ -1,3 +1,6 @@
+import { formatPortableActionLine, parseReplayScriptDetailed } from '@agent-device/ad-script';
+import { recordActionEntry } from '../../../src/daemon/session-action-recorder.ts';
+import { assertRpcOk } from './assertions.ts';
 import { makeIosAppSession } from '../../../src/__tests__/test-utils/session-factories.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -65,9 +68,24 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     });
     assert.equal(result.pose, 'half-open');
     assert.equal(result.hingeAngleDegrees, 100);
-    assert.equal(builds, 1);
-    assert.equal(tool.calls.filter((call) => call.includes('spawn')).length, 1);
-    assert.equal(tool.calls.filter((call) => call.includes('hinge-angle')).length, 2);
+    const recorded = recordActionEntry(daemon.session()!, {
+      command: 'fold',
+      positionals: [],
+      flags: { keyframes: JSON.stringify(trajectory) },
+      result,
+    });
+    assert.ok(recorded);
+    const line = formatPortableActionLine(recorded);
+    assert.match(line, /--keyframes/);
+    const [parsed] = parseReplayScriptDetailed(line).actions;
+    assert.ok(parsed);
+    const replayed = assertRpcOk(
+      await daemon.callCommand(parsed.command, parsed.positionals ?? [], parsed.flags),
+    );
+    assert.equal(replayed.hingeAngleDegrees, 100);
+    assert.equal(builds, 2);
+    assert.equal(tool.calls.filter((call) => call.includes('spawn')).length, 2);
+    assert.equal(tool.calls.filter((call) => call.includes('hinge-angle')).length, 4);
   } finally {
     await daemon.close();
   }

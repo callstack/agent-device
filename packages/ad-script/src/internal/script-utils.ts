@@ -261,6 +261,9 @@ export function appendGenericActionScriptArgs(parts: string[], action: SessionAc
       ),
     );
   }
+  if (action.command === 'fold' && action.flags?.keyframes !== undefined) {
+    parts.push('--keyframes', formatScriptArg(action.flags.keyframes));
+  }
   appendScriptSeriesFlags(parts, action);
 }
 
@@ -290,6 +293,11 @@ export function parseReplaySeriesFlags(
       continue;
     }
     const nextArg = args[index + 1];
+    if (command === 'fold' && token === '--keyframes' && nextArg !== undefined) {
+      flags.keyframes = nextArg;
+      index += 1;
+      continue;
+    }
     if (isClickLikeCommand(command) && token === '--button' && nextArg !== undefined) {
       const clickButton = nextArg;
       if (clickButton === 'primary' || clickButton === 'secondary' || clickButton === 'middle') {

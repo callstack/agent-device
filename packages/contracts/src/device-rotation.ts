@@ -133,22 +133,19 @@ export function parseFoldInput(input: { pose?: unknown; keyframes?: unknown }): 
   if (input.keyframes === undefined) {
     if (input.pose === undefined)
       throw new AppError('INVALID_ARGS', 'fold requires a pose or keyframes');
-    if (input.pose !== undefined && typeof input.pose !== 'string') {
+    if (typeof input.pose !== 'string') {
       throw new AppError('INVALID_ARGS', 'fold pose must be a string');
     }
     return { pose: parseFoldPose(input.pose) };
   }
-  const frames = input.keyframes;
-  if (
-    input.pose !== undefined ||
-    !Array.isArray(frames) ||
-    frames.length < 2 ||
-    frames.length > MAX_FOLD_KEYFRAMES
-  ) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `fold requires either pose or 2–${MAX_FOLD_KEYFRAMES} keyframes`,
-    );
+  if (input.pose !== undefined)
+    throw new AppError('INVALID_ARGS', 'fold accepts either pose or keyframes');
+  return { keyframes: parseFoldKeyframes(input.keyframes) };
+}
+
+function parseFoldKeyframes(frames: unknown): readonly FoldKeyframe[] {
+  if (!Array.isArray(frames) || frames.length < 2 || frames.length > MAX_FOLD_KEYFRAMES) {
+    throw new AppError('INVALID_ARGS', `fold requires 2–${MAX_FOLD_KEYFRAMES} keyframes`);
   }
   const keyframes = frames.map(parseKeyframe);
   if (
@@ -157,7 +154,7 @@ export function parseFoldInput(input: { pose?: unknown; keyframes?: unknown }): 
   ) {
     throw new AppError('INVALID_ARGS', 'Fold keyframes must start at 0ms and increase strictly');
   }
-  return { keyframes };
+  return keyframes;
 }
 
 function isBoundedNumber(value: unknown, maximum: number): value is number {
@@ -194,7 +191,5 @@ export function parseFoldKeyframesJson(value: string): readonly FoldKeyframe[] {
       '--keyframes requires a JSON array of {atMs, angle} objects',
     );
   }
-  const input = parseFoldInput({ keyframes: decoded });
-  if (!input.keyframes) throw new AppError('INVALID_ARGS', '--keyframes requires keyframes');
-  return input.keyframes;
+  return parseFoldKeyframes(decoded);
 }
