@@ -53,6 +53,12 @@ private final class ScreenlessWindowFixture: NSObject {
   @objc var frame: CGRect { CGRect(x: 0, y: 0, width: 951, height: 669) }
 }
 
+/// A window whose frame key the runtime would not answer. The gesture path holds this object across
+/// a command boundary, so a frame read that raises must fail closed inside the resolver.
+private final class FramelessWindowFixture: NSObject {
+  @objc let exists: Bool = true
+}
+
 extension RunnerTests {
   func testSynthesizedDisplayRoutesByTheResolvedWindow() {
     let window = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 951, height: 669), displayID: 3)
@@ -91,6 +97,17 @@ extension RunnerTests {
       )
       XCTAssertEqual(displayID, 99)
     }
+  }
+
+  func testSynthesizedDisplayRefusesAWindowWhoseFrameLookupRaises() {
+    var displayID: UInt = 99
+    let reason = RunnerResolveWindowDisplayID(FramelessWindowFixture(), &displayID)
+    XCTAssertNotNil(reason, "a frame read that raises must be caught, not handed to the gesture path")
+    XCTAssertTrue(
+      reason?.contains("no resolved application window") ?? false,
+      "expected the typed window refusal, got \(reason ?? "nil")"
+    )
+    XCTAssertEqual(displayID, 99)
   }
 
   func testFirstUsableWindowSkipsAbsentAndEmptyWindows() {
