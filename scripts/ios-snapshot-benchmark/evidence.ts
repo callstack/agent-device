@@ -6,24 +6,62 @@ import { validateRawResult } from './schema.ts';
 import type { BenchmarkResult } from './types.ts';
 
 /**
- * The evidence/ios-snapshot branch tip is mutable; this annotated tag and the full commit SHA
- * below are the durable, immutable ref the corpus is pinned to. Re-tag (a new suffix, a new
- * commit) if the corpus is ever re-measured — never move this tag.
+ * Each corpus is pinned by an annotated tag on the mutable `evidence/ios-snapshot` branch tip plus
+ * the full evidence commit below. Re-tag (a new suffix, a new commit) if a corpus is ever
+ * re-measured — never move these tags.
  */
-const EVIDENCE_TAG = 'refs/tags/evidence/ios-snapshot/71fb2483f';
-const EVIDENCE_COMMIT = '2d4baf461aa8897d49c6d4683cd16d8f43588ae8';
+export type PublishedCorpus = {
+  /** Revision the leg measured, as a full SHA. */
+  revision: string;
+  /** Durable ref the corpus is fetched from. */
+  tag: string;
+  /** Evidence-branch commit holding the files. */
+  commit: string;
+  /** Corpus file name -> sha256. */
+  files: Readonly<Record<string, string>>;
+};
+
+const BASELINE_CORPUS: PublishedCorpus = {
+  revision: '71fb2483f30d90e615e949601c836aeebbf450c5',
+  tag: 'refs/tags/evidence/ios-snapshot/71fb2483f',
+  commit: '2d4baf461aa8897d49c6d4683cd16d8f43588ae8',
+  files: {
+    'ios-snapshot-cold-local-71fb2483f.json':
+      '532a83247bfbf8ee47039f80ac429f067c84679e92c781768c1044da1ae6e9bf',
+    'ios-snapshot-warm-relaunch-local-71fb2483f.json':
+      '6d299e8baec69662dca2c1ad8f1348e4361d5afaa781080e9a6b9b3dac362cbf',
+    'ios-snapshot-proxy-71fb2483f.json':
+      'b11b7a07be9e4dcf003f3af66943682a6733c6f21f5f43d3d9e88b3fb37b51a7',
+  },
+};
+
+const CONVERGENCE_FINAL_CORPUS: PublishedCorpus = {
+  revision: '7c434b575837e3291c51315bf9bb8b54c8ce7568',
+  tag: 'refs/tags/evidence/ios-snapshot/7c434b575',
+  commit: '96d4951c19fbe009ba19d192a9774668edcc3f56',
+  files: {
+    'ios-snapshot-cold-local-7c434b575.json':
+      '4663897ee5104569ad54e2ac803c216b284280c1c70fd82a8b2cf7b675d8a8bd',
+    'ios-snapshot-first-interaction-local-7c434b575.json':
+      '87c686336f5581e3f18111e160cf7b733cd726b41e79ed6d8e5b53e2ab40c3fb',
+    'ios-snapshot-warm-relaunch-local-7c434b575.json':
+      'd49df3c3c943178f016a2b958449b257c6d46a44c8ffdf8fab75c1634ae1ebce',
+    'ios-snapshot-proxy-7c434b575.json':
+      '5b5353831851f3a0f60e19d6bfd0cf50db47c3c4db52a283024c10bb17e71573',
+  },
+};
+
+export const PUBLISHED_CORPORA: readonly PublishedCorpus[] = [
+  BASELINE_CORPUS,
+  CONVERGENCE_FINAL_CORPUS,
+];
+
+/** Raw results published on the evidence branch, keyed by file name across every corpus. */
+export const PUBLISHED_EVIDENCE: Readonly<Record<string, string>> = Object.fromEntries(
+  PUBLISHED_CORPORA.flatMap((corpus) => Object.entries(corpus.files)),
+);
 export const DEFAULT_EVIDENCE_DIR = path.join(import.meta.dirname, 'evidence');
 export const EVIDENCE_FIXTURE_PATH = path.join(import.meta.dirname, 'evidence-fixture.v1.json');
-
-/** Raw results published on the evidence branch, keyed by file name; measured at 71fb2483f. */
-export const PUBLISHED_EVIDENCE: Readonly<Record<string, string>> = {
-  'ios-snapshot-cold-local-71fb2483f.json':
-    '532a83247bfbf8ee47039f80ac429f067c84679e92c781768c1044da1ae6e9bf',
-  'ios-snapshot-warm-relaunch-local-71fb2483f.json':
-    '6d299e8baec69662dca2c1ad8f1348e4361d5afaa781080e9a6b9b3dac362cbf',
-  'ios-snapshot-proxy-71fb2483f.json':
-    'b11b7a07be9e4dcf003f3af66943682a6733c6f21f5f43d3d9e88b3fb37b51a7',
-};
 
 export type EvidenceFile = {
   file: string;
@@ -35,9 +73,31 @@ export type EvidenceFile = {
   errors: string[];
 };
 
-export function fetchEvidenceCommand(file = '<file>'): string {
+function corpusFetchCommand(corpus: PublishedCorpus, file: string): string {
   const destination = path.posix.join('scripts/ios-snapshot-benchmark/evidence', file);
-  return `git fetch origin ${EVIDENCE_TAG} && git show ${EVIDENCE_COMMIT}:${file} > ${destination}`;
+  return `git show ${corpus.commit}:${file} > ${destination}`;
+}
+
+/**
+ * The fetch recipe for one corpus file. An unknown name falls back to the newest corpus, which is
+ * what a generic hint should recommend.
+ */
+export function fetchEvidenceCommand(file = '<file>'): string {
+  const corpus =
+    PUBLISHED_CORPORA.find((candidate) => file in candidate.files) ?? PUBLISHED_CORPORA.at(-1)!;
+  return `git fetch origin ${corpus.tag} && ${corpusFetchCommand(corpus, file)}`;
+}
+
+/** One shell line per corpus that holds any of `files`, so a hint never names the wrong commit. */
+function fetchEvidenceCommands(files: readonly string[]): string {
+  const lines: string[] = [];
+  for (const corpus of PUBLISHED_CORPORA) {
+    const missing = files.filter((file) => file in corpus.files);
+    if (missing.length === 0) continue;
+    const fetches = missing.map((file) => corpusFetchCommand(corpus, file));
+    lines.push(`git fetch origin ${corpus.tag} && ${fetches.join(' && ')}`);
+  }
+  return lines.join('\n');
 }
 
 export function listEvidenceFiles(dir: string): string[] {
@@ -133,8 +193,8 @@ export function checkEvidenceCorpus(dir: string, files: EvidenceFile[], isDefaul
     const missing = missingPublishedEvidence(files);
     if (missing.length > 0) {
       throw new Error(
-        `${dir} is missing published evidence file(s): ${missing.join(', ')}. Fetch them with: ` +
-          `${fetchEvidenceCommand()}`,
+        `${dir} is missing published evidence file(s): ${missing.join(', ')}.\n` +
+          `Fetch them with:\n${fetchEvidenceCommands(missing)}`,
       );
     }
   }
@@ -144,7 +204,10 @@ function runEvidenceReport(argv: string[]): void {
   const { dir, isDefault } = readEvidenceDirOption(argv);
   const files = readEvidenceDir(dir);
   if (files.length === 0) {
-    throw new Error(`${dir} holds no evidence; fetch it with: ${fetchEvidenceCommand()}`);
+    throw new Error(
+      `${dir} holds no evidence; fetch it with:\n` +
+        `${fetchEvidenceCommands(Object.keys(PUBLISHED_EVIDENCE))}`,
+    );
   }
   process.stdout.write(renderEvidenceReport(dir, files));
   checkEvidenceCorpus(dir, files, isDefault);

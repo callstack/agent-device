@@ -10,7 +10,7 @@ export type FixtureAnchorPhase = 'opened' | 'prepared' | 'sample';
  * is waited out instead of stopping the run. The budget must stay far below the operation timeout
  * it precedes; a fixture that never exposes its anchor still stops the run.
  */
-export const FIXTURE_ANCHOR_ADMISSION_BUDGET_MS = 30_000;
+const FIXTURE_ANCHOR_ADMISSION_BUDGET_MS = 30_000;
 const FIXTURE_ANCHOR_POLL_INTERVAL_MS = 500;
 
 export type FixtureOperationResult = {
@@ -77,7 +77,7 @@ async function observeFixtureAnchor(
   }
 }
 
-export function hasFixtureAnchor(
+function hasFixtureAnchor(
   payload: unknown,
   fixture: ScreenFixture,
   phase: FixtureAnchorPhase,

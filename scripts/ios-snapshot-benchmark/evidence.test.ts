@@ -6,6 +6,7 @@ import { afterEach, test } from 'vitest';
 import {
   DEFAULT_EVIDENCE_DIR,
   EVIDENCE_FIXTURE_PATH,
+  PUBLISHED_CORPORA,
   PUBLISHED_EVIDENCE,
   checkEvidenceCorpus,
   fetchEvidenceCommand,
@@ -80,13 +81,32 @@ test('the evidence README cites every published hash and the fetch recipe', () =
   assert.ok(readme.includes(fetchEvidenceCommand()));
 });
 
-function oneOfThreePublishedFiles(): EvidenceFile {
-  const [file, sha256] = Object.entries(PUBLISHED_EVIDENCE)[0]!;
+test('each published corpus is disjoint, named for its revision, and cited by tag and commit', () => {
+  const readme = fs.readFileSync(path.join(DEFAULT_EVIDENCE_DIR, 'README.md'), 'utf8');
+  const seen = new Set<string>();
+  for (const corpus of PUBLISHED_CORPORA) {
+    assert.match(corpus.tag, /^refs\/tags\/evidence\/ios-snapshot\/[0-9a-f]{9,}$/);
+    assert.match(corpus.commit, /^[0-9a-f]{40}$/);
+    assert.ok(readme.includes(corpus.tag), `README does not cite ${corpus.tag}`);
+    assert.ok(readme.includes(corpus.commit), `README does not cite ${corpus.commit}`);
+    for (const file of Object.keys(corpus.files)) {
+      assert.ok(!seen.has(file), `${file} is published by two corpora`);
+      seen.add(file);
+      assert.ok(
+        file.endsWith(`-${corpus.tag.split('/').pop()}.json`),
+        `${file} is not named for ${corpus.tag}`,
+      );
+    }
+  }
+});
+
+function onePublishedFile(): EvidenceFile {
+  const [file, sha256] = Object.entries(PUBLISHED_CORPORA[0]!.files)[0]!;
   return {
     file,
     sha256,
     published: 'match',
-    revision: '71fb2483f30d90e615e949601c836aeebbf450c5',
+    revision: PUBLISHED_CORPORA[0]!.revision,
     status: 'completed',
     cells: 2,
     errors: [],
@@ -95,15 +115,23 @@ function oneOfThreePublishedFiles(): EvidenceFile {
 
 test('the default evidence directory must hold the complete published corpus, named files and all', () => {
   const dir = temporaryEvidenceDir({});
-  assert.throws(
-    () => checkEvidenceCorpus(dir, [oneOfThreePublishedFiles()], true),
-    /is missing published evidence file\(s\): ios-snapshot-warm-relaunch-local-71fb2483f\.json, ios-snapshot-proxy-71fb2483f\.json/,
-  );
+  const present = onePublishedFile();
+  let message = '';
+  try {
+    checkEvidenceCorpus(dir, [present], true);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assert.match(message, /is missing published evidence file\(s\)/);
+  for (const file of Object.keys(PUBLISHED_EVIDENCE)) {
+    if (file === present.file) continue;
+    assert.ok(message.includes(file), `the error omits ${file}`);
+  }
 });
 
 test('an explicit --evidence-dir stays permissive: a partial corpus does not fail completeness', () => {
   const dir = temporaryEvidenceDir({});
-  assert.doesNotThrow(() => checkEvidenceCorpus(dir, [oneOfThreePublishedFiles()], false));
+  assert.doesNotThrow(() => checkEvidenceCorpus(dir, [onePublishedFile()], false));
 });
 
 test('fetched evidence under the in-tree directory matches the published corpus', (context) => {
