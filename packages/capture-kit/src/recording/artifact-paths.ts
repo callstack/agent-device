@@ -19,6 +19,17 @@ export function collectedRecordingPath(exportPath: string): string {
   return siblingRecordingPath(exportPath, 'collected');
 }
 
+/**
+ * The report a caller asks a finished export to carry: one PNG holding the frames that changed, so
+ * an agent can read a recording without playing it. It is derived, so unlike the paths above it is
+ * never a recorder's and is always safe to rebuild from the export.
+ */
+export function recordingContactSheetPath(exportPath: string): string {
+  const extension = path.extname(exportPath);
+  const base = extension === '' ? exportPath : exportPath.slice(0, -extension.length);
+  return `${base}.contact-sheet.png`;
+}
+
 function siblingRecordingPath(exportPath: string, role: 'native' | 'collected'): string {
   const extension = path.extname(exportPath);
   const base = extension === '' ? exportPath : exportPath.slice(0, -extension.length);

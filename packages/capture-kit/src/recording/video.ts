@@ -68,7 +68,7 @@ export async function waitForStableFile(
 }
 
 export async function isPlayableVideo(filePath: string): Promise<boolean> {
-  const container = await likelyPlayableVideoContainer(filePath);
+  const container = await readVideoContainerKind(filePath);
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
@@ -146,10 +146,17 @@ function isSwiftVideoValidatorUnavailable(stderr: string, stdout: string): boole
  * spawns nothing, which is what lets a stop check a copy before it trusts it (ADR 0024 2.3).
  */
 export async function hasVideoContainer(filePath: string): Promise<boolean> {
-  return (await likelyPlayableVideoContainer(filePath)) !== undefined;
+  return (await readVideoContainerKind(filePath)) !== undefined;
 }
 
-async function likelyPlayableVideoContainer(filePath: string): Promise<'mp4' | 'webm' | undefined> {
+/**
+ * Which video container a file actually is, sniffed from its bytes rather than its name. Callers
+ * that can only decode one container ask this before they spawn a decoder, because a `.mp4` that
+ * is not an MP4 and a WebM that is named well both answer differently.
+ */
+export async function readVideoContainerKind(
+  filePath: string,
+): Promise<'mp4' | 'webm' | undefined> {
   try {
     const stats = fs.statSync(filePath);
     if (!stats.isFile() || stats.size <= 0) {

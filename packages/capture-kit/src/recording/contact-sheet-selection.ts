@@ -13,7 +13,7 @@ import { computePngChangedPixelRatio, type PngRgbImage } from '../png-changed-pi
  * unchanged chrome — measured 0.030. Any value in that gap separates the two, and this one sits
  * nearer the noise so a quiet change costs an extra cell instead of going unshown.
  */
-const CONTACT_SHEET_CHANGED_PIXEL_THRESHOLD = 0.02;
+export const CONTACT_SHEET_CHANGED_PIXEL_THRESHOLD = 0.02;
 
 /** Cells one sheet prints. The grid thins evenly across time to hold this, keeping both ends. */
 export const MAX_CONTACT_SHEET_CELLS = 24;

@@ -8,25 +8,25 @@ export type AtomicPublishMode = 'replace' | 'link-exclusive';
 /**
  * Publishes a complete file from a same-directory temporary sibling.
  *
+ * Contents are either UTF-8 text or bytes: an encoding is only ever passed when the caller handed
+ * over text, so a PNG or a video chunk reaches the disk exactly as the caller built it.
+ *
  * The temporary file is always removed after the publish attempt. Cleanup is
  * best effort and never replaces the write or publish error; when a request
  * diagnostics scope exists, a cleanup failure is retained as secondary evidence.
  */
 export function publishFileSync(options: {
   destination: string;
-  contents: string;
+  contents: string | Uint8Array;
   mode?: number;
   publish?: AtomicPublishMode;
 }): void {
   withAtomicPublishTempPathSync(options.destination, (temporaryPath) => {
-    if (options.mode === undefined) {
-      fs.writeFileSync(temporaryPath, options.contents, 'utf8');
-    } else {
-      fs.writeFileSync(temporaryPath, options.contents, {
-        encoding: 'utf8',
-        mode: options.mode,
-      });
-    }
+    const writeOptions = {
+      encoding: typeof options.contents === 'string' ? ('utf8' as const) : undefined,
+      ...(options.mode === undefined ? {} : { mode: options.mode }),
+    };
+    fs.writeFileSync(temporaryPath, options.contents, writeOptions);
     if (options.publish === 'link-exclusive') {
       fs.linkSync(temporaryPath, options.destination);
     } else {
