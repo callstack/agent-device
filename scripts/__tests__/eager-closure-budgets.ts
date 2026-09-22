@@ -127,14 +127,7 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({
-  'packages/capture-kit/src/recording/contact-sheet.ts': {
-    issue: '#2747',
-    reason:
-      'Reading a recording through one PNG needs the sample grid, the frame decoder seam, and the PNG codec behind a single surface. Every module it evaluates is capture-kit mechanics, so the property the ceiling guards — no façade evaluating a concrete platform implementation — holds; only its weight is above the p75 of façades that answer a narrower question.',
-    owner: 'capture-kit',
-  },
-});
+> = Object.freeze({});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {
