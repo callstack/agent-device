@@ -181,7 +181,7 @@ describe('system command interface', () => {
   test('fold reader and writer reject a missing or unknown pose', () => {
     expectInvalidArgs(() => foldCliReader([], flags()), 'fold requires a pose');
     expectInvalidArgs(() => foldCliReader(['sideways'], flags()), 'Invalid fold pose');
-    expectInvalidArgs(() => foldDaemonWriter({}), 'fold requires pose');
+    expectInvalidArgs(() => foldDaemonWriter({}), 'fold requires a pose');
   });
 
   test('keyboard reader maps aliases and validates arguments', () => {
@@ -269,4 +269,19 @@ describe('system command interface', () => {
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
   });
+});
+
+test('fold keyframes survive CLI and daemon projection without a preset', () => {
+  const keyframes = [
+    { atMs: 0, angle: 0 },
+    { atMs: 5000, angle: 180 },
+  ];
+  const input = foldCliReader([], flags({ keyframes: JSON.stringify(keyframes) }));
+  expect(input).toMatchObject({ keyframes });
+  expect(foldDaemonWriter(input)).toMatchObject({
+    command: 'fold',
+    positionals: [],
+    options: { keyframes: JSON.stringify(keyframes) },
+  });
+  expect(() => foldCliReader(['open'], flags({ keyframes: JSON.stringify(keyframes) }))).toThrow();
 });

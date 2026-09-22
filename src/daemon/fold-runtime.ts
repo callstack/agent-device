@@ -1,5 +1,10 @@
-import { parseFoldPose, type FoldPose } from '@agent-device/contracts/device';
-import type { SetFoldPoseInput } from '@agent-device/contracts/fold-runtime';
+import {
+  type SetFoldPoseInput,
+  parseFoldPose,
+  parseFoldInput,
+  parseFoldKeyframesJson,
+  type FoldPose,
+} from '@agent-device/contracts/device';
 import { foldRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -21,9 +26,16 @@ export async function resolveBoundFoldRuntime(
   params: {
     device: DeviceInfo;
     positionals: readonly string[];
+    keyframes?: string;
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedGenericExecution> {
-  const pose = readRequestedFoldPose(params.positionals);
+  const input =
+    params.keyframes === undefined
+      ? { pose: readRequestedFoldPose(params.positionals) }
+      : parseFoldInput({
+          pose: params.positionals[0],
+          keyframes: parseFoldKeyframesJson(params.keyframes),
+        });
   return await resolveBoundGenericRuntime(
     {
       command: 'fold',
@@ -32,7 +44,7 @@ export async function resolveBoundFoldRuntime(
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
     },
-    (runtime) => executeSetFoldPose(runtime, pose),
+    (runtime) => executeSetFoldPose(runtime, input),
   );
 }
 
@@ -43,9 +55,8 @@ export async function resolveBoundFoldRuntime(
  */
 async function executeSetFoldPose(
   runtime: BoundDeviceRuntime<typeof foldRuntimeUse>,
-  requestedPose: FoldPose,
+  input: SetFoldPoseInput,
 ): Promise<Record<string, unknown>> {
-  const input: SetFoldPoseInput = { pose: requestedPose };
   const result = await runtime.operations.setFoldPose(input);
   const screen = result.screen;
   return {

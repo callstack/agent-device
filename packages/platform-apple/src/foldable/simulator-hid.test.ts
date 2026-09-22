@@ -45,3 +45,25 @@ test.each(['success', 'build', 'dispatch', 'cancel'] as const)(
     expect(existsSync(path.dirname(binary))).toBe(false);
   },
 );
+
+test('streams all keyframes in one process with a duration-derived timeout', async () => {
+  const keyframes = [
+    { atMs: 0, angle: 0 },
+    { atMs: 60000, angle: 100 },
+  ];
+  let dispatches = 0;
+  await withAppleToolProvider(
+    createLocalAppleToolProvider({
+      runCommand: async (_command, args, options) => {
+        if (args[0] === 'simctl') {
+          dispatches++;
+          expect(JSON.parse(args.at(-1)!)).toEqual(keyframes);
+          expect(options?.timeoutMs).toBe(70000);
+        }
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    }),
+    () => sendSimulatorFoldPose('duo', keyframes),
+  );
+  expect(dispatches).toBe(1);
+});

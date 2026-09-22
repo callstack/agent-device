@@ -1,0 +1,214 @@
+[
+  {
+    "name": "opening reversal",
+    "valid": true,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 1667,
+        "angle": 160
+      },
+      {
+        "atMs": 3333,
+        "angle": 100
+      },
+      {
+        "atMs": 5000,
+        "angle": 180
+      }
+    ],
+    "samples": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 833.5,
+        "angle": 80
+      },
+      {
+        "atMs": 1667,
+        "angle": 160
+      },
+      {
+        "atMs": 2500,
+        "angle": 130
+      },
+      {
+        "atMs": 3333,
+        "angle": 100
+      },
+      {
+        "atMs": 4166.5,
+        "angle": 140
+      },
+      {
+        "atMs": 5000,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "hold and fractional angle",
+    "valid": true,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 42.5
+      },
+      {
+        "atMs": 60000,
+        "angle": 42.5
+      }
+    ],
+    "samples": [
+      {
+        "atMs": 0,
+        "angle": 42.5
+      },
+      {
+        "atMs": 30000,
+        "angle": 42.5
+      },
+      {
+        "atMs": 60000,
+        "angle": 42.5
+      }
+    ]
+  },
+  {
+    "name": "empty",
+    "valid": false,
+    "keyframes": []
+  },
+  {
+    "name": "single",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      }
+    ]
+  },
+  {
+    "name": "late start",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 1,
+        "angle": 0
+      },
+      {
+        "atMs": 5000,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "duplicate time",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 0,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "reverse time",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 5000,
+        "angle": 100
+      },
+      {
+        "atMs": 4000,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "duration bound",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 60001,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "angle bound",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 5000,
+        "angle": 181
+      }
+    ]
+  },
+  {
+    "name": "boolean",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": false
+      },
+      {
+        "atMs": 5000,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "fractional time",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0
+      },
+      {
+        "atMs": 1.5,
+        "angle": 180
+      }
+    ]
+  },
+  {
+    "name": "unknown field",
+    "valid": false,
+    "keyframes": [
+      {
+        "atMs": 0,
+        "angle": 0,
+        "ease": "out"
+      },
+      {
+        "atMs": 5000,
+        "angle": 180
+      }
+    ]
+  }
+]

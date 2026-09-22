@@ -83,7 +83,7 @@ test('sends the simulator HID pose and reports the pose CoreDevice read back', a
   // The first read catches the hinge mid-animation; the verifier polls until it settles.
   mockHinge.mockResolvedValueOnce(95.7).mockResolvedValueOnce(180);
 
-  await expect(setAppleFoldPose(duo, 'open')).resolves.toEqual({
+  await expect(setAppleFoldPose(duo, { pose: 'open' })).resolves.toEqual({
     pose: 'open',
     hingeAngleDegrees: 180,
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
@@ -101,7 +101,7 @@ test('reports the closed outer panel in native points, not rotated to a snapshot
     .mockResolvedValueOnce(duoInventory('outer'));
   mockHinge.mockResolvedValue(0);
 
-  await expect(setAppleFoldPose(duo, 'closed')).resolves.toEqual({
+  await expect(setAppleFoldPose(duo, { pose: 'closed' })).resolves.toEqual({
     pose: 'closed',
     hingeAngleDegrees: 0,
     screen: { display: 'LCD', coordinateSpace: 'native-panel', widthPt: 466, heightPt: 678 },
@@ -126,7 +126,7 @@ test("reports native panel points regardless of the display's own currentOrienta
   mockInventory.mockResolvedValueOnce(duoInventory('inner')).mockResolvedValueOnce(rot0Inner);
   mockHinge.mockResolvedValue(180);
 
-  const result = await setAppleFoldPose(duo, 'open');
+  const result = await setAppleFoldPose(duo, { pose: 'open' });
   expect(result.screen).toEqual({
     display: 'LCD-1',
     coordinateSpace: 'native-panel',
@@ -143,7 +143,7 @@ test('omits the screen report when panel selection is ambiguous, never inventing
   mockInventory.mockResolvedValueOnce(bothLit).mockResolvedValueOnce(bothLit);
   mockHinge.mockResolvedValue(180);
 
-  await expect(setAppleFoldPose(duo, 'open')).resolves.toEqual({
+  await expect(setAppleFoldPose(duo, { pose: 'open' })).resolves.toEqual({
     pose: 'open',
     hingeAngleDegrees: 180,
   });
@@ -157,7 +157,7 @@ test('sends half-open and reports it only once the hinge has stopped', async () 
   // one stream after the press. Only the repeated 130° is the preset.
   mockHinge.mockResolvedValueOnce(175.1).mockResolvedValueOnce(130).mockResolvedValueOnce(130);
 
-  await expect(setAppleFoldPose(duo, 'half-open')).resolves.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'half-open' })).resolves.toMatchObject({
     pose: 'half-open',
     hingeAngleDegrees: 130,
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
@@ -176,7 +176,9 @@ test('refuses half-open when the hinge was observed there but never came to rest
 
   // Every read classifies as half-open, so the requested category was observed; what is missing is
   // a hinge that stopped.
-  const failure = await setAppleFoldPose(duo, 'half-open').catch((error: unknown) => error);
+  const failure = await setAppleFoldPose(duo, { pose: 'half-open' }).catch(
+    (error: unknown) => error,
+  );
   expect(failure).toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
@@ -206,7 +208,7 @@ test('refuses half-open when consecutive readings only straddle the open boundar
     .mockResolvedValueOnce(179)
     .mockResolvedValueOnce(178.8);
 
-  await expect(setAppleFoldPose(duo, 'half-open')).rejects.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
       reason: 'fold-pose-unsettled',
@@ -228,7 +230,7 @@ test('refuses half-open as unverified when the last reading is another pose', as
     .mockResolvedValueOnce(120)
     .mockResolvedValueOnce(180);
 
-  await expect(setAppleFoldPose(duo, 'half-open')).rejects.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
       reason: 'fold-pose-unverified',
@@ -244,7 +246,7 @@ test('refuses the pose when the hinge never reaches it, naming what CoreDevice s
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockResolvedValue(180);
 
-  await expect(setAppleFoldPose(duo, 'closed')).rejects.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'closed' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
       reason: 'fold-pose-unverified',
@@ -264,7 +266,7 @@ test('reports closed on one reading at the end stop, without waiting for a secon
   // confirmation. Routing `closed` through the half-open settle rule would want another read.
   mockHinge.mockResolvedValueOnce(95.7).mockResolvedValueOnce(0.4);
 
-  await expect(setAppleFoldPose(duo, 'closed')).resolves.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'closed' })).resolves.toMatchObject({
     pose: 'closed',
     hingeAngleDegrees: 0.4,
   });
@@ -277,7 +279,7 @@ test('refuses before reading the hinge at all when the request is already cancel
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
 
   await expect(
-    setAppleFoldPose(duo, 'half-open', { signal: controller.signal }),
+    setAppleFoldPose(duo, { pose: 'half-open' }, { signal: controller.signal }),
   ).rejects.toMatchObject({ name: 'AbortError' });
   expect(mockHinge).not.toHaveBeenCalled();
 });
@@ -292,7 +294,7 @@ test('propagates a cancellation raised by a hinge read and stops polling', async
   });
 
   await expect(
-    setAppleFoldPose(duo, 'half-open', { signal: controller.signal }),
+    setAppleFoldPose(duo, { pose: 'half-open' }, { signal: controller.signal }),
   ).rejects.toMatchObject({ name: 'AbortError' });
   expect(mockHinge).toHaveBeenCalledTimes(1);
 });
@@ -300,7 +302,9 @@ test('propagates a cancellation raised by a hinge read and stops polling', async
 test('refuses a single-panel simulator before sending anything', async () => {
   mockInventory.mockResolvedValueOnce(buildInventory([panel({})]));
 
-  await expect(setAppleFoldPose({ ...duo, name: 'iPhone 17' }, 'open')).rejects.toMatchObject({
+  await expect(
+    setAppleFoldPose({ ...duo, name: 'iPhone 17' }, { pose: 'open' }),
+  ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     details: expect.objectContaining({ reason: 'single-panel-device' }),
   });
@@ -309,7 +313,9 @@ test('refuses a single-panel simulator before sending anything', async () => {
 });
 
 test('refuses a physical device and an unreadable display table before sending anything', async () => {
-  await expect(setAppleFoldPose({ ...duo, kind: 'device' }, 'open')).rejects.toMatchObject({
+  await expect(
+    setAppleFoldPose({ ...duo, kind: 'device' }, { pose: 'open' }),
+  ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
   });
   mockInventory.mockResolvedValueOnce({
@@ -318,9 +324,39 @@ test('refuses a physical device and an unreadable display table before sending a
     ambiguous: false,
     unresolved: true,
   });
-  await expect(setAppleFoldPose(duo, 'open')).rejects.toMatchObject({
+  await expect(setAppleFoldPose(duo, { pose: 'open' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({ hint: expect.stringContaining('displays') }),
   });
   expect(mockSend).not.toHaveBeenCalled();
+});
+
+test('a stable half-open angle cannot satisfy a different final keyframe angle', async () => {
+  mockInventory.mockResolvedValue(duoInventory('inner'));
+  mockHinge.mockResolvedValue(130);
+  await expect(
+    setAppleFoldPose(duo, {
+      keyframes: [
+        { atMs: 0, angle: 0 },
+        { atMs: 5000, angle: 100 },
+      ],
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'fold-angle-unverified', targetAngleDegrees: 100, hingeAngleDegrees: 130 },
+  });
+});
+
+test('reports a custom final angle only after it reaches and holds that angle', async () => {
+  mockInventory.mockResolvedValue(duoInventory('inner'));
+  mockHinge.mockResolvedValueOnce(130).mockResolvedValueOnce(100).mockResolvedValueOnce(100);
+  const keyframes = [
+    { atMs: 0, angle: 0 },
+    { atMs: 5000, angle: 100 },
+  ];
+  await expect(setAppleFoldPose(duo, { keyframes })).resolves.toMatchObject({
+    pose: 'half-open',
+    hingeAngleDegrees: 100,
+  });
+  expect(mockSend).toHaveBeenCalledWith(duo.id, keyframes, undefined);
 });

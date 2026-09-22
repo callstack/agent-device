@@ -80,6 +80,7 @@ export async function resolveGenericRuntimeExecution(
       });
     case 'fold':
       return await resolveBoundFoldRuntime({
+        keyframes: params.req.flags?.keyframes,
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { FoldPose } from '@agent-device/contracts/device';
+import type { FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { makeHostTemporaryDirectory, removeHostDirectory } from '@agent-device/host-kit/host-file';
@@ -9,7 +9,7 @@ import { runXcrun } from '../core/tool-provider.ts';
 /** Compiles for the selected Xcode and dispatches inside exactly the requested simulator. */
 export async function sendSimulatorFoldPose(
   udid: string,
-  pose: FoldPose,
+  pose: FoldPose | readonly FoldKeyframe[],
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
@@ -47,9 +47,11 @@ export async function sendSimulatorFoldPose(
       );
     }
     signal?.throwIfAborted();
-    const sent = await runXcrun(['simctl', 'spawn', udid, binary, pose], {
+    const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
+    const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
+    const sent = await runXcrun(['simctl', 'spawn', udid, binary, payload], {
       signal,
-      timeoutMs: 10_000,
+      timeoutMs: durationMs + 10_000,
       allowFailure: true,
     });
     if (sent.exitCode !== 0) {

@@ -1,10 +1,15 @@
+import { FOLD_FLAGS } from '@agent-device/command-registry/flag-groups';
 import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
 import {
+  type FoldKeyframe,
+  MAX_FOLD_DURATION_MS,
+  MAX_FOLD_KEYFRAMES,
+  parseFoldInput,
+  parseFoldKeyframesJson,
   DEVICE_ROTATIONS,
   FOLD_POSES,
   FOLD_POSE_USAGE,
   parseDeviceRotation,
-  parseFoldPose,
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
@@ -23,7 +28,14 @@ import {
   requiredDaemonString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { enumField, integerField, requiredField, stringField } from '../command-input.ts';
+import {
+  enumField,
+  integerField,
+  requiredField,
+  stringField,
+  jsonSchemaField,
+  readFieldInput,
+} from '../command-input.ts';
 import { compactRecord } from '../input-readers.ts';
 import {
   defineCommandFacet,
@@ -60,7 +72,7 @@ const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription = 'Set device orientation on iOS and Android';
 const foldCommandDescription =
-  'Fold or unfold a foldable iPhone simulator (iPhone Duo) into the closed, half-open, or open pose by sending a simulator HID hinge event, then read the hinge angle back from CoreDevice to confirm it. A pose change moves the app to a different panel with a different point size, so every ref and coordinate from before it is stale: re-snapshot after this command. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator-only; requires the iOS simulator SDK; Device Hub and host Accessibility permission are not required.';
+  'Fold or unfold a foldable iPhone simulator (iPhone Duo) into the closed, half-open, or open pose, or follow timestamped angle keyframes, by sending a simulator HID hinge event, then read the hinge angle back from CoreDevice to confirm it. A pose change moves the app to a different panel with a different point size, so every ref and coordinate from before it is stale: re-snapshot after this command. Taps, long presses, and scrolling target the app window on its current panel in closed, half-open, and open poses. Simulator-only; requires the iOS simulator SDK; Device Hub and host Accessibility permission are not required.';
 const appSwitcherCommandDescription =
   'Open the device app switcher to inspect or change foreground apps. This changes the visible system UI and may move focus away from the current app.';
 const keyboardCommandDescription =
@@ -85,14 +97,48 @@ const orientationCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const foldCommandMetadata = defineFieldCommandMetadata(FOLD_COMMAND_NAME, foldCommandDescription, {
-  pose: requiredField(
-    enumField(
-      FOLD_POSES,
-      'The hinge pose to reach: closed lights the outer panel; half-open (130 degrees) and open light the inner panel.',
-    ),
-  ),
-});
+const foldFields = {
+  pose: enumField(FOLD_POSES, 'Instant preset; mutually exclusive with keyframes.'),
+  keyframes: jsonSchemaField<readonly FoldKeyframe[]>({
+    type: 'array',
+    minItems: 2,
+    maxItems: MAX_FOLD_KEYFRAMES,
+    description:
+      'Piecewise-linear hinge motion. Start at 0ms; strictly increasing timestamps, up to 60000ms. Repeated angles create holds. Mutually exclusive with pose.',
+    items: {
+      type: 'object',
+      required: ['atMs', 'angle'],
+      additionalProperties: false,
+      properties: {
+        atMs: { type: 'integer', minimum: 0, maximum: MAX_FOLD_DURATION_MS },
+        angle: { type: 'number', minimum: 0, maximum: 180 },
+      },
+    },
+  }),
+};
+const foldFieldMetadata = defineFieldCommandMetadata(
+  FOLD_COMMAND_NAME,
+  foldCommandDescription,
+  foldFields,
+  {
+    readInput: (input) => {
+      const fields = readFieldInput(input, foldFields);
+      const { pose, keyframes, ...common } = fields;
+      return { ...common, ...parseFoldInput({ pose, keyframes }) };
+    },
+  },
+);
+
+const foldCommandMetadata = {
+  ...foldFieldMetadata,
+  inputSchema: {
+    ...foldFieldMetadata.inputSchema,
+    oneOf: [
+      { required: ['pose'], not: { required: ['keyframes'] } },
+      { required: ['keyframes'], not: { required: ['pose'] } },
+    ],
+  },
+};
 
 const keyboardCommandMetadata = defineFieldCommandMetadata(
   KEYBOARD_COMMAND_NAME,
@@ -139,8 +185,9 @@ const orientationCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const foldCliSchema = {
-  usageOverride: `fold <${FOLD_POSE_USAGE}>`,
-  positionalArgs: ['pose'],
+  usageOverride: `fold [${FOLD_POSE_USAGE}]`,
+  positionalArgs: ['pose?'],
+  allowedFlags: FOLD_FLAGS,
 } as const satisfies CommandSchemaOverride;
 
 const keyboardCliSchema = {
@@ -174,7 +221,10 @@ export const orientationCliReader: CliReader = (positionals, flags) => ({
 
 export const foldCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  pose: parseFoldPose(positionals[0]),
+  ...parseFoldInput({
+    pose: positionals[0],
+    keyframes: flags.keyframes === undefined ? undefined : parseFoldKeyframesJson(flags.keyframes),
+  }),
 });
 
 export const keyboardCliReader: CliReader = (positionals, flags) => ({
@@ -202,9 +252,13 @@ export const orientationDaemonWriter: DaemonWriter = direct(ORIENTATION_COMMAND_
   requiredDaemonString(input.orientation, 'orientation requires orientation'),
 ]);
 
-export const foldDaemonWriter: DaemonWriter = direct(FOLD_COMMAND_NAME, (input) => [
-  requiredDaemonString(input.pose, 'fold requires pose'),
-]);
+export const foldDaemonWriter: DaemonWriter = (input) => {
+  const fold = parseFoldInput(input);
+  return request(FOLD_COMMAND_NAME, fold.pose ? [fold.pose] : [], {
+    ...input,
+    keyframes: fold.keyframes ? JSON.stringify(fold.keyframes) : undefined,
+  });
+};
 
 export const keyboardDaemonWriter: DaemonWriter = direct(KEYBOARD_COMMAND_NAME, (input) =>
   optionalString(input.action),

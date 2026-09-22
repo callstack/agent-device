@@ -1,3 +1,4 @@
+import { recordActionEntry } from '../session-action-recorder.ts';
 import { expect, test, vi } from 'vitest';
 
 import {
@@ -159,4 +160,41 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
     device: testDevice,
     unavailable,
   });
+});
+
+test('passes the validated timed intent to the admitted fold owner', async () => {
+  const setFoldPose = vi.fn(async (): Promise<SetFoldPoseResult> => ({
+    pose: 'half-open',
+    hingeAngleDegrees: 100,
+  }));
+  const harness = runtimeHarness(available, setFoldPose);
+  const keyframes = [
+    { atMs: 0, angle: 0 },
+    { atMs: 5000, angle: 100 },
+  ];
+  const resolved = await resolveBoundFoldRuntime({
+    device: testDevice,
+    positionals: [],
+    keyframes: JSON.stringify(keyframes),
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(await resolved.execute(foldExecutionParams([]))).toMatchObject({ hingeAngleDegrees: 100 });
+  expect(setFoldPose).toHaveBeenCalledWith({ keyframes });
+});
+
+test('recording preserves the timeline for replay', () => {
+  const keyframes = JSON.stringify([
+    { atMs: 0, angle: 0 },
+    { atMs: 5000, angle: 180 },
+  ]);
+  const action = recordActionEntry(makeSession('fold-recording'), {
+    command: 'fold',
+    positionals: [],
+    flags: { keyframes },
+    result: { pose: 'open', hingeAngleDegrees: 180 },
+  });
+  expect(action?.flags?.keyframes).toBe(keyframes);
 });

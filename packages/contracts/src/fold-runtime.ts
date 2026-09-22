@@ -1,12 +1,5 @@
-import type { FoldPose } from './device-rotation.ts';
+import type { FoldPose, SetFoldPoseInput } from './device-rotation.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-
-/**
- * Neutral intent for one hinge pose change. `pose` is already parsed by the caller
- * (`parseFoldPose`); the operation names no command, request, session, or CLI flag, and it
- * carries no runner metadata because no runner takes part in a fold.
- */
-export type SetFoldPoseInput = Readonly<{ pose: FoldPose }>;
 
 /** Single source of truth for the discriminator the Apple owner sets and the MCP schema advertises. */
 export const FOLD_SCREEN_COORDINATE_SPACE = 'native-panel' as const;

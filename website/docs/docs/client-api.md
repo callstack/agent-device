@@ -273,7 +273,17 @@ await client.command.tvRemote({
 await client.command.appSwitcher();
 await client.command.actionButton();
 await client.command.fold({ pose: 'open' });
+await client.command.fold({
+  keyframes: [
+    { atMs: 0, angle: 0 },
+    { atMs: 1667, angle: 160 },
+    { atMs: 3333, angle: 100 },
+    { atMs: 5000, angle: 180 },
+  ],
+});
 ```
+
+`fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion.
 
 Vega OS client support is currently VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
 

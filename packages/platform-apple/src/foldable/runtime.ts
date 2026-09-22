@@ -1,7 +1,5 @@
-import {
-  foldRuntimeOperationFacts,
-  type SetFoldPoseInput,
-} from '@agent-device/contracts/fold-runtime';
+import type { SetFoldPoseInput } from '@agent-device/contracts/device';
+import { foldRuntimeOperationFacts } from '@agent-device/contracts/fold-runtime';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
@@ -13,7 +11,7 @@ const available = Object.freeze({ available: true } as const);
 const foldKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
-  hint: 'fold is supported on foldable iPhone simulators driven by Xcode Device Hub; a physical device is folded by hand.',
+  hint: 'fold is supported on foldable iPhone simulators controlled through simulator HID; a physical device is folded by hand.',
 } as const);
 const foldOsUnavailable = Object.freeze({
   available: false,
@@ -44,7 +42,7 @@ export function createAppleFoldableOperations(params: { device: DeviceInfo; sign
   return whenAdmitted(appleFoldableFacts(device).setFoldPose, () => ({
     setFoldPose: async (input: SetFoldPoseInput) => {
       signal.throwIfAborted();
-      return await setAppleFoldPose(device, input.pose, { signal });
+      return await setAppleFoldPose(device, input, { signal });
     },
   }));
 }

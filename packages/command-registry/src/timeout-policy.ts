@@ -44,10 +44,10 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 
 /**
  * `fold` spends up to four bounded CoreDevice hinge reads (`IOS_HINGE_ANGLE_TIMEOUT_MS` each on a
- * wedged host) after one macOS helper press with its own 30s deadline, which can sum past the
+ * wedged host) after a 30s helper build and up to 60s of timed HID motion, which can sum past the
  * standard envelope; the envelope covers that worst case with the usual margin.
  */
-const FOLD_REQUEST_TIMEOUT_MS = 150_000;
+const FOLD_REQUEST_TIMEOUT_MS = 210_000;
 
 export const FOLD_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   budget: { source: 'none' },

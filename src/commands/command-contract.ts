@@ -7,6 +7,8 @@ export type JsonSchema = {
   required?: readonly string[];
   additionalProperties?: boolean | JsonSchema;
   items?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
   prefixItems?: readonly JsonSchema[];
   oneOf?: readonly JsonSchema[];
   not?: JsonSchema;

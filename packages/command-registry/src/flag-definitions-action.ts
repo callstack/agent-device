@@ -4,6 +4,16 @@ import type { FlagDefinition } from './flag-types.ts';
 
 export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   {
+    key: 'keyframes',
+    names: ['--keyframes'],
+    type: 'string',
+    usageLabel: '--keyframes <json>',
+    usageDescription:
+      'Fold: timed {atMs, angle} keyframes; final atMs is motion duration (up to 60000ms)',
+    projectConfig: false,
+    recorded: true,
+  },
+  {
     key: 'count',
     names: ['--count'],
     type: 'int',

@@ -25,7 +25,7 @@ export const IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS = 5_000;
  */
 export const IOS_HINGE_ANGLE_STREAM_SECONDS = 5;
 export const IOS_HINGE_ANGLE_TIMEOUT_MS = 20_000;
-/** How many hinge reads a pressed Device Hub pose control gets to reach its pose before the pose is refused. */
+/** How many hinge reads a dispatched hinge request gets to reach its pose before the pose is refused. */
 export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 4;
 /** Two consecutive reads this close together mean the hinge has stopped moving. */
 export const IOS_FOLD_POSE_STABLE_DEGREES = 0.5;

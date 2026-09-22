@@ -106,6 +106,7 @@ export type CliFlags = CloudProviderProfileFields &
     /** Fill: publish the live text as a late-bound ${VAR} in a recorded .ad script. */
     recordAs?: string;
     durationMs?: number;
+    keyframes?: string;
     holdMs?: number;
     jitterPx?: number;
     pixels?: number;

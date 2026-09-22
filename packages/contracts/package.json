@@ -488,5 +488,8 @@
       "types": "./src/wait-runtime-plan.ts",
       "default": "./src/wait-runtime-plan.ts"
     }
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
   }
 }

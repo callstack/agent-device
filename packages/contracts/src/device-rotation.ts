@@ -119,3 +119,82 @@ export function parseFoldPose(input: string | undefined): FoldPose {
       throw new AppError('INVALID_ARGS', `Invalid fold pose: ${input}. Use ${FOLD_POSE_USAGE}.`);
   }
 }
+
+export type FoldKeyframe = Readonly<{ atMs: number; angle: number }>;
+export type SetFoldPoseInput =
+  | Readonly<{ pose: FoldPose; keyframes?: never }>
+  | Readonly<{ keyframes: readonly FoldKeyframe[]; pose?: never }>;
+
+export const MAX_FOLD_DURATION_MS = 60_000;
+export const MAX_FOLD_KEYFRAMES = 64;
+
+/** Validates both public structured input and decoded daemon intent before any mutation. */
+export function parseFoldInput(input: { pose?: unknown; keyframes?: unknown }): SetFoldPoseInput {
+  if (input.keyframes === undefined) {
+    if (input.pose === undefined)
+      throw new AppError('INVALID_ARGS', 'fold requires a pose or keyframes');
+    if (input.pose !== undefined && typeof input.pose !== 'string') {
+      throw new AppError('INVALID_ARGS', 'fold pose must be a string');
+    }
+    return { pose: parseFoldPose(input.pose) };
+  }
+  const frames = input.keyframes;
+  if (
+    input.pose !== undefined ||
+    !Array.isArray(frames) ||
+    frames.length < 2 ||
+    frames.length > MAX_FOLD_KEYFRAMES
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `fold requires either pose or 2–${MAX_FOLD_KEYFRAMES} keyframes`,
+    );
+  }
+  const keyframes = frames.map(parseKeyframe);
+  if (
+    keyframes[0]!.atMs !== 0 ||
+    keyframes.some((frame, index) => index > 0 && frame.atMs <= keyframes[index - 1]!.atMs)
+  ) {
+    throw new AppError('INVALID_ARGS', 'Fold keyframes must start at 0ms and increase strictly');
+  }
+  return { keyframes };
+}
+
+function isBoundedNumber(value: unknown, maximum: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= maximum;
+}
+
+function parseKeyframe(frame: unknown): FoldKeyframe {
+  if (!frame || typeof frame !== 'object' || Array.isArray(frame)) {
+    throw new AppError('INVALID_ARGS', 'Each fold keyframe requires atMs and angle');
+  }
+  const { atMs, angle } = frame as Record<string, unknown>;
+  if (Object.keys(frame).some((key) => key !== 'atMs' && key !== 'angle')) {
+    throw new AppError('INVALID_ARGS', 'Fold keyframes only accept atMs and angle');
+  }
+  if (!isBoundedNumber(atMs, MAX_FOLD_DURATION_MS) || !Number.isSafeInteger(atMs)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Fold keyframe times must be integers from 0 to ${MAX_FOLD_DURATION_MS}ms`,
+    );
+  }
+  if (!isBoundedNumber(angle, 180)) {
+    throw new AppError('INVALID_ARGS', 'Fold keyframe angles must be finite numbers from 0 to 180');
+  }
+  return { atMs, angle };
+}
+
+export function parseFoldKeyframesJson(value: string): readonly FoldKeyframe[] {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value);
+  } catch {
+    throw new AppError(
+      'INVALID_ARGS',
+      '--keyframes requires a JSON array of {atMs, angle} objects',
+    );
+  }
+  const input = parseFoldInput({ keyframes: decoded });
+  if (!input.keyframes) throw new AppError('INVALID_ARGS', '--keyframes requires keyframes');
+  return input.keyframes;
+}
