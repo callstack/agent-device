@@ -107,8 +107,3 @@ NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *display
   *displayID = identifier.unsignedIntegerValue;
   return nil;
 }
-
-NSString * _Nullable RunnerResolveApplicationDisplayID(id application, NSUInteger *displayID) {
-  id window = [[application valueForKey:@"windows"] valueForKey:@"firstMatch"];
-  return RunnerResolveWindowDisplayID(window, displayID);
-}

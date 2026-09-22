@@ -43,11 +43,6 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveXCTestEventBridge(
   RunnerXCTestEventBridge *bridge
 );
 
-FOUNDATION_EXPORT NSString * _Nullable RunnerResolveApplicationDisplayID(
-  id application,
-  NSUInteger *displayID
-);
-
 // Reads the display ID off an already-resolved window. When a caller has resolved the app window
 // for geometry, routing the synthesized gesture by this window keeps the record's display and the
 // booked reference frame on the same window instead of re-walking `windows.firstMatch`.
