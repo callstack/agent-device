@@ -106,7 +106,7 @@ function commandsWithTraits(traits: RunnerCommandTraits): RunnerCommand['command
   return RUNNER_COMMANDS.filter(
     (command) =>
       typeof RUNNER_COMMAND_TRAITS[command] !== 'function' &&
-      isDeepStrictEqual(RUNNER_COMMAND_TRAITS[command], traits),
+      isDeepStrictEqual(readRunnerCommandTraits({ command }), traits),
   ).sort();
 }
 

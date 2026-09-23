@@ -134,7 +134,7 @@ export function bindAppleRunnerHost(host: AppleRunnerHost): void {
 function requireHost(): AppleRunnerHost {
   if (!boundHost) {
     throw new Error(
-      'Apple runner host is not bound. Import runner operations through core/runner-client.ts, which binds the host.',
+      'Apple runner host is not bound. Production binds it in core/runner-client.ts; package tests bind it through runner/test-host.ts.',
     );
   }
   return boundHost;

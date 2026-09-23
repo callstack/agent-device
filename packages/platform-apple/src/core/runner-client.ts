@@ -4,9 +4,10 @@ import { appleRunnerHost } from './runner-host.ts';
 /**
  * Composition root for the Apple runner operations: the only module that binds
  * the real host capabilities from `runner-host.ts`, and the module daemon,
- * platform, and CLI consumers import the host-bound operations from. Importing
- * any operation through here evaluates the binding first. Types and host-free
- * helpers come from the package façade directly.
+ * platform, and CLI consumers import the host-bound operations from, so every
+ * such consumer evaluates after the binding. Runner modules must not reach the
+ * host while they evaluate: they load before this module binds it. Types and
+ * host-free helpers come from the package façade directly.
  */
 bindAppleRunnerHost(appleRunnerHost);
 
