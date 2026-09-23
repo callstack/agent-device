@@ -143,6 +143,11 @@ export const LOGICAL_MODULE_POLICIES = [
     ],
   },
   {
+    name: 'replay-port',
+    roots: ['packages/replay-port/src/'],
+    forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'src/compat/'],
+  },
+  {
     name: 'daemon-replay',
     roots: ['src/daemon/replay/'],
     forbiddenTargetRoots: [

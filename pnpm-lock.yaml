@@ -74,6 +74,9 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:packages/provision-kit
+      '@agent-device/replay-port':
+        specifier: workspace:*
+        version: link:packages/replay-port
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:packages/replay-test
@@ -496,6 +499,15 @@ importers:
       undici:
         specifier: 7.29.0
         version: 7.29.0
+
+  packages/replay-port:
+    dependencies:
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/replay-test:
     dependencies:
