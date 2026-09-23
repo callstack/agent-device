@@ -341,6 +341,6 @@ across a pose change or mutation (a dropped session re-opens but never replays a
 failure artifacts, closes the session, and restores the starting pose.
 
 **Deferred GitHub Actions enablement (not a completion condition).** Wiring an automatic Duo job
-later requires, all at once: a Duo runtime/device type on the runner image, working Device Hub pose
-controls with Accessibility permission on the runner host, and one actual successful lane run — then
-re-check the runner-image inventories, which are dated, not permanent.
+later requires, all at once: a Duo runtime/device type on the runner image, an Xcode with foldable
+HID support, and one actual successful lane run — then re-check the runner-image inventories, which
+are dated, not permanent.
