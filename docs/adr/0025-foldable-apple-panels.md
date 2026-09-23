@@ -99,7 +99,12 @@ the system presents turned has its buffer sideways.
 The capture reports the display ID it used, the pixel size it encoded, and the pixels-per-point of
 that image, so density normalization reads the source it captured instead of applying a scale the
 host inferred. A runner that reports nothing measured nothing, and normalization keeps the pre-panel
-answer rather than borrowing a scale from a panel nobody captured.
+answer rather than borrowing a scale from a panel nobody captured. That payload is a cross-language
+contract, not a per-consumer cast: `packages/contracts/src/screen-capture-contract.ts` owns the read,
+the Swift struct owns the write, and those two types are the only declarations of the shape. The
+golden table `contracts/fixtures/screen-capture-metadata.json` carries the wire key and two measured
+poses for the vitest twin and the runner unit-test lane to decode through, so drift fails CI on both
+sides at once.
 
 A capture asks the target app's window first and the system surface's window second. The home screen
 is SpringBoard's window, so a capture with no session app — or with one that is not running — still
@@ -432,11 +437,14 @@ Four facts the capture path cannot read off the image:
   whose display size transposes the panel, where `simctl` exports the same panel `2853x2007`
   upright. The runner's production encoder and `XCUIScreenshot`'s produce 0 differing pixels for
   one capture from `358,402` and `328,181` encoded bytes, so the turn belongs to the capture and
-  not to an encoder. Rotating is not enough to compare the two: the runner's canvas is `2006x2852`
-  and `simctl`'s `2853x2007`, a pixel apart on each axis, so #2729's normalization owes a rotation
-  and a crop. - **Overlays.** A screen capture and a window capture are both display captures — the
-  second cropped to the window — so the software keyboard, a SpringBoard-hosted permission alert,
-  and the status bar all appear in either. It cuts the other way as well: that alert's own window
+  not to an encoder. Rotating is not enough to compare the two: the raw canvas is `2006x2852` and
+  `simctl`'s `2853x2007`, a pixel apart on each axis. The shipped encoder draws the capture upright
+  at that image's own logical size and scale, which pays the rotation and takes no crop: the one-pixel
+  difference stays, because stretching it to CoreDevice's nominal panel box would invent pixels the
+  capture never held (#2741). - **Overlays.** A screen capture and a window capture are both display
+  captures — the second cropped to the window — so the software keyboard, a SpringBoard-hosted
+  permission alert, and the status bar all appear in either. It cuts the other way as well: that
+  alert's own window
   resolved to `displayID` `3`, the dark panel in the closed pose, and capturing it yielded a black
   `668x950` crop indistinguishable from any capture of a dark panel. Whether a system window on the
   *lit* panel captures was not measured, so a system surface is verified on the app's panel, not
@@ -483,9 +491,13 @@ incorrect viewport, not an inner-panel delivery prohibition.
   physical foldable was never exercised.
 - **Runner observation paths that sample a frame.** Keyboard settling, screen recording, and the
   navigation fallback now take their frame from the display owning a window and each states in
-  `runner.log` what it looked at, but none was watched on a device that changes panel under it. A
-  pose change mid-recording still changes the captured display under a writer sized from the first
-  frame, and that mismatch was never exercised.
+  `runner.log` what it looked at. Keyboard settling and the navigation fallback were each watched
+  once while serving a lit panel — `AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=3 captured=3
+  settled=yes` behind a `returnKeyType="done"` field, and
+  `AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION ... changed=no` as the no-change control
+  (#2741) — and neither was watched while the pose changed underneath it. Screen recording was never
+  watched: a pose change mid-recording still changes the captured display under a writer sized from
+  the first frame, and that mismatch was never exercised.
 - **Desktop capture paths.** The two `#if os(macOS)` siblings of the `screenshot` capture in
   `RunnerTests+CommandExecution.swift` keep capturing the desktop screen, which also reaches the
   screen through Screen Capture Kit in `AgentDeviceMacOSHelper`; only the iOS branches changed

@@ -20,9 +20,10 @@
 //   * DEVELOPER_DIR pinned to a Duo-capable Xcode (the iOS 27.1 runtime ships only with Xcode 27.1+).
 //   * An iPhone Duo simulator already booted on that toolchain, not shared with a concurrent run
 //     (concurrent runs rebuild the shared Apple runner and race the pose/capture state).
-//   * Xcode Device Hub reachable with Accessibility permission, because `fold` presses the Device
-//     Hub pose control. If Device Hub's window is on a secondary display, pose control is
-//     unreachable and `fold` reports `device-hub-window-missing`; move it to the main display.
+//   * Nothing else for pose control: `fold` drives the hinge through simulator HID, compiling a
+//     helper and dispatching it inside the simulator with `simctl spawn`, so no Device Hub window
+//     and no host Accessibility permission is involved. It refuses a single-panel simulator as
+//     `single-panel-device` and a pose the hinge read-back does not confirm as `fold-pose-unverified`.
 //   * The Agent Device Tester fixture app installed on that simulator.
 //
 // Usage (from the repository root):

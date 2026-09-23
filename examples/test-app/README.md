@@ -313,9 +313,9 @@ gate and does not change the ordinary iPhone lane.
 
 Requirements: `DEVELOPER_DIR` pinned to a Duo-capable Xcode (iOS 27.1 ships only with Xcode 27.1+);
 exactly one booted iPhone Duo not shared with a concurrent run (concurrent runs rebuild the shared
-Apple runner and race capture/pose state); Xcode Device Hub reachable with Accessibility permission
-(`fold` presses its pose control — a Device Hub window on a secondary display makes the control
-unreachable and reports `device-hub-window-missing`; move it to the main display); the Agent Device
+Apple runner and race capture/pose state); nothing else for pose control, because `fold` drives the
+hinge through simulator HID — a helper compiled and dispatched inside the simulator with `simctl
+spawn`, so no Device Hub window and no host Accessibility permission is involved; the Agent Device
 Tester app installed on that simulator.
 
 ```bash
