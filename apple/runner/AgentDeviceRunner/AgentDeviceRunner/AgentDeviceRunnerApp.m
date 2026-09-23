@@ -62,6 +62,7 @@ int main(int argc, const char *argv[]) {
 
 @interface AgentDeviceRunnerViewController : UIViewController
 @property(nonatomic, strong) UILabel *alertActionStatus;
+@property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
@@ -183,6 +184,10 @@ static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
         ? UIAlertActionStyleCancel : UIAlertActionStyleDefault;
     [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
       (void)action;
+      if (!replacement) {
+        self.alertActivationBusyAnswer.text = self.alertActivationBusyBackstop != nil
+            ? @"Answered while busy" : @"Answered after the app went idle";
+      }
       [self stopAlertActivationBusy];
       [self stopAlertBanner];
       if (replacement) {
@@ -251,6 +256,19 @@ static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
     self.alertActionStatus = label;
     label.accessibilityIdentifier = @"agent-device-alert-actions";
     [self updateAlertActionStatus];
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
+    UILabel *busyAnswer = [[UILabel alloc] init];
+    busyAnswer.text = @"Unanswered";
+    busyAnswer.accessibilityIdentifier = @"agent-device-alert-busy-answer";
+    busyAnswer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:busyAnswer];
+    [NSLayoutConstraint activateConstraints:@[
+      [busyAnswer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [busyAnswer.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+    ]];
+    self.alertActivationBusyAnswer = busyAnswer;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
