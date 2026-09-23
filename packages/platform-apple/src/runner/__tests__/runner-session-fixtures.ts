@@ -76,10 +76,17 @@ export function runnerError(error: { code: string; message: string }): Response 
   return new Response(JSON.stringify({ ok: false, error }));
 }
 
+/** Each reason's canonical connect-path message, reused as `runnerConnectFailure`'s default. */
+const RUNNER_CONNECT_FAILURE_MESSAGES: Record<RunnerConnectFailureReason, string> = {
+  runner_connect_refused: 'Runner did not accept connection',
+  runner_endpoint_probe_exhausted: 'Runner endpoint probe failed',
+  xcodebuild_exited_early: 'xcodebuild exited early',
+};
+
 /** A failure in the shape the runner connect path throws: its message plus its typed reason. */
 export function runnerConnectFailure(
   reason: RunnerConnectFailureReason,
-  message: string,
+  message: string = RUNNER_CONNECT_FAILURE_MESSAGES[reason],
   details?: Record<string, unknown>,
 ): AppError {
   return new AppError('COMMAND_FAILED', message, {

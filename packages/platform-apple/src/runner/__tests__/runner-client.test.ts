@@ -10,7 +10,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempForTest } from './tmp-dir.ts';
-import { runnerConnectFailure } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 
 const mockRunCmdStreaming = vi.fn();
@@ -31,10 +30,6 @@ vi.mock('../runner-macos-products.ts', async () => {
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { RUNNER_COMMAND_TRAITS, isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
-import {
-  isRetryableRunnerError,
-  shouldRetryRunnerConnectError,
-} from '../runner-error-classification.ts';
 import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {
   resolveRunnerBuildDestination,
@@ -411,35 +406,6 @@ test('assertSafeDerivedCleanup allows cleaning override path under project .tmp'
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derivedPath,
     });
   });
-});
-
-test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
-  const err = runnerConnectFailure(
-    'xcodebuild_exited_early',
-    'Runner did not accept connection (xcodebuild exited early)',
-  );
-  assert.equal(shouldRetryRunnerConnectError(err), false);
-});
-
-test('shouldRetryRunnerConnectError retries transient connect errors', () => {
-  const err = runnerConnectFailure(
-    'runner_endpoint_probe_exhausted',
-    'Runner endpoint probe failed',
-  );
-  assert.equal(shouldRetryRunnerConnectError(err), true);
-});
-
-test('isRetryableRunnerError does not retry xcodebuild early-exit errors', () => {
-  const err = runnerConnectFailure(
-    'xcodebuild_exited_early',
-    'Runner did not accept connection (xcodebuild exited early)',
-  );
-  assert.equal(isRetryableRunnerError(err), false);
-});
-
-test('isRetryableRunnerError does not retry busy-connecting errors', () => {
-  const err = new AppError('COMMAND_FAILED', 'Device is busy (Connecting to iPhone)');
-  assert.equal(isRetryableRunnerError(err), false);
 });
 
 test('xctestrunReferencesProjectRoot rejects stale worktree artifacts', async () => {

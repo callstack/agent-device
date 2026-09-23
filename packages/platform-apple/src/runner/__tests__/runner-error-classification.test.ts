@@ -278,6 +278,7 @@ test('runner_endpoint_probe_exhausted is decided by the typed reason, not the me
     assert.equal(shouldRebuildCachedRunnerArtifact(error), true, message);
     assert.equal(isRetryableRunnerError(error), false, message);
     assert.equal(shouldRestartRunnerBeforeCommandSend(error), false, message);
+    assert.equal(shouldRetryRunnerConnectError(error), true, message);
   }
   assert.equal(
     shouldRebuildCachedRunnerArtifact(commandFailed('Runner endpoint probe failed')),

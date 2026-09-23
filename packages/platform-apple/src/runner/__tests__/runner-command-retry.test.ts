@@ -71,9 +71,7 @@ test('prepareIosRunner marks a bad restored artifact and rebuilds once after hea
     .mockResolvedValueOnce(fixtures.restoredSession)
     .mockResolvedValueOnce(fixtures.rebuiltSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce({ uptimeMs: 42 });
 
   const result = await prepareIosRunner(IOS_SIMULATOR, {
@@ -112,9 +110,7 @@ test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery heal
     .mockResolvedValueOnce(restoredSession)
     .mockResolvedValueOnce(rebuiltSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_endpoint_probe_exhausted', 'Runner endpoint probe failed'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_endpoint_probe_exhausted'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner health timed out'));
 
   await assert.rejects(
@@ -148,9 +144,7 @@ test('prepareIosRunner retries a fresh launch session when the health check cann
     .mockResolvedValueOnce(stuckSession)
     .mockResolvedValueOnce(relaunchedSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce({ uptimeMs: 42 });
 
   const result = await prepareIosRunner(IOS_SIMULATOR, {
@@ -238,12 +232,8 @@ test('prepareIosRunner does not force a rebuild when the relaunched fresh sessio
     .mockResolvedValueOnce(stuckSession)
     .mockResolvedValueOnce(relaunchedSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    );
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'));
 
   await assert.rejects(
     () =>
@@ -271,7 +261,7 @@ test('prepareIosRunner does not relaunch after non-retryable runner startup fail
 
   mockEnsureRunnerSession.mockResolvedValueOnce(failedSession);
   mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
-    runnerConnectFailure('xcodebuild_exited_early', 'xcodebuild exited early'),
+    runnerConnectFailure('xcodebuild_exited_early'),
   );
 
   await assert.rejects(
@@ -291,7 +281,7 @@ test('prepareIosRunner does not relaunch after request cancellation', async () =
   mockEnsureRunnerSession.mockResolvedValueOnce(stuckSession);
   mockExecuteRunnerCommandWithSession.mockImplementationOnce(() => {
     markRequestCanceled(requestId);
-    throw runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection');
+    throw runnerConnectFailure('runner_connect_refused');
   });
 
   try {
@@ -313,9 +303,7 @@ test('mutating commands restart stale ready sessions when the preflight probe ne
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -338,9 +326,7 @@ test('mutating commands retry startup sessions with stale bundle cleanup', async
 
   mockEnsureRunnerSession.mockResolvedValueOnce(startupSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -825,9 +811,7 @@ test('mutating commands invalidate the retry session without replaying again', a
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
@@ -1169,9 +1153,7 @@ test('a failed replacement boot does not consume the request recycle budget', as
   const requestId = 'req-recycle-transient-boot-failure';
   mockEnsureRunnerSession
     .mockResolvedValueOnce(makeRunnerSession({ port: 8100, state: 'ready' }))
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce(makeRunnerSession({ port: 8101, state: 'ready' }));
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
@@ -1222,9 +1204,7 @@ test('a later command in the same request cannot pay for a second recycle boot',
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    )
+    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
     .mockResolvedValueOnce({ message: 'tapped' });
 
   // First command consumes the request's only recycle via restart-and-replay.
