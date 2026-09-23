@@ -30,6 +30,44 @@ private final class RunnerBlockingSnapshotStub: NSObject {
   }
 }
 
+/// Records when each `RunnerSlowSweepQueryStub` query started. The swizzled IMP cannot capture
+/// test-local state, so each run resets it.
+private enum RunnerSlowSweepQueryGate {
+  /// Shorter than `flatInteractiveQueryBudget`, so a sweep that stops at its slice deadline never
+  /// outlives the slice; a full sweep of these outlasts the slice, so one that ignores it does.
+  static let queryDuration: TimeInterval = 0.06
+  private static let lock = NSLock()
+  private static var starts: [Date] = []
+
+  static func reset() {
+    lock.lock()
+    starts = []
+    lock.unlock()
+  }
+
+  static func recordStart() {
+    lock.lock()
+    starts.append(Date())
+    lock.unlock()
+  }
+
+  static func recordedStarts() -> [Date] {
+    lock.lock()
+    defer { lock.unlock() }
+    return starts
+  }
+}
+
+/// Stands in for `-[XCUIElementQuery allElementsBoundByIndex]` so every query the sweep runs holds
+/// the main thread for a fixed time and finds nothing.
+private final class RunnerSlowSweepQueryStub: NSObject {
+  @objc var allElementsBoundByIndex: [XCUIElement] {
+    RunnerSlowSweepQueryGate.recordStart()
+    Thread.sleep(forTimeInterval: RunnerSlowSweepQueryGate.queryDuration)
+    return []
+  }
+}
+
 extension RunnerTests {
   /// The Bluesky feed shape: the tree XPC grinds past its slice. The plan must recover through
   /// private AX without queueing the query sweep behind the abandoned XPC, and a fresh process's
@@ -131,6 +169,94 @@ extension RunnerTests {
     guard case .idle = currentMainThreadBusyState() else {
       return XCTFail("expected the runner idle once the tree XPC drained")
     }
+  }
+
+  /// A non-interactive query sweep runs its queries on the main thread one at a time. It must stop
+  /// starting them at the slice deadline its caller waits for, not at the plan deadline, or it holds
+  /// the main thread after the plan has answered (#2783).
+  func testNonInteractiveQuerySweepStopsAtTheSliceItsCallerWaitsFor() throws {
+    let sweepQueryCount = 19
+    XCTAssertLessThan(RunnerSlowSweepQueryGate.queryDuration, Self.flatInteractiveQueryBudget)
+    XCTAssertGreaterThan(
+      RunnerSlowSweepQueryGate.queryDuration * Double(sweepQueryCount),
+      Self.flatInteractiveFallbackBudget
+    )
+    guard
+      let queryMethod = class_getInstanceMethod(
+        XCUIElementQuery.self,
+        #selector(getter: XCUIElementQuery.allElementsBoundByIndex)
+      ),
+      let stubMethod = class_getInstanceMethod(
+        RunnerSlowSweepQueryStub.self,
+        #selector(getter: RunnerSlowSweepQueryStub.allElementsBoundByIndex)
+      )
+    else {
+      XCTFail("unable to install the slow sweep query stub")
+      return
+    }
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    XCTAssertFalse(app.frame.isEmpty)
+    currentApp = app
+    currentBundleId = "com.callstack.agentdevice.runner.query-sweep-slice-test"
+    let captureTarget = takeSnapshotCaptureTarget(app: app)
+    RunnerSlowSweepQueryGate.reset()
+    let originalImplementation = method_getImplementation(queryMethod)
+    method_setImplementation(queryMethod, method_getImplementation(stubMethod))
+    defer {
+      method_setImplementation(queryMethod, originalImplementation)
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    final class ResultBox {
+      var payload: DataPayload?
+      var error: Error?
+      var returnedAt: Date?
+      var abandonedAtReturn: Bool?
+    }
+    let box = ResultBox()
+    let planned = expectation(description: "query-sweep plan answered")
+    DispatchQueue(label: "agent-device.runner.tests.query-sweep-slice").async {
+      do {
+        box.payload = try self.runSnapshotCapturePlan(
+          [.querySweep],
+          target: captureTarget,
+          options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+          terminal: .sparseWithFatalOnAXFailure,
+          deadline: Date().addingTimeInterval(20)
+        )
+      } catch {
+        box.error = error
+      }
+      box.returnedAt = Date()
+      box.abandonedAtReturn = self.hasAbandonedMainThreadWork()
+      planned.fulfill()
+    }
+
+    wait(for: [planned], timeout: 30)
+    let drainDeadline = Date().addingTimeInterval(3)
+    while hasAbandonedMainThreadWork(), Date() < drainDeadline {
+      sleepFor(0.005)
+    }
+    let starts = RunnerSlowSweepQueryGate.recordedStarts()
+
+    XCTAssertNil(box.error)
+    XCTAssertEqual(box.payload?.snapshotQuality?.backend, SnapshotBackendKind.querySweep.rawValue)
+    XCTAssertEqual(
+      box.abandonedAtReturn,
+      false,
+      "the sweep must finish inside the slice its caller waits for"
+    )
+    let returnedAt = try XCTUnwrap(box.returnedAt)
+    XCTAssertTrue(
+      starts.allSatisfy { $0 <= returnedAt },
+      "no sweep query may start after the plan answered"
+    )
+    XCTAssertLessThan(starts.count, sweepQueryCount, "the slice must cut the sweep short")
+    XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 }
 #endif

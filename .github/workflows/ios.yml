@@ -256,6 +256,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAbandonedTreeCaptureSkipsQuerySweepAndHonorsWarmupExemption \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testNonInteractiveQuerySweepStopsAtTheSliceItsCallerWaitsFor \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBlockingModalSnapshotLeavesWarmupExemptionForTheFirstCapturePlan \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPinnedRegularDepthReachesAcquisitionAndPresentation 2>&1 | tee /tmp/agent-device-runner-regressions.log
           node --input-type=module -e '
