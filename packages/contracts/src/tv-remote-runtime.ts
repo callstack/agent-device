@@ -35,6 +35,9 @@ export function tvRemoteRuntimeOperationFacts(
   return Object.freeze({ tvRemote: input.tvRemote });
 }
 
+/** How a fail-closed refusal names the TV remote to the caller, matching the command. */
+export const TV_REMOTE_LABEL = 'tv-remote';
+
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
@@ -52,7 +55,11 @@ export function bindTvRemote(
         appBundleId: input.options?.appBundleId,
         signal,
       });
-      await interactor.tvRemote(input.button, input.durationMs);
+      // Loaded on the call rather than at module evaluation because this facade's eager closure
+      // is held at its merge-base size (`eager-closure-budgets`); a static edge would grow it.
+      const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+      const tvRemote = requireInteractorMethod(interactor.tvRemote, TV_REMOTE_LABEL);
+      await tvRemote.call(interactor, input.button, input.durationMs);
     },
   });
 }

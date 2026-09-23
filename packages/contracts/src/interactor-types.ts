@@ -372,7 +372,13 @@ export type Interactor = {
    * no-op.
    */
   appSwitcher?(): Promise<void>;
-  tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
+  /**
+   * Optional (parity with `home`): presses one TV remote key, a control only TV-capable owners
+   * carry. An owner without it leaves it undefined; its fact refuses the press before binding,
+   * and the TV remote binder fails closed rather than resolving an absent member as a silent
+   * no-op.
+   */
+  tvRemote?(button: TvRemoteButton, durationMs?: number): Promise<void>;
   /**
    * Optional (parity with `keyboardDismiss`): presses the iPhone/iPad Action Button, hardware only
    * the Apple owner carries. An owner without the button leaves it undefined; its fact refuses the

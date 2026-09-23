@@ -228,8 +228,9 @@ export function bindLimrunInteractionOperations(
  * `back`/`orientation`/`tvRemote` differ by direct-session platform, unlike focus/type:
  * the Android leg rides `session.dependencies.android.createInteractor` (`android.ts`) — the
  * SAME factory the local Android family binds, so it carries the identical cell table (parity
- * with the local owner, including the `device.target === 'tv'` gate for `tvRemote`). The iOS leg
- * (`ios.ts`) implements `back`/`setOrientation` but explicitly refuses `tvRemote`.
+ * with the local owner, including the `device.target === 'tv'` gate for `tvRemote`). The iOS
+ * direct session is a phone/tablet surface with no remote receiver, so its fact refuses
+ * `tvRemote` and its interactor carries no such member.
  */
 export function limrunNavigationOperationFacts(
   device: DeviceInfo,

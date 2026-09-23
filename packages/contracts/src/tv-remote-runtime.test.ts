@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { bindTvRemote, tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
@@ -38,4 +39,19 @@ test('a local binding drives the interactor with the button and duration', async
   // Positional (button, durationMs), not an object: swapping the argument order or dropping
   // durationMs is the one transposition a point-shaped assertion would not catch.
   expect(tvRemote).toHaveBeenCalledWith('down', 250);
+});
+
+// Facts admitted the press, so an interactor without the member is an ownership bug the caller
+// must see rather than a refusal to degrade around. The label is the one the command used.
+test('a press whose fact admitted but whose interactor cannot serve it fails closed', async () => {
+  const resolveInteractor = vi.fn(async () => ({}) as unknown as Interactor);
+
+  const operations = bindTvRemote(new AbortController().signal, localInteractorSource({ device, resolveInteractor }));
+  await expect(operations.tvRemote({ button: 'up' })).rejects.toSatisfy(
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.message.includes('tv-remote'),
+  );
 });

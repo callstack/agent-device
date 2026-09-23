@@ -10,7 +10,7 @@ import {
 import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
 import { bindOrientation } from './orientation-runtime.ts';
 import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
-import { bindTvRemote } from './tv-remote-runtime.ts';
+import { TV_REMOTE_LABEL, bindTvRemote } from './tv-remote-runtime.ts';
 import {
   localInteractorSource,
   providerInteractorSource,
@@ -62,7 +62,7 @@ export const INTERACTOR_OPERATIONS = [
     bind: (signal, resolve) => bindSystemButton('home', signal, resolve),
   },
   { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
-  { operation: 'tvRemote', label: 'tv-remote', bind: bindTvRemote },
+  { operation: 'tvRemote', label: TV_REMOTE_LABEL, bind: bindTvRemote },
   {
     operation: 'keyboardStatus',
     label: KEYBOARD_ACTION_LABELS.keyboardStatus,
