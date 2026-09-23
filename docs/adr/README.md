@@ -29,6 +29,7 @@
 | [0025 Foldable Apple Panels — Capture the Lit Panel](0025-foldable-apple-panels.md) | iPhone Duo outer/inner panels, CoreDevice display info as the only screen authority, why `simctl`'s implicit display default captures a black panel, derived (never asserted) pose, and why no pose-control command exists |
 | [0026 Scroll Clip Authority — Ownership Is the Parent Edge (Proposed)](0026-scroll-clip-authority.md) | iOS scroll indicators and the visible band, why ownership is read from the parent edge instead of an ancestor walk, what may remove a node from an interactive snapshot, and ejection dispositions |
 | [0027 Descriptor Root Size vs Eager-Closure Budget (Proposed)](0027-descriptor-root-vs-eager-closure-budget.md) | splitting `packages/command-registry/src/registry.ts`, the ADR-0019 eager-closure module-count budget, and why a byte-neutral hub split is currently unshippable |
+| [0028 Capability-Family Cell Vocabulary — One Runtime Source (Proposed)](0028-capability-family-cell-vocabulary.md) | adding a capability operation family, `UnavailablePlatformRuntimeFacts` / `UNAVAILABLE_CELLS`, `INTERACTOR_OPERATIONS`, and why an eight-package fan-out recurs |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
