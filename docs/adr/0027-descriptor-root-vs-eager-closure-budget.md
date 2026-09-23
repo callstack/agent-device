@@ -94,3 +94,10 @@ agent at this file discovers the conflict from a red gate and picks one silently
 - **Reduce descriptor verbosity instead of splitting the file:** legitimate and unexplored, but it
   changes the declaration vocabulary for all ~80 commands, which is a larger change than the split
   and needs its own decision.
+
+## Recovery
+
+A complete, byte-faithful split of the descriptor array exists on
+`refactor/collocation-registry-family-split` (`40bf719a8b`, split commit `ad3aaa520e`) and is pushed.
+It is kept rather than deleted so that answering the question above does not require redoing the
+mechanical work; 80 descriptors, 79 byte-identical including comments.
