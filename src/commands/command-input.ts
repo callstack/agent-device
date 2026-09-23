@@ -70,6 +70,25 @@ function commandInputSchema(
   };
 }
 
+/**
+ * A non-strict object shape — the one advertised response shapes are built from.
+ * Unlike `commandInputSchema`, this deliberately omits `additionalProperties: false`
+ * and never injects the common selection fields: a response schema advertises what a
+ * command returns, and additive response fields such as `cost` must keep validating.
+ */
+export function objectSchema(
+  properties: Record<string, JsonSchema>,
+  required: readonly string[] = [],
+  description?: string,
+): JsonSchema {
+  return {
+    type: 'object',
+    ...(description ? { description } : {}),
+    properties,
+    ...(required.length > 0 ? { required } : {}),
+  };
+}
+
 function pointSchema(description: string): JsonSchema {
   return {
     type: 'object',
@@ -83,7 +102,7 @@ function pointSchema(description: string): JsonSchema {
   };
 }
 
-function enumSchema(values: readonly string[], description?: string): JsonSchema {
+export function enumSchema(values: readonly string[], description?: string): JsonSchema {
   return { type: 'string', enum: values, ...(description ? { description } : {}) };
 }
 
@@ -91,7 +110,7 @@ export function stringSchema(description?: string): JsonSchema {
   return { type: 'string', ...(description ? { description } : {}) };
 }
 
-function numberSchema(
+export function numberSchema(
   description?: string,
   options: { min?: number; max?: number } = {},
 ): JsonSchema {
@@ -111,7 +130,7 @@ export function booleanSchema(description?: string): JsonSchema {
   return { type: 'boolean', ...(description ? { description } : {}) };
 }
 
-function stringArraySchema(description?: string): JsonSchema {
+export function stringArraySchema(description?: string): JsonSchema {
   return {
     type: 'array',
     items: { type: 'string' },

@@ -1,7 +1,16 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
-import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
+import {
+  booleanSchema,
+  enumSchema,
+  looseObjectSchema,
+  numberSchema,
+  objectSchema,
+  stringArraySchema,
+  stringSchema,
+} from '../commands/command-input.ts';
+import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
@@ -23,9 +32,12 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
  * `outputSchema` key), exactly as `CommandResultMap` omits them rather than
  * inventing a shape.
  *
- * There is no type→JSON-Schema generator in this repo. Schemas remain
- * hand-authored from matching contract types; selected executable contracts can
- * project their colocated schema into this map. Two invariants:
+ * There is no type→JSON-Schema generator in this repo. Schemas are hand-authored from
+ * matching contract types, and the object/enum/number primitives are the shared ones in
+ * `src/commands/command-input.ts`. Where a command family is owned by one module (the
+ * descriptors' `ownerFiles`), that module authors its entries and projects them into this
+ * map — `REPLAY_COMMAND_OUTPUT_SCHEMAS` is the first; the rest stay hand-authored here until
+ * their own shape changes pull them out. Two invariants:
  *  - NEVER strict: no `additionalProperties: false` anywhere, so the additive
  *    `cost` object (opted in via `--cost` / `includeCost`) and any other additive
  *    fields ride into `structuredContent` and still validate.
@@ -40,14 +52,6 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 
-function numberSchema(description?: string): JsonSchema {
-  return { type: 'number', ...(description ? { description } : {}) };
-}
-
-function enumSchema(values: readonly string[], description?: string): JsonSchema {
-  return { type: 'string', enum: values, ...(description ? { description } : {}) };
-}
-
 function constSchema(value: string): JsonSchema {
   return { type: 'string', const: value };
 }
@@ -55,23 +59,6 @@ function constSchema(value: string): JsonSchema {
 function nullableStringSchema(description?: string): JsonSchema {
   return { type: ['string', 'null'], ...(description ? { description } : {}) };
 }
-
-function objectSchema(
-  properties: Record<string, JsonSchema>,
-  required: readonly string[] = [],
-  description?: string,
-): JsonSchema {
-  // Intentionally non-strict (no additionalProperties: false) so additive
-  // fields such as `cost` validate.
-  return {
-    type: 'object',
-    ...(description ? { description } : {}),
-    properties,
-    ...(required.length > 0 ? { required } : {}),
-  };
-}
-
-const stringArraySchema: JsonSchema = { type: 'array', items: { type: 'string' } };
 
 const responseCostSchema: JsonSchema = objectSchema(
   {
@@ -122,7 +109,7 @@ function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema
       ),
       ref: stringSchema('Snapshot ref without the @ prefix when the target was an @ref.'),
       selector: stringSchema('Selector expression when the target was a selector.'),
-      selectorChain: stringArraySchema,
+      selectorChain: stringArraySchema(),
       refLabel: stringSchema(),
       targetHittable: booleanSchema(),
       hint: stringSchema(),
@@ -428,6 +415,13 @@ const unconfirmedFillResponseSchema = interactionResponseDataSchema({
 });
 
 const BASE_COMMAND_OUTPUT_SCHEMAS = {
+  // A family that owns its commands also owns their advertised response shape: it is
+  // projected from the family module instead of being hand-listed here. The projection
+  // stays honest at both ends — this map's `satisfies` still refuses a missing
+  // `CommandResultMap` key, and each family map's `Pick` refuses an entry for a command
+  // it does not own.
+  ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
+
   // buildInteractionResponseData public payloads for interaction commands.
   // #1652: the opt-in `settle` observation is NOT listed here — the trait
   // derivation pass grafts it onto settle-capable entries below.
@@ -798,50 +792,9 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
           ['kind', 'text'],
         ),
       },
-      warnings: stringArraySchema,
+      warnings: stringArraySchema(),
     },
     ['mode', 'baselineInitialized', 'summary', 'lines'],
-  ),
-
-  // packages/contracts/src/replay.ts
-  replay: objectSchema(
-    {
-      replayed: numberSchema(),
-      healed: numberSchema(),
-      session: stringSchema(),
-      sessionActive: booleanSchema(
-        'True iff the session is still active — the script had no terminal close.',
-      ),
-      artifactPaths: stringArraySchema,
-      snapshotDiagnostics: looseObjectSchema(),
-      message: stringSchema(),
-    },
-    ['replayed', 'healed', 'session', 'sessionActive', 'artifactPaths', 'message'],
-  ),
-  test: objectSchema(
-    {
-      total: numberSchema(),
-      executed: numberSchema(),
-      passed: numberSchema(),
-      failed: numberSchema(),
-      skipped: numberSchema(),
-      notRun: numberSchema(),
-      durationMs: numberSchema(),
-      failures: { type: 'array', items: looseObjectSchema() },
-      tests: { type: 'array', items: looseObjectSchema() },
-      snapshotDiagnostics: looseObjectSchema(),
-    },
-    [
-      'total',
-      'executed',
-      'passed',
-      'failed',
-      'skipped',
-      'notRun',
-      'durationMs',
-      'failures',
-      'tests',
-    ],
   ),
 
   // packages/contracts/src/recording.ts
