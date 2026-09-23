@@ -319,14 +319,12 @@ export function postActionObservation(command: string): PostActionObservationSup
   return support;
 }
 
-// ---------------------------------------------------------------------------
-// The command declaration root (ADR 0008). Each entry carries the command identity
-// facets plus whichever daemon, batch, MCP, timeout, observation, and
-// platform-dispatch traits that command owns. Public catalog identity and the
-// non-public dispatch aliases live here too; every view derives from this
-// array rather than recreating command-name sets.
-// ---------------------------------------------------------------------------
-
+/**
+ * Whether this build carries the descriptors' `ownerFiles` claims. Production bundles define
+ * `__OWNER_FILES__` as `false`, so every `ownerFilesEnabled ? { ownerFiles: [...] } : {}` spread
+ * in the family modules folds to nothing and the navigation paths never reach a bundle — which
+ * `pnpm check:bundle-owner-files` proves over `dist/`.
+ */
 export const ownerFilesEnabled = typeof __OWNER_FILES__ === 'undefined' || __OWNER_FILES__;
 
 export const DEPLOY_APP_COMMAND_DESCRIPTOR = {

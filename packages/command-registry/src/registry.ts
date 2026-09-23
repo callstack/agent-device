@@ -181,6 +181,23 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];
 
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+/**
+ * Compile-time literalness of {@link Command}. Every family array is `as const`, so each
+ * descriptor keeps its literal `name` through the composition and the `.map` below; a family
+ * array that lost its `as const` would widen this union to `string` SILENTLY at every
+ * consumer that indexes a table with it (`src/mcp/command-tools.ts`,
+ * `src/mcp/tool-ref-pins.ts`, `packages/session-journal/src/session-event-action.ts`,
+ * `src/__tests__/test-utils/property-arbitraries.ts`) — which is why this is a type guard and
+ * not a value comparison.
+ */
+export type CommandUnionStaysLiteral = AssertTrue<Equal<Equal<Command, string>, false>>;
+/** The CLI view is narrowed from the same literals, so it cannot hide a widened root union. */
+export type CliCommandUnionStaysLiteral = AssertTrue<
+  Equal<Equal<DescriptorCliCommandName, string>, false>
+>;
+
 /**
  * @internal Command names for one catalog group, sorted.
  *
