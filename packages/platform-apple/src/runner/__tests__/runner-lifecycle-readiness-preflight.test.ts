@@ -8,7 +8,11 @@ import {
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
+import {
+  createTestRequestCancellation,
+  makeRunnerSession,
+  runnerConnectFailure,
+} from './runner-session-fixtures.ts';
 
 const {
   mockEnsureRunnerSession,
@@ -216,7 +220,10 @@ test('a boot that exited early does not wipe a restored runner artifact', async 
 
   mockEnsureRunnerSession.mockResolvedValueOnce(restoredSession);
   mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'Runner did not accept connection (xcodebuild exited early)'),
+    runnerConnectFailure(
+      'xcodebuild_exited_early',
+      'Runner did not accept connection (xcodebuild exited early)',
+    ),
   );
 
   await assert.rejects(

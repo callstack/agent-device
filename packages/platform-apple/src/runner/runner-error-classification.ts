@@ -21,11 +21,32 @@ export const RUNNER_CACHE_RECOVERY_HINT =
  */
 type RunnerErrorDetailsMatch = (details: AppErrorDetails) => boolean;
 
+/**
+ * Why agent-device's own runner connect path gave up, published in
+ * `details.runnerConnectFailureReason` by the error that path throws. It sits beside
+ * `details.reason` rather than in it: on these failures `reason` already carries the
+ * `BootFailureReason` the caller's hint answers.
+ */
+export type RunnerConnectFailureReason =
+  | 'xcodebuild_exited_early'
+  | 'runner_connect_refused'
+  | 'runner_endpoint_probe_exhausted';
+
+export function runnerConnectFailureDetails(reason: RunnerConnectFailureReason): {
+  runnerConnectFailureReason: RunnerConnectFailureReason;
+} {
+  return { runnerConnectFailureReason: reason };
+}
+
 type RunnerErrorMatch = {
   /** Required `AppError.code`; absent = any AppError. */
   code?: AppErrorCode;
-  /** Every entry must appear in the lowercased message. */
-  messageIncludesAll?: readonly string[];
+  /**
+   * Every entry must appear in the lowercased message. Only for text a foreign runtime or tool
+   * wrote, which `asAppError` copies into the message verbatim; a failure agent-device produces
+   * publishes a typed detail instead, and its rule keys on that.
+   */
+  foreignMessageIncludesAll?: readonly string[];
   /**
    * Every entry must appear in the lowercased {@link runnerToolText}: our message plus the tool's
    * own `stdout`/`stderr`. Nothing else in `details` is read, so the argv we were asked to run and
@@ -54,6 +75,10 @@ const hasDevToolsSecurityStatus: RunnerErrorDetailsMatch = (details) =>
   typeof details.devToolsSecurityStatus === 'string';
 const hasUsbmuxDeviceUnattached: RunnerErrorDetailsMatch = (details) =>
   details.usbmuxDeviceAttached === false;
+const hasRunnerConnectFailureReason =
+  (reason: RunnerConnectFailureReason): RunnerErrorDetailsMatch =>
+  (details) =>
+    details.runnerConnectFailureReason === reason;
 /**
  * The preflight marks whatever it was waiting on when it stopped, and one of the things it waits on
  * is a caller that stopped waiting. A canceled request is not a wedged runner: the restart this
@@ -188,17 +213,21 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: { retryable: true, connectRetry: true },
   },
   {
-    // Says `artifactSuspect: false` on purpose: its message also reads as a refused
-    // connection, and a boot that cannot compile is not cured by wiping derived data.
+    // Says `artifactSuspect: false` on purpose: a boot that cannot compile is not cured by wiping
+    // derived data.
     reason: 'xcodebuild_exited_early',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['xcodebuild exited early'] },
+    match: {
+      code: 'COMMAND_FAILED',
+      details: hasRunnerConnectFailureReason('xcodebuild_exited_early'),
+    },
     verdicts: { retryable: false, connectRetry: false, artifactSuspect: false },
   },
   {
     // A device still mid-attachment is not a runner we can talk to yet, and waiting on
     // it inside this request is what the caller's own retry is for.
     reason: 'device_busy_connecting',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['device is busy', 'connecting'] },
+    // Xcode/CoreDevice text: "Device is busy (Connecting to <device>)".
+    match: { code: 'COMMAND_FAILED', foreignMessageIncludesAll: ['device is busy', 'connecting'] },
     verdicts: { retryable: false, connectRetry: false },
   },
   {
@@ -212,7 +241,10 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   },
   {
     reason: 'runner_connect_refused',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['runner did not accept connection'] },
+    match: {
+      code: 'COMMAND_FAILED',
+      details: hasRunnerConnectFailureReason('runner_connect_refused'),
+    },
     verdicts: {
       retryable: true,
       connectRetry: true,
@@ -224,22 +256,28 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // Every endpoint answered and none of them had a runner: with a restored artifact
     // in hand, that artifact is the common cause.
     reason: 'runner_endpoint_probe_exhausted',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['runner endpoint probe failed'] },
+    match: {
+      code: 'COMMAND_FAILED',
+      details: hasRunnerConnectFailureReason('runner_endpoint_probe_exhausted'),
+    },
     verdicts: { artifactSuspect: true },
   },
   {
     reason: 'fetch_failed',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['fetch failed'] },
+    // Node's fetch (undici) rejects a failed request with TypeError "fetch failed".
+    match: { code: 'COMMAND_FAILED', foreignMessageIncludesAll: ['fetch failed'] },
     verdicts: { retryable: true, connectRetry: true },
   },
   {
     reason: 'econnrefused',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['econnrefused'] },
+    // Node's net socket: "connect ECONNREFUSED <address>".
+    match: { code: 'COMMAND_FAILED', foreignMessageIncludesAll: ['econnrefused'] },
     verdicts: { retryable: true, connectRetry: true },
   },
   {
     reason: 'socket_hang_up',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['socket hang up'] },
+    // Node's http client: "socket hang up" when the peer closes before responding.
+    match: { code: 'COMMAND_FAILED', foreignMessageIncludesAll: ['socket hang up'] },
     verdicts: { retryable: true, connectRetry: true },
   },
   {
@@ -390,7 +428,7 @@ function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boole
   if (!matchesRunnerErrorDetails(error, match.details)) return false;
   if (!matchesRunnerToolText(error, match.toolTextIncludesAll)) return false;
   if (!matchesRunnerToolTextLine(error, match.toolTextLineIncludesAll)) return false;
-  return matchesRunnerErrorMessage(error, match.messageIncludesAll);
+  return matchesRunnerErrorMessage(error, match.foreignMessageIncludesAll);
 }
 
 function matchesRunnerErrorDetails(error: AppError, details: RunnerErrorMatch['details']): boolean {
@@ -523,10 +561,7 @@ export function resolveRunnerFatalErrorReason(error: unknown): string | undefine
  * A connect-shaped failure that surfaced before the command was sent: restart
  * the runner session and replay the command, rather than probing a runner
  * that never accepted the connection. Composed with the connect-retry axis so
- * a terminal connect verdict (cable unattached, xcodebuild exited early)
- * still refuses the restart. Matching is table-driven and therefore
- * case-insensitive, unlike the raw-message check it replaced; the message is
- * our own transport literal, so no real error changes class.
+ * a terminal connect verdict still refuses the restart.
  */
 export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
   return (

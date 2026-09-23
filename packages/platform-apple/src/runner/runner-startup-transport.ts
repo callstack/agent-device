@@ -23,6 +23,7 @@ import {
   enrichRunnerStartupFailureWithDeviceStates,
   isUsbmuxDeviceUnattachedError,
   RUNNER_CACHE_RECOVERY_HINT,
+  runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
   type IosRunnerDeviceStates,
 } from './runner-error-classification.ts';
@@ -296,6 +297,7 @@ function buildRunnerEndpointProbeError(params: {
     port: params.port,
     endpoints: params.endpoints,
     lastError: params.lastError ? String(params.lastError) : undefined,
+    ...runnerConnectFailureDetails('runner_endpoint_probe_exhausted'),
   });
 }
 
@@ -451,6 +453,7 @@ async function postCommandViaSimulator(
         port,
         reason,
         hint: bootFailureHint(reason),
+        ...runnerConnectFailureDetails('runner_connect_refused'),
       };
     },
   );
@@ -500,6 +503,7 @@ function buildRunnerConnectError(params: {
       context: { platform: 'ios', phase: 'connect' },
     }),
     hint: bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
+    ...runnerConnectFailureDetails('runner_connect_refused'),
   });
   // The other way the connect stage gives up: `xcodebuild` is still alive at the deadline. It gets
   // the same enrichment as the early exit below (#2683).
@@ -539,6 +543,7 @@ export async function buildRunnerEarlyExitError(params: {
     },
     reason,
     hint: resolveRunnerEarlyExitHint(message, output, output, reason),
+    ...runnerConnectFailureDetails('xcodebuild_exited_early'),
   });
   // The build catch is not the only way a runner stops before serving a command. A locked phone lets
   // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that

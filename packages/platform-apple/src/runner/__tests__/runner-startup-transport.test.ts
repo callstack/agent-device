@@ -142,6 +142,22 @@ test('waitForRunner uses simulator fallback within the attempt for ready session
   ]);
 });
 
+test('waitForRunner types a failed simulator fallback as a refused connection', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+  mockRunCmd.mockResolvedValue({ exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' });
+
+  await assert.rejects(
+    () => waitForRunner(iosSimulator, 8100, { command: 'uptime' }, undefined, 100),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.message, 'Runner did not accept connection (simctl spawn)');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'runner_connect_refused');
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
 test('waitForRunner wakes a simulator startup retry when the listener reports ready', async () => {
   vi.useFakeTimers();
   const readiness = new AbortController();
@@ -249,6 +265,7 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     (error: unknown) => {
       const appError = error as AppError;
       assert.equal(appError.message, 'Runner did not accept connection (xcodebuild exited early)');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
       assert.equal(
         (appError.details?.xcodebuild as { exitCode?: number } | undefined)?.exitCode,
         65,
@@ -294,6 +311,7 @@ test('waitForRunner carries the disk-image state when the runner is still alive 
     (error: unknown) => {
       const appError = error as AppError;
       assert.equal(appError.message, 'Runner did not accept connection');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'runner_connect_refused');
       assert.equal(appError.details?.developerDiskImage, 'unavailable');
       assert.equal(appError.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
       assert.doesNotMatch(String(appError.details?.hint), /Unlock the iPhone/);

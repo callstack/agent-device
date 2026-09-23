@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtempForTest } from './tmp-dir.ts';
+import { runnerConnectFailure } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 
 const mockRunCmdStreaming = vi.fn();
@@ -413,21 +414,24 @@ test('assertSafeDerivedCleanup allows cleaning override path under project .tmp'
 });
 
 test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
-  const err = new AppError(
-    'COMMAND_FAILED',
+  const err = runnerConnectFailure(
+    'xcodebuild_exited_early',
     'Runner did not accept connection (xcodebuild exited early)',
   );
   assert.equal(shouldRetryRunnerConnectError(err), false);
 });
 
 test('shouldRetryRunnerConnectError retries transient connect errors', () => {
-  const err = new AppError('COMMAND_FAILED', 'Runner endpoint probe failed');
+  const err = runnerConnectFailure(
+    'runner_endpoint_probe_exhausted',
+    'Runner endpoint probe failed',
+  );
   assert.equal(shouldRetryRunnerConnectError(err), true);
 });
 
 test('isRetryableRunnerError does not retry xcodebuild early-exit errors', () => {
-  const err = new AppError(
-    'COMMAND_FAILED',
+  const err = runnerConnectFailure(
+    'xcodebuild_exited_early',
     'Runner did not accept connection (xcodebuild exited early)',
   );
   assert.equal(isRetryableRunnerError(err), false);

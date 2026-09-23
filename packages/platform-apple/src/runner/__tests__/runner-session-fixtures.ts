@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import type { XcodebuildSimulatorSetRedirectHandle } from '../runner-device-set.ts';
+import {
+  runnerConnectFailureDetails,
+  type RunnerConnectFailureReason,
+} from '../runner-error-classification.ts';
 
 // Fabricated runner sessions, leases, background children, and transport
 // payloads shared by the runner-session tests. The child pids here are made up
@@ -69,6 +74,18 @@ export function runnerResponse(data: Record<string, unknown>): Response {
 
 export function runnerError(error: { code: string; message: string }): Response {
   return new Response(JSON.stringify({ ok: false, error }));
+}
+
+/** A failure in the shape the runner connect path throws: its message plus its typed reason. */
+export function runnerConnectFailure(
+  reason: RunnerConnectFailureReason,
+  message: string,
+  details?: Record<string, unknown>,
+): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    ...details,
+    ...runnerConnectFailureDetails(reason),
+  });
 }
 
 // Records everything the runner package emits through host.emitDiagnostic /
