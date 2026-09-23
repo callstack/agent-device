@@ -471,6 +471,53 @@ test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint'
   expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
 });
 
+test.each([
+  [
+    'physical iOS CoreDevice',
+    appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
+  ],
+  ['iOS simulator', appleDevice()],
+] as const)(
+  'reinstall tolerates an already-missing %s uninstall with mixed-case stderr and still installs',
+  async (_name, device) => {
+    const resolveAppBundleId = vi.fn(async () => 'com.example.app');
+    const prepareArtifact = vi.fn(async () => ({
+      installablePath: '/tmp/App.app',
+      bundleId: 'com.example.app',
+      appName: 'Example',
+      cleanup: vi.fn(async () => {}),
+    }));
+    const executor = {
+      prepareArtifact,
+      resolveAppBundleId,
+      withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+    } as AppleAppDeploymentExecutor;
+    const run = xcrunLikeRun((request) => {
+      if (request.args.includes('uninstall')) {
+        return { stdout: '', stderr: 'ERROR: App Not Installed', exitCode: 1 };
+      }
+      return bootedSimulatorListResult(request);
+    });
+    const host = deploymentHost(executor, run);
+    const operations = createAppleAppDeploymentOperations({
+      host,
+      device,
+      signal: new AbortController().signal,
+    });
+
+    await expect(
+      operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: true,
+      }),
+    ).resolves.toMatchObject({ bundleId: 'com.example.app' });
+
+    expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
+    expect(run.mock.calls.some(([request]) => request.args.includes('install'))).toBe(true);
+  },
+);
+
 test('preserves Apple reinstall partial-failure ordering', async () => {
   const order: string[] = [];
   const resolveAppBundleId = vi.fn(async () => {
