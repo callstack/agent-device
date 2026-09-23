@@ -28,5 +28,9 @@ extension RunnerTests {
       "runner app is not available"
     )
   }
+
+  func runnerCommandFixture(_ json: String) throws -> Command {
+    try JSONDecoder().decode(Command.self, from: Data(json.utf8))
+  }
 }
 #endif

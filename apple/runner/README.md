@@ -26,7 +26,12 @@ Protocol and maintenance references:
 - `RunnerTests+Models.swift`: wire protocol models (`Command`, `Response`, snapshot payload models).
 - `RunnerTests+Environment.swift`: environment and CLI argument helpers (`RunnerEnv`).
 - `RunnerTests+Transport.swift`: TCP request handling and HTTP parsing/encoding.
-- `RunnerTests+CommandExecution.swift`: command dispatch (`execute*`) and command switch.
+- `RunnerTests+CommandDispatch.swift`: the dispatch entry (`executeAccepted`, `executeDispatched`),
+  its recovery loops, target preparation, and recorded-failure conversion.
+- `RunnerTests+CommandExecution.swift`: the prepared-command switch (`executeOnMainPrepared`).
+- `RunnerTests+GestureExecution.swift`, `RunnerTests+ScrollDragExecution.swift`,
+  `RunnerTests+TypeExecution.swift`, `RunnerTests+SnapshotExecution.swift`: per-family command
+  execution.
 - `RunnerTests+Lifecycle.swift`: activation/retry/stabilization and recording lifecycle helpers.
 - `RunnerTests+Interaction.swift`: tap/drag/swipe/type/home/rotate/app-switcher helpers.
 - `RunnerTests+Navigation.swift`: back/navigation-control helpers.
