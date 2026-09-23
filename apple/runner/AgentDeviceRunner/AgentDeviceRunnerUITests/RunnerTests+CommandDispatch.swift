@@ -358,7 +358,7 @@ extension RunnerTests {
           outputPath: resolvedOutPath,
           fps: command.fps.map { Int32($0) }
         )
-        try recorder.start { [weak self] in
+        try startRecording(recorder) { [weak self] in
           guard let self else { return .failure(.unresolvedScreen) }
           return self.captureRunnerFrameResult(app: activeApp)
         }
