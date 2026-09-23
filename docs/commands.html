@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.d587d59891.js"></script>
+<script defer src="/agent-device/static/js/index.3afe25ee2c.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -1076,7 +1076,7 @@ came before it are never replaced.</li>
 <p><code>--fps &lt;n&gt;</code> (1-120) applies to physical iOS device recording as an explicit FPS cap.</p>
 </li>
 <li>
-<p><code>--quality &lt;medium|high&gt;</code> controls recording output quality. Android maps it to <code>adb shell screenrecord --bit-rate</code>; Apple targets use it for export/encoding; Limrun sessions map it to the provider recorder&#x27;s quality (<code>medium</code> to 5, <code>high</code> to 8). <code>medium</code> is the default; pass <code>high</code> for evidence, release notes, or debugging visual artifacts. Legacy numeric values are still accepted for compatibility: <code>5</code>-<code>7</code> map to <code>medium</code>, and <code>8</code>-<code>10</code> map to <code>high</code>.</p>
+<p><code>--quality &lt;medium|high&gt;</code> controls recording output quality. Android maps it to <code>adb shell screenrecord --bit-rate</code>; Limrun sessions map it to the provider recorder&#x27;s quality (<code>medium</code> to 5, <code>high</code> to 8). Apple export always preserves the captured resolution, so <code>--quality</code> has no effect on Apple output size. <code>medium</code> is the default; pass <code>high</code> for evidence, release notes, or debugging visual artifacts. Legacy numeric values are still accepted for compatibility: <code>5</code>-<code>7</code> map to <code>medium</code>, and <code>8</code>-<code>10</code> map to <code>high</code>.</p>
 </li>
 </ul>
 <h2 class="rp-toc-include" id="tracing"><a href="#tracing" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Tracing</h2>
