@@ -179,6 +179,7 @@ extension RunnerTests {
     currentAppProcessIdentifier = nil
     clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
+    repeatedLogSuppressor.reset()
   }
 
   func resetTargetAfterExternalRelaunch() -> Response {
@@ -253,11 +254,11 @@ extension RunnerTests {
       return false
     }
     guard activeApp.state == .runningForeground else { return false }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_FAST_APP_GUARD command=%@ bundle=%@ state=%d",
-      String(describing: command),
-      requestedBundleId,
-      activeApp.state.rawValue
+    let state = activeApp.state.rawValue
+    repeatedLogSuppressor.logIfChanged(
+      key: "fast_app_guard",
+      fact: "\(requestedBundleId) \(state)",
+      line: "AGENT_DEVICE_RUNNER_FAST_APP_GUARD command=\(String(describing: command)) bundle=\(requestedBundleId) state=\(state)"
     )
     return true
   }
@@ -479,3 +480,58 @@ extension RunnerTests {
     usleep(useconds_t(delay * 1_000_000))
   }
 }
+
+/// Writes a repeating log fact only when it changes. `logIfChanged` compares `fact` with the last
+/// one written under `key` and, on a change, writes `line` (which may carry per-command detail the
+/// comparison ignores). `reset` forgets every key so the next call writes again.
+final class RepeatedLogSuppressor {
+  private let lock = NSLock()
+  private var lastFacts: [String: String] = [:]
+
+  @discardableResult
+  func logIfChanged(key: String, fact: String, line: @autoclosure () -> String) -> Bool {
+    lock.lock()
+    let changed = lastFacts[key] != fact
+    if changed {
+      lastFacts[key] = fact
+    }
+    lock.unlock()
+    if changed {
+      NSLog("%@", line())
+    }
+    return changed
+  }
+
+  func reset() {
+    lock.lock()
+    lastFacts.removeAll()
+    lock.unlock()
+  }
+}
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests {
+  func testRepeatedLogSuppressorWritesOnlyWhenTheFactChangesUntilReset() {
+    let suppressor = RepeatedLogSuppressor()
+    XCTAssertTrue(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard first"))
+    XCTAssertFalse(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard repeat"))
+    XCTAssertFalse(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard repeat"))
+    XCTAssertTrue(suppressor.logIfChanged(key: "guard", fact: "app 2", line: "guard changed"))
+    XCTAssertTrue(suppressor.logIfChanged(key: "policy", fact: "app 2", line: "other key"))
+    suppressor.reset()
+    XCTAssertTrue(
+      suppressor.logIfChanged(key: "guard", fact: "app 2", line: "guard after reset"),
+      "a reset must restate the fact once more"
+    )
+  }
+
+  func testInvalidatingTheCachedTargetResetsTheRepeatedLogSuppressor() {
+    repeatedLogSuppressor.reset()
+    XCTAssertTrue(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "first"))
+    XCTAssertFalse(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "repeat"))
+    invalidateCachedTarget(reason: "unit_test")
+    XCTAssertTrue(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "rebind"))
+    repeatedLogSuppressor.reset()
+  }
+}
+#endif

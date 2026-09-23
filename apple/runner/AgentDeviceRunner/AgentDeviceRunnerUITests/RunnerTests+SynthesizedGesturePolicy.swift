@@ -139,22 +139,21 @@ extension RunnerTests {
     fallbackAttempted: Bool
   ) {
 #if os(iOS)
-    guard let context else {
-      NSLog(
-        "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=%@ context=unavailable fallbackAttempted=%@",
-        kind.rawValue,
-        fallbackAttempted.description
-      )
-      return
+    let line: String
+    if let context {
+      line =
+        "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue) axHealth=\(context.accessibilityHealth.rawValue) frameSource=window keyboardPolicy=\(context.keyboardPolicy.rawValue) fallbackPolicy=\(context.fallbackPolicy.rawValue) fallbackAllowed=\(context.allowsXCTestCoordinateFallback) fallbackAttempted=\(fallbackAttempted)"
+    } else {
+      line =
+        "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=\(kind.rawValue) context=unavailable fallbackAttempted=\(fallbackAttempted)"
     }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=%@ axHealth=%@ frameSource=window keyboardPolicy=%@ fallbackPolicy=%@ fallbackAllowed=%@ fallbackAttempted=%@",
-      kind.rawValue,
-      context.accessibilityHealth.rawValue,
-      context.keyboardPolicy.rawValue,
-      context.fallbackPolicy.rawValue,
-      context.allowsXCTestCoordinateFallback.description,
-      fallbackAttempted.description
+    // The decision is the fact: the same policy for a gesture kind on every tap of a session is
+    // one line, a changed policy (AX health, keyboard, fallback) is a new one. Keyed per kind so
+    // alternating taps and scrolls do not restate each other.
+    repeatedLogSuppressor.logIfChanged(
+      key: "synthesized_gesture_policy:\(kind.rawValue)",
+      fact: line,
+      line: line
     )
 #endif
   }
