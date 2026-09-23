@@ -1,6 +1,6 @@
 import type { PressPointOptions } from '@agent-device/contracts/interactor-types';
 import { pressJitter } from '@agent-device/contracts/touch-runtime';
-import { isIosFamily, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { runnerSynthesizesTap, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { RunnerCommand, RunnerSequenceStep } from './runner-contract.ts';
 
@@ -216,7 +216,7 @@ function buildPressSteps(
   options: PressPointOptions,
 ): RunnerSequenceStep[] {
   const kind = options.doubleTap ? 'doubleTap' : options.holdMs > 0 ? 'longPress' : 'tap';
-  const synthesized = kind === 'tap' && isIosFamily(device) && !isTvOsDevice(device);
+  const synthesized = kind === 'tap' && runnerSynthesizesTap(device);
   return Array.from({ length: options.count }, (_, index) => {
     const [dx, dy] = pressJitter(index, options.jitterPx);
     return {

@@ -19,7 +19,12 @@ import {
   assertScrollGestureInput,
 } from '@agent-device/contracts/scroll-gesture';
 import { assertAppleMultiTouchSupported } from './multitouch-support.ts';
-import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isMacOs,
+  isTvOsDevice,
+  runnerSynthesizesTap,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';
 import {
@@ -99,7 +104,7 @@ export function iosRunnerOverrides(
             ...(selector.expectedPoint
               ? { x: selector.expectedPoint.x, y: selector.expectedPoint.y }
               : {}),
-            ...(shouldUseSynthesizedIosGesture(device) ? { synthesized: true } : {}),
+            ...(runnerSynthesizesTap(device) ? { synthesized: true } : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,
@@ -386,14 +391,9 @@ function iosTapCommand(
     command: 'tap',
     x,
     y,
-    ...(shouldUseSynthesizedIosGesture(device) ? { synthesized: true } : {}),
+    ...(runnerSynthesizesTap(device) ? { synthesized: true } : {}),
     appBundleId: ctx.appBundleId,
   };
-}
-
-function shouldUseSynthesizedIosGesture(device: DeviceInfo): boolean {
-  // Two-finger HID synthesis is for touch-input iOS only; the tvOS leaf has no touch.
-  return isIosFamily(device) && !isTvOsDevice(device);
 }
 
 async function runAppleScroll(

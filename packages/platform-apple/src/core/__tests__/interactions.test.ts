@@ -21,6 +21,7 @@ import {
   IOS_TEST_SIMULATOR,
   MACOS_TEST_DEVICE,
   TVOS_TEST_SIMULATOR,
+  VISIONOS_TEST_SIMULATOR,
 } from './apple-core-stub-helpers.ts';
 
 vi.mock('../runner-client.ts', async (importOriginal) => {
@@ -139,6 +140,77 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', as
     synthesized: true,
     appBundleId: 'com.example.App',
   });
+});
+
+test('iosRunnerOverrides does not request synthesis for visionOS coordinate taps', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({});
+
+  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.tap(100, 200);
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'tap',
+    x: 100,
+    y: 200,
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides does not request synthesis for visionOS selector taps', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({});
+
+  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.tapElementSelector!({
+    key: 'label',
+    value: 'General',
+    expectedPoint: { x: 200, y: 300 },
+  });
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'tap',
+    selectorKey: 'label',
+    selectorValue: 'General',
+    allowNonHittableCoordinateFallback: undefined,
+    x: 200,
+    y: 300,
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides does not request synthesis for visionOS fused presses', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({
+    completedSteps: 3,
+    sequenceResults: Array.from({ length: 3 }, () => ({ ok: true, kind: 'tap' })),
+  });
+  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.pressPoint!(
+    { x: 100, y: 200 },
+    {
+      button: 'primary',
+      count: 3,
+      intervalMs: 40,
+      holdMs: 0,
+      jitterPx: 2,
+      doubleTap: false,
+    },
+  );
+
+  const command = mockRunAppleRunnerCommand.mock.calls[0]?.[1] as RunnerCommand;
+  assert.equal(command.command, 'sequence');
+  assert.deepEqual(command.steps, [
+    { kind: 'tap', x: 100, y: 200, pauseMs: 40 },
+    { kind: 'tap', x: 102, y: 200, pauseMs: 40 },
+    { kind: 'tap', x: 100, y: 202 },
+  ]);
 });
 
 test('iosRunnerOverrides owns fused repeated presses with deterministic jitter', async () => {

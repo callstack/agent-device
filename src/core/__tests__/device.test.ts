@@ -8,13 +8,16 @@ import {
   resolveApplePlatformName,
   resolveAppleSimulatorSetPathForSelector,
   resolveDevice,
+  runnerSynthesizesTap,
 } from '@agent-device/kernel/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_TV_DEVICE,
   IOS_SIMULATOR,
+  IPADOS_SIMULATOR,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
+  VISIONOS_SIMULATOR,
 } from '../../__tests__/test-utils/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -26,6 +29,17 @@ test('isTvOsDevice selects only the Apple tvOS leaf, not any TV target', () => {
   // Android TV shares target: 'tv' but is a DISTINCT leaf — the platform gate excludes it,
   // so the tvOS focus-only contract is never applied to Android TV.
   assert.equal(isTvOsDevice(ANDROID_TV_DEVICE), false);
+});
+
+test('runnerSynthesizesTap selects only the leaves whose runner has a synthesis path', () => {
+  // iOS and iPadOS: the runner's `#if os(iOS)` branch synthesizes.
+  assert.equal(runnerSynthesizesTap(IOS_SIMULATOR), true);
+  assert.equal(runnerSynthesizesTap(IPADOS_SIMULATOR), true);
+  // tvOS has no touchscreen; visionOS's runner has no synthesis path (falls to the
+  // Swift `#else` branch) — neither may carry `synthesized: true`.
+  assert.equal(runnerSynthesizesTap(TVOS_SIMULATOR), false);
+  assert.equal(runnerSynthesizesTap(VISIONOS_SIMULATOR), false);
+  assert.equal(runnerSynthesizesTap(MACOS_DEVICE), false);
 });
 
 test('matchesPlatformSelector resolves apple selector across Apple platforms', () => {

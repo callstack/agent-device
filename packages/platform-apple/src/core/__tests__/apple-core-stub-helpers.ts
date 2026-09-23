@@ -34,3 +34,12 @@ export const TVOS_TEST_SIMULATOR: DeviceInfo = {
   target: 'tv',
   booted: true,
 };
+
+export const VISIONOS_TEST_SIMULATOR: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'visionos',
+  id: 'visionos-sim-1',
+  name: 'Apple Vision Pro',
+  kind: 'simulator',
+  booted: true,
+};
