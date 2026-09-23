@@ -25,7 +25,7 @@ export async function resolveCoreDeviceAppProcesses(
   return await resolveIosDeviceAppProcesses(device, bundleId);
 }
 
-function isMissingAppErrorOutput(output: string): boolean {
+export function isMissingAppErrorOutput(output: string): boolean {
   return (
     output.includes('not installed') ||
     output.includes('not found') ||

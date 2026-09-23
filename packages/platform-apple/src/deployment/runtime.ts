@@ -15,7 +15,7 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { isMissingAppErrorOutput } from '../core/apps-simctl.ts';
+import { isMissingAppErrorOutput } from '../core/physical-device-apps.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from '../core/config.ts';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
@@ -171,7 +171,10 @@ async function uninstallAppleApp(
   await runAppleTool(
     host,
     device.kind === 'simulator'
-      ? { tool: 'simctl', args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]) }
+      ? {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]),
+        }
       : {
           tool: 'devicectl',
           args: ['device', 'uninstall', 'app', '--device', device.id, bundleId],
