@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
-import { waitForRunner } from '../runner-startup-transport.ts';
+import { resolveRunnerEarlyExitHint, waitForRunner } from '../runner-startup-transport.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 beforeEach(() => {
@@ -365,3 +365,22 @@ function makeReadyRunnerSession(): RunnerSession {
     hasAbandonedCommands: false,
   };
 }
+
+test('resolveRunnerEarlyExitHint surfaces busy-connecting guidance', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    'Ineligible destinations for the "AgentDeviceRunner" scheme:\n{ error:Device is busy (Connecting to iPhone) }',
+    '',
+  );
+  assert.match(hint, /still connecting/i);
+});
+
+test('resolveRunnerEarlyExitHint falls back to runner connect timeout hint', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    '',
+    'xcodebuild failed unexpectedly',
+  );
+  assert.match(hint, /retry runner startup/i);
+  assert.match(hint, /pnpm clean:xcuitest/i);
+});

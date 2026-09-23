@@ -37,7 +37,6 @@ import {
   isRetryableRunnerError,
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
-import { resolveRunnerEarlyExitHint } from '../runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {
   resolveRunnerBuildDestination,
@@ -414,25 +413,6 @@ test('assertSafeDerivedCleanup allows cleaning override path under project .tmp'
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derivedPath,
     });
   });
-});
-
-test('resolveRunnerEarlyExitHint surfaces busy-connecting guidance', () => {
-  const hint = resolveRunnerEarlyExitHint(
-    'Runner did not accept connection (xcodebuild exited early)',
-    'Ineligible destinations for the "AgentDeviceRunner" scheme:\n{ error:Device is busy (Connecting to iPhone) }',
-    '',
-  );
-  assert.match(hint, /still connecting/i);
-});
-
-test('resolveRunnerEarlyExitHint falls back to runner connect timeout hint', () => {
-  const hint = resolveRunnerEarlyExitHint(
-    'Runner did not accept connection (xcodebuild exited early)',
-    '',
-    'xcodebuild failed unexpectedly',
-  );
-  assert.match(hint, /retry runner startup/i);
-  assert.match(hint, /pnpm clean:xcuitest/i);
 });
 
 test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
