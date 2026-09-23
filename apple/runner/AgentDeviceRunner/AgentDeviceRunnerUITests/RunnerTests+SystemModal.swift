@@ -69,15 +69,7 @@ extension RunnerTests {
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
   ) -> XCUIElement? {
-    let disableSafeProbe = RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_DISABLE_SAFE_MODAL_PROBE")
-    let queryElements: (() -> [XCUIElement]) -> [XCUIElement] = { fetch in
-      if disableSafeProbe {
-        return fetch()
-      }
-      return self.safeElementsQuery(fetch)
-    }
-
-    let alerts = queryElements {
+    let alerts = safeElementsQuery {
       springboard.alerts.allElementsBoundByIndex
     }
     for alert in alerts {
@@ -92,7 +84,7 @@ extension RunnerTests {
       return nil
     }
 
-    let sheets = queryElements {
+    let sheets = safeElementsQuery {
       springboard.sheets.allElementsBoundByIndex
     }
     for sheet in sheets {

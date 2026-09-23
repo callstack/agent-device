@@ -426,10 +426,7 @@ extension RunnerTests {
   }
 
   func shouldRetryCommand(_ command: Command) -> Bool {
-    if RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_DISABLE_READONLY_RETRY") {
-      return false
-    }
-    return isReadOnlyCommand(command)
+    isReadOnlyCommand(command)
   }
 
   func shouldRetryException(_ command: Command, message: String) -> Bool {

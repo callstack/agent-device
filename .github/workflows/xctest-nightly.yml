@@ -126,10 +126,8 @@ jobs:
       # (packages/platform-apple/src/runner/runner-session.ts always passes it as the sole
       # `-only-testing:`). It compiles unconditionally — the `#if AGENT_DEVICE_RUNNER_UNIT_TESTS`
       # block ends well above it — so an unfiltered run reaches it in alphabetical order and
-      # hangs the job until `timeout-minutes`. Its one escape hatch,
-      # AGENT_DEVICE_RUNNER_NOOP_STARTUP, is an environment variable, and the comment above
-      # the flag records that env plumbing into a simulator test process is not dependable;
-      # `-skip-testing:` is the lever that works from here.
+      # hangs the job until `timeout-minutes`. The method has no in-process escape hatch, so
+      # `-skip-testing:` is the lever that keeps it out of this run.
       #
       # A typo in that identifier silently re-arms the hang, so
       # `pnpm check:xctest-selection` validates `-skip-testing:` exactly like `-only-testing:`.
