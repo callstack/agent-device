@@ -15,15 +15,17 @@ import {
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
-  isRetryableRunnerError,
   resolveRunnerRequestSignal,
+  withRunnerCommandId,
+  type RunnerCommand,
+} from './runner-contract.ts';
+import {
+  isRetryableRunnerError,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
   shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
-  withRunnerCommandId,
-  type RunnerCommand,
-} from './runner-contract.ts';
+} from './runner-error-classification.ts';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerPrepareOptions,

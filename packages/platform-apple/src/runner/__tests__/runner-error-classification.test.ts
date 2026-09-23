@@ -2,16 +2,18 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
-  classifyRunnerReportedError,
-  RUNNER_ERROR_RULES,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
+  classifyRunnerReportedError,
+} from '../runner-contract.ts';
+import {
+  RUNNER_ERROR_RULES,
   isRetryableRunnerError,
   resolveRunnerFatalErrorReason,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
   shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
-} from '../runner-contract.ts';
+} from '../runner-error-classification.ts';
 
 function commandFailed(message: string, details?: Record<string, unknown>): AppError {
   return new AppError('COMMAND_FAILED', message, details);

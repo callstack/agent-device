@@ -33,11 +33,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import {
   isRetryableRunnerError,
-  resolveRunnerEarlyExitHint,
   shouldRetryRunnerConnectError,
-  withRunnerCommandId,
-  type RunnerCommand,
-} from '../runner-contract.ts';
+} from '../runner-error-classification.ts';
+import { resolveRunnerEarlyExitHint } from '../runner-startup-failure.ts';
+import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {
   resolveRunnerBuildDestination,
   resolveRunnerDestination,

@@ -19,7 +19,7 @@ import {
   RUNNER_STARTUP_FAILURE_REASONS,
   RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON,
   type RunnerStartupFailureReason,
-} from '../runner-contract.ts';
+} from '../runner-error-classification.ts';
 import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_DEVICE } from './device-fixtures.ts';

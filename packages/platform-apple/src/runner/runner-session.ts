@@ -39,10 +39,12 @@ import {
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
+} from './runner-contract.ts';
+import {
   resolveRunnerFatalErrorReason,
   isRunnerMainThreadOccupiedError,
   enrichRunnerStartupFailureWithDeviceStates,
-} from './runner-contract.ts';
+} from './runner-error-classification.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,

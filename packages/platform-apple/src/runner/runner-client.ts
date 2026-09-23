@@ -9,10 +9,10 @@ import {
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
-  isRetryableRunnerError,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
+import { isRetryableRunnerError } from './runner-error-classification.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   createLocalAppleRunnerProvider,

@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { runAppleToolCommand } from './host.ts';
-import { classifyRunnerStartupFailure } from './runner-contract.ts';
+import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 
 const DEV_TOOLS_SECURITY_TIMEOUT_MS = 2_000;
 

@@ -13,7 +13,7 @@ import {
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { classifyRunnerStartupFailure } from './runner-contract.ts';
+import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
 import { withXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
 import {

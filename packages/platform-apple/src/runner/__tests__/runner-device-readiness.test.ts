@@ -6,7 +6,7 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
 import type { IosDeviceReadiness } from '../host.ts';
 import { preflightIosRunnerDeviceReadiness } from '../runner-device-readiness.ts';
-import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
+import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-error-classification.ts';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import {
   deviceReadinessFixtures,

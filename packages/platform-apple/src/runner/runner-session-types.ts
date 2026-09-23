@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
 import type { XcodebuildSimulatorSetRedirectHandle } from './runner-device-set.ts';
-import type { IosRunnerDeviceStates } from './runner-contract.ts';
+import type { IosRunnerDeviceStates } from './runner-error-classification.ts';
 
 /**
  * Where one runner process stands in the lifecycle of the session that owns it (#2662). The state

@@ -4,7 +4,7 @@ import { resolveIosPhysicalDeviceControl, type IosDeviceReadiness } from './host
 import {
   type IosRunnerDeviceStates,
   type RunnerDeviceReadinessFailureReason,
-} from './runner-contract.ts';
+} from './runner-error-classification.ts';
 
 const DEVICE_MODE_OFF_MESSAGE = 'The iOS device reports that Developer Mode is turned off';
 

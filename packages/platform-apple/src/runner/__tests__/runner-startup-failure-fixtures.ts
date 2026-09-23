@@ -2,8 +2,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   RunnerDeviceReadinessFailureReason,
   RunnerStartupFailureReason,
-} from '../runner-contract.ts';
-import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-contract.ts';
+} from '../runner-error-classification.ts';
+import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-error-classification.ts';
 import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
 
 /**

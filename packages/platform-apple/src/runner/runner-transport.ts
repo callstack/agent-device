@@ -2,7 +2,8 @@ import { createRequestCanceledError, AppError } from '@agent-device/kernel/error
 import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRunnerCommandRouteResolver } from './runner-command-route.ts';
-import { isUsbmuxDeviceUnattachedError, type RunnerCommand } from './runner-contract.ts';
+import { isUsbmuxDeviceUnattachedError } from './runner-error-classification.ts';
+import type { RunnerCommand } from './runner-contract.ts';
 import { usbmuxRunnerTransport } from './runner-usbmux.ts';
 
 export const RUNNER_COMMAND_TIMEOUT_MS = 45_000;

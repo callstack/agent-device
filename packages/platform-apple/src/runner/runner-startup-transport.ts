@@ -19,12 +19,11 @@ import {
   type RunnerCommandRoute,
 } from './runner-command-route.ts';
 import {
-  buildRunnerConnectError,
-  buildRunnerEarlyExitError,
   isUsbmuxDeviceUnattachedError,
   shouldRetryRunnerConnectError,
-  type RunnerCommand,
-} from './runner-contract.ts';
+} from './runner-error-classification.ts';
+import { buildRunnerConnectError, buildRunnerEarlyExitError } from './runner-startup-failure.ts';
+import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
 import {
   canFallBackFromUsbmux,

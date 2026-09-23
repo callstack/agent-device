@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import { isRetryableRunnerError } from '../runner-contract.ts';
+import { isRetryableRunnerError } from '../runner-error-classification.ts';
 import type { RunnerLogAttempt } from '../runner-failure-diagnostics.ts';
 import { parseRunnerResponse } from '../runner-session.ts';
 
