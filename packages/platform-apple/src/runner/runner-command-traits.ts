@@ -1,51 +1,5 @@
 import type { RunnerCommand } from './runner-contract.ts';
 
-export type RunnerCommandTraitClass =
-  | 'default'
-  | 'readinessPreflightExemptMutation'
-  | 'readOnly'
-  | 'alertAction'
-  | 'readOnlyReadinessProbe'
-  | 'preflightSkippableTouchMutation';
-
-export const RUNNER_COMMAND_TRAIT_MANIFEST = {
-  tap: 'preflightSkippableTouchMutation',
-  mouseClick: 'default',
-  longPress: 'preflightSkippableTouchMutation',
-  drag: 'preflightSkippableTouchMutation',
-  remotePress: 'default',
-  type: 'default',
-  swipe: 'preflightSkippableTouchMutation',
-  scroll: 'preflightSkippableTouchMutation',
-  desktopScroll: 'preflightSkippableTouchMutation',
-  findText: 'readOnly',
-  querySelector: 'readOnly',
-  readText: 'readOnly',
-  snapshot: 'readOnly',
-  screenshot: 'readOnly',
-  back: 'default',
-  backInApp: 'default',
-  backSystem: 'default',
-  home: 'default',
-  rotate: 'default',
-  gesture: 'preflightSkippableTouchMutation',
-  gestureViewport: 'readOnly',
-  appSwitcher: 'default',
-  actionButton: 'default',
-  keyboardDismiss: 'default',
-  keyboardReturn: 'default',
-  alert: 'alertAction',
-  sequence: 'preflightSkippableTouchMutation',
-  recordStart: 'default',
-  recordStop: 'default',
-  status: 'readOnlyReadinessProbe',
-  uptime: 'readOnlyReadinessProbe',
-  activate: 'readinessPreflightExemptMutation',
-  terminate: 'readinessPreflightExemptMutation',
-  targetReset: 'readinessPreflightExemptMutation',
-  shutdown: 'default',
-} as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitClass>;
-
 export type RunnerCommandTraits = Readonly<{
   readOnly: boolean;
   readinessProbe: boolean;
@@ -86,6 +40,55 @@ const PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS: RunnerCommandTraits = {
   readinessPreflightSkipEligibleAfterHealthyMutation: true,
 };
 
+type RunnerCommandTraitsEntry =
+  | RunnerCommandTraits
+  | ((command: RunnerCommand) => RunnerCommandTraits);
+
+const readAlertActionTraits = (command: RunnerCommand): RunnerCommandTraits =>
+  (command.action ?? 'get').toLowerCase() === 'get' ? READ_ONLY_TRAITS : DEFAULT_TRAITS;
+
+/**
+ * Traits of every runner command the daemon can send. A command whose traits depend on its
+ * payload maps to a function of the command instead of a fixed trait set.
+ */
+export const RUNNER_COMMAND_TRAITS = {
+  tap: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  mouseClick: DEFAULT_TRAITS,
+  longPress: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  drag: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  remotePress: DEFAULT_TRAITS,
+  type: DEFAULT_TRAITS,
+  swipe: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  scroll: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  desktopScroll: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  findText: READ_ONLY_TRAITS,
+  querySelector: READ_ONLY_TRAITS,
+  readText: READ_ONLY_TRAITS,
+  snapshot: READ_ONLY_TRAITS,
+  screenshot: READ_ONLY_TRAITS,
+  back: DEFAULT_TRAITS,
+  backInApp: DEFAULT_TRAITS,
+  backSystem: DEFAULT_TRAITS,
+  home: DEFAULT_TRAITS,
+  rotate: DEFAULT_TRAITS,
+  gesture: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  gestureViewport: READ_ONLY_TRAITS,
+  appSwitcher: DEFAULT_TRAITS,
+  actionButton: DEFAULT_TRAITS,
+  keyboardDismiss: DEFAULT_TRAITS,
+  keyboardReturn: DEFAULT_TRAITS,
+  alert: readAlertActionTraits,
+  sequence: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
+  recordStart: DEFAULT_TRAITS,
+  recordStop: DEFAULT_TRAITS,
+  status: READ_ONLY_READINESS_PROBE_TRAITS,
+  uptime: READ_ONLY_READINESS_PROBE_TRAITS,
+  activate: READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS,
+  terminate: READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS,
+  targetReset: READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS,
+  shutdown: DEFAULT_TRAITS,
+} as const satisfies Record<RunnerCommand['command'], RunnerCommandTraitsEntry>;
+
 export function isReadOnlyRunnerCommand(command: RunnerCommand): boolean {
   return readRunnerCommandTraits(command).readOnly;
 }
@@ -105,18 +108,6 @@ export function canSkipRunnerReadinessPreflightAfterHealthyMutation(
 }
 
 export function readRunnerCommandTraits(command: RunnerCommand): RunnerCommandTraits {
-  switch (RUNNER_COMMAND_TRAIT_MANIFEST[command.command]) {
-    case 'default':
-      return DEFAULT_TRAITS;
-    case 'readinessPreflightExemptMutation':
-      return READINESS_PREFLIGHT_EXEMPT_MUTATION_TRAITS;
-    case 'readOnly':
-      return READ_ONLY_TRAITS;
-    case 'alertAction':
-      return (command.action ?? 'get').toLowerCase() === 'get' ? READ_ONLY_TRAITS : DEFAULT_TRAITS;
-    case 'readOnlyReadinessProbe':
-      return READ_ONLY_READINESS_PROBE_TRAITS;
-    case 'preflightSkippableTouchMutation':
-      return PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS;
-  }
+  const traits: RunnerCommandTraitsEntry = RUNNER_COMMAND_TRAITS[command.command];
+  return typeof traits === 'function' ? traits(command) : traits;
 }

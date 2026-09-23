@@ -166,7 +166,7 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
 
 /**
  * The one declaration of runner error classes (#1631), mirroring
- * RUNNER_COMMAND_TRAIT_MANIFEST's role for commands: every recovery predicate
+ * RUNNER_COMMAND_TRAITS' role for commands: every recovery predicate
  * below derives from this table instead of keeping its own substring chain,
  * and since #2680 so does the one classification of startup failures — a row
  * carries recovery verdicts, a `buildFailure` reason and hint, or both.

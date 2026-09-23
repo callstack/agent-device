@@ -29,10 +29,7 @@ vi.mock('../runner-macos-products.ts', async () => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  RUNNER_COMMAND_TRAIT_MANIFEST,
-  isReadOnlyRunnerCommand,
-} from '../runner-command-traits.ts';
+import { RUNNER_COMMAND_TRAITS, isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import {
   isRetryableRunnerError,
   shouldRetryRunnerConnectError,
@@ -310,12 +307,12 @@ test('resolveRunnerDestination uses simulator destination for simulators', () =>
 });
 
 test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
-  // The trait manifest is the exhaustive runner-command enumeration — it is `satisfies
+  // The trait table is the exhaustive runner-command enumeration — it is `satisfies
   // Record<RunnerCommand['command'], …>` — so the fixture set is checked against that declaration
   // instead of against a second hand-maintained list that a new command has to remember to update.
   assert.deepEqual(
     Object.keys(runnerProtocolCommandFixtures).sort(),
-    Object.keys(RUNNER_COMMAND_TRAIT_MANIFEST).sort(),
+    Object.keys(RUNNER_COMMAND_TRAITS).sort(),
   );
 
   const roundTrip = JSON.parse(JSON.stringify(runnerProtocolCommandFixtures)) as Record<
