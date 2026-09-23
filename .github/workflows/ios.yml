@@ -162,7 +162,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedTextCommitProgressWalksExpectedPrefixOnly \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEmptyReplacementWithoutResolvableTargetFailsClosed \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
