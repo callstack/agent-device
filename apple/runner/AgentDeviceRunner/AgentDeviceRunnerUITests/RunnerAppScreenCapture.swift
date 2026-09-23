@@ -54,6 +54,21 @@ enum RunnerAppScreenCaptureFailure: String, Error {
   }
 }
 
+extension RunnerTests {
+  /// The target rule, kept apart from the two queries so the rule itself is testable: an unresolved
+  /// window asks the system surface, and nothing else does.
+  func selectObservedScreenCapture(
+    resolving: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+    fallingBack: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
+  ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+    let outcome = resolving()
+    if case .failure(.unresolvedWindow) = outcome {
+      return fallingBack()
+    }
+    return outcome
+  }
+}
+
 #if canImport(UIKit) && os(iOS)
 extension RunnerTests {
   /// Captures the display hosting `app` instead of `XCUIScreen.main`.
@@ -101,19 +116,6 @@ extension RunnerTests {
       resolving: { captureResolvedAppScreen(app: app) },
       fallingBack: { captureResolvedAppScreen(app: springboard) }
     )
-  }
-
-  /// The target rule, kept apart from the two queries so the rule itself is testable: an unresolved
-  /// window asks the system surface, and nothing else does.
-  func selectObservedScreenCapture(
-    resolving: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
-    fallingBack: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
-  ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
-    let outcome = resolving()
-    if case .failure(.unresolvedWindow) = outcome {
-      return fallingBack()
-    }
-    return outcome
   }
 
   private static func resolveCapturedAppScreen(

@@ -177,17 +177,49 @@ extension RunnerTests {
 
   private func captureNavigationFallbackVisualState(app: XCUIApplication) -> NavigationVisualSample {
 #if os(iOS)
-    // A visual check is optional evidence, and the check is about THIS app's screen after the tap.
-    // It uses the app's own resolved screen, never the system-surface fallback: sampling SpringBoard's
-    // home screen twice would read as "unchanged" for an app that resolved no window, laundering a
-    // wrong-process sample into the same false "no back control" verdict a `nil` sample produces (#2728).
-    switch captureResolvedAppScreen(app: app) {
+    return Self.navigationFallbackSample(
+      resolvingApp: { self.captureResolvedAppScreen(app: app) },
+      systemSurface: { self.captureResolvedAppScreen(app: self.springboard) },
+      encoding: { runnerPngData(for: $0.image) }
+    )
+#else
+    return NavigationVisualSample(data: nil)
+#endif
+  }
+
+  /// The decision the in-app `back` fallback makes about WHAT to sample, kept apart from the live app
+  /// so the decision itself is testable. It samples only the app's own resolved screen: consulting the
+  /// system surface for an app that resolved no window would capture SpringBoard's home screen, which
+  /// reads as "unchanged" across a before/after pair and launders a wrong-process frame into a false
+  /// "no back control" — the opposite of the unknown-outcome answer the fallback owes (#2728). The
+  /// system surface is still threaded in, so sampling it is the tested contract: a caller that started
+  /// to consult it fails the fallback's test. `navigationVisualSample` then names the refusal.
+  static func navigationFallbackSample(
+    resolvingApp: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+    systemSurface: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+    encoding: (CapturedAppScreen) -> Data?
+  ) -> NavigationVisualSample {
+    _ = systemSurface
+    return navigationVisualSample(from: resolvingApp(), encoding: encoding)
+  }
+
+  /// Turns a capture answer into a navigation sample: the encoded frame when the display answered,
+  /// and the typed reason it refused otherwise. A resolved display whose image would not encode is
+  /// named as the capture failure it is, not as an unnamed no-sample that would default to "no
+  /// display resolved" (#2728). Kept apart from the query so the mapping itself is testable.
+  static func navigationVisualSample(
+    from outcome: Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+    encoding: (CapturedAppScreen) -> Data?
+  ) -> NavigationVisualSample {
+    switch outcome {
     case .success(let captured):
-      guard let png = runnerPngData(for: captured.image) else {
-        // The display resolved but the image would not encode: name it as the capture failure it is,
-        // not as an unnamed no-sample that would default to "no display resolved" (#2728).
+      guard let png = encoding(captured) else {
         let refusal = RunnerAppScreenCaptureFailure.unrenderableImage
-        return NavigationVisualSample(data: nil, refusalCode: refusal.rawValue, refusalHint: refusal.hint)
+        return NavigationVisualSample(
+          data: nil,
+          refusalCode: refusal.rawValue,
+          refusalHint: refusal.hint
+        )
       }
       return NavigationVisualSample(data: png)
     case .failure(let failure):
@@ -197,9 +229,6 @@ extension RunnerTests {
         refusalHint: failure.hint
       )
     }
-#else
-    return NavigationVisualSample(data: nil)
-#endif
   }
 
   private func verifyNavigationFallbackOutcome(
@@ -217,6 +246,16 @@ extension RunnerTests {
       after.data?.count ?? -1,
       observation.logToken
     )
+    return Self.inAppBackOutcome(observation: observation, before: before, after: after)
+  }
+
+  /// What an observation of the fallback's before/after samples concludes. Kept apart from the sleep
+  /// and the capture so the three-way decision is testable without a running app.
+  static func inAppBackOutcome(
+    observation: NavigationVisualObservation,
+    before: NavigationVisualSample,
+    after: NavigationVisualSample
+  ) -> InAppBackOutcome {
     switch observation {
     case .changed:
       return .performed
@@ -362,6 +401,72 @@ extension RunnerTests {
     )
     XCTAssertEqual(unnamed.code, "APP_SCREEN_UNRESOLVED")
     XCTAssertTrue(unnamed.message.contains("unknown outcome"))
+  }
+
+  func testVerifyNavigationFallbackOutcomeReportsUnresolvedWindowWithoutSystemSurface() {
+    // The in-app `back` fallback ran its tap but the app resolved no window. It must name that refusal
+    // as an unknown outcome AND must not have sampled the system surface: capturing SpringBoard's home
+    // screen twice reads as "unchanged" and launders a wrong-process frame into "no back control
+    // exists" (#2728). This drives the SAME `navigationFallbackSample` production calls, handing it a
+    // system surface that fails the test if consulted — so reverting the fallback to sample SpringBoard
+    // (or dropping the refusal code) turns this red, which an inline `.never` re-creation could not.
+    var askedSystemSurface = false
+    let sample = Self.navigationFallbackSample(
+      resolvingApp: { .failure(.unresolvedWindow) },
+      systemSurface: {
+        askedSystemSurface = true
+        return .failure(.unresolvedWindow)
+      },
+      encoding: { _ in Data([1, 2, 3]) }
+    )
+    XCTAssertFalse(askedSystemSurface, "the in-app fallback samples the app only, never SpringBoard")
+
+    XCTAssertNil(sample.data)
+    XCTAssertEqual(sample.refusalCode, "APP_SCREEN_WINDOW_UNRESOLVED")
+
+    let observation = Self.navigationVisualObservation(before: sample.data, after: sample.data)
+    XCTAssertEqual(observation, .unobserved)
+
+    switch Self.inAppBackOutcome(observation: observation, before: sample, after: sample) {
+    case .unverified(let payload):
+      XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+    case .performed, .unavailable:
+      XCTFail("a refused capture must report an unknown outcome, not 'no back control'")
+    }
+  }
+
+  func testNavigationVisualSampleDistinguishesEncodedFrameFromRefusal() {
+    // The same capture entry point yields three different samples, and only the refusal ones may carry
+    // a code: an encoded frame is evidence, a resolved-but-unencodable image and a refusal are not
+    // (#2728). Reverting the mapping to a plain no-sample loses the reason a host keys on.
+    let captured = CapturedAppScreen(
+      image: RunnerImage(),
+      displayID: 3,
+      pixelWidth: 12,
+      pixelHeight: 24,
+      pixelsPerPoint: 3
+    )
+
+    let encoded = Self.navigationVisualSample(
+      from: .success(captured),
+      encoding: { _ in Data([7, 7]) }
+    )
+    XCTAssertEqual(encoded.data, Data([7, 7]))
+    XCTAssertNil(encoded.refusalCode)
+
+    let unencodable = Self.navigationVisualSample(
+      from: .success(captured),
+      encoding: { _ in nil }
+    )
+    XCTAssertNil(unencodable.data)
+    XCTAssertEqual(unencodable.refusalCode, "APP_SCREEN_CAPTURE_UNRENDERABLE")
+
+    let refused = Self.navigationVisualSample(
+      from: .failure(.unresolvedScreen),
+      encoding: { _ in Data([7, 7]) }
+    )
+    XCTAssertNil(refused.data)
+    XCTAssertEqual(refused.refusalCode, "APP_SCREEN_UNRESOLVED")
   }
 #endif
 }

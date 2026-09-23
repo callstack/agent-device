@@ -59,3 +59,40 @@ extension RunnerTests {
   }
 #endif
 }
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+extension RunnerTests {
+  func testRecordStartThrowsTheCaptureRefusalItReceived() throws {
+    // The bootstrap frame is required, so `record start` must surface the exact refusal its capture
+    // saw rather than the generic "failed to capture initial frame" every refusal used to collapse
+    // into, and that refusal must reach the host as its own code. Driving `start` with an always-
+    // refusing capture and mapping the ACTUAL thrown error — not a re-typed literal — proves the
+    // bootstrap forwards its last refusal end to end; the pure mapping tests cannot catch that wiring.
+    let outputPath = (NSTemporaryDirectory() as NSString).appendingPathComponent(
+      "record-refusal-\(UUID().uuidString).mp4"
+    )
+    let recorder = ScreenRecorder(outputPath: outputPath, fps: 30)
+
+    var captureCalls = 0
+    var thrown: Error?
+    XCTAssertThrowsError(
+      try recorder.start(capture: {
+        captureCalls += 1
+        return .failure(.unresolvedWindow)
+      })
+    ) { error in
+      thrown = error
+      XCTAssertEqual(
+        (error as? RunnerAppScreenCaptureFailure)?.rawValue,
+        "APP_SCREEN_WINDOW_UNRESOLVED",
+        "the thrown bootstrap error is the refusal the capture returned"
+      )
+    }
+    XCTAssertGreaterThan(captureCalls, 0, "the bootstrap must poll the injected capture")
+
+    // The refusal the bootstrap actually threw maps to its own host code, not the generic record error.
+    let payload = RunnerTests.recordingStartErrorPayload(for: try XCTUnwrap(thrown))
+    XCTAssertEqual(payload.code, "APP_SCREEN_WINDOW_UNRESOLVED")
+  }
+}
+#endif
