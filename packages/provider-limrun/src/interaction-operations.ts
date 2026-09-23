@@ -44,9 +44,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const available = Object.freeze({ available: true } as const);
 /**
- * Limrun's iOS direct session drives text and touch but exposes no portable gesture execution —
- * its interactor's own `performGesture` refuses with this wording. Stating it as a fact refuses at
- * admission instead of mid-execution (ADR 0019 §6), keeping the agent-facing hint identical.
+ * Limrun's iOS direct session drives text and touch but exposes no portable gesture execution.
+ * Stating it as a fact refuses at admission instead of mid-execution (ADR 0019 §6), and it is
+ * the only refusal the caller sees: the leg's interactor carries no gesture member at all.
  */
 const iosGestureUnavailable = Object.freeze({
   available: false,

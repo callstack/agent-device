@@ -332,13 +332,6 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.setOrientation(orientation === 'portrait' ? 'Portrait' : 'Landscape');
   }
 
-  async performGesture(): Promise<never> {
-    throw unsupported(
-      'gesture',
-      'Limrun iOS direct sessions do not expose portable gesture execution yet.',
-    );
-  }
-
   async setSetting(): Promise<never> {
     throw unsupported('settings', 'Limrun iOS direct sessions do not expose settings changes yet.');
   }
