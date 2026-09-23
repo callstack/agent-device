@@ -125,23 +125,22 @@ extension RunnerTests {
   func testViewportReadSkippedWhileXCTestChannelPenalized() {
     // Pins the viewport fast path (#1587 review): every penalized private AX capture used to burn
     // the full 1s main-thread timeout on a doomed viewport read before falling back.
-    currentBundleId = "xyz.blueskyweb.app"
+    let bundleId = "xyz.blueskyweb.app"
     defer {
-      currentBundleId = nil
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
       abandonedMainThreadWorkCount = 0
     }
 
-    XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest())
+    XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId))
 
-    penalizeSnapshotXCTestChannel(bundleId: "xyz.blueskyweb.app", reason: "test")
-    XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest())
+    penalizeSnapshotXCTestChannel(bundleId: bundleId, reason: "test")
+    XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId))
 
     clearSnapshotXCTestChannelPenalty(reason: "test")
-    XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest())
+    XCTAssertTrue(shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId))
 
     abandonedMainThreadWorkCount = 1
-    XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest())
+    XCTAssertFalse(shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId))
   }
 
   /// The wire field must reach both capture options AND the backend pin: custom

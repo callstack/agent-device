@@ -110,14 +110,16 @@ extension RunnerTests {
   /// remembered depth deliberately does NOT refresh the TTL, so expiry re-probes the full
   /// requested depth once per window instead of capping this screen class forever.
   func recordPrivateAXAcceptedDepth(
+    bundleId: String?,
+    processIdentifier: Int?,
     exactDepthRequested: Bool,
     effectiveDepth: Int,
     attemptDepths: [Int]
   ) {
     guard !exactDepthRequested, effectiveDepth != attemptDepths.first else { return }
     rememberPrivateAXAcceptedDepth(
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier,
+      bundleId: bundleId,
+      processIdentifier: processIdentifier,
       depth: effectiveDepth
     )
   }
@@ -160,11 +162,12 @@ extension RunnerTests {
   }
 
   func privateAXSnapshotAcquisition(
-    app: XCUIApplication,
+    target: SnapshotCaptureTarget,
     hint: CaptureHint,
     deadline: Date = .distantFuture
   ) -> SnapshotAcquisition? {
     #if os(iOS) && targetEnvironment(simulator)
+      let app = target.app
       let requestedDepth = hint.rawTraversalDepth ?? 64
       // An explicit --depth request is honored as asked: no accepted-depth
       // memory, no frontier extension past it.
@@ -173,8 +176,8 @@ extension RunnerTests {
         exactDepthRequested
         ? nil
         : rememberedPrivateAXAcceptedDepth(
-          bundleId: currentBundleId,
-          processIdentifier: currentAppProcessIdentifier
+          bundleId: target.bundleId,
+          processIdentifier: target.processIdentifier
         )
       let attemptDepths = Self.privateAXAttemptDepths(
         requestedDepth: requestedDepth,
@@ -202,6 +205,8 @@ extension RunnerTests {
         return nil
       }
       recordPrivateAXAcceptedDepth(
+        bundleId: target.bundleId,
+        processIdentifier: target.processIdentifier,
         exactDepthRequested: exactDepthRequested,
         effectiveDepth: effectiveDepth,
         attemptDepths: attemptDepths
@@ -212,7 +217,11 @@ extension RunnerTests {
       }
 
       let rootFrame = privateAXRect(root["frame"])
-      let geometry = privateAXSnapshotGeometry(app: app, rootFrame: rootFrame)
+      let geometry = privateAXSnapshotGeometry(
+        app: app,
+        bundleId: target.bundleId,
+        rootFrame: rootFrame
+      )
       let viewport = geometry.viewport
       let nodes = privateAXAcquisition(
         rawRoot: root,
@@ -262,8 +271,8 @@ extension RunnerTests {
   /// grinding on this screen class. Under penalty it reliably burns its full timeout and
   /// falls back anyway (~1s added to every private AX capture on the Bluesky bench feed),
   /// so honor the penalty here the same way capture plans do.
-  func shouldReadPrivateAXViewportViaXCTest() -> Bool {
-    !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+  func shouldReadPrivateAXViewportViaXCTest(bundleId: String?) -> Bool {
+    !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: bundleId)
   }
 
   /// The geometry this tier may anchor a rotation on. The bridge's own root frame is one more
@@ -272,10 +281,11 @@ extension RunnerTests {
   /// consumers already treat as geometry they cannot measure (#2612).
   private func privateAXSnapshotGeometry(
     app: XCUIApplication,
+    bundleId: String?,
     rootFrame: CGRect
   ) -> (viewport: CGRect, interfaceOrientation: Int) {
     let fallback = rootFrame.isEmpty ? CGRect.infinite : rootFrame
-    guard shouldReadPrivateAXViewportViaXCTest() else {
+    guard shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId) else {
       return (fallback, RunnerInterfaceOrientation.unknown)
     }
     do {

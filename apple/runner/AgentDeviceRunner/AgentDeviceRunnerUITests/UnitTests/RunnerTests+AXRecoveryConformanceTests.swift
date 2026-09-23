@@ -426,8 +426,6 @@ extension RunnerTests {
     XCTAssertFalse(fixture.hintCases.isEmpty)
     defer {
       clearPrivateAXAcceptedDepth(reason: "test-cleanup")
-      currentBundleId = nil
-      currentAppProcessIdentifier = nil
     }
     for hintCase in fixture.hintCases {
       clearPrivateAXAcceptedDepth(reason: "fixture-case")
@@ -440,8 +438,6 @@ extension RunnerTests {
         let target = try XCTUnwrap(step.target, name)
         let processIdentifier = try XCTUnwrap(
           Int(target.generation.filter(\.isNumber)), "\(name): generation must end in digits")
-        currentBundleId = target.id
-        currentAppProcessIdentifier = processIdentifier
         let explicit = step.explicitDepth ?? false
         let remembered =
           explicit
@@ -459,6 +455,8 @@ extension RunnerTests {
           XCTAssertEqual(capture.truncated, outcome.complete == false, "\(name): bounded")
           // The production path records only after a successful ladder, exactly like this.
           recordPrivateAXAcceptedDepth(
+            bundleId: target.id,
+            processIdentifier: processIdentifier,
             exactDepthRequested: explicit,
             effectiveDepth: capture.effectiveDepth,
             attemptDepths: capture.attemptDepths)

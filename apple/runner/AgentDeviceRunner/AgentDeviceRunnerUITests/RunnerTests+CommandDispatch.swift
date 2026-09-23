@@ -580,7 +580,8 @@ extension RunnerTests {
     #endif
     let probeDeadline = Date().addingTimeInterval(systemModalProbeBudget)
     return boundedBlockingSystemAlertSnapshot(
-      deadline: probeDeadline
+      deadline: probeDeadline,
+      penaltyBundleId: currentBundleId
     ) != nil
 #else
     return false

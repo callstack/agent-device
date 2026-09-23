@@ -9,21 +9,29 @@ extension RunnerTests {
   }
 
   private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
-    let preparation = try runMainThreadWork(
+    let preparation: SnapshotCommandPreparation = try runMainThreadWork(
       "command_preparation",
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
-    ) {
-      try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false)
+    ) { () -> SnapshotCommandPreparation in
+      switch try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false) {
+      case .response(let response):
+        return .response(response)
+      case .context(let context):
+        return .capture(
+          self.takeSnapshotCaptureTarget(app: context.app),
+          systemSurface: context.systemSurface
+        )
+      }
     }
     switch preparation {
     case .response(let response):
       return response
-    case .context(let context):
+    case .capture(let target, let systemSurface):
       return try executeSnapshotPrepared(
         command: command,
-        activeApp: context.app,
-        systemSurface: context.systemSurface
+        target: target,
+        systemSurface: systemSurface
       )
     }
   }
@@ -76,16 +84,16 @@ extension RunnerTests {
 
   private func executeSnapshotPrepared(
     command: Command,
-    activeApp: XCUIApplication,
+    target: SnapshotCaptureTarget,
     systemSurface: SystemSurfaceHost?
   ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
       var payload: DataPayload
       if options.raw {
-        payload = try snapshotRaw(app: activeApp, options: options)
+        payload = try snapshotRaw(target: target, options: options)
       } else {
-        payload = try snapshotFast(app: activeApp, options: options)
+        payload = try snapshotFast(target: target, options: options)
       }
       if let systemSurface {
         payload.systemSurface = SystemSurfaceProvenancePayload(
@@ -127,25 +135,8 @@ extension RunnerTests {
   }
 
   func invalidateCachedTargetAfterSnapshotFailure() {
-    // Abandoned work ahead of this hop cannot be cancelled: queue the drop behind it without
-    // waiting, so the failed capture answers now and the next command still finds the target gone.
-    guard !hasAbandonedMainThreadWork() else {
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_INVALIDATION_DEFERRED_XCTEST_OCCUPIED")
-      DispatchQueue.main.async {
-        self.invalidateCachedTarget(reason: "ax_snapshot_failure")
-      }
-      return
-    }
-    do {
-      try runMainThreadWork(
-        "target_invalidation",
-        timeout: 1,
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        self.invalidateCachedTarget(reason: "ax_snapshot_failure")
-      }
-    } catch {
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_INVALIDATION_FAILED=%@", String(describing: error))
+    applyMainOwnedSnapshotState("target_invalidation") {
+      self.invalidateCachedTarget(reason: "ax_snapshot_failure")
     }
   }
 }

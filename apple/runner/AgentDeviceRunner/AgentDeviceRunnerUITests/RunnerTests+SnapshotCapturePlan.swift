@@ -142,6 +142,7 @@ extension RunnerTests {
     return penalized == bundleId
   }
 
+  /// Main thread only, through `takeSnapshotCaptureTarget`.
   func consumeSnapshotXCTestPenaltyWarmupExemption() -> Bool {
     let pending = snapshotXCTestPenaltyWarmupExemptionPending
     snapshotXCTestPenaltyWarmupExemptionPending = false
@@ -260,7 +261,7 @@ extension RunnerTests {
 
   func runSnapshotCapturePlan(
     _ plan: [SnapshotBackendKind],
-    app: XCUIApplication,
+    target: SnapshotCaptureTarget,
     options: PresentationOptions,
     terminal: SnapshotCaptureTerminalPolicy,
     deadline: Date? = nil
@@ -270,7 +271,6 @@ extension RunnerTests {
     var axFailure: SnapshotCaptureFailure?
     // A caller may share the pre-plan system-modal probe's deadline; otherwise own the full budget (#1244).
     let deadline = deadline ?? Date().addingTimeInterval(Self.snapshotPlanBudget)
-    let suppressXCTestPenalty = consumeSnapshotXCTestPenaltyWarmupExemption()
 
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
     // the app remains visually responsive. Simulators can avoid that channel through private AX;
@@ -281,7 +281,7 @@ extension RunnerTests {
     var xCTestChannelPenalized = false
     var xCTestChannelPenalizedByBreaker = false
 #if os(iOS)
-    xCTestChannelPenalizedByBreaker = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+    xCTestChannelPenalizedByBreaker = isSnapshotXCTestChannelPenalized(bundleId: target.bundleId)
     xCTestChannelPenalized = Self.snapshotXCTestChannelTreatedAsPenalized(
       penalized: xCTestChannelPenalizedByBreaker,
       preferredBackend: options.preferredBackend
@@ -305,9 +305,9 @@ extension RunnerTests {
     case .normal:
       break
     case .deferredToIndependentBackend:
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_DEFERRED bundle=%@", currentBundleId ?? "")
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_DEFERRED bundle=%@", target.bundleId ?? "")
     case .boundedXCTestProbe:
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PROBE_BOUNDED bundle=%@", currentBundleId ?? "")
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PROBE_BOUNDED bundle=%@", target.bundleId ?? "")
     }
 
     for kind in effectivePlan {
@@ -332,7 +332,7 @@ extension RunnerTests {
       }
       let attempt = try captureWithBackend(
         kind,
-        app: app,
+        target: target,
         options: options,
         deadline: deadline,
         treeCaptureSliceBudgetOverride: effective.treeCaptureSliceBudgetOverride
@@ -340,7 +340,8 @@ extension RunnerTests {
       recordXCTestSnapshotBackendAttemptIfNeeded(
         kind,
         attempt: attempt,
-        penaltySuppressed: suppressXCTestPenalty
+        bundleId: target.bundleId,
+        penaltySuppressed: target.xCTestPenaltyWarmupExempt
       )
       if case let .failed(failure, phase: _) = attempt.outcome {
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }
@@ -412,11 +413,12 @@ extension RunnerTests {
 
   private func captureWithBackend(
     _ kind: SnapshotBackendKind,
-    app: XCUIApplication,
+    target: SnapshotCaptureTarget,
     options: PresentationOptions,
     deadline: Date,
     treeCaptureSliceBudgetOverride: TimeInterval?
   ) throws -> SnapshotBackendAttempt {
+    let app = target.app
     let hint = SnapshotPresentation.captureHint(for: options)
     var timer = SnapshotPhaseTimer()
     let acquisition: SnapshotAcquisition?
@@ -461,7 +463,7 @@ extension RunnerTests {
           }
         case .privateAX:
           return self.privateAXSnapshotAcquisition(
-            app: app,
+            target: target,
             hint: hint,
             deadline: deadline
           )
@@ -635,7 +637,10 @@ extension RunnerTests {
     state: String,
     reason: (reason: String, code: String)?
   ) -> DataPayload {
-    runnerAccessibilityHealth = reason?.code == "ax-rejected" ? .unavailable : .healthy
+    let health: RunnerAccessibilityHealth = reason?.code == "ax-rejected" ? .unavailable : .healthy
+    applyMainOwnedSnapshotState("accessibility_health") {
+      self.runnerAccessibilityHealth = health
+    }
     let payload = capture.payload
     let quality = SnapshotQuality(
       state: state,

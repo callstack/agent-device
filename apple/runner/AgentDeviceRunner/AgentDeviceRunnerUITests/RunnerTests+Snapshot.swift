@@ -145,14 +145,17 @@ extension RunnerTests {
   // `boundedBlockingSystemAlertSnapshot`'s probe closure (see `systemModalProbeOverrideForTesting`
   // in RunnerTests.swift), so reverting this entry point to bypass the bounded probe fails the
   // regression test.
-  func snapshotFast(app: XCUIApplication, options: PresentationOptions) throws -> DataPayload {
+  func snapshotFast(target: SnapshotCaptureTarget, options: PresentationOptions) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
-    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
+    if let blocking = boundedBlockingSystemAlertSnapshot(
+      deadline: deadline,
+      penaltyBundleId: target.bundleId
+    ) {
       return blocking
     }
     return try runSnapshotCapturePlan(
       Self.regularVisiblePlan,
-      app: app,
+      target: target,
       options: options,
       terminal: .sparseWithFatalOnAXFailure,
       deadline: deadline
@@ -267,14 +270,17 @@ extension RunnerTests {
   }
 
   // See `snapshotFast` above: the single production entry point, no unit-test overload.
-  func snapshotRaw(app: XCUIApplication, options: PresentationOptions) throws -> DataPayload {
+  func snapshotRaw(target: SnapshotCaptureTarget, options: PresentationOptions) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
-    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
+    if let blocking = boundedBlockingSystemAlertSnapshot(
+      deadline: deadline,
+      penaltyBundleId: target.bundleId
+    ) {
       return blocking
     }
     return try runSnapshotCapturePlan(
       Self.rawDiagnosticPlan,
-      app: app,
+      target: target,
       options: options,
       terminal: .throwOnAXFailure,
       deadline: deadline
@@ -283,8 +289,12 @@ extension RunnerTests {
 
   /// Runs the pre-plan SpringBoard system-modal probe as a bounded capture tier sharing the plan
   /// deadline, so a slow alert enumeration cannot bypass the snapshot timeout and stall (#1244).
-  func boundedBlockingSystemAlertSnapshot(deadline: Date) -> DataPayload? {
-    boundedBlockingSystemAlertSnapshotBody(deadline: deadline) { probeDeadline in
+  /// An abandoned probe penalizes the XCTest channel for `penaltyBundleId`.
+  func boundedBlockingSystemAlertSnapshot(deadline: Date, penaltyBundleId: String?) -> DataPayload? {
+    boundedBlockingSystemAlertSnapshotBody(
+      deadline: deadline,
+      penaltyBundleId: penaltyBundleId
+    ) { probeDeadline in
       #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if let override = self.systemModalProbeOverrideForTesting {
         return override(probeDeadline)
@@ -301,6 +311,7 @@ extension RunnerTests {
   /// production runs and what the unit tests exercise.
   private func boundedBlockingSystemAlertSnapshotBody(
     deadline: Date,
+    penaltyBundleId: String?,
     probe: @escaping (Date) -> DataPayload?
   ) -> DataPayload? {
     #if os(macOS)
@@ -329,7 +340,7 @@ extension RunnerTests {
         },
         onAbandoned: {
           self.penalizeSnapshotXCTestChannel(
-            bundleId: self.currentBundleId,
+            bundleId: penaltyBundleId,
             reason: "system_modal_probe_timeout"
           )
         }
@@ -503,8 +514,10 @@ extension RunnerTests {
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_AX_UNAVAILABLE=%@", failure.message)
-    runnerAccessibilityHealth = .unavailable
-    invalidateCachedTarget(reason: Self.axSnapshotUnavailableReason)
+    applyMainOwnedSnapshotState("ax_unavailable_invalidation") {
+      self.runnerAccessibilityHealth = .unavailable
+      self.invalidateCachedTarget(reason: Self.axSnapshotUnavailableReason)
+    }
     // This is a planned terminal result, so it carries the structured verdict like every other
     // planned snapshot — downstream sparse handling keys off the verdict, not node shapes.
     return sparseTruncatedSnapshotPayload(

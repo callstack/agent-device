@@ -52,6 +52,9 @@ final class RunnerTests: XCTestCase {
   let commandExecutionQueue = DispatchQueue(label: "agent-device.runner.commands")
   let app = XCUIApplication()
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
+  // Main-thread owned, like `runnerAccessibilityHealth` and the warm-up exemption below: an off-main
+  // capture plan reads them only through its `SnapshotCaptureTarget` and writes them only through
+  // `applyMainOwnedSnapshotState`.
   var currentApp: XCUIApplication?
   var currentBundleId: String?
   var currentAppProcessIdentifier: Int?

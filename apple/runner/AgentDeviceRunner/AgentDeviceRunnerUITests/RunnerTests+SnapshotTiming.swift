@@ -91,6 +91,7 @@ extension RunnerTests {
   func recordXCTestSnapshotBackendAttemptIfNeeded(
     _ kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
+    bundleId: String?,
     penaltySuppressed: Bool
   ) {
     guard !penaltySuppressed else { return }
@@ -102,7 +103,7 @@ extension RunnerTests {
       )
     else { return }
     penalizeSnapshotXCTestChannel(
-      bundleId: currentBundleId,
+      bundleId: bundleId,
       reason: reason
     )
   }

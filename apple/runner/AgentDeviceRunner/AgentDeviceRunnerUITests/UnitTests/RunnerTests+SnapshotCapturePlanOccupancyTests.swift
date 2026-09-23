@@ -61,6 +61,7 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemptionPending = true
+    let captureTarget = takeSnapshotCaptureTarget(app: app)
     RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
     let originalImplementation = method_getImplementation(snapshotMethod)
     method_setImplementation(snapshotMethod, method_getImplementation(stubMethod))
@@ -85,7 +86,7 @@ extension RunnerTests {
       do {
         box.payload = try self.runSnapshotCapturePlan(
           Self.regularVisiblePlan,
-          app: self.app,
+          target: captureTarget,
           options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
           terminal: .sparseWithFatalOnAXFailure,
           deadline: Date().addingTimeInterval(12)
@@ -96,7 +97,7 @@ extension RunnerTests {
       self.mainThreadWorkLock.lock()
       box.abandonedAfterPlan = self.abandonedMainThreadWorkCount
       self.mainThreadWorkLock.unlock()
-      box.penalizedAfterPlan = self.isSnapshotXCTestChannelPenalized(bundleId: self.currentBundleId)
+      box.penalizedAfterPlan = self.isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId)
       RunnerBlockingSnapshotGate.release.signal()
       planned.fulfill()
     }
