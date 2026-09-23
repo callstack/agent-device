@@ -47,9 +47,13 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
 
   try {
     const result = await source.acquire({
-      target: { ...sourceTarget, targetId: 'target-1' },
+      target: { ...sourceTarget, targetId: 'target-1', simulatorSetPath: '/tmp/scoped-set' },
       hint,
     });
+    assert.deepEqual(
+      fixture.startedTargets.map((started) => started.simulatorSetPath),
+      ['/tmp/scoped-set'],
+    );
     assert.equal(fixture.builds, 1);
     // Four identity probes and one clang build: the identity read execs one Xcode-owned binary.
     assert.equal(fixture.runs, 5);
@@ -465,6 +469,7 @@ type AdapterFixture = {
   omitViewport: boolean;
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
+  startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
 };
 
 function targetForTest() {
@@ -492,6 +497,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     omitViewport: false,
     omitRecovery: false,
     diagnostics: [],
+    startedTargets: [],
   };
   const host: SnapshotSourceHost = {
     ...realHost,
@@ -520,7 +526,10 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
         exitCode: 0,
       };
     },
-    start: () => new AdapterProcess(),
+    start: (target) => {
+      fixture.startedTargets.push(target);
+      return new AdapterProcess();
+    },
     connect: async () => new AdapterSocket(fixture),
     readTargetProcessStartTime: async () => 'target-start',
   };

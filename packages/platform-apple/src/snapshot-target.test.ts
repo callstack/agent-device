@@ -42,7 +42,7 @@ function targetFixture() {
     runCommand,
     provider,
     resolve,
-    discoveryCount: () => run.mock.calls.filter(([args]) => args[0] === 'spawn').length,
+    discoveryCount: () => run.mock.calls.filter(([args]) => args.includes('spawn')).length,
   };
 }
 
