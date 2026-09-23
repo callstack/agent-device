@@ -188,6 +188,10 @@
       "types": "./src/element-text-runtime.ts",
       "default": "./src/element-text-runtime.ts"
     },
+    "./fill-evidence": {
+      "types": "./src/fill-evidence.ts",
+      "default": "./src/fill-evidence.ts"
+    },
     "./fold-runtime": {
       "types": "./src/fold-runtime.ts",
       "default": "./src/fold-runtime.ts"

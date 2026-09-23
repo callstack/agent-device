@@ -44,6 +44,7 @@
   "@agent-device/contracts/durable-resource",
   "@agent-device/contracts/durable-resource-envelope",
   "@agent-device/contracts/element-text-runtime",
+  "@agent-device/contracts/fill-evidence",
   "@agent-device/contracts/focus-runtime",
   "@agent-device/contracts/fold-runtime",
   "@agent-device/contracts/gesture-admission",
