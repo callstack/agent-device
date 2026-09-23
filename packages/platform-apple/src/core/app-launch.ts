@@ -30,7 +30,7 @@ import { ensureBootedSimulator } from './simulator.ts';
 import { runXcrun } from './tool-provider.ts';
 import { closeMacOsApp, openMacOsApp } from '../os/macos/apps.ts';
 import { resolveIosApp } from './app-resolution.ts';
-import { runSimctl, simctlArgs } from './apps-simctl.ts';
+import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
 
 const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
 const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
@@ -153,7 +153,7 @@ async function openIosSimulatorUrl(
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
-  await runSimctl(device, ['openurl', device.id, url]);
+  await runSimctlForDevice(device, ['openurl', device.id, url]);
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {
@@ -208,7 +208,7 @@ async function assertNotSystemSurfaceHost(bundleId: string): Promise<void> {
 async function terminateIosSimulatorApp(device: DeviceInfo, bundleId: string): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
-  const terminateArgs = simctlArgs(device, ['terminate', device.id, bundleId]);
+  const terminateArgs = buildSimctlArgsForDevice(device, ['terminate', device.id, bundleId]);
   const result = await runXcrun(terminateArgs, {
     allowFailure: true,
     timeoutMs: IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
@@ -244,7 +244,7 @@ async function launchIosSimulatorApp(
           });
         }
 
-        const launchArgs = simctlArgs(
+        const launchArgs = buildSimctlArgsForDevice(
           device,
           buildIosSimulatorLaunchArgs(device.id, bundleId, options),
         );

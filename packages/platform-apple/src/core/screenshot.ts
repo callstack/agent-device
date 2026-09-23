@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { type ExecOptions } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -36,10 +35,6 @@ import { ensureBootedSimulator } from './simulator.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
-
-function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
-  return runSimctlForDevice(device, args, options);
-}
 
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
@@ -213,7 +208,7 @@ export async function captureSimulatorScreenshotWithRetry(
   ];
   await retryWithPolicy(
     async ({ deadline: attemptDeadline }) => {
-      await runSimctl(device, argv, {
+      await runSimctlForDevice(device, argv, {
         timeoutMs: Math.max(
           1_000,
           attemptDeadline?.remainingMs() ?? IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
@@ -299,7 +294,7 @@ async function copyRunnerScreenshotFromSimulator(
     iosSimulatorRunnerContainerCache.delete(device.id);
   }
   for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
-    const containerResult = await runSimctl(
+    const containerResult = await runSimctlForDevice(
       device,
       ['get_app_container', device.id, bundleId, 'data'],
       {
@@ -496,9 +491,13 @@ async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<numb
   if (cachedScale !== undefined) {
     return cachedScale;
   }
-  const scaleResult = await runSimctl(device, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'], {
-    timeoutMs: IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
-  });
+  const scaleResult = await runSimctlForDevice(
+    device,
+    ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'],
+    {
+      timeoutMs: IOS_SIMULATOR_SCREENSHOT_SCALE_TIMEOUT_MS,
+    },
+  );
   const scale = Number(scaleResult.stdout.trim());
   if (!Number.isFinite(scale) || scale <= 0) {
     throw new AppError(

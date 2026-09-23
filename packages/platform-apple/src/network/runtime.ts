@@ -7,6 +7,7 @@ import {
   type NetworkScan,
 } from '@agent-device/capture-kit';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { backendForAppleDevice } from '../logs/backend.ts';
 
 export async function dumpAppleNetworkTraffic(
@@ -88,8 +89,7 @@ async function recoverSimulatorTraffic(
   appLogPath: string,
   signal: AbortSignal,
 ): Promise<{ scan: NetworkScan; lineCount: number } | undefined> {
-  const args = [
-    ...(device.simulatorSetPath ? ['--set', device.simulatorSetPath] : []),
+  const args = scopeSimctlArgsForDevice(device, [
     'spawn',
     device.id,
     'log',
@@ -99,7 +99,7 @@ async function recoverSimulatorTraffic(
     '--info',
     '--predicate',
     buildPredicate(input.appBundleId as string),
-  ];
+  ]);
   const startedAt = input.appLogSnapshot?.startedAt;
   args.push(
     ...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt > 0

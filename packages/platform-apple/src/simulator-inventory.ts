@@ -5,6 +5,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { scopeSimctlArgs } from './core/simctl.ts';
 import {
   isSupportedAppleRuntime,
   resolveAppleOs,
@@ -26,8 +27,7 @@ type SimctlListDevicesPayload = {
 const BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
 
 export function buildSimctlListArgs(simulatorSetPath: string | undefined): string[] {
-  const path = simulatorSetPath?.trim();
-  return path ? ['--set', path, 'list', 'devices', '-j'] : ['list', 'devices', '-j'];
+  return scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath });
 }
 
 export function parseSimctlAppleDevices(

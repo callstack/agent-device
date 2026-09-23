@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { requireExecSuccess, type ExecOptions } from '@agent-device/host-kit/command';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -54,10 +54,6 @@ const CELLULAR_MODE_BY_CODE: Record<number, string> = {
   2: 'failed',
   3: 'active',
 };
-
-function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
-  return runSimctlForDevice(device, args, options);
-}
 
 const devicesKnownWithoutStatusBarOverrides = new Set<string>();
 
@@ -130,7 +126,7 @@ async function readSimulatorStatusBarOverrides(
   device: DeviceInfo,
 ): Promise<RestorableStatusBarOverrides | null> {
   const result = requireExecSuccess(
-    await runSimctl(device, ['status_bar', device.id, 'list'], {
+    await runSimctlForDevice(device, ['status_bar', device.id, 'list'], {
       allowFailure: true,
     }),
     'Failed to read simulator status bar overrides',
@@ -139,7 +135,7 @@ async function readSimulatorStatusBarOverrides(
 }
 
 async function clearSimulatorStatusBarOverride(device: DeviceInfo): Promise<void> {
-  await runSimctl(device, ['status_bar', device.id, 'clear']);
+  await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
 }
 
 async function applySimulatorStatusBarOverrideArgs(
@@ -147,7 +143,7 @@ async function applySimulatorStatusBarOverrideArgs(
   args: string[],
 ): Promise<void> {
   if (args.length === 0) return;
-  await runSimctl(device, ['status_bar', device.id, 'override', ...args]);
+  await runSimctlForDevice(device, ['status_bar', device.id, 'override', ...args]);
 }
 
 function parseSimulatorStatusBarOverrides(output: string): RestorableStatusBarOverrides | null {

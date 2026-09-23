@@ -3,7 +3,8 @@ import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
 import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
-import { getSimulatorState, simctlArgs } from '../simulator-state.ts';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
+import { getSimulatorState } from '../simulator-state.ts';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
 export type AppleReadinessHost = Pick<
@@ -98,7 +99,7 @@ async function startSimulatorBoot(
   const boot = await host.appleTools.run(
     {
       tool: 'simctl',
-      args: simctlArgs(device, ['boot', device.id]),
+      args: scopeSimctlArgsForDevice(device, ['boot', device.id]),
       allowFailure: true,
       timeoutMs: remainingBootBudgetMs(deadlineAtMs, device),
     },
@@ -131,7 +132,7 @@ async function waitForSimulatorBoot(
   const status = await host.appleTools.run(
     {
       tool: 'simctl',
-      args: simctlArgs(device, ['bootstatus', device.id, '-b']),
+      args: scopeSimctlArgsForDevice(device, ['bootstatus', device.id, '-b']),
       allowFailure: true,
       timeoutMs: remainingBootBudgetMs(deadlineAtMs, device),
     },
@@ -194,6 +195,10 @@ async function showSimulator(host: AppleReadinessHost, signal: AbortSignal): Pro
 
 function scheduleSimulatorShutdown(host: AppleReadinessHost, device: DeviceInfo): void {
   void host.appleTools
-    .run({ tool: 'simctl', args: simctlArgs(device, ['shutdown', device.id]), allowFailure: true })
+    .run({
+      tool: 'simctl',
+      args: scopeSimctlArgsForDevice(device, ['shutdown', device.id]),
+      allowFailure: true,
+    })
     .catch(() => {});
 }

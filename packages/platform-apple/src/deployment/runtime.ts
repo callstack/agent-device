@@ -11,7 +11,7 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureAppleReady } from '../readiness/runtime.ts';
-import { simctlArgs } from '../simulator-state.ts';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 
 const available = Object.freeze({ available: true } as const);
 const coreDeviceRequired = Object.freeze({
@@ -137,7 +137,10 @@ async function installAppleApp(
   await ensureAppleReady(host, device, signal);
   const result = await host.appleTools.run(
     device.kind === 'simulator'
-      ? { tool: 'simctl', args: simctlArgs(device, ['install', device.id, installablePath]) }
+      ? {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(device, ['install', device.id, installablePath]),
+        }
       : {
           tool: 'devicectl',
           args: ['device', 'install', 'app', '--device', device.id, installablePath],
@@ -159,7 +162,7 @@ async function uninstallAppleApp(
     device.kind === 'simulator'
       ? {
           tool: 'simctl',
-          args: simctlArgs(device, ['uninstall', device.id, bundleId]),
+          args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]),
           allowFailure: true,
         }
       : {
@@ -192,7 +195,7 @@ async function pushAppleNotification(
     const result = await host.appleTools.run(
       {
         tool: 'simctl',
-        args: simctlArgs(device, ['push', device.id, input.appId, payload.path]),
+        args: scopeSimctlArgsForDevice(device, ['push', device.id, input.appId, payload.path]),
       },
       signal,
     );

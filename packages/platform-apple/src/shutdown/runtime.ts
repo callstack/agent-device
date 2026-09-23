@@ -2,7 +2,8 @@ import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { getSimulatorState, simctlArgs } from '../simulator-state.ts';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
+import { getSimulatorState } from '../simulator-state.ts';
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 
@@ -37,7 +38,7 @@ async function shutdownAppleTarget(
     const result = await appleTools.run(
       {
         tool: 'simctl',
-        args: simctlArgs(device, ['shutdown', device.id]),
+        args: scopeSimctlArgsForDevice(device, ['shutdown', device.id]),
         allowFailure: true,
         timeoutMs: SHUTDOWN_TIMEOUT_MS,
       },

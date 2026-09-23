@@ -3,7 +3,10 @@ import { beforeEach, test, vi } from 'vitest';
 
 const { mockRunSimctl } = vi.hoisted(() => ({ mockRunSimctl: vi.fn() }));
 
-vi.mock('../apps-simctl.ts', () => ({ runSimctl: mockRunSimctl }));
+vi.mock('../simctl.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../simctl.ts')>()),
+  runSimctlForDevice: mockRunSimctl,
+}));
 
 import {
   detectSoleRunningIosSimulatorApp,

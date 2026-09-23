@@ -1,3 +1,5 @@
+import { buildSimctlArgs } from '../core/simctl.ts';
+
 export function buildAppleLogPredicate(appBundleId: string, executableName?: string): string {
   const escapedBundleId = escapePredicateString(appBundleId);
   const clauses = [
@@ -25,22 +27,21 @@ export function buildIosSimulatorLogStreamArgs(params: {
   executableName?: string;
   simulatorSetPath?: string;
 }): string[] {
-  const simctlPrefix = params.simulatorSetPath
-    ? ['simctl', '--set', params.simulatorSetPath]
-    : ['simctl'];
-  return [
-    ...simctlPrefix,
-    'spawn',
-    params.deviceId,
-    'log',
-    'stream',
-    '--style',
-    'compact',
-    '--level',
-    'info',
-    '--predicate',
-    buildAppleLogPredicate(params.appBundleId, params.executableName),
-  ];
+  return buildSimctlArgs(
+    [
+      'spawn',
+      params.deviceId,
+      'log',
+      'stream',
+      '--style',
+      'compact',
+      '--level',
+      'info',
+      '--predicate',
+      buildAppleLogPredicate(params.appBundleId, params.executableName),
+    ],
+    { simulatorSetPath: params.simulatorSetPath },
+  );
 }
 
 export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: string): string[] {

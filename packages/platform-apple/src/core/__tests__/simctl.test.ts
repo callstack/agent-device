@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSimctlArgs, buildSimctlArgsForDevice } from '../simctl.ts';
+import {
+  buildSimctlArgs,
+  buildSimctlArgsForDevice,
+  scopeSimctlArgs,
+  scopeSimctlArgsForDevice,
+} from '../simctl.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const IOS_SIMULATOR: DeviceInfo = {
@@ -47,4 +52,33 @@ test('buildSimctlArgsForDevice leaves non-simulator commands unchanged', () => {
     '-b',
   ]);
   assert.deepEqual(args, ['simctl', 'bootstatus', 'sim-1', '-b']);
+});
+
+test('scopeSimctlArgs prefixes a trimmed simulator set and omits a blank one', () => {
+  assert.deepEqual(scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath: ' /tmp/set ' }), [
+    '--set',
+    '/tmp/set',
+    'list',
+    'devices',
+    '-j',
+  ]);
+  assert.deepEqual(scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath: '  ' }), [
+    'list',
+    'devices',
+    '-j',
+  ]);
+});
+
+test('scopeSimctlArgsForDevice scopes simulators only', () => {
+  const scoped = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-c/simulator-set' };
+  assert.deepEqual(scopeSimctlArgsForDevice(scoped, ['shutdown', 'sim-1']), [
+    '--set',
+    '/tmp/tenant-c/simulator-set',
+    'shutdown',
+    'sim-1',
+  ]);
+  assert.deepEqual(scopeSimctlArgsForDevice({ ...scoped, kind: 'device' }, ['shutdown', 'sim-1']), [
+    'shutdown',
+    'sim-1',
+  ]);
 });

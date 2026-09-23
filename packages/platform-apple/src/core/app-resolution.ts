@@ -13,7 +13,7 @@ import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import { buildAppNotInstalledError } from './app-resolution-error.ts';
 import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
 import { runAppleToolCommand } from './tool-provider.ts';
-import { runSimctl } from './apps-simctl.ts';
+import { runSimctlForDevice } from './simctl.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
@@ -147,7 +147,7 @@ export async function detectSoleRunningIosSimulatorApp(
 }
 
 async function listRunningIosSimulatorBundleIds(device: DeviceInfo): Promise<string[]> {
-  const result = await runSimctl(device, ['spawn', device.id, 'launchctl', 'list'], {
+  const result = await runSimctlForDevice(device, ['spawn', device.id, 'launchctl', 'list'], {
     allowFailure: true,
     timeoutMs: IOS_FOREGROUND_APP_PROBE_TIMEOUT_MS,
   });
@@ -229,7 +229,7 @@ async function listSimulatorAppMetadata(
   device: DeviceInfo,
   options?: SimulatorAppListOptions,
 ): Promise<SimulatorAppMetadata[]> {
-  const result = await runSimctl(device, ['listapps', device.id], {
+  const result = await runSimctlForDevice(device, ['listapps', device.id], {
     allowFailure: true,
     timeoutMs: options?.timeoutMs,
   });

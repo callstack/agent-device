@@ -24,7 +24,7 @@ import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/maco
 import { closeIosApp } from './app-launch.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { resolveIosApp } from './app-resolution.ts';
-import { runSimctl, simctlArgs } from './apps-simctl.ts';
+import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   rememberClearedStatusBarOverrides,
@@ -78,7 +78,7 @@ export async function setIosSetting(
       if (state.toLowerCase() !== 'clear') {
         throw new AppError('INVALID_ARGS', 'settings reset-keychain only supports clear.');
       }
-      await runSimctl(device, ['keychain', device.id, 'reset']);
+      await runSimctlForDevice(device, ['keychain', device.id, 'reset']);
       return {
         scope: 'simulator',
         cleared: true,
@@ -89,14 +89,14 @@ export async function setIosSetting(
     case 'wifi': {
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';
-      await runSimctl(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
+      await runSimctlForDevice(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
       invalidateSimulatorStatusBarOverrideCache(device);
       return;
     }
     case 'airplane': {
       const enabled = parseSettingState(state);
       if (enabled) {
-        await runSimctl(device, [
+        await runSimctlForDevice(device, [
           'status_bar',
           device.id,
           'override',
@@ -115,7 +115,7 @@ export async function setIosSetting(
         ]);
         invalidateSimulatorStatusBarOverrideCache(device);
       } else {
-        await runSimctl(device, ['status_bar', device.id, 'clear']);
+        await runSimctlForDevice(device, ['status_bar', device.id, 'clear']);
         rememberClearedStatusBarOverrides(device);
       }
       return;
@@ -123,7 +123,12 @@ export async function setIosSetting(
     case 'location': {
       if (state.toLowerCase() === 'set') {
         const { latitude, longitude } = requireLocationCoordinates(options);
-        await runSimctl(device, ['location', device.id, 'set', `${latitude},${longitude}`]);
+        await runSimctlForDevice(device, [
+          'location',
+          device.id,
+          'set',
+          `${latitude},${longitude}`,
+        ]);
         return { latitude, longitude };
       }
       const enabled = parseSettingState(state);
@@ -131,7 +136,7 @@ export async function setIosSetting(
         throw new AppError('INVALID_ARGS', 'location setting requires an active app in session');
       }
       const action = enabled ? 'grant' : 'revoke';
-      await runSimctl(device, ['privacy', device.id, action, 'location', appBundleId]);
+      await runSimctlForDevice(device, ['privacy', device.id, action, 'location', appBundleId]);
       return;
     }
     case 'faceid':
@@ -148,7 +153,7 @@ export async function setIosSetting(
     }
     case 'appearance': {
       const target = await resolveIosAppearanceTarget(device, state);
-      await runSimctl(device, ['ui', device.id, 'appearance', target]);
+      await runSimctlForDevice(device, ['ui', device.id, 'appearance', target]);
       return;
     }
     case 'text-size': {
@@ -201,7 +206,7 @@ async function clearIosSimulatorAppState(
   await closeIosApp(device, bundleId);
 
   const result = requireExecSuccess(
-    await runSimctl(device, ['get_app_container', device.id, bundleId, 'data'], {
+    await runSimctlForDevice(device, ['get_app_container', device.id, bundleId, 'data'], {
       allowFailure: true,
     }),
     `simctl get_app_container failed for ${bundleId}`,
@@ -244,7 +249,7 @@ async function resolveIosAppearanceTarget(
   if (action !== 'toggle') return action;
 
   const currentResult = requireExecSuccess(
-    await runSimctl(device, ['ui', device.id, 'appearance'], {
+    await runSimctlForDevice(device, ['ui', device.id, 'appearance'], {
       allowFailure: true,
     }),
     'Failed to read current iOS appearance',
@@ -291,7 +296,7 @@ async function runIosPrivacyCommand(
   appBundleId: string,
 ): Promise<void> {
   try {
-    await runSimctl(device, ['privacy', device.id, action, target, appBundleId]);
+    await runSimctlForDevice(device, ['privacy', device.id, action, target, appBundleId]);
   } catch (error) {
     if (!isPrivacyServiceRefusedError(error)) throw error;
     throw privacyServiceRefusedError(device, action, target, appBundleId, error);
@@ -406,7 +411,7 @@ async function runIosBiometricSimctlCommand(
   const failures: CommandAttemptFailure[] = [];
 
   for (const args of attempts) {
-    const commandArgs = simctlArgs(device, args);
+    const commandArgs = buildSimctlArgsForDevice(device, args);
     const result = await runXcrun(commandArgs, { allowFailure: true });
     if (result.exitCode === 0) return;
     failures.push({

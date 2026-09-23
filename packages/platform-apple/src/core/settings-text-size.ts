@@ -12,7 +12,7 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { runSimctl } from './apps-simctl.ts';
+import { runSimctlForDevice } from './simctl.ts';
 import { ensureBootedSimulator } from './simulator.ts';
 
 /**
@@ -51,7 +51,7 @@ export async function setIosTextSize(
 ): Promise<TextSizeSettingPayload> {
   requireTextSizeLeaf(device);
   const category = parseTextSizeCategory(state);
-  await runSimctl(device, ['ui', device.id, 'content_size', category]);
+  await runSimctlForDevice(device, ['ui', device.id, 'content_size', category]);
   return textSizeSettingPayload(category, category);
 }
 
@@ -65,7 +65,7 @@ export async function readIosTextSize(device: DeviceInfo): Promise<TextSizeSetti
   requireTextSizeLeaf(device);
   await ensureBootedSimulator(device);
   const result = requireExecSuccess(
-    await runSimctl(device, ['ui', device.id, 'content_size'], { allowFailure: true }),
+    await runSimctlForDevice(device, ['ui', device.id, 'content_size'], { allowFailure: true }),
     'Failed to read iOS content size category',
   );
   const reported = result.stdout.trim();

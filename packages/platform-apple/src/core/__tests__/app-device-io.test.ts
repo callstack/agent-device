@@ -12,7 +12,10 @@ vi.mock('../simulator.ts', () => ({
     if (device.kind !== 'simulator') throw new Error('simulator required');
   },
 }));
-vi.mock('../apps-simctl.ts', () => ({ runSimctl }));
+vi.mock('../simctl.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../simctl.ts')>()),
+  runSimctlForDevice: runSimctl,
+}));
 
 import { pushIosNotification } from '../app-device-io.ts';
 

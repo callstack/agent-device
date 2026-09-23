@@ -1,7 +1,8 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
-import { runSimctl } from './core/apps-simctl.ts';
+import { runSimctlForDevice } from './core/simctl.ts';
+import { readSimctlDevicesByRuntime } from './core/simctl-device-list.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
 /** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */
@@ -77,7 +78,7 @@ async function resolveSimulatorSnapshotTarget(
   // failure would release its single-flight slot while the other probe still runs, and every
   // capture after it would start a probe of its own.
   const [jobsProbe, runtimeProbe] = await Promise.allSettled([
-    runSimctl(device, ['spawn', device.id, 'launchctl', 'list'], {
+    runSimctlForDevice(device, ['spawn', device.id, 'launchctl', 'list'], {
       allowFailure: true,
       timeoutMs: remainingMs(deadline),
     }),
@@ -118,15 +119,12 @@ async function readSimulatorRuntime(
 ): Promise<string> {
   const existing = runtimeByDevice.get(device.id);
   if (existing) return await existing;
-  const pending = runSimctl(device, ['list', 'devices', '-j'], {
+  const pending = runSimctlForDevice(device, ['list', 'devices', '-j'], {
     allowFailure: true,
     timeoutMs: remainingMs(deadline),
   }).then((result) => {
     if (result.exitCode !== 0) throw targetError('simulator-runtime-probe-failed', device, '');
-    const payload = JSON.parse(result.stdout) as {
-      devices?: Record<string, Array<{ udid?: string }>>;
-    };
-    const runtime = Object.entries(payload.devices ?? {}).find(([, devices]) =>
+    const runtime = Object.entries(readSimctlDevicesByRuntime(result.stdout)).find(([, devices]) =>
       devices.some((candidate) => candidate.udid === device.id),
     )?.[0];
     if (!runtime) throw targetError('simulator-runtime-unavailable', device, '');
