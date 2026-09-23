@@ -179,9 +179,6 @@ await main();
 For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
 stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
 
-When surfacing Apple simulators, `client.apps.open({ deviceHub: true })` mirrors `open --device-hub` and uses Xcode Device Hub instead of the
-standalone Simulator app.
-
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
