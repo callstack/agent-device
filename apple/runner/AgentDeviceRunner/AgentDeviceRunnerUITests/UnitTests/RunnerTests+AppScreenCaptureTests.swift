@@ -1,6 +1,37 @@
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+/// One read of contracts/fixtures/screen-capture-metadata.json. The capture decodes through the
+/// production `ScreenshotMetadataPayload`, so the table cannot describe a shape this encoder does
+/// not write, and this file's re-encode cannot write a shape the table does not describe. The table
+/// names no field of its own: this struct and the host's reader in
+/// `packages/contracts/src/screen-capture-contract.ts` are the only declarations of the shape, and
+/// `packages/contracts/src/screen-capture-contract.test.ts` is the vitest twin (#2728).
+private struct ScreenCaptureMetadataTable: Decodable {
+  struct Capture: Decodable {
+    let name: String
+    let metadata: ScreenshotMetadataPayload
+  }
+
+  let key: String
+  let captures: [Capture]
+}
+
+private func loadScreenCaptureMetadataTable() throws -> ScreenCaptureMetadataTable {
+  let fixtureURL = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent() // UnitTests
+    .deletingLastPathComponent() // AgentDeviceRunnerUITests
+    .deletingLastPathComponent() // AgentDeviceRunner
+    .deletingLastPathComponent() // runner
+    .deletingLastPathComponent() // apple
+    .deletingLastPathComponent() // repo root
+    .appendingPathComponent("contracts/fixtures/screen-capture-metadata.json")
+  return try JSONDecoder().decode(
+    ScreenCaptureMetadataTable.self,
+    from: Data(contentsOf: fixtureURL)
+  )
+}
+
 extension RunnerTests {
   func testScreenCaptureFailureCarriesTheBridgeReasonAsItsOwnCode() {
     XCTAssertEqual(
@@ -26,34 +57,39 @@ extension RunnerTests {
     )
   }
 
-  func testScreenshotResultEncodesDisplayFactsUnderTheKeyTheHostReads() throws {
-    // The measured open-Duo inner panel: 2852x2006 at scale 3 on display 3. The host reads these to
-    // rescale an image it did not measure, so the key and the shape are a cross-language contract.
-    let payload = DataPayload(
-      message: "tmp/screenshot-1.png",
-      screenshotMetadata: ScreenshotMetadataPayload(
-        displayID: 3,
-        pixelWidth: 2852,
-        pixelHeight: 2006,
-        pixelsPerPoint: 3
+  func testScreenshotDisplayFactsReEncodeEveryGoldenTableRowUnderTheTablesKey() throws {
+    let table = try loadScreenCaptureMetadataTable()
+    XCTAssertFalse(table.captures.isEmpty, "the table must record at least one measured capture")
+    for capture in table.captures {
+      let payload = DataPayload(
+        message: "tmp/screenshot-1.png",
+        screenshotMetadata: capture.metadata
       )
-    )
-    let encoded = try JSONSerialization.jsonObject(
-      with: JSONEncoder().encode(payload)
-    ) as? [String: Any]
-    XCTAssertEqual(encoded?["message"] as? String, "tmp/screenshot-1.png")
-    let metadata = encoded?["screenshotMetadata"] as? [String: Any]
-    XCTAssertEqual(metadata?["displayID"] as? UInt, 3)
-    XCTAssertEqual(metadata?["pixelWidth"] as? Int, 2852)
-    XCTAssertEqual(metadata?["pixelHeight"] as? Int, 2006)
-    XCTAssertEqual(metadata?["pixelsPerPoint"] as? Double, 3)
+      let encoded = try JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(payload)
+      ) as? [String: Any]
+      XCTAssertEqual(encoded?["message"] as? String, "tmp/screenshot-1.png", capture.name)
+      // The host reads these facts under the key the table spells, which neither language restates.
+      guard let metadata = encoded?[table.key] as? [String: Any] else {
+        return XCTFail("\(capture.name): no display facts under the table's key '\(table.key)'")
+      }
+      XCTAssertEqual(metadata["displayID"] as? UInt, capture.metadata.displayID, capture.name)
+      XCTAssertEqual(metadata["pixelWidth"] as? Int, capture.metadata.pixelWidth, capture.name)
+      XCTAssertEqual(metadata["pixelHeight"] as? Int, capture.metadata.pixelHeight, capture.name)
+      XCTAssertEqual(
+        metadata["pixelsPerPoint"] as? Double,
+        capture.metadata.pixelsPerPoint,
+        capture.name
+      )
+    }
   }
 
   func testScreenshotResultCarriesNoDisplayFactsWhenNothingResolved() throws {
+    let key = try loadScreenCaptureMetadataTable().key
     let encoded = try JSONSerialization.jsonObject(
       with: JSONEncoder().encode(DataPayload(message: "tmp/screenshot-1.png"))
     ) as? [String: Any]
-    XCTAssertNil(encoded?["screenshotMetadata"])
+    XCTAssertNil(encoded?[key], "a capture that resolved nothing owes no facts either")
   }
 }
 #endif

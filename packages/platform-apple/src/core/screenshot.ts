@@ -5,6 +5,10 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  readRunnerScreenCaptureMetadata,
+  type RunnerScreenCaptureMetadata,
+} from '@agent-device/contracts/screen-capture-contract';
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
@@ -32,58 +36,6 @@ import { ensureBootedSimulator } from './simulator.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
-
-/** The `data` key a runner screenshot result carries its display facts under. */
-const RUNNER_SCREEN_CAPTURE_METADATA_KEY = 'screenshotMetadata';
-
-/**
- * What one runner capture measured about itself. `pixelsPerPoint` is the scale of the image the
- * runner encoded, `pixelWidth`/`pixelHeight` are that encoded image's own box after the runner drew
- * it upright, and `displayID` is the screen the window reported — never a screen chosen by number
- * or by position in a screen list. The runner owns this vocabulary; the literals are pinned against
- * the Swift encoder in the screenshot tests.
- */
-export type RunnerScreenCaptureMetadata = Readonly<{
-  displayID: number;
-  pixelWidth: number;
-  pixelHeight: number;
-  pixelsPerPoint: number;
-}>;
-
-/**
- * Reads the display facts out of a runner `data` payload. Returns undefined when the payload carries
- * none or carries a value that cannot describe a real capture, which leaves the consumer with no
- * source fact — the honest pre-panel state — rather than a number invented from a panel nobody
- * measured.
- */
-export function readRunnerScreenCaptureMetadata(
-  data: Record<string, unknown>,
-): RunnerScreenCaptureMetadata | undefined {
-  const raw = data[RUNNER_SCREEN_CAPTURE_METADATA_KEY];
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const payload = raw as Record<string, unknown>;
-  const displayID = readPositiveInteger(payload.displayID);
-  const pixelWidth = readPositiveInteger(payload.pixelWidth);
-  const pixelHeight = readPositiveInteger(payload.pixelHeight);
-  const pixelsPerPoint = readPositiveFinite(payload.pixelsPerPoint);
-  if (
-    displayID === undefined ||
-    pixelWidth === undefined ||
-    pixelHeight === undefined ||
-    pixelsPerPoint === undefined
-  ) {
-    return undefined;
-  }
-  return Object.freeze({ displayID, pixelWidth, pixelHeight, pixelsPerPoint });
-}
-
-function readPositiveInteger(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
-}
-
-function readPositiveFinite(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
-}
 
 function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
   return runSimctlForDevice(device, args, options);

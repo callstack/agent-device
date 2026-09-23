@@ -1,7 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
+import type { RunnerScreenCaptureMetadata } from '@agent-device/contracts/screen-capture-contract';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -49,7 +50,6 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
-  readRunnerScreenCaptureMetadata,
   resolveSimulatorRunnerScreenshotCandidatePaths,
   shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
@@ -69,6 +69,17 @@ const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockOpenIosSimulatorApp = vi.mocked(openIosSimulatorApp);
 const mockPrepareStatusBarForScreenshot = vi.mocked(prepareSimulatorStatusBarForScreenshot);
+
+// The wire key and a real measured capture come from the cross-language golden table, so this
+// consumer suite cannot spell a shape the Swift encoder disagrees with (#2728).
+const SCREEN_CAPTURE_TABLE = JSON.parse(
+  readFileSync(
+    new URL('../../../../../contracts/fixtures/screen-capture-metadata.json', import.meta.url),
+    'utf8',
+  ),
+) as { key: string; captures: Array<{ metadata: RunnerScreenCaptureMetadata }> };
+const [MEASURED_CAPTURE] = SCREEN_CAPTURE_TABLE.captures;
+assert(MEASURED_CAPTURE, 'the golden table must record at least one measured capture');
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -505,7 +516,7 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
   await fs.writeFile(runnerImage, 'runner-image', 'utf8');
   mockRunAppleRunnerCommand.mockResolvedValue({
     message: 'tmp/duo.png',
-    screenshotMetadata: { displayID: 3, pixelWidth: 2852, pixelHeight: 2006, pixelsPerPoint: 3 },
+    [SCREEN_CAPTURE_TABLE.key]: MEASURED_CAPTURE.metadata,
   });
   mockRunCmd.mockImplementation(async (_cmd, args) => {
     if (args.includes('get_app_container')) {
@@ -517,12 +528,7 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
   try {
     const outPath = path.join(tmpDir, 'out.png');
     const metadata = await captureScreenshotViaRunner(device, outPath);
-    assert.deepEqual(metadata, {
-      displayID: 3,
-      pixelWidth: 2852,
-      pixelHeight: 2006,
-      pixelsPerPoint: 3,
-    });
+    assert.deepEqual(metadata, MEASURED_CAPTURE.metadata);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -567,53 +573,4 @@ test('captureScreenshotViaRunner copies macOS runner screenshots from the host',
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
-});
-
-// The open-Duo row of the #2727 measurement: a resolved inner panel reports 2852x2006 at scale 3,
-// one pixel per axis smaller than the size CoreDevice calls the panel.
-const OPEN_DUO_CAPTURE = {
-  displayID: 3,
-  pixelWidth: 2852,
-  pixelHeight: 2006,
-  pixelsPerPoint: 3,
-};
-
-// The wire key is spelled as a literal because the Swift encoder, not this module, owns it (#2728).
-function runnerCapturePayload(metadata: unknown): Record<string, unknown> {
-  return { message: 'tmp/screenshot-1.png', screenshotMetadata: metadata };
-}
-
-test('reads the display facts a resolved runner capture reported', () => {
-  assert.deepEqual(
-    readRunnerScreenCaptureMetadata(runnerCapturePayload(OPEN_DUO_CAPTURE)),
-    OPEN_DUO_CAPTURE,
-  );
-  assert.deepEqual(
-    readRunnerScreenCaptureMetadata(
-      runnerCapturePayload({
-        displayID: 1,
-        pixelWidth: 1398,
-        pixelHeight: 2034,
-        pixelsPerPoint: 3,
-      }),
-    ),
-    { displayID: 1, pixelWidth: 1398, pixelHeight: 2034, pixelsPerPoint: 3 },
-  );
-});
-
-test('reports no source fact when the runner carried no metadata', () => {
-  assert.equal(readRunnerScreenCaptureMetadata({ message: 'tmp/screenshot-1.png' }), undefined);
-});
-
-test.each([
-  ['a non-object payload', 'not-an-object'],
-  ['an array payload', [OPEN_DUO_CAPTURE]],
-  ['the pre-panel scale probe value leaking in as zero', { ...OPEN_DUO_CAPTURE, displayID: 0 }],
-  ['a zero-scale image', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: 0 }],
-  ['a non-integer pixel box', { ...OPEN_DUO_CAPTURE, pixelWidth: 2852.5 }],
-  ['a missing side', { displayID: 3, pixelWidth: 2852, pixelsPerPoint: 3 }],
-  ['a negative scale', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: -3 }],
-  ['a non-numeric scale', { ...OPEN_DUO_CAPTURE, pixelsPerPoint: '3' }],
-])('refuses %s rather than guessing a capture scale', (_case, metadata) => {
-  assert.equal(readRunnerScreenCaptureMetadata(runnerCapturePayload(metadata)), undefined);
 });
