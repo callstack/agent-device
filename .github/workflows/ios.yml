@@ -251,7 +251,7 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXNodesCarryAnnotatedCustomActions \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRequestPinnedBackendReportsItsOwnReason \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testStampedPayloadCarriesDisclosuresOnlyInTheVerdict \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAbandonedTreeCaptureSkipsQuerySweepAndHonorsWarmupExemption \
