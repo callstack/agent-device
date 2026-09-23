@@ -589,6 +589,10 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       keyboardMinY: numberSchema(
         'Where the keyboard began, in the same unit as the gesture coordinates. Clipped scrolls only.',
       ),
+      movement: enumSchema(
+        ['moved', 'at-edge', 'unchanged', 'unobserved'],
+        'Directional scrolls only: what the owner observed after its gesture. `moved` means the content inside the scroller the swipe ran in differs from the tree the session stored immediately before the gesture; `at-edge` and `unchanged` mean it did not change, with no hidden content left to reveal and with no end-of-content signal to read, respectively; `unobserved` means the pair could not back a claim in either direction — nothing comparable was available (no stored tree, a capture from another lineage, a surface that never came to rest), or every difference sits outside the scroller that was swiped, which a changing status bar does on Android — so the reported distance rests on the gesture plan alone. The field is absent — which is never a claim that nothing moved — on the tiers that verify per pass (`scroll top`/`bottom`, `--until`), on a runtime bound without a capture, on a platform whose scroll dispatches no swipe (the Linux wheel), and where the caller already owns that observation (`--settle`, or a replay with `postGestureStabilization: false`).',
+      ),
     },
     ['direction'],
   ),
