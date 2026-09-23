@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import {
   DAEMON_SOURCE_ENTRY,
   findProjectRoot,
@@ -182,7 +183,7 @@ function newerDaemonRefusedError(
   stateDir: string | undefined,
 ): AppError {
   const stopCommand = stateDir
-    ? `agent-device daemon stop --state-dir ${stateDir}`
+    ? `agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}`
     : 'agent-device daemon stop';
   return new AppError(
     'COMMAND_FAILED',

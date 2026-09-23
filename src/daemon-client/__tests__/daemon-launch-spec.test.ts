@@ -110,7 +110,8 @@ test('a source client fingerprints the source entry through the stat-validated c
 test('a reachable daemon newer than the client is refused, not replaced', async () => {
   const clientVersion = readVersion();
   await assert.rejects(
-    () => resolveDaemonTakeoverReason(runningDaemon({ version: '999.0.0' }), true, '/tmp/state'),
+    () =>
+      resolveDaemonTakeoverReason(runningDaemon({ version: '999.0.0' }), true, '/tmp/state dir'),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
@@ -122,7 +123,7 @@ test('a reachable daemon newer than the client is refused, not replaced', async 
       assert.equal(error.details?.clientVersion, clientVersion);
       assert.match(
         String(error.details?.hint),
-        /agent-device daemon stop --state-dir \/tmp\/state/,
+        /agent-device daemon stop --state-dir '\/tmp\/state dir'/,
       );
       return true;
     },
