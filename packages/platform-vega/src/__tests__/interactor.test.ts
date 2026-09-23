@@ -129,7 +129,6 @@ test('required unproven Vega operations share typed unsupported behavior', async
     ['screenshot', () => interactor.screenshot('/tmp/vega.png')],
     ['snapshot', () => interactor.snapshot()],
     ['setOrientation', () => interactor.setOrientation('portrait')],
-    ['appSwitcher', () => interactor.appSwitcher!()],
     ['readClipboard', () => interactor.readClipboard!()],
     ['writeClipboard', () => interactor.writeClipboard!('text')],
     ['setSetting', () => interactor.setSetting('wifi', 'on')],
@@ -155,6 +154,9 @@ test('optional Vega operations stay absent so shared dispatch keeps its fallback
     'setViewport',
     'gestureViewport',
     'performGesture',
+    // The factory no longer fakes a recents button Vega OS never carried; the runtime
+    // fact refuses the press before the absent member could be resolved.
+    'appSwitcher',
   ];
 
   for (const operation of optionalOperations) {

@@ -16,9 +16,7 @@ const OPERATIONS = [
   'screenshot',
   'snapshot',
   'back',
-  'home',
   'setOrientation',
-  'appSwitcher',
   'tvRemote',
   'readClipboard',
   'writeClipboard',
@@ -35,11 +33,20 @@ test('every operation rejects as unsupported and names the platform', async () =
 });
 
 test('the label is per-instance, so two platforms reject with their own wording', async () => {
-  const web = createUnsupportedInteractor('web').home as () => Promise<unknown>;
-  const vega = createUnsupportedInteractor('Vega OS').home as () => Promise<unknown>;
+  const web = createUnsupportedInteractor('web').setSetting as () => Promise<unknown>;
+  const vega = createUnsupportedInteractor('Vega OS').setSetting as () => Promise<unknown>;
 
-  await expectUnsupported(web, 'home', 'web');
-  await expectUnsupported(vega, 'home', 'Vega OS');
+  await expectUnsupported(web, 'setSetting', 'web');
+  await expectUnsupported(vega, 'setSetting', 'Vega OS');
+});
+
+// The system buttons ride fact-gated binders: web's cell refuses both, Vega's refuses the
+// app switcher, and the system-button binder fails closed if a fact ever admits one anyway.
+test('the springboard buttons are left undefined, not denied', () => {
+  const interactor = createUnsupportedInteractor('Vega OS');
+
+  assert.equal(interactor.home, undefined);
+  assert.equal(interactor.appSwitcher, undefined);
 });
 
 test('the factory covers the whole required interactor surface', () => {

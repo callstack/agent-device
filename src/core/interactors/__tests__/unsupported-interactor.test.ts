@@ -28,10 +28,14 @@ test('every operation on the factory rejects, naming itself and the platform', a
   assert.deepEqual(failures.filter(Boolean), []);
 });
 
-test('a fused double-click is left undefined, not denied, so a shared series reports the gap', () => {
+test('optional operations are left undefined, not denied, so shared dispatch keeps its fallback semantics', () => {
   const interactor = createUnsupportedInteractor('web');
 
+  // A fused double-click has no shared-series stand-in, and the system buttons ride
+  // fact-gated binders: an absent member is the owner's absence, a throw would fake one.
   assert.equal(interactor.doubleTap, undefined);
+  assert.equal(interactor.home, undefined);
+  assert.equal(interactor.appSwitcher, undefined);
 });
 
 test('a rejection carries no partial result the caller could mistake for success', async () => {
