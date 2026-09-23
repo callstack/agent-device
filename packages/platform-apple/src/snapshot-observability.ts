@@ -7,7 +7,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
 import {
-  isSimulatorTargetDiscoveryPending,
+  resolveSimulatorTargetJoiningDiscovery,
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
@@ -111,12 +111,19 @@ async function resolveLaunchedTarget(
   appBundleId: string,
   signal: AbortSignal,
 ): Promise<SimulatorSnapshotTarget | undefined> {
-  for (;;) {
-    try {
-      return await resolveTarget(device, appBundleId, signal);
-    } catch (error) {
-      signal.throwIfAborted();
-      if (!isSimulatorTargetDiscoveryPending(error)) return undefined;
-    }
+  try {
+    return await resolveSimulatorTargetJoiningDiscovery(
+      resolveTarget,
+      device,
+      appBundleId,
+      signal,
+      () => {
+        signal.throwIfAborted();
+        return true;
+      },
+    );
+  } catch {
+    signal.throwIfAborted();
+    return undefined;
   }
 }

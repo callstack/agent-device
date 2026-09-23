@@ -73,8 +73,32 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
  * Whether a resolver failure only says the discovery is still running. The discovery keeps going
  * under its own deadline, so asking again joins it rather than starting another.
  */
-export function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
+function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === TARGET_DISCOVERY_PENDING;
+}
+
+/**
+ * Resolves `resolveTarget`, re-asking it for as long as the only thing standing in the way is a
+ * discovery still in flight: the discovery's own deadline, or `resolveTarget` itself observing the
+ * request signal, is what eventually turns that into a real answer or a non-pending failure, which
+ * this always rethrows at once. `keepWaiting` is the one thing callers differ on: whether riding
+ * the discovery out is still worth it before the next wait slice.
+ */
+export async function resolveSimulatorTargetJoiningDiscovery(
+  resolveTarget: SimulatorSnapshotTargetResolver,
+  device: DeviceInfo,
+  appBundleId: string,
+  signal: AbortSignal,
+  keepWaiting: () => Promise<boolean> | boolean,
+): Promise<SimulatorSnapshotTarget> {
+  for (;;) {
+    try {
+      return await resolveTarget(device, appBundleId, signal);
+    } catch (error) {
+      if (!isSimulatorTargetDiscoveryPending(error)) throw error;
+      if (!(await keepWaiting())) throw error;
+    }
+  }
 }
 
 async function resolveSimulatorSnapshotTarget(

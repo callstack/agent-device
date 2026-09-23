@@ -29,7 +29,7 @@ import {
 } from './snapshot-observability.ts';
 import {
   createSimulatorSnapshotTargetResolver,
-  isSimulatorTargetDiscoveryPending,
+  resolveSimulatorTargetJoiningDiscovery,
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
@@ -236,15 +236,14 @@ async function resolveTargetForObservation(
   signal: AbortSignal,
 ): Promise<SimulatorSnapshotTarget> {
   const appBundleId = input.options!.appBundleId!;
-  for (;;) {
-    try {
-      return await resolveTarget(device, appBundleId, signal);
-    } catch (error) {
-      if (!isSimulatorTargetDiscoveryPending(error)) throw error;
-      const execution = { requestId: input.execution?.requestId };
-      if (await host.appleApplications.hasLiveRunnerSession(device, execution)) throw error;
-    }
-  }
+  const execution = { requestId: input.execution?.requestId };
+  return await resolveSimulatorTargetJoiningDiscovery(
+    resolveTarget,
+    device,
+    appBundleId,
+    signal,
+    async () => !(await host.appleApplications.hasLiveRunnerSession(device, execution)),
+  );
 }
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
