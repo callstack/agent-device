@@ -160,7 +160,6 @@
         "prepareIosRunner",
         "resolveRunnerAppBundleId",
         "detachIosRunnerSessionsForShutdown",
-        "getRunnerSessionSnapshot",
         "stopIosRunnerSession",
         "stopAllIosRunnerSessions",
         "readStaleRunnerLease",
