@@ -10,30 +10,30 @@ private final class RunnerSynthesizedTapFailureStub: NSObject {
     "forced private synthesis failure"
   }
 }
+
+extension RunnerTests {
+  /// Makes private tap synthesis fail until the returned closure restores it.
+  func forceSynthesizedTapFailure() throws -> () -> Void {
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:")
+    let synthesizedTapMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
+    let failureStubMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector))
+    let originalImplementation = method_getImplementation(synthesizedTapMethod)
+    method_setImplementation(synthesizedTapMethod, method_getImplementation(failureStubMethod))
+    return { method_setImplementation(synthesizedTapMethod, originalImplementation) }
+  }
+}
 #endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
 #if os(iOS)
   func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:")
-    guard
-      let synthesizedTapMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
-      let failureStubMethod = class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector)
-    else {
-      XCTFail("unable to install synthesized tap failure stub")
-      return
-    }
-    let originalImplementation = method_getImplementation(synthesizedTapMethod)
-    method_setImplementation(
-      synthesizedTapMethod,
-      method_getImplementation(failureStubMethod)
-    )
+    let restoreSynthesizedTap = try forceSynthesizedTapFailure()
     app.launch()
     currentApp = app
     runnerAccessibilityHealth = .healthy
     defer {
-      method_setImplementation(synthesizedTapMethod, originalImplementation)
+      restoreSynthesizedTap()
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }

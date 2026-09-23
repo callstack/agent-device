@@ -159,17 +159,20 @@ extension RunnerTests {
       app: app,
       policy: synthesizedGesturePolicy(.coordinateTap)
     )?.withReferenceFrame(frame)
-    let synthesized = performGesture(app, idleTimeout: false) {
+    switch performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
       synthesizedTapAt(app: app, x: point.x, y: point.y, context: context)
-    }
-    if case .performed = synthesized.outcome {
+    }) {
+    case .performed:
       return verifyNavigationFallbackOutcome(app: app, before: before)
-    }
-    let fallback = performGesture(app) {
-      tapAt(app: app, x: point.x, y: point.y)
-    }
-    if case .performed = fallback.outcome {
-      return verifyNavigationFallbackOutcome(app: app, before: before)
+    case .refused:
+      return .unavailable
+    case .xctestFallback:
+      let fallback = performGesture(app) {
+        tapAt(app: app, x: point.x, y: point.y)
+      }
+      if case .performed = fallback.outcome {
+        return verifyNavigationFallbackOutcome(app: app, before: before)
+      }
     }
 #endif
     return .unavailable

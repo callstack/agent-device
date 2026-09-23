@@ -105,22 +105,18 @@ extension RunnerTests {
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: true)))
   }
 
-  func testSequenceTapStepAndStandaloneTapChooseTheSameFallbackForEveryAccessibilityHealth() throws {
-    let sequenceKind = try XCTUnwrap(
-      synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true))
-    )
+  func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       runnerAccessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
         let label = "axHealth=\(health.rawValue) context=\(context == nil ? "unresolved" : "resolved")"
-        let standalone = synthesizedGestureRoute(
-          performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: failedSynthesis)
+        let attempt = performSynthesizedGesture(
+          app,
+          kind: .coordinateTap,
+          context: context,
+          synthesize: failedSynthesis
         )
-        let sequenceStep = synthesizedGestureRoute(
-          performSynthesizedGesture(app, kind: sequenceKind, context: context, synthesize: failedSynthesis)
-        )
-        XCTAssertEqual(sequenceStep, standalone, label)
-        XCTAssertEqual(standalone, "xctestFallback", label)
+        XCTAssertEqual(synthesizedGestureRoute(attempt), "xctestFallback", label)
       }
     }
   }

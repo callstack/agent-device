@@ -169,3 +169,32 @@ extension RunnerTests {
   }
 }
 #endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+extension RunnerTests {
+  func testSynthesizedSequenceTapFallsBackToXCTestCoordinateTapWhenAccessibilityIsUnavailable() throws {
+    let restoreSynthesizedTap = try forceSynthesizedTapFailure()
+    app.launch()
+    currentApp = app
+    defer {
+      restoreSynthesizedTap()
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let label = app.staticTexts["Agent Device Runner"]
+    XCTAssertTrue(label.waitForExistence(timeout: appExistenceTimeout))
+    let point = CGPoint(x: label.frame.midX, y: label.frame.midY)
+    runnerAccessibilityHealth = .unavailable
+    let command = try runnerCommandFixture(
+      #"{"command":"sequence","commandId":"sequence-synthesized-tap-fallback","steps":[{"kind":"tap","x":\#(point.x),"y":\#(point.y),"synthesized":true}]}"#
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.completedSteps, 1)
+    XCTAssertNil(response.data?.failedStepIndex)
+    XCTAssertEqual(response.data?.sequenceResults?.first?.ok, true)
+  }
+}
+#endif
