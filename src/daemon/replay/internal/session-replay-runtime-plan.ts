@@ -22,7 +22,7 @@ import {
   resolveReplayFormat,
   type ReplayScriptMetadata,
 } from '@agent-device/ad-script';
-import { buildReplayBuiltinVars } from './session-replay-vars.ts';
+import { buildReplayBuiltinVars } from '@agent-device/replay-port/session-replay-vars';
 import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 

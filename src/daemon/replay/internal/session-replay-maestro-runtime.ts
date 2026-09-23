@@ -17,7 +17,7 @@ import {
 } from '@agent-device/ad-script';
 import { createDaemonMaestroRuntimePort } from '@agent-device/maestro/daemon-runtime-port';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildReplayBuiltinVars } from './session-replay-vars.ts';
+import { buildReplayBuiltinVars } from '@agent-device/replay-port/session-replay-vars';
 import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
 import { maestroOperationDispatchRequest } from './session-replay-maestro-request.ts';
 import {

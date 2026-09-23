@@ -1,0 +1,18 @@
+{
+  "name": "@agent-device/replay-port",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "Daemon-side replay port: the adapter over the ad-replay, ad-script and replay-test engines.",
+  "dependencies": {
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/contracts": "workspace:*"
+  },
+  "exports": {
+    "./session-replay-vars": {
+      "types": "./src/session-replay-vars.ts",
+      "default": "./src/session-replay-vars.ts"
+    }
+  }
+}
