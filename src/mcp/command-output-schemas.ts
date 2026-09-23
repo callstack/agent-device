@@ -33,11 +33,10 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
  * inventing a shape.
  *
  * There is no type→JSON-Schema generator in this repo. Schemas are hand-authored from
- * matching contract types, and the object/enum/number primitives are the shared ones in
+ * matching contract types, using the shared JSON-Schema primitives in
  * `src/commands/command-input.ts`. Where a command family is owned by one module (the
  * descriptors' `ownerFiles`), that module authors its entries and projects them into this
- * map — `REPLAY_COMMAND_OUTPUT_SCHEMAS` is the first; the rest stay hand-authored here until
- * their own shape changes pull them out. Two invariants:
+ * map instead of being hand-listed here. Two invariants:
  *  - NEVER strict: no `additionalProperties: false` anywhere, so the additive
  *    `cost` object (opted in via `--cost` / `includeCost`) and any other additive
  *    fields ride into `structuredContent` and still validate.

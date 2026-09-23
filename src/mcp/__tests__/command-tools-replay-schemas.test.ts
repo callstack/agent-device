@@ -78,8 +78,6 @@ test('MCP test outputSchema validates a full suite result and refuses a dropped 
 });
 
 test('MCP replay family output schemas stay non-strict for additive response fields', () => {
-  // The additive `cost` object and any response field the schema has not caught up with
-  // must keep validating: neither migrated entry may close its object.
   assert.equal(COMMAND_OUTPUT_SCHEMAS.replay.additionalProperties, undefined);
   assert.equal(COMMAND_OUTPUT_SCHEMAS.test.additionalProperties, undefined);
   assert.deepEqual(

@@ -71,10 +71,10 @@ function commandInputSchema(
 }
 
 /**
- * A non-strict object shape — the one advertised response shapes are built from.
- * Unlike `commandInputSchema`, this deliberately omits `additionalProperties: false`
- * and never injects the common selection fields: a response schema advertises what a
- * command returns, and additive response fields such as `cost` must keep validating.
+ * A non-strict object shape, for what a command RETURNS. It deliberately omits
+ * `additionalProperties: false` and never injects the common device-selection fields, so
+ * additive response fields such as `cost` keep validating. An advertised INPUT object is
+ * built by `commandInputSchema` instead, which is strict and carries those fields.
  */
 export function objectSchema(
   properties: Record<string, JsonSchema>,
