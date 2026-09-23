@@ -500,7 +500,12 @@ export type SnapshotState = {
    * the foreground instead (#2682). Consumers that surface this tree disclose the repair.
    */
   targetActivation?: IosTargetActivation;
+  /** The gesture whose surface was still changing when stabilization gave up on this capture. */
+  unsettledGesture?: PostGestureAction;
 } & SnapshotStateProvenance;
+
+/** The gesture a post-gesture outcome fact names: the command and its positionals. */
+export type PostGestureAction = { action: string; positionals: string[] };
 
 export type SnapshotUnchanged = {
   ageMs: number;

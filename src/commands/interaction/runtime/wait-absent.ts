@@ -3,6 +3,7 @@ import { isUnreadableCaptureContentError } from '@agent-device/contracts/android
 import { AppError } from '@agent-device/kernel/errors';
 import {
   absenceCaptureOptionRefusal,
+  isUnprovableAbsence,
   type AbsenceObservation,
 } from '@agent-device/selectors/absence-observation';
 import {
@@ -63,7 +64,7 @@ export async function waitForAbsent<Runtime extends SelectorWaitRuntime>(
           selectorExpression,
           runtime.backend.platform,
         );
-        if (observation.kind === 'sparse' || observation.kind === 'truncated') {
+        if (isUnprovableAbsence(observation.kind)) {
           throw absenceObservationError(selectorExpression, observation, 'wait');
         }
         return observation;
@@ -130,8 +131,6 @@ function isWaitAbsentUnreadableError(error: unknown): boolean {
   return (
     details?.command === 'wait' &&
     details.predicate === 'absent' &&
-    (details.observation === 'sparse' ||
-      details.observation === 'truncated' ||
-      details.observation === 'unreadable')
+    (isUnprovableAbsence(details.observation) || details.observation === 'unreadable')
   );
 }

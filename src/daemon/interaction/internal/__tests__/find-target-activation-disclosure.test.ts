@@ -7,6 +7,8 @@ import type { DaemonResponse } from '../../../daemon-request.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { handleFindCommands } from '../../index.ts';
+import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
+import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -71,9 +73,12 @@ beforeEach(() => {
   legacyDispatchCapture.mockReset();
 });
 
-async function findClick(captures: Record<string, unknown>[]) {
+async function findClick(captures: Record<string, unknown>[], afterScroll = false) {
   const sessionStore = makeSessionStore();
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  const session = makeIosSession('default', { appBundleId: 'com.example.app' });
+  if (afterScroll)
+    markDeferredInteractionOutcome({ session, command: 'scroll', positionals: [], flags: {} });
+  sessionStore.set('default', session);
   let call = 0;
   legacyDispatchCapture.mockImplementation(
     async () => captures[Math.min(call++, captures.length - 1)],
@@ -122,4 +127,33 @@ test('a find that stayed sparse reports the repair on the failure it returns', a
   if (!response || response.ok) return;
   const hint = String(response.error.details?.hint ?? '');
   expect(hint).toContain(iosTargetActivationDisclosure(FACT));
+});
+
+/** The tree a mutating find resolves against carries every provenance fact, not a hand-picked few. */
+test('a find that misses on a surface still moving after a scroll reports the unsettled fact', async () => {
+  const moving = Array.from({ length: 40 }, (_, call) => ({
+    ...RECOVERED_TREE,
+    nodes: [
+      RECOVERED_TREE.nodes[0],
+      { ...RECOVERED_TREE.nodes[1], label: 'Wi-Fi', rect: { ...SCREEN, y: 600 - call * 37 } },
+    ],
+  }));
+  const realSetTimeout = globalThis.setTimeout;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  let done = false;
+  const pending = findClick(moving, true).finally(() => (done = true));
+  // The route awaits real I/O between polls, so the faked clock advances while the test yields.
+  while (!done) {
+    await vi.advanceTimersByTimeAsync(50);
+    await new Promise((resolve) => realSetTimeout(resolve, 1));
+  }
+  const { response } = await pending;
+  vi.useRealTimers();
+
+  expect(response?.ok === false && response.error.details).toMatchObject({
+    unsettledGesture: { action: 'scroll', positionals: [] },
+    hint: expect.stringContaining(
+      formatGestureUnsettledWarning({ action: 'scroll', positionals: [] }),
+    ),
+  });
 });

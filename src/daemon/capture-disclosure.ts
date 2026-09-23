@@ -2,12 +2,13 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import type { DaemonResponse } from './daemon-request.ts';
 
-/** The capture provenance a response must be disclosed against (#2438, #2682). */
+/** The capture provenance a response must be disclosed against (#2438, #2682, unsettled gestures). */
 export type CaptureProvenance = Pick<
   SnapshotState,
-  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation'
+  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation' | 'unsettledGesture'
 >;
 
 /**
@@ -58,20 +59,36 @@ export function withSystemSurfaceDisclosure(
 }
 
 /**
- * Disclose a foreground repair the consumed capture carried (#2682). The fact applies to the whole
- * tree, so it travels as response-level metadata and its sentence is APPENDED — an earlier warning
- * (staleness, quality, an occluding surface) is never replaced. The typed fact lands even when the
- * sentence was already carried: the field is this response's own claim, independent of who spoke.
+ * Disclose a fact about the whole answered tree (#2682 foreground repair, an unsettled gesture). Its
+ * sentence is APPENDED, never replacing an earlier warning, and the typed fact lands on either
+ * outcome (`data` or `error.details`) even when the sentence was already carried.
  */
+function withTreeFactDisclosure<K extends 'targetActivation' | 'unsettledGesture'>(
+  response: DaemonResponse,
+  key: K,
+  fact: CaptureProvenance[K],
+  sentence: (fact: NonNullable<CaptureProvenance[K]>) => string,
+): DaemonResponse {
+  if (!fact) return response;
+  const disclosed = appendDisclosure(response, sentence(fact), 'warnings');
+  return disclosed.ok
+    ? { ...disclosed, data: { ...disclosed.data, [key]: fact } }
+    : {
+        ...disclosed,
+        error: { ...disclosed.error, details: { ...disclosed.error.details, [key]: fact } },
+      };
+}
+
 export function withTargetActivationDisclosure(
   response: DaemonResponse,
   snapshot: CaptureProvenance | undefined,
 ): DaemonResponse {
-  const fact = snapshot?.targetActivation;
-  if (!fact) return response;
-  const disclosed = appendDisclosure(response, iosTargetActivationDisclosure(fact), 'warnings');
-  if (!disclosed.ok) return disclosed;
-  return { ...disclosed, data: { ...disclosed.data, targetActivation: fact } };
+  return withTreeFactDisclosure(
+    response,
+    'targetActivation',
+    snapshot?.targetActivation,
+    iosTargetActivationDisclosure,
+  );
 }
 
 /**
@@ -87,7 +104,12 @@ export function withCaptureDisclosures(params: {
 }): DaemonResponse {
   const { response, consumedTree, activationProof } = params;
   return withTargetActivationDisclosure(
-    withSystemSurfaceDisclosure(response, consumedTree),
+    withTreeFactDisclosure(
+      withSystemSurfaceDisclosure(response, consumedTree),
+      'unsettledGesture',
+      consumedTree?.unsettledGesture,
+      formatGestureUnsettledWarning,
+    ),
     activationProof?.state,
   );
 }

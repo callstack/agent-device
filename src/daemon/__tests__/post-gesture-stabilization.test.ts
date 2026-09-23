@@ -330,6 +330,43 @@ test('capturePostGestureStabilizedResult keeps the ordinary never-quiet timeout 
   );
 });
 
+test('a deadline that expires right after a rebased quiet pair is not reported as unsettled', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
+    snapshotQuality: { state: 'healthy', backend: 'tree' },
+  });
+  markPostGestureStabilization(session, 'scroll');
+  // Moving on the baseline backend until the final poll pair, which agrees on another backend:
+  // the loop rebases on it and then runs out of time with the surface at rest.
+  let call = 0;
+  const capture = vi.fn(async () => {
+    call += 1;
+    return call >= 8
+      ? makeSnapshotState(pickupSnapshot(640).nodes, {
+          snapshotQuality: { state: 'healthy', backend: 'private-ax' },
+        })
+      : makeSnapshotState(pickupSnapshot(100 + call * 40).nodes, {
+          snapshotQuality: { state: 'healthy', backend: 'tree' },
+        });
+  });
+
+  const resultPromise = withDiagnosticsScope({}, async () => ({
+    result: await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    }),
+    rebased: countDiagnosticEventsByPhase(['post_gesture_snapshot_baseline_rebased']),
+    timeouts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilization_timeout']),
+  }));
+  await vi.advanceTimersByTimeAsync(1_700);
+  const { result, rebased, timeouts } = await resultPromise;
+
+  assert.deepEqual([rebased, timeouts], [1, 1]);
+  assert.equal(result.unsettledGesture, undefined);
+});
+
 test('capturePostGestureStabilizedResult catches a frozen target even when the baseline came from a broader-scope capture than the post-gesture reads (iOS, live regression)', async () => {
   // Live shape (checkout-form.ad): the pre-gesture baseline is whatever
   // `session.snapshot` held from an earlier broad capture (e.g. a text-search

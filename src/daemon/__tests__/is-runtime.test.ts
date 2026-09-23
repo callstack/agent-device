@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
@@ -12,6 +12,8 @@ import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inven
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
+import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
@@ -26,6 +28,10 @@ import { dispatchIsViaRuntime } from '../selector-runtime.ts';
 beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();
   mockRunAppleRunnerCommand.mockResolvedValue({});
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 // `is` answers every one of its eight predicates from the resolved capture — `isCommand` never
@@ -415,4 +421,50 @@ test('a failing predicate answers COMMAND_FAILED from the bound capture', async 
   }
   // The bound capture is what answered it.
   expect(fixture.captures.length).toBeGreaterThan(0);
+});
+
+test('a miss on a surface that never settled carries the unsettled fact, and the re-read captures afresh', async () => {
+  vi.useFakeTimers();
+  // Every capture shows the row at a new offset, so no two consecutive reads agree.
+  const fixture = selectorCaptureFixture({
+    snapshot: (_input, index) => ({
+      nodes: [
+        {
+          index: 0,
+          type: 'Cell',
+          identifier: 'row',
+          rect: { x: 0, y: 200 - index * 37, width: 390, height: 60 },
+        },
+      ],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  const session = makeIosAppSession('is-unsettled');
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: [], flags: {} });
+  sessionStore.set('is-unsettled', session);
+  const isVisible = () =>
+    dispatchIsViaRuntime({
+      req: isRequest('is-unsettled', ['visible', 'id=target']),
+      sessionName: 'is-unsettled',
+      sessionStore,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+  const pending = isVisible();
+  // Just past the 1.5s stabilization deadline, so the re-read lands inside the cache window.
+  await vi.advanceTimersByTimeAsync(1_700);
+  const gesture = { action: 'scroll', positionals: [] };
+
+  const response = await pending;
+  expect(response?.ok === false && response.error.details).toMatchObject({
+    reason: 'selector_not_found',
+    unsettledGesture: gesture,
+    hint: expect.stringContaining(formatGestureUnsettledWarning(gesture)),
+  });
+  const captures = fixture.captures.length;
+  const reread = await isVisible();
+  expect(fixture.captures.length).toBe(captures + 1);
+  expect(reread?.ok === false && reread.error.details?.unsettledGesture).toBeUndefined();
 });

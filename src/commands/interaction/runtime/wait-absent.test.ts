@@ -141,6 +141,23 @@ test('wait absent rides out sparse and truncated captures without counting them 
   assert.equal(result.waitedMs >= 600, true);
 });
 
+test('wait absent does not take a miss on a surface still moving after a gesture as absence', async () => {
+  const unsettled = {
+    snapshot: {
+      ...makeSnapshotState([]),
+      unsettledGesture: { action: 'scroll', positionals: ['down'] },
+    },
+  };
+  const device = absentDevice([unsettled, snapshot('Removed')]);
+
+  await assert.rejects(waitAbsent(device, 500), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'wait_target_present');
+    assert.equal(error.details?.readableCaptures, 1);
+    return true;
+  });
+});
+
 test('wait absent excludes sparse and truncated polls from deadline readable-capture evidence', async () => {
   const sparse = snapshot(undefined, {
     snapshotQuality: { state: 'sparse', backend: 'private-ax', reasonCode: 'sparse-tree' },

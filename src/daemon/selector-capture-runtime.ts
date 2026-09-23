@@ -273,7 +273,7 @@ function canUseSessionSnapshotCache(
   if (request.cache?.useSessionSnapshot !== true) return false;
   if (getActiveAndroidSnapshotFreshness(session)) return false;
   if (shouldBypassForPostGestureStabilization(session, request)) return false;
-  return true;
+  return session.snapshot?.unsettledGesture === undefined;
 }
 
 function isFreshSelectorSnapshot(snapshot: SnapshotState, timestamp: number): boolean {

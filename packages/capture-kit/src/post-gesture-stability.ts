@@ -1,5 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
+import type { PostGestureAction } from '@agent-device/kernel/snapshot';
 
 /**
  * Pure post-gesture stability mechanics: the quiet-window polling loop and the
@@ -58,6 +59,8 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
 
 export type PostGestureStabilityOutcome<T> = {
   value: T;
+  /** Present when the deadline expired while the last two captures still disagreed. */
+  unsettledGesture?: PostGestureAction;
   /**
    * Present ONLY when the accept-stale verdict is corroborated by full-surface
    * evidence (`surfacesIdentical`). The bare verdict is NOT enough — it is
@@ -66,8 +69,32 @@ export type PostGestureStabilityOutcome<T> = {
    * Callers surface this to the agent: a diagnostics-only signal let one
    * benchmark run burn 40 calls re-issuing scrolls that moved nothing (#1600).
    */
-  gestureNoEffect?: { action: string; positionals: string[] };
+  gestureNoEffect?: PostGestureAction;
 };
+
+function describePostGestureAction(gesture: PostGestureAction): string {
+  return [gesture.action, ...gesture.positionals].join(' ').trim();
+}
+
+/**
+ * The agent-facing wording for a proven no-effect gesture. Names the exact
+ * gesture, admits the honest ambiguity (at-edge is a legitimate no-op the
+ * platform cannot distinguish), and hands over the one escape hatch that
+ * moved a stuck list when synthesized scrolls did not (#1600, element-18:
+ * raw `swipe` worked where scroll/fling/pan all silently no-opped).
+ */
+export function formatGestureNoEffectWarning(action: string, positionals: string[]): string {
+  return (
+    `${describePostGestureAction({ action, positionals })} produced no visible change: the tree still matches its pre-gesture state. ` +
+    'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
+    'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).'
+  );
+}
+
+/** A miss on a tree read while a gesture's surface was still changing is not proof of absence. */
+export function formatGestureUnsettledWarning(gesture: PostGestureAction): string {
+  return `The surface was still changing after ${describePostGestureAction(gesture)} when this was read, so an element missing from it may still be on screen. Read again before treating it as absent.`;
+}
 
 /**
  * Verdict for a quiet match that has already been observed. `'ambiguous'`
@@ -114,12 +141,16 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   // Extended past STABILIZATION_DEADLINE_MS only when the distrust verdict
   // fires below; the ordinary (non-distrust) timeout path is unaffected.
   let effectiveDeadlineMs = STABILIZATION_DEADLINE_MS;
+  // A rebase or a distrust verdict keeps polling on a pair that DID agree, so
+  // the deadline can expire on a surface that is already at rest.
+  let lastPairAgreed = false;
 
   while (attempts < STABILIZATION_MIN_ATTEMPTS || Date.now() - startedAt < effectiveDeadlineMs) {
     await sleep(STABILIZATION_INTERVAL_MS);
     attempts += 1;
     const current = await captureSurface(hooks);
-    if (hooks.signaturesStable(previous.signature, current.signature)) {
+    lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
+    if (lastPairAgreed) {
       const elapsedMs = Date.now() - startedAt;
       // A capture plan may fall back or be pre-empted by the XCTest-channel
       // penalty at any time, so the backend can change mid-poll. Backends do
@@ -164,9 +195,14 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
       action: pending.action,
       attempts,
       durationMs: Date.now() - startedAt,
+      lastPairAgreed,
     },
   });
-  return { value: previous.value };
+  if (lastPairAgreed) return { value: previous.value };
+  return {
+    value: previous.value,
+    unsettledGesture: { action: pending.action, positionals: pending.positionals },
+  };
 }
 
 type CapturedSurface<T, S> = {

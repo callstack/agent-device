@@ -1,6 +1,8 @@
 import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { INTERACTION_ERROR_REASONS } from './interaction-error.ts';
 import {
+  UNPROVABLE_ABSENCE_CAUSES,
+  type UnprovableAbsenceKind,
   absenceCaptureOptionMessage,
   type AbsenceCaptureOption,
   type AbsenceObservation,
@@ -47,9 +49,7 @@ export function absenceObservationError(
   }
   return new AppError(
     'COMMAND_FAILED',
-    `${command} absent could not prove absence for selector ${selector}: ${
-      observation.kind === 'sparse' ? 'capture was sparse' : 'capture was truncated'
-    }`,
+    `${command} absent could not prove absence for selector ${selector}: ${UNPROVABLE_ABSENCE_CAUSES[observation.kind as UnprovableAbsenceKind]}`,
     {
       ...details,
       hint: 'Retry after the accessibility capture is complete.',

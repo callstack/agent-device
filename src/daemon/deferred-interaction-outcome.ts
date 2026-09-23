@@ -30,7 +30,10 @@ import {
   snapshotSurfaceComparisonKey,
   type InteractionRetryTap,
 } from './interaction-outcome-policy.ts';
-import { runPostGestureStabilityLoop } from '@agent-device/capture-kit/post-gesture-stability';
+import {
+  runPostGestureStabilityLoop,
+  type PostGestureStabilityOutcome,
+} from '@agent-device/capture-kit/post-gesture-stability';
 import type { SessionState } from './session-state.ts';
 
 /**
@@ -262,10 +265,7 @@ async function captureInteractionOutcomeAwareSnapshot(
     });
   }
 
-  return {
-    snapshot: latest.snapshot,
-    ...withGestureNoEffectWarning(latest.annotations, stabilized.gestureNoEffect),
-  };
+  return resolvedPostGestureCapture(stabilized);
 }
 
 async function waitForDelayedInteractionSurfaceChange(
@@ -294,11 +294,7 @@ async function capturePostGestureAwareSnapshot(
     capture: async () => await capturePostActionSnapshotAttempt(params),
     readSnapshot: (attempt) => attempt.snapshot,
   });
-  const latest = stabilized.value;
-  return {
-    snapshot: latest.snapshot,
-    ...withGestureNoEffectWarning(latest.annotations, stabilized.gestureNoEffect),
-  };
+  return resolvedPostGestureCapture(stabilized);
 }
 
 async function capturePostActionSnapshotAttempt(
@@ -310,12 +306,6 @@ async function capturePostActionSnapshotAttempt(
   }
   return await params.capture();
 }
-
-export type PostGestureStabilizedResult<T> = {
-  value: T;
-  /** See `PostGestureStabilityOutcome` in post-gesture-stability.ts (#1600/#1601). */
-  gestureNoEffect?: { action: string; positionals: string[] };
-};
 
 /**
  * Session-aware adapter over the pure stability loop
@@ -329,7 +319,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   capture: () => Promise<T>;
   readSnapshot: (result: T) => SnapshotState;
   initial?: T;
-}): Promise<PostGestureStabilizedResult<T>> {
+}): Promise<PostGestureStabilityOutcome<T>> {
   const { session, capture, readSnapshot } = params;
   const pending = session?.postGestureStabilization;
   if (!session || !supportsPostGestureStabilization(session.device) || !pending) {
@@ -362,6 +352,15 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   });
   clearPostGestureStabilization(session);
   return outcome;
+}
+
+/** The stabilized attempt as a capture result: the tree carries an unsettled outcome as its own fact. */
+function resolvedPostGestureCapture(
+  stabilized: PostGestureStabilityOutcome<DeferredOutcomeSnapshotAttempt>,
+): DeferredOutcomeCaptureResult {
+  const { snapshot, annotations } = stabilized.value;
+  if (stabilized.unsettledGesture) snapshot.unsettledGesture = stabilized.unsettledGesture;
+  return { snapshot, ...withGestureNoEffectWarning(annotations, stabilized.gestureNoEffect) };
 }
 
 function isPostGestureStabilizingAction(

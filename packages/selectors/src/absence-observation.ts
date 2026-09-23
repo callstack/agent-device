@@ -32,7 +32,21 @@ export type AbsenceObservation =
   | { kind: 'absent'; matches: 0 }
   | { kind: 'present'; matches: number; firstMatch: AbsenceFirstMatch }
   | { kind: 'sparse'; matches: number; firstMatch?: AbsenceFirstMatch; quality: SparseQuality }
-  | { kind: 'truncated'; matches: number; firstMatch?: AbsenceFirstMatch };
+  | { kind: 'truncated'; matches: number; firstMatch?: AbsenceFirstMatch }
+  | { kind: 'unsettled'; matches: 0 };
+
+/** Why a capture with no match still cannot prove absence. */
+export const UNPROVABLE_ABSENCE_CAUSES = {
+  sparse: 'capture was sparse',
+  truncated: 'capture was truncated',
+  unsettled: 'the surface was still changing after a gesture',
+} as const;
+
+export type UnprovableAbsenceKind = keyof typeof UNPROVABLE_ABSENCE_CAUSES;
+
+export function isUnprovableAbsence(kind: unknown): kind is UnprovableAbsenceKind {
+  return typeof kind === 'string' && Object.hasOwn(UNPROVABLE_ABSENCE_CAUSES, kind);
+}
 
 export type AbsenceCaptureOption = 'depth' | 'scope';
 
@@ -56,7 +70,10 @@ export function absenceCaptureOptionMessage(
 }
 
 export function classifyAbsenceObservation(
-  snapshot: Pick<SnapshotState, 'backend' | 'nodes' | 'snapshotQuality' | 'truncated'>,
+  snapshot: Pick<
+    SnapshotState,
+    'backend' | 'nodes' | 'snapshotQuality' | 'truncated' | 'unsettledGesture'
+  >,
   matches: readonly SnapshotNode[],
 ): AbsenceObservation {
   const firstMatch = matches[0] ? stableFirstMatch(matches[0]) : undefined;
@@ -82,7 +99,9 @@ export function classifyAbsenceObservation(
       },
     };
   }
-  if (matchCount === 0) return { kind: 'absent', matches: 0 };
+  if (matchCount === 0) {
+    return { kind: snapshot.unsettledGesture ? 'unsettled' : 'absent', matches: 0 };
+  }
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
 }
 

@@ -17,7 +17,7 @@ import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
-import { formatGestureNoEffectWarning } from '../gesture-no-effect.ts';
+import { formatGestureNoEffectWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import type { SessionState } from '../session-state.ts';
 import {
   chromeWithListSnapshot,
