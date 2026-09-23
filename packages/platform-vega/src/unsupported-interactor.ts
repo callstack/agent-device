@@ -25,8 +25,6 @@ export function createUnsupportedInteractor(platformLabel: string): Interactor {
     back: () => unsupported('back'),
     setOrientation: () => unsupported('setOrientation'),
     tvRemote: () => unsupported('tvRemote'),
-    readClipboard: () => unsupported('readClipboard'),
-    writeClipboard: () => unsupported('writeClipboard'),
     setSetting: () => unsupported('setSetting'),
   };
 }

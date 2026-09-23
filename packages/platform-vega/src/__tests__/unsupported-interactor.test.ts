@@ -18,8 +18,6 @@ const OPERATIONS = [
   'back',
   'setOrientation',
   'tvRemote',
-  'readClipboard',
-  'writeClipboard',
   'setSetting',
 ] as const;
 
@@ -40,13 +38,16 @@ test('the label is per-instance, so two platforms reject with their own wording'
   await expectUnsupported(vega, 'setSetting', 'Vega OS');
 });
 
-// The system buttons ride fact-gated binders: web's cell refuses both, Vega's refuses the
-// app switcher, and the system-button binder fails closed if a fact ever admits one anyway.
-test('the springboard buttons are left undefined, not denied', () => {
+// The system buttons and the clipboard ride fact-gated binders: web's cell refuses all four,
+// Vega's refuses the app switcher and both clipboard halves, and each binder fails closed if a
+// fact ever admits an operation its interactor lacks.
+test('operations with no shared fallback are left undefined, not denied', () => {
   const interactor = createUnsupportedInteractor('Vega OS');
 
   assert.equal(interactor.home, undefined);
   assert.equal(interactor.appSwitcher, undefined);
+  assert.equal(interactor.readClipboard, undefined);
+  assert.equal(interactor.writeClipboard, undefined);
 });
 
 test('the factory covers the whole required interactor surface', () => {
