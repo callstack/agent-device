@@ -487,23 +487,34 @@ extension RunnerTests {
       app.images
     ]
 
-    var elements: [XCUIElement] = []
-    var truncated = false
-    for query in queries {
-      if Date() >= deadline {
-        NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
-        truncated = true
-        break
-      }
-      let result = snapshotElementsQuery {
+    return Self.runFlatInteractiveQueries(queries, deadline: deadline) { query in
+      self.snapshotElementsQuery {
         query.allElementsBoundByIndex
       }
+    }
+  }
+
+  /// Runs sweep queries in order until one reports AX unavailable, or until the next one could not
+  /// finish before `deadline` (`querySweepCanStartQuery`).
+  static func runFlatInteractiveQueries<Query, Element>(
+    _ queries: [Query],
+    deadline: Date,
+    now: () -> Date = { Date() },
+    run: (Query) -> (elements: [Element], axUnavailable: Bool)
+  ) -> (elements: [Element], truncated: Bool) {
+    var elements: [Element] = []
+    for query in queries {
+      if !querySweepCanStartQuery(deadline: deadline, now: now()) {
+        NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
+        return (elements, true)
+      }
+      let result = run(query)
       elements.append(contentsOf: result.elements)
       if result.axUnavailable {
         break
       }
     }
-    return (elements, truncated)
+    return (elements, false)
   }
 
   func snapshotElementsQuery(

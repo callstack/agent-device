@@ -132,6 +132,20 @@ extension RunnerTests {
   ]
 
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
+  /// The least slice time a sweep query may start with. XCTest cannot cancel a query, so one that
+  /// starts later outlives the slice its caller waits for and holds the main thread (#2783).
+  static let flatInteractiveQueryBudget: TimeInterval = 0.1
+
+  /// The deadline the query-sweep tier's caller waits for: one slice, clamped to the plan deadline.
+  /// Interactive and non-interactive requests share it, since the caller discards a later result.
+  static func querySweepSliceDeadline(startedAt: Date, planDeadline: Date) -> Date {
+    min(startedAt.addingTimeInterval(flatInteractiveFallbackBudget), planDeadline)
+  }
+
+  /// Whether a sweep query started at `now` can still finish before the slice `deadline`.
+  static func querySweepCanStartQuery(deadline: Date, now: Date) -> Bool {
+    deadline.timeIntervalSince(now) >= flatInteractiveQueryBudget
+  }
 
   /// What one capture may spend reading the keyboard band before it gives up on the fact and lets the
   /// tap guard fall back to the tree rule. The scroll path pays this query per gesture and stays well
@@ -424,7 +438,7 @@ extension RunnerTests {
   func querySweepSnapshotAcquisition(
     app: XCUIApplication,
     hint: CaptureHint,
-    planDeadline: Date = .distantFuture
+    sliceDeadline deadline: Date
   ) -> SnapshotAcquisition {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
@@ -440,19 +454,13 @@ extension RunnerTests {
       )
     }
 
-    // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
-    // chained recovery tier can never push the plan past the main-thread watchdog (#1105).
-    let sweepDeadline = hint.interactiveOnly
-      ? Date().addingTimeInterval(Self.flatInteractiveFallbackBudget)
-      : Date.distantFuture
-    let deadline = min(sweepDeadline, planDeadline)
     let viewport = safeSnapshotViewport(app: app)
     var seen = Set<String>()
     var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
     var truncated = flatElements.truncated
     for element in flatElements.elements {
-      if Date() >= deadline {
+      if !Self.querySweepCanStartQuery(deadline: deadline, now: Date()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
         truncated = true
         break

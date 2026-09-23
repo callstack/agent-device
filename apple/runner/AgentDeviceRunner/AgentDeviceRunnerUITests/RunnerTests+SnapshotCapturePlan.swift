@@ -450,15 +450,16 @@ extension RunnerTests {
               : try self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
           }
         case .querySweep:
+          let sliceDeadline = Self.querySweepSliceDeadline(startedAt: Date(), planDeadline: deadline)
           return try self.runMainThreadWork(
             "query_sweep",
-            timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
+            timeout: max(0.1, sliceDeadline.timeIntervalSinceNow),
             timeoutError: self.snapshotMainThreadTimeoutError("running query-sweep snapshot")
           ) {
             self.querySweepSnapshotAcquisition(
               app: app,
               hint: hint,
-              planDeadline: deadline
+              sliceDeadline: sliceDeadline
             )
           }
         case .privateAX:
