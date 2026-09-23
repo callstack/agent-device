@@ -156,26 +156,31 @@ export type CommandRecordingEffect =
  * dispatch (touch/fill/get/is expect their target present). `post-resolution`
  * — the command's own resolution verifies (wait's polling loop, whose
  * landmark may legitimately be absent at step start); only decision 3 path 1
- * runs up front. Declared on every evidence-carrying command and pinned by
- * the parity test, so a new one must choose a phase explicitly.
+ * runs up front. Declared on every evidence-carrying command and pinned as a literal
+ * set by `src/__tests__/command-descriptor-parity.test.ts`, so a new one must choose a
+ * phase explicitly.
  */
 export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
 
 /**
- * The single additive command-descriptor shape (ADR-0008, Phase 1 step 1).
+ * The single command-descriptor shape (ADR 0008).
  *
- * Per command this carries, side-by-side, the facts that today live in three
- * separate hand-authored tables:
- *  - `daemon`     — the daemon route + request-policy traits
- *                   (from DAEMON_COMMAND_DESCRIPTORS). Absent for commands that
- *                   have no daemon route (e.g. `app-switcher`, `install-from-source`).
- *  - `batchable`  — whether the command is exposed through `batch`
- *                   (from STRUCTURED_BATCH_COMMAND_NAMES).
- *  - `mcpExposed` — whether the command is surfaced over MCP.
- *  - `timeoutPolicy` — the request-envelope budget source + on-timeout daemon
- *                   policy. REQUIRED on every entry — most commands share the
+ * Per command this carries, side-by-side, the facts its consumer projections are built
+ * from. Four of them replaced a hand-authored list outright:
+ *  - `daemon`     — the daemon route + request-policy traits, projected into
+ *                   DAEMON_COMMAND_DESCRIPTORS (#907). Absent for commands with no
+ *                   daemon route: the local-cli commands, and `install-from-source`,
+ *                   which reaches the daemon through the `install_source` internal command.
+ *  - `batchable`  — whether the command is exposed through `batch`, projected into
+ *                   STRUCTURED_BATCH_COMMAND_NAMES (#909).
+ *  - `mcpExposed` — whether the command is surfaced over MCP, in place of the
+ *                   hand-maintained exclusion list (`8ef4e73408` #1137).
+ *  - `timeoutPolicy` — the request-envelope budget source + on-timeout daemon policy,
+ *                   in place of the daemon client's timeout lists (`b25ef7b024` #1084).
+ *                   REQUIRED on every entry — most commands share the
  *                   explicit `DEFAULT_TIMEOUT_POLICY` constant, but a new
  *                   command must say so rather than inherit silently.
+ * The remaining facets are plain declarations their consumers derive from:
  *  - `postActionObservation` — optional interaction observation trait for
  *                   commands that support `--settle`/`--verify`; consumed by
  *                   command surfaces and timeout policy instead of repeated
