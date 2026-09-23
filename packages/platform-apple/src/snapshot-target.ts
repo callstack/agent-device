@@ -1,8 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
-import { runSimctlForDevice } from './core/simctl.ts';
-import { readSimctlDevicesByRuntime } from './core/simctl-device-list.ts';
+import { readSimctlDevicesByRuntime, runSimctlForDevice } from './core/simctl.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
 /** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */

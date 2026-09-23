@@ -12,8 +12,7 @@ import {
   IOS_SIMCTL_LIST_TIMEOUT_MS,
   IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
 } from './config.ts';
-import { buildSimctlArgsForDevice } from './simctl.ts';
-import { readSimctlDeviceState } from './simctl-device-list.ts';
+import { buildSimctlArgsForDevice, readSimctlDeviceState } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
 const IOS_SIMULATOR_HOST_APPS = ['Simulator'] as const;
