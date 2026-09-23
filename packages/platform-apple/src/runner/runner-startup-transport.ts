@@ -480,7 +480,7 @@ export function resolveRunnerEarlyExitHint(
   return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
 }
 
-export function buildRunnerConnectError(params: {
+function buildRunnerConnectError(params: {
   port: number;
   endpoints: string[];
   logPath?: string;
