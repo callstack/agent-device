@@ -25,11 +25,15 @@ extension RunnerTests {
     case .performed:
       return nil
     case .unsupported(let message, let hint):
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: "UNSUPPORTED_OPERATION", message: message, hint: hint)
-      )
+      return unsupportedResponse(message: message, hint: hint)
     }
+  }
+
+  func unsupportedResponse(message: String, hint: String?) -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(code: "UNSUPPORTED_OPERATION", message: message, hint: hint)
+    )
   }
 
   /// Optional visualization frame returned with a gesture response.
@@ -43,15 +47,6 @@ extension RunnerTests {
     let strategy: String
     let message: String
     let hint: String?
-  }
-
-  func gestureFallback(strategy: String, from outcome: RunnerInteractionOutcome) -> GestureFallback? {
-    switch outcome {
-    case .performed:
-      return nil
-    case .unsupported(let message, let hint):
-      return GestureFallback(strategy: strategy, message: message, hint: hint)
-    }
   }
 
 

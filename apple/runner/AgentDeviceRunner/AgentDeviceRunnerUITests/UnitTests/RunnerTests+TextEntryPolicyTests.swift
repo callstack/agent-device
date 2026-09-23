@@ -204,15 +204,6 @@ extension RunnerTests {
   }
 #endif
 
-  func testResolvedCoordinateTextEntryFallsBackWhenSynthesizedFocusIsUnavailable() {
-    XCTAssertFalse(Self.shouldFallbackFromSynthesizedTextEntryFocus(.performed))
-    XCTAssertTrue(
-      Self.shouldFallbackFromSynthesizedTextEntryFocus(
-        .unsupported(message: "private synthesis unavailable", hint: "use XCTest")
-      )
-    )
-  }
-
   func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndPenalizedXCTest() {
     let cases: [(TextTypingRepairMode, Bool, Bool, Bool, Bool)] = [
       (.replacement, true, true, false, false),

@@ -149,19 +149,6 @@ extension RunnerTests {
       context: context
     )
     else {
-      if context?.allowsXCTestCoordinateFallback == true {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
-        return executeCoordinateDragFallback(
-          activeApp: activeApp,
-          x: x,
-          y: y,
-          x2: x2,
-          y2: y2,
-          durationMs: durationMs,
-          message: message,
-          fallback: nil
-        )
-      }
       logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
       return Response(
         ok: false,
@@ -179,7 +166,7 @@ extension RunnerTests {
       y2: plan.points.y2,
       referenceFrame: plan.referenceFrame
     )
-    let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+    switch performSynthesizedGesture(activeApp, kind: policyKind, context: plan.context, synthesize: {
       synthesizedDragAt(
         app: activeApp,
         x: plan.points.x,
@@ -190,13 +177,10 @@ extension RunnerTests {
         profile: profile,
         context: plan.context
       )
-    }
-    if case .performed = outcome {
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
+    }) {
+    case .performed(let timing):
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
-    }
-    if plan.context.allowsXCTestCoordinateFallback {
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: true)
+    case .xctestFallback(let fallbackMessage, let hint):
       return executeCoordinateDragFallback(
         activeApp: activeApp,
         x: plan.points.x,
@@ -205,11 +189,11 @@ extension RunnerTests {
         y2: plan.points.y2,
         durationMs: durationMs,
         message: message,
-        fallback: gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
+        fallback: GestureFallback(strategy: "xctest-coordinate-drag", message: fallbackMessage, hint: hint)
       )
+    case .refused(_, let refusalMessage, let hint):
+      return unsupportedResponse(message: refusalMessage, hint: hint)
     }
-    logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
-    return unsupportedResponse(for: outcome)
 #else
     return nil
 #endif
@@ -223,7 +207,7 @@ extension RunnerTests {
     y2: Double,
     durationMs: Double,
     message: String,
-    fallback: GestureFallback?
+    fallback: GestureFallback
   ) -> Response {
     let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
     let dragFrame = resolvedDragVisualizationFrame(

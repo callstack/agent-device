@@ -31,27 +31,20 @@ extension RunnerTests {
         app: activeApp,
         policy: synthesizedGesturePolicy(policyKind)
       )
-      let (_, outcome) = performGesture(activeApp, idleTimeout: false) {
+      switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-      }
-      if Self.shouldFallbackFromSynthesizedTextEntryFocus(outcome) {
-        logSynthesizedGesturePolicyDecision(
-          kind: policyKind,
-          context: context,
-          fallbackAttempted: true
-        )
-      } else {
-        logSynthesizedGesturePolicyDecision(
-          kind: policyKind,
-          context: context,
-          fallbackAttempted: false
-        )
+      }) {
+      case .performed:
         resolvedCoordinateContext = context
         resolvedCoordinateTarget = TextEntryTarget(
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
           prefersFocusedElement: false
         )
+      case .xctestFallback:
+        break
+      case .refused(_, let message, let hint):
+        return unsupportedResponse(message: message, hint: hint)
       }
     }
 #else

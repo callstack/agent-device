@@ -57,20 +57,6 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.message.contains("at most 20") ?? false)
   }
 
-  func testSequenceHasSynthesizedCoordinateStep() {
-    XCTAssertTrue(
-      sequenceHasSynthesizedCoordinateStep([
-        sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true),
-      ])
-    )
-    XCTAssertFalse(
-      sequenceHasSynthesizedCoordinateStep([
-        sequenceStep(kind: "tap", x: 1, y: 2),
-        sequenceStep(kind: "doubleTap", x: 1, y: 2, synthesized: true),
-      ])
-    )
-  }
-
   func testAssembleSequencePreservesOrderOnSuccess() {
     let steps = [
       sequenceStep(kind: "tap", x: 1, y: 1),
@@ -151,8 +137,7 @@ extension RunnerTests {
   private func sequenceStep(
     kind: String,
     x: Double?,
-    y: Double? = nil,
-    synthesized: Bool? = nil
+    y: Double? = nil
   ) -> SequenceStep {
     SequenceStep(
       kind: kind,
@@ -160,7 +145,7 @@ extension RunnerTests {
       y: y,
       durationMs: nil,
       pauseMs: nil,
-      synthesized: synthesized
+      synthesized: nil
     )
   }
 

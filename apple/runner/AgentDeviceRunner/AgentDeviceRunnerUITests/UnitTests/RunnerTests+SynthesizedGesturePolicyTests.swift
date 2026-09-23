@@ -58,10 +58,7 @@ extension RunnerTests {
   /// Keyboard-policy semantics only. Which command gets which policy is the table below; a probe
   /// that is merely permitted still costs a live AX fetch, so the two questions stay separate.
   func testSynthesizedKeyboardPolicyAllowsProbeOnlyWhenAccessibilityPermitsIt() {
-    XCTAssertFalse(
-      SynthesizedKeyboardPolicy.whenAccessibilityHealthy
-        .allowsProbe(accessibilityHealth: .unknown)
-    )
+    XCTAssertFalse(SynthesizedKeyboardPolicy.never.allowsProbe(accessibilityHealth: .healthy))
     XCTAssertTrue(
       SynthesizedKeyboardPolicy.requiredWhenAvailable
         .allowsProbe(accessibilityHealth: .unknown)
@@ -101,5 +98,83 @@ extension RunnerTests {
     XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true))
   }
 
+  func testOnlySynthesizedSequenceTapStepsTakeTheCoordinateTapPolicy() {
+    XCTAssertEqual(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true)), .coordinateTap)
+    XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: nil)))
+    XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("doubleTap", synthesized: true)))
+    XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: true)))
+  }
+
+  func testSequenceTapStepAndStandaloneTapChooseTheSameFallbackForEveryAccessibilityHealth() throws {
+    let sequenceKind = try XCTUnwrap(
+      synthesizedPolicyKind(forSequenceStep: sequenceStep("tap", synthesized: true))
+    )
+    for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
+      runnerAccessibilityHealth = health
+      for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
+        let label = "axHealth=\(health.rawValue) context=\(context == nil ? "unresolved" : "resolved")"
+        let standalone = synthesizedGestureRoute(
+          performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: failedSynthesis)
+        )
+        let sequenceStep = synthesizedGestureRoute(
+          performSynthesizedGesture(app, kind: sequenceKind, context: context, synthesize: failedSynthesis)
+        )
+        XCTAssertEqual(sequenceStep, standalone, label)
+        XCTAssertEqual(standalone, "xctestFallback", label)
+      }
+    }
+  }
+
+  func testSynthesizedGestureFallbackFollowsItsKindAndTheResolvedAccessibilityHealth() {
+    runnerAccessibilityHealth = .healthy
+    let unavailable = synthesizedGestureTestContext(accessibilityHealth: .unavailable)
+    let unknown = synthesizedGestureTestContext(accessibilityHealth: .unknown)
+    let cases: [(SynthesizedGesturePolicyKind, SynthesizedCoordinateContext?, String)] = [
+      (.scroll, synthesizedGestureTestContext(accessibilityHealth: .healthy), "refused"),
+      (.synthesizedDrag, unavailable, "refused"),
+      (.synthesizedDrag, unknown, "xctestFallback"),
+      (.coordinateTap, unavailable, "xctestFallback"),
+    ]
+    for (kind, context, expected) in cases {
+      let attempt = performSynthesizedGesture(app, kind: kind, context: context, synthesize: failedSynthesis)
+      XCTAssertEqual(synthesizedGestureRoute(attempt), expected, "kind=\(kind.rawValue)")
+      switch attempt {
+      case .xctestFallback(let message, let hint), .refused(_, let message, let hint):
+        XCTAssertEqual(message, "forced private synthesis failure")
+        XCTAssertEqual(hint, "forced hint")
+      case .performed:
+        break
+      }
+      let performed = performSynthesizedGesture(app, kind: kind, context: context) { .performed }
+      XCTAssertEqual(synthesizedGestureRoute(performed), "performed", "kind=\(kind.rawValue)")
+    }
+  }
+
+  private func failedSynthesis() -> RunnerInteractionOutcome {
+    .unsupported(message: "forced private synthesis failure", hint: "forced hint")
+  }
+
+  private func synthesizedGestureRoute(_ attempt: SynthesizedGestureAttempt) -> String {
+    switch attempt {
+    case .performed: return "performed"
+    case .xctestFallback: return "xctestFallback"
+    case .refused: return "refused"
+    }
+  }
+
+  private func synthesizedGestureTestContext(
+    accessibilityHealth: RunnerAccessibilityHealth
+  ) -> SynthesizedCoordinateContext {
+    SynthesizedCoordinateContext(
+      referenceFrame: CGRect(x: 0, y: 0, width: 390, height: 844),
+      resolvedWindow: app.windows.firstMatch,
+      keyboardPolicy: .never,
+      accessibilityHealth: accessibilityHealth
+    )
+  }
+
+  private func sequenceStep(_ kind: String, synthesized: Bool?) -> SequenceStep {
+    SequenceStep(kind: kind, x: 10, y: 20, durationMs: nil, pauseMs: nil, synthesized: synthesized)
+  }
 }
 #endif

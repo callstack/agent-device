@@ -270,11 +270,4 @@ extension RunnerTests {
   ) -> Bool {
     repairMode == .replacement && hasX && hasY && xCTestChannelPenalized
   }
-
-  static func shouldFallbackFromSynthesizedTextEntryFocus(
-    _ outcome: RunnerInteractionOutcome
-  ) -> Bool {
-    if case .unsupported = outcome { return true }
-    return false
-  }
 }

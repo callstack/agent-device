@@ -143,51 +143,21 @@ extension RunnerTests {
   ) -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
-    // Synthesized HID tap fast path mirrors the individual `tap` command (idleTimeout:false, with
-    // a tapAt fallback when synthesis is unsupported), so fusing a jittered tap series does not
-    // change the touch mechanism for these inputs.
-    if step.kind == "tap", step.synthesized == true {
-      let policyKind = SynthesizedGesturePolicyKind.synthesizedDrag
-#if os(iOS)
-      guard let synthesizedContext else {
-        let nowMs = ProcessInfo.processInfo.systemUptime * 1000
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: nil, fallbackAttempted: false)
-        return SequenceStepOutcome(
-          outcome: .unsupported(
-            message: "synthesized coordinate tap could not resolve a finite coordinate frame",
-            hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
-          ),
-          gestureStartUptimeMs: nowMs,
-          gestureEndUptimeMs: nowMs
-        )
-      }
-#endif
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+    if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
+      switch performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: synthesizedContext)
-      }
-      if case .performed = outcome {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
-        if let pauseMs = step.pauseMs, pauseMs > 0 {
-          sleepFor(min(max(pauseMs, 0), 10000) / 1000.0)
-        }
-        return SequenceStepOutcome(
-          outcome: outcome,
-          gestureStartUptimeMs: timing.gestureStartUptimeMs,
-          gestureEndUptimeMs: timing.gestureEndUptimeMs
+      }) {
+      case .performed(let timing):
+        return finishedSequenceStep(step, timing: timing, outcome: .performed)
+      case .refused(let timing, let message, let hint):
+        return finishedSequenceStep(
+          step,
+          timing: timing,
+          outcome: .unsupported(message: message, hint: hint)
         )
+      case .xctestFallback:
+        break
       }
-#if os(iOS)
-      guard synthesizedContext.allowsXCTestCoordinateFallback else {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
-        return SequenceStepOutcome(
-          outcome: outcome,
-          gestureStartUptimeMs: timing.gestureStartUptimeMs,
-          gestureEndUptimeMs: timing.gestureEndUptimeMs
-        )
-      }
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: true)
-#endif
-      // Synthesis unsupported (e.g. macOS) — fall through to the drag-based tapAt below.
     }
     let (timing, outcome) = performGesture(activeApp) {
       switch step.kind {
@@ -201,6 +171,14 @@ extension RunnerTests {
         return tapAt(app: activeApp, x: x, y: y)
       }
     }
+    return finishedSequenceStep(step, timing: timing, outcome: outcome)
+  }
+
+  private func finishedSequenceStep(
+    _ step: SequenceStep,
+    timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
+    outcome: RunnerInteractionOutcome
+  ) -> SequenceStepOutcome {
     // Sleep AFTER the step — pauseMs is the inter-step gap — but only when the step performed.
     // assembleSequenceExecution stops at the first unsupported outcome, so pausing after a failed
     // step would burn up to 10s of watchdog budget with no following step to separate from.

@@ -78,20 +78,15 @@ extension RunnerTests {
               app: activeApp,
               policy: synthesizedGesturePolicy(policyKind)
             )
-            let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+            switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
               synthesizedTapAt(
                 app: activeApp,
                 x: touchPoint.x,
                 y: touchPoint.y,
                 context: context
               )
-            }
-            if case .performed = outcome {
-              logSynthesizedGesturePolicyDecision(
-                kind: policyKind,
-                context: context,
-                fallbackAttempted: false
-              )
+            }) {
+            case .performed(let timing):
               if isTextEntry {
                 waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
               }
@@ -107,13 +102,12 @@ extension RunnerTests {
                   ? match.usedNonHittableFallback
                   : nil
               )
+            case .xctestFallback(let message, let hint):
+              fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+            case .refused(_, let message, let hint):
+              clearRememberedTextEntryTap()
+              return unsupportedResponse(message: message, hint: hint)
             }
-            logSynthesizedGesturePolicyDecision(
-              kind: policyKind,
-              context: context,
-              fallbackAttempted: true
-            )
-            fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
           }
           let (timing, outcome) = performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
@@ -172,16 +166,18 @@ extension RunnerTests {
             app: activeApp,
             policy: synthesizedGesturePolicy(policyKind)
           )
-          let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+          switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-          }
-          if case .performed = outcome {
-            logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
+          }) {
+          case .performed(let timing):
             rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)
+          case .xctestFallback(let message, let hint):
+            fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+          case .refused(_, let message, let hint):
+            clearRememberedTextEntryTap()
+            return unsupportedResponse(message: message, hint: hint)
           }
-          logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
-          fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
         }
         let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
         let (timing, outcome) = performGesture(activeApp) { tapAt(app: activeApp, x: x, y: y) }

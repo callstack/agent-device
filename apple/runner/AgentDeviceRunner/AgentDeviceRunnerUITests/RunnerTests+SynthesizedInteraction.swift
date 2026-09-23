@@ -384,7 +384,6 @@ extension RunnerTests {
       referenceFrame: referenceFrame,
       resolvedWindow: window,
       keyboardPolicy: policy.keyboardPolicy,
-      fallbackPolicy: policy.fallbackPolicy,
       accessibilityHealth: health
     )
 #else
