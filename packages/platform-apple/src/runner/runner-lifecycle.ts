@@ -21,6 +21,7 @@ import {
 } from './runner-contract.ts';
 import {
   isRetryableRunnerError,
+  isStructuredRunnerFailure,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
   shouldRestartRunnerBeforeCommandSend,
@@ -327,7 +328,10 @@ export async function executeRunnerCommand(
         recoveredDiagnosticPhase: 'ios_runner_readiness_preflight_recovered',
       });
     }
-    if (session && isRetryableRunnerError(appErr)) {
+    // Status recovery answers "did the command I lost the response to run?". A structured reply
+    // (a RUNNER_BUSY refusal, for one) already answered, so it is rethrown for the caller's own
+    // resend policy instead of paying a status round trip per attempt.
+    if (session && isRetryableRunnerError(appErr) && !isStructuredRunnerFailure(appErr)) {
       return await handleRunnerTransportErrorAfterCommandSend({
         device,
         session,
@@ -394,7 +398,7 @@ async function restartSessionAndRunCommand(params: {
     return recovered;
   } catch (error) {
     const retryAppErr = asAppError(error, 'COMMAND_FAILED');
-    if (isRetryableRunnerError(retryAppErr)) {
+    if (isRetryableRunnerError(retryAppErr) && !isStructuredRunnerFailure(retryAppErr)) {
       try {
         return await handleRunnerTransportErrorAfterCommandSend({
           device,

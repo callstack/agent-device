@@ -8,6 +8,7 @@ import {
 import {
   RUNNER_ERROR_RULES,
   isRetryableRunnerError,
+  isRunnerBusyError,
   resolveRunnerFatalErrorReason,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
@@ -300,4 +301,28 @@ test('a refused screen capture keeps the runner reason and stays off the wire co
     assert.equal(classified.details.runnerErrorCode, runnerCode);
     assert.equal(classified.details.retriable, undefined);
   }
+});
+
+// --- busy refusal (isRunnerBusyError) ---
+
+test('only the typed RUNNER_BUSY refusal reads as busy', () => {
+  assert.equal(
+    isRunnerBusyError(commandFailed('runner is busy', { runnerErrorCode: 'RUNNER_BUSY' })),
+    true,
+  );
+  // The stalling command's own timeout already spent its wait: not a refusal to resend.
+  assert.equal(
+    isRunnerBusyError(
+      commandFailed('main thread execution timed out', { runnerErrorCode: 'MAIN_THREAD_TIMEOUT' }),
+    ),
+    false,
+  );
+  assert.equal(
+    isRunnerBusyError(
+      commandFailed('The iOS runner is still finishing a previous command', { retriable: true }),
+    ),
+    false,
+  );
+  assert.equal(isRunnerBusyError(commandFailed('RUNNER_BUSY')), false);
+  assert.equal(isRunnerBusyError(new Error('RUNNER_BUSY')), false);
 });

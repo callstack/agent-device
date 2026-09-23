@@ -43,6 +43,7 @@ import {
 import {
   resolveRunnerFatalErrorReason,
   isRunnerMainThreadOccupiedError,
+  isStructuredRunnerFailure,
   enrichRunnerStartupFailureWithDeviceStates,
 } from './runner-error-classification.ts';
 import {
@@ -975,10 +976,6 @@ export async function executeRunnerCommandWithSession(
 
 function readRunnerMainThreadBusy(data: Record<string, unknown>): boolean | undefined {
   return typeof data.runnerMainThreadBusy === 'boolean' ? data.runnerMainThreadBusy : undefined;
-}
-
-function isStructuredRunnerFailure(error: unknown): boolean {
-  return error instanceof AppError && error.details?.runner !== undefined;
 }
 
 function markSkippedPreflightTransportError(

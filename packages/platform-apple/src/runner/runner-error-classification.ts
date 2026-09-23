@@ -72,6 +72,8 @@ type RunnerErrorMatch = {
 const hasRetriableFlag: RunnerErrorDetailsMatch = (details) => details.retriable === true;
 const hasAppNotRunningRunnerCode: RunnerErrorDetailsMatch = (details) =>
   details.runnerErrorCode === APP_NOT_RUNNING_RUNNER_CODE;
+const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
+  details.runnerErrorCode === RUNNER_BUSY_RUNNER_CODE;
 /**
  * The host's own `DevToolsSecurity -status` read, published as typed details by the probe that
  * takes it. The build-failure rule below keys on this field and never on the probe's message, so
@@ -95,8 +97,14 @@ const hasReadinessPreflightFailure: RunnerErrorDetailsMatch = (details) =>
   details.runnerReadinessPreflightFailed === true && !isRequestCanceledDetails(details);
 
 type RunnerErrorVerdicts = {
-  /** isRetryableRunnerError: transport error worth a same-session resend. */
+  /**
+   * isRetryableRunnerError: worth a same-session resend, either a transport failure or a structured
+   * refusal that executed nothing. Whether a lost response needs status recovery is a separate
+   * question ({@link isStructuredRunnerFailure}).
+   */
   retryable?: boolean;
+  /** isRunnerBusyError: the runner refused fast while abandoned main-thread work drains. */
+  drainResend?: boolean;
   /** shouldRetryRunnerConnectError: connect loop may keep waiting for the runner. */
   connectRetry?: boolean;
   /** Session-fatal classification: invalidate the cached runner session with this reason. */
@@ -218,6 +226,13 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     reason: 'app_not_running',
     match: { code: 'COMMAND_FAILED', details: hasAppNotRunningRunnerCode },
     verdicts: { retryable: false, connectRetry: false },
+  },
+  {
+    // Named before the generic retriable flag so diagnostics say what refused, not that a flag
+    // was set. Nothing ran: the runner answered before dispatching the command (#1105).
+    reason: 'runner_busy_refusal',
+    match: { code: 'COMMAND_FAILED', details: hasRunnerBusyCode },
+    verdicts: { retryable: true, connectRetry: true, drainResend: true },
   },
   {
     reason: 'flagged_retriable',
@@ -512,12 +527,29 @@ export function isRetryableRunnerError(err: unknown): boolean {
  * `details.runnerErrorCode`), so family policy reads the typed detail rather than the message.
  */
 export function isRunnerMainThreadOccupiedError(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const runnerErrorCode = error.details?.runnerErrorCode;
+  if (isRunnerBusyError(error)) return true;
   return (
-    runnerErrorCode === RUNNER_BUSY_RUNNER_CODE ||
-    runnerErrorCode === MAIN_THREAD_TIMEOUT_RUNNER_CODE
+    error instanceof AppError && error.details?.runnerErrorCode === MAIN_THREAD_TIMEOUT_RUNNER_CODE
   );
+}
+
+/**
+ * True when the runner refused this command outright because watchdog-abandoned XCTest work still
+ * occupies its main thread (`RUNNER_BUSY`). Nothing was executed, so a read-only caller may resend
+ * once the work drains; `MAIN_THREAD_TIMEOUT` is deliberately excluded because that command already
+ * spent its wait.
+ */
+export function isRunnerBusyError(error: unknown): boolean {
+  return runnerErrorVerdict(error, 'drainResend') ?? false;
+}
+
+/**
+ * True when the runner answered with a structured failure: the reply itself carries the runner's
+ * payload, so the command's outcome is known and no lifecycle status probe is needed to recover it.
+ * A transport-shaped failure (aborted body, malformed payload, refused connection) answered nothing.
+ */
+export function isStructuredRunnerFailure(error: unknown): boolean {
+  return error instanceof AppError && error.details?.runner !== undefined;
 }
 
 /**

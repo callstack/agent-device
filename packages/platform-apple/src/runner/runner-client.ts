@@ -9,10 +9,11 @@ import {
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
+  resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
-import { isRetryableRunnerError } from './runner-error-classification.ts';
+import { isRetryableRunnerError, isRunnerBusyError } from './runner-error-classification.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   createLocalAppleRunnerProvider,
@@ -32,6 +33,25 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 
 // --- Runner command execution ---
 
+/**
+ * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
+ * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
+ * that budget has to outlast the drain. The window is a heuristic, not a measurement: with 200ms
+ * doubling to a 1s cap it spans roughly 4 to 6.5s of delay across eight attempts before jitter and
+ * round trips, and a drain that outlives it still surfaces as `RUNNER_BUSY` (the runner's own
+ * `abandonedForSeconds=` marker in runner.log is the evidence for tuning it). Transport failures
+ * keep the pre-existing three attempts. The budget is positional: the error on each attempt sets
+ * how many attempts the loop may reach in total, so three busy refusals followed by a transport
+ * failure resend no further.
+ */
+const RUNNER_BUSY_RESEND_ATTEMPTS = 8;
+const TRANSPORT_RESEND_ATTEMPTS = 3;
+
+function readOnlyResendBudget(error: unknown): number {
+  if (isRunnerBusyError(error)) return RUNNER_BUSY_RESEND_ATTEMPTS;
+  return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
+}
+
 export async function runAppleRunnerCommand(
   device: DeviceInfo,
   command: RunnerCommand,
@@ -48,11 +68,17 @@ export async function runAppleRunnerCommand(
         return provider.runCommand(device, runnerCommand, options);
       },
       {
-        shouldRetry: (error) => {
+        maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
+        baseDelayMs: 200,
+        maxDelayMs: 1_000,
+        shouldRetry: (error, attempt) => {
           assertRunnerRequestActive(options.requestId);
-          return isRetryableRunnerError(error);
+          return attempt < readOnlyResendBudget(error);
         },
       },
+      // The busy window is seconds long, so a cancelled request must wake the delay instead of
+      // sleeping it out and sending one more attempt.
+      { signal: resolveRunnerRequestSignal(options) },
     );
   }
   return provider.runCommand(device, runnerCommand, options);
