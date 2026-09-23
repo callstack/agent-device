@@ -464,7 +464,7 @@ extension RunnerTests {
   func flatInteractiveElements(
     app: XCUIApplication,
     deadline: Date
-  ) -> (elements: [XCUIElement], truncated: Bool) {
+  ) -> (elements: [XCUIElement], outcome: SnapshotTierOutcome) {
     let queries: [XCUIElementQuery] = [
       app.buttons,
       app.links,
@@ -495,18 +495,20 @@ extension RunnerTests {
   }
 
   /// Runs sweep queries in order until one reports AX unavailable, or until the next one could not
-  /// finish before `deadline` (`querySweepCanStartQuery`).
+  /// finish before `deadline` (`querySweepCanStartQuery`). A sweep stopped by the deadline reports
+  /// `.deadlineExhausted` rather than a truncation flag: what it collected is a partial tree, and
+  /// only the caller that owns the tier decides whether that counts as an answer (#2781).
   static func runFlatInteractiveQueries<Query, Element>(
     _ queries: [Query],
     deadline: Date,
     now: () -> Date = { Date() },
     run: (Query) -> (elements: [Element], axUnavailable: Bool)
-  ) -> (elements: [Element], truncated: Bool) {
+  ) -> (elements: [Element], outcome: SnapshotTierOutcome) {
     var elements: [Element] = []
     for query in queries {
       if !querySweepCanStartQuery(deadline: deadline, now: now()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
-        return (elements, true)
+        return (elements, .deadlineExhausted)
       }
       let result = run(query)
       elements.append(contentsOf: result.elements)
@@ -514,7 +516,7 @@ extension RunnerTests {
         break
       }
     }
-    return (elements, false)
+    return (elements, .completed)
   }
 
   func snapshotElementsQuery(

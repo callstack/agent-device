@@ -439,18 +439,21 @@ extension RunnerTests {
     app: XCUIApplication,
     hint: CaptureHint,
     sliceDeadline deadline: Date
-  ) -> SnapshotAcquisition {
+  ) -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
     var nodes: [RawAXNode] = [
       interactiveRootNode(rect: .zero)
     ]
     if hint.rawTraversalDepth == 0 || hint.regularPresentedDepth == 0 {
-      return SnapshotAcquisition(
-        hint: hint,
-        nodes: nodes,
-        truncated: false,
-        effectiveDepth: nil,
-        viewport: .infinite,
-        interfaceOrientation: RunnerInterfaceOrientation.unknown
+      return (
+        SnapshotAcquisition(
+          hint: hint,
+          nodes: nodes,
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: .infinite,
+          interfaceOrientation: RunnerInterfaceOrientation.unknown
+        ),
+        .completed
       )
     }
 
@@ -458,11 +461,11 @@ extension RunnerTests {
     var seen = Set<String>()
     var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
-    var truncated = flatElements.truncated
+    var outcome = flatElements.outcome
     for element in flatElements.elements {
       if !Self.querySweepCanStartQuery(deadline: deadline, now: Date()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
-        truncated = true
+        outcome = .deadlineExhausted
         break
       }
       guard let node = flatSnapshotNode(element: element, index: 0, parentIndex: 0) else {
@@ -510,13 +513,16 @@ extension RunnerTests {
         )
       )
     }
-    return SnapshotAcquisition(
-      hint: hint,
-      nodes: nodes,
-      truncated: truncated,
-      effectiveDepth: nil,
-      viewport: viewport,
-      interfaceOrientation: RunnerInterfaceOrientation.unknown
+    return (
+      SnapshotAcquisition(
+        hint: hint,
+        nodes: nodes,
+        truncated: outcome == .deadlineExhausted,
+        effectiveDepth: nil,
+        viewport: viewport,
+        interfaceOrientation: RunnerInterfaceOrientation.unknown
+      ),
+      outcome
     )
   }
 

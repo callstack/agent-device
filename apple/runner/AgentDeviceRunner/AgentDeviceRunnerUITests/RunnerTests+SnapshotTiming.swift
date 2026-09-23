@@ -98,6 +98,20 @@ extension RunnerTests {
     /// or error text.
     let outcome: Outcome
     let timing: SnapshotCaptureTiming
+    /// Whether the tier finished collecting or stopped at its own deadline. A tier that stopped at
+    /// its deadline timed out even when it handed back a payload, so penalty and recovery policy
+    /// read this instead of classifying the payload (#2781).
+    let tierOutcome: SnapshotTierOutcome
+
+    init(
+      outcome: Outcome,
+      timing: SnapshotCaptureTiming,
+      tierOutcome: SnapshotTierOutcome = .completed
+    ) {
+      self.outcome = outcome
+      self.timing = timing
+      self.tierOutcome = tierOutcome
+    }
   }
 
   /// The penalty breaker observes only acquisition facts. Presentation is a separate phase and
@@ -111,6 +125,9 @@ extension RunnerTests {
     if case let .failed(failure, phase: .acquisition) = attempt.outcome,
       failure.code == Self.xCTestSnapshotTimeoutCode
     {
+      return "\(kind.rawValue)_backend_timeout"
+    }
+    if attempt.tierOutcome == .deadlineExhausted {
       return "\(kind.rawValue)_backend_timeout"
     }
     guard attempt.timing.acquisitionMs > slowThresholdMs else { return nil }
