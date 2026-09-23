@@ -45,6 +45,11 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     regularRoot.index,
     `projected child should be reparented to the presented root: ${JSON.stringify(regular)}`,
   );
+  assert.equal(
+    projectedChild.hittable,
+    true,
+    `on-screen projected child should carry geometric hittability: ${JSON.stringify(regular)}`,
+  );
   assert.ok(
     regularNodes.every((node) => numericDepth(node) <= 1),
     `regular --depth 1 exceeded the presented frontier: ${JSON.stringify(regular)}`,
@@ -123,8 +128,9 @@ function assertSimulatorBridgeSnapshot(result: { json?: any }, description: stri
     undefined,
     `${description} must not carry XCTest tree quality metadata: ${JSON.stringify(result)}`,
   );
-  assert.ok(
-    result.json?.data?.warnings?.includes(MISSING_HITTABILITY_WARNING),
-    `${description} must disclose the Simulator AX bridge evidence gap: ${JSON.stringify(result)}`,
+  assert.equal(
+    result.json?.data?.warnings?.includes(MISSING_HITTABILITY_WARNING) ?? false,
+    false,
+    `${description} reported a viewport, so the AX bridge must derive hittability instead of disclosing it as missing: ${JSON.stringify(result)}`,
   );
 }

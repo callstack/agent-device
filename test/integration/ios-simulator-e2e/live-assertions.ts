@@ -23,6 +23,7 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
 
 export type LiveSnapshotNode = {
   depth?: unknown;
+  hittable?: unknown;
   identifier?: unknown;
   index?: unknown;
   label?: unknown;
