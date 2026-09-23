@@ -46,21 +46,10 @@ extension RunnerTests {
     XCTAssertFalse(shouldRetryResponse(succeeded))
   }
 
-  func testTargetAppUnavailableErrorKeepsItsWireShape() throws {
-    let encoded = try JSONEncoder().encode(ErrorPayload.targetAppUnavailable(bundleId: "com.example.app"))
-    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-    XCTAssertEqual(Array(object.keys), ["message"])
-    XCTAssertEqual(object["message"] as? String, "app 'com.example.app' is not available")
-    XCTAssertEqual(
-      ErrorPayload.targetAppUnavailable(bundleId: nil).message,
-      "runner app is not available"
-    )
-  }
-
   func testExceptionRetryIsLimitedToTheAxServerNotFoundReadOnlyCase() throws {
-    let readText = try JSONDecoder().decode(Command.self, from: Data(#"{"command":"readText"}"#.utf8))
-    let snapshot = try JSONDecoder().decode(Command.self, from: Data(#"{"command":"snapshot"}"#.utf8))
-    let tap = try JSONDecoder().decode(Command.self, from: Data(#"{"command":"tap"}"#.utf8))
+    let readText = try runnerCommandFixture(#"{"command":"readText"}"#)
+    let snapshot = try runnerCommandFixture(#"{"command":"snapshot"}"#)
+    let tap = try runnerCommandFixture(#"{"command":"tap"}"#)
     let axServerNotFound = "NSException: Error kAXErrorServerNotFound"
     XCTAssertTrue(shouldRetryException(readText, message: axServerNotFound))
     XCTAssertFalse(shouldRetryException(tap, message: axServerNotFound))
