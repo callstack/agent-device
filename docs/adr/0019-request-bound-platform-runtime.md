@@ -12,6 +12,12 @@ a narrow neutral typed service, not diagnostics alone. Host diagnostics, daemon-
 cleanup, and managed host tooling share the execution category because none binds a request-scoped
 device runtime; their domain services remain separate rather than forming a generic host grab bag.
 
+Amendment proposed 2026-09-23 alongside the web press-shape refusal: it states in section 3 that a
+modifier on an admitted operation is not a second operation and therefore has no fact cell, which is
+what a per-shape refusal on the owning leaf mechanic rests on. Without that sentence the next
+contributor reasonably reaches for a per-shape fact key, which the operation-facts mapped type cannot
+express.
+
 Amendment proposed 2026-09-14 by [ADR 0024](./0024-screen-recording-provable-signal.md) for the
 `screen-recording` kind only; see the note at the head of section 5. It takes effect when ADR 0024
 is accepted.
@@ -267,6 +273,15 @@ facet plus a typed unavailability fact represents unsupported behavior; implemen
 stubs that throw `unsupported` after binding. Runtime-use keys identify individual semantic
 operations, not whole facet namespaces, so selecting one operation does not expose undeclared sibling
 operations from the same facet.
+
+**A shape of an operation is not an operation and gets no fact cell.** Runtime facts speak per
+semantic operation; a modifier applied to an admitted operation — a press that is double, held, or
+repeated — is not a second operation and must not be given a fact key, because the facts map is a
+mapped type over operation names and a phantom operation satisfies neither the required nor the
+preferred runtime-use shape. Such a shape is refused by the owning leaf mechanic being absent, with a
+typed reason and a hint, at the point the shape is requested. Absence of a whole admitted
+operation's member remains an ownership bug and fails closed with its own typed reason; it is never
+the mechanism that expresses an unsupported shape.
 
 `RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
 
