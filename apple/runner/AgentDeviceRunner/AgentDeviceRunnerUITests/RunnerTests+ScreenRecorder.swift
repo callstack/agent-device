@@ -296,7 +296,7 @@ extension RunnerTests {
 extension RunnerTests {
   /// Starts `recorder` on the frames `capture` produces. The bootstrap frame is taken on the calling
   /// thread, which is main for `record start`. Each later tick is optional work: it hops to main only
-  /// while no other main-thread work is in flight or abandoned, so it never queues behind a command.
+  /// while no other main-thread work is in flight, so it never queues behind a command.
   /// A capture still running after `recordingFrameCaptureTimeout` is abandoned and its frame dropped;
   /// its late result is never returned.
   func startRecording(

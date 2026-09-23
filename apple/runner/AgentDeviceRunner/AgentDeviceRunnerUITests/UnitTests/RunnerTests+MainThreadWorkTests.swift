@@ -181,6 +181,46 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
+  func testRunMainThreadWorkIfIdleDeclinesOnlyForInFlightWork() {
+    // Production marks work abandoned only while its block is still running on main, so the mark
+    // never stands alone. The gate therefore reads in-flight dispatches and nothing else: a mark
+    // with an idle main thread names no work to wait for and must not starve the recorder.
+    final class Outcome {
+      var value: Bool?
+      var offered = false
+      var error: Error?
+    }
+    let outcome = Outcome()
+    let finished = expectation(description: "optional work was offered with main free")
+    abandonedMainThreadWorkCount = 1
+    defer { abandonedMainThreadWorkCount = 0 }
+
+    DispatchQueue(label: "agent-device.runner.tests.stale-abandoned-mark").async {
+      defer { finished.fulfill() }
+      do {
+        outcome.value = try self.runMainThreadWorkIfIdle(
+          "recording_frame",
+          timeout: 5,
+          timeoutError: self.mainThreadExecutionTimeoutError
+        ) {
+          Thread.isMainThread
+        }
+        outcome.offered = true
+      } catch {
+        outcome.error = error
+      }
+    }
+
+    wait(for: [finished], timeout: 10)
+    XCTAssertNil(outcome.error)
+    XCTAssertTrue(outcome.offered)
+    XCTAssertEqual(
+      outcome.value,
+      true,
+      "an abandoned mark over an idle main thread is no reason to decline a frame"
+    )
+  }
+
   private final class BoundaryOutcome {
     var value: Int?
     var error: Error?

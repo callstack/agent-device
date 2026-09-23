@@ -77,9 +77,11 @@ extension RunnerTests {
   }
 
   /// Runs optional `work` like `runMainThreadWork`, but only while no other dispatched main-thread
-  /// work is in flight or abandoned; otherwise it returns `nil` without dispatching. The check and
-  /// the enqueue happen under one hold of `mainThreadWorkLock`, the same lock every dispatch enqueues
-  /// under, so admitted work never waits in the main queue behind a command's hop.
+  /// work is in flight; otherwise it returns `nil` without dispatching. The check and the enqueue
+  /// happen under one hold of `mainThreadWorkLock`, the same lock every dispatch enqueues under, so
+  /// admitted work never waits in the main queue behind a command's hop. The in-flight count covers
+  /// abandoned work too: a block stays counted until it returns, and it marks itself abandoned in
+  /// the same window, so occupancy that outlived its slice is already declined here.
   func runMainThreadWorkIfIdle<T>(
     _ operation: String,
     timeout: TimeInterval,
@@ -90,7 +92,7 @@ extension RunnerTests {
       return nil
     }
     mainThreadWorkLock.lock()
-    guard mainThreadWorkInFlightCount == 0, abandonedMainThreadWorkCount == 0 else {
+    guard mainThreadWorkInFlightCount == 0 else {
       mainThreadWorkLock.unlock()
       return nil
     }
