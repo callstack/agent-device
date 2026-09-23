@@ -202,7 +202,7 @@ extension RunnerTests {
   /// markers. Every site that binds, rebinds, or drops the target runs this.
   func resetTargetBoundState() {
     clearRememberedTextEntryTap()
-    snapshotXCTestPenaltyWarmupExemptionPending = false
+    snapshotXCTestPenaltyWarmupExemption.isPending = false
     lastLoggedFastAppGuardLine = nil
     lastLoggedGesturePolicyLines.removeAll()
   }
@@ -247,7 +247,7 @@ extension RunnerTests {
     resetTargetBoundState()
     clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
     clearPrivateAXAcceptedDepth(reason: "target_process_changed")
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
     beginFirstInteractionStabilization()
   }
 

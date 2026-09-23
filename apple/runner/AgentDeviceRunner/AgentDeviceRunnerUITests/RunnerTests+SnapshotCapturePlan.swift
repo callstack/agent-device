@@ -142,13 +142,6 @@ extension RunnerTests {
     return penalized == bundleId
   }
 
-  /// Main thread only, through `takeSnapshotCaptureTarget`.
-  func consumeSnapshotXCTestPenaltyWarmupExemption() -> Bool {
-    let pending = snapshotXCTestPenaltyWarmupExemptionPending
-    snapshotXCTestPenaltyWarmupExemptionPending = false
-    return pending
-  }
-
   /// The pre-seeded first-failure a penalized plan stamps into its verdict. The deferred case
   /// uses the dedicated 'deferred' code: the breaker pre-selected the backend, nothing new
   /// degraded on this capture, and the daemon keys warning suppression and the settle budget
@@ -271,6 +264,7 @@ extension RunnerTests {
     var axFailure: SnapshotCaptureFailure?
     // A caller may share the pre-plan system-modal probe's deadline; otherwise own the full budget (#1244).
     let deadline = deadline ?? Date().addingTimeInterval(Self.snapshotPlanBudget)
+    let suppressXCTestPenalty = snapshotXCTestPenaltyWarmupExemption.consume()
 
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
     // the app remains visually responsive. Simulators can avoid that channel through private AX;
@@ -341,7 +335,7 @@ extension RunnerTests {
         kind,
         attempt: attempt,
         bundleId: target.bundleId,
-        penaltySuppressed: target.xCTestPenaltyWarmupExempt
+        penaltySuppressed: suppressXCTestPenalty
       )
       if case let .failed(failure, phase: _) = attempt.outcome {
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }

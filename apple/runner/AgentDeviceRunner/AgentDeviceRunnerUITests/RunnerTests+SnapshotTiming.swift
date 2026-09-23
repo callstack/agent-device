@@ -57,6 +57,35 @@ struct SnapshotPhaseTimer {
   }
 }
 
+/// Keeps the first capture plan that runs against a fresh target process from penalizing the XCTest
+/// channel for a slow tier. Lifecycle code arms and disarms it on main; the capture plan consumes it
+/// on the command queue, so a snapshot that returns before running a plan leaves it pending.
+final class SnapshotXCTestPenaltyWarmupExemption {
+  private let lock = NSLock()
+  private var pending = false
+
+  var isPending: Bool {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return pending
+    }
+    set {
+      lock.lock()
+      pending = newValue
+      lock.unlock()
+    }
+  }
+
+  func consume() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    let wasPending = pending
+    pending = false
+    return wasPending
+  }
+}
+
 extension RunnerTests {
   struct SnapshotBackendAttempt {
     enum Outcome {

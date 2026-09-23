@@ -2,20 +2,17 @@ import XCTest
 
 // MARK: - Snapshot capture target (#2781)
 //
-// Target identity (`currentApp`, `currentBundleId`, `currentAppProcessIdentifier`), the penalty
-// warm-up exemption, and `runnerAccessibilityHealth` are owned by main-thread lifecycle code. A
-// capture plan runs on the command queue, so it reads the identity from a `SnapshotCaptureTarget`
-// taken on main while the command is prepared, and writes health or invalidates the target only
-// through `applyMainOwnedSnapshotState`.
+// Target identity (`currentApp`, `currentBundleId`, `currentAppProcessIdentifier`) and
+// `runnerAccessibilityHealth` are owned by main-thread lifecycle code. A capture plan runs on the
+// command queue, so it reads the identity from a `SnapshotCaptureTarget` taken on main while the
+// command is prepared, and writes health or invalidates the target only through
+// `applyMainOwnedSnapshotState`.
 
 /// The target one capture plan reads, taken once on the main thread.
 struct SnapshotCaptureTarget {
   let app: XCUIApplication
   let bundleId: String?
   let processIdentifier: Int?
-  /// The first capture of a fresh target process does not penalize the XCTest channel for a slow
-  /// tier; the pending exemption is consumed when the target is taken.
-  let xCTestPenaltyWarmupExempt: Bool
 }
 
 /// What snapshot command preparation hands the off-main capture.
@@ -25,13 +22,12 @@ enum SnapshotCommandPreparation {
 }
 
 extension RunnerTests {
-  /// Main thread only: reads the lifecycle-owned target identity and consumes the warm-up exemption.
+  /// Main thread only: reads the lifecycle-owned target identity.
   func takeSnapshotCaptureTarget(app: XCUIApplication) -> SnapshotCaptureTarget {
     SnapshotCaptureTarget(
       app: app,
       bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier,
-      xCTestPenaltyWarmupExempt: consumeSnapshotXCTestPenaltyWarmupExemption()
+      processIdentifier: currentAppProcessIdentifier
     )
   }
 

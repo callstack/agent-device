@@ -71,7 +71,7 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = "com.example.stale-target"
     currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
     defer {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
@@ -85,7 +85,7 @@ extension RunnerTests {
     XCTAssertNil(currentApp)
     XCTAssertNil(currentBundleId)
     XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
   }
 
   func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {

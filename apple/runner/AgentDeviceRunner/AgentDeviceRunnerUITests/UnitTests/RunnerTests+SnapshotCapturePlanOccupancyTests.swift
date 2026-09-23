@@ -60,7 +60,7 @@ extension RunnerTests {
     _ = capturedInterfaceOrientation(app: app)
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
     let captureTarget = takeSnapshotCaptureTarget(app: app)
     RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
     let originalImplementation = method_getImplementation(snapshotMethod)

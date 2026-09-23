@@ -101,10 +101,10 @@ extension RunnerTests {
   }
 
   func testSnapshotPenaltyWarmupExemptionIsConsumedOnce() {
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
 
-    XCTAssertTrue(consumeSnapshotXCTestPenaltyWarmupExemption())
-    XCTAssertFalse(consumeSnapshotXCTestPenaltyWarmupExemption())
+    XCTAssertTrue(snapshotXCTestPenaltyWarmupExemption.consume())
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.consume())
   }
 
   func testSnapshotPenaltyCanBeClearedAcrossTargetProcessReplacement() {
@@ -120,14 +120,14 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = "com.example.app"
     currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
 
     invalidateCachedTarget(reason: "unit_test")
 
     XCTAssertNil(currentApp)
     XCTAssertNil(currentBundleId)
     XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
   }
 
   func testTextEntryTapWitnessIsBoundToTargetIdentity() {
@@ -146,7 +146,7 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = "com.example.app"
     currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
     firstInteractionReadyUptime = nil
     penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
@@ -157,7 +157,7 @@ extension RunnerTests {
     XCTAssertNil(currentApp)
     XCTAssertNil(currentBundleId)
     XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
     XCTAssertNotNil(firstInteractionReadyUptime)
   }

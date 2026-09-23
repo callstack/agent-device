@@ -52,9 +52,8 @@ final class RunnerTests: XCTestCase {
   let commandExecutionQueue = DispatchQueue(label: "agent-device.runner.commands")
   let app = XCUIApplication()
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
-  // Main-thread owned, like `runnerAccessibilityHealth` and the warm-up exemption below: an off-main
-  // capture plan reads them only through its `SnapshotCaptureTarget` and writes them only through
-  // `applyMainOwnedSnapshotState`.
+  // Main-thread owned, like `runnerAccessibilityHealth`: an off-main capture plan reads them only
+  // through its `SnapshotCaptureTarget` and writes them only through `applyMainOwnedSnapshotState`.
   var currentApp: XCUIApplication?
   var currentBundleId: String?
   var currentAppProcessIdentifier: Int?
@@ -117,7 +116,7 @@ final class RunnerTests: XCTestCase {
   var snapshotXCTestChannelPenaltyBundleId: String?
   var snapshotXCTestChannelPenaltyUntil = Date.distantPast
   let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
-  var snapshotXCTestPenaltyWarmupExemptionPending = false
+  let snapshotXCTestPenaltyWarmupExemption = SnapshotXCTestPenaltyWarmupExemption()
   // Sticky per-bundle hint for the private AX depth ladder: deep RN screens reject the default
   // depth with kAXErrorIllegalArgument on EVERY capture, so once a shallower rung is accepted
   // later captures start there instead of re-paying the rejected deep request (~300ms per

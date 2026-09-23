@@ -1,12 +1,13 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testSnapshotCaptureTargetKeepsPreparedIdentityAndConsumesWarmupExemptionOnce() {
+  func testSnapshotCaptureTargetKeepsPreparedIdentityAndLeavesWarmupExemptionPending() {
     currentApp = app
     currentBundleId = "com.example.prepared"
     currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
     defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
 
     let target = takeSnapshotCaptureTarget(app: app)
@@ -16,13 +17,49 @@ extension RunnerTests {
     XCTAssertTrue(target.app === app)
     XCTAssertEqual(target.bundleId, "com.example.prepared")
     XCTAssertEqual(target.processIdentifier, 42)
-    XCTAssertTrue(target.xCTestPenaltyWarmupExempt)
-    XCTAssertFalse(
-      snapshotXCTestPenaltyWarmupExemptionPending,
-      "taking the target on main consumes the exemption, so the plan never touches the flag"
+    XCTAssertTrue(
+      snapshotXCTestPenaltyWarmupExemption.isPending,
+      "only a capture plan that runs may spend the exemption"
     )
-    XCTAssertFalse(takeSnapshotCaptureTarget(app: app).xCTestPenaltyWarmupExempt)
   }
+
+#if os(iOS)
+  func testBlockingModalSnapshotLeavesWarmupExemptionForTheFirstCapturePlan() throws {
+    currentApp = app
+    currentBundleId = "com.example.fresh-process"
+    currentAppProcessIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
+    systemModalProbeOverrideForTesting = { _ in DataPayload(message: "blocking system modal") }
+    defer {
+      systemModalProbeOverrideForTesting = nil
+      runnerAccessibilityHealth = .unknown
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+    }
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+
+    let fast = try snapshotFast(target: takeSnapshotCaptureTarget(app: app), options: options)
+    let raw = try snapshotRaw(target: takeSnapshotCaptureTarget(app: app), options: options)
+
+    XCTAssertEqual(fast.message, "blocking system modal")
+    XCTAssertEqual(raw.message, "blocking system modal")
+    XCTAssertTrue(
+      snapshotXCTestPenaltyWarmupExemption.isPending,
+      "a snapshot answered by the modal probe runs no capture plan, so the exemption stays pending"
+    )
+
+    _ = try runSnapshotCapturePlan(
+      [],
+      target: takeSnapshotCaptureTarget(app: app),
+      options: options,
+      terminal: .sparseWithFatalOnAXFailure
+    )
+
+    XCTAssertFalse(
+      snapshotXCTestPenaltyWarmupExemption.isPending,
+      "the first capture plan that runs spends the exemption"
+    )
+  }
+#endif
 
   func testMainOwnedSnapshotStateWriteRunsOnMainBeforeReturningWhenMainIsFree() {
     final class ResultBox {
