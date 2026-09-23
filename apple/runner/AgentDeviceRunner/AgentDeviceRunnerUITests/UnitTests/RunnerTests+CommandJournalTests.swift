@@ -1,0 +1,340 @@
+import Foundation
+import XCTest
+import AgentDeviceSnapshotPresentation
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests {
+  func testUptimeBypassesCommandJournal() throws {
+    let command = runnerJournalCommand("uptime", id: "uptime-probe")
+
+    let response = try execute(command: command)
+    let status = commandJournal.status(normalizedCommandId: "uptime-probe")
+
+    XCTAssertEqual(response.ok, true)
+    XCTAssertNotNil(response.data?.currentUptimeMs)
+    XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.notAccepted.rawValue)
+  }
+
+  func testStampingCurrentUptimePreservesPayload() {
+    let stamped = Response(ok: true, data: DataPayload(message: "recording started"))
+      .stampingCurrentUptimeMs(123.5)
+
+    XCTAssertEqual(stamped.ok, true)
+    XCTAssertEqual(stamped.data?.message, "recording started")
+    XCTAssertEqual(stamped.data?.currentUptimeMs, 123.5)
+  }
+
+  func testStampingCurrentUptimeCreatesPayloadWhenNil() {
+    let stamped = Response(ok: true).stampingCurrentUptimeMs(456.0)
+
+    XCTAssertEqual(stamped.ok, true)
+    XCTAssertEqual(stamped.data?.currentUptimeMs, 456.0)
+  }
+
+  func testStampingCurrentUptimeSkipsErrorResponses() {
+    let response = Response(ok: false, error: ErrorPayload(message: "boom"))
+    let stamped = response.stampingCurrentUptimeMs(789.0)
+
+    XCTAssertEqual(stamped.ok, false)
+    XCTAssertNil(stamped.data)
+    XCTAssertEqual(stamped.error?.message, "boom")
+  }
+
+  func testStampingCurrentMainThreadBusyPreservesPayload() {
+    let stamped = Response(ok: true, data: DataPayload(nodes: [], truncated: false))
+      .stampingCurrentMainThreadBusy(true)
+
+    XCTAssertEqual(stamped.ok, true)
+    XCTAssertEqual(stamped.data?.runnerMainThreadBusy, true)
+  }
+
+  func testStampingCurrentMainThreadBusySkipsErrorResponses() {
+    let response = Response(ok: false, error: ErrorPayload(code: "RUNNER_BUSY", message: "busy"))
+    let stamped = response.stampingCurrentMainThreadBusy(true)
+
+    XCTAssertEqual(stamped.ok, false)
+    XCTAssertNil(stamped.data)
+    XCTAssertEqual(stamped.error?.code, "RUNNER_BUSY")
+  }
+
+  func testMainThreadBusyStateReportsOccupancy() {
+    XCTAssertFalse(MainThreadBusyState.idle.reportsMainThreadBusy)
+    XCTAssertTrue(MainThreadBusyState.busy(abandonedForSeconds: 5).reportsMainThreadBusy)
+    XCTAssertTrue(MainThreadBusyState.wedged(abandonedForSeconds: 200).reportsMainThreadBusy)
+    XCTAssertEqual(
+      Response(ok: true).stampingCurrentMainThreadBusy(false).data?.runnerMainThreadBusy, false)
+  }
+
+  func testCommandFailedResponseTagsMainThreadTimeoutWithTypedCode() {
+    let timeout = NSError(
+      domain: RunnerErrorDomain.general,
+      code: RunnerErrorCode.mainThreadExecutionTimedOut,
+      userInfo: [NSLocalizedDescriptionKey: "main thread execution timed out"]
+    )
+
+    let response = commandFailedResponse(from: timeout)
+
+    XCTAssertEqual(response.ok, false)
+    XCTAssertEqual(response.error?.code, RunnerWireErrorCode.mainThreadTimeout)
+  }
+
+  func testCommandFailedResponseKeepsGenericCodeForOtherErrors() {
+    let other = NSError(domain: "SomeOtherDomain", code: 99, userInfo: nil)
+
+    let response = commandFailedResponse(from: other)
+
+    XCTAssertEqual(response.error?.code, "COMMAND_FAILED")
+  }
+
+  func testJournalStoredResponseStaysUnstamped() throws {
+    let journal = RunnerCommandJournal()
+    let recordStart = runnerJournalCommand("recordStart", id: "record-start-anchor")
+
+    journal.accept(command: recordStart)
+    journal.finish(
+      command: recordStart,
+      response: Response(ok: true, data: DataPayload(message: "recording started"))
+    )
+
+    let status = journal.status(normalizedCommandId: "record-start-anchor")
+    let responseJson = try XCTUnwrap(status.lifecycleResponseJson)
+    XCTAssertFalse(responseJson.contains("currentUptimeMs"))
+  }
+
+  func testCommandJournalRetentionPolicy() throws {
+    let journal = RunnerCommandJournal()
+
+    let uptime = runnerJournalCommand("uptime", id: "small-scalar")
+    journal.accept(command: uptime)
+    journal.finish(
+      command: uptime,
+      response: Response(ok: true, data: DataPayload(currentUptimeMs: 12.5))
+    )
+
+    let scalarStatus = journal.status(normalizedCommandId: "small-scalar")
+    XCTAssertEqual(scalarStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(scalarStatus.lifecycleResponseOk, true)
+    XCTAssertNotNil(scalarStatus.lifecycleResponseJson)
+    let scalarResponse = try decodeRunnerJournalResponse(scalarStatus.lifecycleResponseJson)
+    XCTAssertEqual(scalarResponse.data?.currentUptimeMs, 12.5)
+
+    let querySelector = runnerJournalCommand("querySelector", id: "small-object")
+    journal.accept(command: querySelector)
+    journal.finish(
+      command: querySelector,
+      response: Response(ok: true, data: DataPayload(found: true, nodes: [runnerJournalNode()]))
+    )
+
+    let objectStatus = journal.status(normalizedCommandId: "small-object")
+    XCTAssertNotNil(objectStatus.lifecycleResponseJson)
+    let objectResponse = try decodeRunnerJournalResponse(objectStatus.lifecycleResponseJson)
+    XCTAssertEqual(objectResponse.data?.found, true)
+    XCTAssertEqual(objectResponse.data?.nodes?.count, 1)
+
+    let snapshot = runnerJournalCommand("snapshot", id: "snapshot-tree")
+    journal.accept(command: snapshot)
+    journal.finish(
+      command: snapshot,
+      response: Response(ok: true, data: DataPayload(nodes: [runnerJournalNode()], truncated: false))
+    )
+
+    let snapshotStatus = journal.status(normalizedCommandId: "snapshot-tree")
+    XCTAssertEqual(snapshotStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(snapshotStatus.lifecycleResponseOk, true)
+    XCTAssertNil(snapshotStatus.lifecycleResponseJson)
+
+    let screenshot = runnerJournalCommand("screenshot", id: "screenshot-artifact")
+    journal.accept(command: screenshot)
+    journal.finish(
+      command: screenshot,
+      response: Response(ok: true, data: DataPayload(message: "tmp/screenshot-1.png"))
+    )
+
+    let screenshotStatus = journal.status(normalizedCommandId: "screenshot-artifact")
+    XCTAssertEqual(screenshotStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(screenshotStatus.lifecycleResponseOk, true)
+    XCTAssertNil(screenshotStatus.lifecycleResponseJson)
+
+    let scroll = runnerJournalCommand("scroll", id: "scroll-drag")
+    journal.accept(command: scroll)
+    journal.finish(
+      command: scroll,
+      response: Response(
+        ok: true,
+        data: DataPayload(
+          message: "scrolled",
+          gestureStartUptimeMs: 1,
+          gestureEndUptimeMs: 2,
+          x: 155,
+          y: 420,
+          x2: 155,
+          y2: 301,
+          referenceWidth: 300,
+          referenceHeight: 600
+        )
+      )
+    )
+
+    let scrollStatus = journal.status(normalizedCommandId: "scroll-drag")
+    XCTAssertEqual(scrollStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(scrollStatus.lifecycleResponseOk, true)
+    XCTAssertNotNil(scrollStatus.lifecycleResponseJson)
+    let scrollResponse = try decodeRunnerJournalResponse(scrollStatus.lifecycleResponseJson)
+    XCTAssertEqual(scrollResponse.data?.x, 155)
+    XCTAssertEqual(scrollResponse.data?.y, 420)
+    XCTAssertEqual(scrollResponse.data?.x2, 155)
+    XCTAssertEqual(scrollResponse.data?.y2, 301)
+    XCTAssertEqual(scrollResponse.data?.referenceWidth, 300)
+    XCTAssertEqual(scrollResponse.data?.referenceHeight, 600)
+
+    let largeRead = runnerJournalCommand("readText", id: "large-read")
+    journal.accept(command: largeRead)
+    journal.finish(
+      command: largeRead,
+      response: Response(ok: true, data: DataPayload(text: String(repeating: "x", count: 17 * 1024)))
+    )
+
+    let largeReadStatus = journal.status(normalizedCommandId: "large-read")
+    XCTAssertEqual(largeReadStatus.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(largeReadStatus.lifecycleResponseOk, true)
+    XCTAssertNil(largeReadStatus.lifecycleResponseJson)
+  }
+
+  func testCommandJournalKeepsErrorMetadataWhenResponseJsonIsDropped() {
+    let journal = RunnerCommandJournal()
+    let snapshot = runnerJournalCommand("snapshot", id: "snapshot-error")
+    let hint = "Try a smaller read such as snapshot -s <visible label or id> -d 8."
+
+    journal.accept(command: snapshot)
+    journal.finish(
+      command: snapshot,
+      response: Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "IOS_AX_SNAPSHOT_FAILED",
+          message: "iOS XCTest snapshot failed while serializing the accessibility tree.",
+          hint: hint
+        )
+      )
+    )
+
+    let status = journal.status(normalizedCommandId: "snapshot-error")
+    XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.failed.rawValue)
+    XCTAssertEqual(status.lifecycleResponseOk, false)
+    XCTAssertNil(status.lifecycleResponseJson)
+    XCTAssertEqual(status.lifecycleErrorCode, "IOS_AX_SNAPSHOT_FAILED")
+    XCTAssertEqual(
+      status.lifecycleErrorMessage,
+      "iOS XCTest snapshot failed while serializing the accessibility tree."
+    )
+    XCTAssertEqual(status.lifecycleErrorHint, hint)
+  }
+
+  func testCommandJournalRetainsCompletedSequenceResults() throws {
+    let journal = RunnerCommandJournal()
+    let sequence = runnerJournalCommand("sequence", id: "sequence-completed")
+    let results = (0..<20).map { _ in
+      SequenceStepResult(
+        ok: true,
+        kind: "tap",
+        errorCode: nil,
+        errorMessage: nil,
+        gestureStartUptimeMs: 100,
+        gestureEndUptimeMs: 120
+      )
+    }
+
+    journal.accept(command: sequence)
+    journal.finish(
+      command: sequence,
+      response: Response(
+        ok: true,
+        data: DataPayload(
+          message: "sequence",
+          completedSteps: 20,
+          failedStepIndex: nil,
+          sequenceResults: results
+        )
+      )
+    )
+
+    let status = journal.status(normalizedCommandId: "sequence-completed")
+    XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    XCTAssertEqual(status.lifecycleResponseOk, true)
+    let json = try XCTUnwrap(status.lifecycleResponseJson)
+    // Worst-case 20-step response must stay under the 16KB journal retention cap.
+    XCTAssertLessThan(json.utf8.count, 16 * 1024)
+    let decoded = try decodeRunnerJournalResponse(status.lifecycleResponseJson)
+    XCTAssertEqual(decoded.data?.completedSteps, 20)
+    XCTAssertEqual(decoded.data?.sequenceResults?.count, 20)
+  }
+
+  func testCommandJournalRetainsFailedSequenceResults() throws {
+    let journal = RunnerCommandJournal()
+    let sequence = runnerJournalCommand("sequence", id: "sequence-failed")
+    let longError = String(repeating: "z", count: 200)
+    let results: [SequenceStepResult] = [
+      SequenceStepResult(ok: true, kind: "tap", errorCode: nil, errorMessage: nil,
+                         gestureStartUptimeMs: 100, gestureEndUptimeMs: 120),
+      SequenceStepResult(ok: true, kind: "tap", errorCode: nil, errorMessage: nil,
+                         gestureStartUptimeMs: 130, gestureEndUptimeMs: 150),
+      SequenceStepResult(ok: false, kind: "longPress", errorCode: "UNSUPPORTED_OPERATION",
+                         errorMessage: longError, gestureStartUptimeMs: 160, gestureEndUptimeMs: 180),
+    ]
+
+    journal.accept(command: sequence)
+    journal.finish(
+      command: sequence,
+      response: Response(
+        ok: true,
+        data: DataPayload(
+          message: "sequence",
+          completedSteps: 2,
+          failedStepIndex: 2,
+          sequenceResults: results
+        )
+      )
+    )
+
+    let status = journal.status(normalizedCommandId: "sequence-failed")
+    XCTAssertEqual(status.lifecycleState, RunnerCommandLifecycleState.completed.rawValue)
+    let decoded = try decodeRunnerJournalResponse(status.lifecycleResponseJson)
+    XCTAssertEqual(decoded.data?.completedSteps, 2)
+    XCTAssertEqual(decoded.data?.failedStepIndex, 2)
+    XCTAssertEqual(decoded.data?.sequenceResults?.count, 3)
+    XCTAssertEqual(decoded.data?.sequenceResults?[2].ok, false)
+    XCTAssertEqual(decoded.data?.sequenceResults?[2].errorCode, "UNSUPPORTED_OPERATION")
+  }
+
+  private func runnerJournalCommand(_ command: String, id: String) -> Command {
+    let json = #"{"command":"\#(command)","commandId":"\#(id)"}"#
+    return try! JSONDecoder().decode(Command.self, from: Data(json.utf8))
+  }
+
+  private func runnerJournalNode() -> PresentedNode {
+    SnapshotPresentation.singleElementRead(
+      RawAXNode(
+        index: 0,
+        type: "button",
+        label: "Continue",
+        identifier: "continue",
+        value: nil,
+        rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
+        enabled: true,
+        focused: nil,
+        selected: nil,
+        hittable: true,
+        depth: 0,
+        parentIndex: nil,
+        hiddenContentAbove: nil,
+        hiddenContentBelow: nil
+      )
+    )
+  }
+
+  private func decodeRunnerJournalResponse(_ responseJson: String?) throws -> Response {
+    let responseJson = try XCTUnwrap(responseJson)
+    return try JSONDecoder().decode(Response.self, from: Data(responseJson.utf8))
+  }
+}
+#endif

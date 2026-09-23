@@ -188,7 +188,7 @@ extension RunnerTests {
     return buttons.first(where: { isDismissButton($0.label) }) ?? buttons.last
   }
 
-  private func isAcceptButton(_ label: String) -> Bool {
+  func isAcceptButton(_ label: String) -> Bool {
     let normalized = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return [
       "ok",
@@ -200,12 +200,6 @@ extension RunnerTests {
       "open settings"
     ].contains(normalized) || normalized.hasPrefix("confirm")
   }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testAlertAcceptTreatsOpenAsAffirmative() {
-    XCTAssertTrue(isAcceptButton("Open"))
-  }
-#endif
 
   private func isDismissButton(_ label: String) -> Bool {
     [

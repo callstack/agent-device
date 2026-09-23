@@ -33,6 +33,8 @@ Protocol and maintenance references:
 - `RunnerTests+Snapshot.swift`: fast/raw snapshot builders and include/filter helpers.
 - `RunnerTests+SystemModal.swift`: SpringBoard/system modal detection and modal snapshot shaping.
 - `RunnerTests+ScreenRecorder.swift`: nested `ScreenRecorder` implementation.
+- `UnitTests/RunnerTests+<Source>Tests.swift`: the `AGENT_DEVICE_RUNNER_UNIT_TESTS` tests for each
+  source file. The packaged runner source omits this directory.
 
 ## Snapshot Strategy
 

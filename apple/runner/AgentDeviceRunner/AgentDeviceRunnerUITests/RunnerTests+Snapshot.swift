@@ -5,12 +5,12 @@ extension RunnerTests {
   static let axSnapshotErrorCode = "IOS_AX_SNAPSHOT_FAILED"
   static let axSnapshotFailureMessage =
     "iOS XCTest snapshot failed while serializing the accessibility tree."
-  private static let axSnapshotUnavailableReason = "ax_snapshot_unavailable"
+  static let axSnapshotUnavailableReason = "ax_snapshot_unavailable"
   static let axSnapshotHint =
     "Snapshot state is unavailable because XCTest could not serialize this iOS accessibility tree. This can be specific to the current screen. Use plain screenshot, not screenshot --overlay-refs, as visual truth; navigate with coordinate commands if needed; then retry snapshot -i after reaching another screen. If you own the app and need full-tree inspection, simplify this screen's accessibility tree and expose stable ids on actionable controls."
-  private static let rawSnapshotTooLargeCode = "IOS_RAW_SNAPSHOT_TOO_LARGE"
-  private static let rawSnapshotMaxNodes = 5_000
-  private static let rawSnapshotTooLargeHint =
+  static let rawSnapshotTooLargeCode = "IOS_RAW_SNAPSHOT_TOO_LARGE"
+  static let rawSnapshotMaxNodes = 5_000
+  static let rawSnapshotTooLargeHint =
     "Raw iOS snapshot exceeded the runner payload guard. Use regular snapshot for visible UI, or scope/depth-limit raw snapshot when inspecting a large accessibility tree."
   // Runaway guard for the regular tree walk: a work bound only. A screen that trips it raises this
   // number in ADR 0004's name rather than bounding the walk by geometry again.
@@ -523,11 +523,11 @@ extension RunnerTests {
     )
   }
 
-  private func recoveredSnapshotMessage(_ failure: SnapshotCaptureFailure) -> String {
+  func recoveredSnapshotMessage(_ failure: SnapshotCaptureFailure) -> String {
     return "\(failure.message) Hint: \(failure.hint)"
   }
 
-  private func rawSnapshotTooLargeFailure(nodeCount: Int) -> SnapshotCaptureFailure {
+  func rawSnapshotTooLargeFailure(nodeCount: Int) -> SnapshotCaptureFailure {
     SnapshotCaptureFailure(
       code: Self.rawSnapshotTooLargeCode,
       message: "iOS raw snapshot exceeded \(Self.rawSnapshotMaxNodes) nodes while walking node \(nodeCount).",
@@ -558,246 +558,4 @@ extension RunnerTests {
       runnerFatalReason: runnerFatalReason
     )
   }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testSnapshotAccessibilityUnavailableMarksSparseSnapshotRunnerFatal() {
-    currentApp = app
-    currentBundleId = "com.example.app"
-
-    let payload = snapshotAccessibilityUnavailable(
-      failure: SnapshotCaptureFailure(
-        code: Self.axSnapshotErrorCode,
-        message: Self.axSnapshotFailureMessage,
-        hint: Self.axSnapshotHint
-      )
-    )
-
-    XCTAssertEqual(payload.message, "\(Self.axSnapshotFailureMessage) Hint: \(Self.axSnapshotHint)")
-    XCTAssertEqual(payload.nodes?.count, 1)
-    XCTAssertEqual(payload.nodes?.first?.type, "Application")
-    XCTAssertEqual(payload.truncated, true)
-    XCTAssertEqual(payload.runnerFatal, true)
-    XCTAssertEqual(payload.runnerFatalReason, Self.axSnapshotUnavailableReason)
-    // The planned terminal result carries the structured verdict like every other planned
-    // snapshot — downstream sparse handling keys off it, not off node shapes.
-    XCTAssertEqual(payload.snapshotQuality?.state, "sparse")
-    XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
-    XCTAssertEqual(payload.snapshotQuality?.reason, Self.axSnapshotFailureMessage)
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
-  }
-
-  func testRecoveredSnapshotMessagePreservesHint() {
-    let message = recoveredSnapshotMessage(
-      SnapshotCaptureFailure(
-        code: Self.axSnapshotErrorCode,
-        message: Self.axSnapshotFailureMessage,
-        hint: Self.axSnapshotHint
-      )
-    )
-
-    XCTAssertTrue(message.contains(Self.axSnapshotFailureMessage))
-    XCTAssertTrue(message.contains(Self.axSnapshotHint))
-  }
-
-  func testRawSnapshotTooLargeFailureIsStructured() {
-    let failure = rawSnapshotTooLargeFailure(nodeCount: Self.rawSnapshotMaxNodes + 1)
-
-    XCTAssertEqual(failure.code, Self.rawSnapshotTooLargeCode)
-    XCTAssertTrue(failure.message.contains("\(Self.rawSnapshotMaxNodes) nodes"))
-    XCTAssertEqual(failure.hint, Self.rawSnapshotTooLargeHint)
-  }
-
-  func testSystemModalProbeSliceSharesAndClampsToPlanDeadline() {
-    // Fresh plan deadline: the probe gets its full dedicated budget.
-    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 20), 4)
-    // Nearly-spent plan deadline: the probe is clamped so it can't run past the shared budget.
-    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 1.5), 1.5)
-    // Exactly/already exhausted deadline: skip the probe entirely (0), never a negative timeout.
-    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 0), 0)
-    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
-  }
-
-  // Simulator-only: the bounded probe body returns nil on macOS (no SpringBoard host), so the
-  // timeout/penalty/drain machinery below only exists on the iOS branch.
-#if os(iOS)
-  /// Regression for #1244/#1248: drives the bounded system-modal probe through a real,
-  /// production-only command entry point (`snapshotFast` or `snapshotRaw` -- see the two test
-  /// methods below), not `boundedBlockingSystemAlertSnapshot` directly, with
-  /// `systemModalProbeOverrideForTesting` set to a closure that blocks past the probe's real
-  /// slice, forcing a real `runMainThreadWork` timeout. This is revert-sensitive on both halves
-  /// of the fix, for either entry point:
-  ///   - if the entry point reverted to calling the unbounded `blockingSystemAlertSnapshot`
-  ///     directly (or dropped the `runMainThreadWork` wrap), nothing here would ever time out,
-  ///     so the mid-flight busy/penalty assertions below would never be met;
-  ///   - if the `onAbandoned` penalty hook or the abandoned-work accounting were dropped, the
-  ///     timeout would still fire, but the busy/penalty and drain assertions would not hold.
-  ///
-  /// The drain assertion is synchronized on the *real* release rather than raced: after
-  /// signaling the probe to finish, the background queue polls `hasAbandonedMainThreadWork()`
-  /// (bounded) and only then fulfills `drained`, which the test `wait(for:timeout:)`s on before
-  /// asserting `.idle`/`hasAbandonedMainThreadWork() == false` below -- so a slow drain fails that
-  /// assertion instead of racing a fixed-timing guess.
-  private func assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(
-    entryPointName: String,
-    callEntryPoint: @escaping (XCUIApplication, PresentationOptions) throws -> DataPayload
-  ) {
-    let targetBundleId = "com.callstack.agentdevice.runner.missing.snapshot-timeout-test"
-    let snapshotTarget = XCUIApplication(bundleIdentifier: targetBundleId)
-    let probeReleaseGate = DispatchSemaphore(value: 0)
-    currentApp = snapshotTarget
-    currentBundleId = targetBundleId
-    defer {
-      probeReleaseGate.signal()
-      currentApp = nil
-      currentBundleId = nil
-      systemModalProbeOverrideForTesting = nil
-      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-    }
-
-    final class ResultBox {
-      var payload: DataPayload?
-      var wasBusyBeforeDrain = false
-      var hadAbandonedCaptureBeforeDrain = false
-      var wasPenalizedBeforeDrain = false
-    }
-    let box = ResultBox()
-    // The test owns release of the injected probe. A fixed timeout races the capture plan's
-    // independent fallback tiers on loaded CI hosts and can drain before the test records the
-    // abandoned-work state. The defer above still releases the probe if an earlier assertion or
-    // expectation fails.
-    systemModalProbeOverrideForTesting = { _ in
-      probeReleaseGate.wait()
-      return nil
-    }
-
-    let completion = expectation(
-      description: "\(entryPointName) recovered while the probe was abandoned, then released it"
-    )
-    let drained = expectation(description: "\(entryPointName) modal probe drained")
-    DispatchQueue(label: "agent-device.runner.tests.modal-probe-timeout").async {
-      box.payload = try? callEntryPoint(
-        snapshotTarget,
-        PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
-      )
-
-      // 1) Penalty/busy accounting: must already be in place by the time the entry point
-      // returns, well before we release the still-blocked probe below.
-      if case .busy = self.currentMainThreadBusyState() {
-        box.wasBusyBeforeDrain = true
-      }
-      box.hadAbandonedCaptureBeforeDrain = self.hasAbandonedMainThreadWork()
-      box.wasPenalizedBeforeDrain = self.isSnapshotXCTestChannelPenalized(bundleId: self.currentBundleId)
-
-      // 2) `box.payload` above was already produced -- through the capture plan's recovery
-      // tiers -- while the probe is still blocked on `probeReleaseGate`, i.e. recovered before
-      // drain, not queued behind it.
-      completion.fulfill()
-
-      // 3) Only now let the abandoned probe finish, then block this queue (never the test's
-      // main-thread wait) on the *real* drain signal -- the abandoned-work count reaching zero
-      // -- bounded so a revert that never drains fulfills `drained` anyway and lets the
-      // assertions below report the regression explicitly instead of just timing out.
-      probeReleaseGate.signal()
-      let drainDeadline = Date().addingTimeInterval(5)
-      while self.hasAbandonedMainThreadWork(), Date() < drainDeadline {
-        self.sleepFor(0.002)
-      }
-      drained.fulfill()
-    }
-
-    wait(for: [completion], timeout: 15)
-
-    // 1) Penalty/busy accounting.
-    XCTAssertTrue(
-      box.wasBusyBeforeDrain,
-      "expected RUNNER_BUSY while the \(entryPointName) modal probe timeout is outstanding"
-    )
-    XCTAssertTrue(
-      box.hadAbandonedCaptureBeforeDrain,
-      "onAbandoned must retain the abandoned XCTest channel work for \(entryPointName)"
-    )
-    XCTAssertTrue(
-      box.wasPenalizedBeforeDrain,
-      "a timed-out modal probe must penalize the XCTest snapshot channel for \(entryPointName)"
-    )
-
-    // 2) Recovered response before drain.
-    XCTAssertNotNil(
-      box.payload,
-      "\(entryPointName) must recover a payload through the capture plan while the probe drains"
-    )
-
-    // 3) Bounded, deterministic drain barrier, then release assertions.
-    wait(for: [drained], timeout: 6)
-    guard case .idle = currentMainThreadBusyState() else {
-      return XCTFail("expected the runner to be idle once the abandoned \(entryPointName) probe drained")
-    }
-    XCTAssertFalse(
-      hasAbandonedMainThreadWork(),
-      "the drained probe must release the main thread for \(entryPointName)"
-    )
-  }
-
-  func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain() {
-    assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotFast") {
-      target, options in
-      try self.snapshotFast(app: target, options: options)
-    }
-  }
-
-  func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw() {
-    assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotRaw") {
-      target, options in
-      try self.snapshotRaw(app: target, options: options)
-    }
-  }
-#endif
-
-  func testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied() {
-    // The #1244 recovery shape: the modal probe abandoned an XCTest query that is still grinding on
-    // main, the capture recovered independently, and its response is ready. The recovery loop must
-    // return it without re-entering the main queue for recorded-failure/retry bookkeeping (that hop
-    // would block behind the abandoned query and re-stall the command), and a later command must
-    // still see the runner busy until the abandoned work drains. Removing the guard regresses this.
-    let command = try! JSONDecoder().decode(
-      Command.self,
-      from: Data(#"{"command":"snapshot","commandId":"recovery-guard"}"#.utf8)
-    )
-    let recovered = Response(ok: false, error: .targetAppUnavailable(bundleId: nil))
-
-    setAbandonedMainThreadWork(1)
-    defer { setAbandonedMainThreadWork(0) }
-    guard case .busy = currentMainThreadBusyState() else {
-      return XCTFail("expected RUNNER_BUSY while abandoned XCTest work is outstanding")
-    }
-
-    var occupiedCalls = 0
-    let occupied = try! executeDispatchedWithRecovery(command: command) {
-      occupiedCalls += 1
-      return recovered
-    }
-    XCTAssertEqual(occupiedCalls, 1, "recovered response must not retry behind abandoned XCTest work")
-    XCTAssertEqual(occupied.ok, false)
-
-    setAbandonedMainThreadWork(0)
-    guard case .idle = currentMainThreadBusyState() else {
-      return XCTFail("runner should be idle once the abandoned work drained")
-    }
-    var drainedCalls = 0
-    _ = try! executeDispatchedWithRecovery(command: command) {
-      drainedCalls += 1
-      return recovered
-    }
-    XCTAssertEqual(drainedCalls, 2, "with the channel free the read-only retry runs once")
-  }
-
-  private func setAbandonedMainThreadWork(_ count: Int) {
-    mainThreadWorkLock.lock()
-    abandonedMainThreadWorkCount = count
-    abandonedMainThreadWorkSince = count > 0 ? Date(timeIntervalSinceNow: -1) : nil
-    mainThreadWorkLock.unlock()
-  }
-#endif
-
 }

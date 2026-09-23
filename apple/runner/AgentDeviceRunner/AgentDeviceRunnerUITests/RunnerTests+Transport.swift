@@ -200,7 +200,7 @@ extension RunnerTests {
   /// Returns true when this send duplicated a still-executing commandId and was attached as a
   /// waiter of the in-flight execution. Otherwise marks the commandId in flight and returns
   /// false so the caller enqueues the (single) execution.
-  private func attachToInFlightCommandIfNeeded(
+  func attachToInFlightCommandIfNeeded(
     command: Command,
     completion: @escaping ((data: Data, shouldFinish: Bool)) -> Void
   ) -> Bool {
@@ -221,7 +221,7 @@ extension RunnerTests {
     return false
   }
 
-  private func deliverCommandResult(
+  func deliverCommandResult(
     command: Command,
     result: (data: Data, shouldFinish: Bool),
     completion: ((data: Data, shouldFinish: Bool)) -> Void
@@ -238,45 +238,6 @@ extension RunnerTests {
       waiter(result)
     }
   }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testDuplicateCommandIdCoalescesOntoInFlightExecution() throws {
-    let command = try JSONDecoder().decode(
-      Command.self,
-      from: Data(#"{"command":"snapshot","commandId":"snapshot-coalesce"}"#.utf8)
-    )
-    var primaryData: Data?
-    var waiterData: Data?
-    defer {
-      inFlightCommandIds.removeAll()
-      inFlightCommandWaiters.removeAll()
-    }
-
-    XCTAssertFalse(
-      attachToInFlightCommandIfNeeded(command: command) { result in
-        primaryData = result.data
-      }
-    )
-    XCTAssertTrue(
-      attachToInFlightCommandIfNeeded(command: command) { result in
-        waiterData = result.data
-      }
-    )
-
-    let delivered = Data("single-result".utf8)
-    deliverCommandResult(
-      command: command,
-      result: (delivered, false)
-    ) { result in
-      primaryData = result.data
-    }
-
-    XCTAssertEqual(primaryData, delivered)
-    XCTAssertEqual(waiterData, delivered)
-    XCTAssertFalse(inFlightCommandIds.contains("snapshot-coalesce"))
-    XCTAssertNil(inFlightCommandWaiters["snapshot-coalesce"])
-  }
-#endif
 
   // MARK: - Response Encoding
 

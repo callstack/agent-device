@@ -505,33 +505,3 @@ extension RunnerTests {
     usleep(useconds_t(delay * 1_000_000))
   }
 }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-extension RunnerTests {
-  func testResettingTargetBoundStateForgetsTheLastWrittenMarkers() {
-    defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
-    lastLoggedFastAppGuardLine = "AGENT_DEVICE_RUNNER_FAST_APP_GUARD bundle=app state=4"
-    lastLoggedGesturePolicyLines[.scroll] = "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=scroll"
-    resetTargetBoundState()
-    XCTAssertNil(lastLoggedFastAppGuardLine, "a rebind must state the guard once more")
-    XCTAssertTrue(lastLoggedGesturePolicyLines.isEmpty, "a rebind must state the policy once more")
-  }
-
-  func testFastAppGuardMarkerWritesOnceUntilTheFactChanges() {
-    var written: [String] = []
-    runnerMarkerWriter = { written.append($0) }
-    defer {
-      runnerMarkerWriter = { NSLog("%@", $0) }
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-    }
-    writeFastAppGuardMarker(bundleId: "com.example.app", state: .runningForeground)
-    writeFastAppGuardMarker(bundleId: "com.example.app", state: .runningForeground)
-    XCTAssertEqual(written.count, 1, "a repeated fact writes no second line")
-    writeFastAppGuardMarker(bundleId: "com.example.other", state: .runningForeground)
-    XCTAssertEqual(written.count, 2, "a changed fact writes a new line")
-    resetTargetBoundState()
-    writeFastAppGuardMarker(bundleId: "com.example.other", state: .runningForeground)
-    XCTAssertEqual(written.count, 3, "a rebind states the same fact once more")
-  }
-}
-#endif

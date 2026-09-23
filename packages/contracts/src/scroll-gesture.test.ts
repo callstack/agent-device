@@ -60,8 +60,8 @@ test('buildInPageSwipeGesturePlan truncates percentage coordinates on odd viewpo
 
 // Cross-language parity table: every case in contracts/fixtures/scroll-gesture.json is asserted
 // here AND by the Swift port (runnerScrollGesturePlan in RunnerTests+ScrollGesture.swift, gated
-// XCTest in the same file). Add vectors to the table, never to one suite — drift on either side
-// turns CI red without a simulator.
+// XCTest in UnitTests/RunnerTests+ScrollGestureTests.swift). Add vectors to the table, never to
+// one suite — drift on either side turns CI red without a simulator.
 type ScrollGestureFixture = {
   constants: {
     defaultIosScrollAmount: number;
@@ -210,7 +210,8 @@ test('clampGestureCoordinate returns the lower bound for non-finite coordinates'
 
 // Golden parity table: the SAME JSON is asserted against the Swift twin
 // (ScrollViewportPolicy in apple/runner/AgentDeviceRunner/
-// AgentDeviceRunnerUITests/RunnerScrollViewportPolicy.swift, gated XCTest in the same file), so
+// AgentDeviceRunnerUITests/RunnerScrollViewportPolicy.swift, gated XCTest in
+// UnitTests/RunnerTests+ScrollViewportPolicyTests.swift), so
 // a clip that drifts between the iOS runner and the Android/TS owner turns CI red on whichever
 // side changed, without a simulator.
 
