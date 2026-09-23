@@ -148,7 +148,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     }),
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
-    ...(session ? {} : { readiness: true }),
+    readiness: !session,
   });
   if (!bound.ok) return bound;
 

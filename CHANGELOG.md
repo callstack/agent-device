@@ -148,9 +148,10 @@
   as JPEG and the interactor wrote those bytes straight to the `.png` path, so every capture failed
   downstream with "Screenshot file is not a valid PNG". The bytes are now sniffed and a JPEG is
   transcoded to PNG before it is written; a PNG passes through unchanged.
-- Changed (ios): `open --device-hub` and the `deviceHub` option of `client.apps.open()` are gone.
-  The option has had no effect since 0.20.9: `open` surfaces the standalone Simulator app after a
-  cold boot either way. Passing it is now handled like any other unknown option (#2798).
+- Changed (ios): `open --device-hub`, the `deviceHub` option of `client.apps.open()`, and the
+  `deviceHub` config-file key are gone. The option has had no effect since 0.20.9: `open` surfaces
+  the standalone Simulator app after a cold boot either way. Each form is now handled like any
+  other unknown flag, option, or config key; drop it from scripts and `agent-device.json` (#2798).
 - Changed (ios): a regular `snapshot --depth N` on the XCTest runner is a presentation cut over a
   full acquisition, not a bound on the walk. Acquisition publishes the frames the platform reported,
   one normalization pass turns geometry into the app's orientation space and recomputes `hittable`,

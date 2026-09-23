@@ -26,11 +26,7 @@ export async function withSimulatorReadiness<T>(
   return await simulatorReadiness.run(ensureReady, task);
 }
 
-type OpenIosSimulatorAppOptions = {
-  signal?: AbortSignal;
-};
-
-type EnsureBootedSimulatorOptions = {
+type SimulatorCommandOptions = {
   signal?: AbortSignal;
 };
 
@@ -70,7 +66,7 @@ export function requireSimulatorDevice(device: DeviceInfo, command: string): voi
   }
 }
 
-export async function openIosSimulatorApp(options: OpenIosSimulatorAppOptions = {}): Promise<void> {
+export async function openIosSimulatorApp(options: SimulatorCommandOptions = {}): Promise<void> {
   await runAppleToolCommand('open', ['-a', 'Simulator'], {
     allowFailure: true,
     signal: options.signal,
@@ -80,7 +76,7 @@ export async function openIosSimulatorApp(options: OpenIosSimulatorAppOptions = 
 
 export async function ensureBootedSimulator(
   device: DeviceInfo,
-  options: EnsureBootedSimulatorOptions = {},
+  options: SimulatorCommandOptions = {},
 ): Promise<void> {
   if (device.kind !== 'simulator') return;
   options.signal?.throwIfAborted();

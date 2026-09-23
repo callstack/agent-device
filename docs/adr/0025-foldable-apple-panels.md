@@ -151,8 +151,8 @@ told, and every row is real content where a main-screen capture of the unlit pan
 The guest HID experiment supersedes the Device Hub pose decision and its private-API rejection
 below. UI discovery and sidebar sections, and their outstanding evidence gaps, are historical.
 `fold` now runs a small Objective-C helper through `simctl spawn <udid>` with no Device Hub or
-host Accessibility requirement. `open` surfaces the standalone Simulator app and has no Device Hub
-option.
+host Accessibility requirement. `open` surfaces the standalone Simulator app after a cold boot and
+has no Device Hub option.
 The helper serializes `{provider: "com.apple.Virtualization.VirtualMachines", source:
 "hinge-slider-control", type: "range", value: angle}` with IOCFSerialize and dispatches a vendor
 HID event (usage page 0xff61, usage 0x5b, version 0) inside the simulator. Requested angles are
