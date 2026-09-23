@@ -79,6 +79,10 @@ final class RunnerTests: XCTestCase {
   let xctestIdleKeepaliveInterval: TimeInterval = 60.0
   let minRecordingFps = 1
   let maxRecordingFps = 120
+  // A recorder frame still capturing on main after this long is abandoned and dropped. It bounds a
+  // screenshot round trip, not the frame interval: a capture slower than the interval lowers the
+  // frame rate, and only a capture this slow counts as main-thread occupancy.
+  let recordingFrameCaptureTimeout: TimeInterval = 1
   var needsPostSnapshotInteractionDelay = false
   // Per-command markers that restate a fact of the bound target (the fast app guard, the
   // synthesized gesture policy per gesture kind) write only when that fact changes; otherwise a
@@ -106,6 +110,9 @@ final class RunnerTests: XCTestCase {
   // and post-capture bookkeeping stays off main (#1105/#1244).
   let mainThreadWorkLock = NSLock()
   var abandonedMainThreadWorkCount = 0
+  // Dispatched main-queue work that has not finished yet, abandoned or not. Only optional work
+  // reads it, to stay off a main thread that commands are using; occupancy readers do not.
+  var mainThreadWorkInFlightCount = 0
   var abandonedMainThreadWorkSince: Date?
   // Past this age the runner stops claiming "busy, retry soon" and reports itself wedged so
   // the daemon recycles it — the only cure once the main thread is stuck for good.

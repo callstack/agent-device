@@ -86,7 +86,7 @@ extension RunnerTests {
           captureCalls += 1
           return .failure(.unresolvedWindow)
         },
-        frame: { _ in nil }
+        frame: { nil }
       )
     ) { error in
       thrown = error
@@ -107,15 +107,21 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 /// Frames for a recording test. Every capture draws a new image, so an appended frame is identified
-/// by instance. An armed wedge makes the next capture block the main thread until released, and
-/// remembers the image that capture will hand back late.
+/// by instance, and holds the calling thread for `captureDelay` like a screenshot round trip. An
+/// armed wedge makes the next capture block the main thread until released, and remembers the image
+/// that capture will hand back late.
 private final class RecordingFrameSource {
   static let side = 128
+  private let captureDelay: TimeInterval
   private let lock = NSLock()
   private var wedgeArmed = false
   private var wedgedImage: RunnerImage?
   let wedgeEntered = DispatchSemaphore(value: 0)
   let releaseWedge = DispatchSemaphore(value: 0)
+
+  init(captureDelay: TimeInterval = 0) {
+    self.captureDelay = captureDelay
+  }
 
   var lateImage: RunnerImage? {
     lock.lock()
@@ -130,6 +136,9 @@ private final class RecordingFrameSource {
   }
 
   func capture() -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+    if captureDelay > 0 {
+      Thread.sleep(forTimeInterval: captureDelay)
+    }
     let image = Self.makeImage()
     lock.lock()
     let wedge = wedgeArmed
@@ -171,6 +180,48 @@ private final class RecordingFrameSource {
     #else
     return NSImage(cgImage: cgImage, size: NSSize(width: side, height: side))
     #endif
+  }
+}
+
+/// Samples, off main, the readers that commands consult for main-thread occupancy until stopped.
+private final class MainThreadOccupancySampler {
+  private let lock = NSLock()
+  private var stopped = false
+  private let done = DispatchSemaphore(value: 0)
+  private(set) var sampled = false
+  private(set) var sawBusy = false
+  private(set) var sawAbandoned = false
+  private(set) var sawXCTestTierSkip = false
+
+  init(runner: RunnerTests) {
+    DispatchQueue(label: "agent-device.runner.tests.occupancy-sampler").async {
+      defer { self.done.signal() }
+      while !self.isStopped {
+        let busy = runner.currentMainThreadBusyState().reportsMainThreadBusy
+        let abandoned = runner.hasAbandonedMainThreadWork()
+        let tierSkip = runner.shouldSkipSnapshotBackendForAbandonedMainThreadWork(.recursiveTree)
+        self.lock.lock()
+        self.sampled = true
+        self.sawBusy = self.sawBusy || busy
+        self.sawAbandoned = self.sawAbandoned || abandoned
+        self.sawXCTestTierSkip = self.sawXCTestTierSkip || tierSkip
+        self.lock.unlock()
+        usleep(2_000)
+      }
+    }
+  }
+
+  private var isStopped: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return stopped
+  }
+
+  func stop() {
+    lock.lock()
+    stopped = true
+    lock.unlock()
+    _ = done.wait(timeout: .now() + 2)
   }
 }
 
@@ -217,8 +268,8 @@ extension RunnerTests {
     XCTAssertEqual(observation.abandonedWhileWedged, 1, "the timed-out frame counts as abandoned")
     XCTAssertLessThan(
       observation.secondsToAbandon ?? .infinity,
-      1.5,
-      "a frame is bounded by the tick interval, not a command-scale timeout"
+      recordingFrameCaptureTimeout + 1,
+      "a frame is bounded by the recording capture timeout, not the command watchdog"
     )
     let lateImage = try XCTUnwrap(source.lateImage)
     XCTAssertFalse(
@@ -236,6 +287,7 @@ extension RunnerTests {
 
     final class Observation {
       var maxAbandoned = 0
+      var maxInFlight = 0
     }
     let observation = Observation()
     let observed = expectation(description: "the wedge was held for many ticks")
@@ -246,10 +298,11 @@ extension RunnerTests {
         observed.fulfill()
       }
       guard source.wedgeEntered.wait(timeout: .now() + 3) == .success else { return }
-      let holdUntil = Date().addingTimeInterval(0.6)
+      let holdUntil = Date().addingTimeInterval(self.recordingFrameCaptureTimeout * 2.5)
       while Date() < holdUntil {
         self.mainThreadWorkLock.lock()
         observation.maxAbandoned = max(observation.maxAbandoned, self.abandonedMainThreadWorkCount)
+        observation.maxInFlight = max(observation.maxInFlight, self.mainThreadWorkInFlightCount)
         self.mainThreadWorkLock.unlock()
         usleep(10_000)
       }
@@ -260,8 +313,9 @@ extension RunnerTests {
     XCTAssertEqual(
       observation.maxAbandoned,
       1,
-      "twelve ticks against a wedged main thread leave one recorder capture pending, not one per tick"
+      "every tick against a wedged main thread leaves one recorder capture pending, not one per tick"
     )
+    XCTAssertEqual(observation.maxInFlight, 1, "skipped ticks dispatch nothing to main")
   }
 
   func testRecordingStopDuringATimedOutCaptureAppendsNoLateFrame() throws {
@@ -372,6 +426,81 @@ extension RunnerTests {
     XCTAssertGreaterThan((attributes[.size] as? NSNumber)?.intValue ?? 0, 0)
   }
 
+  func testRecordingFrameNeverQueuesBehindACommandsMainThreadWork() throws {
+    let source = RecordingFrameSource()
+    let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 60)
+    try startRecording(recorder, capture: source.capture)
+    defer { try? recorder.stop() }
+    XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 3 }))
+
+    let occupancy = MainThreadOccupancySampler(runner: self)
+    let commandFinished = expectation(description: "the command's main-thread hops finished")
+    final class Outcome {
+      var error: Error?
+    }
+    let outcome = Outcome()
+    DispatchQueue(label: "agent-device.runner.tests.recording-command").async {
+      defer {
+        occupancy.stop()
+        commandFinished.fulfill()
+      }
+      do {
+        for _ in 0..<2 {
+          try self.runMainThreadWork(
+            "command_execution",
+            timeout: self.mainThreadExecutionTimeout,
+            timeoutError: self.mainThreadExecutionTimeoutError
+          ) {
+            Thread.sleep(forTimeInterval: self.recordingFrameCaptureTimeout + 0.3)
+          }
+        }
+      } catch {
+        outcome.error = error
+      }
+    }
+    wait(for: [commandFinished], timeout: 15)
+    let framesAfterCommand = recorder.appendedFrameSnapshotForTesting().count
+    XCTAssertTrue(
+      pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= framesAfterCommand + 2 }),
+      "the recorder appends frames again once the command leaves main"
+    )
+
+    XCTAssertNil(outcome.error)
+    XCTAssertTrue(occupancy.sampled, "the sampler ran while the command held main")
+    XCTAssertFalse(occupancy.sawBusy, "a recorder tick must not make the busy gate or stamp see occupancy")
+    XCTAssertFalse(occupancy.sawAbandoned, "a recorder tick must not mark work abandoned")
+    XCTAssertFalse(occupancy.sawXCTestTierSkip, "a recorder tick must not skip XCTest snapshot tiers")
+    guard case .idle = currentMainThreadBusyState() else {
+      return XCTFail("expected the runner idle after the command")
+    }
+  }
+
+  func testRecordingFrameSlowerThanTheIntervalStillYieldsFrames() throws {
+    let fps: Int32 = 20
+    let interval = 1.0 / Double(fps)
+    let source = RecordingFrameSource(captureDelay: interval * 1.6)
+    let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: fps)
+    try startRecording(recorder, capture: source.capture)
+    defer { try? recorder.stop() }
+    XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 2 }))
+
+    let window: TimeInterval = 1.5
+    let occupancy = MainThreadOccupancySampler(runner: self)
+    let framesBefore = recorder.appendedFrameSnapshotForTesting().count
+    sleepFor(window)
+    occupancy.stop()
+    let yielded = recorder.appendedFrameSnapshotForTesting().count - framesBefore
+
+    XCTAssertGreaterThanOrEqual(
+      yielded,
+      Int(window / (interval * 1.6) / 3),
+      "a capture slower than the interval lowers the frame rate instead of dropping every frame"
+    )
+    XCTAssertTrue(occupancy.sampled)
+    XCTAssertFalse(occupancy.sawAbandoned, "an ordinary slow capture is not abandoned work")
+    XCTAssertFalse(occupancy.sawBusy, "an ordinary slow capture keeps the runner available")
+  }
+
   private func recordingTestOutputPath() -> String {
     (NSTemporaryDirectory() as NSString).appendingPathComponent(
       "record-bounded-\(UUID().uuidString).mp4"
@@ -387,7 +516,7 @@ extension RunnerTests {
     return true
   }
 
-  private func waitOffMain(timeout: TimeInterval = 3, until condition: () -> Bool) -> Bool {
+  private func waitOffMain(timeout: TimeInterval = 5, until condition: () -> Bool) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition() {
       if Date() >= deadline { return false }

@@ -111,6 +111,76 @@ extension RunnerTests {
     XCTAssertEqual(outcome.onAbandonedCalls, 0)
   }
 
+  func testRunMainThreadWorkIfIdleDeclinesWhileOtherWorkIsInFlight() {
+    final class Outcome {
+      var offeredWhileInFlight = false
+      var whileInFlight: Bool?
+      var ranWhileInFlight = false
+      var whenIdle: Bool?
+      var error: Error?
+    }
+    let outcome = Outcome()
+    let releaseCommand = DispatchSemaphore(value: 0)
+    let commandEntered = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "optional work was offered during and after the command")
+
+    DispatchQueue(label: "agent-device.runner.tests.in-flight-command").async {
+      _ = try? self.runMainThreadWork(
+        "command_execution",
+        timeout: 5,
+        timeoutError: self.mainThreadExecutionTimeoutError
+      ) {
+        commandEntered.signal()
+        _ = releaseCommand.wait(timeout: .now() + 3)
+      }
+    }
+    DispatchQueue(label: "agent-device.runner.tests.optional-work").async {
+      defer { finished.fulfill() }
+      guard commandEntered.wait(timeout: .now() + 3) == .success else { return }
+      do {
+        outcome.whileInFlight = try self.runMainThreadWorkIfIdle(
+          "recording_frame",
+          timeout: 5,
+          timeoutError: self.mainThreadExecutionTimeoutError
+        ) { () -> Bool in
+          outcome.ranWhileInFlight = true
+          return true
+        }
+        outcome.offeredWhileInFlight = true
+      } catch {
+        outcome.error = error
+      }
+      releaseCommand.signal()
+      let idleDeadline = Date().addingTimeInterval(3)
+      while Date() < idleDeadline {
+        self.mainThreadWorkLock.lock()
+        let inFlight = self.mainThreadWorkInFlightCount
+        self.mainThreadWorkLock.unlock()
+        if inFlight == 0 { break }
+        usleep(2_000)
+      }
+      do {
+        outcome.whenIdle = try self.runMainThreadWorkIfIdle(
+          "recording_frame",
+          timeout: 5,
+          timeoutError: self.mainThreadExecutionTimeoutError
+        ) {
+          Thread.isMainThread
+        }
+      } catch {
+        outcome.error = error
+      }
+    }
+
+    wait(for: [finished], timeout: 10)
+    XCTAssertNil(outcome.error)
+    XCTAssertTrue(outcome.offeredWhileInFlight)
+    XCTAssertNil(outcome.whileInFlight, "optional work declines while a hop is in flight")
+    XCTAssertFalse(outcome.ranWhileInFlight, "declined work is never dispatched")
+    XCTAssertEqual(outcome.whenIdle, true, "optional work runs on main once main is idle")
+    XCTAssertFalse(hasAbandonedMainThreadWork())
+  }
+
   private final class BoundaryOutcome {
     var value: Int?
     var error: Error?

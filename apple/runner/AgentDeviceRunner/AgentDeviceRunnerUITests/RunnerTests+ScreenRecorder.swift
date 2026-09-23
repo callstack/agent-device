@@ -34,10 +34,10 @@ extension RunnerTests {
     }
 
     /// `bootstrap` must produce the frame that sizes the writer and runs on the caller's thread.
-    /// `frame` answers each tick with an image within the given timeout, or `nil` to drop the tick.
+    /// `frame` answers each tick with an image, or `nil` to drop the tick.
     func start(
       bootstrap: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
-      frame: @escaping (_ timeout: TimeInterval) -> RunnerImage?
+      frame: @escaping () -> RunnerImage?
     ) throws {
       let url = URL(fileURLWithPath: outputPath)
       let directory = url.deletingLastPathComponent()
@@ -135,7 +135,7 @@ extension RunnerTests {
       timer.setEventHandler { [weak self] in
         guard let self else { return }
         if self.shouldStop() { return }
-        guard let image = frame(self.frameInterval) else { return }
+        guard let image = frame() else { return }
         self.append(image: image)
       }
       self.timer = timer
@@ -295,32 +295,23 @@ extension RunnerTests {
 
 extension RunnerTests {
   /// Starts `recorder` on the frames `capture` produces. The bootstrap frame is taken on the calling
-  /// thread, which is main for `record start`. Each later tick hops to main through
-  /// `runMainThreadWork`, bounded by the tick's own interval, so a wedged main thread drops frames
-  /// and is accounted as abandoned work instead of blocking the recorder queue.
+  /// thread, which is main for `record start`. Each later tick is optional work: it hops to main only
+  /// while no other main-thread work is in flight or abandoned, so it never queues behind a command.
+  /// A capture still running after `recordingFrameCaptureTimeout` is abandoned and its frame dropped;
+  /// its late result is never returned.
   func startRecording(
     _ recorder: ScreenRecorder,
     capture: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
   ) throws {
-    try recorder.start(bootstrap: capture) { [weak self] timeout in
-      self?.boundedRecordingFrame(timeout: timeout, capture: capture)
-    }
-  }
-
-  /// A recording frame is optional, so while abandoned main-thread work is outstanding the tick is
-  /// skipped rather than queued behind it: the recorder keeps at most one capture pending on main.
-  /// A capture that outlives `timeout` is dropped, and its late result is never returned.
-  private func boundedRecordingFrame(
-    timeout: TimeInterval,
-    capture: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
-  ) -> RunnerImage? {
-    guard !hasAbandonedMainThreadWork() else { return nil }
-    return try? runMainThreadWork(
-      "recording_frame",
-      timeout: timeout,
-      timeoutError: mainThreadExecutionTimeoutError
-    ) {
-      try capture().get().image
+    try recorder.start(bootstrap: capture) { [weak self] in
+      guard let self else { return nil }
+      return try? self.runMainThreadWorkIfIdle(
+        "recording_frame",
+        timeout: self.recordingFrameCaptureTimeout,
+        timeoutError: self.mainThreadExecutionTimeoutError
+      ) {
+        try capture().get().image
+      }
     }
   }
 
