@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
+  geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
+  the bridge and the XCTest runner. The snapshot capability table has declared `hittable =
+  geometric-actionability` for every backend (#1933), and the runner has always stamped it; when 0.21.0
+  made the AX bridge the Simulator's snapshot source, the bridge reader mapped the traits word into
+  `enabled` and `selected` but handed over no hit result and disclosed `hittability` as unavailable on
+  every capture, so a `hittable:` selector matched nothing on the bridge that the runner would match.
+  The reader now derives `hittable` on its raw nodes from the same rule the runner's Swift uses — the
+  shared `isGeometricallyActionable`, `CGRect.contains` half-open edges and all — applied to the node's
+  own frame and the reported viewport, and discloses `hittability` as unavailable only when no viewport
+  is reported. Because it stamps the raw source rather than the fold, `snapshot --raw` matches too, and
+  the residue owner stays the fact owner (#2199). Closes the hittable-absence half of the AX-bridge
+  capture divergence (#2638).
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again carries the
   accessibility `selected` state, so `is selected`, a `selected=true` selector, and a Maestro
   `selected:` qualifier match the active control. When 0.21.0 made the AX bridge the Simulator's

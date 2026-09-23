@@ -52,6 +52,7 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
       role: 'Application',
       rect: { x: 0, y: 0, width: 390, height: 844 },
       depth: 0,
+      hittable: false,
     },
     {
       index: 1,
@@ -61,6 +62,7 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
       subrole: 'UIWindow',
       rect: { x: 0, y: 0, width: 390, height: 844 },
       depth: 1,
+      hittable: true,
     },
     {
       index: 2,
@@ -69,6 +71,7 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
       label: 'Continue',
       rect: { x: 20, y: 700, width: 120, height: 48 },
       depth: 2,
+      hittable: true,
     },
   ]);
   assert.deepEqual(result.viewport, {
@@ -77,6 +80,59 @@ test('the bridge tree becomes one depth-first raw snapshot with viewport evidenc
   });
   assert.equal(result.maxTraversalDepth, 2);
   assert.equal(result.opaqueRemoteElements, 0);
+});
+
+test('the bridge reader stamps geometric hittable onto every raw node, matching the runner', () => {
+  const traitsWord = (bits: bigint) => bits.toString();
+  const button = (text: string, rect: Record<string, number>, traitBits = 1n) => ({
+    [automationType]: 9,
+    [label]: text,
+    [frame]: rect,
+    [traits]: traitsWord(traitBits),
+    [children]: [],
+  });
+  const decode = (kids: unknown[]) =>
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 390, Height: 844 },
+        [children]: kids,
+      },
+      { truncated: false },
+      limits,
+    ).nodes;
+  const hittableOf = (kids: unknown[]) => decode(kids).map((node) => node.hittable);
+  const notEnabled = 1n << 8n;
+
+  // A root has no parent to hit through, so it is published not-hittable exactly as the runner does.
+  assert.deepEqual(hittableOf([]), [false], 'root is not hittable');
+  // On-screen enabled is hittable; the same frame disabled is not; a frame centred below the
+  // fold is not, even while enabled. These are the Swift `normalized()` cases pinned in
+  // CoordinateSpaceTests.swift, replayed against the bridge reader.
+  assert.deepEqual(
+    hittableOf([
+      button('Continue', { X: 20, Y: 700, Width: 120, Height: 48 }),
+      button('Place order', { X: 20, Y: 600, Width: 120, Height: 48 }, 1n | notEnabled),
+      button('Offscreen', { X: 20, Y: 2000, Width: 120, Height: 48 }),
+    ]),
+    [false, true, false, false],
+  );
+
+  // Without a reported viewport the reader has no rule input, so it publishes no hittable claim at
+  // all rather than guessing — the fold keeps hittability withheld until the runner serves the frame.
+  const noViewport = decodeSnapshotBridgeTree(
+    {
+      [application]: 'Application',
+      [children]: [button('Continue', { X: 20, Y: 700, Width: 120, Height: 48 })],
+    },
+    { truncated: false },
+    limits,
+  ).nodes;
+  assert.deepEqual(
+    noViewport.map((node) => node.hittable),
+    [undefined, undefined],
+    'a missing viewport publishes no hittable claim',
+  );
 });
 
 test('the bridge tree counts web-hosted remote leaves that reach the viewport', () => {

@@ -27,6 +27,32 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
 
+/**
+ * The shared `hittable` predicate every iOS snapshot producer publishes (#1933): an enabled node
+ * with a positive frame whose center falls inside the viewport. It is the TypeScript twin of the
+ * runner's Swift `SnapshotGeometry.isGeometricallyActionable`, including `CGRect.contains`'s
+ * half-open right/bottom edges — a center landing exactly on the viewport's right or bottom edge is
+ * not hittable on either producer. The host AX bridge derives the source bit from the node's own
+ * frame and the fold intersects it with the clipped frame, so a `hittable:` selector cannot tell the
+ * two producers apart. Kept here so both packages read one definition rather than each re-encoding
+ * the rule.
+ */
+export function isGeometricallyActionable(
+  enabled: boolean,
+  rect: Rect | undefined,
+  viewport: Rect,
+): boolean {
+  if (!enabled || !isPositiveFiniteRect(rect)) return false;
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  return (
+    centerX >= viewport.x &&
+    centerX < viewport.x + viewport.width &&
+    centerY >= viewport.y &&
+    centerY < viewport.y + viewport.height
+  );
+}
+
 export function pickLargestRect(rects: readonly Rect[]): Rect | null {
   let best: Rect | null = null;
   let bestArea = -1;

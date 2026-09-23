@@ -1,7 +1,7 @@
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { isGeometricallyActionable } from '@agent-device/kernel/rect';
 import { validateIosSnapshotGraph } from './graph.ts';
 import {
-  isGeometricallyActionable,
   rootTraversal,
   traversalDecision,
   type BranchState,

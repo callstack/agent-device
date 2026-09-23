@@ -17,11 +17,12 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
  * this module derives.
  *
  * `apple-runner` and `simulator-ax-bridge` are absent by construction, not by omission: each
- * builds its own residue at the source (the bridge adapter emits `unavailable-fact: hittability`
- * on every capture; the runner presents and reports its own facts), so a row here would be a
- * declaration with no reader — which is how the table came to claim the bridge had hittability
- * evidence while every bridge-served `snapshot -i` printed the opposite (#2199). Keying the
- * record on {@link IosProviderAcquisitionProducer} makes that claim not compile.
+ * builds its own residue at the source (the bridge reader derives geometric `hittable` onto its
+ * nodes and emits `unavailable-fact: hittability` only when the viewport is missing; the runner
+ * presents and reports its own facts), so a row here would be a declaration with no reader — which
+ * is how the table once came to claim the bridge had hittability evidence while every bridge-served
+ * `snapshot -i` printed the opposite (#2199). Keying the record on
+ * {@link IosProviderAcquisitionProducer} makes that claim not compile.
  */
 const IOS_PROVIDER_ACQUISITION_CAPABILITY_VALUES = {
   'appium-source': {

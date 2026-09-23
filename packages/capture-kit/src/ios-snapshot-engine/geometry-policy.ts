@@ -1,5 +1,5 @@
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { containsPoint, isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { IosSnapshotFoldPolicy } from './types.ts';
 
@@ -26,18 +26,6 @@ export type GeometryDecision = Readonly<{
   hiddenContentFrame?: Rect;
   establishesScrollAnchor: boolean;
 }>;
-
-export function isGeometricallyActionable(
-  enabled: boolean,
-  rect: Rect | undefined,
-  viewport: Rect,
-): boolean {
-  return Boolean(
-    enabled &&
-    isPositiveFiniteRect(rect) &&
-    containsPoint(viewport, rect.x + rect.width / 2, rect.y + rect.height / 2),
-  );
-}
 
 export function rootTraversal(): TraversalState {
   return { projectedOut: false };

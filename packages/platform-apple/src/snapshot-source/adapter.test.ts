@@ -66,9 +66,27 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       targetId: 'target-1',
       generation: 'generation-1',
     });
+    // With the viewport reported the reader owns `hittable` and stamps it on every node, so hittability
+    // is not disclosed as unavailable; only the interactive-query facet it cannot honour is.
     assert.deepEqual(result.acquisition.residue, [
+      { kind: 'unavailable-fact', fact: 'interactive-query' },
+    ]);
+    assert.equal(result.acquisition.nodes[0]?.hittable, false, 'the stamped root is not hittable');
+
+    // The complement (#2199: the residue owner is the fact owner): strip the viewport and the reader
+    // publishes no `hittable` claim and discloses hittability as unavailable again.
+    fixture.omitViewport = true;
+    const viewportless = await source.acquire({
+      target: { ...sourceTarget, targetId: 'target-1' },
+      hint,
+    });
+    fixture.omitViewport = false;
+    assert.equal(viewportless.stage, 'acquired');
+    assert.equal(viewportless.acquisition.nodes[0]?.hittable, undefined);
+    assert.deepEqual(viewportless.acquisition.residue, [
       { kind: 'unavailable-fact', fact: 'hittability' },
       { kind: 'unavailable-fact', fact: 'interactive-query' },
+      { kind: 'missing-viewport', reason: 'not-provided' },
     ]);
 
     const regularDepthOne = await source.acquire({
@@ -443,6 +461,8 @@ type AdapterFixture = {
   remoteContent: boolean;
   /** Whether the fake guest's tree holds a window reporting the app box quarter-turned (#2612). */
   turnedWindow: boolean;
+  /** Whether the fake guest's root omits its frame, leaving the capture without a viewport. */
+  omitViewport: boolean;
   omitRecovery: boolean;
   diagnostics: Record<string, unknown>[];
 };
@@ -469,6 +489,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
     malformedTree: false,
     remoteContent: false,
     turnedWindow: false,
+    omitViewport: false,
     omitRecovery: false,
     diagnostics: [],
   };
@@ -542,6 +563,11 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
     this.fixture = fixture;
   }
 
+  /** The guest root's frame, or undefined when the fixture reports a viewportless tree. */
+  private rootFrame(): Record<string, number> | undefined {
+    return this.fixture.omitViewport ? undefined : { X: 0, Y: 0, Width: 390, Height: 844 };
+  }
+
   write(frame: Buffer): boolean {
     const bodyLength = frame.readUInt32BE(0);
     const request = JSON.parse(frame.subarray(4, bodyLength + 4).toString('utf8')) as {
@@ -610,7 +636,7 @@ class AdapterSocket extends EventEmitter implements SnapshotSourceSocket {
               ? null
               : {
                   XC_kAXXCAttributeElementType: 'Application',
-                  XC_kAXXCAttributeFrame: { X: 0, Y: 0, Width: 390, Height: 844 },
+                  XC_kAXXCAttributeFrame: this.rootFrame(),
                   XC_kAXXCAttributeChildren:
                     request.maxDepth === 1
                       ? [{ XC_kAXXCAttributeElementType: 'Button', XC_kAXXCAttributeChildren: [] }]

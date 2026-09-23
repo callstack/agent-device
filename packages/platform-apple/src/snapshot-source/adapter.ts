@@ -261,8 +261,16 @@ function createAcquisitionResidue(
   truncated: boolean,
   viewport: IosViewportEvidence,
 ) {
+  // With a reported viewport the bridge reader has already stamped geometric `hittable` onto every
+  // node (it owns that fact and the residue), so it is not declared unavailable. Only when the
+  // viewport is missing does the reader withhold `hittable` and disclose it as an unavailable fact —
+  // the same "the residue owner is the fact owner" rule that keeps geometry from minting the claim.
+  const hittabilityResidue =
+    viewport.kind === 'reported'
+      ? []
+      : ([{ kind: 'unavailable-fact', fact: 'hittability' }] as const);
   return Object.freeze([
-    { kind: 'unavailable-fact', fact: 'hittability' } as const,
+    ...hittabilityResidue,
     ...(hint.interactiveOnly
       ? ([{ kind: 'unavailable-fact', fact: 'interactive-query' }] as const)
       : []),

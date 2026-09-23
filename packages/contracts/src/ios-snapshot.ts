@@ -84,9 +84,11 @@ export type IosSnapshotFact =
  * element tree — and deliberately not every {@link IosSnapshotProducer}. `apple-runner` and
  * `simulator-ax-bridge` build their own residue at the source, so a capability declared for
  * them here would be a claim nothing consults: exactly the shape that let the table say the
- * Simulator bridge had hittability evidence while the bridge adapter emitted
- * `unavailable-fact: hittability` on every capture (#2199). Narrowing the producer makes that
- * claim unrepresentable rather than merely wrong.
+ * Simulator bridge had hittability evidence while the bridge adapter published none and emitted
+ * `unavailable-fact: hittability` on every capture (#2199). The bridge now derives geometric
+ * `hittable` at the source and drops that residue when its inputs are established, so a table row
+ * for it would still have no reader. Narrowing the producer makes that claim unrepresentable
+ * rather than merely wrong.
  *
  * Truncation is not a field here: it is the one fact the runner and the bridge also need
  * answered, so it has a single owner over all four producers instead

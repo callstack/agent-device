@@ -1,4 +1,8 @@
-import { isPositiveFiniteRect, isRectVisibleInViewport } from '@agent-device/kernel/rect';
+import {
+  isGeometricallyActionable,
+  isPositiveFiniteRect,
+  isRectVisibleInViewport,
+} from '@agent-device/kernel/rect';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { snapshotSourceError } from './errors.ts';
@@ -173,6 +177,14 @@ export function decodeSnapshotBridgeTree(
   }
   const windowRoots = nodes.filter(isWindowRoot);
   const viewport = viewportFromRoot(windowRoots[0]);
+  // The runner publishes `hittable` for every node as geometric actionability; the guest hands over no
+  // hit-test result, so derive the same fact here from enabled + the node's own frame + the reported
+  // viewport. Publishing it on the raw nodes (rather than in the fold) is what lets `snapshot --raw`
+  // match the runner too, and it is only claimed once every input the rule needs is established — the
+  // reported viewport, with unresolved coordinate-space windows already refused above.
+  if (viewport.kind === 'reported') {
+    publishDerivedHittability(nodes, viewport.rect);
+  }
   return {
     nodes,
     maxTraversalDepth,
@@ -307,6 +319,21 @@ function viewportFromRoot(root: RawSnapshotNode | undefined): IosViewportEvidenc
 
 function isWindowRoot(node: RawSnapshotNode): boolean {
   return node.type === 'Application' || node.type === 'Window';
+}
+
+/**
+ * Stamp geometric actionability onto every decoded node, mirroring the XCTest runner's Swift rule
+ * (`parentIndex != nil && isGeometricallyActionable(enabled, frame, viewport)`). A root, a disabled
+ * node, or one whose frame center falls outside the viewport is published `hittable: false`; the
+ * fold's `available` branch then intersects this with the clipped-frame test exactly as it does for
+ * the runner, so the two producers cannot be told apart.
+ */
+function publishDerivedHittability(nodes: RawSnapshotNode[], viewport: Rect): void {
+  for (const node of nodes) {
+    node.hittable =
+      node.parentIndex !== undefined &&
+      isGeometricallyActionable(node.enabled !== false, node.rect, viewport);
+  }
 }
 
 /**
