@@ -87,6 +87,32 @@ test('notifier prints cached upgrade notice once for a newly discovered version'
   assert.equal(cache.prompted, true);
 });
 
+test('notifier treats the release as newer than the -dev build of the same base', () => {
+  // main carries `-dev` between releases; the shared SemVer comparator ranks the release above it,
+  // where numeric string collation ranked it below and never prompted.
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  writeCache(stateDir, {
+    latestVersion: '0.12.0',
+    checkedAt: '2026-03-25T10:00:00.000Z',
+  });
+
+  let stderr = '';
+  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write);
+
+  maybeRunUpgradeNotifier({
+    command: 'devices',
+    currentVersion: '0.12.0-dev',
+    stateDir,
+    flags: {},
+  });
+
+  assert.match(stderr, /Update available: agent-device 0\.12\.0-dev -> 0\.12\.0/);
+});
+
 test('notifier skips repeat prompts after the cached version was already shown', () => {
   const stateDir = makeTempStateDir();
   cleanupPaths.push(stateDir);

@@ -28,6 +28,11 @@ import {
   listenOnLoopback,
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
+import {
+  captureStderr,
+  startHttpDaemonFixture,
+  type HttpDaemonFixture,
+} from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -44,13 +49,6 @@ type DaemonInfoFixture = {
   version?: string;
   codeSignature?: string;
   processStartTime?: string;
-};
-
-type HttpDaemonFixture = {
-  server: http.Server;
-  port: number;
-  seenPaths: string[];
-  rpcRequests: Record<string, any>[];
 };
 
 const mockRunCmdDetached = vi.mocked(runCmdDetachedMonitored);
@@ -107,51 +105,6 @@ function writeDaemonLock(
     `${JSON.stringify({ startedAt: Date.now(), ...lock })}\n`,
     'utf8',
   );
-}
-
-async function startHttpDaemonFixture(
-  responseData: Record<string, unknown>,
-): Promise<HttpDaemonFixture> {
-  const seenPaths: string[] = [];
-  const rpcRequests: Record<string, any>[] = [];
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-
-    if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
-      res.end('ok');
-      return;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/rpc') {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      req.on('end', () => {
-        const rpcRequest = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<
-          string,
-          any
-        >;
-        rpcRequests.push(rpcRequest);
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: rpcRequest.id,
-            result: { ok: true, data: responseData },
-          }),
-        );
-      });
-      return;
-    }
-
-    res.writeHead(404);
-    res.end('not found');
-  });
-  const port = await listenOnLoopback(server);
-  return { server, port, seenPaths, rpcRequests };
 }
 
 /** Like `startHttpDaemonFixture`, but every RPC call returns `errorResult` as an `{ok:false}` result. */
@@ -648,21 +601,6 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
-
-function captureStderr(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  (process.stderr as { write: typeof process.stderr.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stderr.write = originalWrite;
-    },
-  };
-}
 
 test('sendRequest timeout cleanup uses resolved daemon paths instead of request flags', async (t) => {
   if (!(await supportsLoopbackBind())) {

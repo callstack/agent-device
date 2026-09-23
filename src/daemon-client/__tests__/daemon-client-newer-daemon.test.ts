@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -13,15 +12,15 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon } from '../daemon-client.ts';
+import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  supportsLoopbackBind,
-} from '../../__tests__/test-utils/loopback.ts';
+  captureStderr,
+  startHttpDaemonFixture,
+} from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 
-// The daemon-version half of the takeover ladder (`resolveDaemonTakeoverReason`): an older CLI
+// The daemon-version half of the takeover ladder (`resolveDaemonTakeover`): an older CLI
 // hoisted onto PATH meets the daemon a newer install started, with live sessions attached. It must
 // neither spawn a replacement nor kill the daemon.
 
@@ -32,38 +31,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** A reachable daemon that answers `/health` and records every path it was asked for. */
-async function startHealthyDaemon(): Promise<{
-  server: http.Server;
-  port: number;
-  seenPaths: string[];
-}> {
-  const seenPaths: string[] = [];
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-    res.writeHead(url.pathname === '/health' ? 200 : 404);
-    res.end(url.pathname === '/health' ? 'ok' : 'not found');
-  });
-  const port = await listenOnLoopback(server);
-  return { server, port, seenPaths };
-}
-
-function captureStderr(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  (process.stderr as { write: typeof process.stderr.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stderr.write = originalWrite;
-    },
-  };
-}
-
 test('sendToDaemon refuses to replace a reachable daemon newer than the client', async (t) => {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');
@@ -71,7 +38,7 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
   }
   const stateDir = mkdtempForTestSync('agent-device-daemon-newer-refused-');
   const paths = resolveDaemonPaths(stateDir);
-  const newerDaemon = await startHealthyDaemon();
+  const newerDaemon = await startHttpDaemonFixture({ via: 'newer-daemon' });
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(

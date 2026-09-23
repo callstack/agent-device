@@ -33,35 +33,49 @@ export function findProjectRoot(): string {
 }
 
 /**
- * Whether `candidate` is a later release than `baseline` under SemVer ordering: numeric
- * `major.minor.patch` first, then a release sorts after any prerelease of the same base
- * (`0.21.13` > `0.21.13-dev`), and prerelease identifiers compare per dot-separated field,
- * numerically when both are numbers and lexically otherwise. Build metadata is ignored. The daemon
- * takeover decision needs exactly this to tell an upgrade from a downgrade across the `-dev`
- * versions main carries between releases.
+ * Whether `candidate` is a later release than `baseline` (see {@link compareVersions}).
  */
 export function isNewerVersion(candidate: string, baseline: string): boolean {
   return compareVersions(candidate, baseline) > 0;
 }
 
-function compareVersions(left: string, right: string): number {
+/**
+ * SemVer order for the versions this package publishes: numeric `major.minor.patch` first, then a
+ * release sorts after any prerelease of the same base (`0.21.13` > `0.21.13-dev`, the shape main
+ * carries between releases), and prerelease fields compare per dot-separated field, numerically
+ * when both are numbers and lexically otherwise. Build metadata is ignored. A string that is not a
+ * version at all reads as `0.0.0`, so a malformed version always compares as the oldest.
+ */
+export function compareVersions(left: string, right: string): number {
   const a = parseVersion(left);
   const b = parseVersion(right);
   return compareRelease(a.release, b.release) || comparePrerelease(a.prerelease, b.prerelease);
 }
 
-function compareRelease(a: number[], b: number[]): number {
+const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+type ParsedVersion = { release: [number, number, number]; prerelease: string[] };
+
+function parseVersion(version: string): ParsedVersion {
+  const match = SEMVER.exec(version.trim());
+  if (!match) return { release: [0, 0, 0], prerelease: [] };
+  return {
+    release: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease: match[4]?.split('.') ?? [],
+  };
+}
+
+function compareRelease(a: ParsedVersion['release'], b: ParsedVersion['release']): number {
   for (let i = 0; i < 3; i += 1) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y ? 1 : -1;
+    if (a[i] !== b[i]) return a[i]! > b[i]! ? 1 : -1;
   }
   return 0;
 }
 
 /** A release (no prerelease) sorts after every prerelease of the same base. */
 function comparePrerelease(a: string[], b: string[]): number {
-  if (a.length === 0 || b.length === 0) return Math.sign(b.length - a.length);
+  if (a.length === 0) return b.length === 0 ? 0 : 1;
+  if (b.length === 0) return -1;
   const fields = Math.max(a.length, b.length);
   for (let i = 0; i < fields; i += 1) {
     const x = a[i];
@@ -82,14 +96,4 @@ function comparePrereleaseField(x: string, y: string): number {
   if (xNumeric && yNumeric) return Number(x) > Number(y) ? 1 : -1;
   if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
   return x > y ? 1 : -1;
-}
-
-function parseVersion(version: string): { release: number[]; prerelease: string[] } {
-  const [core = '', prerelease = ''] = version.split('+', 1)[0]!.split(/-(.*)/s, 2);
-  const release = core.split('.').map((part) => Number.parseInt(part, 10));
-  while (release.length < 3) release.push(0);
-  return {
-    release: release.map((part) => (Number.isNaN(part) ? 0 : part)),
-    prerelease: prerelease ? prerelease.split('.') : [],
-  };
 }

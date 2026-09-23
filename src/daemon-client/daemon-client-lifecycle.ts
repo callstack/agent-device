@@ -19,7 +19,11 @@ import {
   type DaemonServerMode,
   type DaemonTransportPreference,
 } from '../daemon-resolution.ts';
-import { resolveDaemonLaunchSpec, resolveDaemonTakeoverReason } from './daemon-launch-spec.ts';
+import {
+  resolveDaemonLaunchSpec,
+  resolveDaemonTakeover,
+  type DaemonTakeoverDecision,
+} from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 import {
@@ -182,14 +186,13 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   if (!existing) return null;
 
   const existingReachable = await canConnectReusableDaemon(existing, settings.transportPreference);
-  const takeoverReason = await resolveDaemonTakeoverReason(
-    existing,
-    existingReachable,
-    settings.paths.baseDir,
-  );
-  if (!takeoverReason) return existing;
+  const decision = await resolveDaemonTakeover(existing, existingReachable);
+  if (decision.kind === 'reuse') return existing;
+  if (decision.kind === 'refuseNewer') {
+    throw newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
+  }
 
-  emitDaemonTakeoverNotice(existing, takeoverReason, settings.paths.baseDir);
+  emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
   await stopDaemonProcessForTakeover(existing);
   removeDaemonInfo(settings.paths.infoPath);
   return null;
@@ -213,6 +216,24 @@ function isDaemonTransportUnavailableError(error: unknown): boolean {
     error.code === 'COMMAND_FAILED' &&
     (error.message === DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE ||
       error.message === DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE)
+  );
+}
+
+function newerDaemonRefusedError(
+  info: DaemonInfo,
+  decision: Extract<DaemonTakeoverDecision, { kind: 'refuseNewer' }>,
+  stateDir: string,
+): AppError {
+  const { daemonVersion, clientVersion } = decision;
+  return new AppError(
+    'COMMAND_FAILED',
+    `Daemon (pid ${info.pid}, v${daemonVersion}) is newer than this client (v${clientVersion}); refusing to replace it.`,
+    {
+      daemonPid: info.pid,
+      daemonVersion,
+      clientVersion,
+      hint: `Use the agent-device v${daemonVersion} CLI that started it, or stop it deliberately: agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}`,
+    },
   );
 }
 

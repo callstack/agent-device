@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmdDetached } from '@agent-device/host-kit/command';
+import { compareVersions } from '@agent-device/host-kit/version';
 
 const PACKAGE_NAME = 'agent-device';
 const UPDATE_CHECK_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -166,10 +167,6 @@ function parseTimestamp(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-function compareVersions(left: string, right: string): number {
-  return left.localeCompare(right, undefined, { numeric: true });
 }
 
 export function readUpdateCheckWorkerArgs(
