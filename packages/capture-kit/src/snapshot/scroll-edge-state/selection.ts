@@ -38,6 +38,9 @@ export function analyzeScrollEdgeState(
   return {
     canScroll,
     emptySnapshot: false,
+    // Every selection path admits only `isUsableRect` containers, so a resolved container always
+    // has a frame to report and its absence always means no container was resolved.
+    ...(container.rect ? { containerRect: container.rect } : {}),
     scope: buildScrollContainerScope(container, nodes),
     fingerprint: buildSurfaceFingerprint(container, nodes),
   };

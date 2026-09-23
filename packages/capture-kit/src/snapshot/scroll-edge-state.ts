@@ -1,13 +1,31 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { ScrollMovementObservation } from '@agent-device/contracts/scroll-command';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import type { Point, RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Point, RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export type ScrollEdge = 'top' | 'bottom';
+
+/**
+ * The end-of-content analyzer reads vertical edges only, so a horizontal scroll has no end signal
+ * and is bounded by whatever pass or observation budget its caller owns.
+ */
+export function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefined {
+  if (direction === 'down') return 'bottom';
+  if (direction === 'up') return 'top';
+  return undefined;
+}
 
 export type ScrollEdgeState = {
   canScroll: boolean;
   emptySnapshot: boolean;
   scope?: string;
+  /**
+   * The frame of the container every other field on this record describes, absent when the tree
+   * named no usable scroll container at all. Without it `canScroll: false` cannot be read as
+   * "already at this edge": a tree that names no scroller and a scroller with nothing left to
+   * reveal answer the same way, and only one of them is the end of the content (#2714).
+   */
+  containerRect?: Rect;
   /**
    * A cheap signature of what is on screen right now. Two consecutive captures with the same
    * fingerprint but `canScroll` still true mean the scroll did not move the container — the actuator
@@ -56,6 +74,19 @@ export async function captureScrollEdgeState(params: {
 }
 
 /**
+ * Everything one tree can answer about this edge — hidden content left, the container that answer
+ * was taken on, and the surface signature — with no capture. The one pure door into the analyzer,
+ * so every reader of an edge decision goes through the same selection rules.
+ */
+export async function readScrollEdgeState(
+  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
+  edge: ScrollEdge,
+): Promise<ScrollEdgeState> {
+  const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
+  return analyzeScrollEdgeState(nodes, edge);
+}
+
+/**
  * Is there hidden content left at this edge? The same question `runScrollEdgePasses` loops on,
  * exposed for callers with their own stop condition (`scroll --until`) so both read one signal.
  */
@@ -63,8 +94,7 @@ export async function canScrollFurtherAtEdge(
   nodes: readonly (RawSnapshotNode | SnapshotNode)[],
   edge: ScrollEdge,
 ): Promise<boolean> {
-  const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
-  return analyzeScrollEdgeState(nodes, edge).canScroll;
+  return (await readScrollEdgeState(nodes, edge)).canScroll;
 }
 
 /**
@@ -167,6 +197,10 @@ export async function runScrollEdgePasses<TResult>(params: {
  * travel that was asked for: one gesture cannot cross more than the viewport axis minus its edge
  * padding, so a large `amount` saturates. Naming the honored distance is what keeps
  * `scroll down 3` from reporting a three-viewport scroll it never performed.
+ *
+ * `movement` is what the owner measured after the gesture (#2714), and it outranks the requested
+ * distance: a directional scroll that observed no change cannot answer with a travel figure, since
+ * that number describes the swipe that was dispatched, not content that moved.
  */
 export function formatScrollEdgeMessage(params: {
   direction: ScrollDirection;
@@ -175,12 +209,25 @@ export function formatScrollEdgeMessage(params: {
   amount?: number | undefined;
   pixels?: number | undefined;
   honoredPixels?: number | undefined;
+  movement?: ScrollMovementObservation | undefined;
 }): string {
-  const { direction, edge, passes, amount, pixels, honoredPixels } = params;
+  const { direction, edge, passes, amount, pixels, honoredPixels, movement } = params;
   if (edge && passes === 0) {
     return `Already at ${edge}; no hidden content ${edge === 'bottom' ? 'below' : 'above'} detected`;
   }
   if (edge) return `Scrolled to ${edge} with ${passes} ${direction} passes`;
+  const verticalEdge = verticalEdgeFor(direction);
+  if (movement === 'at-edge' && verticalEdge) {
+    // The same honesty the zero-pass branch above holds: the analyzer reports no hidden content
+    // DETECTED, which is not a claim that the content provably ends here. A horizontal scroll has
+    // no edge signal to report, so it falls through to the distance it was asked for.
+    return `Scrolled ${direction} and no hidden content ${
+      verticalEdge === 'bottom' ? 'below' : 'above'
+    } was detected`;
+  }
+  if (movement === 'unchanged') {
+    return `Scrolled ${direction} and the visible content did not change`;
+  }
   if (pixels !== undefined) return `Scrolled ${direction} by ${honoredPixels ?? pixels}px`;
   if (amount !== undefined) {
     return honoredPixels === undefined
@@ -199,10 +246,34 @@ function buildScrollEdgeNoProgressError(edge: ScrollEdge, passes: number): AppEr
       reason: 'scroll_edge_no_progress',
       edge,
       passes,
-      hint:
-        `The scroll is not reaching this container. If a field is focused, dismiss the keyboard first; if it is nested inside another scroller, target it directly with scroll <dir> --until <selector>. ` +
-        `Some lists ignore synthesized scrolls — a raw drag moves them: swipe x1 y1 x2 y2 started inside the list.`,
+      hint: scrollNoProgressHint({ targetDirectly: 'with scroll <dir> --until <selector>' }),
     },
+  );
+}
+
+/**
+ * What a caller does next when a scroll moved nothing while the container still had content to
+ * reveal: one hint, because every loop that notices has the same recovery.
+ *
+ * `targetDirectly` names the form the failing command has for reaching an inner scroller — `scroll
+ * --until` already IS that form, so it says only "target it directly". The raw-drag sentence belongs
+ * only where the command can say where a swipe would land: a tvOS scroll is a remote keypress with no
+ * coordinates to name, and advice nobody can follow is noise.
+ */
+export function scrollNoProgressHint(
+  params: Readonly<{ targetDirectly?: string; rawDrag?: boolean }> = {},
+): string {
+  const target =
+    params.targetDirectly === undefined
+      ? 'target it directly'
+      : `target it directly ${params.targetDirectly}`;
+  const reached =
+    `The scroll is not reaching this container. If a field is focused, dismiss the keyboard first; ` +
+    `if it is nested inside another scroller, ${target}.`;
+  if (params.rawDrag === false) return reached;
+  return (
+    reached +
+    ` Some lists ignore synthesized scrolls — a raw drag moves them: swipe x1 y1 x2 y2 started inside the list.`
   );
 }
 

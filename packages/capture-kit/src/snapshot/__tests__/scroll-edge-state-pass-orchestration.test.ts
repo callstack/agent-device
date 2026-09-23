@@ -77,6 +77,63 @@ test('an amount-based message names the honored travel when the planner reports 
   );
 });
 
+/**
+ * #2714. A travel figure describes the swipe that was dispatched, not content that moved, so an
+ * observation of no change outranks it. `unobserved` is the pair to these: the disclosure travels in
+ * the `movement` field, and the prose keeps the number the caller asked for.
+ */
+test('formatScrollEdgeMessage: an observed edge answers without a distance', () => {
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'down', passes: 1, amount: 0.75, movement: 'at-edge' }),
+    'Scrolled down and no hidden content below was detected',
+  );
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'up', passes: 1, amount: 0.75, movement: 'at-edge' }),
+    'Scrolled up and no hidden content above was detected',
+  );
+});
+
+test('formatScrollEdgeMessage: a horizontal scroll never claims a vertical edge', () => {
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'left', passes: 1, amount: 0.75, movement: 'at-edge' }),
+    'Scrolled left by 0.75',
+  );
+});
+
+test('formatScrollEdgeMessage: an unchanged surface reports the measurement, not the request', () => {
+  assert.equal(
+    formatScrollEdgeMessage({ direction: 'left', passes: 1, pixels: 500, movement: 'unchanged' }),
+    'Scrolled left and the visible content did not change',
+  );
+});
+
+test('formatScrollEdgeMessage: an observation outranks the distance it disagrees with', () => {
+  assert.equal(
+    formatScrollEdgeMessage({
+      direction: 'down',
+      passes: 1,
+      amount: 3,
+      pixels: 5000,
+      honoredPixels: 640,
+      movement: 'at-edge',
+    }),
+    'Scrolled down and no hidden content below was detected',
+  );
+});
+
+test('formatScrollEdgeMessage: an unobserved movement keeps the distance the caller asked for', () => {
+  assert.equal(
+    formatScrollEdgeMessage({
+      direction: 'down',
+      passes: 1,
+      amount: 0.75,
+      honoredPixels: 656,
+      movement: 'unobserved',
+    }),
+    'Scrolled down by 0.75 of the viewport (656px)',
+  );
+});
+
 // ---------------------------------------------------------------------------
 // captureScrollEdgeState: retry-without-scope on an empty scoped capture
 // ---------------------------------------------------------------------------

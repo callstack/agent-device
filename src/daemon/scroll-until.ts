@@ -11,8 +11,10 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import {
   canScrollFurtherAtEdge,
   pushScrollSurfaceSignature,
+  scrollNoProgressHint,
   scrollSurfaceFingerprint,
   scrollSurfaceIsStuck,
+  verticalEdgeFor,
   type ScrollEdge,
 } from '@agent-device/capture-kit/scroll-edge-state';
 
@@ -252,9 +254,7 @@ function scrollUntilNoProgressError(
       selector,
       direction,
       passes,
-      hint:
-        `The scroll is not reaching this container. If a field is focused, dismiss the keyboard first; if it is nested inside another scroller, target it directly. ` +
-        `Some lists ignore synthesized scrolls — a raw drag moves them: swipe x1 y1 x2 y2 started inside the list.`,
+      hint: scrollNoProgressHint(),
     },
   );
 }
@@ -278,14 +278,4 @@ function scrollUntilCaptureError(
           : 'The accessibility tree came back sparse, so its refs and selectors are not trustworthy. Run screenshot, inspect the image, and navigate by coordinates until snapshot -i reports a full tree.',
     },
   );
-}
-
-/**
- * The end-of-content analyzer only reads vertical edges, so a horizontal `--until` is bounded by its
- * pass budget alone rather than by a signal that would always report "no room".
- */
-function verticalEdgeFor(direction: ScrollDirection): ScrollEdge | undefined {
-  if (direction === 'down') return 'bottom';
-  if (direction === 'up') return 'top';
-  return undefined;
 }

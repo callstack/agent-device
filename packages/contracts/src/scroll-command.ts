@@ -9,6 +9,24 @@ export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
 
 export type ScrollReleaseBehavior = 'controlled' | 'inertial';
 
+/**
+ * What a directional scroll actually SAW after its gesture, which is the only evidence that can
+ * back the distance the same response reports (#2714).
+ *
+ * - `'moved'`: the post-gesture surface differs from the pre-gesture one, so content did move.
+ * - `'at-edge'`: the surface is identical and the resolved container names no hidden content in
+ *   that direction — the scroll was a legitimate no-op at the end of the content.
+ * - `'unchanged'`: the surface is identical and the direction has no end-of-content signal to read
+ *   (a horizontal scroll: the hidden-content analyzer only covers the vertical axis), so the
+ *   response says what it measured without guessing which of the two it was.
+ * - `'unobserved'`: nothing comparable was available, so the distance rests on the gesture plan
+ *   alone. Callers that need the effect confirmed ask for a capture or a `--settle` observation.
+ *
+ * A directional scroll that measures an unchanged surface WITH hidden content still in that
+ * direction does not answer at all: it fails with `scroll_no_progress`.
+ */
+export type ScrollMovementObservation = 'moved' | 'at-edge' | 'unchanged' | 'unobserved';
+
 export type ScrollDistanceOptions = {
   amount?: number;
   pixels?: number;
@@ -96,6 +114,29 @@ export function honoredScrollDurationMs(
 }
 
 /**
+ * Where the leaf's swipe ran, as the midpoint of the coordinates it reported — the same absolute space
+ * its snapshots use, which is what lets a container rect say whether the gesture landed inside it.
+ * An owner that reports no coordinates is answered `undefined` rather than guessed at: a tvOS scroll
+ * is a remote keypress, so there is no midpoint to name.
+ */
+export function honoredScrollSwipeMidpoint(
+  result: Record<string, unknown> | undefined,
+): { x: number; y: number } | undefined {
+  const x1 = readReportedCoordinate(result?.x1);
+  const y1 = readReportedCoordinate(result?.y1);
+  const x2 = readReportedCoordinate(result?.x2);
+  const y2 = readReportedCoordinate(result?.y2);
+  if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
+    return undefined;
+  }
+  return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+}
+
+function readReportedCoordinate(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/**
  * `scroll` — the generic-route result built by `buildDispatchedScrollResult`
  * (src/core/dispatch-scroll.ts): the resolved direction, the edge-pass
  * bookkeeping for `top`/`bottom` scrolls, the honored distance/timing echo,
@@ -118,6 +159,14 @@ export type ScrollCommandResult = {
   durationMs?: number;
   message?: string;
   settle?: SettleObservation;
+  /**
+   * The observation that gated this response's distance claim. See
+   * {@link ScrollMovementObservation}: `scroll` answers with what it measured after the gesture,
+   * and only `'moved'` and `'at-edge'` confirm the surface's fate. Absent on the tiers that verify
+   * per pass instead of per gesture (`scroll top`/`bottom` and `--until`), and on platforms whose
+   * scroll owner never dispatches a swipe (the Linux wheel).
+   */
+  movement?: ScrollMovementObservation;
   /**
    * Set only when an on-screen keyboard made the owner clip the swipe into the band above it
    * (#2500). Absent means the swipe was not clipped, which is not the same claim as `false`: a
