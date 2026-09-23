@@ -256,11 +256,6 @@ extension RunnerTests {
     XCTAssertLessThan(finalSampleTravel, 0.1)
   }
 
-  func testContinuousDragRetainsSixteenMillisecondSamplingAtLongDurations() {
-    XCTAssertEqual(RunnerContinuousDragFrameCount(1_000), 62)
-    XCTAssertEqual(RunnerContinuousDragFrameCount(10_000), 625)
-  }
-
   func testRunnerScrollGesturePlanRejectsUnknownDirection() {
     XCTAssertNil(RunnerScrollDirection(rawValue: "sideways"))
   }

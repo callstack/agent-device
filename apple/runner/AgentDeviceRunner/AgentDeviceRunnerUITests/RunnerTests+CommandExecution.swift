@@ -1867,7 +1867,6 @@ extension RunnerTests {
         x2: x2,
         y2: y2,
         durationMs: defaults.durationMs,
-        synthesized: command.synthesized == true,
         message: "dragged",
         synthesizedPolicyKind: .synthesizedDrag
       )
@@ -2240,7 +2239,6 @@ extension RunnerTests {
             x2: last.x,
             y2: last.y,
             durationMs: plan.durationMs,
-            synthesized: true,
             message: plan.intent,
             synthesizedPolicyKind: .synthesizedDrag,
             synthesizedProfile: .fastSwipe
@@ -2307,7 +2305,6 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       durationMs: durationMs,
-      synthesized: true,
       message: message,
       synthesizedContext: context,
       synthesizedPolicyKind: .scroll,
@@ -2321,7 +2318,6 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       durationMs: durationMs,
-      synthesized: false,
       message: message,
       synthesizedPolicyKind: .scroll
     )
@@ -2337,11 +2333,10 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     durationMs: Double?,
-    synthesized: Bool,
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
     synthesizedPolicyKind: SynthesizedGesturePolicyKind,
-    synthesizedProfile: SynthesizedDragProfile = .continuous
+    synthesizedProfile: SynthesizedDragProfile? = nil
   ) -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
@@ -2351,7 +2346,7 @@ extension RunnerTests {
         error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
       )
     }
-    if synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
+    if let synthesizedProfile, let synthesizedResponse = executeSynthesizedDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -2373,33 +2368,9 @@ extension RunnerTests {
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    var fallback: GestureFallback?
-    if synthesized {
-      let durationMs = min(max(durationMs, 16), 10000)
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
-      )
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        synthesizedDragAt(
-          app: activeApp,
-          x: dragPoints.x,
-          y: dragPoints.y,
-          x2: dragPoints.x2,
-          y2: dragPoints.y2,
-          durationMs: durationMs,
-          profile: synthesizedProfile,
-          context: context
-        )
-      }
-      if case .performed = outcome {
-        return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
-      }
-      fallback = gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
-    }
-    let holdDuration = synthesized
-      ? synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
-      : coordinateDragHoldDuration()
+    let holdDuration = synthesizedProfile == nil
+      ? coordinateDragHoldDuration()
+      : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
     let (timing, outcome) = performGesture(activeApp) {
       dragAt(
         app: activeApp,
@@ -2413,12 +2384,7 @@ extension RunnerTests {
     if let response = unsupportedResponse(for: outcome) {
       return response
     }
-    return gestureResponse(
-      message: message,
-      timing: timing,
-      frame: .drag(dragFrame),
-      fallback: fallback
-    )
+    return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
   }
 
   private func executeSynthesizedDragGesture(

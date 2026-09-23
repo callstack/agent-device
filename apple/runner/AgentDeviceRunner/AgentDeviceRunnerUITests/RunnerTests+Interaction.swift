@@ -18,7 +18,6 @@ extension RunnerTests {
   }
 
   enum SynthesizedDragProfile: Equatable {
-    case continuous
     case controlledScroll
     case fastSwipe
   }

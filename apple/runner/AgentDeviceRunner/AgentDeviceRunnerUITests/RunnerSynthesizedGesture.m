@@ -52,12 +52,6 @@ static id RunnerSwipePointerPath(
   CGPoint end,
   double durationMs
 );
-static id RunnerContinuousDragPointerPath(
-  const RunnerGestureEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs
-);
 static id RunnerControlledScrollPointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
@@ -72,7 +66,6 @@ static id RunnerSampledDragPointerPath(
   RunnerDragProgressFunction progress,
   NSInteger frameCount
 );
-static double RunnerSmoothstepProgress(double t);
 static NSString * _Nullable RunnerTrySynthesizeDrag(
   id application,
   id _Nullable resolvedWindow,
@@ -111,28 +104,6 @@ static id RunnerTapPointerPath(
       durationMs,
       @"agent-device-swipe",
       RunnerSwipePointerPath
-    );
-  } @catch (NSException *exception) {
-    return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
-  }
-}
-
-+ (NSString * _Nullable)synthesizeContinuousDragWithApplication:(id)application
-                                                resolvedWindow:(id _Nullable)resolvedWindow
-                                                             x:(double)x
-                                                             y:(double)y
-                                                            x2:(double)x2
-                                                            y2:(double)y2
-                                                     durationMs:(double)durationMs {
-  @try {
-    return RunnerTrySynthesizeDrag(
-      application,
-      resolvedWindow,
-      CGPointMake(x, y),
-      CGPointMake(x2, y2),
-      durationMs,
-      @"agent-device-continuous-drag",
-      RunnerContinuousDragPointerPath
     );
   } @catch (NSException *exception) {
     return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
@@ -411,25 +382,6 @@ static id RunnerSwipePointerPath(
   return path;
 }
 
-static id RunnerContinuousDragPointerPath(
-  const RunnerGestureEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs
-) {
-  // This is velocity shaping, not just interpolation density: smoothstep's endpoint slope is zero,
-  // while a planned linear segment reaches lift with nonzero velocity unless a destination hold
-  // follows it. UIKit uses finger-up velocity for scroll deceleration. See ADR 0013 and issue #1586.
-  return RunnerSampledDragPointerPath(
-    bridge,
-    start,
-    end,
-    durationMs,
-    RunnerSmoothstepProgress,
-    RunnerContinuousDragFrameCount(durationMs)
-  );
-}
-
 static id RunnerControlledScrollPointerPath(
   const RunnerGestureEventBridge *bridge,
   CGPoint start,
@@ -476,14 +428,6 @@ static id RunnerSampledDragPointerPath(
 
   ((RunnerMsgSendPathOffset)objc_msgSend)(path, bridge->liftSelector, durationSeconds);
   return path;
-}
-
-static double RunnerSmoothstepProgress(double t) {
-  return t * t * (3.0 - 2.0 * t);
-}
-
-NSInteger RunnerContinuousDragFrameCount(double durationMs) {
-  return MAX(3, (NSInteger)(durationMs / RunnerDragSampleIntervalMs));
 }
 
 NSInteger RunnerControlledScrollFrameCount(double durationMs) {

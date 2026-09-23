@@ -9,7 +9,7 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     durationMs: Double,
-    profile: SynthesizedDragProfile = .continuous,
+    profile: SynthesizedDragProfile,
     context: SynthesizedCoordinateContext? = nil
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
@@ -48,16 +48,6 @@ extension RunnerTests {
       orientation: orientation
     )
     let message = switch profile {
-    case .continuous:
-      RunnerSynthesizedGesture.synthesizeContinuousDrag(
-        withApplication: app,
-        resolvedWindow: context.resolvedWindow,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
     case .controlledScroll:
       RunnerSynthesizedGesture.synthesizeControlledScroll(
         withApplication: app,

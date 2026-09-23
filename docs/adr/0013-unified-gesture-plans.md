@@ -113,14 +113,15 @@ Platform adapters consume the canonical plan:
   The three schedules shape that velocity differently. `endpoint-hold` moves quickly for 100 ms and
   becomes stationary before lift. `timed-pan` and target-authored drag submit the authored samples
   unchanged, preserving piecewise-linear movement plus explicit source and destination holds. The
-  runner's coordinate `drag` and fused `scroll` compatibility path instead expands the movement to
-  roughly 16 ms samples using smoothstep `s(t) = 3t² - 2t³`. A linear segment has constant movement
-  velocity through its endpoint unless a destination hold follows it; smoothstep has zero slope at
-  both endpoints and a peak velocity 1.5 times its average. Identical endpoints and total durations
-  can consequently produce different recognizer and deceleration outcomes. Neither a destination
-  hold nor an analytically zero endpoint slope proves a controlled release by itself: XCTest event
-  sampling and app recognizer thresholds can still leave observable post-lift motion, so live
-  evidence must measure the resulting content offset after pointer-up.
+  runner's fused `scroll` reuses `endpoint-hold` for inertial release; controlled release instead
+  expands the movement to at most 30 samples, roughly 16 ms apart, using cubic ease-out
+  `s(t) = 1 - (1 - t)³`. A linear segment has constant movement velocity through its endpoint unless
+  a destination hold follows it; cubic ease-out decelerates from the first movement and has zero
+  slope at lift, with a starting velocity three times its average. Identical endpoints and total
+  durations can consequently produce different recognizer and deceleration outcomes. Neither a
+  destination hold nor an analytically zero endpoint slope proves a controlled release by itself:
+  XCTest event sampling and app recognizer thresholds can still leave observable post-lift motion,
+  so live evidence must measure the resulting content offset after pointer-up.
 
   Live iOS characterization in [issue #1586](https://github.com/callstack/agent-device/issues/1586)
   confirmed that distinction: the schedules crossed the same fling-recognizer thresholds in the
