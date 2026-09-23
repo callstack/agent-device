@@ -60,7 +60,8 @@ extension RunnerTests {
   func testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline() throws {
     app.launchArguments = [
       "--agent-device-alert-replacement-regression",
-      "--agent-device-alert-activation-busy"
+      "--agent-device-alert-activation-busy",
+      String(RunnerTests.alertResolutionAllowance + RunnerTests.alertActivationDeadline)
     ]
     app.launch()
     defer {
@@ -72,9 +73,10 @@ extension RunnerTests {
 
     let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
 
-    // The fixture keeps an animation in flight until a button is answered or its 20 s backstop stops
-    // it, and an in-flight animation is what XCTest waits out before it synthesises an event. An
-    // answer that arrives while the app is still busy is one activation did not wait to idle (#2546).
+    // The fixture keeps an animation in flight until a button is answered or its backstop, which
+    // outlasts resolution plus activation, stops it, and an in-flight animation is what XCTest waits
+    // out before it synthesises an event. An answer that arrives while the app is still busy is one
+    // activation did not wait to idle (#2546).
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
     XCTAssertEqual(app.staticTexts["agent-device-alert-busy-answer"].label, "Answered while busy")

@@ -82,15 +82,21 @@ int main(int argc, const char *argv[]) {
 // may receive an event: the app keeps reporting work in flight, which is the state that cost an alert
 // command its whole deadline in #2546. It stops the moment an alert button is answered, since that
 // answer is the event the runner is trying to land, and the backstop stops it even when no answer
-// arrives so a regressed run finishes rather than waiting out XCTest's own timeout. A layer
+// arrives so a regressed run finishes rather than waiting out XCTest's own timeout. The test passes
+// the backstop after `--agent-device-alert-activation-busy`, sized to outlast its whole resolution
+// and activation budget, so a slow host cannot end the busy state before the answer lands. A layer
 // animation on its own is not enough; only a UIView animation counts as in-flight work here.
-static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
+static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger flag = [arguments indexOfObject:@"--agent-device-alert-activation-busy"];
+  return flag + 1 < arguments.count ? arguments[flag + 1].doubleValue : 0;
+}
 
 - (void)startAlertActivationBusy {
   if (self.alertActivationBusyBackstop != nil) {
     return;
   }
-  self.alertActivationBusyBackstop = [NSTimer scheduledTimerWithTimeInterval:kAgentDeviceAlertActivationBusyWindow
+  self.alertActivationBusyBackstop = [NSTimer scheduledTimerWithTimeInterval:AgentDeviceAlertActivationBusyWindow()
                                                                       target:self
                                                                     selector:@selector(stopAlertActivationBusy)
                                                                     userInfo:nil
