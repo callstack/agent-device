@@ -185,8 +185,12 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
 
-  const existingReachable = await canConnectReusableDaemon(existing, settings.transportPreference);
-  const decision = await resolveDaemonTakeover(existing, existingReachable);
+  const viaClientTransport = await canConnectReusableDaemon(existing, settings.transportPreference);
+  const decision = await resolveDaemonTakeover(existing, {
+    viaClientTransport,
+    onAnyAdvertisedTransport: async () =>
+      viaClientTransport || (await canConnectReusableDaemon(existing, 'auto')),
+  });
   if (decision.kind === 'reuse') return existing;
   if (decision.kind === 'refuseNewer') {
     throw newerDaemonRefusedError(existing, decision, settings.paths.baseDir);

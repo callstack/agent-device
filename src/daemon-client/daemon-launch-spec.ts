@@ -114,23 +114,37 @@ export type DaemonTakeoverDecision =
   | { kind: 'refuseNewer'; daemonVersion: string; clientVersion: string };
 
 /**
+ * Reuse needs the daemon on the transport this client will route through; refusal needs only
+ * proof that the daemon is alive, on any transport its metadata advertises. A client whose
+ * transport preference the daemon does not serve must still see a live newer daemon.
+ */
+export type DaemonReachability = {
+  viaClientTransport: boolean;
+  onAnyAdvertisedTransport: () => Promise<boolean>;
+};
+
+/**
  * One ladder decides reuse, replace, or refuse, so a daemon can never be reused and announced as
  * replaced, or replaced without a reason to print. The version answers first because it is cheap
  * and decides alone for the common pair of installed trees; the code identity
  * (`resolveCodeIdentityMismatch`) answers next and unreachability last.
  *
- * A reachable daemon NEWER than this client is neither reused nor replaced: it was started by a
+ * A live daemon NEWER than this client is neither reused nor replaced: it was started by a
  * newer install that may still own live sessions, and an older binary that a package manager
  * hoisted onto PATH must not kill it under that install. An unreachable newer daemon is dead and
  * replaced like any version mismatch.
  */
 export async function resolveDaemonTakeover(
   info: DaemonInfo,
-  reachable: boolean,
+  reachability: DaemonReachability,
 ): Promise<DaemonTakeoverDecision> {
   const clientVersion = readVersion();
   if (info.version !== clientVersion) {
-    if (reachable && info.version && isNewerVersion(info.version, clientVersion)) {
+    if (
+      info.version &&
+      isNewerVersion(info.version, clientVersion) &&
+      (await reachability.onAnyAdvertisedTransport())
+    ) {
       return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
     }
     return { kind: 'replace', reason: `version mismatch (client v${clientVersion})` };
@@ -138,7 +152,7 @@ export async function resolveDaemonTakeover(
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
   if (codeMismatch) return { kind: 'replace', reason: codeMismatch };
-  if (!reachable) return { kind: 'replace', reason: 'unreachable' };
+  if (!reachability.viaClientTransport) return { kind: 'replace', reason: 'unreachable' };
   return { kind: 'reuse' };
 }
 

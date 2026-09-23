@@ -82,3 +82,53 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('sendToDaemon refuses a newer socket-only daemon when the client prefers http', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+  const stateDir = mkdtempForTestSync('agent-device-daemon-newer-socket-only-');
+  const paths = resolveDaemonPaths(stateDir);
+  const newerDaemon = await startHttpDaemonFixture({ via: 'newer-socket-daemon' });
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  fs.mkdirSync(paths.baseDir, { recursive: true });
+  fs.writeFileSync(
+    paths.infoPath,
+    `${JSON.stringify({
+      token: 'local-secret',
+      pid: 999_999,
+      version: '999.0.0',
+      port: newerDaemon.port,
+      transport: 'socket',
+    })}\n`,
+    'utf8',
+  );
+  const stderrCapture = captureStderr();
+
+  try {
+    await assert.rejects(
+      () =>
+        sendToDaemon({
+          session: 'default',
+          command: 'newer-daemon-smoke',
+          positionals: [],
+          flags: { stateDir, daemonTransport: 'http' },
+          meta: { requestId: 'req-newer-socket-daemon' },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.match(error.message, /v999\.0\.0\) is newer than this client/);
+        return true;
+      },
+    );
+
+    assert.equal(mockRunCmdDetached.mock.calls.length, 0, 'no replacement daemon is spawned');
+    assert.equal(stderrCapture.read(), '', 'no takeover notice is printed');
+    assert.ok(fs.existsSync(paths.infoPath), 'the newer daemon keeps its metadata');
+  } finally {
+    stderrCapture.restore();
+    await closeLoopbackServer(newerDaemon.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

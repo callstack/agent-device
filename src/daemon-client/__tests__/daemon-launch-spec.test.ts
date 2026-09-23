@@ -6,6 +6,7 @@ import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signatur
 import {
   resolveDaemonLaunchSpec,
   resolveDaemonTakeover,
+  type DaemonReachability,
   resolveLocalDaemonCodeIdentity,
 } from '../daemon-launch-spec.ts';
 import { isSourceCheckoutProjectRoot, readVersion } from '@agent-device/host-kit/version';
@@ -101,22 +102,47 @@ test('a source client fingerprints the source entry through the stat-validated c
 });
 
 test('a reachable daemon newer than the client is refused, not replaced', async () => {
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), true), {
-    kind: 'refuseNewer',
-    daemonVersion: '999.0.0',
-    clientVersion: readVersion(),
-  });
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), reachable()),
+    {
+      kind: 'refuseNewer',
+      daemonVersion: '999.0.0',
+      clientVersion: readVersion(),
+    },
+  );
 });
 
 test('an unreachable newer daemon is replaced like any version mismatch', async () => {
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), false), {
-    kind: 'replace',
-    reason: `version mismatch (client v${readVersion()})`,
-  });
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), unreachable()),
+    {
+      kind: 'replace',
+      reason: `version mismatch (client v${readVersion()})`,
+    },
+  );
+});
+
+test('a newer daemon alive only on a transport the client does not prefer is still refused', async () => {
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), onlyOnAnotherTransport()),
+    { kind: 'refuseNewer', daemonVersion: '999.0.0', clientVersion: readVersion() },
+  );
+});
+
+test('a same-version daemon the client transport cannot reach is replaced', async () => {
+  useClientTree(false);
+
+  assert.deepEqual(
+    await resolveDaemonTakeover(
+      runningDaemon({ codeOrigin: 'installed' }),
+      onlyOnAnotherTransport(),
+    ),
+    { kind: 'replace', reason: 'unreachable' },
+  );
 });
 
 test('a reachable daemon older than the client is replaced', async () => {
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), true), {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), reachable()), {
     kind: 'replace',
     reason: `version mismatch (client v${readVersion()})`,
   });
@@ -130,6 +156,18 @@ test('a reachable daemon older than the client is replaced', async () => {
  */
 function useClientTree(sourceCheckout: boolean): void {
   vi.mocked(isSourceCheckoutProjectRoot).mockReturnValue(sourceCheckout);
+}
+
+function reachable(): DaemonReachability {
+  return { viaClientTransport: true, onAnyAdvertisedTransport: async () => true };
+}
+
+function unreachable(): DaemonReachability {
+  return { viaClientTransport: false, onAnyAdvertisedTransport: async () => false };
+}
+
+function onlyOnAnotherTransport(): DaemonReachability {
+  return { viaClientTransport: false, onAnyAdvertisedTransport: async () => true };
 }
 
 function runningDaemon(info: {
@@ -167,7 +205,7 @@ test('an installed client keeps an installed daemon whose code signature differs
   assert.deepEqual(
     await resolveDaemonTakeover(
       runningDaemon({ codeOrigin: 'installed', codeSignature: 'some-other-install' }),
-      true,
+      reachable(),
     ),
     { kind: 'reuse' },
   );
@@ -182,7 +220,7 @@ test('an installed client replaces a daemon that reports a source checkout (#245
   assert.deepEqual(
     await resolveDaemonTakeover(
       runningDaemon({ codeOrigin: 'checkout', codeSignature: 'edited-checkout' }),
-      true,
+      reachable(),
     ),
     { kind: 'replace', reason: 'code origin mismatch (daemon checkout, client installed)' },
   );
@@ -191,10 +229,13 @@ test('an installed client replaces a daemon that reports a source checkout (#245
 test('an installed client replaces a daemon that predates the code origin field (#2458)', async () => {
   useClientTree(false);
 
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ codeSignature: 'any' }), true), {
-    kind: 'replace',
-    reason: 'code origin mismatch (daemon unreported, client installed)',
-  });
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeSignature: 'any' }), reachable()),
+    {
+      kind: 'replace',
+      reason: 'code origin mismatch (daemon unreported, client installed)',
+    },
+  );
 });
 
 test('a source checkout keeps a daemon that reports the same code signature', async () => {
@@ -205,7 +246,7 @@ test('a source checkout keeps a daemon that reports the same code signature', as
   assert.deepEqual(
     await resolveDaemonTakeover(
       runningDaemon({ codeOrigin: 'checkout', codeSignature: ownCodeSignature }),
-      true,
+      reachable(),
     ),
     { kind: 'reuse' },
   );
@@ -219,7 +260,7 @@ test('a source checkout replaces a daemon whose code signature differs', async (
   assert.deepEqual(
     await resolveDaemonTakeover(
       runningDaemon({ codeOrigin: 'checkout', codeSignature: 'an-older-build' }),
-      true,
+      reachable(),
     ),
     {
       kind: 'replace',
@@ -236,7 +277,7 @@ test('a source checkout replaces a daemon that reports an installed package', as
   assert.deepEqual(
     await resolveDaemonTakeover(
       runningDaemon({ codeOrigin: 'installed', codeSignature: 'the-published-artifact' }),
-      true,
+      reachable(),
     ),
     {
       kind: 'replace',
@@ -250,7 +291,7 @@ test('a source checkout judges a daemon that predates the code origin field by i
   // comparison they were reused under until now.
   useClientTree(true);
 
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({}), true), {
+  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({}), reachable()), {
     kind: 'replace',
     reason: 'code-signature mismatch',
   });
@@ -264,7 +305,7 @@ test('a mismatched version replaces the daemon whichever tree the client runs fr
     assert.deepEqual(
       await resolveDaemonTakeover(
         runningDaemon({ version: '0.0.0-mismatch', codeOrigin: 'installed', codeSignature: 'any' }),
-        true,
+        reachable(),
       ),
       expected,
     );
@@ -274,13 +315,19 @@ test('a mismatched version replaces the daemon whichever tree the client runs fr
 test('a reachable daemon of a matching identity survives, an unreachable one does not', async () => {
   useClientTree(false);
 
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), true), {
-    kind: 'reuse',
-  });
-  assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), false), {
-    kind: 'replace',
-    reason: 'unreachable',
-  });
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), reachable()),
+    {
+      kind: 'reuse',
+    },
+  );
+  assert.deepEqual(
+    await resolveDaemonTakeover(runningDaemon({ codeOrigin: 'installed' }), unreachable()),
+    {
+      kind: 'replace',
+      reason: 'unreachable',
+    },
+  );
 });
 
 test('the tree shape is asked per call, not memoized with the signature', async () => {
