@@ -8,7 +8,6 @@ import {
   terminateIosDeviceApp,
 } from './devicectl.ts';
 import type { IosAppInfo, IosDeviceAppProcesses } from './app-info.ts';
-import { isMissingAppErrorOutput } from './apps-simctl.ts';
 
 export async function listCoreDeviceApps(
   device: DeviceInfo,
@@ -60,4 +59,12 @@ export async function resolveCoreDeviceAppProcesses(
   bundleId: string,
 ): Promise<IosDeviceAppProcesses> {
   return await resolveIosDeviceAppProcesses(device, bundleId);
+}
+
+function isMissingAppErrorOutput(output: string): boolean {
+  return (
+    output.includes('not installed') ||
+    output.includes('not found') ||
+    output.includes('no such file')
+  );
 }

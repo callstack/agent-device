@@ -1,6 +1,6 @@
 type SimctlListedDevice = { udid?: string; state?: string };
 
-/** The runtime-keyed device lists of `simctl list devices -j` output; throws on malformed JSON. */
+/** The runtime-keyed device lists of `simctl list devices -j` output; throws unless it is a JSON object. */
 export function readSimctlDevicesByRuntime(stdout: string): Record<string, SimctlListedDevice[]> {
   const payload = JSON.parse(stdout) as { devices?: Record<string, SimctlListedDevice[]> };
   return payload.devices ?? {};
