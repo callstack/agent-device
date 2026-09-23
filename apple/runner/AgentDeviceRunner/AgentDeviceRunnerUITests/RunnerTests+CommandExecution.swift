@@ -824,7 +824,7 @@ extension RunnerTests {
   }
 #endif
 
-  func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
+  func testDispatchReturnsBusyBeforeQueueingMainThreadWork() throws {
     let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-busy"}"#)
     abandonedMainThreadWorkCount = 1
     abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
@@ -833,14 +833,14 @@ extension RunnerTests {
       abandonedMainThreadWorkSince = nil
     }
 
-    let response = try executeDispatched(command: command)
+    let response = try execute(command: command)
 
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "RUNNER_BUSY")
     XCTAssertTrue(response.error?.message.contains("previous command") == true)
   }
 
-  func testExecuteDispatchedReturnsWedgedBeforeMainThreadFastPath() throws {
+  func testDispatchReturnsWedgedBeforeQueueingMainThreadWork() throws {
     let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-wedged"}"#)
     abandonedMainThreadWorkCount = 1
     abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -(mainThreadWedgeThreshold + 1))
@@ -849,7 +849,7 @@ extension RunnerTests {
       abandonedMainThreadWorkSince = nil
     }
 
-    let response = try executeDispatched(command: command)
+    let response = try execute(command: command)
 
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "RUNNER_WEDGED")
@@ -936,15 +936,36 @@ extension RunnerTests {
 #endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  /// Sends `command` the way the transport does: status and uptime answer inline, every other
+  /// command is journal-accepted and executed on `commandExecutionQueue`. The calling test's main
+  /// thread serves the command's main-thread work while it waits.
   func execute(command: Command) throws -> Response {
+    dispatchPrecondition(condition: .onQueue(.main))
     if command.command == .status {
       return executeStatus(command: command)
     }
     if command.command == .uptime {
       return executeUptime()
     }
+    final class ResultBox {
+      var result: Result<Response, Error>?
+    }
+    let box = ResultBox()
+    let executed = expectation(description: "\(command.command.rawValue) executed off main")
     commandJournal.accept(command: command)
-    return try executeAccepted(command: command)
+    commandExecutionQueue.async {
+      box.result = Result { try self.executeAccepted(command: command) }
+      executed.fulfill()
+    }
+    wait(for: [executed], timeout: mainThreadExecutionTimeout + 5)
+    guard let result = box.result else {
+      throw NSError(
+        domain: RunnerErrorDomain.general,
+        code: RunnerErrorCode.commandReturnedNoResponse,
+        userInfo: [NSLocalizedDescriptionKey: "command did not finish on the command queue"]
+      )
+    }
+    return try result.get()
   }
 #endif
 
@@ -1063,14 +1084,6 @@ extension RunnerTests {
     let alertDeadline = command.command == .alert
       ? Date().addingTimeInterval(Self.alertCommandTimeout(timeoutMs: command.timeoutMs))
       : nil
-    if Thread.isMainThread {
-      let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(command)
-      return try executeOnMainSafely(
-        command: command,
-        alertDeadline: alertDeadline,
-        routeToSpringboard: routeToSpringboard
-      )
-    }
     // Resolve this before the command's outer main-thread block. If the bounded probe abandons
     // slow XCTest enumeration, return the established recoverable response instead of queueing
     // command preparation behind work that may outlive the 30-second command watchdog.
@@ -1300,7 +1313,7 @@ extension RunnerTests {
   private func executeSnapshotPrepared(
     command: Command,
     activeApp: XCUIApplication,
-    systemSurface: SystemSurfaceHost? = nil
+    systemSurface: SystemSurfaceHost?
   ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
@@ -1332,10 +1345,6 @@ extension RunnerTests {
   }
 
   private func setNeedsPostSnapshotInteractionDelay() {
-    if Thread.isMainThread {
-      needsPostSnapshotInteractionDelay = true
-      return
-    }
     guard !hasAbandonedMainThreadWork() else {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_SKIPPED_XCTEST_OCCUPIED")
       return
@@ -1354,10 +1363,6 @@ extension RunnerTests {
   }
 
   private func invalidateCachedTargetAfterSnapshotFailure() {
-    if Thread.isMainThread {
-      invalidateCachedTarget(reason: "ax_snapshot_failure")
-      return
-    }
     // Abandoned work ahead of this hop cannot be cancelled: queue the drop behind it without
     // waiting, so the failed capture answers now and the next command still finds the target gone.
     guard !hasAbandonedMainThreadWork() else {
@@ -1633,7 +1638,8 @@ extension RunnerTests {
       clearRememberedTextEntryTap()
     }
     switch command.command {
-    case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime:
+    case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
+      .snapshot:
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -2049,8 +2055,6 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "readText did not resolve text"))
       }
       return Response(ok: true, data: DataPayload(text: text))
-    case .snapshot:
-      return try executeSnapshotPrepared(command: command, activeApp: activeApp)
     case .screenshot:
 #if os(macOS)
       // macOS keeps the app-targeted capture behavior for window-level screenshots.
@@ -2116,11 +2120,10 @@ extension RunnerTests {
         inlineScreenshot: command.inlineScreenshot == true
       )
 #endif
-    case .back, .backInApp:
+    case .backInApp:
       switch tapInAppBackControl(app: activeApp) {
       case .performed:
-        let message = command.command == .back ? "back" : "backInApp"
-        return Response(ok: true, data: DataPayload(message: message))
+        return Response(ok: true, data: DataPayload(message: "backInApp"))
       case .unavailable:
         return Response(
           ok: false,
@@ -2612,15 +2615,6 @@ extension RunnerTests {
     }
     #endif
     let probeDeadline = Date().addingTimeInterval(systemModalProbeBudget)
-    // `runMainThreadWork` executes inline for a main-thread caller, so that path cannot use its
-    // timeout machinery. Direct main-thread dispatch keeps the prior synchronous modal check;
-    // normal off-main command dispatch uses the bounded probe and post-probe busy recovery.
-    if Thread.isMainThread {
-      return firstBlockingSystemModal(
-        in: springboard,
-        deadline: probeDeadline
-      ) != nil
-    }
     return boundedBlockingSystemAlertSnapshot(
       deadline: probeDeadline
     ) != nil
@@ -2668,15 +2662,12 @@ extension RunnerTests {
     let textEntryMode = resolveTextEntryMode(command)
     let target: TextEntryTarget
     var resolvedCoordinateContext: SynthesizedCoordinateContext?
-    var maestroNonHittableCoordinateFallbackUsed: Bool?
-    if command.allowNonHittableCoordinateFallback == true,
-      command.x != nil,
-      command.y != nil
-    {
-      // The shared runtime has already resolved this node as non-hittable and
-      // deliberately selected Maestro's coordinate compatibility route.
-      maestroNonHittableCoordinateFallbackUsed = true
-    }
+    // The shared runtime has already resolved this node as non-hittable and
+    // deliberately selected Maestro's coordinate compatibility route.
+    let maestroNonHittableCoordinateFallbackUsed: Bool? =
+      command.allowNonHittableCoordinateFallback == true && command.x != nil && command.y != nil
+      ? true
+      : nil
     let focusStartedAt = Date()
 #if os(iOS)
     let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
@@ -2721,28 +2712,6 @@ extension RunnerTests {
 #endif
     if let resolvedCoordinateTarget {
       target = resolvedCoordinateTarget
-    } else if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
-      // Released daemons may still send selector-keyed type commands even though current
-      // daemons resolve fill selectors through the runtime tree before reaching the runner.
-      let match = findElement(
-        app: activeApp,
-        selectorKey: selectorKey,
-        selectorValue: selectorValue,
-        allowNonHittableFallback: command.allowNonHittableCoordinateFallback == true
-      )
-      if match.isAmbiguous {
-        return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
-      }
-      guard let element = match.element else {
-        return Response(ok: false, error: ErrorPayload(code: "NO_MATCH", message: "selector did not match an element"))
-      }
-      guard isTextEntryElement(element) else {
-        return Response(ok: false, error: ErrorPayload(code: "INVALID_TARGET", message: "selector did not match a text input"))
-      }
-      if command.allowNonHittableCoordinateFallback == true {
-        maestroNonHittableCoordinateFallbackUsed = match.usedNonHittableFallback
-      }
-      target = focusTextInputForTextEntry(app: activeApp, element: element)
     } else {
       target = focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
     }

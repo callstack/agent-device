@@ -17,7 +17,6 @@ enum CommandType: String, Codable {
   case readText
   case snapshot
   case screenshot
-  case back
   case backInApp
   case backSystem
   case home
@@ -78,7 +77,7 @@ extension CommandType {
     // classification as .drag. .desktopScroll is the macOS frame-resolve + wheel event sibling.
     // .sequence is the fused multi-step gesture batch.
     case .tap, .longPress, .drag, .remotePress, .type, .swipe, .scroll, .desktopScroll,
-         .back, .backInApp, .backSystem, .rotate, .appSwitcher,
+         .backInApp, .backSystem, .rotate, .appSwitcher,
          .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return CommandTraits(isInteraction: true, readOnly: .never, isLifecycle: false)
 

@@ -66,7 +66,6 @@ export const RUNNER_COMMAND_TRAITS = {
   readText: READ_ONLY_TRAITS,
   snapshot: READ_ONLY_TRAITS,
   screenshot: READ_ONLY_TRAITS,
-  back: DEFAULT_TRAITS,
   backInApp: DEFAULT_TRAITS,
   backSystem: DEFAULT_TRAITS,
   home: DEFAULT_TRAITS,

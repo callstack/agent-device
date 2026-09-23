@@ -121,7 +121,6 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
     raw: false,
   },
   screenshot: { command: 'screenshot', outPath: '/tmp/runner-screenshot.png', fullscreen: true },
-  back: { command: 'back' },
   backInApp: { command: 'backInApp' },
   backSystem: { command: 'backSystem' },
   home: { command: 'home' },

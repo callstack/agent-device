@@ -48,7 +48,6 @@ export type RunnerCommand = {
     | 'readText'
     | 'snapshot'
     | 'screenshot'
-    | 'back'
     | 'backInApp'
     | 'backSystem'
     | 'home'

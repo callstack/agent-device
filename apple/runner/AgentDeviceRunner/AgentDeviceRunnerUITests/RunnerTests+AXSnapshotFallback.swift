@@ -55,14 +55,10 @@ extension RunnerTests {
   static func privateAXCustomActionCoverage(_ raw: Any?) -> SnapshotCustomActionCoverage? {
     guard let coverage = raw as? [String: Any],
       let read = (coverage[RunnerAXSnapshotCustomActionsReadKey] as? NSNumber)?.intValue,
-      let candidates = (coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? NSNumber)?.intValue
+      let candidates = (coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? NSNumber)?.intValue,
+      let truncated = (coverage[RunnerAXSnapshotCustomActionsTruncatedKey] as? NSNumber)?.intValue,
+      let blocked = (coverage[RunnerAXSnapshotCustomActionsBlockedKey] as? NSNumber)?.boolValue
     else { return nil }
-    // read/candidates are the ratio and must both be present; the truncation
-    // count is additive, so an older bridge that omits it reads as zero rather
-    // than voiding the whole coverage.
-    let truncated =
-      (coverage[RunnerAXSnapshotCustomActionsTruncatedKey] as? NSNumber)?.intValue ?? 0
-    let blocked = (coverage[RunnerAXSnapshotCustomActionsBlockedKey] as? NSNumber)?.boolValue ?? false
     return SnapshotCustomActionCoverage(
       read: read, candidates: candidates, truncated: truncated, blocked: blocked)
   }
@@ -513,19 +509,28 @@ extension RunnerTests {
   /// The disclosure only exists if the counts survive the bridge boundary, and
   /// "did not ask" must stay distinguishable from "read none".
   func testCustomActionCoverageParsesOnlyCompletePairs() {
-    let coverage = Self.privateAXCustomActionCoverage([
+    let complete: [String: Any] = [
       RunnerAXSnapshotCustomActionsReadKey: 12,
       RunnerAXSnapshotCustomActionsCandidatesKey: 19,
-    ])
+      RunnerAXSnapshotCustomActionsTruncatedKey: 2,
+      RunnerAXSnapshotCustomActionsBlockedKey: true,
+    ]
+    let coverage = Self.privateAXCustomActionCoverage(complete)
     XCTAssertEqual(coverage?.read, 12)
     XCTAssertEqual(coverage?.candidates, 19)
+    XCTAssertEqual(coverage?.truncated, 2)
+    XCTAssertEqual(coverage?.blocked, true)
 
     // Absent key = the capture never asked; it must not read as (0, 0), which
     // would warn "0 of 0" on every default capture.
     XCTAssertNil(Self.privateAXCustomActionCoverage(nil))
-    // A half-present pair cannot express a ratio, so it is dropped whole.
-    XCTAssertNil(
-      Self.privateAXCustomActionCoverage([RunnerAXSnapshotCustomActionsReadKey: 12]))
+    // The bridge in this target always writes all four keys, so a partial
+    // dictionary is malformed and is dropped whole.
+    for key in complete.keys {
+      var partial = complete
+      partial.removeValue(forKey: key)
+      XCTAssertNil(Self.privateAXCustomActionCoverage(partial), "missing \(key)")
+    }
   }
 
   /// The AX call cannot be cancelled once issued, so the read deadline frees
