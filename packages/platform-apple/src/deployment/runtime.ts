@@ -14,7 +14,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
@@ -215,11 +215,11 @@ async function pushAppleNotification(
 
 /**
  * The one request path this module uses to run a tolerated Apple tool call: it forces
- * `allowFailure`, then guards the result itself so a non-zero exit always throws through
- * `execFailureDetails` (the same shape `runCmd`'s own exit error carries) with the caller's
- * curated message and, optionally, a devicectl hint. `tolerate` lets a caller accept a specific
- * non-zero result (uninstall's "already missing" case) without losing that guard for every
- * other outcome (#2785).
+ * `allowFailure`, then guards the result itself through `requireExecSuccess` so a non-zero
+ * exit always throws the same COMMAND_FAILED shape as every other exec call site, with the
+ * caller's curated message and, optionally, a devicectl hint. `tolerate` lets a caller accept
+ * a specific non-zero result (uninstall's "already missing" case) without losing that guard
+ * for every other outcome (#2785).
  */
 async function runAppleTool(
   host: PlatformRuntimeHost,
@@ -232,17 +232,11 @@ async function runAppleTool(
   }>,
 ): Promise<HostCommandResult> {
   const result = await host.appleTools.run({ ...request, allowFailure: true }, signal);
-  if (result.exitCode === 0 || options?.tolerate?.(result)) return result;
-  const hint = options?.hint?.(result);
-  throw new AppError(
-    'COMMAND_FAILED',
-    message,
-    execFailureDetails(result, {
-      cmd: 'xcrun',
-      args: [request.tool, ...request.args],
-      ...(hint ? { hint } : {}),
-    }),
-  );
+  if (options?.tolerate?.(result)) return result;
+  return requireExecSuccess(result, message, (failed) => {
+    const hint = options?.hint?.(failed);
+    return { cmd: 'xcrun', args: [request.tool, ...request.args], ...(hint ? { hint } : {}) };
+  });
 }
 
 function isMissingAppOutput(output: string): boolean {

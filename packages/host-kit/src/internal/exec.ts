@@ -688,11 +688,13 @@ function createExitError(
  * than relying on the spawn layer to throw. `extra` accepts a function so
  * failure-only work (hint classification) is not paid on the success path.
  */
-export function requireExecSuccess(
-  result: ExecResult,
+export function requireExecSuccess<
+  R extends Pick<ExecResult, 'stdout' | 'stderr'> & Readonly<{ exitCode: number | null }>,
+>(
+  result: R,
   message: string,
-  extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
-): ExecResult {
+  extra?: Record<string, unknown> | ((result: R) => Record<string, unknown>),
+): R {
   if (result.exitCode === 0) return result;
   throw new AppError(
     'COMMAND_FAILED',
