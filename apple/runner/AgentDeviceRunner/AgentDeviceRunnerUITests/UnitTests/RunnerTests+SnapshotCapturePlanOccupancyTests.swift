@@ -15,9 +15,13 @@ private enum RunnerBlockingSnapshotGate {
 /// read the AX server gave up on. The swap is process-wide while installed, which serial XCTest
 /// execution tolerates.
 private final class RunnerBlockingSnapshotStub: NSObject {
+  /// Far past the plan deadline, so only the test's own release ends the block; it only stops a
+  /// stuck test from holding the main thread.
+  private static let leakGuard: TimeInterval = 75
+
   @objc(snapshotWithError:)
   func snapshot() throws -> XCUIElementSnapshot {
-    _ = RunnerBlockingSnapshotGate.release.wait(timeout: .now() + 20)
+    _ = RunnerBlockingSnapshotGate.release.wait(timeout: .now() + Self.leakGuard)
     throw NSError(
       domain: "AgentDeviceRunner.tests",
       code: 1,
@@ -50,6 +54,10 @@ extension RunnerTests {
     // resolution is slow, and it must not be the block the plan abandons.
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertFalse(app.frame.isEmpty)
+    // The traversal context reads the viewport under a 1 s cap; a cold first read can overrun it
+    // and abandon the wrong block, so pay it here, uncapped.
+    _ = safeSnapshotViewport(app: app)
+    _ = capturedInterfaceOrientation(app: app)
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemptionPending = true
