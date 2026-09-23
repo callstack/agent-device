@@ -135,9 +135,12 @@ test('read-only transport failures keep the three-attempt resend budget', async 
   assert.equal(sentCommands().filter((command) => command === 'snapshot').length, 3);
 });
 
-test('a cancelled request wakes the RUNNER_BUSY delay instead of sleeping it out', async () => {
+test('a wait deadline landing mid-window rethrows the last RUNNER_BUSY refusal, not a cancel', async () => {
+  // `wait` bounds each poll with its own abort signal (runWithinWaitDeadline) and keeps the last
+  // typed refusal as the wait's cause. The refusal must therefore survive the deadline: a bare
+  // cancellation would make the wait report a stalled capture and drop the runner's own code.
   vi.useFakeTimers();
-  const controller = new AbortController();
+  const deadline = new AbortController();
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(busyRefusal())
     .mockResolvedValue({ nodes: [], truncated: false });
@@ -145,7 +148,35 @@ test('a cancelled request wakes the RUNNER_BUSY delay instead of sleeping it out
   const pending = runAppleRunnerCommand(
     IOS_SIMULATOR,
     { command: 'snapshot' },
-    { signal: controller.signal },
+    { requestId: 'req-wait', signal: deadline.signal },
+  );
+  const settled = pending.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(50);
+  deadline.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+  await vi.advanceTimersByTimeAsync(0);
+  const error = await settled;
+
+  assert.ok(error instanceof AppError, `expected the refusal, got ${String(error)}`);
+  assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+  assert.equal(error.details?.retriable, true);
+  assert.deepEqual(sentCommands(), ['snapshot']);
+});
+
+test('a cancelled request wakes the RUNNER_BUSY delay and reports the cancellation', async () => {
+  vi.useFakeTimers();
+  const request = new AbortController();
+  appleRunnerTestHost.update({ getRequestSignal: () => request.signal });
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(busyRefusal())
+    .mockResolvedValue({ nodes: [], truncated: false });
+
+  const pending = runAppleRunnerCommand(
+    IOS_SIMULATOR,
+    { command: 'snapshot' },
+    { requestId: 'req-cancelled' },
   );
   const settled = pending.then(
     () => undefined,
@@ -153,10 +184,30 @@ test('a cancelled request wakes the RUNNER_BUSY delay instead of sleeping it out
   );
   // Inside the first 200ms delay; the next attempt would otherwise succeed at the timer.
   await vi.advanceTimersByTimeAsync(50);
-  controller.abort();
+  requestCancellation.markRequestCanceled('req-cancelled');
+  request.abort();
   await vi.advanceTimersByTimeAsync(0);
   const error = await settled;
 
   assert.ok(isRequestCanceledError(error), `expected a canceled request, got ${String(error)}`);
   assert.deepEqual(sentCommands(), ['snapshot']);
+});
+
+test('a mutating command meets RUNNER_BUSY once, with no status probe and no resend', async () => {
+  // The status-recovery bypass for structured replies reaches mutating commands too: the refusal
+  // says the tap did not run, so there is nothing to recover and nothing is replayed.
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(busyRefusal());
+
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+      assert.equal(error.details?.recovery, undefined);
+      return true;
+    },
+  );
+
+  assert.deepEqual(sentCommands(), ['tap']);
+  assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
 });

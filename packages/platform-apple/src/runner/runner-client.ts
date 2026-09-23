@@ -1,5 +1,6 @@
-import { retryWithPolicy, emitDiagnostic } from './host.ts';
+import { retryWithPolicy, emitDiagnostic, getRequestSignal, isRequestCanceled } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   ensureRunnerSession,
   readRunnerSessionLiveness,
@@ -36,20 +37,36 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 /**
  * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
  * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
- * that budget has to outlast the drain. The window is a heuristic, not a measurement: with 200ms
- * doubling to a 1s cap it spans roughly 4 to 6.5s of delay across eight attempts before jitter and
- * round trips, and a drain that outlives it still surfaces as `RUNNER_BUSY` (the runner's own
- * `abandonedForSeconds=` marker in runner.log is the evidence for tuning it). Transport failures
- * keep the pre-existing three attempts. The budget is positional: the error on each attempt sets
- * how many attempts the loop may reach in total, so three busy refusals followed by a transport
- * failure resend no further.
+ * that budget has to outlast the drain. The window is a heuristic, not a measurement: 200ms doubling
+ * to a 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a drain
+ * that outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=` marker
+ * in runner.log is the evidence for tuning it). Transport failures keep the pre-existing three
+ * attempts. The budget is positional: the error on each attempt sets how many attempts the loop may
+ * reach in total, so three busy refusals followed by a transport failure resend no further.
  */
 const RUNNER_BUSY_RESEND_ATTEMPTS = 8;
 const TRANSPORT_RESEND_ATTEMPTS = 3;
+const READ_ONLY_RESEND_POLICY = {
+  maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
+  baseDelayMs: 200,
+  maxDelayMs: 1_000,
+  jitter: 0,
+};
 
 function readOnlyResendBudget(error: unknown): number {
   if (isRunnerBusyError(error)) return RUNNER_BUSY_RESEND_ATTEMPTS;
   return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
+}
+
+/**
+ * Whether the request itself was cancelled, as opposed to one caller's deadline on this command.
+ * A `wait` bounds each poll with its own abort signal; that deadline landing inside the resend
+ * window must not erase the refusal the runner already gave.
+ */
+function isRunnerRequestCancelled(options: AppleRunnerCommandOptions): boolean {
+  return (
+    isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted === true
+  );
 }
 
 export async function runAppleRunnerCommand(
@@ -61,27 +78,37 @@ export async function runAppleRunnerCommand(
   assertRunnerRequestActive(options.requestId);
   const runnerCommand = withRunnerCommandId(command);
   const provider = resolveAppleRunnerRuntime(device, options);
-  if (isReadOnlyRunnerCommand(runnerCommand)) {
-    return retryWithPolicy(
+  if (!isReadOnlyRunnerCommand(runnerCommand)) {
+    return provider.runCommand(device, runnerCommand, options);
+  }
+  let lastBusyRefusal: unknown;
+  try {
+    return await retryWithPolicy(
       () => {
         assertRunnerRequestActive(options.requestId);
         return provider.runCommand(device, runnerCommand, options);
       },
       {
-        maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
-        baseDelayMs: 200,
-        maxDelayMs: 1_000,
+        ...READ_ONLY_RESEND_POLICY,
         shouldRetry: (error, attempt) => {
           assertRunnerRequestActive(options.requestId);
+          if (isRunnerBusyError(error)) lastBusyRefusal = error;
           return attempt < readOnlyResendBudget(error);
         },
       },
-      // The busy window is seconds long, so a cancelled request must wake the delay instead of
-      // sleeping it out and sending one more attempt.
+      // The busy window is seconds long, so an abort must wake the delay instead of sleeping it
+      // out and sending one more attempt.
       { signal: resolveRunnerRequestSignal(options) },
     );
+  } catch (error) {
+    // A caller's deadline (a `wait` poll bounding this capture) that lands mid-window still has an
+    // answer: the runner refused, and that typed refusal is what the caller can act on. Only a
+    // cancelled request reports as a bare cancellation.
+    if (isRequestCanceledError(error) && lastBusyRefusal && !isRunnerRequestCancelled(options)) {
+      throw lastBusyRefusal;
+    }
+    throw error;
   }
-  return provider.runCommand(device, runnerCommand, options);
 }
 
 export async function notifyIosRunnerAppRelaunched(
