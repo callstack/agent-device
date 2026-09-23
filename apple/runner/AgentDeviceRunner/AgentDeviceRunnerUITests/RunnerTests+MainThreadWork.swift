@@ -93,6 +93,11 @@ extension RunnerTests {
     }
     let waitResult = semaphore.wait(timeout: .now() + timeout)
     if waitResult == .timedOut {
+      #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      mainThreadWorkTimedOutForTesting?()
+      #endif
+      // Work that finished before the lock was taken already stored its result: it is answered
+      // like work that finished in time, so an action that happened is never reported as a timeout.
       mainThreadWorkLock.lock()
       let abandoned = !workState.finished
       if abandoned {
@@ -110,8 +115,8 @@ extension RunnerTests {
           timeout
         )
         onAbandoned?()
+        throw timeoutError()
       }
-      throw timeoutError()
     }
     switch result {
     case .success(let value):

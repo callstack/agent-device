@@ -89,5 +89,71 @@ extension RunnerTests {
       return XCTFail("expected the runner idle once the abandoned work drained")
     }
   }
+
+  func testRunMainThreadWorkReturnsWorkThatFinishedAtTheTimeoutBoundary() {
+    let outcome = runMainThreadWorkFinishingAtTheTimeoutBoundary { 42 }
+
+    XCTAssertNil(outcome.error, "work that finished before the lock must not read as a timeout")
+    XCTAssertEqual(outcome.value, 42)
+    XCTAssertEqual(outcome.abandonedCount, 0)
+    XCTAssertEqual(outcome.onAbandonedCalls, 0)
+  }
+
+  func testRunMainThreadWorkRethrowsWorkThatFailedAtTheTimeoutBoundary() {
+    let outcome = runMainThreadWorkFinishingAtTheTimeoutBoundary { () throws -> Int in
+      throw NSError(domain: "agent-device.runner.tests", code: 7)
+    }
+
+    XCTAssertNil(outcome.value)
+    XCTAssertEqual((outcome.error as NSError?)?.domain, "agent-device.runner.tests")
+    XCTAssertEqual((outcome.error as NSError?)?.code, 7)
+    XCTAssertEqual(outcome.abandonedCount, 0)
+    XCTAssertEqual(outcome.onAbandonedCalls, 0)
+  }
+
+  private final class BoundaryOutcome {
+    var value: Int?
+    var error: Error?
+    var abandonedCount: Int?
+    var onAbandonedCalls = 0
+  }
+
+  /// Times the wait out immediately, then lets the work finish before the watchdog takes the lock:
+  /// the seam releases the blocked work and waits for the serial main queue to run past it.
+  private func runMainThreadWorkFinishingAtTheTimeoutBoundary(
+    _ produce: @escaping () throws -> Int
+  ) -> BoundaryOutcome {
+    let outcome = BoundaryOutcome()
+    let releaseWork = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "off-main caller finished")
+    mainThreadWorkTimedOutForTesting = {
+      releaseWork.signal()
+      DispatchQueue.main.sync {}
+    }
+    defer { mainThreadWorkTimedOutForTesting = nil }
+
+    DispatchQueue(label: "agent-device.runner.tests.timeout-boundary").async {
+      do {
+        outcome.value = try self.runMainThreadWork(
+          "command_execution",
+          timeout: 0,
+          timeoutError: self.mainThreadExecutionTimeoutError,
+          onAbandoned: { outcome.onAbandonedCalls += 1 }
+        ) {
+          _ = releaseWork.wait(timeout: .now() + 2)
+          return try produce()
+        }
+      } catch {
+        outcome.error = error
+      }
+      self.mainThreadWorkLock.lock()
+      outcome.abandonedCount = self.abandonedMainThreadWorkCount
+      self.mainThreadWorkLock.unlock()
+      finished.fulfill()
+    }
+
+    wait(for: [finished], timeout: 3)
+    return outcome
+  }
 }
 #endif

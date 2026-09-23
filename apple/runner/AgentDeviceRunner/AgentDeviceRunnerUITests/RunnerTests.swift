@@ -201,6 +201,9 @@ final class RunnerTests: XCTestCase {
   var blockingSystemModalPresenceOverrideForTesting: Bool?
   var alertResolutionOverrideForTesting: ((Date) -> RunnerAlert?)?
   var alertButtonHittabilityProbeOverrideForTesting: ((Date) -> Bool)?
+  // Runs on the waiting thread after `runMainThreadWork`'s wait timed out and before it takes the
+  // lock that decides between finished and abandoned, so a test can finish the work in that window.
+  var mainThreadWorkTimedOutForTesting: (() -> Void)?
   #endif
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
   // issues this session muted, so wedge investigations see the volume without grepping logs.
