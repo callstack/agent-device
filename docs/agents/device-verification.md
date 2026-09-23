@@ -45,7 +45,8 @@ verification looks exactly like that to the next `open` — until the owner reop
 boot it is now running on and makes the claim live again.
 
 The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
-retry policy, or command typing, start at `runner-contract.ts`; transport stays below session/client
+start at `runner-startup-transport.ts`; for retry policy, at `runner-error-classification.ts`; for
+command typing, at `runner-contract.ts`. Transport stays below session/client
 behavior, and xctestrun build/cache logic stays outside request execution.
 
 ## Session hygiene
