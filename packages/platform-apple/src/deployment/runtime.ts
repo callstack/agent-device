@@ -15,6 +15,8 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
+import { isMissingAppErrorOutput } from '../core/apps-simctl.ts';
+import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from '../core/config.ts';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
@@ -151,7 +153,7 @@ async function installAppleApp(
       : {
           tool: 'devicectl',
           args: ['device', 'install', 'app', '--device', device.id, installablePath],
-          timeoutMs: 120_000,
+          timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
         },
     signal,
     'Apple app install failed',
@@ -178,7 +180,8 @@ async function uninstallAppleApp(
     `Apple app uninstall failed for ${bundleId}`,
     {
       hint: (result) => devicectlHint(device, result),
-      tolerate: (result) => isMissingAppOutput(`${result.stdout}\n${result.stderr}`),
+      tolerate: (result) =>
+        isMissingAppErrorOutput(`${result.stdout}\n${result.stderr}`.toLowerCase()),
     },
   );
 }
@@ -219,7 +222,7 @@ async function pushAppleNotification(
  * exit always throws the same COMMAND_FAILED shape as every other exec call site, with the
  * caller's curated message and, optionally, a devicectl hint. `tolerate` lets a caller accept
  * a specific non-zero result (uninstall's "already missing" case) without losing that guard
- * for every other outcome (#2785).
+ * for every other outcome.
  */
 async function runAppleTool(
   host: PlatformRuntimeHost,
@@ -239,18 +242,9 @@ async function runAppleTool(
   });
 }
 
-function isMissingAppOutput(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return (
-    normalized.includes('not installed') ||
-    normalized.includes('not found') ||
-    normalized.includes('no such file')
-  );
-}
-
 /**
- * Physical iOS install/uninstall runs through devicectl (#2785): a failure gets the same
- * Developer Mode, developer-disk-image, and pairing hints the other devicectl call sites attach.
+ * Physical iOS install/uninstall runs through devicectl: a failure gets the same Developer
+ * Mode, developer-disk-image, and pairing hints the other devicectl call sites attach.
  * Simulator installs go through simctl, which this resolver does not classify.
  */
 function devicectlHint(
