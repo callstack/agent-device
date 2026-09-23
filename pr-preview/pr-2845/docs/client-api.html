@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2845/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2845/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2845/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2845/static/js/index.2b134e8812.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2845/static/js/index.602ee9de6b.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -243,8 +243,6 @@
 <p><code>client.devices.capabilities()</code> returns <code>{ device, availableCommands }</code>, using the same capability matrix as the CLI. Use it when a dynamic integration needs to decide which command names are valid for the selected target.</p>
 <p>For direct iOS simulator app launches, <code>client.apps.open({ app, platform: &#x27;ios&#x27;, launchConsole: &#x27;./artifacts/app.console.log&#x27; })</code> captures launch-time
 stdout/stderr. The option mirrors <code>open --launch-console</code> and is not valid for URL opens or non-simulator targets.</p>
-<p>When surfacing Apple simulators, <code>client.apps.open({ deviceHub: true })</code> mirrors <code>open --device-hub</code> and uses Xcode Device Hub instead of the
-standalone Simulator app.</p>
 <p><code>client.sessions.stateDir()</code> mirrors <code>session state-dir</code> and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass <code>{ stateDir }</code> to resolve an explicit override the same way the CLI resolves <code>--state-dir</code>.</p>
 <p><code>client.sessions.artifacts({ provider, providerSessionId })</code> mirrors <code>artifacts --provider ... --provider-session ...</code> and returns provider-hosted <code>cloudArtifacts</code>.
