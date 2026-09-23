@@ -14,9 +14,8 @@ import { activeSource, PLATFORMS, type Platform } from './swift-conditional-comp
 export const RUNNER_TESTS_DIR = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
 
 // Every .swift file below the target directory is a member: the Xcode project uses a
-// PBXFileSystemSynchronizedRootGroup, so membership is the directory, not a file list. A
-// `RunnerTests*` name filter would miss RunnerTapPointPolicy.swift, which declares a real
-// addressable test inside `extension RunnerTests`.
+// PBXFileSystemSynchronizedRootGroup, so membership is the directory, not a file list, and a
+// file's name says nothing about whether it declares addressable tests.
 const SWIFT_SOURCE = /\.swift$/;
 
 // One ordered pass over the source. A column-0 type declaration moves the enclosing type;

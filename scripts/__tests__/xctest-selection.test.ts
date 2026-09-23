@@ -113,7 +113,7 @@ describe('the real tree', () => {
     // own regex, because the Xcode project uses a PBXFileSystemSynchronizedRootGroup — every
     // .swift file in it is a member. Reusing the check's own file filter would make this
     // tautological, and a name-based filter is exactly the bug it caught
-    // (RunnerTapPointPolicy.swift declares a test and does not start with "RunnerTests").
+    // (RunnerTapPointPolicy.swift declared a test and does not start with "RunnerTests").
     const directory = path.join(repoRoot, RUNNER_TESTS_DIR);
     const countAddressableMethods = (sourceDirectory: string): number =>
       fs.readdirSync(sourceDirectory, { withFileTypes: true }).reduce((total, entry) => {

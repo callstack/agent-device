@@ -55,8 +55,8 @@ describe('the declaration scan', () => {
   });
 
   test('reads a file whose name does not start with RunnerTests', () => {
-    // RunnerTapPointPolicy.swift is the real instance: the synchronized-root-group project
-    // compiles every .swift in the directory, so file naming carries no membership meaning.
+    // The synchronized-root-group project compiles every .swift in the directory, so file
+    // naming carries no membership meaning.
     expect(
       parseDeclaredTests(TARGET, [
         {
