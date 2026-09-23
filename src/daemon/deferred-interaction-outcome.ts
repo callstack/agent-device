@@ -27,6 +27,7 @@ import {
   summarizeDiscriminatingSurfaceDivergence,
   markPendingInteractionOutcome,
   retryPendingInteractionOutcome,
+  snapshotSurfaceComparisonKey,
   type InteractionRetryTap,
 } from './interaction-outcome-policy.ts';
 import { runPostGestureStabilityLoop } from '@agent-device/capture-kit/post-gesture-stability';
@@ -124,7 +125,7 @@ function markPostGestureStabilization(
           baselineSignature,
           // Recorded so the loop can tell a comparable quiet capture from one
           // served by a different backend, which is not comparable at all.
-          baselineBackend: snapshotComparisonKey(session.snapshot),
+          baselineBackend: snapshotSurfaceComparisonKey(session.snapshot),
         }
       : {}),
   };
@@ -350,7 +351,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
         const snapshot = readSnapshot(value);
         return {
           signature: buildInteractionSurfaceSignature(snapshot.nodes),
-          backend: snapshotComparisonKey(snapshot),
+          backend: snapshotSurfaceComparisonKey(snapshot),
         };
       },
       signaturesStable: areInteractionSurfaceSignaturesStable,
@@ -361,16 +362,6 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   });
   clearPostGestureStabilization(session);
   return outcome;
-}
-
-/**
- * What makes two captures comparable at all. The iOS comparison key already carries the whole
- * presentation identity, including the surface the capture described — an in-place system surface (a
- * web sign-in sheet) is captured under its own host lineage (#2438) — so a sheet appearing or
- * dismissing mid-poll reads as incomparable rather than as a stable surface.
- */
-function snapshotComparisonKey(snapshot: SnapshotState | undefined): string | undefined {
-  return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
 }
 
 function isPostGestureStabilizingAction(

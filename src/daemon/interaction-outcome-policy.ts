@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { isMobilePlatform } from '@agent-device/kernel/device';
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
@@ -256,6 +256,17 @@ export function buildInteractionSurfaceSignature(
   return entries;
 }
 
+/**
+ * What makes two captures comparable at all: the iOS comparison key when the capture carries one,
+ * and the capturing backend otherwise. Two trees from different producers are not two views of one
+ * screen — the XCTest-channel fallback swapping mid-request (#1569) is the case this exists for.
+ */
+export function snapshotSurfaceComparisonKey(
+  snapshot: SnapshotState | undefined,
+): string | undefined {
+  return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
+}
+
 export function classifyInteractionSurfaceChange(
   before: InteractionSurfaceSignature,
   after: InteractionSurfaceSignature,
@@ -451,6 +462,47 @@ export function summarizeDiscriminatingSurfaceDivergence(
     if (!rectsWithinTolerance(entry, other)) rectMismatched += 1;
   }
   return { onlyInBaseline, onlyInCurrent: currentByKey.size, rectMismatched, shared };
+}
+
+/**
+ * Whether the DISCRIMINATING entries inside `rect` differ across a gesture, on the same key-matched,
+ * rect-tolerant view `haveIdenticalDiscriminatingSurfaces` uses — restricted to one region.
+ *
+ * A whole-surface difference is not automatically the gesture's doing. A captured tree carries system
+ * chrome with it, and on Android the status bar clocks and icons change on their own while the app's
+ * list sits frozen underneath. A difference that lives entirely outside the region a command acted on
+ * therefore proves nothing in either direction: it cannot credit the gesture, and it cannot convict it.
+ */
+export function discriminatingSurfaceChangedWithinRect(
+  before: InteractionSurfaceSignature,
+  after: InteractionSurfaceSignature,
+  rect: Rect,
+): boolean {
+  const beforeInRect = discriminatingEntriesWithinRect(before, rect);
+  const afterByKey = new Map(
+    discriminatingEntriesWithinRect(after, rect).map((entry) => [entry.key, entry]),
+  );
+  for (const entry of beforeInRect) {
+    const other = afterByKey.get(entry.key);
+    if (!other) return true;
+    if (!rectsWithinTolerance(entry, other)) return true;
+    afterByKey.delete(entry.key);
+  }
+  return afterByKey.size > 0;
+}
+
+function discriminatingEntriesWithinRect(
+  signature: InteractionSurfaceSignature,
+  rect: Rect,
+): InteractionSurfaceSignature {
+  return signature.filter(
+    (entry) =>
+      entry.discriminating &&
+      entry.x < rect.x + rect.width &&
+      rect.x < entry.x + entry.width &&
+      entry.y < rect.y + rect.height &&
+      rect.y < entry.y + entry.height,
+  );
 }
 
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
