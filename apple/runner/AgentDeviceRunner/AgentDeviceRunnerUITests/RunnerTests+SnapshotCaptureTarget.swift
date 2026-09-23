@@ -21,6 +21,50 @@ enum SnapshotCommandPreparation {
   case capture(SnapshotCaptureTarget, systemSurface: SystemSurfaceHost?)
 }
 
+/// The target a bounded XCTest probe arms its abandonment penalty with.
+///
+/// The hook that arms the penalty fires on the command queue the moment the probe's slice is spent,
+/// while the probe's own work block may still be running on main. `currentBundleId` belongs to main,
+/// so it is never read across that boundary: a caller that already took the identity on main hands it
+/// over, and a caller that is on the command queue lets the probe's main-side block capture the
+/// identity main holds once the work actually starts (#2781).
+enum SnapshotProbePenaltyTarget: Equatable {
+  /// Identity a capture took on main when it prepared its target.
+  case prepared(bundleId: String?)
+  /// Read `currentBundleId` inside the probe's main-side block.
+  case mainOwnedTarget
+}
+
+/// One probe's penalty identity: written by the probe's main-side block, read by the command queue's
+/// abandonment hook through this lock.
+final class SnapshotProbePenaltyIdentity {
+  private let lock = NSLock()
+  private var bundleId: String?
+  private let readsMainOwnedTarget: Bool
+
+  init(_ target: SnapshotProbePenaltyTarget) {
+    readsMainOwnedTarget = target == .mainOwnedTarget
+    if case .prepared(let bundleId) = target {
+      self.bundleId = bundleId
+    }
+  }
+
+  /// Called on the main thread inside the probe's work block, before it enumerates anything, so the
+  /// identity is the one main had settled on rather than one a queued write is about to replace.
+  func captureFromMain(bundleId: String?) {
+    guard readsMainOwnedTarget else { return }
+    lock.lock()
+    self.bundleId = bundleId
+    lock.unlock()
+  }
+
+  var penalizedBundleId: String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return bundleId
+  }
+}
+
 extension RunnerTests {
   /// Main thread only: reads the lifecycle-owned target identity.
   func takeSnapshotCaptureTarget(app: XCUIApplication) -> SnapshotCaptureTarget {

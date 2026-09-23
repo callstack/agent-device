@@ -163,7 +163,7 @@ extension RunnerTests {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(
       deadline: deadline,
-      penaltyBundleId: target.bundleId
+      penaltyTarget: .prepared(bundleId: target.bundleId)
     ) {
       return blocking
     }
@@ -288,7 +288,7 @@ extension RunnerTests {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(
       deadline: deadline,
-      penaltyBundleId: target.bundleId
+      penaltyTarget: .prepared(bundleId: target.bundleId)
     ) {
       return blocking
     }
@@ -303,11 +303,14 @@ extension RunnerTests {
 
   /// Runs the pre-plan SpringBoard system-modal probe as a bounded capture tier sharing the plan
   /// deadline, so a slow alert enumeration cannot bypass the snapshot timeout and stall (#1244).
-  /// An abandoned probe penalizes the XCTest channel for `penaltyBundleId`.
-  func boundedBlockingSystemAlertSnapshot(deadline: Date, penaltyBundleId: String?) -> DataPayload? {
+  /// An abandoned probe penalizes the XCTest channel for `penaltyTarget`.
+  func boundedBlockingSystemAlertSnapshot(
+    deadline: Date,
+    penaltyTarget: SnapshotProbePenaltyTarget
+  ) -> DataPayload? {
     boundedBlockingSystemAlertSnapshotBody(
       deadline: deadline,
-      penaltyBundleId: penaltyBundleId
+      penaltyTarget: penaltyTarget
     ) { probeDeadline in
       #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if let override = self.systemModalProbeOverrideForTesting {
@@ -325,7 +328,7 @@ extension RunnerTests {
   /// production runs and what the unit tests exercise.
   private func boundedBlockingSystemAlertSnapshotBody(
     deadline: Date,
-    penaltyBundleId: String?,
+    penaltyTarget: SnapshotProbePenaltyTarget,
     probe: @escaping (Date) -> DataPayload?
   ) -> DataPayload? {
     #if os(macOS)
@@ -341,6 +344,7 @@ extension RunnerTests {
     }
     let probeDeadline = Date().addingTimeInterval(slice)
     let startedAt = Date()
+    let penaltyIdentity = SnapshotProbePenaltyIdentity(penaltyTarget)
     do {
       return try runMainThreadWork(
         "system_modal_probe",
@@ -354,12 +358,13 @@ extension RunnerTests {
         },
         onAbandoned: {
           self.penalizeSnapshotXCTestChannel(
-            bundleId: penaltyBundleId,
+            bundleId: penaltyIdentity.penalizedBundleId,
             reason: "system_modal_probe_timeout"
           )
         }
       ) {
-        probe(probeDeadline)
+        penaltyIdentity.captureFromMain(bundleId: self.currentBundleId)
+        return probe(probeDeadline)
       }
     } catch {
       NSLog(

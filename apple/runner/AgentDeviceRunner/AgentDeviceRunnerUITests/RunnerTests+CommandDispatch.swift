@@ -579,9 +579,13 @@ extension RunnerTests {
     }
     #endif
     let probeDeadline = Date().addingTimeInterval(systemModalProbeBudget)
+    // Routing runs on the command queue, so this hands the probe a target rather than a bundle id it
+    // read across the main boundary: the penalty an abandoned probe arms carries the identity main
+    // holds once the probe starts, not one whose write was still queued behind the block that
+    // occupied main (#2781).
     return boundedBlockingSystemAlertSnapshot(
       deadline: probeDeadline,
-      penaltyBundleId: currentBundleId
+      penaltyTarget: .mainOwnedTarget
     ) != nil
 #else
     return false

@@ -61,6 +61,24 @@ extension RunnerTests {
   }
 #endif
 
+  func testProbePenaltyIdentityTakesTheIdentityItsCallerMayLegallyKnow() {
+    let prepared = SnapshotProbePenaltyIdentity(.prepared(bundleId: "com.example.prepared"))
+    prepared.captureFromMain(bundleId: "com.example.settled")
+    XCTAssertEqual(
+      prepared.penalizedBundleId,
+      "com.example.prepared",
+      "a capture penalizes the target it was prepared for, whatever lifecycle binds meanwhile"
+    )
+
+    let mainOwned = SnapshotProbePenaltyIdentity(.mainOwnedTarget)
+    XCTAssertNil(
+      mainOwned.penalizedBundleId,
+      "a command-queue caller knows no identity until the probe's main-side block runs"
+    )
+    mainOwned.captureFromMain(bundleId: "com.example.settled")
+    XCTAssertEqual(mainOwned.penalizedBundleId, "com.example.settled")
+  }
+
   func testMainOwnedSnapshotStateWriteRunsOnMainBeforeReturningWhenMainIsFree() {
     final class ResultBox {
       var ranOnMainThread: Bool?
