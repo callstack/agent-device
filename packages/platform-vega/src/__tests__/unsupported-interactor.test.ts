@@ -23,10 +23,6 @@ const OPERATIONS = [
   'readClipboard',
   'writeClipboard',
   'setSetting',
-  'readAlert',
-  'awaitAlert',
-  'acceptAlert',
-  'dismissAlert',
 ] as const;
 
 test('every operation rejects as unsupported and names the platform', async () => {
@@ -46,7 +42,7 @@ test('the label is per-instance, so two platforms reject with their own wording'
   await expectUnsupported(vega, 'home', 'Vega OS');
 });
 
-test('the factory covers the whole interactor surface', () => {
+test('the factory covers the whole required interactor surface', () => {
   const interactor = createUnsupportedInteractor('Vega OS');
 
   assert.deepEqual(Object.keys(interactor).sort(), [...OPERATIONS].sort());

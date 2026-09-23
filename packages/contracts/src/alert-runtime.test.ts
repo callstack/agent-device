@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { alertRuntimeOperationFacts, bindAlertLeg } from './alert-runtime.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
 import type { AlertInteractorOptions, Interactor } from './interactor-types.ts';
@@ -81,4 +82,23 @@ test('an absent target field never reaches the owner as an explicit undefined', 
 
   expect(readAlert).toHaveBeenCalledWith({ surface: 'frontmost-app' });
   expect(Object.keys(readAlert.mock.calls[0]?.[0] ?? {})).toEqual(['surface']);
+});
+
+// Facts admitted the leg, so an interactor without it is an ownership bug the caller must see
+// rather than a refusal to degrade around. The label is the one the command already used.
+test('a leg whose fact admitted but whose interactor cannot serve it fails closed', async () => {
+  const served = { acceptAlert: vi.fn(async () => ({ accepted: true })) } as unknown as Interactor;
+  const source = localInteractorSource({
+    device,
+    resolveInteractor: async () => ({ ...served, acceptAlert: undefined }),
+  });
+  const operations = bindAlertLeg('acceptAlert', new AbortController().signal, source);
+
+  await expect(operations.acceptAlert({})).rejects.toSatisfy(
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.message.includes('alert accept'),
+  );
 });

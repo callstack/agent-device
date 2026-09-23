@@ -351,22 +351,6 @@ class LimrunIosInteractor implements Interactor {
     throw unsupported('tv-remote', 'Limrun iOS direct sessions do not expose tv remote control.');
   }
 
-  async readAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async awaitAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async acceptAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async dismissAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
   async readClipboard(): Promise<never> {
     throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard read yet.');
   }
@@ -470,10 +454,6 @@ export function isUserInstalledIosApp(app: LimrunIosApp): boolean {
     !app.bundleId.startsWith('com.apple.') && !app.installType.toLowerCase().includes('system')
   );
 }
-
-/** One sentence for all four alert legs: this session has no XCUITest runner to read a sheet. */
-const LIMRUN_IOS_ALERT_UNSUPPORTED =
-  'Limrun iOS direct sessions do not expose alert inspection yet.';
 
 function unsupported(command: string, message: string): never {
   throw new AppError('UNSUPPORTED_OPERATION', message, { command });

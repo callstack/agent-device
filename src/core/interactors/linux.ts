@@ -24,10 +24,6 @@ import {
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
-function unsupportedLinuxAlert(): Promise<never> {
-  throw new AppError('UNSUPPORTED_OPERATION', 'alert not supported on Linux');
-}
-
 export function createLinuxInteractor(): Interactor {
   return {
     open: (app) => openLinuxApp(app),
@@ -83,10 +79,5 @@ export function createLinuxInteractor(): Interactor {
     setSetting: () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'setSetting not supported on Linux');
     },
-    // R59: the retired `alert` descriptor declared `linux: {}`, so no Linux cell was admitted.
-    readAlert: unsupportedLinuxAlert,
-    awaitAlert: unsupportedLinuxAlert,
-    acceptAlert: unsupportedLinuxAlert,
-    dismissAlert: unsupportedLinuxAlert,
   };
 }

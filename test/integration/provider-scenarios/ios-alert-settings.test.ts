@@ -284,10 +284,10 @@ function createRecordingPlatformRuntimeGateway(params: {
           // R59 does the same for `alert`: the scenario's gateway states and serves the four
           // legs, reusing the Apple family's own module so the runner transcript this scenario
           // scripts — including its retry and poll windows — is what actually runs.
-          readAlert: async (input) => await interactor.readAlert(alertOptions(input)),
-          awaitAlert: async (input) => await interactor.awaitAlert(alertOptions(input)),
-          acceptAlert: async (input) => await interactor.acceptAlert(alertOptions(input)),
-          dismissAlert: async (input) => await interactor.dismissAlert(alertOptions(input)),
+          readAlert: async (input) => await interactor.readAlert!(alertOptions(input)),
+          awaitAlert: async (input) => await interactor.awaitAlert!(alertOptions(input)),
+          acceptAlert: async (input) => await interactor.acceptAlert!(alertOptions(input)),
+          dismissAlert: async (input) => await interactor.dismissAlert!(alertOptions(input)),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({

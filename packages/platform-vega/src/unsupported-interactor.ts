@@ -30,9 +30,5 @@ export function createUnsupportedInteractor(platformLabel: string): Interactor {
     readClipboard: () => unsupported('readClipboard'),
     writeClipboard: () => unsupported('writeClipboard'),
     setSetting: () => unsupported('setSetting'),
-    readAlert: () => unsupported('readAlert'),
-    awaitAlert: () => unsupported('awaitAlert'),
-    acceptAlert: () => unsupported('acceptAlert'),
-    dismissAlert: () => unsupported('dismissAlert'),
   };
 }

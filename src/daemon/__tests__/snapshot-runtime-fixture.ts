@@ -130,13 +130,13 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
           ...(appleInteractor
             ? {
                 readAlert: async (input: AlertRuntimeInput) =>
-                  await appleInteractor.readAlert(alertOptions(input)),
+                  await appleInteractor.readAlert!(alertOptions(input)),
                 awaitAlert: async (input: AlertRuntimeInput) =>
-                  await appleInteractor.awaitAlert(alertOptions(input)),
+                  await appleInteractor.awaitAlert!(alertOptions(input)),
                 acceptAlert: async (input: AlertRuntimeInput) =>
-                  await appleInteractor.acceptAlert(alertOptions(input)),
+                  await appleInteractor.acceptAlert!(alertOptions(input)),
                 dismissAlert: async (input: AlertRuntimeInput) =>
-                  await appleInteractor.dismissAlert(alertOptions(input)),
+                  await appleInteractor.dismissAlert!(alertOptions(input)),
               }
             : {}),
         },

@@ -395,11 +395,15 @@ export type Interactor = {
    * poll: an alert is a transient device surface, and how long to look for it — and how to press
    * its buttons — is family mechanics, not something a caller can supply. `timeoutMs` is the
    * whole window the caller allows; the owner spends it however its backend requires.
+   *
+   * Optional: an owner with no alert surface leaves all four undefined. Its facts refuse every leg
+   * before binding, so the absent members are never resolved, and a fact that admitted a leg the
+   * interactor cannot serve fails closed instead of answering empty.
    */
-  readAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
-  awaitAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
-  acceptAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
-  dismissAlert(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  readAlert?(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  awaitAlert?(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  acceptAlert?(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
+  dismissAlert?(options?: AlertInteractorOptions): Promise<Record<string, unknown>>;
 };
 
 /**

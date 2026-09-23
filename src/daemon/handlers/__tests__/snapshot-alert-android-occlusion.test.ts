@@ -30,7 +30,7 @@ afterEach(() => {
 test('Android alert get does not choose an exactly covered candidate', async () => {
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const result = await alertLegs().readAlert();
+  const result = await alertLegs().readAlert!();
 
   expect(result).toMatchObject({ action: 'get', alert: null });
   expect(pressAndroid).not.toHaveBeenCalled();
@@ -40,12 +40,10 @@ test('Android alert accept does not tap an exactly covered candidate', async () 
   vi.useFakeTimers();
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const outcome = alertLegs()
-    .acceptAlert()
-    .then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+  const outcome = alertLegs().acceptAlert!().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   await vi.advanceTimersByTimeAsync(3_500);
   const error = await outcome;
   expect(error).toBeInstanceOf(Error);

@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { bindAlertLeg } from './alert-runtime.ts';
+import { ALERT_LEG_LABELS, bindAlertLeg } from './alert-runtime.ts';
 import { bindAppEvent } from './app-event-runtime.ts';
 import { bindBack } from './back-runtime.ts';
 import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
@@ -91,22 +91,22 @@ export const INTERACTOR_OPERATIONS = [
   { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },
   {
     operation: 'readAlert',
-    label: 'alert get',
+    label: ALERT_LEG_LABELS.readAlert,
     bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
   },
   {
     operation: 'awaitAlert',
-    label: 'alert wait',
+    label: ALERT_LEG_LABELS.awaitAlert,
     bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
   },
   {
     operation: 'acceptAlert',
-    label: 'alert accept',
+    label: ALERT_LEG_LABELS.acceptAlert,
     bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
   },
   {
     operation: 'dismissAlert',
-    label: 'alert dismiss',
+    label: ALERT_LEG_LABELS.dismissAlert,
     bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
   },
 ] as const satisfies readonly InteractorOperationDefinition[];
