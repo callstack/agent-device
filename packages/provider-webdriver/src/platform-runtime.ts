@@ -249,14 +249,10 @@ const foldUnavailable = Object.freeze({
 } as const);
 
 /**
- * The WebDriver interactor's own `setSetting` always throws unsupported (its capability map
- * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
- * gated by interactor reachability — the same shape `tvRemote` takes.
- */
-/**
- * Same shape as `settings`: the WebDriver interactor's own alert legs always throw unsupported
- * (its capability map declares `alert: unsupported`), so this cell is unavailable unconditionally
- * rather than gated by interactor reachability.
+ * The WebDriver interactor supplies no alert members at all: ADR 0019 keeps a stub that throws
+ * `unsupported` out of an interactor, and the provider's capability map declares
+ * `alert: unsupported`, so this cell is unavailable unconditionally rather than gated by
+ * interactor reachability.
  */
 const alertUnavailable = Object.freeze({
   available: false,
@@ -264,6 +260,11 @@ const alertUnavailable = Object.freeze({
   hint: 'WebDriver provider runtimes do not expose native alert handling.',
 } as const);
 
+/**
+ * The WebDriver interactor's own `setSetting` always throws unsupported (its capability map
+ * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
+ * gated by interactor reachability — the same shape `tvRemote` takes.
+ */
 const settingsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
