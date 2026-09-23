@@ -2280,7 +2280,7 @@ state the session app was found in and why the runner activated it:
   tripped before dispatching.
 - The disclosure rides capture-consuming commands — `snapshot`, `find`, `get`, `is`, `wait`, and an
   interaction whose target tree was captured for it — at every response level, including
-  `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
+  `--level digest`. On a failure the typed fact is in `error.details` and the sentence in its hint. It is disclosed only for the command that paid for the repair: a read answered
   from a cached or stored tree did no device work and reports no repair of its own.
 - In text mode the CLI prints every response warning as a `Warning:` line after the command's own
   output, for every command — not only `snapshot`. Four commands declare their stdout to be the
