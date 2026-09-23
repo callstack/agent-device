@@ -77,6 +77,7 @@ extension RunnerTests {
     }
     let shouldUseSynthesizedFirstResponderType = Self.shouldUseSynthesizedFirstResponderType(
       repairMode: repairMode,
+      text: text,
       fromTapWitness: activeTarget.fromTapWitness,
       softwareKeyboardVisible: isKeyboardVisible(app: app)
     )
@@ -142,26 +143,9 @@ extension RunnerTests {
         }
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
-        let textBefore = editableTextValue(for: currentTarget, treatingPlaceholderAsEmpty: true)
         switch synthesizer.enterText(app: app, text: value, replacingExistingText: false) {
         case .continueTyping:
-          // No refresh point: like the tap-witness target itself, the commit wait must observe
-          // only the element the tap selected, never rediscover a different field.
-          let commit = awaitSynthesizedFirstResponderCommit(
-            app: app,
-            target: TextEntryTarget(
-              element: currentTarget,
-              refreshPoint: nil,
-              prefersFocusedElement: false,
-              fromTapWitness: true
-            ),
-            textBefore: textBefore,
-            typedText: value
-          )
-          // The characters were posted, so the element stays on the tuple for the caller's
-          // bookkeeping; the failure is what makes the command refuse. Reporting ok here is the
-          // defect this route had — the deadline was indistinguishable from a commit.
-          return (currentTarget, Self.textEntryFailure(forCommitOutcome: commit))
+          return (currentTarget, nil)
         case .fallback:
           return (nil, .synthesisUnavailable)
         case .raise(let message):

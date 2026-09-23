@@ -41,155 +41,34 @@ extension RunnerTests {
     }
   }
 
-  func testSynthesizedFirstResponderTypeRequiresHiddenKeyboardTapWitness() {
-    let cases: [(TextTypingRepairMode, Bool, Bool, Bool)] = [
-      (.none, true, false, true),
-      (.none, true, true, false),
-      (.none, false, false, false),
-      (.append, true, false, false),
-      (.replacement, true, false, false),
+  func testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap() {
+    let cases: [(TextTypingRepairMode, String, Bool, Bool, Bool)] = [
+      (.none, "\n", true, false, true),
+      (.none, "\n", true, true, false),
+      (.none, "\n", false, false, false),
+      (.none, "hardware-keyboard", true, false, false),
+      (.none, "\r", true, false, false),
+      (.none, "search\n", true, false, false),
+      (.append, "\n", true, false, false),
+      (.append, "hardware-keyboard", true, false, false),
+      (.replacement, "\n", true, false, false),
     ]
-    for (mode, fromTapWitness, softwareKeyboardVisible, expected) in cases {
+    for (mode, text, fromTapWitness, softwareKeyboardVisible, expected) in cases {
       XCTAssertEqual(
         Self.shouldUseSynthesizedFirstResponderType(
           repairMode: mode,
+          text: text,
           fromTapWitness: fromTapWitness,
           softwareKeyboardVisible: softwareKeyboardVisible
         ),
-        expected
+        expected,
+        "mode: \(mode), text: \(text.debugDescription)"
       )
     }
-  }
-
-  func testSynthesizedTextCommitProgressWalksExpectedPrefixOnly() {
-    let expected = "hardware-keyboard"
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboard", expectedText: expected),
-      .committed
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "", expectedText: expected),
-      .pending
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboa", expectedText: expected),
-      .pending
-    )
-    // Transformed input (formatter, mid-text caret, autocomplete) must stop the wait.
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardwarX", expectedText: expected),
-      .diverged
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboards", expectedText: expected),
-      .diverged
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: nil, expectedText: expected),
-      .diverged
-    )
-  }
-
-  // The regression behind #1874/#1844: the wait used to return Void, so an expired deadline was
-  // indistinguishable from a commit and `type` reported ok over a partially committed field. The
-  // CI signature was a field holding "h" out of "hardware-keyboard" with the command successful.
-  func testSynthesizedCommitDeadlineIsNotReportedAsACommit() {
-    let clock = CommitWaitClock()
-    var observations = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      stallBudget: 3,
-      ceiling: 10,
-      now: clock.read,
-      observe: { "h" },
-      waitForNextObservation: {
-        observations += 1
-        clock.advance(1)
-      }
-    )
-    XCTAssertEqual(outcome, .notObserved)
-    XCTAssertEqual(observations, 3, "a pending prefix must keep polling until the deadline")
-  }
-
-  func testSynthesizedCommitStopsAtTheFirstSettledObservation() {
-    for observed in ["hardware-keyboard", "hardwarX", nil] {
-      var polls = 0
-      let outcome = Self.awaitSynthesizedCommitOutcome(
-        expectedText: "hardware-keyboard",
-        placeholder: nil,
-        observe: { observed },
-        waitForNextObservation: { polls += 1 }
-      )
-      // `.diverged` settles the wait too: the app transformed the input and the runner must not
-      // second-guess it. Only an outstanding strict prefix keeps waiting.
-      XCTAssertEqual(outcome, .settled, "observed: \(observed ?? "nil")")
-      XCTAssertEqual(polls, 0, "observed: \(observed ?? "nil")")
-    }
-  }
-
-  func testSynthesizedCommitWalksAPrefixToCompletion() {
-    let steps = ["", "hardware-", "hardware-keyboard"]
-    var index = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      observe: { steps[min(index, steps.count - 1)] },
-      waitForNextObservation: { index += 1 }
-    )
-    XCTAssertEqual(outcome, .settled)
-    XCTAssertEqual(index, 2)
-  }
-
-  // Adversarial-review finding: the deadline used to be checked BEFORE observing, so a commit
-  // landing during the final poll sleep was condemned as never observed — a false failure under
-  // exactly the loaded-host timing this wait exists for. Red against that ordering.
-  func testCommitLandingDuringTheFinalSleepIsStillObserved() {
-    let clock = CommitWaitClock()
-    var polls = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      stallBudget: 3,
-      ceiling: 10,
-      now: clock.read,
-      // The value lands during the sleep that takes the clock past the stall budget: the read
-      // happens first, so it is still observed.
-      observe: { polls == 0 ? "hardware-" : "hardware-keyboard" },
-      waitForNextObservation: {
-        polls += 1
-        clock.advance(9)
-      }
-    )
-    XCTAssertEqual(outcome, .settled)
-  }
-
-  // A pre-dispatch value cannot identify what a later placeholder-equal AX value represents.
-  // Here the field starts at "0", but its input handler clears it after `type ".00"`; the empty
-  // field then renders its "0.00" placeholder. Reporting success would describe an empty field as
-  // committed text.
-  func testClearAfterDispatchCannotTurnThePlaceholderIntoCommitEvidence() {
-    let textBeforeDispatch = "0"
-    let expectedText = textBeforeDispatch + ".00"
-    var observations = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: expectedText,
-      placeholder: "0.00",
-      observe: {
-        observations += 1
-        return "0.00"
-      },
-      waitForNextObservation: {}
-    )
-    XCTAssertEqual(
-      Self.textEntryFailure(forCommitOutcome: outcome)?.rawValue,
-      "TEXT_INPUT_COMMIT_NOT_OBSERVED"
-    )
-    XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
   // The guard must stay narrow: it fires only when the WHOLE expected value is the placeholder.
-  // Widening it would refuse ordinary typing into any placeheld field, which is most of them.
+  // Widening it would refuse ordinary entry into any placeheld field, which is most of them.
   func testPlaceholderGuardDoesNotFireOnOrdinaryTyping() {
     let cases: [(placeholder: String?, expectedText: String)] = [
       ("0.00", "0.005"),
@@ -199,7 +78,7 @@ extension RunnerTests {
       ("   ", ""),
     ]
     for testCase in cases {
-      let outcome = Self.awaitSynthesizedCommitOutcome(
+      let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
         observe: { testCase.expectedText },
@@ -209,32 +88,16 @@ extension RunnerTests {
     }
   }
 
-  // The bug this whole route exists to fix: `awaitSynthesizedCommitOutcome` (append/`type`) treats
-  // any non-prefix value as `.diverged` -> `.settled`, i.e. "trust the app, don't second-guess it."
-  // That rule is correct for `type` (an autocomplete/formatter can legitimately transform bare
-  // input) but silently swallows a dropped-character corruption in `.replacement` mode, because a
-  // value with a hole in the middle is neither a matching prefix nor an exact match — it still hits
-  // `.diverged`. These are the two corruption strings actually observed in CI on `fill`
+  // A value with a hole in the middle is neither a matching prefix nor an exact match, and must
+  // never settle. These are the two corruption strings actually observed in CI on `fill`
   // (id="field-name" "Ada Lovelace" -> "Avelace", id="field-email" "ada@example" -> "aexample";
-  // first character and tail survive, a middle run is missing). Confirms
-  // `awaitSynthesizedReplacementCommitOutcome` reports `.notObserved` for both, where
-  // `awaitSynthesizedCommitOutcome` (proven by the assertion inside the loop) reports `.settled`.
+  // first character and tail survive, a middle run is missing).
   func testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters() {
     let corruptions: [(expected: String, observedAfterDrop: String)] = [
       (expected: "Ada Lovelace", observedAfterDrop: "Avelace"),
       (expected: "ada@example", observedAfterDrop: "aexample"),
     ]
     for corruption in corruptions {
-      XCTAssertEqual(
-        Self.awaitSynthesizedCommitOutcome(
-          expectedText: corruption.expected,
-          placeholder: nil,
-          observe: { corruption.observedAfterDrop },
-          waitForNextObservation: {}
-        ),
-        .settled,
-        "append-mode's diverge-trusting outcome must stay unchanged by this fix"
-      )
       let clock = CommitWaitClock()
       var polls = 0
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
@@ -255,10 +118,7 @@ extension RunnerTests {
   }
 
   // The non-failure counterpart: replacement mode must still tolerate real commit lag (the value
-  // converges to an exact match over a few polls), not just instant matches. Mirrors
-  // `testSynthesizedCommitWalksAPrefixToCompletion`, but replacement mode has no "prefix" concept —
-  // every intermediate read here is deliberately NOT a prefix of the final value, to prove the wait
-  // does not depend on prefix-walking to keep polling.
+  // converges to an exact match over a few polls), not just instant matches.
   func testSynthesizedReplacementCommitToleratesLagUntilExactMatch() {
     let steps = ["", "ad", "ada@example"]
     var index = 0
@@ -272,8 +132,8 @@ extension RunnerTests {
     XCTAssertEqual(index, 2)
   }
 
-  // Same ordering guarantee as `testCommitLandingDuringTheFinalSleepIsStillObserved`: the deadline
-  // is checked AFTER an observation, so a match landing during the final poll sleep is still caught.
+  // The deadline is checked AFTER an observation, so a match landing during the final poll sleep
+  // is still caught.
   func testSynthesizedReplacementCommitLandingDuringTheFinalSleepIsStillObserved() {
     let clock = CommitWaitClock()
     var polls = 0
@@ -292,8 +152,9 @@ extension RunnerTests {
     XCTAssertEqual(outcome, .settled)
   }
 
-  // Same placeholder-collision guard as append mode, and for the same reason: a pre-dispatch value
-  // cannot identify what a later placeholder-equal AX value represents, so refuse before polling.
+  // A pre-dispatch value cannot identify what a later placeholder-equal AX value represents: an
+  // input handler may clear the field after dispatch and the empty field then renders the
+  // placeholder. Reporting success would describe an empty field as committed text.
   func testSynthesizedReplacementCommitPlaceholderGuardRefusesWithoutPolling() {
     var observations = 0
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
@@ -310,8 +171,7 @@ extension RunnerTests {
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
-  // pre-existing contract for submit-key text and unreadable fields, so inverting it would fail
-  // every `type "...\n"`.
+  // contract for submit-key text, so inverting it would fail every `fill` ending in a submit key.
   func testOnlyAnUnobservedCommitBecomesACommandFailure() {
     XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .settled))
     XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .unobservable))
@@ -465,9 +325,8 @@ extension RunnerTests {
     XCTAssertNil(result.observedText)
   }
 
-  // Companion to the above: text carrying a submit key must skip the wait entirely, same as the
-  // append route (`awaitSynthesizedFirstResponderCommit`) — the app may clear or rewrite the field
-  // on submit, so there is nothing meaningful to poll toward.
+  // Companion to the above: text carrying a submit key must skip the wait entirely — the app may
+  // clear or rewrite the field on submit, so there is nothing meaningful to poll toward.
   func testSynthesizedReplacementCommitSkipsSubmitKeyText() {
     for expectedText in ["ada@example.test\n", "ada@example.test\r"] {
       XCTAssertEqual(

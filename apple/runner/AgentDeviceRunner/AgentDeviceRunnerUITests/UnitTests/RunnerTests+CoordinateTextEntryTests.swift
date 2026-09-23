@@ -42,7 +42,7 @@ extension RunnerTests {
 
     let failureCountBefore = currentXCTestFailureCount()
     let typeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-after-penalized-non-text-target","text":"must-not-type"}"#
+      #"{"command":"type","commandId":"type-after-penalized-non-text-target","text":"must-not-type","textEntryMode":"append"}"#
     )
     let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
 

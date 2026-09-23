@@ -10,8 +10,8 @@ const commitWaitPath = path.join(
   'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SynthesizedCommitDeadline.swift',
 );
 
-// The synthesized bare-type commit wait polls the target field's live value on the shipped
-// `type` path. That value is user content — a `type` command may carry credentials, tokens, or
+// The synthesized replacement commit wait polls the target field's live value on the shipped
+// `fill` path. That value is user content — a `fill` command may carry credentials, tokens, or
 // PII — and runner.log persists across the session. Cadence evidence must stay value-free.
 //
 // The enforcement is a typed Swift boundary (`logCommitCadence`), whose parameters are Ints

@@ -25,7 +25,7 @@ extension RunnerTests {
       case .notFocused:
         return "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
       case .synthesisUnavailable:
-        return "Show the software keyboard, then retry type or fill."
+        return "Show the software keyboard, then retry type."
       case .commitNotObserved:
         return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms 80. Do not use type, which appends to whatever committed."
       }

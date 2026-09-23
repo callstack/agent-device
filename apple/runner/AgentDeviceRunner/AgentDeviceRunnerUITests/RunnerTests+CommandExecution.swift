@@ -345,76 +345,6 @@ extension RunnerTests {
 #endif
 
 #if os(iOS)
-  func testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText() throws {
-    let command = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-without-focus","text":"hello"}"#
-    )
-
-    let response = executeTypeCommand(
-      activeApp: XCUIApplication(bundleIdentifier: "com.example.agentdevice.missing-input"),
-      command: command
-    )
-
-    XCTAssertFalse(response.ok)
-    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertEqual(
-      response.error?.hint,
-      "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
-    )
-  }
-
-  func testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden() throws {
-    // The fixture uses a real text responder with an empty input view to model hardware-keyboard input.
-    app.launchArguments = ["--agent-device-text-entry-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
-
-    let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    let frame = textField.frame
-    XCTAssertFalse(frame.isEmpty)
-
-    let tapCommand = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-hardware-keyboard-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
-    )
-    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
-    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-    // A precondition, not a product claim. The fixture's empty `inputView` is what keeps the
-    // keyboard down, but nothing in this bundle owns the simulator's own keyboard settings, so an
-    // ambient flip that raised one here would be an environment fact — and reporting it as a
-    // failed assertion is what made this read as a product regression on unrelated PRs (#1874).
-    try XCTSkipIf(
-      isKeyboardVisible(app: app),
-      "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
-    )
-
-    let failureCountBefore = currentXCTestFailureCount()
-    let typeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-hardware-keyboard","text":"hardware-keyboard"}"#
-    )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
-
-    XCTAssertTrue(typeResponse.ok, String(describing: typeResponse.error))
-    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
-    XCTAssertEqual(typeResponse.data?.textEntryRoute, "synthesized-first-responder")
-    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
-
-    let secondFailureCountBefore = currentXCTestFailureCount()
-    let secondTypeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-hardware-keyboard-again","text":"-again"}"#
-    )
-    let secondTypeResponse = executeTypeCommand(activeApp: app, command: secondTypeCommand)
-
-    XCTAssertFalse(secondTypeResponse.ok)
-    XCTAssertEqual(secondTypeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
-    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
-  }
-
   // `waitForTextEntryReadiness`'s hardware-keyboard fallback returns early only on confirmed
   // focus (#1874), and `keyboardFocusConfirmed` reads that from the app-wide focus predicate this
   // bundle otherwise refuses to trust. Two XCTest facts it rests on, neither a repository
@@ -463,38 +393,6 @@ extension RunnerTests {
       keyboardFocusConfirmed(app: app, element: otherElement),
       "focus held by another element must read as a refusal, never as this element's focus"
     )
-  }
-
-  func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
-    app.launchArguments = [
-      "--agent-device-text-entry-regression",
-      "--agent-device-text-entry-disappear-after-input",
-    ]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
-
-    let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    let tapCommand = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-disappearing-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
-    )
-    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
-    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-
-    let failureCountBefore = currentXCTestFailureCount()
-    let typeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-disappearing-input","text":"ab","delayMs":50}"#
-    )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
-
-    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
-    XCTAssertFalse(typeResponse.ok)
-    XCTAssertEqual(typeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertFalse(textField.exists)
   }
 #endif
 

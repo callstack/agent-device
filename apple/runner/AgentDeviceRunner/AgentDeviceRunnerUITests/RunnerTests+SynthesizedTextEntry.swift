@@ -127,10 +127,9 @@ extension RunnerTests {
         sleepFor(request.delaySeconds)
       }
     }
-    // The private synthesize call returns at post time, not commit time (same as bare `type`,
-    // see awaitSynthesizedFirstResponderCommit) — but this route never resolves an XCUIElement,
-    // so without this wait it had no way to notice a dropped or still-in-flight character at all
-    // and reported ok purely because the event posted. Wait here, on the same request.target
+    // The private synthesize call returns at post time, not commit time, and this route never
+    // resolves an XCUIElement, so without this wait it had no way to notice a dropped or
+    // still-in-flight character at all. Wait here, on the same request.target
     // (element nil, refreshPoint set) that gated this route, so each poll re-resolves via the
     // refresh point rather than trusting a stale element handle.
     let commit = awaitSynthesizedReplacementCommit(
@@ -168,37 +167,16 @@ extension RunnerTests {
     !hasResolvedElement && hasRefreshPoint && xCTestChannelPenalized
   }
 
+  /// The tap-witness route carries only the bare submit key, the one text the daemon sends without
+  /// a text-entry mode. Ordinary `type` text arrives in `.append` mode and is typed through the
+  /// resolved XCUIElement, where it is verified.
   static func shouldUseSynthesizedFirstResponderType(
     repairMode: TextTypingRepairMode,
+    text: String,
     fromTapWitness: Bool,
     softwareKeyboardVisible: Bool
   ) -> Bool {
-    repairMode == .none && fromTapWitness && !softwareKeyboardVisible
-  }
-
-  enum SynthesizedTextCommitProgress: Equatable {
-    case committed
-    case pending
-    case diverged
-  }
-
-  // The private synthesize call returns once the event record is posted, not once the target
-  // app has committed the characters, so intermediate reads walk prefix-by-prefix toward the
-  // expected value. Anything off that prefix path means the app transformed the input
-  // (formatter, mid-text caret, autocomplete) and the runner must not second-guess it. An
-  // unreadable value — secure field, or the element stopped resolving — ends the wait the
-  // same way.
-  static func synthesizedTextCommitProgress(
-    observedText: String?,
-    expectedText: String
-  ) -> SynthesizedTextCommitProgress {
-    guard let observedText else {
-      return .diverged
-    }
-    if observedText == expectedText {
-      return .committed
-    }
-    return expectedText.hasPrefix(observedText) ? .pending : .diverged
+    repairMode == .none && text == "\n" && fromTapWitness && !softwareKeyboardVisible
   }
 
   /// Length of the shared prefix of two strings. Feeds value-free commit-wait logging: the
@@ -213,73 +191,19 @@ extension RunnerTests {
     return length
   }
 
-  /// How the commit wait ended. Distinct from `SynthesizedTextCommitProgress`, which classifies a
-  /// single observation: this is the whole wait's verdict, and it exists so the deadline can be
-  /// told apart from success. The wait used to return `Void`, which made an expired deadline
-  /// indistinguishable from a committed one — `type` then reported ok with a partial value in the
-  /// field (#1874, #1844).
+  /// How the commit wait ended: the whole wait's verdict, so the deadline can be told apart from
+  /// success.
   enum SynthesizedTextCommitOutcome: Equatable {
-    /// The wait's success case, but its meaning is route-specific: for append mode (bare `type`),
-    /// the expected text committed OR the app transformed the input in a way the runner must not
-    /// second-guess; for replacement mode (`fill`), it means only an exact match — see
-    /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why replacement mode has no
-    /// "trust it" case.
+    /// The field holds exactly the expected text.
     case settled
-    /// There was nothing to wait for — no readable baseline, or the text carries a submit key.
+    /// There was nothing to wait for: the text carries a submit key.
     case unobservable
     /// The deadline expired with the expected text still not observed.
     case notObserved
   }
 
-  /// The commit wait's decision, with observation, pacing and the clock injected so both deadline
-  /// branches are exercisable without a simulator (the macOS host lane runs this; the member
-  /// wrapper below binds the real XCUI reads).
-  ///
-  /// The deadline is a local `var`, started from this loop's own first `now()` and advanced from
-  /// the same observation the progress check reads, so "did the burst move" and "is time up" are
-  /// two statements in one loop. The budget defaults to the shipped one, so only a test that is
-  /// asking about time has to name it.
-  static func awaitSynthesizedCommitOutcome(
-    expectedText: String,
-    placeholder: String?,
-    stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
-    ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
-    now: () -> Date = { Date() },
-    observe: () -> String?,
-    waitForNextObservation: () -> Void
-  ) -> SynthesizedTextCommitOutcome {
-    // A placeholder-equal AX value cannot prove a commit: an input handler may clear even a
-    // previously non-empty field after dispatch, making the empty field render the same value.
-    // Refuse before polling because no later read can distinguish those states.
-    if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
-      return .notObserved
-    }
-    var deadline = SynthesizedCommitDeadline(startedAt: now(), stallBudget: stallBudget, ceiling: ceiling)
-    // The deadline is checked AFTER an observation, never before one, so the last thing that
-    // happens before condemning a commit is a read. Checking first would condemn a commit that
-    // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
-    while true {
-      let observedText = observe()
-      switch synthesizedTextCommitProgress(observedText: observedText, expectedText: expectedText) {
-      case .committed, .diverged:
-        return .settled
-      case .pending:
-        // One clock sample, so the instant an observation is recorded at is the instant it is
-        // judged against.
-        let sampledAt = now()
-        deadline.record(
-          expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
-          at: sampledAt
-        )
-        if deadline.isExpired(at: sampledAt) { return .notObserved }
-        waitForNextObservation()
-      }
-    }
-  }
-
-  /// The command-level consequence of a commit wait. `.unobservable` is not a failure: there was
-  /// no baseline to compare against, which is the pre-existing contract for submit-key text and
-  /// unreadable fields, not evidence that anything went wrong.
+  /// The command-level consequence of a commit wait. `.unobservable` is not a failure: the app
+  /// may clear or rewrite the field on submit, so there is no value to compare against.
   static func textEntryFailure(
     forCommitOutcome outcome: SynthesizedTextCommitOutcome
   ) -> TextEntryFailure? {
@@ -291,22 +215,16 @@ extension RunnerTests {
     }
   }
 
-  /// The replacement-mode counterpart of `awaitSynthesizedCommitOutcome`. It must NOT reuse that
-  /// function's `synthesizedTextCommitProgress`: prefix-walk's `.diverged` case exists to trust an
-  /// app that transforms bare-`type` input (formatter, autocomplete) rather than second-guess it —
-  /// but that same rule silently accepts a dropped-character corruption too, because a value with a
-  /// hole in the middle ("ada@example" -> "aexample") is neither a matching prefix NOR the full
-  /// string, yet still gets classified `.diverged` -> `.settled` -> reported `ok: true`. This is not
-  /// a hypothetical: it is the exact shape of the corruption this wait exists to catch (`fill`
-  /// reporting success over "Avelace"/"aexample"-style drops), verified against both live examples
-  /// before writing this comment.
+  /// The replacement commit wait's decision, with observation, pacing and the clock injected so
+  /// both deadline branches are exercisable without a simulator (the macOS host lane runs this;
+  /// `awaitSynthesizedReplacementCommit` binds the real XCUI reads). The budget defaults to the
+  /// shipped one, so only a test that is asking about time has to name it.
   ///
-  /// `.replacement` mode does not need prefix tolerance for legitimate transforms either:
-  /// `isRepairableTextEntryMismatch` (RunnerTests+TextTyping.swift) already treats every mismatch in
-  /// `.replacement` mode as repairable unconditionally, with no formatter/autocomplete carve-out —
-  /// `fill` fully owns the field via select-all, so there is no legitimate reason for the settled
-  /// value to be anything other than exactly what was requested. A settled non-match is therefore
-  /// always the wait's failure case, never a `.settled` pass-through.
+  /// Only an exact match settles. A value with a hole in the middle ("ada@example" -> "aexample")
+  /// is the corruption this wait exists to catch, and `.replacement` mode has no formatter or
+  /// autocomplete carve-out: `isRepairableTextEntryMismatch` (RunnerTests+TextTyping.swift) treats
+  /// every `.replacement` mismatch as repairable, because `fill` owns the whole field via
+  /// select-all. A settled non-match is therefore always the wait's failure case.
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
@@ -316,18 +234,24 @@ extension RunnerTests {
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
+    // A placeholder-equal AX value cannot prove a commit: an input handler may clear the field
+    // after dispatch, making the empty field render the same value. Refuse before polling because
+    // no later read can distinguish those states.
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
     }
     var deadline = SynthesizedCommitDeadline(startedAt: now(), stallBudget: stallBudget, ceiling: ceiling)
+    // The deadline is checked AFTER an observation, never before one, so the last thing that
+    // happens before condemning a commit is a read. Checking first would condemn a commit that
+    // landed during the final poll sleep — the exact loaded-host timing this wait exists for.
     while true {
       let observedText = observe()
       if observedText == expectedText {
         return .settled
       }
-      // Prefix growth cannot settle this wait — a value with a hole in the middle is still a
-      // failure, see the doc comment above — but it is the same evidence that the burst is still
-      // landing, so it buys the same time here as it does in append mode.
+      // Prefix growth cannot settle this wait, but it is evidence that the burst is still
+      // landing, so it buys time. One clock sample, so the instant an observation is recorded at
+      // is the instant it is judged against.
       let sampledAt = now()
       deadline.record(
         expectedPrefixLength: Self.commonPrefixLength(observedText ?? "", expectedText),
