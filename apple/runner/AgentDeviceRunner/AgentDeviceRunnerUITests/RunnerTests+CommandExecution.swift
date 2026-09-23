@@ -1576,10 +1576,10 @@ extension RunnerTests {
         if let bundleId = requestedBundleId {
           activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
           guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
-            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
+            return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: bundleId)))
           }
         } else {
-          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
+          return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: nil)))
         }
       }
 
@@ -1595,10 +1595,9 @@ extension RunnerTests {
           requestedBundleId: requestedBundleId
         )
         if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
-          if let bundleId = requestedBundleId {
-            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
-          }
-          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
+          return .response(
+            Response(ok: false, error: .targetAppUnavailable(bundleId: requestedBundleId))
+          )
         }
         applyInteractionStabilizationIfNeeded()
       }

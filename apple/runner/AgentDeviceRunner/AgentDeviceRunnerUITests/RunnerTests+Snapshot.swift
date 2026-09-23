@@ -764,7 +764,7 @@ extension RunnerTests {
       Command.self,
       from: Data(#"{"command":"snapshot","commandId":"recovery-guard"}"#.utf8)
     )
-    let recovered = Response(ok: false, error: ErrorPayload(message: "target is not available"))
+    let recovered = Response(ok: false, error: .targetAppUnavailable(bundleId: nil))
 
     setAbandonedMainThreadWork(1)
     defer { setAbandonedMainThreadWork(0) }

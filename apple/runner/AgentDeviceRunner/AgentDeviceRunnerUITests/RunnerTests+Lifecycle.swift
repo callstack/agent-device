@@ -431,17 +431,8 @@ extension RunnerTests {
 
   func shouldRetryException(_ command: Command, message: String) -> Bool {
     guard shouldRetryCommand(command) else { return false }
-    let normalized = message.lowercased()
-    if normalized.contains("kaxerrorservernotfound") {
-      return true
-    }
-    if normalized.contains("main thread execution timed out") {
-      return true
-    }
-    if normalized.contains("timed out") && command.command == .snapshot {
-      return true
-    }
-    return false
+    // XCTest raises this AX error as an ObjC exception whose reason is the only handle on it.
+    return message.lowercased().contains("kaxerrorservernotfound")
   }
 
   // MARK: - Command Classification
@@ -460,8 +451,7 @@ extension RunnerTests {
 
   func shouldRetryResponse(_ response: Response) -> Bool {
     guard response.ok == false else { return false }
-    guard let message = response.error?.message.lowercased() else { return false }
-    return message.contains("is not available")
+    return response.error?.retryableFailure != nil
   }
 
   func isInteractionCommand(_ command: CommandType) -> Bool {

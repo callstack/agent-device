@@ -385,8 +385,30 @@ struct SnapshotQualityPayload: Codable {
   }
 }
 
+/// A runner failure the read-only retry may recover from by re-resolving the target.
+enum RetryableResponseFailure: Equatable {
+  case targetAppUnavailable
+}
+
 struct ErrorPayload: Codable {
   var code: String?
   let message: String
   var hint: String?
+  /// Runner-internal: read by `shouldRetryResponse` and never encoded, so the host's decoding of
+  /// the error is unchanged.
+  var retryableFailure: RetryableResponseFailure? = nil
+
+  private enum CodingKeys: String, CodingKey {
+    case code
+    case message
+    case hint
+  }
+
+  static func targetAppUnavailable(bundleId: String?) -> ErrorPayload {
+    let subject = bundleId.map { "app '\($0)'" } ?? "runner app"
+    return ErrorPayload(
+      message: "\(subject) is not available",
+      retryableFailure: .targetAppUnavailable
+    )
+  }
 }
