@@ -796,7 +796,7 @@ extension RunnerTests {
       app.terminate()
     }
     let drag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
+      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#
     )
     let scroll = try runnerCommandFixture(
       #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
@@ -1867,8 +1867,7 @@ extension RunnerTests {
         x2: x2,
         y2: y2,
         durationMs: defaults.durationMs,
-        message: "dragged",
-        synthesizedPolicyKind: .synthesizedDrag
+        message: "dragged"
       )
     case .scroll:
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
@@ -2240,8 +2239,7 @@ extension RunnerTests {
             y2: last.y,
             durationMs: plan.durationMs,
             message: plan.intent,
-            synthesizedPolicyKind: .synthesizedDrag,
-            synthesizedProfile: .fastSwipe
+            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag)
           )
         )
       case .sampled:
@@ -2307,8 +2305,7 @@ extension RunnerTests {
       durationMs: durationMs,
       message: message,
       synthesizedContext: context,
-      synthesizedPolicyKind: .scroll,
-      synthesizedProfile: scrollDragProfile(releaseBehavior: releaseBehavior)
+      synthesized: (profile: scrollDragProfile(releaseBehavior: releaseBehavior), policyKind: .scroll)
     )
 #else
     return executeDragGesture(
@@ -2318,14 +2315,13 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       durationMs: durationMs,
-      message: message,
-      synthesizedPolicyKind: .scroll
+      message: message
     )
 #endif
   }
 
-  /// Shared drag execution for explicit drag commands. The iOS synthesized lane keeps its
-  /// fallback policy explicit; viewport scrolling owns a separate single drag specification.
+  /// Shared coordinate drag execution. Callers that pass `synthesized` take the iOS synthesized
+  /// lane with that profile and fallback policy; the rest perform an XCTest coordinate drag.
   private func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -2335,8 +2331,7 @@ extension RunnerTests {
     durationMs: Double?,
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
-    synthesizedPolicyKind: SynthesizedGesturePolicyKind,
-    synthesizedProfile: SynthesizedDragProfile? = nil
+    synthesized: (profile: SynthesizedDragProfile, policyKind: SynthesizedGesturePolicyKind)? = nil
   ) -> Response {
     let durationMs = durationMs ?? runnerDefaultDragDurationMs
     let commandName = dragCommandName(message: message)
@@ -2346,7 +2341,7 @@ extension RunnerTests {
         error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
       )
     }
-    if let synthesizedProfile, let synthesizedResponse = executeSynthesizedDragGesture(
+    if let synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
       activeApp: activeApp,
       x: x,
       y: y,
@@ -2355,8 +2350,8 @@ extension RunnerTests {
       durationMs: durationMs,
       message: message,
       context: synthesizedContext,
-      policyKind: synthesizedPolicyKind,
-      profile: synthesizedProfile
+      policyKind: synthesized.policyKind,
+      profile: synthesized.profile
     ) {
       return synthesizedResponse
     }
@@ -2368,7 +2363,7 @@ extension RunnerTests {
       x2: dragPoints.x2,
       y2: dragPoints.y2
     )
-    let holdDuration = synthesizedProfile == nil
+    let holdDuration = synthesized == nil
       ? coordinateDragHoldDuration()
       : synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
     let (timing, outcome) = performGesture(activeApp) {
