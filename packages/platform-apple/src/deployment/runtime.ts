@@ -6,6 +6,10 @@ import type {
   MaterializeAppSourceInput,
   PushNotificationInput,
 } from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  AppleToolRequest,
+  HostCommandResult,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
@@ -136,7 +140,8 @@ async function installAppleApp(
   signal: AbortSignal,
 ): Promise<void> {
   await ensureAppleReady(host, device, signal);
-  const result = await host.appleTools.run(
+  const result = await runAppleTool(
+    host,
     device.kind === 'simulator'
       ? {
           tool: 'simctl',
@@ -159,17 +164,13 @@ async function uninstallAppleApp(
   signal: AbortSignal,
 ): Promise<void> {
   await ensureAppleReady(host, device, signal);
-  const result = await host.appleTools.run(
+  const result = await runAppleTool(
+    host,
     device.kind === 'simulator'
-      ? {
-          tool: 'simctl',
-          args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]),
-          allowFailure: true,
-        }
+      ? { tool: 'simctl', args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]) }
       : {
           tool: 'devicectl',
           args: ['device', 'uninstall', 'app', '--device', device.id, bundleId],
-          allowFailure: true,
         },
     signal,
   );
@@ -197,7 +198,8 @@ async function pushAppleNotification(
   });
   try {
     await payload.writeText(`${JSON.stringify(input.payload)}\n`);
-    const result = await host.appleTools.run(
+    const result = await runAppleTool(
+      host,
       {
         tool: 'simctl',
         args: scopeSimctlArgsForDevice(device, ['push', device.id, input.appId, payload.path]),
@@ -208,6 +210,19 @@ async function pushAppleNotification(
   } finally {
     await payload[Symbol.asyncDispose]();
   }
+}
+
+/**
+ * Every result this module hands to assertAppleToolSuccess must come from a request that
+ * tolerates a non-zero exit, or the host's command runner throws before the caller's curated
+ * message and devicectl hint are attached (#2785).
+ */
+async function runAppleTool(
+  host: PlatformRuntimeHost,
+  request: Omit<AppleToolRequest, 'allowFailure'>,
+  signal: AbortSignal,
+): Promise<HostCommandResult> {
+  return await host.appleTools.run({ ...request, allowFailure: true }, signal);
 }
 
 function isMissingAppOutput(output: string): boolean {

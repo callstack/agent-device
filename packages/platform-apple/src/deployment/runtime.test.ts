@@ -1,9 +1,38 @@
 import { expect, test, vi } from 'vitest';
 import type { AppleAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  AppleToolRequest,
+  HostCommandResult,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { assertRejectsAppError } from '../__tests__/app-error.ts';
 import { appleAppDeploymentFacts, createAppleAppDeploymentOperations } from './runtime.ts';
+
+/**
+ * Mirrors runXcrun's own contract (host-kit exec.ts): a non-zero exit rejects with a bare
+ * COMMAND_FAILED and no hint unless the request set `allowFailure`. A fake that always resolves
+ * cannot catch a call site that forgot `allowFailure` before handing the result to the caller's
+ * curated message and hint (#2785).
+ */
+function xcrunLikeRun(
+  respond: (
+    request: AppleToolRequest,
+  ) => Readonly<{ stdout: string; stderr: string; exitCode: number }>,
+) {
+  return vi.fn(async (request: AppleToolRequest): Promise<HostCommandResult> => {
+    const result = respond(request);
+    if (result.exitCode !== 0 && !request.allowFailure) {
+      throw new AppError('COMMAND_FAILED', `xcrun exited with code ${result.exitCode}`, {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      });
+    }
+    return result;
+  });
+}
 
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
@@ -27,7 +56,7 @@ async function withoutInvalidatingAppResolutionCache<Result>(
 
 function deploymentHost(
   appleDeployment: AppleAppDeploymentExecutor,
-  run = vi.fn(async (request: { args: readonly string[] }) => ({
+  run = xcrunLikeRun((request) => ({
     stdout: request.args.includes('list')
       ? '{"devices":{"runtime":[{"udid":"apple-deployment-fact","state":"Booted"}]}}'
       : '',
@@ -275,7 +304,7 @@ test('physical iOS install failure surfaces the devicectl Developer Mode hint', 
     resolveAppBundleId: vi.fn(),
     withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
   } as AppleAppDeploymentExecutor;
-  const run = vi.fn(async (request: { args: readonly string[] }) =>
+  const run = xcrunLikeRun((request) =>
     request.args.includes('install')
       ? {
           stdout: '',
@@ -311,7 +340,7 @@ test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint'
     resolveAppBundleId,
     withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
   } as AppleAppDeploymentExecutor;
-  const run = vi.fn(async (request: { args: readonly string[] }) =>
+  const run = xcrunLikeRun((request) =>
     request.args.includes('uninstall')
       ? {
           stdout: '',
