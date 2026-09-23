@@ -52,3 +52,45 @@ test('a stalled capture retries without scrolling or consuming an attempt', asyn
   assert.deepEqual(probeAttempts, [1, 1]);
   assert.deepEqual(scrollAttempts, []);
 });
+
+/**
+ * The CI failure shape: the element is on screen only at offset 1, and the first read after each
+ * scroll lands on a surface still moving, so it misses with `unsettledGesture`.
+ */
+function listWithUnsettledFirstReads(visibleAt?: number) {
+  let offset = 0;
+  let moving = false;
+  const probes: number[] = [];
+  const scrolls: number[] = [];
+  const probe = async (attempt: number) => {
+    probes.push(attempt);
+    const unsettled = moving;
+    moving = false;
+    if (!unsettled && offset === visibleAt) return result(0);
+    return result(1, unsettled ? { unsettledGesture: { action: 'scroll', positionals: [] } } : {});
+  };
+  const scroll = async (attempt: number) => {
+    scrolls.push(attempt);
+    offset += 1;
+    moving = true;
+  };
+  return { probes, scrolls, probe, scroll };
+}
+
+test('an unsettled miss after the scroll that reached the element is re-read at the same offset', async () => {
+  const list = listWithUnsettledFirstReads(1);
+
+  await searchForVisibleElement('id="target"', list.probe, list.scroll);
+
+  assert.deepEqual([list.probes, list.scrolls], [[1, 2, 2], [1]]);
+});
+
+test('a real absence still fails after the forward scrolls, naming every step', async () => {
+  const list = listWithUnsettledFirstReads();
+
+  await assert.rejects(
+    searchForVisibleElement('id="target"', list.probe, list.scroll),
+    /scroll after attempt 3: [\s\S]*probe 4:/,
+  );
+  assert.deepEqual(list.scrolls, [1, 2, 3]);
+});

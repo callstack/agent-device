@@ -41,9 +41,10 @@ export function snapshotNodes(result: { json?: any }): LiveSnapshotNode[] {
 }
 
 const SCROLL_SEARCH_ATTEMPTS = 4;
-// A stalled capture says nothing about where the element is, so it must not consume the scroll
-// budget outright; a couple of retries absorb a slow runner without masking a real absence.
-const SCROLL_SEARCH_STALL_RETRIES = 2;
+// A stalled capture, or one taken while the last scroll was still moving, says nothing about where
+// the element is, so re-reading it must not consume a scroll. A couple of re-reads per scroll absorb
+// a slow runner without masking a real absence.
+const SCROLL_SEARCH_REREADS = 2;
 
 export async function assertElementTextAfterScrolling(
   context: LiveContext,
@@ -64,7 +65,7 @@ export async function assertElementTextAfterScrolling(
         'scroll',
         'down',
         '0.75',
-      ]).then(() => undefined),
+      ]).then((result) => result.json?.data),
   );
   await assertElementText(context, selector, expected);
 }
@@ -78,31 +79,31 @@ export async function assertElementTextAfterScrolling(
 export async function searchForVisibleElement(
   selector: string,
   probeVisibility: (attempt: number) => Promise<CliJsonResult>,
-  scrollAfterAttempt: (attempt: number) => Promise<void>,
+  scrollAfterAttempt: (attempt: number) => Promise<unknown>,
 ): Promise<void> {
-  let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
-  let lastFailure: CliJsonResult | undefined;
+  let rereadsLeft = SCROLL_SEARCH_REREADS;
+  const history: string[] = [];
 
   for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS;) {
     const probe = await probeVisibility(attempt);
+    history.push(`probe ${attempt}: ${JSON.stringify(probe.json ?? { status: probe.status })}`);
     if (probe.status === 0) return;
-    lastFailure = probe;
 
-    // The snapshot never came back, so the surface was never read. Scrolling here would move the
-    // surface for a reason unrelated to visibility and spend an attempt on no evidence.
-    if (probe.json?.error?.details?.captureStalled === true && stallRetriesLeft > 0) {
-      stallRetriesLeft -= 1;
+    const details = probe.json?.error?.details;
+    const readNothing = details?.captureStalled === true || details?.unsettledGesture !== undefined;
+    if (readNothing && rereadsLeft > 0) {
+      rereadsLeft -= 1;
       continue;
     }
 
     attempt += 1;
     if (attempt <= SCROLL_SEARCH_ATTEMPTS) {
-      await scrollAfterAttempt(attempt - 1);
+      const scrolled = await scrollAfterAttempt(attempt - 1);
+      history.push(`scroll after attempt ${attempt - 1}: ${JSON.stringify(scrolled ?? null)}`);
+      rereadsLeft = SCROLL_SEARCH_REREADS;
     }
   }
-  assert.fail(
-    `${selector} did not become visible after scrolling\nlast visibility probe: ${JSON.stringify(lastFailure?.json ?? null)}`,
-  );
+  assert.fail(`${selector} did not become visible after scrolling\n${history.join('\n')}`);
 }
 
 function requireNode(
