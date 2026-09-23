@@ -20,6 +20,8 @@ export type IosSnapshotPresentationStats = Readonly<{
   presentedNodeCount: number;
   sourceNodeCount: number;
   parentClipLookups: number;
+  /** Sources the presentation cut removed because a later modal presentation dims them. */
+  modalContainedNodeCount: number;
 }>;
 
 export type IosSnapshotEnginePresentation = Readonly<{

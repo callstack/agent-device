@@ -2,6 +2,7 @@ import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { isGeometricallyActionable } from '@agent-device/kernel/rect';
 import { validateIosSnapshotGraph } from './graph.ts';
 import {
+  collectModalContainedIndexes,
   rootTraversal,
   traversalDecision,
   type BranchState,
@@ -22,13 +23,15 @@ export function foldIosSnapshot(
   options: IosSnapshotFoldOptions = {},
 ): { nodes: IosSnapshotPresentationNode[]; stats: IosSnapshotPresentationStats } {
   validateIosSnapshotGraph(nodes);
-  const hasChildren = buildChildPresence(nodes);
+  const modalContained = collectModalContainedIndexes(nodes);
+  const presentable = nodes.filter((node) => !modalContained.has(node.index));
+  const hasChildren = buildChildPresence(presentable);
   const states = new Map<number, BranchState>();
   const kept: IosSnapshotPresentationNode[] = [];
   const hints = new Map<number, { above: boolean; below: boolean }>();
   let parentClipLookups = 0;
 
-  for (const node of nodes) {
+  for (const node of presentable) {
     const parentState = readParentState(node, states, () => {
       parentClipLookups += 1;
     });
@@ -61,6 +64,7 @@ export function foldIosSnapshot(
       presentedNodeCount: presented.length,
       sourceNodeCount: nodes.length,
       parentClipLookups,
+      modalContainedNodeCount: modalContained.size,
     },
   };
 }

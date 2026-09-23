@@ -1,11 +1,20 @@
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import { normalizeType } from '@agent-device/contracts/snapshot';
+import { collectChildrenByParent, collectSubtreeIndexes } from './tree.ts';
 import type { IosSnapshotFoldPolicy } from './types.ts';
 
 const SCROLL_CONTAINER_TYPES = new Set(['collectionview', 'scrollview', 'table']);
 const VISIBILITY_CARRIER_TYPES = new Set(['application', 'window']);
 const NEGLIGIBLE_DECORATION_TOLERANCE = 1;
+
+/**
+ * Private UIKit classes are matched by exact name, unlike the substring role tests the occlusion
+ * pass uses: this rule decides node membership, so a near miss on a class name has to fail closed
+ * rather than widen the cut.
+ */
+const PRESENTATION_CONTAINER_ROLE = 'uitransitionview';
+const PRESENTATION_DIMMING_ROLE = 'uidimmingview';
 
 export type TraversalState = Readonly<{
   projectedOut: boolean;
@@ -222,4 +231,70 @@ function intersectRect(left: Rect, right: Rect): Rect {
     width: rightEdge - x,
     height: bottomEdge - y,
   };
+}
+
+type CoveringPresentation = Readonly<{
+  container: RawSnapshotNode;
+  dimmingRect: Rect;
+}>;
+
+/**
+ * UIKit appends each modal presentation as a later sibling of the container it presents over,
+ * dims the content behind it with a dimming view that is a direct child of the presentation
+ * container, and the host accessibility snapshot reports siblings in that subview order. A
+ * presenting container carries only a drop shadow, so a direct-child dimming view separates a
+ * modal presentation from an ordinary container, and its dimmed area says which earlier
+ * presentation the user can no longer reach.
+ *
+ * Producers that report no UIKit class names — the XCTest runner, whose own queries already
+ * omit modal-contained content — never trigger this rule.
+ */
+export function collectModalContainedIndexes(
+  nodes: readonly RawSnapshotNode[],
+): ReadonlySet<number> {
+  const childrenByParent = collectChildrenByParent(nodes);
+  const contained = new Set<number>();
+  for (const siblings of childrenByParent.values()) {
+    const covering = findCoveringPresentation(siblings, childrenByParent);
+    if (!covering) continue;
+    for (const sibling of siblings.slice(0, -1)) {
+      if (isDimmedByPresentation(covering, sibling)) {
+        for (const index of collectSubtreeIndexes(sibling.index, childrenByParent)) {
+          contained.add(index);
+        }
+      }
+    }
+  }
+  return contained;
+}
+
+function findCoveringPresentation(
+  siblings: readonly RawSnapshotNode[],
+  childrenByParent: ReadonlyMap<number, RawSnapshotNode[]>,
+): CoveringPresentation | undefined {
+  const last = siblings.at(-1);
+  if (!last || !isPresentationContainer(last)) return undefined;
+  const dimming = (childrenByParent.get(last.index) ?? []).find(isPresentationDimmingView);
+  const dimmingRect = dimming && isPositiveFiniteRect(dimming.rect) ? dimming.rect : undefined;
+  return dimmingRect ? { container: last, dimmingRect } : undefined;
+}
+
+function isDimmedByPresentation(covering: CoveringPresentation, sibling: RawSnapshotNode): boolean {
+  return (
+    isPresentationContainer(sibling) &&
+    isPositiveFiniteRect(sibling.rect) &&
+    rectContains(covering.dimmingRect, sibling.rect)
+  );
+}
+
+function isPresentationContainer(node: RawSnapshotNode): boolean {
+  return hasRole(node, PRESENTATION_CONTAINER_ROLE);
+}
+
+function isPresentationDimmingView(node: RawSnapshotNode): boolean {
+  return hasRole(node, PRESENTATION_DIMMING_ROLE);
+}
+
+function hasRole(node: RawSnapshotNode, role: string): boolean {
+  return normalizeType(node.role ?? '') === role;
 }

@@ -101,6 +101,7 @@ function presentAcquiredSnapshot(
         presentedNodeCount: projected.nodes.length,
         sourceNodeCount: acquisition.nodes.length,
         parentClipLookups: 0,
+        modalContainedNodeCount: 0,
       },
     };
   }
@@ -153,6 +154,7 @@ function presentAcquiredSnapshot(
       presentedNodeCount: compacted.nodes.length,
       sourceNodeCount: acquisition.nodes.length,
       parentClipLookups: folded.stats.parentClipLookups + validation.parentClipLookups,
+      modalContainedNodeCount: folded.stats.modalContainedNodeCount,
     },
   };
 }

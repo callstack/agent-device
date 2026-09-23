@@ -42,6 +42,7 @@ export function presentIosRunnerSnapshot(
       presentedNodeCount: compacted.nodes.length,
       sourceNodeCount: input.presentation.payload.nodes.length,
       parentClipLookups: validationStats.parentClipLookups,
+      modalContainedNodeCount: 0,
     },
   };
 }
