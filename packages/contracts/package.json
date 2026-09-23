@@ -396,6 +396,10 @@
       "types": "./src/runner-lease-context.ts",
       "default": "./src/runner-lease-context.ts"
     },
+    "./screen-capture-contract": {
+      "types": "./src/screen-capture-contract.ts",
+      "default": "./src/screen-capture-contract.ts"
+    },
     "./screen-recording-runtime": {
       "types": "./src/screen-recording-runtime.ts",
       "default": "./src/screen-recording-runtime.ts"
