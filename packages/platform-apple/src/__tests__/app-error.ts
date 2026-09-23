@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
-type ExpectedAppError = { code: string; message?: RegExp; hint?: string | RegExp };
+type ExpectedAppError = {
+  code: string;
+  message?: RegExp;
+  /** Checked against `normalizeError(error).message`, e.g. the stderr excerpt a command failure appends. */
+  normalizedMessage?: RegExp;
+  hint?: string | RegExp;
+};
 
 function assertAppError(error: unknown, expected: ExpectedAppError): true {
   assert.ok(
@@ -10,6 +16,9 @@ function assertAppError(error: unknown, expected: ExpectedAppError): true {
   );
   assert.equal(error.code, expected.code);
   if (expected.message) assert.match(error.message, expected.message);
+  if (expected.normalizedMessage) {
+    assert.match(normalizeError(error).message, expected.normalizedMessage);
+  }
   if (expected.hint !== undefined) {
     const { hint } = normalizeError(error);
     assert.ok(typeof hint === 'string', `expected a hint on ${error.code}, got ${String(hint)}`);

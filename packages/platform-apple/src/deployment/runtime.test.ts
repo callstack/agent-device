@@ -7,14 +7,16 @@ import type {
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { execFailureDetails } from '@agent-device/host-kit/command';
 import { assertRejectsAppError } from '../__tests__/app-error.ts';
 import { appleAppDeploymentFacts, createAppleAppDeploymentOperations } from './runtime.ts';
 
 /**
- * Mirrors runXcrun's own contract (host-kit exec.ts): a non-zero exit rejects with a bare
- * COMMAND_FAILED and no hint unless the request set `allowFailure`. A fake that always resolves
- * cannot catch a call site that forgot `allowFailure` before handing the result to the caller's
- * curated message and hint (#2785).
+ * Mirrors runXcrun's own contract (host-kit exec.ts): a non-zero exit rejects with the same
+ * `execFailureDetails` shape `createExitError` builds — `processExitError: true` plus `cmd` and
+ * `args` — and no hint, unless the request set `allowFailure`. A fake that throws a bare
+ * COMMAND_FAILED cannot catch a call site that forgot `allowFailure`, or one whose caller drops
+ * the stderr excerpt `normalizeError` would otherwise surface (#2785).
  */
 function xcrunLikeRun(
   respond: (
@@ -24,11 +26,11 @@ function xcrunLikeRun(
   return vi.fn(async (request: AppleToolRequest): Promise<HostCommandResult> => {
     const result = respond(request);
     if (result.exitCode !== 0 && !request.allowFailure) {
-      throw new AppError('COMMAND_FAILED', `xcrun exited with code ${result.exitCode}`, {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        `xcrun exited with code ${result.exitCode}`,
+        execFailureDetails(result, { cmd: 'xcrun', args: [request.tool, ...request.args] }),
+      );
     }
     return result;
   });
@@ -52,6 +54,18 @@ async function withoutInvalidatingAppResolutionCache<Result>(
   operation: () => Promise<Result>,
 ): Promise<Result> {
   return await operation();
+}
+
+function bootedSimulatorListResult(
+  request: AppleToolRequest,
+): Readonly<{ stdout: string; stderr: string; exitCode: number }> {
+  return {
+    stdout: request.args.includes('list')
+      ? '{"devices":{"runtime":[{"udid":"apple-deployment-fact","state":"Booted"}]}}'
+      : '',
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 function deploymentHost(
@@ -328,9 +342,92 @@ test('physical iOS install failure surfaces the devicectl Developer Mode hint', 
         appPath: '/tmp/App.app',
         replaceExisting: false,
       }),
-    { code: 'COMMAND_FAILED', hint: /Developer Mode/ },
+    {
+      code: 'COMMAND_FAILED',
+      hint: /Developer Mode/,
+      normalizedMessage: /Developer Mode is disabled on this device/,
+    },
   );
   expect(run.mock.calls.some(([request]) => request.args.includes('install'))).toBe(true);
+});
+
+test('simulator install failure surfaces the simctl stderr excerpt with no devicectl hint', async () => {
+  const prepareArtifact = vi.fn(async () => ({
+    installablePath: '/tmp/App.app',
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    cleanup: vi.fn(async () => {}),
+  }));
+  const executor = {
+    prepareArtifact,
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('install')
+      ? {
+          stdout: '',
+          stderr: 'Failed to install the requested application',
+          exitCode: 1,
+        }
+      : bootedSimulatorListResult(request),
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice();
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: false,
+      }),
+    {
+      code: 'COMMAND_FAILED',
+      normalizedMessage: /Failed to install the requested application/,
+    },
+  );
+  const [request] = run.mock.calls.find(([call]) => call.args.includes('install'))!;
+  expect(request.allowFailure).toBe(true);
+});
+
+test('simulator push failure surfaces the simctl stderr excerpt', async () => {
+  const executor = {
+    prepareArtifact: vi.fn(),
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('push')
+      ? {
+          stdout: '',
+          stderr: 'Invalid device state: Booted',
+          exitCode: 1,
+        }
+      : bootedSimulatorListResult(request),
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice();
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () => await operations.sendPushNotification?.({ appId: 'com.example.app', payload: {} }),
+    {
+      code: 'COMMAND_FAILED',
+      normalizedMessage: /Invalid device state: Booted/,
+    },
+  );
+  const [request] = run.mock.calls.find(([call]) => call.args.includes('push'))!;
+  expect(request.allowFailure).toBe(true);
 });
 
 test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint', async () => {
@@ -365,7 +462,11 @@ test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint'
         appPath: '/tmp/replacement.app',
         replaceExisting: true,
       }),
-    { code: 'COMMAND_FAILED', hint: /Developer Mode/ },
+    {
+      code: 'COMMAND_FAILED',
+      hint: /Developer Mode/,
+      normalizedMessage: /Developer Mode is disabled on this device/,
+    },
   );
   expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
 });
