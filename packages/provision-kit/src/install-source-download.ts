@@ -11,6 +11,7 @@ import { approveDownloadSourceUrl } from './install-source-network.ts';
 import * as networkTransport from './install-source-network-transport.ts';
 
 const MAX_REDIRECTS = 5;
+const DEFAULT_USER_AGENT = 'agent-device';
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const FORBIDDEN_HEADERS = new Set([
   'accept-encoding',
@@ -33,7 +34,7 @@ export async function downloadInstallSource(params: {
   signal: AbortSignal;
 }): Promise<string> {
   let currentUrl = parseSourceUrl(params.url);
-  let headers = sanitizeHeaders(params.headers);
+  let headers = withDefaultUserAgent(sanitizeHeaders(params.headers));
   for (let redirectCount = 0; ; redirectCount += 1) {
     const response = await requestHop(currentUrl, headers, params.signal);
     try {
@@ -157,6 +158,11 @@ function sanitizeHeaders(input: Record<string, string> | undefined): Record<stri
       return !FORBIDDEN_HEADERS.has(lower) && !connectionTokens.has(lower);
     }),
   );
+}
+
+function withDefaultUserAgent(headers: Record<string, string>): Record<string, string> {
+  if (Object.keys(headers).some((name) => name.toLowerCase() === 'user-agent')) return headers;
+  return { ...headers, 'user-agent': DEFAULT_USER_AGENT };
 }
 
 function crossOriginHeaders(headers: Record<string, string>): Record<string, string> {

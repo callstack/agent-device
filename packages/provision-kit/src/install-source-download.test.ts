@@ -51,6 +51,43 @@ test('download redirects revalidate destinations and strip sensitive cross-origi
   }
 });
 
+test('download sends a default user-agent that a caller header replaces', async () => {
+  const tempRoot = await mkdtempForTest('agent-device-download-user-agent-');
+  const lookup = vi
+    .spyOn(dns, 'lookup')
+    .mockImplementation(
+      async () =>
+        [{ address: '93.184.216.34', family: 4 }] as unknown as Awaited<
+          ReturnType<typeof dns.lookup>
+        >,
+    );
+  const requestMock = vi
+    .spyOn(networkTransport, 'requestApprovedUrl')
+    .mockImplementation(async () => response(200, Buffer.from('apk')));
+  try {
+    await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/default.apk',
+      signal: new AbortController().signal,
+    });
+    await downloadInstallSource({
+      tempDir: tempRoot,
+      url: 'https://example.com/custom.apk',
+      headers: { 'User-Agent': 'caller-agent' },
+      signal: new AbortController().signal,
+    });
+    const defaultHeaders = requestMock.mock.calls[0]![0].headers;
+    const customHeaders = requestMock.mock.calls[1]![0].headers;
+    assert.equal(defaultHeaders['user-agent'], 'agent-device');
+    assert.equal(customHeaders['User-Agent'], 'caller-agent');
+    assert.equal(customHeaders['user-agent'], undefined);
+  } finally {
+    requestMock.mockRestore();
+    lookup.mockRestore();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('download errors do not disclose URL credentials or query values', async () => {
   const tempRoot = await mkdtempForTest('agent-device-download-redaction-');
   const lookup = vi
