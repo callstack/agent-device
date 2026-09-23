@@ -29,6 +29,7 @@ import {
 } from './snapshot-observability.ts';
 import {
   createSimulatorSnapshotTargetResolver,
+  isSimulatorTargetDiscoveryPending,
   type SimulatorSnapshotTarget,
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
@@ -239,17 +240,11 @@ async function resolveTargetForObservation(
     try {
       return await resolveTarget(device, appBundleId, signal);
     } catch (error) {
-      if (!isDiscoveryPending(error)) throw error;
+      if (!isSimulatorTargetDiscoveryPending(error)) throw error;
       const execution = { requestId: input.execution?.requestId };
       if (await host.appleApplications.hasLiveRunnerSession(device, execution)) throw error;
     }
   }
-}
-
-function isDiscoveryPending(error: unknown): boolean {
-  return (
-    error instanceof AppError && error.details?.reason === 'simulator-target-discovery-pending'
-  );
 }
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {

@@ -69,9 +69,10 @@ export function releaseSpeculativeRunner(
 
 /**
  * Lets the opened app become observable before the open returns. A local Simulator asks its AX
- * bridge, bounded by the launch-transition windows the bridge itself defines, so the first
- * observation never pays the launch and never falls back to a runner start for it. Any other
- * device, or a Simulator whose bridge cannot answer, keeps the fixed settle.
+ * bridge once the app's discovery settles, bounded by the discovery's own deadline and the
+ * launch-transition windows the bridge itself defines, so the first observation never pays the
+ * launch and never falls back to a runner start for it. Any other device, or a Simulator whose
+ * bridge cannot answer, keeps the fixed settle.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,

@@ -546,6 +546,74 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   }
 });
 
+test('an open waits out a slow app discovery, so the first capture after it starts warm', async () => {
+  // iOS smoke `wait for Agent Device Tester` right after `open --relaunch`: `launchctl list`
+  // outlasted one discovery slice on CI, the open read that as an unobservable app and returned,
+  // and the wait's first poll paid the discovery, the bridge preparation and the first bridge
+  // connection behind a runner findText until its 10 s budget ran out.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn(async (args: string[]) => {
+    if (args[0] === 'spawn') await released;
+    return {
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const source = sourceReturning(bridgeAcquisition());
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => true },
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        let verdict: string | undefined;
+        const observed = route
+          .awaitObservable(ios, input.options.appBundleId, signal())
+          .then((value) => (verdict = value));
+        await vi.advanceTimersByTimeAsync(4_500);
+        expect(verdict).toBeUndefined();
+        expect(source.acquire).not.toHaveBeenCalled();
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        await expect(observed).resolves.toBe('observable');
+        expect(source.acquire).toHaveBeenCalledOnce();
+
+        const first = await route.capture(ios, input, signal(), fallback);
+        expect(first.producer).toBe('simulator-ax-bridge');
+        expect(fallback).not.toHaveBeenCalled();
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test.each([
   'application-server-unavailable',
   'continuation-budget-exhausted',

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed (ios): `open` on a local Simulator now waits for the launched app's discovery before it
+  decides whether the app is observable. On a loaded host `simctl spawn launchctl list` outlasts one
+  1.5 s discovery wait slice, and the launch observation read that slice as an unobservable app, so
+  the open returned before the discovery, the AX-bridge preparation or the first bridge connection.
+  The first `wait` after the open then paid all three in one poll, behind a runner `findText`, and on
+  CI it spent its whole 10 s budget there (`wait_capture_stalled` with `captures: 1`). The probe now
+  joins the running discovery, bounded by the discovery's own deadline, and then observes the launch
+  as before. A resolution failure other than a pending discovery still ends the probe at once.
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
   the bridge and the XCTest runner. The snapshot capability table has declared `hittable =

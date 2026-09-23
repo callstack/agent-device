@@ -15,6 +15,8 @@ const TARGET_IDENTITY_TIMEOUT_MS = 3_000;
 const TARGET_DISCOVERY_WAIT_MS = 1_500;
 /** Overall deadline of one discovery (both simctl probes and the `ps` identity read). */
 const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
+/** A caller's wait slice ran out while the discovery it joined is still running. */
+const TARGET_DISCOVERY_PENDING = 'simulator-target-discovery-pending';
 
 export type SimulatorSnapshotTarget = Readonly<{
   udid: string;
@@ -61,9 +63,17 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
       },
       wait: (waitMs, stop) =>
         waitForDetachedAttempt({ waitMs, signal, stop, cancelled: () => signal.reason }),
-      pending: () => targetError('simulator-target-discovery-pending', device, appBundleId),
+      pending: () => targetError(TARGET_DISCOVERY_PENDING, device, appBundleId),
     });
   };
+}
+
+/**
+ * Whether a resolver failure only says the discovery is still running. The discovery keeps going
+ * under its own deadline, so asking again joins it rather than starting another.
+ */
+export function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === TARGET_DISCOVERY_PENDING;
 }
 
 async function resolveSimulatorSnapshotTarget(

@@ -4,6 +4,7 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { createLaunchObservationProbe } from './snapshot-observability.ts';
 import type { SnapshotSourceFailure, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
 import type { SimulatorSnapshotTarget } from './snapshot-target.ts';
@@ -185,6 +186,32 @@ test('the skip is reported, so a live run can tell it from an unresolvable targe
     ).resolves.toBe('unobservable');
     expect(countDiagnosticEventsByPhase(['ios_launch_observation_skipped'])).toBe(0);
   });
+});
+
+test.each([
+  ['a discovery still running is joined until it answers', 'simulator-target-discovery-pending', 3],
+  ['any other resolution failure is unobservable at once', 'simulator-target-unavailable', 1],
+])('%s', async (_name, reason, expectedResolutions) => {
+  let resolutions = 0;
+  const acquire = vi.fn(async () => acquired());
+  const observe = createLaunchObservationProbe({
+    source: { acquire, close: async () => {} },
+    resolveTarget: async () => {
+      resolutions += 1;
+      if (resolutions < 3) {
+        throw new AppError('COMMAND_FAILED', 'Unable to resolve the running iOS Simulator app.', {
+          reason,
+        });
+      }
+      return target;
+    },
+    clock: { now: () => 0, sleep: async () => {} },
+    isBridgeDisabled: () => false,
+  });
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
+    expectedResolutions === 3 ? 'observable' : 'unobservable',
+  );
+  expect(resolutions).toBe(expectedResolutions);
 });
 
 test.each([
