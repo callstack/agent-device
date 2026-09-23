@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
+import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../../commands/replay/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
@@ -45,6 +46,17 @@ const SUITE_RESULT = {
 test('MCP replay family output schemas are the family module entries, not copies', () => {
   assert.equal(COMMAND_OUTPUT_SCHEMAS.replay, REPLAY_COMMAND_OUTPUT_SCHEMAS.replay);
   assert.equal(COMMAND_OUTPUT_SCHEMAS.test, REPLAY_COMMAND_OUTPUT_SCHEMAS.test);
+});
+
+test('the projected family map declares exactly the commands its module owns', () => {
+  const commands = Object.keys(REPLAY_COMMAND_OUTPUT_SCHEMAS) as ['replay', 'test'];
+  assert.deepEqual(commands, ['replay', 'test']);
+  for (const command of commands) {
+    assert.ok(
+      ownerFilesForCommand(command).includes('src/commands/replay/index.ts'),
+      `${command} projects its output schema from this module but does not name it as its owner`,
+    );
+  }
 });
 
 test('MCP replay outputSchema validates a full result and refuses a dropped required count', () => {

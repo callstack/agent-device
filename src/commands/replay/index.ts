@@ -102,15 +102,10 @@ export const testCommandMetadata = defineFieldCommandMetadata(
 );
 
 /**
- * The `replay` family's advertised MCP `outputSchema`s, keyed by daemon command name and
- * projected into the command map by `src/mcp/command-output-schemas.ts`. They live here because
- * this module is the declared owner of both commands (`packages/command-registry/src/registry.ts`
- * `ownerFiles`), so a response shape is edited beside the input shape it mirrors.
- *
- * `packages/contracts/src/replay.ts` — `ReplayCommandResult` and `ReplaySuiteResult`. The map's
- * `satisfies Record<keyof CommandResultMap, JsonSchema>` still requires a schema for every typed
- * result, and the `Pick` here requires this family to declare exactly these two. Non-strict like
- * every other entry: no `additionalProperties: false`, so the additive `cost` object validates.
+ * This family's advertised MCP `outputSchema`s — `ReplayCommandResult` and `ReplaySuiteResult`
+ * (`packages/contracts/src/replay.ts`) — keyed by daemon command name and projected into the
+ * command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `cost` keep validating.
  */
 export const REPLAY_COMMAND_OUTPUT_SCHEMAS = {
   replay: objectSchema(

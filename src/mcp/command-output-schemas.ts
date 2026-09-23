@@ -415,13 +415,6 @@ const unconfirmedFillResponseSchema = interactionResponseDataSchema({
 });
 
 const BASE_COMMAND_OUTPUT_SCHEMAS = {
-  // A family that owns its commands also owns their advertised response shape: it is
-  // projected from the family module instead of being hand-listed here. The projection
-  // stays honest at both ends — this map's `satisfies` still refuses a missing
-  // `CommandResultMap` key, and each family map's `Pick` refuses an entry for a command
-  // it does not own.
-  ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
-
   // buildInteractionResponseData public payloads for interaction commands.
   // #1652: the opt-in `settle` observation is NOT listed here — the trait
   // derivation pass grafts it onto settle-capable entries below.
@@ -860,6 +853,12 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       ),
     ],
   },
+
+  // A family that owns its commands authors their advertised response shape beside the
+  // command surface and projects it here. This spread stays last: a hand-written entry for
+  // a projected command then fails as TS2783 instead of quietly overriding the family's,
+  // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
+  ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
 
 export const COMMAND_OUTPUT_SCHEMAS = deriveSettleObservationSchemas(BASE_COMMAND_OUTPUT_SCHEMAS);
