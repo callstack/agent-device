@@ -10,6 +10,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 
@@ -148,7 +149,7 @@ async function installAppleApp(
         },
     signal,
   );
-  assertAppleToolSuccess(result, 'Apple app install failed');
+  assertAppleToolSuccess(result, 'Apple app install failed', devicectlHintDetails(device, result));
 }
 
 async function uninstallAppleApp(
@@ -173,7 +174,11 @@ async function uninstallAppleApp(
     signal,
   );
   if (result.exitCode === 0 || isMissingAppOutput(`${result.stdout}\n${result.stderr}`)) return;
-  assertAppleToolSuccess(result, `Apple app uninstall failed for ${bundleId}`);
+  assertAppleToolSuccess(
+    result,
+    `Apple app uninstall failed for ${bundleId}`,
+    devicectlHintDetails(device, result),
+  );
 }
 
 async function pushAppleNotification(
@@ -217,13 +222,30 @@ function isMissingAppOutput(output: string): boolean {
 function assertAppleToolSuccess(
   result: Readonly<{ stdout: string; stderr: string; exitCode: number | null }>,
   message: string,
+  details: Readonly<{ hint?: string }> = {},
 ): void {
   if (result.exitCode === 0) return;
   throw new AppError('COMMAND_FAILED', message, {
     stdout: result.stdout,
     stderr: result.stderr,
     exitCode: result.exitCode,
+    ...details,
   });
+}
+
+/**
+ * Physical iOS install/uninstall runs through devicectl (#2785): a failure gets the same
+ * Developer Mode, developer-disk-image, and pairing hints the other devicectl call sites attach.
+ * Simulator installs go through simctl, which this resolver does not classify.
+ */
+function devicectlHintDetails(
+  device: DeviceInfo,
+  result: Readonly<{ stdout: string; stderr: string }>,
+): Readonly<{ hint?: string }> {
+  if (device.kind === 'simulator') return {};
+  return {
+    hint: resolveIosDevicectlHint(result.stdout, result.stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+  };
 }
 
 function appleDeployFact(device: DeviceInfo): RuntimeOperationFact {

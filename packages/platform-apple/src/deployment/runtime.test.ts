@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { AppleAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { assertRejectsAppError } from '../__tests__/app-error.ts';
 import { appleAppDeploymentFacts, createAppleAppDeploymentOperations } from './runtime.ts';
 
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
@@ -260,6 +261,84 @@ test('exposes only fact-admitted Apple deployment operations', async () => {
       signal: new AbortController().signal,
     }),
   ).toEqual({});
+});
+
+test('physical iOS install failure surfaces the devicectl Developer Mode hint', async () => {
+  const prepareArtifact = vi.fn(async () => ({
+    installablePath: '/tmp/App.app',
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    cleanup: vi.fn(async () => {}),
+  }));
+  const executor = {
+    prepareArtifact,
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = vi.fn(async (request: { args: readonly string[] }) =>
+    request.args.includes('install')
+      ? {
+          stdout: '',
+          stderr: 'Unable to install "com.example.app": Developer Mode is disabled on this device.',
+          exitCode: 1,
+        }
+      : { stdout: '', stderr: '', exitCode: 0 },
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' });
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: false,
+      }),
+    { code: 'COMMAND_FAILED', hint: /Developer Mode/ },
+  );
+  expect(run.mock.calls.some(([request]) => request.args.includes('install'))).toBe(true);
+});
+
+test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint', async () => {
+  const resolveAppBundleId = vi.fn(async () => 'com.example.app');
+  const executor = {
+    prepareArtifact: vi.fn(),
+    resolveAppBundleId,
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = vi.fn(async (request: { args: readonly string[] }) =>
+    request.args.includes('uninstall')
+      ? {
+          stdout: '',
+          stderr:
+            'Unable to uninstall "com.example.app": Developer Mode is disabled on this device.',
+          exitCode: 1,
+        }
+      : { stdout: '', stderr: '', exitCode: 0 },
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' });
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/replacement.app',
+        replaceExisting: true,
+      }),
+    { code: 'COMMAND_FAILED', hint: /Developer Mode/ },
+  );
+  expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
 });
 
 test('preserves Apple reinstall partial-failure ordering', async () => {

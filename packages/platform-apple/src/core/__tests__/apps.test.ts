@@ -1,6 +1,6 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { promises as fs, readFileSync, writeFileSync } from 'node:fs';
+import { promises as fs, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 
@@ -26,7 +26,7 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
 import { closeIosApp, openIosApp } from '../app-launch.ts';
-import { pushIosNotification, readIosClipboardText } from '../app-device-io.ts';
+import { readIosClipboardText } from '../app-device-io.ts';
 import { resolveIosApp, resolveIosSimulatorDeepLinkBundleId } from '../app-resolution.ts';
 import { screenshotIos } from '../screenshot.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
@@ -567,37 +567,6 @@ test('openIosApp with app and URL on iOS device launches app bundle with payload
           'myapp://screen/to',
         ],
       ]);
-    },
-  );
-});
-
-test('pushIosNotification uses simctl push with temporary payload file', async () => {
-  const device: DeviceInfo = {
-    platform: 'apple',
-    id: 'sim-1',
-    name: 'iPhone',
-    kind: 'simulator',
-    booted: true,
-  };
-
-  let capturedPayload: string | undefined;
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args[0] === 'simctl' && args[1] === 'push') {
-        capturedPayload = readFileSync(args[4] ?? '', 'utf8');
-        return '';
-      }
-      return '';
-    },
-    async ({ calls }) => {
-      await pushIosNotification(device, 'com.example.app', { aps: { alert: 'hello', badge: 4 } });
-      const pushCall = calls.find((args) => args[0] === 'simctl' && args[1] === 'push');
-      assert.ok(pushCall);
-      assert.equal(pushCall[2], 'sim-1');
-      assert.equal(pushCall[3], 'com.example.app');
-      assert.match(pushCall[4] ?? '', /payload\.apns$/);
-      assert.deepEqual(JSON.parse(capturedPayload ?? ''), { aps: { alert: 'hello', badge: 4 } });
     },
   );
 });

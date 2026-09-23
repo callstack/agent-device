@@ -508,9 +508,9 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'typed broadcast extras are persisted by the fixture receiver and rendered after refresh',
     ),
     iosSimulator: iosSimulator.contract(
-      'packages/platform-apple/src/core/__tests__/apps.test.ts',
-      'pushIosNotification uses simctl push with temporary payload file',
-      'simctl push dispatch; fixture has no notification entitlement or UI oracle',
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'exposes only fact-admitted Apple deployment operations',
+      'simctl push dispatch through the shared Apple deployment operations; fixture has no notification entitlement or UI oracle',
     ),
     macos: macos.contract(
       'packages/platform-apple/src/deployment/runtime.test.ts',

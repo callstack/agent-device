@@ -4,11 +4,9 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { IosAppInfo, IosDeviceAppProcesses } from './app-info.ts';
 import {
-  installCoreDeviceApp,
   listCoreDeviceApps,
   resolveCoreDeviceAppProcesses,
   terminateCoreDeviceApp,
-  uninstallCoreDeviceApp,
 } from './physical-device-apps.ts';
 import {
   ensureCoreDeviceReady,
@@ -42,11 +40,8 @@ type IosPhysicalDeviceLaunchOptions = {
 };
 
 export type IosPhysicalDeviceControl = IosPhysicalDeviceRunnerControl & {
-  assertAppInstallationSupported(device: DeviceInfo): void;
   ensureReady(device: DeviceInfo, signal?: AbortSignal): Promise<void>;
   listApps(device: DeviceInfo, filter: AppsFilter): Promise<IosAppInfo[]>;
-  installApp(device: DeviceInfo, installablePath: string, signal?: AbortSignal): Promise<void>;
-  uninstallApp(device: DeviceInfo, bundleId: string, signal?: AbortSignal): Promise<void>;
   launchApp(
     device: DeviceInfo,
     bundleId: string,
@@ -77,11 +72,8 @@ export type IosPhysicalDeviceControl = IosPhysicalDeviceRunnerControl & {
 const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
   coredevice: {
     backend: 'coredevice',
-    assertAppInstallationSupported: () => {},
     ensureReady: ensureCoreDeviceReady,
     listApps: listCoreDeviceApps,
-    installApp: installCoreDeviceApp,
-    uninstallApp: uninstallCoreDeviceApp,
     launchApp: launchCoreDeviceApp,
     terminateApp: async (device, bundleId) => await terminateCoreDeviceApp(device, bundleId),
     resolveAppProcesses: resolveCoreDeviceAppProcesses,
@@ -94,11 +86,8 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
   },
   xctest: {
     backend: 'xctest',
-    assertAppInstallationSupported: assertXctestAppInstallationUnsupported,
     ensureReady: ensureXctestDeviceReady,
     listApps: rejectXctestAppInventory,
-    installApp: rejectXctestAppInstallation,
-    uninstallApp: rejectXctestAppInstallation,
     launchApp: launchXctestDeviceApp,
     terminateApp: terminateXctestDeviceApp,
     resolveAppProcesses: rejectXctestProcessLookup,
@@ -111,22 +100,6 @@ const CONTROLS: Record<IosPhysicalDeviceBackend, IosPhysicalDeviceControl> = {
 
 export function resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceControl {
   return CONTROLS[device.iosPhysicalDeviceBackend === 'xctest' ? 'xctest' : 'coredevice'];
-}
-
-function assertXctestAppInstallationUnsupported(device: DeviceInfo): never {
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'Installing apps is unavailable on this XCTest-backed physical iOS device.',
-    {
-      deviceId: device.id,
-      backend: 'xctest',
-      hint: 'Install the app with Xcode, then open it in agent-device by bundle ID.',
-    },
-  );
-}
-
-async function rejectXctestAppInstallation(device: DeviceInfo): Promise<never> {
-  return assertXctestAppInstallationUnsupported(device);
 }
 
 async function rejectXctestAppInventory(device: DeviceInfo): Promise<never> {
