@@ -22,5 +22,9 @@ let package = Package(
       name: "AgentDeviceMacOSInputTests",
       dependencies: ["AgentDeviceMacOSInput"]
     ),
+    .testTarget(
+      name: "AgentDeviceMacOSHelperTests",
+      dependencies: ["AgentDeviceMacOSHelper"]
+    ),
   ]
 )

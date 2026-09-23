@@ -4,6 +4,7 @@ export {
   SCREENSHOT_ACTION_FLAG_KEYS,
   SCREENSHOT_COMMAND_FLAG_KEYS,
   SCREENSHOT_CROP_REASONS,
+  SCREENSHOT_FULLSCREEN_REASONS,
   SCREENSHOT_SCALE_LIMITS,
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   appendScreenshotScriptFlags,
@@ -18,6 +19,7 @@ export {
 export type {
   ScreenshotCropReason,
   ScreenshotDispatchFlags,
+  ScreenshotFullscreenReason,
   ScreenshotPublicOptions,
   ScreenshotRequestFlags,
   ScreenshotRuntimeFlags,

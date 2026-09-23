@@ -75,7 +75,6 @@ struct PressResponse: Encodable {
 struct ScreenshotResponse: Encodable {
   let path: String
   let surface: String?
-  let fullscreen: Bool
 }
 
 struct AgentDeviceMacOSHelper {
@@ -436,9 +435,8 @@ struct AgentDeviceMacOSHelper {
     }
 
     let surface = optionValue(arguments: arguments, name: "--surface")
-    let fullscreen = arguments.contains("--fullscreen")
-    try captureSurfaceScreenshot(surface: surface, outPath: outPath, fullscreen: fullscreen)
-    return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface, fullscreen: fullscreen))
+    try captureSurfaceScreenshot(surface: surface, outPath: outPath)
+    return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface))
   }
 
   static func handleAudioProbe(arguments: [String]) throws -> any Encodable {
@@ -547,8 +545,7 @@ private func pressAtPosition(_ request: MouseClickRequest) throws {
   }
 }
 
-private func captureSurfaceScreenshot(surface: String?, outPath: String, fullscreen: Bool) throws {
-  _ = fullscreen
+private func captureSurfaceScreenshot(surface: String?, outPath: String) throws {
   guard #available(macOS 15.2, *) else {
     throw HelperError.commandFailed(
       "screenshot on macOS desktop and menubar surfaces requires macOS 15.2 or newer"

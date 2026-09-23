@@ -13,6 +13,7 @@ import {
   type AppleRunnerProvider,
 } from './runner/index.ts';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
+import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
@@ -386,9 +387,15 @@ async function runAppleScreenshot(
   runnerOpts: RunnerCallOptions,
 ): Promise<void> {
   if (usesMacOsSurfaceScreenshot(device, options.surface)) {
+    if (options.fullscreen && rejectsMacOsHelperFullscreen(options.surface)) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `screenshot --fullscreen is not accepted on the macOS ${options.surface} surface: it always captures the main display`,
+        { reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame, surface: options.surface },
+      );
+    }
     await runMacOsScreenshotAction(outPath, {
       surface: options.surface,
-      fullscreen: options.fullscreen,
     });
     return;
   }
@@ -419,6 +426,15 @@ function usesMacOsSurfaceScreenshot(
   surface: ScreenshotOptions['surface'],
 ): surface is Exclude<ScreenshotOptions['surface'], undefined | 'app'> {
   return isMacOs(device) && surface !== undefined && surface !== 'app';
+}
+
+/**
+ * `desktop` and `menubar` always capture the main display through the helper; an explicit
+ * `--fullscreen` on either names a frame the capture cannot vary, so it is refused rather than
+ * silently ignored.
+ */
+function rejectsMacOsHelperFullscreen(surface: ScreenshotOptions['surface']): boolean {
+  return surface === 'desktop' || surface === 'menubar';
 }
 
 /** Only non-app macOS surfaces are helper-read; an app session is runner-read like any leaf. */

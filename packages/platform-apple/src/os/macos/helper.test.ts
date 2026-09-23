@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
-import { macOsClickScheduleMs, runMacOsPressAction, runMacOsSnapshotAction } from './helper.ts';
+import {
+  macOsClickScheduleMs,
+  runMacOsPressAction,
+  runMacOsScreenshotAction,
+  runMacOsSnapshotAction,
+} from './helper.ts';
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -206,4 +211,23 @@ test('macOS helper press stays a single held click when nothing is repeated', as
   assert.equal(receivedArgs.includes('--clicks'), false);
   assert.equal(receivedArgs.includes('--hold-ms'), false);
   assert.equal(receivedArgs.includes('--interval-ms'), false);
+});
+
+test('macOS helper screenshot argv carries only --out and --surface', async () => {
+  let receivedArgs: string[] = [];
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs = args;
+        return helperReturn({ path: '/tmp/out.png', surface: 'desktop' });
+      },
+    },
+  });
+
+  await withAppleToolProvider(
+    provider,
+    async () => await runMacOsScreenshotAction('/tmp/out.png', { surface: 'desktop' }),
+  );
+
+  assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
 });

@@ -473,16 +473,12 @@ export async function runMacOsPressAction(
 
 export async function runMacOsScreenshotAction(
   outPath: string,
-  options: { surface?: SessionSurface; fullscreen?: boolean } = {},
+  options: { surface?: SessionSurface } = {},
 ): Promise<{
   path: string;
   surface?: SessionSurface;
-  fullscreen: boolean;
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  if (options.fullscreen) {
-    args.push('--fullscreen');
-  }
   return await runMacOsHelper(args);
 }

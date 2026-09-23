@@ -67,6 +67,19 @@ export const SCREENSHOT_CROP_REASONS = {
 export type ScreenshotCropReason =
   (typeof SCREENSHOT_CROP_REASONS)[keyof typeof SCREENSHOT_CROP_REASONS];
 
+/**
+ * Machine-readable `screenshot --fullscreen` refusal reason. macOS `desktop` and `menubar`
+ * surfaces capture through the helper, which always reads the main display; an explicit
+ * `--fullscreen` on one of them names a frame the capture cannot vary, so it is refused
+ * with this reason in `error.details.reason` rather than silently ignored.
+ */
+export const SCREENSHOT_FULLSCREEN_REASONS = {
+  macOsHelperSurfaceFixedFrame: 'SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME',
+} as const;
+
+export type ScreenshotFullscreenReason =
+  (typeof SCREENSHOT_FULLSCREEN_REASONS)[keyof typeof SCREENSHOT_FULLSCREEN_REASONS];
+
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
