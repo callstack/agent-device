@@ -1,4 +1,4 @@
-// In-memory model of the enforced host-global device claim (`src/daemon/device-claims.ts`).
+// In-memory model of the enforced host-global device claim (`src/daemon/device/device-claims.ts`).
 //
 // The production claim is a filesystem lock file guarded by a process lock, keyed
 // by `canonicalLocalDeviceKey`. That is real I/O and a real OS lock — neither is

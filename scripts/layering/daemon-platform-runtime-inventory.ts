@@ -130,7 +130,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'orphan cleanups, and legacy app-log marker recovery.',
   },
   {
-    file: 'src/daemon/device-claim-owner-recovery.ts',
+    file: 'src/daemon/device/device-claim-owner-recovery.ts',
     target: 'src/platform-runtime.ts',
     symbols: ['createPlatformRuntimeGateway'],
     classification: 'composition-essential',
@@ -140,7 +140,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       "composition belongs to the recovery policy's own module.",
   },
   {
-    file: 'src/daemon/device-ready.ts',
+    file: 'src/daemon/device/device-ready.ts',
     target: 'src/platform-runtime-device-ready.ts',
     symbols: ['ensureLocalPlatformDeviceReady'],
     classification: 'composition-essential',

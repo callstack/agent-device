@@ -91,7 +91,7 @@ Hint: Run agent-device session list to inspect active sessions. To reuse this de
 };
 
 // Enforced cross-daemon device claim conflict from
-// src/daemon/device-claim-conflict.ts. This path is deliberately non-retriable:
+// src/daemon/device/device-claim-conflict.ts. This path is deliberately non-retriable:
 // the exact status command is the only safe next step while ownership is live.
 export const DEVICE_CLAIM_IN_USE_SAMPLE = {
   command: 'agent-device open Demo --platform android --serial emulator-5554',

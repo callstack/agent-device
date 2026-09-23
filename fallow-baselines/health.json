@@ -130,7 +130,7 @@
         "count": 1
       }
     },
-    "src/daemon/device-ready.ts": {
+    "src/daemon/device/device-ready.ts": {
       "complexity_high": {
         "count": 1
       },

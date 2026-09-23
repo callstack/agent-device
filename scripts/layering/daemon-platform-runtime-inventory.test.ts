@@ -23,11 +23,11 @@ function edgeViolations(sources: Record<string, string>, file: string): Layering
 test('R76 accepts a classified edge with the exact recorded symbols', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';\n" +
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
       'void ensureLocalPlatformDeviceReady;\n',
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/device-ready.ts'), []);
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
 });
 
 for (const [file, target, symbol] of [
@@ -51,8 +51,8 @@ for (const [file, target, symbol] of [
 test('R76 reports every classified edge missing from the tree as stale, not the other way around', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';\n" +
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
       'void ensureLocalPlatformDeviceReady;\n',
   };
   const stale = violations(sources).filter(
@@ -87,11 +87,11 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
 test('R76 rejects new symbols on a classified edge', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB + 'export function extraReadiness() {}\n',
-    'src/daemon/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady, extraReadiness } from '../platform-runtime-device-ready.ts';\n" +
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady, extraReadiness } from '../../platform-runtime-device-ready.ts';\n" +
       'void [ensureLocalPlatformDeviceReady, extraReadiness];\n',
   };
-  const found = edgeViolations(sources, 'src/daemon/device-ready.ts');
+  const found = edgeViolations(sources, 'src/daemon/device/device-ready.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
@@ -212,12 +212,12 @@ test('R76 rejects a namespace import alongside the recorded named binding on the
 test('R76 treats the import and re-export of one classified pair as one entry', () => {
   const sources = {
     [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';\n" +
-      "export { ensureLocalPlatformDeviceReady } from '../platform-runtime-device-ready.ts';\n" +
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
+      "export { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
       'void ensureLocalPlatformDeviceReady;\n',
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/device-ready.ts'), []);
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
 });
 
 test('R76 ignores test-shaped and non-daemon importers', () => {
