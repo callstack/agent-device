@@ -7,7 +7,6 @@ import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DeviceReadyOptions } from './device/device-ready.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 /**
@@ -59,7 +58,7 @@ export async function resolveBoundAppEventRuntime(
   params: Readonly<{
     device: DeviceInfo;
     positionals: readonly string[];
-    readiness?: DeviceReadyOptions;
+    readiness?: boolean;
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {

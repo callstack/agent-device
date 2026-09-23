@@ -74,7 +74,6 @@ export type OpenApplicationPreparationInput = Readonly<{
   currentAppBundleId?: string;
   hasExistingSession: boolean;
   surface: SessionSurface;
-  deviceHub: boolean;
   prewarmRunnerOnColdBoot: boolean;
   execution: ApplicationLifecycleExecution;
 }>;

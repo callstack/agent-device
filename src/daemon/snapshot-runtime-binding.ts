@@ -16,7 +16,6 @@ import {
   type BindDeviceRuntime,
   type InspectDeviceRuntimeFacts,
 } from './request-runtime-binding.ts';
-import type { DeviceReadyOptions } from './device/device-ready.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
@@ -101,7 +100,7 @@ export async function admitAndBindSnapshotCapture(
     plan: SnapshotRuntimePlan | SelectorCaptureRuntimePlan;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
-    readiness?: DeviceReadyOptions;
+    readiness?: boolean;
   }>,
 ): Promise<AdmittedSnapshotCapture> {
   const { command, device, session, plan } = params;
@@ -149,7 +148,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     }),
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
-    ...(session ? {} : { readiness: {} }),
+    ...(session ? {} : { readiness: true }),
   });
   if (!bound.ok) return bound;
 
@@ -177,7 +176,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
 async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
   admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>,
-  readiness: DeviceReadyOptions | undefined,
+  readiness: boolean | undefined,
 ): Promise<
   Readonly<{
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
@@ -194,7 +193,7 @@ async function bindSnapshotCaptureRuntime(
   const bind = requireRuntimeBinding(bindDevice);
   const bindReady: BindDeviceRuntime = async (device, use) => {
     const runtime = await bind(device, use);
-    if (readiness !== undefined) await ensureBoundDeviceReady(runtime, readiness);
+    if (readiness) await ensureBoundDeviceReady(runtime);
     return runtime;
   };
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);

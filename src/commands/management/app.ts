@@ -61,7 +61,6 @@ const openCommandMetadata = defineFieldCommandMetadata(
     force: booleanField(
       'Overwrite an existing --save-script target instead of refusing (alias: --overwrite).',
     ),
-    deviceHub: booleanField('Use Xcode Device Hub when surfacing Apple simulators.'),
     testIme: booleanField(
       'Activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices).',
     ),
@@ -116,7 +115,6 @@ const openCliSchema = {
     'activity',
     'launchConsole',
     'launchArgs',
-    'deviceHub',
     'testIme',
     'saveScript',
     'force',
@@ -155,7 +153,6 @@ const openCliReader: CliReader = (positionals, flags) => ({
   waitMs: flags.waitMs,
   saveScript: flags.saveScript,
   force: flags.force,
-  deviceHub: flags.deviceHub,
   testIme: flags.testIme,
   noRecord: flags.noRecord,
   metroHost: flags.metroHost,

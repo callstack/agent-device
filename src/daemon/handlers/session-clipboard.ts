@@ -115,7 +115,7 @@ async function resolveBoundClipboardRuntime(
       use: clipboardReadUse,
       inspectFacts,
       bindDevice,
-      readiness: {},
+      readiness: true,
     });
     if (admission.type === 'response') return { ok: false, response: admission.response };
     const runtime = admission.runtime;
@@ -127,7 +127,7 @@ async function resolveBoundClipboardRuntime(
     use: clipboardWriteUse,
     inspectFacts,
     bindDevice,
-    readiness: {},
+    readiness: true,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;

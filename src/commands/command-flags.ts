@@ -64,7 +64,6 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     relaunch: options.relaunch,
     shutdown: options.shutdown,
     saveScript: options.saveScript,
-    deviceHub: options.deviceHub,
     testIme: options.testIme,
     noRecord: options.noRecord,
     recordAs: options.recordAs,

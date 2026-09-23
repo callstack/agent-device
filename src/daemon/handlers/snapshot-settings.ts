@@ -226,7 +226,7 @@ async function executeSettingsRead(
     use: settingReadUse,
     inspectFacts,
     bindDevice,
-    ...(session ? {} : { readiness: {} }),
+    ...(session ? {} : { readiness: true }),
   });
   if (admission.type === 'response') return admission.response;
 
@@ -267,7 +267,7 @@ async function executeSettingsWrite(
     use: settingsRuntimeUse,
     inspectFacts,
     bindDevice,
-    ...(session ? {} : { readiness: {} }),
+    ...(session ? {} : { readiness: true }),
   });
   const appBundleId = settingsWriteAppId(req, parsed, session);
   if (admission.type === 'response') return admission.response;

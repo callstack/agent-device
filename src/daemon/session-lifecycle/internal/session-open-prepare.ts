@@ -157,7 +157,6 @@ export async function prepareOpenCommandDetails(params: {
     currentAppBundleId: existingSession?.appBundleId,
     hasExistingSession: existingSession !== undefined,
     surface,
-    deviceHub: req.flags?.deviceHub === true,
     prewarmRunnerOnColdBoot:
       surface === 'app' && Boolean(openTarget) && !isDeepLinkTarget(openTarget ?? ''),
     execution: {

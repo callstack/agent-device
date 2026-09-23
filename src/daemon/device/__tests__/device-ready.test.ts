@@ -54,26 +54,7 @@ test('ensureDeviceReady caches successful simulator readiness checks', async () 
   await ensureDeviceReady({ ...device });
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(1);
-  expect(mockEnsureBootedSimulator).toHaveBeenCalledWith(
-    device,
-    expect.objectContaining({
-      deviceHub: undefined,
-      focusExisting: undefined,
-    }),
-  );
-});
-
-test('ensureDeviceReady focuses cached simulator readiness checks when requested', async () => {
-  const device: DeviceInfo = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-a' };
-
-  await ensureDeviceReady(device);
-  await ensureDeviceReady({ ...device }, { deviceHub: true, focusExisting: true });
-
-  expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(2);
-  expect(mockEnsureBootedSimulator).toHaveBeenLastCalledWith(
-    { ...device },
-    expect.objectContaining({ deviceHub: true, focusExisting: true }),
-  );
+  expect(mockEnsureBootedSimulator).toHaveBeenCalledWith(device);
 });
 
 test('ensureDeviceReady caches successful iOS physical device readiness checks', async () => {
@@ -103,16 +84,6 @@ test('ensureDeviceReady includes simulator set path in the cache key', async () 
   await ensureDeviceReady({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-b' });
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(2);
-});
-
-test('ensureDeviceReady forwards iOS simulator cold boot callback', async () => {
-  const onColdBootStart = vi.fn();
-  await ensureDeviceReady(IOS_SIMULATOR, { onIosSimulatorColdBootStart: onColdBootStart });
-
-  expect(mockEnsureBootedSimulator).toHaveBeenCalledWith(
-    IOS_SIMULATOR,
-    expect.objectContaining({ onColdBootStart }),
-  );
 });
 
 test('ensureDeviceReady expires cached readiness checks after the ttl', async () => {

@@ -73,7 +73,6 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
     force?: boolean;
-    deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
     /** Fill-only script parameter name used to publish `${VAR}` instead of literal text. */

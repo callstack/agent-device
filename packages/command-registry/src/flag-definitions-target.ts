@@ -309,15 +309,6 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
-    key: 'deviceHub',
-    names: ['--device-hub'],
-    type: 'boolean',
-    usageLabel: '--device-hub',
-    usageDescription: 'open: use Xcode Device Hub when surfacing Apple simulators',
-    projectConfig: true,
-    recorded: false,
-  },
-  {
     key: 'testIme',
     names: ['--test-ime'],
     type: 'boolean',

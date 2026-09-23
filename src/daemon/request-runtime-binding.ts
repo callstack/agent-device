@@ -15,7 +15,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { ensureDeviceReady, type DeviceReadyOptions } from './device/device-ready.ts';
+import { ensureDeviceReady } from './device/device-ready.ts';
 import type {
   ManagedRequestAdmission,
   ResolveManagedRequestLease,
@@ -82,10 +82,7 @@ export type BoundDeviceIdentity = Readonly<{
 }>;
 
 /** Confirms managed authority or runs local readiness after binding and claim admission. */
-export async function ensureBoundDeviceReady(
-  bound: BoundDeviceIdentity,
-  options: DeviceReadyOptions = {},
-): Promise<void> {
+export async function ensureBoundDeviceReady(bound: BoundDeviceIdentity): Promise<void> {
   switch (bound.owner.kind) {
     case 'provider-runtime':
       return;
@@ -102,7 +99,7 @@ export async function ensureBoundDeviceReady(
       );
     }
     case 'local-family':
-      await ensureDeviceReady(bound.device, options);
+      await ensureDeviceReady(bound.device);
   }
 }
 

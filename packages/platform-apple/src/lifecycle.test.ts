@@ -341,7 +341,6 @@ test('open forwards its startup deadline to the Simulator boot wait', async () =
       target: 'com.example.app',
       hasExistingSession: false,
       surface: 'app',
-      deviceHub: false,
       prewarmRunnerOnColdBoot: false,
       execution: { startupDeadlineAtMs: startedAtMs + 45_000 },
     });

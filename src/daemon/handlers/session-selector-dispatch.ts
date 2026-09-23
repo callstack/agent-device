@@ -16,7 +16,6 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
-import type { DeviceReadyOptions } from '../device/device-ready.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
@@ -136,7 +135,7 @@ type SessionRouteRuntimeResolver = (
   params: Readonly<{
     device: DeviceInfo;
     positionals: string[];
-    readiness?: DeviceReadyOptions;
+    readiness?: boolean;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
   }>,
@@ -181,7 +180,7 @@ async function runBoundSessionRoute(
       const bound = await params.resolveRuntime({
         device,
         positionals,
-        readiness: {},
+        readiness: true,
         inspectFacts,
         bindDevice,
       });

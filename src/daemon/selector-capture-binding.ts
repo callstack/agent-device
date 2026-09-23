@@ -60,7 +60,7 @@ export async function resolveBoundSelectorCapture(
       hasActiveApp: params.session?.appBundleId !== undefined,
       intent: selectorCaptureIntent(params.command),
     }),
-    ...(params.session ? {} : { readiness: {} }),
+    ...(params.session ? {} : { readiness: true }),
   });
   if (!bound.ok) return bound;
   // The read is present only when the admitted owner advertised it; its absence is not a failure

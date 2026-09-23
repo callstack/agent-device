@@ -61,7 +61,7 @@ async function resolveBoundAlertRuntime(
     device,
     inspectFacts,
     bindDevice,
-    ...(params.session ? {} : { readiness: {} }),
+    ...(params.session ? {} : { readiness: true }),
   };
   if (action === 'wait') {
     const admission = await admitRuntimeUse({ ...shared, use: alertWaitUse });

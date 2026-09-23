@@ -53,11 +53,10 @@ beforeEach(() => {
 
 test('bound readiness preserves local behavior after the binding fence', async () => {
   const selected = device('ready-after-bind');
-  const options = { focusExisting: true };
 
-  await ensureBoundDeviceReady({ device: selected, owner: localRuntimeOwner('android') }, options);
+  await ensureBoundDeviceReady({ device: selected, owner: localRuntimeOwner('android') });
 
-  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected, options);
+  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected);
 });
 
 test('bound readiness leaves provider-owned devices alone', async () => {
@@ -103,7 +102,7 @@ test('runtime readiness follows allocator claim admission', async () => {
     use: appLogInspectUse,
     inspectFacts: bindings.inspectFacts,
     bindDevice: bindings.bindDevice,
-    readiness: {},
+    readiness: true,
   });
 
   expect(admission.type).toBe('runtime');

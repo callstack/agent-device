@@ -90,7 +90,6 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
     force?: boolean;
-    deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
     runtime?: SessionRuntimeHints;

@@ -8,26 +8,13 @@ export const DEVICE_READY_CACHE_TTL_MS = 5_000;
 
 const readyCache = createTtlMemo<string, true>({ ttlMs: DEVICE_READY_CACHE_TTL_MS });
 
-export type DeviceReadyOptions = {
-  deviceHub?: boolean;
-  focusExisting?: boolean;
-  onIosSimulatorColdBootStart?: (device: DeviceInfo) => void;
-};
-
-export async function ensureDeviceReady(
-  device: DeviceInfo,
-  options: DeviceReadyOptions = {},
-): Promise<void> {
+export async function ensureDeviceReady(device: DeviceInfo): Promise<void> {
   if (isActiveProviderDevice(device)) return;
 
   const cacheKey = deviceReadyCacheKey(device);
-  const isCached = readyCache.get(cacheKey) === true;
-  if (isCached) {
-    if (!options.focusExisting) return;
-    readyCache.delete(cacheKey);
-  }
+  if (readyCache.get(cacheKey) === true) return;
 
-  const handled = await ensureLocalPlatformDeviceReady(device, options);
+  const handled = await ensureLocalPlatformDeviceReady(device);
   if (handled) {
     markDeviceReady(cacheKey);
   }

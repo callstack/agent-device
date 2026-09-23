@@ -75,7 +75,7 @@ test('sessionless capture readiness follows runtime binding', async () => {
     plan: resolveSnapshotRuntimePlan({ customActions: false, hasActiveApp: true }),
     inspectFacts: fixture.inspectFacts,
     bindDevice: recordingBind,
-    readiness: {},
+    readiness: true,
   });
 
   expect(resolved.ok).toBe(true);

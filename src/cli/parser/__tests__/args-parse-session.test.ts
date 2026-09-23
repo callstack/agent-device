@@ -842,15 +842,6 @@ test('parseArgs recognizes explicit config file flag', () => {
   assert.equal(parsed.flags.config, './agent-device.json');
 });
 
-test('parseArgs recognizes open Device Hub opt-in flag', () => {
-  const parsed = parseArgs(['open', 'settings', '--platform', 'ios', '--device-hub'], {
-    strictFlags: true,
-  });
-  assert.equal(parsed.command, 'open');
-  assert.equal(parsed.flags.platform, 'ios');
-  assert.equal(parsed.flags.deviceHub, true);
-});
-
 test('parseArgs recognizes session lock policy flag', () => {
   const parsed = parseArgs(['snapshot', '--session-lock', 'strip'], { strictFlags: true });
   assert.equal(parsed.command, 'snapshot');

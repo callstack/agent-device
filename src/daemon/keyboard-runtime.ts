@@ -29,7 +29,6 @@ import {
   type RuntimeAdmissionRequest,
 } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DeviceReadyOptions } from './device/device-ready.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type KeyboardRuntimeAction = 'status' | 'dismiss' | 'enter';
@@ -222,7 +221,7 @@ async function executeKeyboardEnter(
 export async function resolveBoundKeyboardRuntime(
   params: {
     device: DeviceInfo;
-    readiness?: DeviceReadyOptions;
+    readiness?: boolean;
   } & RuntimeAdmissionBindings & { positionals: readonly string[] },
 ): Promise<ResolvedKeyboardExecution> {
   const action = readKeyboardAction(params.positionals);

@@ -66,7 +66,6 @@ export type CliFlags = CloudProviderProfileFields &
     iosXctestrunFile?: string;
     iosXctestDerivedDataPath?: string;
     iosXctestEnvDir?: string;
-    deviceHub?: boolean;
     testIme?: boolean;
     androidDeviceAllowlist?: string;
     remote?: boolean;

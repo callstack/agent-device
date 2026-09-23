@@ -153,15 +153,8 @@ export function createRecordingAppleToolProvider(handlers: RecordingAppleToolHan
   };
 }
 
-const SIMULATOR_HOST_OPEN_COMMANDS = new Set([
-  '-a Device Hub',
-  '-a Simulator',
-  '-g -a Device Hub',
-  '-g -a Simulator',
-]);
-
 function isSimulatorHostOpenCommand(cmd: string, args: readonly string[]): boolean {
-  return cmd === 'open' && SIMULATOR_HOST_OPEN_COMMANDS.has(args.join(' '));
+  return cmd === 'open' && args.join(' ') === '-a Simulator';
 }
 
 function createRecordingMacOsHostProvider(

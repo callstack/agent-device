@@ -325,8 +325,6 @@ test('open command usage documents surface and console log flags', async () => {
   assert.match(help, /macOS also supports --surface/);
   assert.match(help, /--launch-console <path>/);
   assert.match(help, /iOS simulator launch console/);
-  assert.match(help, /--device-hub/);
-  assert.match(help, /use Xcode Device Hub/);
   assert.match(help, /Use --platform to bind URL\/deep-link opens/);
   assert.match(help, /agent-device open "Expo Go" exp:\/\/127\.0\.0\.1:8081 --platform ios/);
 });
