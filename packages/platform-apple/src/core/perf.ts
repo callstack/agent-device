@@ -28,12 +28,7 @@ import {
   resolveXmlProcess,
   type XmlReference,
 } from './perf-xml.ts';
-import {
-  readAppleProcessSamples,
-  resolveAppleExecutable,
-  resolveIosDevicePerfTarget,
-  type AppleProcessSample,
-} from './perf-target.ts';
+import type { AppleProcessSample } from './perf-target.ts';
 import { exportAppleXctraceData, recordAppleXctraceTimedTrace } from './perf-xctrace.ts';
 import {
   APPLE_FRAME_SAMPLE_DESCRIPTION,
@@ -105,6 +100,7 @@ export async function sampleAppleMemoryPerf(
     return await sampleIosDeviceMemoryPerf(device, appBundleId);
   }
 
+  const { readAppleProcessSamples, resolveAppleExecutable } = await import('./perf-target.ts');
   const executable = await resolveAppleExecutable(device, appBundleId);
   const processes = await readAppleProcessSamples(device, executable);
   if (processes.length === 0) {
@@ -290,6 +286,7 @@ export async function sampleAppleFramePerf(
     );
   }
 
+  const { resolveIosDevicePerfTarget } = await import('./perf-target.ts');
   const processes = await resolveIosDevicePerfTarget(device, appBundleId);
   const capture = await captureIosDeviceFramePerf(device, appBundleId, processes);
   return parseAppleFramePerfSample({
@@ -484,6 +481,7 @@ async function sampleIosDeviceMemoryPerf(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<AppleMemoryPerfSample> {
+  const { resolveIosDevicePerfTarget } = await import('./perf-target.ts');
   const processes = await resolveIosDevicePerfTarget(device, appBundleId);
   const capture = await captureIosDevicePerfTable(device, appBundleId);
   const snapshot = summarizeIosDeviceMemorySnapshot(
@@ -600,6 +598,7 @@ async function resolveAppleMemorySnapshotProcess(
   appBundleId: string,
   executable: { executableName: string; executablePath?: string },
 ): Promise<AppleProcessSample> {
+  const { readAppleProcessSamples } = await import('./perf-target.ts');
   const processes = await readAppleProcessSamples(device, executable);
   const processInfo = processes.sort((left, right) => right.rssKb - left.rssKb)[0];
   if (processInfo) return processInfo;
@@ -619,6 +618,7 @@ async function resolveAppleMemorySnapshotTarget(
   | Extract<AppleMemorySnapshotResult, { available: false }>
 > {
   try {
+    const { resolveAppleExecutable } = await import('./perf-target.ts');
     const executable = await resolveAppleExecutable(device, appBundleId);
     return {
       available: true,

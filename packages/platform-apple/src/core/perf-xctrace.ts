@@ -33,11 +33,6 @@ import {
   parseAppleTimeProfileSummary,
   type AppleTimeProfileFunction,
 } from './perf-time-profile.ts';
-import {
-  readAppleProcessSamples,
-  resolveAppleExecutable,
-  resolveIosDevicePerfTarget,
-} from './perf-target.ts';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import { runXcrun } from './tool-provider.ts';
 
@@ -348,6 +343,8 @@ async function resolveAppleXctracePerfTarget(
       hint: 'Android native profiling belongs to the Android perf rollout and is not implemented under Apple xctrace.',
     });
   }
+  const { readAppleProcessSamples, resolveAppleExecutable, resolveIosDevicePerfTarget } =
+    await import('./perf-target.ts');
   if (isIosFamily(device) && device.kind === 'device') {
     const processes = await resolveIosDevicePerfTarget(device, appBundleId);
     return {
