@@ -166,8 +166,17 @@ extension RunnerTests {
     currentApp = app
     currentBundleId = nil
     currentAppProcessIdentifier = nil
+    resetTargetBoundState()
+  }
+
+  /// State that belongs to the currently bound target and must not outlive it: the text-entry tap
+  /// witness, the fresh-process snapshot warmup exemption, and the last-written per-command log
+  /// markers. Every site that binds, rebinds, or drops the target runs this.
+  func resetTargetBoundState() {
     clearRememberedTextEntryTap()
     snapshotXCTestPenaltyWarmupExemptionPending = false
+    lastLoggedFastAppGuardLine = nil
+    lastLoggedGesturePolicyLines.removeAll()
   }
 
   func invalidateCachedTarget(reason: String) {
@@ -177,9 +186,7 @@ extension RunnerTests {
     currentApp = nil
     currentBundleId = nil
     currentAppProcessIdentifier = nil
-    clearRememberedTextEntryTap()
-    snapshotXCTestPenaltyWarmupExemptionPending = false
-    repeatedLogSuppressor.reset()
+    resetTargetBoundState()
   }
 
   func resetTargetAfterExternalRelaunch() -> Response {
@@ -254,12 +261,13 @@ extension RunnerTests {
       return false
     }
     guard activeApp.state == .runningForeground else { return false }
-    let state = activeApp.state.rawValue
-    repeatedLogSuppressor.logIfChanged(
-      key: "fast_app_guard",
-      fact: "\(requestedBundleId) \(state)",
-      line: "AGENT_DEVICE_RUNNER_FAST_APP_GUARD command=\(String(describing: command)) bundle=\(requestedBundleId) state=\(state)"
-    )
+    // The command is on the adjacent COMMAND_ACCEPTED line; repeating it here would make a deduped
+    // marker read as if only that command ever passed the guard.
+    let line = "AGENT_DEVICE_RUNNER_FAST_APP_GUARD bundle=\(requestedBundleId) state=\(activeApp.state.rawValue)"
+    if lastLoggedFastAppGuardLine != line {
+      lastLoggedFastAppGuardLine = line
+      NSLog("%@", line)
+    }
     return true
   }
 
@@ -313,8 +321,7 @@ extension RunnerTests {
     currentApp = target
     currentBundleId = bundleId
     currentAppProcessIdentifier = Self.processIdentifier(of: target)
-    clearRememberedTextEntryTap()
-    snapshotXCTestPenaltyWarmupExemptionPending = false
+    resetTargetBoundState()
     beginFirstInteractionStabilization()
     return target
   }
@@ -481,57 +488,15 @@ extension RunnerTests {
   }
 }
 
-/// Writes a repeating log fact only when it changes. `logIfChanged` compares `fact` with the last
-/// one written under `key` and, on a change, writes `line` (which may carry per-command detail the
-/// comparison ignores). `reset` forgets every key so the next call writes again.
-final class RepeatedLogSuppressor {
-  private let lock = NSLock()
-  private var lastFacts: [String: String] = [:]
-
-  @discardableResult
-  func logIfChanged(key: String, fact: String, line: @autoclosure () -> String) -> Bool {
-    lock.lock()
-    let changed = lastFacts[key] != fact
-    if changed {
-      lastFacts[key] = fact
-    }
-    lock.unlock()
-    if changed {
-      NSLog("%@", line())
-    }
-    return changed
-  }
-
-  func reset() {
-    lock.lock()
-    lastFacts.removeAll()
-    lock.unlock()
-  }
-}
-
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
-  func testRepeatedLogSuppressorWritesOnlyWhenTheFactChangesUntilReset() {
-    let suppressor = RepeatedLogSuppressor()
-    XCTAssertTrue(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard first"))
-    XCTAssertFalse(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard repeat"))
-    XCTAssertFalse(suppressor.logIfChanged(key: "guard", fact: "app 4", line: "guard repeat"))
-    XCTAssertTrue(suppressor.logIfChanged(key: "guard", fact: "app 2", line: "guard changed"))
-    XCTAssertTrue(suppressor.logIfChanged(key: "policy", fact: "app 2", line: "other key"))
-    suppressor.reset()
-    XCTAssertTrue(
-      suppressor.logIfChanged(key: "guard", fact: "app 2", line: "guard after reset"),
-      "a reset must restate the fact once more"
-    )
-  }
-
-  func testInvalidatingTheCachedTargetResetsTheRepeatedLogSuppressor() {
-    repeatedLogSuppressor.reset()
-    XCTAssertTrue(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "first"))
-    XCTAssertFalse(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "repeat"))
-    invalidateCachedTarget(reason: "unit_test")
-    XCTAssertTrue(repeatedLogSuppressor.logIfChanged(key: "guard", fact: "app", line: "rebind"))
-    repeatedLogSuppressor.reset()
+  func testResettingTargetBoundStateForgetsTheLastWrittenMarkers() {
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
+    lastLoggedFastAppGuardLine = "AGENT_DEVICE_RUNNER_FAST_APP_GUARD bundle=app state=4"
+    lastLoggedGesturePolicyLines[.scroll] = "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=scroll"
+    resetTargetBoundState()
+    XCTAssertNil(lastLoggedFastAppGuardLine, "a rebind must state the guard once more")
+    XCTAssertTrue(lastLoggedGesturePolicyLines.isEmpty, "a rebind must state the policy once more")
   }
 }
 #endif

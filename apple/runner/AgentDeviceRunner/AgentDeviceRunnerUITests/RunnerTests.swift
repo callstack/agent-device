@@ -76,11 +76,12 @@ final class RunnerTests: XCTestCase {
   let minRecordingFps = 1
   let maxRecordingFps = 120
   var needsPostSnapshotInteractionDelay = false
-  // Per-command markers that restate the same fact on every command (the fast app guard, the
-  // synthesized gesture policy) write only when that fact changes; otherwise a long session fills
-  // runner.log with one identical line per command. Reset with the cached target so a rebind
-  // states the fact once more.
-  let repeatedLogSuppressor = RepeatedLogSuppressor()
+  // Per-command markers that restate a fact of the bound target (the fast app guard, the
+  // synthesized gesture policy per gesture kind) write only when that fact changes; otherwise a
+  // long session fills runner.log with one identical line per command. Cleared with the rest of the
+  // target-bound state so a rebind states the fact once more.
+  var lastLoggedFastAppGuardLine: String?
+  var lastLoggedGesturePolicyLines: [SynthesizedGesturePolicyKind: String] = [:]
   /// When the first interaction after an activation may run, on the monotonic uptime clock.
   /// The guarantee is a minimum gap *since the activation*, not a pause at the interaction:
   /// a caller that already spent that gap elsewhere (an agent's round trip is 190-260 ms)
