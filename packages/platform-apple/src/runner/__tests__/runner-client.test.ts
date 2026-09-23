@@ -3,7 +3,6 @@ import {
   isRequestCanceledError,
   AppError,
 } from '@agent-device/kernel/errors';
-import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner-command-manifest.ts';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import { beforeEach, test, onTestFinished, vi } from 'vitest';
 import assert from 'node:assert/strict';
@@ -30,12 +29,15 @@ vi.mock('../runner-macos-products.ts', async () => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
+import {
+  RUNNER_COMMAND_TRAIT_MANIFEST,
+  isReadOnlyRunnerCommand,
+} from '../runner-command-traits.ts';
 import {
   isRetryableRunnerError,
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
-import { resolveRunnerEarlyExitHint } from '../runner-startup-failure.ts';
+import { resolveRunnerEarlyExitHint } from '../runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {
   resolveRunnerBuildDestination,

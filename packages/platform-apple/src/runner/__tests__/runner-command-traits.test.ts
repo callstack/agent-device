@@ -8,9 +8,9 @@ import {
   isRunnerReadinessPreflightExempt,
   isRunnerReadinessProbeCommand,
   readRunnerCommandTraits,
+  RUNNER_COMMAND_TRAIT_MANIFEST,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
-import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner-command-manifest.ts';
 
 const EXPECTED_RUNNER_COMMAND_TRAITS = Object.fromEntries(
   Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [

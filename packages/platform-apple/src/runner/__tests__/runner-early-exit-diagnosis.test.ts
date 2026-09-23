@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { AppError } from '@agent-device/kernel/errors';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
-import { buildRunnerEarlyExitError } from '../runner-startup-failure.ts';
+import { buildRunnerEarlyExitError } from '../runner-startup-transport.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
