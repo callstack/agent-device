@@ -47,28 +47,41 @@ export function isNewerVersion(candidate: string, baseline: string): boolean {
 function compareVersions(left: string, right: string): number {
   const a = parseVersion(left);
   const b = parseVersion(right);
+  return compareRelease(a.release, b.release) || comparePrerelease(a.prerelease, b.prerelease);
+}
+
+function compareRelease(a: number[], b: number[]): number {
   for (let i = 0; i < 3; i += 1) {
-    const x = a.release[i] ?? 0;
-    const y = b.release[i] ?? 0;
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
     if (x !== y) return x > y ? 1 : -1;
   }
-  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
-    return Math.sign(b.prerelease.length - a.prerelease.length);
-  }
-  const fields = Math.max(a.prerelease.length, b.prerelease.length);
+  return 0;
+}
+
+/** A release (no prerelease) sorts after every prerelease of the same base. */
+function comparePrerelease(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return Math.sign(b.length - a.length);
+  const fields = Math.max(a.length, b.length);
   for (let i = 0; i < fields; i += 1) {
-    const x = a.prerelease[i];
-    const y = b.prerelease[i];
+    const x = a[i];
+    const y = b[i];
     if (x === undefined) return -1;
     if (y === undefined) return 1;
-    if (x === y) continue;
-    const xNumeric = /^\d+$/.test(x);
-    const yNumeric = /^\d+$/.test(y);
-    if (xNumeric && yNumeric) return Number(x) > Number(y) ? 1 : -1;
-    if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
-    return x > y ? 1 : -1;
+    const order = comparePrereleaseField(x, y);
+    if (order !== 0) return order;
   }
   return 0;
+}
+
+/** Numeric fields compare as numbers and sort below alphanumeric ones; the rest compare lexically. */
+function comparePrereleaseField(x: string, y: string): number {
+  if (x === y) return 0;
+  const xNumeric = /^\d+$/.test(x);
+  const yNumeric = /^\d+$/.test(y);
+  if (xNumeric && yNumeric) return Number(x) > Number(y) ? 1 : -1;
+  if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
+  return x > y ? 1 : -1;
 }
 
 function parseVersion(version: string): { release: number[]; prerelease: string[] } {
