@@ -69,6 +69,12 @@ export function clipboardRuntimeOperationFacts(
   });
 }
 
+/** How a fail-closed refusal names each clipboard half to the caller. */
+export const CLIPBOARD_LEG_LABELS = {
+  readClipboard: 'clipboard read',
+  writeClipboard: 'clipboard write',
+} as const;
+
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The
  * owner is already chosen by the time a binder is called, so each entry point supplies its own
@@ -87,6 +93,19 @@ async function resolveClipboardInteractor(
   });
 }
 
+/**
+ * Resolves one clipboard half's member through the shared optional-member guard. Loaded on the
+ * call rather than at module evaluation because this facade's eager closure is held at its
+ * merge-base size (`eager-closure-budgets`); a static edge would grow it.
+ */
+async function requireClipboardMethod<Leg extends keyof typeof CLIPBOARD_LEG_LABELS>(
+  interactor: Interactor,
+  leg: Leg,
+): Promise<NonNullable<Interactor[Leg]>> {
+  const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+  return requireInteractorMethod(interactor[leg], CLIPBOARD_LEG_LABELS[leg]);
+}
+
 export function bindClipboardRead(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
@@ -94,7 +113,8 @@ export function bindClipboardRead(
   return Object.freeze({
     readClipboard: async (input: ClipboardReadInput) => {
       const interactor = await resolveClipboardInteractor(signal, resolveInteractor, input);
-      return await interactor.readClipboard();
+      const readClipboard = await requireClipboardMethod(interactor, 'readClipboard');
+      return await readClipboard.call(interactor);
     },
   });
 }
@@ -106,7 +126,8 @@ export function bindClipboardWrite(
   return Object.freeze({
     writeClipboard: async (input: ClipboardWriteInput) => {
       const interactor = await resolveClipboardInteractor(signal, resolveInteractor, input);
-      await interactor.writeClipboard(input.text);
+      const writeClipboard = await requireClipboardMethod(interactor, 'writeClipboard');
+      await writeClipboard.call(interactor, input.text);
     },
   });
 }

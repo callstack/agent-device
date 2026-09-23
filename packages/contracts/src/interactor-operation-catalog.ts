@@ -2,7 +2,11 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { ALERT_LEG_LABELS, bindAlertLeg } from './alert-runtime.ts';
 import { bindAppEvent } from './app-event-runtime.ts';
 import { bindBack } from './back-runtime.ts';
-import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
+import {
+  CLIPBOARD_LEG_LABELS,
+  bindClipboardRead,
+  bindClipboardWrite,
+} from './clipboard-runtime.ts';
 import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
 import { bindOrientation } from './orientation-runtime.ts';
 import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
@@ -74,8 +78,16 @@ export const INTERACTOR_OPERATIONS = [
     label: KEYBOARD_ACTION_LABELS.keyboardEnter,
     bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
   },
-  { operation: 'readClipboard', label: 'clipboard read', bind: bindClipboardRead },
-  { operation: 'writeClipboard', label: 'clipboard write', bind: bindClipboardWrite },
+  {
+    operation: 'readClipboard',
+    label: CLIPBOARD_LEG_LABELS.readClipboard,
+    bind: bindClipboardRead,
+  },
+  {
+    operation: 'writeClipboard',
+    label: CLIPBOARD_LEG_LABELS.writeClipboard,
+    bind: bindClipboardWrite,
+  },
   {
     operation: 'appSwitcher',
     label: SYSTEM_BUTTON_LABELS.appSwitcher,

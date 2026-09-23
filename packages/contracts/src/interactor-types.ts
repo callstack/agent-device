@@ -386,8 +386,17 @@ export type Interactor = {
   keyboardDismiss?(): Promise<KeyboardDismissResult>;
   /** Optional: platforms with no keyboard-return concept leave it undefined. */
   keyboardEnter?(): Promise<KeyboardEnterResult>;
-  readClipboard(): Promise<string>;
-  writeClipboard(text: string): Promise<void>;
+  /**
+   * Optional (parity with `readSetting`): the owner's pasteboard read. An owner with no clipboard
+   * surface leaves both halves undefined; its fact refuses the half before binding, and the
+   * clipboard binder fails closed rather than resolving an absent member as an empty answer.
+   */
+  readClipboard?(): Promise<string>;
+  /**
+   * Optional (parity with `readClipboard`): the owner's pasteboard write, with the same
+   * fact-then-guard contract as the read.
+   */
+  writeClipboard?(text: string): Promise<void>;
   setSetting(
     setting: string,
     state: string,

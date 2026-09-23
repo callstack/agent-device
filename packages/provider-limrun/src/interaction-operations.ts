@@ -267,8 +267,7 @@ export function limrunNavigationOperationFacts(
  * `clipboard` shares the split its siblings have: the Android leg rides
  * `session.dependencies.android.createInteractor` — the SAME factory the local Android family
  * binds, so `cmd clipboard get/set text` reaches the device exactly as it does locally — while
- * the iOS leg's own `readClipboard`/`writeClipboard` throw, so both cells stay unavailable there
- * and carry the interactor's wording.
+ * the iOS direct session has no pasteboard transport, so both cells stay unavailable there.
  */
 export function limrunClipboardOperationFacts(
   device: DeviceInfo,

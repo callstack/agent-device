@@ -343,14 +343,6 @@ class LimrunIosInteractor implements Interactor {
     throw unsupported('tv-remote', 'Limrun iOS direct sessions do not expose tv remote control.');
   }
 
-  async readClipboard(): Promise<never> {
-    throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard read yet.');
-  }
-
-  async writeClipboard(): Promise<never> {
-    throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard write yet.');
-  }
-
   async setSetting(): Promise<never> {
     throw unsupported('settings', 'Limrun iOS direct sessions do not expose settings changes yet.');
   }

@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   bindClipboardRead,
   bindClipboardWrite,
@@ -95,4 +96,32 @@ test('a local write binding hands the interactor the already-joined text', async
   await operations.writeClipboard({ text: 'hello world' });
 
   expect(writeClipboard).toHaveBeenCalledWith('hello world');
+});
+
+// Facts admitted the half, so an interactor without it is an ownership bug the caller must see
+// rather than a refusal to degrade around. The label is the one the command already used.
+test('a clipboard half whose fact admitted but whose interactor cannot serve it fails closed', async () => {
+  const served = { readClipboard: vi.fn(async () => 'copied text') } as unknown as Interactor;
+  const signal = new AbortController().signal;
+  const missingWrite = local(async () => ({ ...served, writeClipboard: undefined }));
+  const missingRead = local(
+    async () => ({ writeClipboard: vi.fn(async () => undefined) }) as unknown as Interactor,
+  );
+
+  await expect(
+    bindClipboardWrite(signal, missingWrite).writeClipboard({ text: 'hello' }),
+  ).rejects.toSatisfy(
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.message.includes('clipboard write'),
+  );
+  await expect(bindClipboardRead(signal, missingRead).readClipboard({})).rejects.toSatisfy(
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'COMMAND_FAILED' &&
+      error.details?.['reason'] === 'interactor-method-missing' &&
+      error.message.includes('clipboard read'),
+  );
 });
