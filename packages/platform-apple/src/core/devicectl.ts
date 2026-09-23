@@ -184,7 +184,9 @@ export type IosDevicectlJsonOutcome =
       ok: false;
       reason: IosDevicectlJsonFailureReason;
       args: string[];
-      result?: ExecResult;
+      result: ExecResult;
+      /** The JSON a failed command still wrote, when it was readable. */
+      payload?: unknown;
       cause?: string;
     };
 
@@ -210,28 +212,35 @@ export async function runIosDevicectlJsonRequest(options: {
     `${options.jsonPrefix}-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
   );
   const args = [...options.args, '--json-output', jsonPath];
-  const result = await runXcrun(args, {
-    allowFailure: true,
-    signal: options.signal,
-    timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
-  });
-
   try {
+    const result = await runXcrun(args, {
+      allowFailure: true,
+      signal: options.signal,
+      timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
+    });
     if (result.exitCode !== 0) {
-      if (options.tolerateFailurePayload) {
-        const failurePayload = await readJsonFile(jsonPath).catch(() => undefined);
-        if (failurePayload !== undefined && options.tolerateFailurePayload(failurePayload)) {
-          return { ok: true, payload: failurePayload };
-        }
+      const failurePayload = await readJsonFile(jsonPath).catch(() => undefined);
+      if (failurePayload !== undefined && options.tolerateFailurePayload?.(failurePayload)) {
+        return { ok: true, payload: failurePayload };
       }
-      return { ok: false, reason: 'command-failed', args, result };
+      return { ok: false, reason: 'command-failed', args, result, payload: failurePayload };
     }
+    return await readIosDevicectlJsonPayload(jsonPath, args, result);
+  } finally {
+    await unlinkHostFile(jsonPath).catch(() => {});
+  }
+}
+
+async function readIosDevicectlJsonPayload(
+  jsonPath: string,
+  args: string[],
+  result: ExecResult,
+): Promise<IosDevicectlJsonOutcome> {
+  try {
     return { ok: true, payload: await readJsonFile(jsonPath) };
   } catch (error) {
     if (error instanceof AppError) throw error;
     return { ok: false, reason: 'unreadable-json', args, result, cause: String(error) };
-  } finally {
-    await unlinkHostFile(jsonPath).catch(() => {});
   }
 }
 
@@ -251,7 +260,7 @@ async function runIosDevicectlJsonCommand(
   const outcome = await runIosDevicectlJsonRequest(options);
   if (outcome.ok) return outcome.payload;
 
-  if (outcome.reason === 'command-failed' && outcome.result) {
+  if (outcome.reason === 'command-failed') {
     const { stdout, stderr } = outcome.result;
     throw new AppError(
       'COMMAND_FAILED',

@@ -16,7 +16,6 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 import {
   buildAppleMemorySnapshotSupport,
   captureAppleMemorySnapshot,
-  parseApplePsOutput,
   sampleAppleFramePerf,
   sampleAppleMemoryPerf,
 } from '../perf.ts';
@@ -113,29 +112,6 @@ test('buildAppleMemorySnapshotSupport never emits the internal apple platform', 
       `apple leaked in support for ${device.name}: ${platforms.join(', ')}`,
     );
   }
-});
-
-test('parseApplePsOutput reads pid cpu rss and command columns', () => {
-  const rows = parseApplePsOutput(
-    ['123 12.5 45678 /Applications/Test.app/Contents/MacOS/Test --flag', '456 0.0 2048 Test'].join(
-      '\n',
-    ),
-  );
-
-  assert.deepEqual(rows, [
-    {
-      pid: 123,
-      cpuPercent: 12.5,
-      rssKb: 45678,
-      command: '/Applications/Test.app/Contents/MacOS/Test --flag',
-    },
-    {
-      pid: 456,
-      cpuPercent: 0,
-      rssKb: 2048,
-      command: 'Test',
-    },
-  ]);
 });
 
 test('parseAppleFramePerfSample summarizes app hitches and worst windows', () => {

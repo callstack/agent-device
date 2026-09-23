@@ -103,11 +103,7 @@ export async function queryAppleDisplayInventory(
       signal: options.signal,
     });
     if (!outcome.ok) {
-      emitUnresolvedDiagnostic(
-        device,
-        outcome.reason,
-        outcome.result ? outcome.result.stderr.trim() : (outcome.cause ?? ''),
-      );
+      emitUnresolvedDiagnostic(device, outcome.reason, outcome.result.stderr.trim());
       return unresolvedInventory();
     }
     const displays = parseCoreDeviceDisplays(outcome.payload);

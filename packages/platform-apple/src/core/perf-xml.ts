@@ -1,6 +1,6 @@
 import type { XmlNode } from '@agent-device/xml';
 
-export function findFirstXmlNode(
+function findFirstXmlNode(
   nodes: XmlNode[],
   predicate: (node: XmlNode) => boolean,
 ): XmlNode | undefined {
@@ -40,7 +40,7 @@ export function readSchemaColumns(document: XmlNode[], schemaName: string): stri
     .map((column) => readFirstChildText(column, 'mnemonic') ?? '');
 }
 
-export function parseDirectXmlNumber(element: XmlNode | undefined): number | null {
+function parseDirectXmlNumber(element: XmlNode | undefined): number | null {
   if (!element || element.children.some((child) => child.name === 'sentinel')) return null;
   if (!element.text) return null;
   const value = Number(element.text);
@@ -54,6 +54,48 @@ export function resolveXmlNumber(
   if (!element) return null;
   if (element.attributes.ref) return references.get(element.attributes.ref)?.numberValue ?? null;
   return parseDirectXmlNumber(element);
+}
+
+type XmlProcess = { pid?: number; name?: string };
+
+export type XmlReference = {
+  numberValue?: number | null;
+  process?: XmlProcess | null;
+};
+
+export function rememberXmlReferences(
+  elements: XmlNode[],
+  references: Map<string, XmlReference>,
+): void {
+  for (const element of elements) {
+    rememberXmlReferences(element.children, references);
+    if (!element.attributes.id) continue;
+    references.set(element.attributes.id, {
+      numberValue: parseDirectXmlNumber(element),
+      process: readDirectXmlProcess(element),
+    });
+  }
+}
+
+export function resolveXmlProcess(
+  element: XmlNode | undefined,
+  references: Map<string, XmlReference>,
+): XmlProcess | null {
+  if (!element) return null;
+  if (element.attributes.ref) return references.get(element.attributes.ref)?.process ?? null;
+  return readDirectXmlProcess(element);
+}
+
+function readDirectXmlProcess(element: XmlNode | undefined): XmlProcess | null {
+  if (!element || element.children.some((child) => child.name === 'sentinel')) return null;
+  const pidNode = findFirstXmlNode(element.children, (child) => child.name === 'pid');
+  const pid = parseDirectXmlNumber(pidNode);
+  const name = (element.attributes.fmt ?? '').replace(/\s+\(\d+\)$/, '').trim();
+  if (pid === null && name.length === 0) return null;
+  return {
+    pid: pid ?? undefined,
+    name: name.length > 0 ? name : undefined,
+  };
 }
 
 export function indexXmlNodesById(document: XmlNode[]): Map<string, XmlNode> {

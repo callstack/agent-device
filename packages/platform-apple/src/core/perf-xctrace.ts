@@ -34,15 +34,15 @@ import {
   type AppleTimeProfileFunction,
 } from './perf-time-profile.ts';
 import {
-  isRetryableIosDeviceTraceRecordFailure,
-  prepareAppleTraceRecordRetry,
   readAppleProcessSamples,
   resolveAppleExecutable,
-  resolveIosDevicePerfHint,
   resolveIosDevicePerfTarget,
-} from './perf.ts';
+} from './perf-target.ts';
+import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from './devicectl.ts';
 import { runXcrun } from './tool-provider.ts';
 
+// Physical device tracing can take materially longer to initialize than the 1s sample window.
+const IOS_DEVICE_PERF_RECORD_TIMEOUT_MS = 60_000;
 const IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS = 15_000;
 const IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS = 3;
 const IOS_DEVICE_TRACE_RECORD_RETRY_DELAY_MS = 1_500;
@@ -51,6 +51,16 @@ const APPLE_XCTRACE_STOP_GRACE_TIMEOUT_MS = 45_000;
 const APPLE_XCTRACE_STOP_FORCE_TIMEOUT_MS = 5_000;
 
 export type AppleXctracePerfMode = 'cpu-profile' | 'trace';
+
+type AppleXctraceRecordTarget = number[] | 'all-processes';
+
+type AppleXctraceRecordAttempt<T> = { started: T } | { failure: ExecResult };
+
+export type AppleXctraceTimedRecord = {
+  startedAt: string;
+  endedAt: string;
+  capturedAtMs: number;
+};
 
 export type AppleXctracePerfCapture = {
   kind: 'xctrace';
@@ -112,15 +122,24 @@ export async function startAppleXctracePerfCapture(params: {
   const args = buildAppleXctraceRecordArgs({
     device: params.device,
     template: params.template,
-    targetPids: target.pids,
+    target: target.pids,
     outPath: params.outPath,
   });
   const startedAt = new Date().toISOString();
-  const background = await startAppleXctraceRecordWithRetry(args, params.outPath, {
-    device: params.device,
-    appBundleId: params.appBundleId,
-    failureMessage: `Failed to start Apple xctrace ${params.mode} capture for ${params.appBundleId}`,
-  });
+  const background = await recordAppleXctraceWithRetry(
+    args,
+    params.outPath,
+    {
+      device: params.device,
+      appBundleId: params.appBundleId,
+      failureMessage: `Failed to start Apple xctrace ${params.mode} capture for ${params.appBundleId}`,
+    },
+    async (): Promise<AppleXctraceRecordAttempt<ExecBackgroundResult>> => {
+      const started = runCmdBackground('xcrun', args, { allowFailure: true });
+      const immediate = await waitForImmediateAppleXctraceExit(started.wait);
+      return immediate ? { failure: immediate } : { started };
+    },
+  );
   return {
     kind: 'xctrace',
     mode: params.mode,
@@ -160,6 +179,8 @@ export async function stopAppleXctracePerfCapture(
     });
   }
   await assertTracePathHasData(outPath, {
+    message: 'xctrace produced no trace data',
+    hint: 'Keep the Apple device unlocked and connected, keep the app active, then retry perf.',
     appBundleId: capture.appBundleId,
     deviceId: capture.deviceId,
     stdout: result.stdout,
@@ -196,30 +217,20 @@ export async function writeAppleXctracePerfReport(params: {
   const tocPath = path.join(tempDir, 'trace-toc.xml');
   const timeProfilePath = path.join(tempDir, 'time-profile.xml');
   try {
-    const exportArgs = [
-      'xctrace',
-      'export',
-      '--input',
-      params.tracePath,
-      '--toc',
-      '--output',
-      tocPath,
-    ];
-    requireExecSuccess(
-      await runXcrun(exportArgs, {
-        allowFailure: true,
-        timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
-      }),
-      'Failed to export Apple xctrace report metadata',
-      (exportResult) => ({
-        cmd: 'xcrun',
-        args: exportArgs,
-        tracePath: params.tracePath,
-        hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
-      }),
-    );
-    const tocXml = await readHostTextFile(tocPath);
-    const timeProfileXml = await exportAppleTimeProfile(params.tracePath, timeProfilePath);
+    const tocXml = await exportAppleXctraceData({
+      tracePath: params.tracePath,
+      outPath: tocPath,
+      query: 'toc',
+      failureMessage: 'Failed to export Apple xctrace report metadata',
+      failureDetails: { tracePath: params.tracePath },
+    });
+    const timeProfileXml = await exportAppleXctraceData({
+      tracePath: params.tracePath,
+      outPath: timeProfilePath,
+      query: { schema: 'time-profile' },
+      failureMessage: 'Failed to export Apple xctrace Time Profiler samples',
+      failureDetails: { tracePath: params.tracePath },
+    });
     const report = buildAppleXctracePerfReport({
       ...params,
       tocXml,
@@ -240,31 +251,86 @@ export async function writeAppleXctracePerfReport(params: {
   }
 }
 
-async function exportAppleTimeProfile(tracePath: string, outPath: string): Promise<string> {
+export async function recordAppleXctraceTimedTrace(params: {
+  device: DeviceInfo;
+  appBundleId: string;
+  tracePath: string;
+  template: string;
+  timeLimit: string;
+  target: AppleXctraceRecordTarget;
+  requireTraceData?: boolean;
+  failureMessage: string;
+}): Promise<AppleXctraceTimedRecord> {
+  const args = buildAppleXctraceRecordArgs({
+    device: params.device,
+    template: params.template,
+    target: params.target,
+    timeLimit: params.timeLimit,
+    outPath: params.tracePath,
+  });
+  const { result, ...record } = await recordAppleXctraceWithRetry(
+    args,
+    params.tracePath,
+    params,
+    async (): Promise<
+      AppleXctraceRecordAttempt<AppleXctraceTimedRecord & { result: ExecResult }>
+    > => {
+      const startedAt = new Date().toISOString();
+      const result = await runXcrun(args, {
+        allowFailure: true,
+        timeoutMs: IOS_DEVICE_PERF_RECORD_TIMEOUT_MS,
+      });
+      if (result.exitCode !== 0) return { failure: result };
+      return {
+        started: { result, startedAt, endedAt: new Date().toISOString(), capturedAtMs: Date.now() },
+      };
+    },
+  );
+  if (params.requireTraceData) {
+    await assertTracePathHasData(params.tracePath, {
+      message: `${params.failureMessage}: xctrace produced no trace data`,
+      hint: 'Keep the iOS device unlocked and connected by cable, keep the app active, then retry perf.',
+      appBundleId: params.appBundleId,
+      deviceId: params.device.id,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+  return record;
+}
+
+export async function exportAppleXctraceData(params: {
+  tracePath: string;
+  outPath: string;
+  query: 'toc' | { schema: string };
+  failureMessage: string;
+  failureDetails: Record<string, unknown>;
+}): Promise<string> {
   const exportArgs = [
     'xctrace',
     'export',
     '--input',
-    tracePath,
-    '--xpath',
-    '/trace-toc/run/data/table[@schema="time-profile"]',
+    params.tracePath,
+    ...(params.query === 'toc'
+      ? ['--toc']
+      : ['--xpath', `/trace-toc/run/data/table[@schema="${params.query.schema}"]`]),
     '--output',
-    outPath,
+    params.outPath,
   ];
   requireExecSuccess(
     await runXcrun(exportArgs, {
       allowFailure: true,
       timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
     }),
-    'Failed to export Apple xctrace Time Profiler samples',
+    params.failureMessage,
     (exportResult) => ({
       cmd: 'xcrun',
       args: exportArgs,
-      tracePath,
+      ...params.failureDetails,
       hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
     }),
   );
-  return await readHostTextFile(outPath);
+  return await readHostTextFile(params.outPath);
 }
 
 async function resolveAppleXctracePerfTarget(
@@ -305,7 +371,8 @@ async function resolveAppleXctracePerfTarget(
 function buildAppleXctraceRecordArgs(params: {
   device: DeviceInfo;
   template: string;
-  targetPids: number[];
+  target: AppleXctraceRecordTarget;
+  timeLimit?: string;
   outPath: string;
 }): string[] {
   return [
@@ -314,7 +381,10 @@ function buildAppleXctraceRecordArgs(params: {
     '--template',
     params.template,
     ...(isIosFamily(params.device) ? ['--device', params.device.id] : []),
-    ...params.targetPids.flatMap((pid) => ['--attach', String(pid)]),
+    ...(params.target === 'all-processes'
+      ? ['--all-processes']
+      : params.target.flatMap((pid) => ['--attach', String(pid)])),
+    ...(params.timeLimit ? ['--time-limit', params.timeLimit] : []),
     '--output',
     params.outPath,
     '--quiet',
@@ -322,7 +392,7 @@ function buildAppleXctraceRecordArgs(params: {
   ];
 }
 
-async function startAppleXctraceRecordWithRetry(
+async function recordAppleXctraceWithRetry<T>(
   args: string[],
   tracePath: string,
   context: {
@@ -330,18 +400,16 @@ async function startAppleXctraceRecordWithRetry(
     appBundleId: string;
     failureMessage: string;
   },
-): Promise<ExecBackgroundResult> {
-  let lastImmediateFailure: ExecResult | undefined;
+  attemptRecord: () => Promise<AppleXctraceRecordAttempt<T>>,
+): Promise<T> {
+  let failure: ExecResult = { stdout: '', stderr: '', exitCode: 1 };
   for (let attempt = 1; attempt <= IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS; attempt += 1) {
-    await prepareAppleTraceRecordRetry(tracePath, attempt, IOS_DEVICE_TRACE_RECORD_RETRY_DELAY_MS);
-    const background = runCmdBackground('xcrun', args, { allowFailure: true });
-    const immediate = await waitForImmediateAppleXctraceExit(background.wait);
-    if (!immediate) return background;
-    lastImmediateFailure = immediate;
-    if (!isRetryableIosDeviceTraceRecordFailure(immediate)) break;
+    await prepareAppleTraceRecordRetry(tracePath, attempt);
+    const outcome = await attemptRecord();
+    if ('started' in outcome) return outcome.started;
+    failure = outcome.failure;
+    if (!isRetryableIosDeviceTraceRecordFailure(failure)) break;
   }
-
-  const failure = lastImmediateFailure ?? { stdout: '', stderr: '', exitCode: 1 };
   throw new AppError(
     'COMMAND_FAILED',
     context.failureMessage,
@@ -353,6 +421,24 @@ async function startAppleXctraceRecordWithRetry(
       hint: resolveIosDevicePerfHint(failure.stdout, failure.stderr),
     }),
   );
+}
+
+export function isRetryableIosDeviceTraceRecordFailure(result: {
+  stdout: string;
+  stderr: string;
+}): boolean {
+  const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  return (
+    text.includes('_lockkperf') ||
+    text.includes('could not lock kperf') ||
+    text.includes('likely another session just started')
+  );
+}
+
+async function prepareAppleTraceRecordRetry(tracePath: string, attempt: number): Promise<void> {
+  if (attempt <= 1) return;
+  await removeHostPath(tracePath).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, IOS_DEVICE_TRACE_RECORD_RETRY_DELAY_MS));
 }
 
 async function waitForImmediateAppleXctraceExit(
@@ -415,6 +501,8 @@ async function waitForAppleXctraceExit(
 async function assertTracePathHasData(
   tracePath: string,
   context: {
+    message: string;
+    hint: string;
     appBundleId?: string;
     deviceId?: string;
     stdout: string;
@@ -427,13 +515,13 @@ async function assertTracePathHasData(
       ? (await readHostDirectory(tracePath).catch(() => [])).length > 0
       : (stat?.size ?? 0) > 0;
   if (hasTrace) return;
-  throw new AppError('COMMAND_FAILED', 'xctrace produced no trace data', {
+  throw new AppError('COMMAND_FAILED', context.message, {
     tracePath,
     appBundleId: context.appBundleId,
     deviceId: context.deviceId,
     stdout: context.stdout,
     stderr: context.stderr,
-    hint: 'Keep the Apple device unlocked and connected, keep the app active, then retry perf.',
+    hint: context.hint,
   });
 }
 
@@ -467,4 +555,17 @@ function buildAppleXctracePerfReport(params: {
       ...timeProfile,
     },
   };
+}
+
+export function resolveIosDevicePerfHint(stdout: string, stderr: string): string {
+  const devicectlHint = resolveIosDevicectlHint(stdout, stderr);
+  if (devicectlHint) return devicectlHint;
+  const text = `${stdout}\n${stderr}`.toLowerCase();
+  if (text.includes('no device matched') || text.includes('failed to find device')) {
+    return IOS_DEVICECTL_DEFAULT_HINT;
+  }
+  if (text.includes('timed out')) {
+    return 'Keep the iOS device unlocked and connected by cable, keep the app active, then retry perf.';
+  }
+  return 'Ensure the iOS device is unlocked, trusted, visible to xctrace, and the target app stays active while perf samples it.';
 }

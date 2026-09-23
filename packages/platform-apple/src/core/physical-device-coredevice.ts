@@ -1,25 +1,18 @@
-import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
-import {
-  hostTemporaryDirectory,
-  readHostTextFile,
-  removeHostPath,
-} from '@agent-device/host-kit/host-file';
-import { hostProcessId } from '@agent-device/host-kit/process';
+import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
 import {
   IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
   IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
   IOS_DEVICECTL_DEFAULT_HINT,
   resolveIosDevicectlHint,
   runIosDevicectl,
+  runIosDevicectlJsonRequest,
 } from './devicectl.ts';
 import {
   IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
   IOS_DEVICE_READY_TIMEOUT_MS,
 } from './physical-device-constants.ts';
-import { runXcrun } from './tool-provider.ts';
 
 const IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS = 10_000;
 
@@ -50,18 +43,17 @@ export async function ensureCoreDeviceReady(
       IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
       signal,
     );
-    const { result, parsed } = probe;
-    if (result.exitCode === 0) {
-      if (!parsed.parsed) {
-        throw new AppError('COMMAND_FAILED', 'iOS device readiness probe failed', {
-          kind: 'probe_inconclusive',
-          deviceId: device.id,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          hint: 'CoreDevice returned success but readiness JSON output was missing or invalid. Retry; if it persists restart Xcode and the iOS device.',
-        });
-      }
-      const tunnelState = parsed.tunnelState?.toLowerCase();
+    if (probe.status === 'unreadable') {
+      throw new AppError('COMMAND_FAILED', 'iOS device readiness probe failed', {
+        kind: 'probe_inconclusive',
+        deviceId: device.id,
+        stdout: probe.result.stdout,
+        stderr: probe.result.stderr,
+        hint: 'CoreDevice returned success but readiness JSON output was missing or invalid. Retry; if it persists restart Xcode and the iOS device.',
+      });
+    }
+    if (probe.status === 'reported') {
+      const tunnelState = probe.details.tunnelState?.toLowerCase();
       if (tunnelState === 'connecting') {
         throw new AppError('COMMAND_FAILED', 'iOS device is not ready for automation', {
           kind: 'not_ready',
@@ -75,11 +67,11 @@ export async function ensureCoreDeviceReady(
     throw new AppError(
       'COMMAND_FAILED',
       'iOS device is not ready for automation',
-      execFailureDetails(result, {
+      execFailureDetails(probe.result, {
         kind: 'not_ready',
         deviceId: device.id,
-        tunnelState: parsed.tunnelState,
-        hint: resolveIosReadyHint(result.stdout, result.stderr),
+        tunnelState: probe.details.tunnelState,
+        hint: resolveIosReadyHint(probe.result.stdout, probe.result.stderr),
       }),
     );
   } catch (error) {
@@ -159,66 +151,54 @@ async function readIosDeviceDetails(
   const timeoutMs = Math.max(1, Math.min(IOS_RUNNER_DEVICE_INFO_TIMEOUT_MS, timeoutBudgetMs));
   try {
     const probe = await runCoreDeviceDetails(device.id, timeoutMs, 0, signal);
-    if (probe.result.exitCode !== 0 || !probe.parsed.parsed) return null;
-    if (probe.parsed.outcome && probe.parsed.outcome !== 'success') return null;
-    const { parsed } = probe;
-    const { parsed: _parsed, ...details } = parsed;
-    return details;
+    if (probe.status !== 'reported') return null;
+    if (probe.details.outcome && probe.details.outcome !== 'success') return null;
+    return probe.details;
   } catch {
     return null;
   }
 }
+
+/**
+ * `reported` when the command succeeded with a readable payload, `unreadable` when it succeeded
+ * without one, and `failed` when it exited non-zero, carrying whatever its failure payload reported.
+ */
+type CoreDeviceDetailsProbe =
+  | { status: 'reported'; details: IosDeviceDetails }
+  | { status: 'unreadable'; result: ExecResult }
+  | { status: 'failed'; result: ExecResult; details: IosDeviceDetails };
 
 async function runCoreDeviceDetails(
   deviceId: string,
   timeoutMs: number,
   commandTimeoutBufferMs = 0,
   signal?: AbortSignal,
-): Promise<{
-  result: Awaited<ReturnType<typeof runXcrun>>;
-  parsed: { parsed: boolean } & IosDeviceDetails;
-}> {
-  const jsonPath = path.join(
-    hostTemporaryDirectory(),
-    `agent-device-coredevice-info-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-  );
+): Promise<CoreDeviceDetailsProbe> {
   const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-  try {
-    const result = await runXcrun(
-      [
-        'devicectl',
-        'device',
-        'info',
-        'details',
-        '--device',
-        deviceId,
-        '--json-output',
-        jsonPath,
-        '--timeout',
-        String(timeoutSeconds),
-      ],
-      {
-        allowFailure: true,
-        signal,
-        timeoutMs: timeoutMs + commandTimeoutBufferMs,
-      },
-    );
-    return { result, parsed: await readCoreDeviceDetails(jsonPath) };
-  } finally {
-    await removeHostPath(jsonPath).catch(() => {});
+  const outcome = await runIosDevicectlJsonRequest({
+    jsonPrefix: 'agent-device-coredevice-info',
+    args: [
+      'devicectl',
+      'device',
+      'info',
+      'details',
+      '--device',
+      deviceId,
+      '--timeout',
+      String(timeoutSeconds),
+    ],
+    signal,
+    timeoutMs: timeoutMs + commandTimeoutBufferMs,
+  });
+  if (outcome.ok) {
+    return { status: 'reported', details: parseIosDeviceDetailsPayload(outcome.payload) };
   }
-}
-
-async function readCoreDeviceDetails(
-  jsonPath: string,
-): Promise<{ parsed: boolean } & IosDeviceDetails> {
-  try {
-    const payload = JSON.parse(await readHostTextFile(jsonPath)) as unknown;
-    const details = parseIosDeviceDetailsPayload(payload);
-    return { parsed: true, ...details };
-  } catch {
-    return { parsed: false };
-  }
+  if (outcome.reason === 'unreadable-json') return { status: 'unreadable', result: outcome.result };
+  return {
+    status: 'failed',
+    result: outcome.result,
+    details: parseIosDeviceDetailsPayload(outcome.payload),
+  };
 }
 
 /**

@@ -3,10 +3,11 @@ import { roundOneDecimal, roundPercent } from '@agent-device/kernel/numeric';
 import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import {
   findAllXmlNodes,
-  findFirstXmlNode,
-  parseDirectXmlNumber,
   readSchemaColumns,
+  rememberXmlReferences,
   resolveXmlNumber,
+  resolveXmlProcess,
+  type XmlReference,
 } from './perf-xml.ts';
 
 const MAX_WORST_WINDOWS = 3;
@@ -52,11 +53,6 @@ type AppleHitchSchemaIndexes = {
   duration: number;
   process: number;
   isSystem: number;
-};
-
-type XmlReference = {
-  numberValue?: number | null;
-  process?: { pid?: number; name?: string } | null;
 };
 
 export function parseAppleFramePerfSample(options: {
@@ -236,17 +232,6 @@ function parseTable(xml: string, schemaName: string): { rows: XmlNode[]; schema:
   };
 }
 
-function rememberXmlReferences(elements: XmlNode[], references: Map<string, XmlReference>): void {
-  for (const element of elements) {
-    rememberXmlReferences(element.children, references);
-    if (!element.attributes.id) continue;
-    references.set(element.attributes.id, {
-      numberValue: parseDirectXmlNumber(element),
-      process: readDirectProcess(element),
-    });
-  }
-}
-
 function resolveXmlBoolean(
   element: XmlNode | undefined,
   references: Map<string, XmlReference>,
@@ -254,25 +239,4 @@ function resolveXmlBoolean(
   const value = resolveXmlNumber(element, references);
   if (value === null) return null;
   return value !== 0;
-}
-
-function resolveXmlProcess(
-  element: XmlNode | undefined,
-  references: Map<string, XmlReference>,
-): { pid?: number; name?: string } | null {
-  if (!element) return null;
-  if (element.attributes.ref) return references.get(element.attributes.ref)?.process ?? null;
-  return readDirectProcess(element);
-}
-
-function readDirectProcess(element: XmlNode | undefined): { pid?: number; name?: string } | null {
-  if (!element || element.children.some((child) => child.name === 'sentinel')) return null;
-  const pidNode = findFirstXmlNode(element.children, (child) => child.name === 'pid');
-  const pid = parseDirectXmlNumber(pidNode);
-  const name = (element.attributes.fmt ?? '').replace(/\s+\(\d+\)$/, '').trim();
-  if (pid === null && name.length === 0) return null;
-  return {
-    pid: pid ?? undefined,
-    name: name.length > 0 ? name : undefined,
-  };
 }
