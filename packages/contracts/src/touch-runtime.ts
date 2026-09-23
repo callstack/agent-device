@@ -136,6 +136,8 @@ function bindTouch(
     return await resolveInteractor(runnerContext(input, signal));
   };
   const tapPoint = async (input: TapPointInput) => {
+    signal.throwIfAborted();
+    requireAdmittedHold(input.options, facts.longPressPoint);
     const interactor = await interactorFor(input);
     if (input.options.button !== 'primary' && interactor.alternateClick) {
       return await interactor.alternateClick(input.point, input.options.button);
@@ -221,6 +223,33 @@ function missingAdvertisedOperation(name: string): never {
   );
 }
 
+/**
+ * Two shapes of a point press ask for more than the shared series can compose. A hold is a capability
+ * an owner states with its `longPressPoint` cell, so `press --hold` is refused by the same fact that
+ * refuses `longpress`, carrying the owner's reason and hint.
+ */
+function requireAdmittedHold(options: PressPointOptions, fact: RuntimeOperationFact): void {
+  if (options.holdMs <= 0 || fact.available) return;
+  throw new AppError('UNSUPPORTED_OPERATION', 'press-and-hold is not supported by this runtime.', {
+    reason: fact.reason,
+    ...(fact.hint === undefined ? {} : { hint: fact.hint }),
+  });
+}
+
+/**
+ * A fused double-click is the one press shape no fact can state: facts speak per operation, and no
+ * command names a double-tap operation. The interactor member is the owner's only claim, so an absent
+ * one is a capability it declines — where an absent alert member is an ownership bug, because the
+ * alert leg's operation was admitted and this shape never was.
+ */
+function requireDoubleTapMechanic(interactor: Interactor): NonNullable<Interactor['doubleTap']> {
+  if (interactor.doubleTap) return interactor.doubleTap;
+  throw new AppError('UNSUPPORTED_OPERATION', 'double-tap is not supported by this runtime.', {
+    reason: 'owner-capability-missing',
+    hint: 'This runtime drives single presses; use --count to repeat them.',
+  });
+}
+
 async function executeGenericPress(
   interactor: Interactor,
   point: Point,
@@ -233,11 +262,12 @@ async function executeGenericPress(
       `Bound runtime does not implement ${options.button} click.`,
     );
   }
+  const doubleTap = options.doubleTap ? requireDoubleTapMechanic(interactor) : undefined;
   let first: Record<string, unknown> | void = undefined;
   for (let index = 0; index < options.count; index += 1) {
     const [dx, dy] = pressJitter(index, options.jitterPx);
-    const result = options.doubleTap
-      ? await interactor.doubleTap(point.x + dx, point.y + dy)
+    const result = doubleTap
+      ? await doubleTap.call(interactor, point.x + dx, point.y + dy)
       : options.holdMs > 0
         ? await interactor.longPress(point.x + dx, point.y + dy, options.holdMs)
         : await interactor.tap(point.x + dx, point.y + dy);

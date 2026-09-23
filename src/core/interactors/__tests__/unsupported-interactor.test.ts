@@ -28,6 +28,12 @@ test('every operation on the factory rejects, naming itself and the platform', a
   assert.deepEqual(failures.filter(Boolean), []);
 });
 
+test('a fused double-click is left undefined, not denied, so a shared series reports the gap', () => {
+  const interactor = createUnsupportedInteractor('web');
+
+  assert.equal(interactor.doubleTap, undefined);
+});
+
 test('a rejection carries no partial result the caller could mistake for success', async () => {
   const interactor = createUnsupportedInteractor('Linux desktop');
 

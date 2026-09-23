@@ -886,8 +886,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     tvos: tvos.gap('No tvOS-specific long-press command evidence exists yet'),
     web: web.contract(
       'packages/platform-web/src/runtime.ts',
-      'longPress: readinessUnavailable',
-      'the web runtime fact rejects touch long-press input',
+      'longPress: holdUnavailable',
+      'the web runtime fact declines the timed hold as a platform leaf',
     ),
     linux: linux.contract(
       LINUX_PROVIDER_EVIDENCE.path,

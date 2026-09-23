@@ -14,7 +14,6 @@ export function createUnsupportedInteractor(platformLabel: string): Interactor {
     openDevice: () => unsupported('openDevice'),
     close: () => unsupported('close'),
     tap: () => unsupported('tap'),
-    doubleTap: () => unsupported('doubleTap'),
     longPress: () => unsupported('longPress'),
     focus: () => unsupported('focus'),
     type: () => unsupported('type'),

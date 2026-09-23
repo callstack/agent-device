@@ -15,6 +15,19 @@
   is reported. Because it stamps the raw source rather than the fold, `snapshot --raw` matches too, and
   the residue owner stays the fact owner (#2199). Closes the hittable-absence half of the AX-bridge
   capture divergence (#2638).
+- Fixed (web): `press --double` and `press --hold` on a web session now answer with a typed reason
+  instead of an unclassified `UNSUPPORTED_OPERATION` naming an interactor member. The browser owner's
+  `tapPoint` cell admitted the whole press series, but the web click affordance is one immediate
+  pointer press per call: `--count` repeats it, and this owner composes neither a fused double-click
+  nor a timed hold. A hold is refused by the `longPressPoint` cell that already refuses `longpress`,
+  so both commands now carry the hint "A web click is one immediate pointer press; the browser backend
+  has no timed hold." and `press --hold` adds `details.reason: "unsupported-platform-leaf"`. A
+  double-click is refused by the fused mechanic the web interactor no longer carries, reporting
+  `details.reason: "owner-capability-missing"`; both refusals arrive when the press runs, after any
+  target selector was resolved. A repeated single-tap press (`--count 3`) keeps working on the same
+  session, and every owner that double-tapped or held before this change still does: Android, iOS,
+  Linux, HarmonyOS, Cloud WebDriver and Limrun keep their own mechanics, and an owner with a fused
+  point press keeps answering `--double` through it.
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again carries the
   accessibility `selected` state, so `is selected`, a `selected=true` selector, and a Maestro
   `selected:` qualifier match the active control. When 0.21.0 made the AX bridge the Simulator's

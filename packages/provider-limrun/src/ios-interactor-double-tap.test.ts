@@ -17,7 +17,7 @@ function sessionWithClient() {
 test('double tap sends both taps in one batch with the pause enforced on the device', async () => {
   const { interactor, client } = sessionWithClient();
 
-  await interactor.doubleTap(120, 340);
+  await interactor.doubleTap!(120, 340);
 
   expect(client.performActions).toHaveBeenCalledTimes(1);
   expect(client.performActions).toHaveBeenCalledWith([
@@ -32,5 +32,5 @@ test('a batch the device rejects surfaces as the double tap failure', async () =
   const { interactor, client } = sessionWithClient();
   client.performActions.mockRejectedValueOnce(new Error('tap: no foreground application'));
 
-  await expect(interactor.doubleTap(120, 340)).rejects.toThrow('tap: no foreground application');
+  await expect(interactor.doubleTap!(120, 340)).rejects.toThrow('tap: no foreground application');
 });

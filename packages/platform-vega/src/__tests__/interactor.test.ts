@@ -121,7 +121,6 @@ test('required unproven Vega operations share typed unsupported behavior', async
   const interactor = createVegaInteractor(VEGA_VVD, {});
   const unsupportedCalls: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
     ['tap', () => interactor.tap(10, 20)],
-    ['doubleTap', () => interactor.doubleTap(10, 20)],
     ['longPress', () => interactor.longPress(10, 20, 500)],
     ['focus', () => interactor.focus(10, 20)],
     ['type', () => interactor.type('text')],

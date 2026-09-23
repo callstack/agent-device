@@ -8,7 +8,6 @@ const OPERATIONS = [
   'openDevice',
   'close',
   'tap',
-  'doubleTap',
   'longPress',
   'focus',
   'type',

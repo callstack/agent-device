@@ -114,6 +114,18 @@ const nativeRefUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
 } as const);
+/**
+ * The web click affordance is one immediate pointer press, which is everything `press` needs for a
+ * repeated `--count` series. Timed actions are a policy this owner declines rather than a missing
+ * primitive: the browser could compose a raw pointer down/up pair around a wait and does not, so the
+ * cell denies the hold rather than borrowing the tap cell that admits the series. The fused
+ * double-click is declined one level down, by the interactor member the browser never supplies.
+ */
+const holdUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'A web click is one immediate pointer press; the browser backend has no timed hold.',
+} as const);
 const audioCaptureUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -386,7 +398,7 @@ function webRuntimeFacts(
         unsupported: readinessUnavailable,
         tap: browserDevice,
         tapRef: webOptionalOperationFact(interactor?.tapRef, browserDevice),
-        longPress: readinessUnavailable,
+        longPress: holdUnavailable,
         hover: webOptionalOperationFact(interactor?.hover, browserDevice),
         hoverRef: webOptionalOperationFact(interactor?.hoverRef, browserDevice),
         fill: browserDevice,

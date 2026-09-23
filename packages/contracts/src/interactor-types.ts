@@ -295,7 +295,13 @@ export type Interactor = {
   /** Owner-native ref routes; currently the managed web runtime is their only local owner. */
   tapRef?(ref: string): Promise<Record<string, unknown> | void>;
   tapElementSelector?(selector: ElementSelectorTapOptions): Promise<Record<string, unknown> | void>;
-  doubleTap(x: number, y: number): Promise<Record<string, unknown> | void>;
+  /**
+   * Fused double-click for owners that have one. The shared `--count` series cannot stand in for it —
+   * it spaces and jitters independent presses rather than firing one pair the target reads as a
+   * double — so an owner with no such mechanic leaves this undefined and `press --double` reports the
+   * gap instead of resolving a denial.
+   */
+  doubleTap?(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
   /**
    * Move the pointer to a point without pressing. Only pointer-driven

@@ -89,6 +89,16 @@ test('web interactor reports hover unsupported when the provider lacks it', asyn
   });
 });
 
+// `press --double` refuses through the absent mechanic, so the interactor the daemon composes for a
+// web session must carry no fused double-click of its own.
+test('web interactor carries no fused double-click mechanic', async () => {
+  await withWebProvider(makeWebProvider(), async () => {
+    const interactor = await createWebInteractor();
+
+    assert.equal(interactor.doubleTap, undefined);
+  });
+});
+
 test('web interactor reports unsupported operations explicitly', async () => {
   const interactor = await createWebInteractor();
 

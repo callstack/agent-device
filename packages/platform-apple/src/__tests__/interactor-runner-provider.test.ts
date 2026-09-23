@@ -51,7 +51,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
     invoke: (i) => i.tapElementSelector!({ key: 'label', value: 'Go' }),
     runnerCommand: 'tap',
   },
-  doubleTap: { invoke: (i) => i.doubleTap(10, 20), runnerCommand: 'sequence' },
+  doubleTap: { invoke: (i) => i.doubleTap!(10, 20), runnerCommand: 'sequence' },
   longPress: { invoke: (i) => i.longPress(10, 20, 600), runnerCommand: 'longPress' },
   focus: { invoke: (i) => i.focus(10, 20), runnerCommand: 'tap' },
   type: { invoke: (i) => i.type('hi'), runnerCommand: 'type' },
