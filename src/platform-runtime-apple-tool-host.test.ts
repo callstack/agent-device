@@ -14,6 +14,11 @@ test('Apple tool host uses a full scoped provider when local xcrun is unavailabl
       throw new Error('local command fallback is unavailable');
     },
     whichCommand,
+    simctl: {
+      run: async () => {
+        throw new Error('simctl is unscripted');
+      },
+    },
     devicectl: { run },
   };
   const host = createAppleToolHost();

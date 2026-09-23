@@ -29,8 +29,8 @@ export type {
 
 export type AppleToolProvider = {
   runCommand: AppleToolCommandExecutor;
-  simctl?: AppleXcrunToolProvider;
-  devicectl?: AppleXcrunToolProvider;
+  simctl: AppleXcrunToolProvider;
+  devicectl: AppleXcrunToolProvider;
   macosHelper?: AppleMacOsHelperProvider;
   macosHost?: AppleMacOsHostProvider;
   plist?: ApplePlistProvider;
@@ -118,12 +118,10 @@ export async function runXcrun(args: string[], options?: ExecOptions): Promise<E
   const provider = resolveAppleToolProvider();
   const [tool, ...toolArgs] = args;
   if (tool === 'simctl') {
-    return await (provider.simctl?.run(toolArgs, options) ??
-      provider.runCommand('xcrun', args, options));
+    return await provider.simctl.run(toolArgs, options);
   }
   if (tool === 'devicectl') {
-    return await (provider.devicectl?.run(toolArgs, options) ??
-      provider.runCommand('xcrun', args, options));
+    return await provider.devicectl.run(toolArgs, options);
   }
   return await runAppleToolCommand('xcrun', args, options);
 }
@@ -139,8 +137,8 @@ function normalizeAppleToolProvider(provider: AppleToolProvider): AppleToolProvi
   return createLocalAppleToolProvider({
     ...provider,
     runCommand: coerceRunCommand(provider.runCommand),
-    ...(provider.simctl ? { simctl: { run: coerceRun(provider.simctl.run) } } : {}),
-    ...(provider.devicectl ? { devicectl: { run: coerceRun(provider.devicectl.run) } } : {}),
+    simctl: { run: coerceRun(provider.simctl.run) },
+    devicectl: { run: coerceRun(provider.devicectl.run) },
     ...(provider.macosHelper ? { macosHelper: { run: coerceRun(provider.macosHelper.run) } } : {}),
   });
 }
