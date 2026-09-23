@@ -258,6 +258,8 @@
       "file": "{packages/command-registry/src/registry.ts,src/core/interactors/register-builtins.ts,src/core/platform-descriptor/registry.ts,src/daemon/request-platform-providers.ts}",
       "exports": [
         "CommandOwnerFileClaimsAreComplete",
+        "CommandUnionStaysLiteral",
+        "CliCommandUnionStaysLiteral",
         "BuiltinPluginsCoverAllPlatforms",
         "PlatformDescriptorsAreTotal",
         "GatedKeysAreResolverKeys"

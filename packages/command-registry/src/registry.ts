@@ -437,6 +437,14 @@ function postActionObservation(command: string): PostActionObservationSupport {
   return support;
 }
 
+/**
+ * Whether this build carries the descriptors' `ownerFiles` claims. Production defines
+ * `__OWNER_FILES__` as `false`, so every `ownerFilesEnabled ? { ownerFiles: [...] } : {}` spread
+ * in the root below folds to nothing and the navigation paths never reach a bundle — which
+ * `pnpm check:bundle-owner-files` proves over `dist/`.
+ */
+const ownerFilesEnabled = typeof __OWNER_FILES__ === 'undefined' || __OWNER_FILES__;
+
 // ---------------------------------------------------------------------------
 // The command declaration root (ADR 0008). Each entry carries the command identity
 // facets plus whichever daemon, batch, MCP, timeout, observation, and
@@ -444,8 +452,6 @@ function postActionObservation(command: string): PostActionObservationSupport {
 // non-public dispatch aliases live here too; every view derives from this
 // array rather than recreating command-name sets.
 // ---------------------------------------------------------------------------
-
-const ownerFilesEnabled = typeof __OWNER_FILES__ === 'undefined' || __OWNER_FILES__;
 
 const DEPLOY_APP_COMMAND_DESCRIPTOR = {
   deviceClaimPolicy: 'transient-exclusive',
@@ -1534,7 +1540,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     batchable: false,
     platformExecution: { kind: 'device-runtime', uses: [viewportRuntimeUse] },
   },
-  // -- capability/batch-only commands (no daemon route) --
+  // -- public extended-tier commands: the generic route, or no daemon facet declared --
   {
     name: 'app-switcher',
     deviceClaimPolicy: 'require-owner',
@@ -1837,6 +1843,23 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
 
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];
+
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+/**
+ * Compile-time literalness of {@link Command}. The `as const` on {@link RAW_COMMAND_DESCRIPTORS}
+ * keeps each descriptor's literal `name` through the composition and the `.map` above; an array
+ * that lost it would widen this union to `string`, and nothing downstream would say so:
+ * `COMMAND_DEFAULTS` below and `Record<DescriptorCliCommandName, …>` in
+ * `src/cli/injected-daemon-dispatch.ts` stop rejecting an unknown key, and the `command: Command`
+ * parameters in `src/cli/command-explain.ts` and `owner-files.ts` would stop excluding a name no
+ * descriptor declares. That silence is why this is a type guard and not a value comparison.
+ */
+export type CommandUnionStaysLiteral = AssertTrue<Equal<Equal<Command, string>, false>>;
+/** The CLI view is narrowed from the same literals, so it cannot hide a widened root union. */
+export type CliCommandUnionStaysLiteral = AssertTrue<
+  Equal<Equal<DescriptorCliCommandName, string>, false>
+>;
 
 /**
  * @internal Command names for one catalog group, sorted.
