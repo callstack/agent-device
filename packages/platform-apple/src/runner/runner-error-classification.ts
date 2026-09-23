@@ -24,8 +24,8 @@ type RunnerErrorDetailsMatch = (details: AppErrorDetails) => boolean;
 /**
  * Why agent-device's own runner connect path gave up, published in
  * `details.runnerConnectFailureReason` by the error that path throws. It sits beside
- * `details.reason` rather than in it: on these failures `reason` already carries the
- * `BootFailureReason` the caller's hint answers.
+ * `details.reason` rather than in it: on the refused-connection and early-exit failures
+ * `reason` already carries the `BootFailureReason` the caller's hint answers.
  */
 export type RunnerConnectFailureReason =
   | 'xcodebuild_exited_early'
@@ -304,7 +304,8 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   // caller and no recovery verdicts, because there is no session to invalidate and nothing was sent
   // to resend. Specific rows precede generic ones: the classifier takes the first match.
   //
-  // Why these rows are text matchers while the rows above key on a code or a typed field:
+  // Why these rows are text matchers while the rows above key on a code, a typed field, or a
+  // foreign runtime's message:
   // `runnerToolText` reads xcodebuild's own prose because that prose is the only publication these
   // failures have — there is no code and no typed field to key on. Its haystack is deliberately
   // narrow: our message plus the tool's stdout/stderr, never the whole details bag, which also
@@ -560,14 +561,10 @@ export function resolveRunnerFatalErrorReason(error: unknown): string | undefine
 /**
  * A connect-shaped failure that surfaced before the command was sent: restart
  * the runner session and replay the command, rather than probing a runner
- * that never accepted the connection. Composed with the connect-retry axis so
- * a terminal connect verdict still refuses the restart.
+ * that never accepted the connection.
  */
 export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
-  return (
-    (runnerErrorVerdict(error, 'restartBeforeSend') ?? false) &&
-    shouldRetryRunnerConnectError(error)
-  );
+  return runnerErrorVerdict(error, 'restartBeforeSend') ?? false;
 }
 
 /**

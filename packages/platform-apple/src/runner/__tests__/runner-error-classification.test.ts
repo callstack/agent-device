@@ -234,17 +234,12 @@ test('a refused connection before send restarts the session', () => {
   );
 });
 
-test('a terminal connect verdict refuses the restart', () => {
+test('an early exit or a foreign transport failure earns no restart before send', () => {
   const earlyExit = runnerConnectFailure(
     'xcodebuild_exited_early',
     'xcodebuild exited early: runner did not accept connection',
   );
   assert.equal(shouldRestartRunnerBeforeCommandSend(earlyExit), false);
-  const busy = runnerConnectFailure(
-    'runner_connect_refused',
-    'Device is busy (Connecting to iPhone): runner did not accept connection',
-  );
-  assert.equal(shouldRestartRunnerBeforeCommandSend(busy), false);
   assert.equal(shouldRestartRunnerBeforeCommandSend(commandFailed('socket hang up')), false);
 });
 
