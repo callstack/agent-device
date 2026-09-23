@@ -71,11 +71,11 @@ const RUNNER_TRANSPORT_METHODS: Record<
   },
   findText: { invoke: (i) => i.findText!('Ready'), runnerCommand: 'findText' },
   back: { invoke: (i) => i.back(), runnerCommand: 'backInApp' },
-  home: { invoke: (i) => i.home(), runnerCommand: 'home' },
+  home: { invoke: (i) => i.home!(), runnerCommand: 'home' },
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },
-  appSwitcher: { invoke: (i) => i.appSwitcher(), runnerCommand: 'appSwitcher' },
+  appSwitcher: { invoke: (i) => i.appSwitcher!(), runnerCommand: 'appSwitcher' },
   actionButton: { invoke: (i) => i.actionButton!(), runnerCommand: 'actionButton' },
-  tvRemote: { invoke: (i) => i.tvRemote('select'), runnerCommand: 'remotePress' },
+  tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
   // R59: same reading as `readTextAtPoint` — the macOS-helper branch is reachable only for a
@@ -92,8 +92,8 @@ const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unk
   openDevice: (i) => i.openDevice(),
   close: (i) => i.close('com.example.app'),
   screenshot: (i) => i.screenshot('/dev/null'),
-  readClipboard: (i) => i.readClipboard(),
-  writeClipboard: (i) => i.writeClipboard('hi'),
+  readClipboard: (i) => i.readClipboard!(),
+  writeClipboard: (i) => i.writeClipboard!('hi'),
   setSetting: (i) => i.setSetting('wifi', 'on'),
   // `simctl ui ... content_size` is local Apple tooling like the write leg beside it, so a provider-owned
   // device has no way to answer a text-size read.

@@ -217,7 +217,7 @@ test('tvOS home navigates focus via the remote Home button', async () => {
   });
   const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
 
-  await withRunner(() => interactor.home(), tvOsSimulator);
+  await withRunner(() => interactor.home!(), tvOsSimulator);
 
   assert.deepEqual(commands, [
     { command: 'remotePress', remoteButton: 'home', appBundleId: 'com.example.app' },

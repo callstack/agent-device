@@ -46,7 +46,10 @@ test('a local binding drives the interactor with the button and duration', async
 test('a press whose fact admitted but whose interactor cannot serve it fails closed', async () => {
   const resolveInteractor = vi.fn(async () => ({}) as unknown as Interactor);
 
-  const operations = bindTvRemote(new AbortController().signal, localInteractorSource({ device, resolveInteractor }));
+  const operations = bindTvRemote(
+    new AbortController().signal,
+    localInteractorSource({ device, resolveInteractor }),
+  );
   await expect(operations.tvRemote({ button: 'up' })).rejects.toSatisfy(
     (error: unknown) =>
       error instanceof AppError &&

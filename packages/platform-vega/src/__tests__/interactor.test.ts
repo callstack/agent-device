@@ -42,9 +42,9 @@ beforeEach(() => {
 test('tvRemote, back, and home share the Vega remote primitive', async () => {
   const interactor = createVegaInteractor(VEGA_VVD, {});
 
-  await interactor.tvRemote('left', 250);
+  await interactor.tvRemote!('left', 250);
   await interactor.back('system');
-  await interactor.home();
+  await interactor.home!();
 
   assert.deepEqual(mockPressVegaTvRemote.mock.calls, [
     [VEGA_VVD, 'left', 250],
@@ -129,9 +129,9 @@ test('required unproven Vega operations share typed unsupported behavior', async
     ['screenshot', () => interactor.screenshot('/tmp/vega.png')],
     ['snapshot', () => interactor.snapshot()],
     ['setOrientation', () => interactor.setOrientation('portrait')],
-    ['appSwitcher', () => interactor.appSwitcher()],
-    ['readClipboard', () => interactor.readClipboard()],
-    ['writeClipboard', () => interactor.writeClipboard('text')],
+    ['appSwitcher', () => interactor.appSwitcher!()],
+    ['readClipboard', () => interactor.readClipboard!()],
+    ['writeClipboard', () => interactor.writeClipboard!('text')],
     ['setSetting', () => interactor.setSetting('wifi', 'on')],
   ];
 
