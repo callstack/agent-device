@@ -1,55 +1,39 @@
-import { createAppleRunnerClient, type AppleRunnerClient } from '../runner/client.ts';
+import { bindAppleRunnerHost } from '../runner/host.ts';
 import { appleRunnerHost } from './runner-host.ts';
 
 /**
- * Composition root for the Apple runner client (`@agent-device/platform-apple/runner`).
- * This is the only module that constructs the client: it supplies the real
- * host capabilities from `runner-host.ts` and re-exposes the bound operations
- * under their historical names for daemon, platform, and CLI consumers. Types
- * and host-free helpers come from the package façade directly.
- *
- * Each export below carries an explicit `AppleRunnerClient[...]` annotation
- * (rather than a destructuring re-export) because the package's operation
- * types resolve through its private modules; without an annotation naming
- * the public `AppleRunnerClient` type, dts emit cannot print a portable type
- * for the inferred signature (TS2883).
+ * Composition root for the Apple runner operations: the only module that binds
+ * the real host capabilities from `runner-host.ts`, and the module daemon,
+ * platform, and CLI consumers import the host-bound operations from. Importing
+ * any operation through here evaluates the binding first. Types and host-free
+ * helpers come from the package façade directly.
  */
-const client: AppleRunnerClient = createAppleRunnerClient(appleRunnerHost);
+bindAppleRunnerHost(appleRunnerHost);
 
-export const runAppleRunnerCommand: AppleRunnerClient['runAppleRunnerCommand'] =
-  client.runAppleRunnerCommand;
-export const notifyIosRunnerAppRelaunched: AppleRunnerClient['notifyIosRunnerAppRelaunched'] =
-  client.notifyIosRunnerAppRelaunched;
-export const hasLiveIosRunnerSession: AppleRunnerClient['hasLiveIosRunnerSession'] =
-  client.hasLiveIosRunnerSession;
-export const releaseSpeculativeIosRunnerSessionFor: AppleRunnerClient['releaseSpeculativeIosRunnerSessionFor'] =
-  client.releaseSpeculativeIosRunnerSessionFor;
-export const prewarmAppleRunnerCache: AppleRunnerClient['prewarmAppleRunnerCache'] =
-  client.prewarmAppleRunnerCache;
-export const prewarmIosRunnerSession: AppleRunnerClient['prewarmIosRunnerSession'] =
-  client.prewarmIosRunnerSession;
-export const prepareIosRunner: AppleRunnerClient['prepareIosRunner'] = client.prepareIosRunner;
-export const resolveRunnerAppBundleId: AppleRunnerClient['resolveRunnerAppBundleId'] =
-  client.resolveRunnerAppBundleId;
-export const hasCachedAppleRunnerArtifact: AppleRunnerClient['hasCachedAppleRunnerArtifact'] =
-  client.hasCachedAppleRunnerArtifact;
-export const detachIosRunnerSessionsForShutdown: AppleRunnerClient['detachIosRunnerSessionsForShutdown'] =
-  client.detachIosRunnerSessionsForShutdown;
-export const readRunnerSessionLiveness: AppleRunnerClient['readRunnerSessionLiveness'] =
-  client.readRunnerSessionLiveness;
-export const releaseIosRunnerOnClose: AppleRunnerClient['releaseIosRunnerOnClose'] =
-  client.releaseIosRunnerOnClose;
-export const stopIosRunnerSession: AppleRunnerClient['stopIosRunnerSession'] =
-  client.stopIosRunnerSession;
-export const stopAllIosRunnerSessions: AppleRunnerClient['stopAllIosRunnerSessions'] =
-  client.stopAllIosRunnerSessions;
-export const runApplePressSeries: AppleRunnerClient['runApplePressSeries'] =
-  client.runApplePressSeries;
-export const cleanupRunnerLeasesForOwner: AppleRunnerClient['cleanupRunnerLeasesForOwner'] =
-  client.cleanupRunnerLeasesForOwner;
-export const readStaleRunnerLease: AppleRunnerClient['readStaleRunnerLease'] =
-  client.readStaleRunnerLease;
-export const verifyLeaseRunnerPidIdentity: AppleRunnerClient['verifyLeaseRunnerPidIdentity'] =
-  client.verifyLeaseRunnerPidIdentity;
-export const applyXctestRunnerAppIconFromDerivedPath: AppleRunnerClient['applyXctestRunnerAppIconFromDerivedPath'] =
-  client.applyXctestRunnerAppIconFromDerivedPath;
+export {
+  hasLiveIosRunnerSession,
+  notifyIosRunnerAppRelaunched,
+  prepareIosRunner,
+  prewarmAppleRunnerCache,
+  prewarmIosRunnerSession,
+  releaseSpeculativeIosRunnerSessionFor,
+  runAppleRunnerCommand,
+} from '../runner/runner-client.ts';
+export { applyXctestRunnerAppIconFromDerivedPath } from '../runner/runner-icon.ts';
+export {
+  cleanupRunnerLeasesForOwner,
+  readStaleRunnerLease,
+  verifyLeaseRunnerPidIdentity,
+} from '../runner/runner-lease.ts';
+export { runApplePressSeries } from '../runner/runner-sequence.ts';
+export {
+  detachIosRunnerSessionsForShutdown,
+  readRunnerSessionLiveness,
+  releaseIosRunnerOnClose,
+  stopAllIosRunnerSessions,
+  stopIosRunnerSession,
+} from '../runner/runner-session.ts';
+export {
+  hasCachedAppleRunnerArtifact,
+  resolveRunnerAppBundleId,
+} from '../runner/runner-xctestrun.ts';

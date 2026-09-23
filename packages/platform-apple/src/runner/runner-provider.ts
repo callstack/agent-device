@@ -114,10 +114,8 @@ export function createLocalAppleRunnerProvider(
 export function resolveAppleRunnerProvider(
   device: DeviceInfo,
   fallback: AppleRunnerProvider | AppleRunnerCommandExecutor,
-  provider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
   options: { requestId?: string } = {},
 ): AppleRunnerProvider {
-  if (provider) return normalizeAppleRunnerProvider(provider);
   const scoped = resolveScopedAppleRunnerProvider(device, options);
   return scoped
     ? normalizeAppleRunnerProvider(scoped.provider)

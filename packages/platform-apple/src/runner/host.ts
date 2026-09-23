@@ -25,8 +25,8 @@ import type * as AppleToolProvider from '../core/tool-provider.ts';
  * enters through this object: process execution, diagnostics, retry, process
  * probes, locks, Apple foreground tooling, and physical-device control. The
  * package never imports root implementation files; the composition root
- * (`packages/platform-apple/src/core/runner-client.ts`) constructs the client with the
- * real implementations exactly once per process.
+ * (`packages/platform-apple/src/core/runner-client.ts`) binds the real
+ * implementations exactly once per process.
  *
  * The port is DERIVED from the modules it fronts, never re-typed: the `Pick`
  * lists below are the one place that says which symbol of which module the
@@ -119,7 +119,7 @@ export type {
 let boundHost: AppleRunnerHost | undefined;
 
 /**
- * Binds the process-wide host. Called by `createAppleRunnerClient`; binding a
+ * Binds the process-wide host. Called by the composition root; binding a
  * different host after one is bound throws, because the runner keeps
  * process-wide state (sessions, leases, provider scopes) that cannot serve two
  * hosts. Rebinding the same reference is a no-op.
@@ -134,7 +134,7 @@ export function bindAppleRunnerHost(host: AppleRunnerHost): void {
 function requireHost(): AppleRunnerHost {
   if (!boundHost) {
     throw new Error(
-      'Apple runner host is not bound. Construct the client via createAppleRunnerClient() before using runner operations.',
+      'Apple runner host is not bound. Import runner operations through core/runner-client.ts, which binds the host.',
     );
   }
   return boundHost;

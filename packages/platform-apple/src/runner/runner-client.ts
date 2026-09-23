@@ -178,7 +178,7 @@ function resolveAppleRunnerRuntime(
   device: DeviceInfo,
   options: { requestId?: string },
 ): AppleRunnerProvider {
-  return resolveAppleRunnerProvider(device, LOCAL_APPLE_RUNNER_RUNTIME, undefined, {
+  return resolveAppleRunnerProvider(device, LOCAL_APPLE_RUNNER_RUNTIME, {
     requestId: options.requestId,
   });
 }

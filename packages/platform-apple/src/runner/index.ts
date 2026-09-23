@@ -1,16 +1,13 @@
 /**
  * @agent-device/platform-apple/runner - the Apple XCUITest runner client.
  *
- * The façade exports the host-free surface only: the client factory, provider
- * seam coordination, pure sequence builders, and types. Host-bound operations
- * (command execution, prewarm/prepare, session lifecycle, leases) exist only
- * on the {@link AppleRunnerClient} returned by {@link createAppleRunnerClient},
- * which the root composition module constructs exactly once with the real host
- * capabilities.
+ * The façade exports the host-free surface only: provider seam coordination,
+ * pure sequence builders, and types. Host-bound operations (command execution,
+ * prewarm/prepare, session lifecycle, leases) are reached through the package
+ * composition root, which binds the real host capabilities exactly once, so
+ * façade consumers never evaluate the implementation.
  */
 
-// The client factory lives behind the './client' subpath so façade consumers
-// (types, pure helpers, runner bundle ids) never evaluate the implementation.
 export type { AppleRunnerHost } from './host.ts';
 export type { RunnerCommand } from './runner-contract.ts';
 export {

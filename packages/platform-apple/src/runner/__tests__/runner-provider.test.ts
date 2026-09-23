@@ -16,7 +16,7 @@ test('scoped Apple runner provider requires matching request id when scoped by r
     scoped,
     { deviceId: IOS_SIMULATOR.id, requestId: 'req-1' },
     async () =>
-      await resolveAppleRunnerProvider(IOS_SIMULATOR, fallback, undefined, {
+      await resolveAppleRunnerProvider(IOS_SIMULATOR, fallback, {
         requestId: 'req-1',
       }).runCommand(IOS_SIMULATOR, { command: 'snapshot' }, { requestId: 'req-1' }),
   );
@@ -38,7 +38,7 @@ test('scoped Apple runner provider requires matching request id when scoped by r
     scoped,
     { deviceId: IOS_SIMULATOR.id, requestId: 'req-1' },
     async () =>
-      await resolveAppleRunnerProvider(IOS_SIMULATOR, fallback, undefined, {
+      await resolveAppleRunnerProvider(IOS_SIMULATOR, fallback, {
         requestId: 'req-2',
       }).runCommand(IOS_SIMULATOR, { command: 'snapshot' }, { requestId: 'req-2' }),
   );
