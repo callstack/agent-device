@@ -391,7 +391,10 @@ async function runAppleScreenshot(
       throw new AppError(
         'INVALID_ARGS',
         `screenshot --fullscreen is not accepted on the macOS ${options.surface} surface: it always captures the main display`,
-        { reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame, surface: options.surface },
+        {
+          reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+          surface: options.surface,
+        },
       );
     }
     await runMacOsScreenshotAction(outPath, {

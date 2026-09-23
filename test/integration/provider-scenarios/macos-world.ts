@@ -181,7 +181,6 @@ function runScriptedMacOsHelper(args: readonly string[]): {
     return helperOk({
       path: outPath,
       surface: args.includes('--surface') ? args[args.indexOf('--surface') + 1] : 'frontmost-app',
-      fullscreen: args.includes('--fullscreen'),
     });
   }
   if (args[0] === 'press') {
