@@ -46,7 +46,7 @@ export function parseSimctlAppleDevices(
         name: device.name,
         kind: 'simulator',
         target,
-        appleOs: resolveAppleOs(target, [device.deviceTypeIdentifier ?? '', device.name]),
+        appleOs: resolveAppleOs(target, [runtime, device.deviceTypeIdentifier ?? '', device.name]),
         booted: device.state === 'Booted',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
       });

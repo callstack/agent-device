@@ -68,6 +68,27 @@ test('simctl parser keeps available supported runtimes and their target semantic
   ]);
 });
 
+test('simctl parser classifies visionOS from the runtime when the name is not descriptive', () => {
+  const [device] = parseSimctlAppleDevices(
+    {
+      devices: {
+        'com.apple.CoreSimulator.SimRuntime.xrOS-26-2': [
+          {
+            name: 'test-1',
+            udid: 'vision-1',
+            state: 'Shutdown',
+            isAvailable: true,
+            deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K',
+          },
+        ],
+      },
+    },
+    undefined,
+  );
+  assert.equal(device?.target, 'mobile');
+  assert.equal(device?.appleOs, 'visionos');
+});
+
 test('simulator inventory scopes bounded simctl and reports fresh booted observations', async () => {
   const calls: Array<{ tool: string; args: readonly string[]; timeoutMs?: number }> = [];
   const observed: string[] = [];
