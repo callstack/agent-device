@@ -258,5 +258,113 @@ extension RunnerTests {
     XCTAssertLessThan(starts.count, sweepQueryCount, "the slice must cut the sweep short")
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
+
+  /// A query sweep that stops at its own slice deadline collected a partial tree, not an answer, so
+  /// it is a tier timeout: the plan must arm the XCTest-channel penalty and let private AX answer,
+  /// keeping the partial sweep only as the fallback. Accepting it because it carries more nodes than
+  /// the sparse threshold ships a hierarchy-free capture and leaves every later capture of the same
+  /// screen to pay for the full sweep again (#2781).
+  func testQuerySweepThatEndsOnItsSliceDeadlinePenalizesChannelAndReachesPrivateAX() throws {
+    guard
+      let queryMethod = class_getInstanceMethod(
+        XCUIElementQuery.self,
+        #selector(getter: XCUIElementQuery.allElementsBoundByIndex)
+      ),
+      let stubMethod = class_getInstanceMethod(
+        RunnerSlowSweepQueryStub.self,
+        #selector(getter: RunnerSlowSweepQueryStub.allElementsBoundByIndex)
+      )
+    else {
+      XCTFail("unable to install the slow sweep query stub")
+      return
+    }
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    currentApp = app
+    currentBundleId = "com.callstack.agentdevice.runner.query-sweep-timeout-test"
+    snapshotXCTestPenaltyWarmupExemption.isPending = false
+    clearSnapshotXCTestChannelPenalty(reason: "test-setup")
+    RunnerSlowSweepQueryGate.reset()
+    let captureTarget = takeSnapshotCaptureTarget(app: app)
+    let originalImplementation = method_getImplementation(queryMethod)
+    method_setImplementation(queryMethod, method_getImplementation(stubMethod))
+    defer {
+      method_setImplementation(queryMethod, originalImplementation)
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      clearPrivateAXAcceptedDepth(reason: "test-cleanup")
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    final class ResultBox {
+      var payload: DataPayload?
+      var error: Error?
+      var abandonedAtReturn = false
+      var penalizedAtReturn = false
+      var sweepStartsAfterFirstPlan = 0
+      var secondPayload: DataPayload?
+      var secondError: Error?
+    }
+    let box = ResultBox()
+    let planned = expectation(description: "slow-sweep plan answered")
+    DispatchQueue(label: "agent-device.runner.tests.query-sweep-timeout").async {
+      do {
+        box.payload = try self.runSnapshotCapturePlan(
+          [.querySweep, .privateAX],
+          target: captureTarget,
+          options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+          terminal: .sparseWithFatalOnAXFailure,
+          deadline: Date().addingTimeInterval(20)
+        )
+      } catch {
+        box.error = error
+      }
+      box.abandonedAtReturn = self.hasAbandonedMainThreadWork()
+      box.penalizedAtReturn = self.isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId)
+      box.sweepStartsAfterFirstPlan = RunnerSlowSweepQueryGate.recordedStarts().count
+      do {
+        box.secondPayload = try self.runSnapshotCapturePlan(
+          Self.regularVisiblePlan,
+          target: self.takeSnapshotCaptureTarget(app: self.app),
+          options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+          terminal: .sparseWithFatalOnAXFailure,
+          deadline: Date().addingTimeInterval(20)
+        )
+      } catch {
+        box.secondError = error
+      }
+      planned.fulfill()
+    }
+
+    wait(for: [planned], timeout: 60)
+    XCTAssertNil(box.error)
+    let quality = box.payload?.snapshotQuality
+    XCTAssertEqual(
+      quality?.backend,
+      SnapshotBackendKind.privateAX.rawValue,
+      "a sweep that ended on its slice deadline is a tier timeout, not an accepted capture"
+    )
+    XCTAssertEqual(quality?.state, "recovered")
+    XCTAssertGreaterThan(box.payload?.nodes?.count ?? 0, 1, "private AX answers with a real tree")
+    XCTAssertFalse(box.abandonedAtReturn, "the sweep must answer inside its own main-thread hop")
+    XCTAssertTrue(
+      box.penalizedAtReturn,
+      "the tier timeout must arm the XCTest-channel penalty for the captured target"
+    )
+
+    XCTAssertNil(box.secondError)
+    XCTAssertEqual(
+      box.secondPayload?.snapshotQuality?.backend,
+      SnapshotBackendKind.privateAX.rawValue,
+      "the armed penalty must defer the next plan's XCTest tiers, not re-run the sweep"
+    )
+    XCTAssertEqual(
+      RunnerSlowSweepQueryGate.recordedStarts().count,
+      box.sweepStartsAfterFirstPlan,
+      "the deferred plan may start no sweep query at all"
+    )
+    XCTAssertFalse(hasAbandonedMainThreadWork())
+  }
 }
 #endif

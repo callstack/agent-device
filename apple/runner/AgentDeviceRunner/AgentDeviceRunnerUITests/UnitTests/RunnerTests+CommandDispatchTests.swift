@@ -248,6 +248,79 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
+  /// A coordinate tap resolves its system-modal routing on the command queue while main may still be
+  /// clearing or rebinding the cached target. Target identity belongs to main, so an abandoned
+  /// routing probe must arm its penalty with the identity main settled on — never with the identity
+  /// the command queue read while that write was still pending (#2781).
+  func testCoordinateTapRoutingPenalizesTheIdentityMainSettledOnWhileTheWriteWasPending() throws {
+    app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    let pendingBundleId = "com.example.routing-pending-stale"
+    let settledBundleId = "com.example.routing-pending-settled"
+    currentApp = app
+    currentBundleId = pendingBundleId
+    snapshotXCTestPenaltyWarmupExemption.isPending = false
+    clearSnapshotXCTestChannelPenalty(reason: "test-setup")
+    defer {
+      systemModalProbeOverrideForTesting = nil
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+
+    // Occupy main and rebind the target inside that block: every identity read that arrives while it
+    // is queued sees a target that main is on its way to replacing.
+    let mainRelease = DispatchSemaphore(value: 0)
+    DispatchQueue.main.async {
+      _ = mainRelease.wait(timeout: .now() + 0.5)
+      self.currentBundleId = settledBundleId
+    }
+
+    let probeStarted = expectation(description: "system-modal routing probe started")
+    let probeReleaseGate = DispatchSemaphore(value: 0)
+    systemModalProbeOverrideForTesting = { _ in
+      probeStarted.fulfill()
+      // Outlives the probe's own slice, so the abandonment hook is what arms the penalty.
+      _ = probeReleaseGate.wait(timeout: .now() + 15)
+      return nil
+    }
+    let tap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-pending-target-write","x":10,"y":20}"#
+    )
+
+    final class ResultBox {
+      var response: Response?
+      var penalizedPendingIdentity = false
+      var penalizedSettledIdentity = false
+    }
+    let box = ResultBox()
+    let tapFinished = expectation(description: "off-main tap returned")
+    DispatchQueue(label: "agent-device.runner.tests.tap-pending-target-write").async {
+      box.response = try? self.executeDispatched(command: tap)
+      box.penalizedPendingIdentity = self.isSnapshotXCTestChannelPenalized(bundleId: pendingBundleId)
+      box.penalizedSettledIdentity = self.isSnapshotXCTestChannelPenalized(bundleId: settledBundleId)
+      probeReleaseGate.signal()
+      tapFinished.fulfill()
+    }
+
+    wait(for: [probeStarted, tapFinished], timeout: 40)
+    mainRelease.signal()
+    let drainDeadline = Date().addingTimeInterval(5)
+    while hasAbandonedMainThreadWork(), Date() < drainDeadline {
+      sleepFor(0.002)
+    }
+
+    XCTAssertTrue(
+      box.penalizedSettledIdentity,
+      "the abandoned routing probe must penalize the target main settled on"
+    )
+    XCTAssertFalse(
+      box.penalizedPendingIdentity,
+      "the command queue may not key a penalty with an identity whose write was still pending on main"
+    )
+    XCTAssertFalse(hasAbandonedMainThreadWork())
+  }
+
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
     app.launch()
     currentApp = app
