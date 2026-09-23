@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { test, vi } from 'vitest';
+import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createSnapshotSourceHost, snapshotSourceSocketPath } from './host.ts';
+
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
+  runCmdBackground: vi.fn(),
+}));
 
 test('snapshot bridge socket paths stay within the AF_UNIX limit and are target-specific', () => {
   const host = createSnapshotSourceHost();
@@ -13,4 +20,46 @@ test('snapshot bridge socket paths stay within the AF_UNIX limit and are target-
   assert.equal(otherOwner.length < 104, true);
   assert.notEqual(first, second);
   assert.notEqual(first, otherOwner);
+});
+
+test.each([
+  ['the default simulator set', undefined, []],
+  ['a scoped simulator set', '/tmp/scoped-set', ['--set', '/tmp/scoped-set']],
+] as const)('the bridge spawns inside %s', (_label, simulatorSetPath, setArgs) => {
+  const spawn = vi.mocked(runCmdBackground);
+  spawn.mockReset();
+  const child = Object.assign(new EventEmitter(), {
+    pid: 4242,
+    exitCode: null,
+    signalCode: null,
+    stderr: null,
+  });
+  spawn.mockReturnValue({
+    child: child as unknown as ReturnType<typeof runCmdBackground>['child'],
+    wait: new Promise(() => {}),
+  });
+
+  const started = createSnapshotSourceHost().start(
+    { udid: 'simulator-1', ...(simulatorSetPath ? { simulatorSetPath } : {}) },
+    '/tmp/bridge',
+    '/tmp/bridge.sock',
+  );
+
+  assert.equal(started.pid, 4242);
+  assert.deepEqual(spawn.mock.calls[0]?.slice(0, 2), [
+    'xcrun',
+    [
+      'simctl',
+      ...setArgs,
+      'spawn',
+      'simulator-1',
+      '/tmp/bridge',
+      'serve',
+      '/tmp/bridge.sock',
+      '--idle-timeout',
+      '60',
+      '--exit-on-disconnect',
+      'false',
+    ],
+  ]);
 });

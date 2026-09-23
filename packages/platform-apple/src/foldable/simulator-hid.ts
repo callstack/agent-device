@@ -1,14 +1,16 @@
 import path from 'node:path';
 import type { FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { makeHostTemporaryDirectory, removeHostDirectory } from '@agent-device/host-kit/host-file';
 import { findProjectRoot } from '@agent-device/host-kit/version';
+import { runSimctlForDevice } from '../core/simctl.ts';
 import { runXcrun } from '../core/tool-provider.ts';
 
 /** Compiles for the selected Xcode and dispatches inside exactly the requested simulator. */
 export async function sendSimulatorFoldPose(
-  udid: string,
+  device: DeviceInfo,
   pose: FoldPose | readonly FoldKeyframe[],
   signal?: AbortSignal,
 ): Promise<void> {
@@ -49,7 +51,7 @@ export async function sendSimulatorFoldPose(
     signal?.throwIfAborted();
     const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
     const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
-    const sent = await runXcrun(['simctl', 'spawn', udid, binary, payload], {
+    const sent = await runSimctlForDevice(device, ['spawn', device.id, binary, payload], {
       signal,
       timeoutMs: durationMs + 10_000,
       // simctl must forward termination to the guest before the host kills it.
@@ -60,7 +62,7 @@ export async function sendSimulatorFoldPose(
       throw new AppError(
         'COMMAND_FAILED',
         'Unable to send the simulator hinge pose',
-        execFailureDetails(sent, { reason: 'fold-hid-dispatch-failed', deviceId: udid }),
+        execFailureDetails(sent, { reason: 'fold-hid-dispatch-failed', deviceId: device.id }),
       );
     }
   } finally {

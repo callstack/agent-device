@@ -89,7 +89,7 @@ test('sends the simulator HID pose and reports the pose CoreDevice read back', a
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
 
-  expect(mockSend).toHaveBeenCalledWith(duo.id, 'open', undefined);
+  expect(mockSend).toHaveBeenCalledWith(duo, 'open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(2);
 });
 
@@ -162,7 +162,7 @@ test('sends half-open and reports it only once the hinge has stopped', async () 
     hingeAngleDegrees: 130,
     screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
   });
-  expect(mockSend).toHaveBeenCalledWith(duo.id, 'half-open', undefined);
+  expect(mockSend).toHaveBeenCalledWith(duo, 'half-open', undefined);
   expect(mockHinge).toHaveBeenCalledTimes(3);
 });
 
@@ -358,7 +358,7 @@ test('reports a custom final angle only after it reaches and holds that angle', 
     pose: 'half-open',
     hingeAngleDegrees: 100,
   });
-  expect(mockSend).toHaveBeenCalledWith(duo.id, keyframes, undefined);
+  expect(mockSend).toHaveBeenCalledWith(duo, keyframes, undefined);
 });
 
 test.each([

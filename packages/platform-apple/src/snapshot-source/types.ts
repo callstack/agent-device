@@ -22,6 +22,8 @@ export type SnapshotSourceTarget = Readonly<{
   generation: string;
   targetId?: string;
   processStartTime?: string;
+  /** Device set that owns `udid`; absent for the default CoreSimulator set. */
+  simulatorSetPath?: string;
 }>;
 
 export type SnapshotSourceRequest = Readonly<{
@@ -82,7 +84,7 @@ export type SnapshotSourceHost = Readonly<{
   homeDirectory(): string;
   run(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
   start(
-    udid: string,
+    target: Pick<SnapshotSourceTarget, 'udid' | 'simulatorSetPath'>,
     bridgePath: string,
     socketPath: string,
     options?: { signal?: AbortSignal },

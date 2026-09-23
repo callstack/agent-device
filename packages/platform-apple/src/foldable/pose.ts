@@ -45,7 +45,7 @@ export async function setAppleFoldPose(
   const inventory = await queryAppleDisplayInventory(device, { signal: options.signal });
   requireFoldableInventory(device, inventory);
 
-  await sendSimulatorFoldPose(device.id, intent.keyframes ?? pose, options.signal);
+  await sendSimulatorFoldPose(device, intent.keyframes ?? pose, options.signal);
   emitDiagnostic({
     level: 'info',
     phase: 'apple_fold_pose_dispatched',

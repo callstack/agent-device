@@ -23,8 +23,14 @@ import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diag
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
 import { remainingSnapshotSourceMs } from './deadline.ts';
-import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
+import type {
+  SnapshotSourceHost,
+  SnapshotSourceProcess,
+  SnapshotSourceSocket,
+  SnapshotSourceTarget,
+} from './types.ts';
 import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
+import { buildSimctlArgs } from '../core/simctl.ts';
 
 const BRIDGE_IDLE_TIMEOUT_SECONDS = 60;
 const MAX_PROCESS_LOG_BYTES = 64 * 1024;
@@ -54,7 +60,7 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
 }
 
 function startSnapshotBridge(
-  udid: string,
+  target: Pick<SnapshotSourceTarget, 'udid' | 'simulatorSetPath'>,
   bridgePath: string,
   socketPath: string,
   options: { signal?: AbortSignal } = {},
@@ -64,18 +70,20 @@ function startSnapshotBridge(
   }
   const started = runCmdBackground(
     'xcrun',
-    [
-      'simctl',
-      'spawn',
-      udid,
-      bridgePath,
-      'serve',
-      socketPath,
-      '--idle-timeout',
-      String(BRIDGE_IDLE_TIMEOUT_SECONDS),
-      '--exit-on-disconnect',
-      'false',
-    ],
+    buildSimctlArgs(
+      [
+        'spawn',
+        target.udid,
+        bridgePath,
+        'serve',
+        socketPath,
+        '--idle-timeout',
+        String(BRIDGE_IDLE_TIMEOUT_SECONDS),
+        '--exit-on-disconnect',
+        'false',
+      ],
+      { simulatorSetPath: target.simulatorSetPath },
+    ),
     {
       allowFailure: true,
       captureOutput: false,

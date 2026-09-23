@@ -53,6 +53,23 @@ test('the bridge manager reuses a healthy per-device helper and stops it exactly
   assert.deepEqual(fixture.processes[0]!.signals, ['SIGTERM']);
 });
 
+test('the helper starts inside the simulator set that owns the target', async () => {
+  const fixture = createLifecycleFixture();
+  const manager = new SnapshotBridgeManager(fixture.host);
+  const scopedTarget = { ...target, simulatorSetPath: '/tmp/scoped-set' };
+
+  await manager.request({
+    target: scopedTarget,
+    bridge,
+    limits,
+    maxDepth: 10,
+    deadline: deadline(),
+  });
+
+  assert.deepEqual(fixture.startedTargets, [scopedTarget]);
+  await manager.close();
+});
+
 test('a new target generation reuses the healthy helper and carries generation per request', async () => {
   const fixture = createLifecycleFixture();
   const manager = new SnapshotBridgeManager(fixture.host);
@@ -368,6 +385,7 @@ type LifecycleFixture = {
   sockets: FakeSocket[];
   diagnostics: Array<Parameters<SnapshotSourceHost['emitDiagnostic']>[0]>;
   socketPaths: string[];
+  startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
 };
 
 function deadline(signal?: AbortSignal, timeoutMs = limits.maxDurationMs) {
@@ -396,12 +414,14 @@ function createLifecycleFixture(
   const sockets: FakeSocket[] = [];
   const diagnostics: LifecycleFixture['diagnostics'] = [];
   const socketPaths: string[] = [];
+  const startedTargets: LifecycleFixture['startedTargets'] = [];
   const realHost = createSnapshotSourceHost();
   const host: SnapshotSourceHost = {
     ...realHost,
     emitDiagnostic: (event) => diagnostics.push(event),
     readTargetProcessStartTime: async () => options.targetStartTimes?.shift() ?? 'target-start',
-    start: (_udid, _bridgePath, socketPath) => {
+    start: (startedTarget, _bridgePath, socketPath) => {
+      startedTargets.push(startedTarget);
       socketPaths.push(socketPath);
       const process = new FakeProcess(700 + processes.length);
       processes.push(process);
@@ -434,7 +454,7 @@ function createLifecycleFixture(
       return socket;
     },
   };
-  return { host, processes, sockets, diagnostics, socketPaths };
+  return { host, processes, sockets, diagnostics, socketPaths, startedTargets };
 }
 
 class FakeProcess implements SnapshotSourceProcess {

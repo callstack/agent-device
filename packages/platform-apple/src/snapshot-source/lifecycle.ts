@@ -140,7 +140,7 @@ export class SnapshotBridgeManager {
     const socketPath = snapshotSourceSocketPath(this.host, input.target.udid, this.ownerId);
     await this.host.ensureDirectory(path.dirname(socketPath));
     await this.host.remove(socketPath);
-    const bridgeProcess = this.host.start(input.target.udid, input.bridge.path, socketPath, {
+    const bridgeProcess = this.host.start(input.target, input.bridge.path, socketPath, {
       signal: deadline.signal,
     });
     const session: BridgeSession = {

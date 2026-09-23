@@ -2,7 +2,10 @@ import { expect, test } from 'vitest';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { withAppleToolProvider, createLocalAppleToolProvider } from '../core/tool-provider.ts';
+import { IOS_SIMULATOR } from '../__tests__/device-fixtures.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
+
+const selectedDuo = { ...IOS_SIMULATOR, id: 'selected-duo' };
 
 test.each(['success', 'build', 'dispatch', 'cancel'] as const)(
   'HID route targets the UDID, cleans temporary artifacts, and handles %s',
@@ -29,7 +32,7 @@ test.each(['success', 'build', 'dispatch', 'cancel'] as const)(
         },
       }),
       async () => {
-        const operation = sendSimulatorFoldPose('selected-duo', 'half-open', controller.signal);
+        const operation = sendSimulatorFoldPose(selectedDuo, 'half-open', controller.signal);
         if (failure === 'success') await expect(operation).resolves.toBeUndefined();
         else if (failure === 'cancel') await expect(operation).rejects.toThrow('cancelled');
         else
@@ -64,7 +67,25 @@ test('streams all keyframes in one process with a duration-derived timeout', asy
         return { stdout: '', stderr: '', exitCode: 0 };
       },
     }),
-    () => sendSimulatorFoldPose('duo', keyframes),
+    () => sendSimulatorFoldPose(selectedDuo, keyframes),
   );
   expect(dispatches).toBe(1);
+});
+
+test('HID dispatch addresses the UDID inside its scoped simulator set', async () => {
+  const dispatches: string[][] = [];
+  let binary = '';
+  await withAppleToolProvider(
+    createLocalAppleToolProvider({
+      runCommand: async (_command, args) => {
+        if (args.includes('clang')) binary = args.at(-1)!;
+        else dispatches.push(args);
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    }),
+    () => sendSimulatorFoldPose({ ...selectedDuo, simulatorSetPath: '/tmp/scoped-set' }, 'closed'),
+  );
+  expect(dispatches).toEqual([
+    ['simctl', '--set', '/tmp/scoped-set', 'spawn', 'selected-duo', binary, 'closed'],
+  ]);
 });

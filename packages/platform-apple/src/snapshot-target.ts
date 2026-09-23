@@ -23,6 +23,7 @@ export type SimulatorSnapshotTarget = Readonly<{
   generation: string;
   targetId: string;
   processStartTime: string;
+  simulatorSetPath?: string;
 }>;
 
 export type SimulatorSnapshotTargetResolver = (
@@ -106,6 +107,7 @@ async function resolveSimulatorSnapshotTarget(
     generation: `${job.pid}:${job.label}:${processStartTime}`,
     targetId: `${device.id}:${appBundleId}`,
     processStartTime,
+    ...(device.simulatorSetPath ? { simulatorSetPath: device.simulatorSetPath } : {}),
   });
 }
 

@@ -19,12 +19,11 @@ const signal = () => new AbortController().signal;
 function targetFixture() {
   const state = { pid: 42, launch: 'launch-a', start: 'start-a' as string | null };
   const run = vi.fn(async (args: string[], _options?: { timeoutMs?: number }) => ({
-    stdout:
-      args[0] === 'spawn'
-        ? `90\t0\tUIKitApplication:com.example.app.beta[wrong][rb-legacy]\n${state.pid}\t0\tUIKitApplication:${app}[${state.launch}][rb-legacy]`
-        : JSON.stringify({
-            devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
-          }),
+    stdout: args.includes('spawn')
+      ? `90\t0\tUIKitApplication:com.example.app.beta[wrong][rb-legacy]\n${state.pid}\t0\tUIKitApplication:${app}[${state.launch}][rb-legacy]`
+      : JSON.stringify({
+          devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+        }),
     stderr: '',
     exitCode: 0,
   }));
@@ -63,6 +62,22 @@ test('an unchanged OS process reuses its exact app target without another simctl
     });
     expect(fixture.discoveryCount()).toBe(1);
     expect(fixture.runCommand).toHaveBeenCalledTimes(2);
+  });
+});
+
+test('a target in a scoped simulator set carries that set to the bridge', async () => {
+  const fixture = targetFixture();
+  await withAppleToolProvider(fixture.provider, async () => {
+    const target = await fixture.resolve(
+      { ...ios, simulatorSetPath: '/tmp/scoped-set' },
+      app,
+      signal(),
+    );
+    expect(target.simulatorSetPath).toBe('/tmp/scoped-set');
+    expect(fixture.run.mock.calls.map(([args]) => args.slice(0, 2))).toEqual([
+      ['--set', '/tmp/scoped-set'],
+      ['--set', '/tmp/scoped-set'],
+    ]);
   });
 });
 
