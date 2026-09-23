@@ -566,6 +566,55 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
   }
 });
 
+test('sendToDaemon refuses to replace a reachable daemon newer than the client', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+  // The hoisted-CLI shape: an older agent-device on PATH meets the daemon a newer install
+  // started, with live sessions attached. It must neither spawn nor kill anything.
+  const stateDir = makeTempStateDir('agent-device-daemon-newer-refused-');
+  const paths = resolveDaemonPaths(stateDir);
+  const newerDaemon = await startHttpDaemonFixture({ via: 'newer-daemon' });
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  mockRunCmdDetached.mockReset();
+  writeDaemonInfo(paths, {
+    httpPort: newerDaemon.port,
+    transport: 'http',
+    pid: 999_999,
+    version: '999.0.0',
+  });
+  const stderrCapture = captureStderr();
+
+  try {
+    await assert.rejects(
+      () =>
+        sendToDaemon({
+          session: 'default',
+          command: 'newer-daemon-smoke',
+          positionals: [],
+          flags: { stateDir, daemonTransport: 'http' },
+          meta: { requestId: 'req-newer-daemon' },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.match(error.message, /v999\.0\.0\) is newer than this client/);
+        return true;
+      },
+    );
+
+    assert.equal(mockRunCmdDetached.mock.calls.length, 0);
+    assert.deepEqual(newerDaemon.seenPaths, ['GET /health']);
+    assert.equal(stderrCapture.read(), '');
+    assert.ok(fs.existsSync(paths.infoPath), 'the newer daemon keeps its metadata');
+  } finally {
+    stderrCapture.restore();
+    await closeLoopbackServer(newerDaemon.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+  }
+});
+
 test('sendToDaemon prints a takeover notice before replacing an unreachable daemon', async (t) => {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');

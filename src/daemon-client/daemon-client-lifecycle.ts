@@ -182,7 +182,11 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   if (!existing) return null;
 
   const existingReachable = await canConnectReusableDaemon(existing, settings.transportPreference);
-  const takeoverReason = await resolveDaemonTakeoverReason(existing, existingReachable);
+  const takeoverReason = await resolveDaemonTakeoverReason(
+    existing,
+    existingReachable,
+    settings.paths.baseDir,
+  );
   if (!takeoverReason) return existing;
 
   emitDaemonTakeoverNotice(existing, takeoverReason, settings.paths.baseDir);

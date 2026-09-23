@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_SOURCE_ENTRY, findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import {
+  DAEMON_SOURCE_ENTRY,
+  findProjectRoot,
+  isNewerVersion,
+  readVersion,
+} from '@agent-device/host-kit/version';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
@@ -110,12 +115,24 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
  * replaced, or replaced without a reason to print. The version answers first because
  * it is cheap and decides alone for the common pair of installed trees; the code
  * identity (`resolveCodeIdentityMismatch`) answers next and unreachability last.
+ *
+ * A reachable daemon NEWER than this client is neither reused nor replaced: it was started
+ * by a newer install that may still own live sessions, and an older binary that a package
+ * manager hoisted onto PATH must not kill it under that install. The call throws
+ * instead, naming both versions and the stop command for a deliberate downgrade.
  */
 export async function resolveDaemonTakeoverReason(
   info: DaemonInfo,
   reachable: boolean,
+  stateDir?: string,
 ): Promise<string | undefined> {
-  if (info.version !== readVersion()) return `version mismatch (client v${readVersion()})`;
+  const clientVersion = readVersion();
+  if (info.version !== clientVersion) {
+    if (reachable && info.version && isNewerVersion(info.version, clientVersion)) {
+      throw newerDaemonRefusedError(info, info.version, clientVersion, stateDir);
+    }
+    return `version mismatch (client v${clientVersion})`;
+  }
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
   if (codeMismatch) return codeMismatch;
@@ -156,4 +173,25 @@ function describeCodeOriginMismatch(
   info: DaemonInfo,
 ): `code origin mismatch (${string}, client ${string})` {
   return `code origin mismatch (daemon ${info.codeOrigin ?? 'unreported'}, client ${local.origin})`;
+}
+
+function newerDaemonRefusedError(
+  info: DaemonInfo,
+  daemonVersion: string,
+  clientVersion: string,
+  stateDir: string | undefined,
+): AppError {
+  const stopCommand = stateDir
+    ? `agent-device daemon stop --state-dir ${stateDir}`
+    : 'agent-device daemon stop';
+  return new AppError(
+    'COMMAND_FAILED',
+    `Daemon (pid ${info.pid}, v${daemonVersion}) is newer than this client (v${clientVersion}); refusing to replace it.`,
+    {
+      daemonPid: info.pid,
+      daemonVersion,
+      clientVersion,
+      hint: `Run the agent-device v${daemonVersion} CLI that started this daemon (an older copy was probably hoisted onto PATH), or stop it first with: ${stopCommand}.`,
+    },
+  );
 }

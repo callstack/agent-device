@@ -31,3 +31,12 @@ export function findProjectRoot(): string {
   projectRootMemo.set('self', resolved);
   return resolved;
 }
+
+/**
+ * Whether `candidate` sorts after `baseline` as a release version. Numeric-aware string order is
+ * enough for the daemon takeover decision: it only has to tell an upgrade from a downgrade, and
+ * equal strings are never compared here.
+ */
+export function isNewerVersion(candidate: string, baseline: string): boolean {
+  return candidate.localeCompare(baseline, undefined, { numeric: true }) > 0;
+}

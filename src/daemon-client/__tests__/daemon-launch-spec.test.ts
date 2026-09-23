@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonLaunchSpec,
@@ -106,6 +107,42 @@ test('a source client fingerprints the source entry through the stat-validated c
  * in; these cases flip the two inputs that separate the trees — which tree this client
  * runs from, and which tree the running daemon says it was started from (#2458).
  */
+test('a reachable daemon newer than the client is refused, not replaced', async () => {
+  const clientVersion = readVersion();
+  await assert.rejects(
+    () => resolveDaemonTakeoverReason(runningDaemon({ version: '999.0.0' }), true, '/tmp/state'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(
+        error.message,
+        `Daemon (pid 999999, v999.0.0) is newer than this client (v${clientVersion}); refusing to replace it.`,
+      );
+      assert.equal(error.details?.daemonVersion, '999.0.0');
+      assert.equal(error.details?.clientVersion, clientVersion);
+      assert.match(
+        String(error.details?.hint),
+        /agent-device daemon stop --state-dir \/tmp\/state/,
+      );
+      return true;
+    },
+  );
+});
+
+test('an unreachable newer daemon is replaced like any version mismatch', async () => {
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({ version: '999.0.0' }), false),
+    `version mismatch (client v${readVersion()})`,
+  );
+});
+
+test('a reachable daemon older than the client is replaced', async () => {
+  assert.equal(
+    await resolveDaemonTakeoverReason(runningDaemon({ version: '0.0.1' }), true),
+    `version mismatch (client v${readVersion()})`,
+  );
+});
+
 function useClientTree(sourceCheckout: boolean): void {
   vi.mocked(isSourceCheckoutProjectRoot).mockReturnValue(sourceCheckout);
 }
