@@ -17,13 +17,14 @@
   the caller was told it had failed (#2546's late tap, from the banner side). Alert activation now
   opts out of XCTest's interruption handling, which also stops that handler from pressing a button of
   its own choosing on an unrelated system alert while the command answers the alert it resolved.
-- Fixed (macos): `screenshot --fullscreen` on the `desktop` or `menubar` surface now refuses with
-  `INVALID_ARGS` (`details.reason: SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME`) instead
-  of being accepted and silently ignored. Both surfaces always capture the main display through the
-  macOS helper, so the flag never named a frame the capture could vary. A `.ad` script or project
-  config that sets `screenshotFullscreen` for a desktop/menubar capture now fails instead of
-  succeeding with the same image it always produced; drop the flag for those surfaces. macOS app
-  sessions and every other platform keep accepting `--fullscreen` unchanged. (#2799)
+- Fixed (macos): `screenshot --fullscreen` on the `desktop`, `menubar`, or `frontmost-app` surface
+  now refuses with `INVALID_ARGS` (`details.reason:
+  SCREENSHOT_FULLSCREEN_MACOS_HELPER_SURFACE_FIXED_FRAME`) instead of being accepted and silently
+  ignored. Every one of those surfaces captures through the macOS helper, which always reads the
+  main display, so the flag never named a frame the capture could vary. A `.ad` script or project
+  config that sets `screenshotFullscreen` for one of those surfaces now fails instead of succeeding
+  with the same image it always produced; drop the flag there. macOS app sessions and every other
+  platform keep accepting `--fullscreen` unchanged. (#2799)
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
   the bridge and the XCTest runner. The snapshot capability table has declared `hittable =
