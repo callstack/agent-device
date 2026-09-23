@@ -109,6 +109,49 @@ extension RunnerTests {
     }
   }
 
+  func testAlertActivationDoesNotWaitOutANotificationBanner() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-banner"]
+    app.launch()
+    let banner = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+      .descendants(matching: .any)["NotificationShortLookView"]
+    var consultedInterruptions: [String] = []
+    let monitor = addUIInterruptionMonitor(withDescription: "alert activation banner") { element in
+      consultedInterruptions.append(element.identifier)
+      return false
+    }
+    defer {
+      removeUIInterruptionMonitor(monitor)
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+      _ = banner.waitForNonExistence(timeout: 15)
+    }
+    acceptNotificationAuthorizationUntilAlertAppears()
+    XCTAssertTrue(banner.waitForExistence(timeout: appExistenceTimeout), "the fixture keeps a banner up")
+    let alert = try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(30)))
+
+    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(30))
+
+    XCTAssertEqual(consultedInterruptions, [], "alert activation waited on XCTest's interruption handling")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
+  }
+
+  /// The banner fixture presents its alert only once this app may post notifications; a fresh
+  /// simulator asks first, through SpringBoard.
+  private func acceptNotificationAuthorizationUntilAlertAppears() {
+    let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+    let fixtureAlert = app.alerts.firstMatch
+    let deadline = Date().addingTimeInterval(appExistenceTimeout)
+    while Date() < deadline, !fixtureAlert.exists {
+      if allow.exists {
+        allow.tap()
+      } else {
+        Thread.sleep(forTimeInterval: 0.25)
+      }
+    }
+    XCTAssertTrue(fixtureAlert.exists, "the banner fixture needs notification authorization before it presents its alert")
+  }
+
   /// The accessibility round trips `resolveAlert` spends before a button is chosen, decomposed from
   /// the implementation rather than counted off one trace: the blocking-modal probe scans
   /// SpringBoard's alert and sheet lists and re-reads the candidate it settles on; the app's own

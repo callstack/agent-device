@@ -56,6 +56,9 @@ int main(int argc, const char *argv[]) {
 
 #else
 #import <UIKit/UIKit.h>
+#if TARGET_OS_IOS
+#import <UserNotifications/UserNotifications.h>
+#endif
 
 @interface AgentDeviceRunnerViewController : UIViewController
 @property(nonatomic, strong) UILabel *alertActionStatus;
@@ -63,7 +66,13 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
+@property(nonatomic, strong) NSTimer *alertBannerRepost;
 @end
+
+#if TARGET_OS_IOS
+@interface AgentDeviceRunnerViewController () <UNUserNotificationCenterDelegate>
+@end
+#endif
 
 @implementation AgentDeviceRunnerViewController
 
@@ -101,6 +110,57 @@ static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
   self.alertActivationBusyBackstop = nil;
 }
 
+// A banner from this app, shown over its own alert and re-posted before the previous one expires so
+// one is on screen for as long as the first alert is unanswered. XCTest treats such a banner as an
+// interruption of every event aimed at the app (#2546's late tap, from the banner side).
+- (void)startAlertBannerThen:(dispatch_block_t)presentAlert {
+  UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
+  center.delegate = self;
+  [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert
+                        completionHandler:^(BOOL granted, NSError *error) {
+                          (void)error;
+                          if (!granted) {
+                            return;
+                          }
+                          dispatch_async(dispatch_get_main_queue(), ^{
+                            presentAlert();
+                            [self postAlertBanner];
+                            self.alertBannerRepost = [NSTimer scheduledTimerWithTimeInterval:2.0
+                                                                                      target:self
+                                                                                    selector:@selector(postAlertBanner)
+                                                                                    userInfo:nil
+                                                                                     repeats:YES];
+                          });
+                        }];
+}
+
+- (void)postAlertBanner {
+  UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
+  content.title = @"Agent Device banner";
+  content.body = @"Shown over the alert fixture";
+  UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:NSUUID.UUID.UUIDString
+                                                                        content:content
+                                                                        trigger:nil];
+  [UNUserNotificationCenter.currentNotificationCenter addNotificationRequest:request withCompletionHandler:nil];
+}
+
+- (void)stopAlertBanner {
+  if (self.alertBannerRepost == nil) {
+    return;
+  }
+  [self.alertBannerRepost invalidate];
+  self.alertBannerRepost = nil;
+  [UNUserNotificationCenter.currentNotificationCenter removeAllDeliveredNotifications];
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler {
+  (void)center;
+  (void)notification;
+  completionHandler(UNNotificationPresentationOptionBanner);
+}
+
 
 - (void)updateAlertActionStatus {
   self.alertActionStatus.text = [NSString stringWithFormat:@"First actions: %lu; replacement actions: %lu",
@@ -124,6 +184,7 @@ static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
     [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:style handler:^(UIAlertAction *action) {
       (void)action;
       [self stopAlertActivationBusy];
+      [self stopAlertBanner];
       if (replacement) {
         self.replacementAlertActions += 1;
       } else {
@@ -145,9 +206,16 @@ static NSTimeInterval const kAgentDeviceAlertActivationBusyWindow = 20.0;
   if (!self.alertFixtureStarted &&
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
     self.alertFixtureStarted = YES;
-    [self presentAlertFixtureReplacement:NO];
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
-      [self startAlertActivationBusy];
+    dispatch_block_t presentAlert = ^{
+      [self presentAlertFixtureReplacement:NO];
+      if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
+        [self startAlertActivationBusy];
+      }
+    };
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-banner"]) {
+      [self startAlertBannerThen:presentAlert];
+    } else {
+      presentAlert();
     }
   }
 }

@@ -10,6 +10,13 @@
   CI it spent its whole 10 s budget there (`wait_capture_stalled` with `captures: 1`). The probe now
   joins the running discovery, bounded by the discovery's own deadline, and then observes the launch
   as before. A resolution failure other than a pending discovery still ends the probe at once.
+- Fixed (ios): `alert accept` and `alert dismiss` no longer land their tap after the command's
+  deadline when a notification banner is on screen. XCTest checks for SpringBoard banners and alerts
+  before every event and its default handler waited up to 15 s for a banner to leave, so the command
+  answered `ALERT_DEADLINE_EXCEEDED` ("The button was activated once") for a tap that arrived after
+  the caller was told it had failed (#2546's late tap, from the banner side). Alert activation now
+  opts out of XCTest's interruption handling, which also stops that handler from pressing a button of
+  its own choosing on an unrelated system alert while the command answers the alert it resolved.
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
   the bridge and the XCTest runner. The snapshot capability table has declared `hittable =
