@@ -1,4 +1,5 @@
 import { test, expect } from 'vitest';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
@@ -28,6 +29,38 @@ test('finalizeDaemonResponse preserves handler error hints from details', () => 
   expect(finalized.ok).toBe(false);
   if (!finalized.ok) {
     expect(finalized.error.hint).toBe('Run agent-device session list and reuse --session default.');
+  }
+});
+
+test('finalizeDaemonResponse keeps a network error code without the cause message', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'install-from-source',
+    positionals: ['https://example.com/app.apk'],
+    flags: {},
+  };
+  const response: DaemonResponse = {
+    ok: false,
+    error: normalizeError(
+      new AppError(
+        'COMMAND_FAILED',
+        'The daemon failed to fetch the app source (network error code: ECONNREFUSED)',
+        { networkErrorCode: 'ECONNREFUSED' },
+        Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), { code: 'ECONNREFUSED' }),
+      ),
+    ),
+  };
+
+  const finalized = finalizeDaemonResponse(req, response, () => 'artifact-id');
+
+  expect(finalized.ok).toBe(false);
+  if (!finalized.ok) {
+    expect(finalized.error.message).toBe(
+      'The daemon failed to fetch the app source (network error code: ECONNREFUSED)',
+    );
+    expect(finalized.error.details).toMatchObject({ networkErrorCode: 'ECONNREFUSED' });
+    expect(JSON.stringify(finalized.error)).not.toContain('10.0.0.1');
   }
 });
 
