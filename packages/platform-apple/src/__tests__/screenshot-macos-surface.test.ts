@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
+import { SESSION_SURFACES } from '@agent-device/contracts/session';
 
 vi.mock('../os/macos/helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../os/macos/helper.ts')>();
@@ -38,7 +39,12 @@ beforeEach(() => {
   vi.mocked(screenshotIos).mockClear();
 });
 
-test.each(['desktop', 'menubar'] as const)(
+// The helper-routed domain, derived from the same condition `usesMacOsSurfaceScreenshot` applies
+// (every session surface except `app`) rather than a hand-picked list — so adding a surface to
+// `SESSION_SURFACES` extends this coverage automatically instead of silently falling outside it.
+const helperRoutedSurfaces = SESSION_SURFACES.filter((surface) => surface !== 'app');
+
+test.each(helperRoutedSurfaces)(
   'refuses an explicit --fullscreen on the macOS %s surface before any capture',
   async (surface) => {
     const interactor = createAppleInteractor(macOsDevice, {});
@@ -57,7 +63,7 @@ test.each(['desktop', 'menubar'] as const)(
   },
 );
 
-test.each(['desktop', 'menubar'] as const)(
+test.each(helperRoutedSurfaces)(
   'captures the %s surface through the helper when --fullscreen is not requested',
   async (surface) => {
     const interactor = createAppleInteractor(macOsDevice, {});

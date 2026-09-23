@@ -298,6 +298,36 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             flags: { doubleTap: true },
             expectData: { x: 116, y: 80, doubleTap: true },
           },
+        ]);
+
+        const helperScreenshotCallsBeforeFrontmostRefusal = appleTool.calls.filter(
+          (call) => call[0] === 'macos-helper' && call[1] === 'screenshot',
+        ).length;
+        const frontmostFullscreenRefusal = await daemon.callCommand('screenshot', [], {
+          out: screenshotPath,
+          screenshotFullscreen: true,
+        });
+        const frontmostRefusalErrorData = assertRpcError(
+          frontmostFullscreenRefusal,
+          'INVALID_ARGS',
+          /--fullscreen is not accepted on the macOS frontmost-app surface/,
+        );
+        const frontmostRefusalDetails = frontmostRefusalErrorData.details as
+          | Record<string, unknown>
+          | undefined;
+        assert.equal(
+          frontmostRefusalDetails?.reason,
+          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+        );
+        assert.equal(frontmostRefusalDetails?.surface, 'frontmost-app');
+        assert.equal(
+          appleTool.calls.filter((call) => call[0] === 'macos-helper' && call[1] === 'screenshot')
+            .length,
+          helperScreenshotCallsBeforeFrontmostRefusal,
+          'A refused --fullscreen frontmost-app screenshot must not reach the macos-helper',
+        );
+
+        await runProviderScenario(daemon, [
           {
             name: 'switch to desktop surface',
             command: 'open',
