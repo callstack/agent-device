@@ -25,7 +25,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
@@ -92,7 +92,7 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { ensureDeviceReady } from '../../device-ready.ts';
+import { ensureDeviceReady } from '../../device/device-ready.ts';
 import {
   applyRuntimeHintValues,
   clearRuntimeHintValues,

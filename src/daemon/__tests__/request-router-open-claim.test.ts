@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
@@ -64,11 +64,11 @@ import {
   awaitFixtureReadiness,
   discoverReadyAndroidEmulators,
 } from './application-lifecycle-runtime-fixture.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 

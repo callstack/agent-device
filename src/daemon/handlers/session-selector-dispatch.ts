@@ -16,7 +16,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
-import type { DeviceReadyOptions } from '../device-ready.ts';
+import type { DeviceReadyOptions } from '../device/device-ready.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**

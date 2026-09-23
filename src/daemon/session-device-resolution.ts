@@ -5,7 +5,10 @@ import { appleSessionObservation } from '../platform-runtime-apple-resources.ts'
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
-import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import {
+  hasDeviceSelectionInput,
+  hasExplicitDeviceSelector,
+} from './device/device-selector-intent.ts';
 import { listSessionSelectorConflicts } from './session-selector.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 

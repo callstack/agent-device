@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

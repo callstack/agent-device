@@ -1,13 +1,13 @@
 import {
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecoveryComposer,
-} from '../../daemon/device-claim-owner-recovery.ts';
+} from '../../daemon/device/device-claim-owner-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../../daemon/platform-request-scope.ts';
 import {
   releaseProvenStaleDeviceClaims,
   type DeviceClaimStaleReleaseOutcome,
-} from '../../daemon/device-claims.ts';
-import type { DeviceClaimSelectors } from '../../daemon/device-claim-inspection.ts';
+} from '../../daemon/device/device-claims.ts';
+import type { DeviceClaimSelectors } from '../../daemon/device/device-claim-inspection.ts';
 
 /**
  * Daemonless `device release --stale`: settles each provably dead owner

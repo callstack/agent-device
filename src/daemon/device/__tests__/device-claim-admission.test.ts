@@ -9,20 +9,20 @@ import {
   type DeviceBindingIntent,
 } from '@agent-device/contracts/platform-runtime';
 import { asAppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../__tests__/test-utils/device-claim-store.ts';
+} from '../../../__tests__/test-utils/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
 import { acquireAllocatorHeldDeviceClaim } from '../device-claim-allocator.ts';
 import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
-import { createRequestExecutionScope } from '../request-execution-scope.ts';
-import { LeaseRegistry } from '../lease-registry.ts';
-import { SessionStore } from '../session-store.ts';
-import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import { createRequestExecutionScope } from '../../request-execution-scope.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
+import { SessionStore } from '../../session-store.ts';
+import { unavailableDeviceRuntimeGateway } from '../../__tests__/test-device-runtime-gateway.ts';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 
 const setup = isolatedDeviceClaimStores('agent-device-claim-admission-');

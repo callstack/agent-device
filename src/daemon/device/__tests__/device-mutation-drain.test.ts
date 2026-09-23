@@ -1,4 +1,4 @@
-import { createControlLatch } from './human-control-fixtures.ts';
+import { createControlLatch } from '../../__tests__/human-control-fixtures.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DeviceMutationDrain } from '../device-mutation-drain.ts';

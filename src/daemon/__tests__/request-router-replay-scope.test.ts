@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 vi.mock('../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platform-runtime-runtime-hints.ts')>();
@@ -39,7 +39,7 @@ import {
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { createRequestPlatformProviders } from '../../platform-runtime.ts';

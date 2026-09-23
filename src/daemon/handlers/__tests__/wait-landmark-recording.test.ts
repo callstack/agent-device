@@ -38,7 +38,7 @@ vi.mock('../../snapshot-interactor-capture.ts', async () => {
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../device-ready.ts', () => ({
+vi.mock('../../device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

@@ -15,7 +15,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { ensureDeviceReady, type DeviceReadyOptions } from './device-ready.ts';
+import { ensureDeviceReady, type DeviceReadyOptions } from './device/device-ready.ts';
 import type {
   ManagedRequestAdmission,
   ResolveManagedRequestLease,

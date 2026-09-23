@@ -13,7 +13,7 @@ import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/devi
 import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { trimRuntimeValue } from '@agent-device/host-kit/runtime-transport-hints';
-import { isAndroidEmulator, isIosSimulator } from './device-targets.ts';
+import { isAndroidEmulator, isIosSimulator } from './device/device-targets.ts';
 
 type SessionRuntimeHintsStore = Readonly<{
   getRuntimeHints: SessionStore['getRuntimeHints'];

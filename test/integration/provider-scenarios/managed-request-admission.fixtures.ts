@@ -13,8 +13,8 @@ import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../../src/__tests__/test-utils/device-claim-store.ts';
-import { createDeviceClaimAdmission } from '../../../src/daemon/device-claim-admission.ts';
-import { acquireAllocatorHeldDeviceClaim } from '../../../src/daemon/device-claim-allocator.ts';
+import { createDeviceClaimAdmission } from '../../../src/daemon/device/device-claim-admission.ts';
+import { acquireAllocatorHeldDeviceClaim } from '../../../src/daemon/device/device-claim-allocator.ts';
 import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
 import { managedCommandHorizon } from '../../../src/daemon/managed-device-allocation/command-horizon.ts';
 import type { ManagedLeaseAdmission } from '../../../src/daemon/managed-device-allocation/lease-admission.ts';

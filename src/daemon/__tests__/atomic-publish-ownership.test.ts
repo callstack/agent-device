@@ -5,7 +5,7 @@ import { test } from 'vitest';
 const SIMPLE_PUBLISHERS = [
   // device-claims.ts delegates every write to device-claim-store.ts's writeDeviceClaim, the
   // single writer shared by the process-owned and allocator-held claim kinds.
-  new URL('../device-claim-store.ts', import.meta.url),
+  new URL('../device/device-claim-store.ts', import.meta.url),
   new URL('../daemon-shutdown-report.ts', import.meta.url),
   new URL('../provider-lease-expiry.ts', import.meta.url),
   new URL('../session-script-writer.ts', import.meta.url),

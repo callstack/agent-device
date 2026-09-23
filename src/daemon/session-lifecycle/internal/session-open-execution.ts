@@ -57,16 +57,16 @@ import {
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
-} from '../../device-claims.ts';
-import type { TakenOverDeviceClaim } from '../../device-claim-reboot.ts';
+} from '../../device/device-claims.ts';
+import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
 import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import {
   buildAllocatorHeldRefusal,
   buildDeviceClaimConflictError,
-} from '../../device-claim-conflict.ts';
-import { requireAllocatorHeldDeviceClaim } from '../../device-claim-allocator.ts';
-import { deviceClaimRuleForOwner } from '../../device-claim-rule.ts';
+} from '../../device/device-claim-conflict.ts';
+import { requireAllocatorHeldDeviceClaim } from '../../device/device-claim-allocator.ts';
+import { deviceClaimRuleForOwner } from '../../device/device-claim-rule.ts';
 import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type OpenTiming = {

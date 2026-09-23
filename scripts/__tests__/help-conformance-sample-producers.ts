@@ -22,7 +22,7 @@ import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settl
 import { buildAmbiguousMatchError } from '../../src/daemon/selector-match-errors.ts';
 import { refMutationAdmissionResponse } from '../../src/daemon/interaction/index.ts';
 import { buildDeviceInUseBySessionError } from '../../src/daemon/session-recovery-hints.ts';
-import { buildDeviceClaimConflictError } from '../../src/daemon/device-claim-conflict.ts';
+import { buildDeviceClaimConflictError } from '../../src/daemon/device/device-claim-conflict.ts';
 import { activateCompleteRefFrame, readRefMutationFrame } from '../../src/daemon/ref-frame.ts';
 import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
 import type { SessionState } from '../../src/daemon/session-state.ts';

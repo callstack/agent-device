@@ -25,7 +25,7 @@ import {
   leaseDeviceBindingKey,
   leaseRunBindingKey,
 } from './lease-registry-scope.ts';
-import { DeviceMutationDrain } from './device-mutation-drain.ts';
+import { DeviceMutationDrain } from './device/device-mutation-drain.ts';
 import {
   type LeaseWorkPass,
   type LeaseWorkWanted,

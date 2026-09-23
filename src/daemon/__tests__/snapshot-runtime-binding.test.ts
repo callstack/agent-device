@@ -11,9 +11,9 @@ import {
 } from '../snapshot-runtime-binding.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 

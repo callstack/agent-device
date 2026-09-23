@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isReplayInfrastructureFailure } from '../session-test-infrastructure.ts';
-import { ALLOCATOR_CLAIM_MISSING } from '../../../device-claim-conflict.ts';
+import { ALLOCATOR_CLAIM_MISSING } from '../../../device/device-claim-conflict.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 

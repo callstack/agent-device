@@ -31,7 +31,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   return { ...actual, resolveTargetDevice: vi.fn(async () => DEVICE) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 test('fresh default-device recording starts serialize before durable admission', async () => {
   let releaseFirstStart: () => void = () => {};

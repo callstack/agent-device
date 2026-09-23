@@ -15,8 +15,8 @@ import {
 } from '../../../__tests__/test-utils/device-claim-store.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import { acquireDeviceClaim } from '../../device-claims.ts';
-import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
+import { acquireDeviceClaim } from '../../device/device-claims.ts';
+import { inspectDeviceClaims } from '../../device/device-claim-inspection.ts';
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
 import { handleSessionStateCommands } from '../session-state.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

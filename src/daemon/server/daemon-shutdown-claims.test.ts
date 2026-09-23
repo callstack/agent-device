@@ -5,9 +5,9 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../__tests__/test-utils/device-claim-store.ts';
 import fs from 'node:fs';
-import { acquireDeviceClaim } from '../device-claims.ts';
-import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { acquireDeviceClaim } from '../device/device-claims.ts';
+import { resolveDeviceClaimPath } from '../device/device-claim-paths.ts';
+import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import type { SessionState } from '../session-state.ts';
 

@@ -59,8 +59,11 @@ import {
   type InspectDeviceRuntimeFacts,
   type RequestRuntimeBindings,
 } from './request-runtime-binding.ts';
-import { createDeviceClaimAdmission, type DeviceClaimAdmission } from './device-claim-admission.ts';
-import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
+import {
+  createDeviceClaimAdmission,
+  type DeviceClaimAdmission,
+} from './device/device-claim-admission.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
 import {
   applyCommandDefaults,
   resolveCommandDeviceClaimPolicy,

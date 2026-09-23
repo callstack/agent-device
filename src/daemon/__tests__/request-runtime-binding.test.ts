@@ -24,10 +24,10 @@ import {
   createRequestRuntimeBindings,
   ensureBoundDeviceReady,
 } from '../request-runtime-binding.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 const inspectPlan = resolveLogsRuntimePlan({ action: 'path' });
 const doctorPlan = resolveLogsRuntimePlan({ action: 'doctor' });

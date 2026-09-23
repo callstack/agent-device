@@ -56,7 +56,7 @@ import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
-import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,

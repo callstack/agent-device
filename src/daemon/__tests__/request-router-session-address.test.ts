@@ -5,7 +5,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
@@ -26,7 +26,7 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';

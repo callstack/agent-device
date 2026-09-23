@@ -7,11 +7,11 @@ import {
   managedLocalRuntimeOwner,
   type DeviceBindingIntent,
 } from '@agent-device/contracts/platform-runtime';
-import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../__tests__/test-utils/device-claim-store.ts';
+} from '../../../__tests__/test-utils/device-claim-store.ts';
 import {
   acquireAllocatorHeldDeviceClaim,
   inspectAllocatorHeldDeviceClaim,
@@ -27,7 +27,7 @@ import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim
 import { acquireDeviceClaim, deviceClaimIdentity } from '../device-claims.ts';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
+  (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),
 );

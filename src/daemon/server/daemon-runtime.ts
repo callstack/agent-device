@@ -40,8 +40,8 @@ import {
   processOwnsActiveDeviceClaim,
   reconcileOrphanedDeviceClaims,
   type DeviceClaimReconciler,
-} from '../device-claims.ts';
-import { createOwnerScopedDeviceClaimReconciler } from '../device-claim-owner-recovery.ts';
+} from '../device/device-claims.ts';
+import { createOwnerScopedDeviceClaimReconciler } from '../device/device-claim-owner-recovery.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';

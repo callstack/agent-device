@@ -69,8 +69,8 @@ import {
 } from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
 import { WEB_DESKTOP_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
-import { acquireDeviceClaim } from '../../../device-claims.ts';
-import { inspectDeviceClaims } from '../../../device-claim-inspection.ts';
+import { acquireDeviceClaim } from '../../../device/device-claims.ts';
+import { inspectDeviceClaims } from '../../../device/device-claim-inspection.ts';
 
 import {
   type DeviceBinding,

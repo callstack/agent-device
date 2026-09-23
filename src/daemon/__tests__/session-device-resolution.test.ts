@@ -9,7 +9,7 @@ import {
 import { appleSessionObservation } from '../../platform-runtime-apple-resources.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 
 vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
@@ -21,7 +21,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
 vi.mock('../provider-device-admission.ts', () => ({
   isActiveProviderDevice: vi.fn(() => false),
 }));
-vi.mock('../device-ready.ts', () => ({
+vi.mock('../device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

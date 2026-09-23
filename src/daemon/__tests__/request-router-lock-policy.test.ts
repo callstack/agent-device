@@ -12,7 +12,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import {
   createRequestHandler,

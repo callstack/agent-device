@@ -16,7 +16,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
@@ -38,7 +38,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
 );
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { ensureDeviceReady } from '../../device-ready.ts';
+import { ensureDeviceReady } from '../../device/device-ready.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import {
   activateAndroidTestIme,
@@ -49,8 +49,8 @@ import {
   dispatchApplicationLifecycleEffect,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device-claims.ts';
-import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
+import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device/device-claims.ts';
+import { inspectDeviceClaims } from '../../device/device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import {

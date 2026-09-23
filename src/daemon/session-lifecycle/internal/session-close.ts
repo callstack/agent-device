@@ -17,7 +17,7 @@ import {
 import { isAuthoringArmedSession } from '../../session-script-publication-capability.ts';
 import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
-import { clearDeviceClaim } from '../../device-claims.ts';
+import { clearDeviceClaim } from '../../device/device-claims.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from '../../session-runtime.ts';
 import type {

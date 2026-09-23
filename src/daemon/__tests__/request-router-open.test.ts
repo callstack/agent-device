@@ -8,7 +8,7 @@ import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   const startTime = 'test-process-start';
@@ -74,7 +74,7 @@ import {
 import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 import {
   awaitFixtureReadiness,
   discoverReadyAndroidEmulators,
@@ -83,7 +83,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import {

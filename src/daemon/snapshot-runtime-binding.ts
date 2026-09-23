@@ -16,7 +16,7 @@ import {
   type BindDeviceRuntime,
   type InspectDeviceRuntimeFacts,
 } from './request-runtime-binding.ts';
-import type { DeviceReadyOptions } from './device-ready.ts';
+import type { DeviceReadyOptions } from './device/device-ready.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';

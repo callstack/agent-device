@@ -4,9 +4,9 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { sameDeviceIdentity } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '../daemon-resolution.ts';
-import { appLogDurableResource } from './app-log-session-resource.ts';
-import { recoverAppLogResourceAfterDaemonLock } from './app-log-resource-recovery.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { appLogDurableResource } from '../app-log-session-resource.ts';
+import { recoverAppLogResourceAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import type { DeviceClaim } from './device-claim-record.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { DurableCaptureRecoveryOutcome } from '@agent-device/capture-kit/durable-capture';

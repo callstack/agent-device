@@ -22,9 +22,9 @@ import {
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaims,
-} from '../../device-claim-inspection.ts';
-import { canonicalLocalDeviceKey } from '../../device-claim-paths.ts';
-import { deviceClaimIdentity } from '../../device-claims.ts';
+} from '../../device/device-claim-inspection.ts';
+import { canonicalLocalDeviceKey } from '../../device/device-claim-paths.ts';
+import { deviceClaimIdentity } from '../../device/device-claims.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionRef } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';

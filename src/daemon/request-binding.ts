@@ -1,5 +1,5 @@
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { hasDeviceSelectionInput } from './device-selector-intent.ts';
+import { hasDeviceSelectionInput } from './device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';

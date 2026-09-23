@@ -9,7 +9,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 // Register a test view on a command whose payload this file controls end to end, so the router
 // graft mechanics can be exercised without the real snapshot handler (the actual snapshot view is

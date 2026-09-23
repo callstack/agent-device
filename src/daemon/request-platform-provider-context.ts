@@ -1,6 +1,9 @@
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { hasDeviceSelectionInput, hasExplicitDeviceSelector } from './device-selector-intent.ts';
+import {
+  hasDeviceSelectionInput,
+  hasExplicitDeviceSelector,
+} from './device/device-selector-intent.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import { resolveProviderDeviceResolutionIntent } from './daemon-command-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
