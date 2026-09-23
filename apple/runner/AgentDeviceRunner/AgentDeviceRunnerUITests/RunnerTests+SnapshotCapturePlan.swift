@@ -648,8 +648,7 @@ extension RunnerTests {
       timing: capture.timing
     )
     return DataPayload(
-      // Legacy human text for older daemons that read message instead of snapshotQuality.
-      message: Self.legacyQualityMessage(quality) ?? payload.message,
+      message: payload.message,
       nodes: payload.nodes,
       // Completeness, never provenance: a whole tree that a later backend produced (state
       // "recovered") stays untruncated, so strict absence reads can trust it. Only a real cap
@@ -665,75 +664,6 @@ extension RunnerTests {
       runnerFatal: payload.runnerFatal,
       runnerFatalReason: payload.runnerFatalReason
     )
-  }
-
-  /// Response level, one line per incompleteness. An unread merged element is
-  /// byte-identical to one with no actions, and a clipped list looks complete,
-  /// so both have to name themselves.
-  static func customActionCoverageWarnings(_ coverage: SnapshotCustomActionCoverage) -> [String] {
-    var lines: [String] = []
-    if coverage.blocked {
-      // Scrolling is the remedy for a budget stop, not for this one — saying it
-      // here would send the reader off doing something that cannot help.
-      lines.append(
-        "Custom actions were not read: an earlier accessibility read is still hung, so this "
-          + "capture skipped the read pass instead of queueing behind it. No element's actions "
-          + "list is authoritative here. Reads resume once that call returns.")
-    } else if coverage.read < coverage.candidates {
-      lines.append(
-        "Custom actions were read for \(coverage.read) of \(coverage.candidates) merged elements, "
-          + "on-screen ones first; the remaining \(coverage.candidates - coverage.read) were not read, "
-          + "so an absent actions list on those is not evidence that they have none. "
-          + "Scroll them into view and re-run to read them.")
-    }
-    if coverage.truncated > 0 {
-      lines.append(
-        "\(coverage.truncated) element(s) published more custom actions than are shown; those "
-          + "lists are clipped to the first 8 names, and long names are shortened.")
-    }
-    return lines
-  }
-
-  static func legacyQualityMessage(_ quality: SnapshotQuality) -> String? {
-    let customActionWarnings =
-      quality.customActions.map { Self.customActionCoverageWarnings($0) } ?? []
-    guard quality.state != "healthy" || quality.collapsedLeafIndexes != nil
-      || !customActionWarnings.isEmpty
-    else { return nil }
-    var parts: [String] = []
-    if quality.state == "recovered" {
-      let meaning: String
-      switch quality.reasonCode {
-      case "budget", "deferred":
-        meaning = " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
-      case "presentation-failed":
-        meaning = " The runner rejected a regular presentation because its cumulative clip invariant failed; report this as a runner bug and treat screenshot as visual truth."
-      default:
-        meaning = " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
-      }
-      parts.append(
-        "Detected an overly complex or slow accessibility tree. Fell back to the \(quality.backend) snapshot backend"
-          + (quality.reason.map { " after: \($0)." } ?? ".")
-          + meaning
-      )
-    }
-    if quality.state == "sparse" {
-      parts.append(
-        "No snapshot backend could read this screen"
-          + (quality.reason.map { " (\($0))" } ?? "")
-          + ". Use screenshot as visual truth and coordinate taps."
-      )
-    }
-    parts.append(contentsOf: customActionWarnings)
-    if let depth = quality.effectiveDepth {
-      // No --depth remedy here: an explicit --depth capture disables the
-      // frontier extension, so following it would return strictly less than
-      // this capture did. A plain re-run retries with a fresh extension budget.
-      parts.append(
-        "The accessibility server rejected deeper requests; content below depth \(depth) may be missing — re-run snapshot to retry deeper content."
-      )
-    }
-    return parts.isEmpty ? nil : parts.joined(separator: " ")
   }
 }
 
@@ -830,28 +760,6 @@ extension RunnerTests {
     XCTAssertNil(Self.collapsedLeafIndexes([root, prose]))
   }
 
-  func testLegacyQualityMessageStatesFallbackMeaning() {
-    let recovered = SnapshotQuality(
-      state: "recovered",
-      backend: "queries",
-      reason: "snapshot returned only structural application/window nodes",
-      reasonCode: "sparse-tree",
-      effectiveDepth: nil,
-      collapsedLeafIndexes: nil,
-      customActions: nil
-    )
-    let message = Self.legacyQualityMessage(recovered)
-    XCTAssertTrue(message?.contains("queries snapshot backend") == true)
-    XCTAssertTrue(message?.contains("fixing the app's accessibility") == true)
-    XCTAssertTrue(message?.contains("screenshot as visual truth") == true)
-    XCTAssertNil(
-      Self.legacyQualityMessage(
-        SnapshotQuality(
-          state: "healthy", backend: "tree", reason: nil, reasonCode: nil, effectiveDepth: nil,
-          collapsedLeafIndexes: nil, customActions: nil)
-      )
-    )
-  }
   func testTerminalFailsClosedOnInteractiveAxFailureRegardlessOfSparseBest() {
     // Interactive AX failure must invalidate + fail closed; a later tier's sparse synthetic-root
     // "best" must never downgrade this to a returned-sparse payload (regression: best == nil guard).
@@ -895,6 +803,42 @@ extension RunnerTests {
 
     XCTAssertEqual(payload.snapshotQuality?.timing, timing)
     XCTAssertEqual(payload.nodes?.count, 1)
+  }
+
+  func testStampedPayloadCarriesDisclosuresOnlyInTheVerdict() {
+    let root = planTestNode(index: 0, type: "Application", label: "App")
+    let merged = planTestNode(
+      index: 1,
+      type: "Other",
+      label: (0...30).map { "Tab \($0)" }.joined(separator: ", "),
+      parentIndex: 0
+    )
+    let coverage = SnapshotCustomActionCoverage(
+      read: 12, candidates: 19, truncated: 0, blocked: false)
+    let silent = stampedSnapshotPayload(
+      SnapshotBackendCapture(
+        payload: DataPayload(nodes: [root, merged], truncated: false),
+        effectiveDepth: nil,
+        customActions: coverage
+      ),
+      backend: .recursiveTree,
+      state: "healthy",
+      reason: nil
+    )
+    XCTAssertNil(silent.message)
+    XCTAssertEqual(silent.snapshotQuality?.customActions, coverage)
+    XCTAssertEqual(silent.snapshotQuality?.collapsedLeafIndexes, [1])
+
+    let underlying = stampedSnapshotPayload(
+      SnapshotBackendCapture(
+        payload: DataPayload(message: "underlying", nodes: [root], truncated: false),
+        effectiveDepth: 4
+      ),
+      backend: .privateAX,
+      state: "recovered",
+      reason: (reason: "tree capture timed out", code: "budget")
+    )
+    XCTAssertEqual(underlying.message, "underlying")
   }
 
   func testStampedPayloadTruncationTracksCompletenessNotRecoveryProvenance() {

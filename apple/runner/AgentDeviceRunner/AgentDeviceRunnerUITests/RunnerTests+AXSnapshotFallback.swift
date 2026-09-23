@@ -583,13 +583,9 @@ extension RunnerTests {
     XCTAssertEqual(coverage[RunnerAXSnapshotCustomActionsCandidatesKey] as? Int, 1)
     XCTAssertEqual(
       RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 1)
-
-    // And the rendered verdict names the hang, not the scroll remedy.
-    let blockedWarnings = Self.customActionCoverageWarnings(
-      Self.privateAXCustomActionCoverage(coverage)!)
-    XCTAssertEqual(blockedWarnings.count, 1)
-    XCTAssertTrue(blockedWarnings[0].contains("still hung"))
-    XCTAssertFalse(blockedWarnings[0].contains("Scroll"))
+    XCTAssertEqual(
+      Self.privateAXCustomActionCoverage(coverage),
+      SnapshotCustomActionCoverage(read: 0, candidates: 1, truncated: 0, blocked: true))
 
     // 4. Recovery: once the wedged call returns, reads resume by themselves.
     hung.release()
@@ -643,34 +639,6 @@ extension RunnerTests {
     // Empty input is not "truncated".
     XCTAssertEqual(RunnerAXSnapshotBridge.cappedActionNames([], truncated: &truncated), [])
     XCTAssertFalse(truncated.boolValue)
-  }
-
-  /// A capped pass must say so; a complete one must stay silent.
-  func testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot() {
-    let partial = SnapshotQuality(
-      state: "recovered", backend: "private-ax", reason: nil, reasonCode: "requested-backend",
-      effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0, blocked: false))
-    let message = Self.legacyQualityMessage(partial)
-    XCTAssertTrue(message?.contains("12 of 19 merged elements") == true)
-    XCTAssertTrue(message?.contains("remaining 7") == true)
-    XCTAssertTrue(message?.contains("Scroll them into view") == true)
-
-    // Every candidate read: nothing to disclose, and a healthy capture stays silent.
-    let complete = SnapshotQuality(
-      state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
-      effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 19, candidates: 19, truncated: 0, blocked: false))
-    XCTAssertNil(Self.legacyQualityMessage(complete))
-
-    // A healthy capture with an incomplete pass still discloses — the guard must
-    // not key the disclosure off degradation state.
-    let healthyButCapped = SnapshotQuality(
-      state: "healthy", backend: "private-ax", reason: nil, reasonCode: nil,
-      effectiveDepth: nil, collapsedLeafIndexes: nil,
-      customActions: SnapshotCustomActionCoverage(read: 12, candidates: 19, truncated: 0, blocked: false))
-    XCTAssertTrue(
-      Self.legacyQualityMessage(healthyButCapped)?.contains("12 of 19") == true)
   }
 
   /// Action names annotated by the bridge must survive into the emitted node —

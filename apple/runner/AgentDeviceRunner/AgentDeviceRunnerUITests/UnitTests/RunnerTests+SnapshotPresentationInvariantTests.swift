@@ -338,20 +338,6 @@ extension RunnerTests {
     XCTAssertEqual(Self.snapshotQualityReasonCode(for: captureFailure), "presentation-failed")
     XCTAssertNotEqual(Self.snapshotQualityReasonCode(for: captureFailure), "capture-failed")
     XCTAssertTrue(captureFailure.message.contains("cumulative clip"))
-
-    let warning = Self.legacyQualityMessage(
-      SnapshotQuality(
-        state: "recovered",
-        backend: "queries",
-        reason: captureFailure.message,
-        reasonCode: captureFailure.qualityReasonCode,
-        effectiveDepth: nil,
-        collapsedLeafIndexes: nil,
-        customActions: nil
-      )
-    )
-    XCTAssertTrue(warning?.contains("runner bug") == true)
-    XCTAssertFalse(warning?.contains("fixing the app's accessibility") == true)
   }
 }
 #endif

@@ -266,6 +266,32 @@ test('snapshot publishes runner presentation through the engine and drops its qu
   assert.equal('qualityPayload' in result, false);
 });
 
+test('a message-less runner capture leaves its disclosures to the verdict', async () => {
+  const coverage = { read: 12, candidates: 19, truncated: 0, blocked: false };
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    {
+      hasLiveSession: () => true,
+      runCommand: async () => ({
+        ...runnerResultFor({ command: 'snapshot' }),
+        snapshotQuality: {
+          state: 'healthy',
+          backend: 'tree',
+          customActions: coverage,
+          collapsedLeafIndexes: [1],
+        },
+      }),
+    },
+  );
+
+  const result = presentedSnapshot(await interactor.snapshot());
+
+  assert.equal('warnings' in result, false);
+  assert.deepEqual(result.quality?.customActions, coverage);
+  assert.deepEqual(result.quality?.collapsedLeafIndexes, [1]);
+});
+
 test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {
   const nodes = [{ index: 0, type: 'Application', label: 'System Settings' }];
   const interactor = createAppleInteractor(
