@@ -1,10 +1,8 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from './config.ts';
 import {
   listIosDeviceApps,
   resolveIosDeviceAppProcesses,
-  runIosDevicectl,
   terminateIosDeviceApp,
 } from './devicectl.ts';
 import type { IosAppInfo, IosDeviceAppProcesses } from './app-info.ts';
@@ -14,40 +12,6 @@ export async function listCoreDeviceApps(
   filter: AppsFilter,
 ): Promise<IosAppInfo[]> {
   return await listIosDeviceApps(device, filter);
-}
-
-export async function installCoreDeviceApp(
-  device: DeviceInfo,
-  installablePath: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  await runIosDevicectl(
-    ['device', 'install', 'app', '--device', device.id, installablePath],
-    {
-      action: 'install iOS app',
-      deviceId: device.id,
-    },
-    {
-      signal,
-      timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
-    },
-  );
-}
-
-export async function uninstallCoreDeviceApp(
-  device: DeviceInfo,
-  bundleId: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  await runIosDevicectl(
-    ['device', 'uninstall', 'app', '--device', device.id, bundleId],
-    { action: `uninstall iOS app ${bundleId}`, deviceId: device.id },
-    {
-      signal,
-      tolerateOutput: (stdout, stderr) =>
-        isMissingAppErrorOutput(`${stdout}\n${stderr}`.toLowerCase()),
-    },
-  );
 }
 
 export async function terminateCoreDeviceApp(device: DeviceInfo, bundleId: string): Promise<void> {
