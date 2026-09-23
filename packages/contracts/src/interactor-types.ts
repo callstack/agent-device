@@ -356,10 +356,22 @@ export type Interactor = {
   }>;
   gestureViewport?(): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
-  home(): Promise<void>;
+  /**
+   * Optional (parity with `actionButton`): opens the springboard, a control not every owner
+   * carries. An owner without it leaves it undefined; its fact refuses the press before binding,
+   * and the system-button binder fails closed rather than resolving an absent member as a
+   * successful no-op.
+   */
+  home?(): Promise<void>;
   setOrientation(orientation: DeviceRotation): Promise<{ orientation?: DeviceRotation } | void>;
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
-  appSwitcher(): Promise<void>;
+  /**
+   * Optional (parity with `home`): opens the recents surface, a control not every owner carries.
+   * An owner without it leaves it undefined; its fact refuses the press before binding, and the
+   * system-button binder fails closed rather than resolving an absent member as a successful
+   * no-op.
+   */
+  appSwitcher?(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
   /**
    * Optional (parity with `keyboardDismiss`): presses the iPhone/iPad Action Button, hardware only

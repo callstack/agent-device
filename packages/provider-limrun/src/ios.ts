@@ -322,10 +322,6 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.pressKey('escape');
   }
 
-  async home(): Promise<never> {
-    throw unsupported('home', 'Limrun iOS direct sessions do not expose home yet.');
-  }
-
   async setOrientation(orientation: DeviceRotation): Promise<void> {
     if (orientation === 'portrait-upside-down') {
       throw unsupported(
@@ -341,10 +337,6 @@ class LimrunIosInteractor implements Interactor {
       'gesture',
       'Limrun iOS direct sessions do not expose portable gesture execution yet.',
     );
-  }
-
-  async appSwitcher(): Promise<never> {
-    throw unsupported('app-switcher', 'Limrun iOS direct sessions do not expose app switcher yet.');
   }
 
   async tvRemote(): Promise<never> {
