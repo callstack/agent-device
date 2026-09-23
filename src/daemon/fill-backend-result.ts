@@ -2,8 +2,8 @@ import {
   CLOUD_TEXT_ENTRY_READINESS,
   type CloudTextEntryReadiness,
   type FillBackendResult,
-  type FillVerificationTarget,
 } from '@agent-device/contracts/interactor-types';
+import type { FillVerificationTarget } from '@agent-device/contracts/fill-evidence';
 
 type RawUnconfirmedVerification = Record<string, unknown> & {
   requested: string;

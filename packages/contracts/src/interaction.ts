@@ -1,7 +1,7 @@
 import type { Point, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
-import type { FillUnconfirmedVerification } from './interactor-types.ts';
+import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 
 export type SelectorTarget = {
   kind: 'selector';

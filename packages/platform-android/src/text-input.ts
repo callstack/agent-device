@@ -4,7 +4,7 @@
  * Pointer, key, and gesture actions stay in `input-actions.ts`; what the field ended up holding is
  * `fill-verification.ts`.
  */
-import type { FillUnconfirmedVerification } from '@agent-device/contracts/interactor-types';
+import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';

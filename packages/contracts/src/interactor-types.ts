@@ -1,6 +1,7 @@
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 import type { DeviceRotation } from './device-rotation.ts';
+import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -150,21 +151,6 @@ export type TypeTextBackendResult = {
 export const CLOUD_TEXT_ENTRY_READINESS = ['focused-element', 'keyboard-shown'] as const;
 
 export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number];
-
-export type FillVerificationTarget = {
-  resourceId: string | null;
-  className: string | null;
-  packageName: string | null;
-  rect: Rect;
-};
-
-export type FillUnconfirmedVerification = {
-  verification: 'unconfirmed';
-  requested: string;
-  before: string | null;
-  after: string | null;
-  target: FillVerificationTarget;
-};
 
 /**
  * What `Interactor.fill` reports back about the entry it performed. The cloud

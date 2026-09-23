@@ -18,7 +18,7 @@ import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import type {
   FillUnconfirmedVerification,
   FillVerificationTarget,
-} from '@agent-device/contracts/interactor-types';
+} from '@agent-device/contracts/fill-evidence';
 
 export type { AndroidFillVerification } from './fill-diagnostics.ts';
 
