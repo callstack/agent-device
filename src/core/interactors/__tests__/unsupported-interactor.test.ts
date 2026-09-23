@@ -32,13 +32,14 @@ test('optional operations are left undefined, not denied, so shared dispatch kee
   const interactor = createUnsupportedInteractor('web');
 
   // A fused double-click has no shared-series stand-in, the system buttons ride fact-gated
-  // binders, and neither clipboard half has a shared fallback either: an absent member is the
-  // owner's absence, a throw would fake one.
+  // binders, and neither the clipboard nor a TV remote has a shared fallback either: an absent
+  // member is the owner's absence, a throw would fake one.
   assert.equal(interactor.doubleTap, undefined);
   assert.equal(interactor.home, undefined);
   assert.equal(interactor.appSwitcher, undefined);
   assert.equal(interactor.readClipboard, undefined);
   assert.equal(interactor.writeClipboard, undefined);
+  assert.equal(interactor.tvRemote, undefined);
 });
 
 test('a rejection carries no partial result the caller could mistake for success', async () => {

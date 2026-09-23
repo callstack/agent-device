@@ -24,7 +24,6 @@ export function createUnsupportedInteractor(platformLabel: string): Interactor {
     snapshot: () => unsupported('snapshot'),
     back: () => unsupported('back'),
     setOrientation: () => unsupported('setOrientation'),
-    tvRemote: () => unsupported('tvRemote'),
     setSetting: () => unsupported('setSetting'),
   };
 }
