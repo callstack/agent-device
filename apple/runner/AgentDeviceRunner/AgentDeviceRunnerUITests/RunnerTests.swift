@@ -82,6 +82,7 @@ final class RunnerTests: XCTestCase {
   // target-bound state so a rebind states the fact once more.
   var lastLoggedFastAppGuardLine: String?
   var lastLoggedGesturePolicyLines: [SynthesizedGesturePolicyKind: String] = [:]
+  var runnerMarkerWriter: (String) -> Void = { NSLog("%@", $0) }
   /// When the first interaction after an activation may run, on the monotonic uptime clock.
   /// The guarantee is a minimum gap *since the activation*, not a pause at the interaction:
   /// a caller that already spent that gap elsewhere (an agent's round trip is 190-260 ms)

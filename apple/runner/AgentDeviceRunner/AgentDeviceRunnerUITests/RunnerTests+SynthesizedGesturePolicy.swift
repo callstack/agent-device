@@ -148,7 +148,7 @@ extension RunnerTests {
     // (AX health, keyboard, fallback) is a new one.
     if lastLoggedGesturePolicyLines[kind] != line {
       lastLoggedGesturePolicyLines[kind] = line
-      NSLog("%@", line)
+      runnerMarkerWriter(line)
     }
 #endif
   }
@@ -174,14 +174,22 @@ extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
   func testSynthesizedGesturePolicyMarkerWritesOncePerKindUntilTheDecisionChanges() {
-    defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
+    var written: [String] = []
+    runnerMarkerWriter = { written.append($0) }
+    defer {
+      runnerMarkerWriter = { NSLog("%@", $0) }
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+    }
     logSynthesizedGesturePolicyDecision(kind: .coordinateTap, context: nil, fallbackAttempted: false)
     logSynthesizedGesturePolicyDecision(kind: .coordinateTap, context: nil, fallbackAttempted: false)
+    XCTAssertEqual(written.count, 1, "a repeated decision writes no second line")
     logSynthesizedGesturePolicyDecision(kind: .scroll, context: nil, fallbackAttempted: false)
-    XCTAssertEqual(lastLoggedGesturePolicyLines.count, 2, "one remembered line per gesture kind")
-    let before = lastLoggedGesturePolicyLines[.coordinateTap]
+    XCTAssertEqual(written.count, 2, "each gesture kind states its own decision")
     logSynthesizedGesturePolicyDecision(kind: .coordinateTap, context: nil, fallbackAttempted: true)
-    XCTAssertNotEqual(lastLoggedGesturePolicyLines[.coordinateTap], before, "a changed decision is a new line")
+    XCTAssertEqual(written.count, 3, "a changed decision writes a new line")
+    resetTargetBoundState()
+    logSynthesizedGesturePolicyDecision(kind: .coordinateTap, context: nil, fallbackAttempted: true)
+    XCTAssertEqual(written.count, 4, "a rebind states the same decision once more")
   }
 }
 #endif
