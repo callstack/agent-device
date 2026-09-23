@@ -413,20 +413,13 @@ async function captureIosDeviceFramePerf(
       requireTraceData: true,
       failureMessage: `Failed to record iOS frame-health sample for ${appBundleId}`,
     });
-    const exportTable = async (schema: string, fileName: string) =>
-      await exportIosDevicePerfTable(
-        device,
-        appBundleId,
-        tracePath,
-        schema,
-        path.join(tempDir, fileName),
-      );
+    const context = { device, appBundleId, tracePath, tempDir };
     return {
       windowStartedAt: record.startedAt,
       windowEndedAt: record.endedAt,
-      hitchesXml: await exportTable('hitches', 'hitches.xml'),
-      frameLifetimesXml: await exportTable('hitches-frame-lifetimes', 'frame-lifetimes.xml'),
-      displayInfoXml: await exportTable('device-display-info', 'display-info.xml').catch(
+      hitchesXml: await exportIosDevicePerfTable(context, 'hitches'),
+      frameLifetimesXml: await exportIosDevicePerfTable(context, 'hitches-frame-lifetimes'),
+      displayInfoXml: await exportIosDevicePerfTable(context, 'device-display-info').catch(
         () => undefined,
       ),
     };
@@ -436,18 +429,15 @@ async function captureIosDeviceFramePerf(
 }
 
 async function exportIosDevicePerfTable(
-  device: DeviceInfo,
-  appBundleId: string,
-  tracePath: string,
+  context: { device: DeviceInfo; appBundleId: string; tracePath: string; tempDir: string },
   schema: string,
-  outPath: string,
 ): Promise<string> {
   return await exportAppleXctraceData({
-    tracePath,
-    outPath,
+    tracePath: context.tracePath,
+    outPath: path.join(context.tempDir, `${schema}.xml`),
     query: { schema },
     failureMessage: `Failed to export iOS device ${schema} data`,
-    failureDetails: { appBundleId, deviceId: device.id },
+    failureDetails: { appBundleId: context.appBundleId, deviceId: context.device.id },
   });
 }
 
@@ -537,11 +527,8 @@ async function captureIosDevicePerfTable(
     return {
       capturedAtMs: record.capturedAtMs,
       xml: await exportIosDevicePerfTable(
-        device,
-        appBundleId,
-        tracePath,
+        { device, appBundleId, tracePath, tempDir },
         'activity-monitor-process-live',
-        path.join(tempDir, 'activity-monitor-process-live.xml'),
       ),
     };
   } finally {

@@ -90,7 +90,10 @@ function readDirectXmlProcess(element: XmlNode | undefined): XmlProcess | null {
   if (!element || element.children.some((child) => child.name === 'sentinel')) return null;
   const pidNode = findFirstXmlNode(element.children, (child) => child.name === 'pid');
   const pid = parseDirectXmlNumber(pidNode);
-  const name = (element.attributes.fmt ?? '').replace(/\s+\(\d+\)$/, '').trim();
+  const name = (element.attributes.fmt ?? '')
+    .trim()
+    .replace(/\s+\(\d+\)$/, '')
+    .trim();
   if (pid === null && name.length === 0) return null;
   return {
     pid: pid ?? undefined,

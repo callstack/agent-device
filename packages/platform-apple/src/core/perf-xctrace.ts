@@ -54,7 +54,7 @@ export type AppleXctracePerfMode = 'cpu-profile' | 'trace';
 
 type AppleXctraceRecordTarget = number[] | 'all-processes';
 
-type AppleXctraceRecordAttempt<T> = { started: T } | { failure: ExecResult };
+type AppleXctraceRecordAttempt<T> = { recorded: T } | { failure: ExecResult };
 
 export type AppleXctraceTimedRecord = {
   startedAt: string;
@@ -135,9 +135,9 @@ export async function startAppleXctracePerfCapture(params: {
       failureMessage: `Failed to start Apple xctrace ${params.mode} capture for ${params.appBundleId}`,
     },
     async (): Promise<AppleXctraceRecordAttempt<ExecBackgroundResult>> => {
-      const started = runCmdBackground('xcrun', args, { allowFailure: true });
-      const immediate = await waitForImmediateAppleXctraceExit(started.wait);
-      return immediate ? { failure: immediate } : { started };
+      const recorded = runCmdBackground('xcrun', args, { allowFailure: true });
+      const immediate = await waitForImmediateAppleXctraceExit(recorded.wait);
+      return immediate ? { failure: immediate } : { recorded };
     },
   );
   return {
@@ -282,7 +282,12 @@ export async function recordAppleXctraceTimedTrace(params: {
       });
       if (result.exitCode !== 0) return { failure: result };
       return {
-        started: { result, startedAt, endedAt: new Date().toISOString(), capturedAtMs: Date.now() },
+        recorded: {
+          result,
+          startedAt,
+          endedAt: new Date().toISOString(),
+          capturedAtMs: Date.now(),
+        },
       };
     },
   );
@@ -402,25 +407,29 @@ async function recordAppleXctraceWithRetry<T>(
   },
   attemptRecord: () => Promise<AppleXctraceRecordAttempt<T>>,
 ): Promise<T> {
-  let failure: ExecResult = { stdout: '', stderr: '', exitCode: 1 };
-  for (let attempt = 1; attempt <= IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; ; attempt += 1) {
     await prepareAppleTraceRecordRetry(tracePath, attempt);
     const outcome = await attemptRecord();
-    if ('started' in outcome) return outcome.started;
-    failure = outcome.failure;
-    if (!isRetryableIosDeviceTraceRecordFailure(failure)) break;
+    if ('recorded' in outcome) return outcome.recorded;
+    if (
+      attempt < IOS_DEVICE_TRACE_RECORD_MAX_ATTEMPTS &&
+      isRetryableIosDeviceTraceRecordFailure(outcome.failure)
+    ) {
+      continue;
+    }
+    const { failure } = outcome;
+    throw new AppError(
+      'COMMAND_FAILED',
+      context.failureMessage,
+      execFailureDetails(failure, {
+        cmd: 'xcrun',
+        args,
+        appBundleId: context.appBundleId,
+        deviceId: context.device.id,
+        hint: resolveIosDevicePerfHint(failure.stdout, failure.stderr),
+      }),
+    );
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    context.failureMessage,
-    execFailureDetails(failure, {
-      cmd: 'xcrun',
-      args,
-      appBundleId: context.appBundleId,
-      deviceId: context.device.id,
-      hint: resolveIosDevicePerfHint(failure.stdout, failure.stderr),
-    }),
-  );
 }
 
 export function isRetryableIosDeviceTraceRecordFailure(result: {
