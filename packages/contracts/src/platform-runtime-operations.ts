@@ -250,8 +250,22 @@ const gestureTargetAuthoredDragUse = defineUse({
  */
 export const gestureViewportRuntimeUse = defineUse({ required: ['gestureViewport'] });
 
-/** `scroll <direction>` executes one pass and needs nothing else. */
-const scrollDirectionUse = defineUse({ required: ['scrollDirection'] });
+/**
+ * `scroll <direction>` executes one pass, and the capture that lets it answer with the movement it
+ * observed (#2714) is CONDITIONAL — not `preferred`, not `required` (ADR 0019 §2). Not preferred:
+ * the observation is what makes the direction tier's answer honest, which is correctness rather
+ * than a faster path, and §2 reserves `preferred` for optimizations that never carry correctness.
+ * Not required: a runtime that cannot read a screen still scrolls, and `movement: 'unobserved'` —
+ * or no movement field at all — is the answer it owes.
+ *
+ * Both sides are complete. An owner that can capture answers with the movement it saw; an owner that
+ * cannot answers exactly the response it answered before, distance and all. `scroll-runtime.test.ts`
+ * pins one case per side of that parity.
+ */
+const scrollDirectionUse = defineUse({
+  required: ['scrollDirection'],
+  conditional: ['captureSnapshot'],
+});
 /**
  * Every scroll that verifies between passes: `scroll top`/`scroll bottom` read hidden content at
  * the edge, and `scroll --until <selector>` re-reads the tree to decide whether the target came

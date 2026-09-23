@@ -55,6 +55,11 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         context: params.context,
+        // The scroll's own observation is decided here rather than in its execution closure: this is
+        // the last moment the session's stored tree is still the newest observation, before the
+        // dispatcher's ADR 0014 side-effect seam.
+        session: params.session,
+        flags: params.req.flags,
         inspectFacts: params.inspectFacts,
         bindDevice: params.bindDevice,
       });
