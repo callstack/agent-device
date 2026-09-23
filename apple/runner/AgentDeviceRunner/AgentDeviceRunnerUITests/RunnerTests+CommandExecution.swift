@@ -936,29 +936,25 @@ extension RunnerTests {
 #endif
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  /// Sends `command` the way the transport does: status and uptime answer inline, every other
-  /// command is journal-accepted and executed on `commandExecutionQueue`. The calling test's main
+  /// Routes `command` through the transport's inline and queued paths. The calling test's main
   /// thread serves the command's main-thread work while it waits.
   func execute(command: Command) throws -> Response {
     dispatchPrecondition(condition: .onQueue(.main))
-    if command.command == .status {
-      return executeStatus(command: command)
-    }
-    if command.command == .uptime {
-      return executeUptime()
+    if let response = inlineResponse(for: command) {
+      return response
     }
     final class ResultBox {
       var result: Result<Response, Error>?
     }
     let box = ResultBox()
-    let executed = expectation(description: "\(command.command.rawValue) executed off main")
-    commandJournal.accept(command: command)
-    commandExecutionQueue.async {
-      box.result = Result { try self.executeAccepted(command: command) }
+    let executed = XCTestExpectation(description: "\(command.command.rawValue) executed off main")
+    enqueueAccepted(command: command) { result in
+      box.result = result
       executed.fulfill()
     }
-    wait(for: [executed], timeout: mainThreadExecutionTimeout + 5)
-    guard let result = box.result else {
+    guard XCTWaiter.wait(for: [executed], timeout: mainThreadExecutionTimeout + 5) == .completed,
+      let result = box.result
+    else {
       throw NSError(
         domain: RunnerErrorDomain.general,
         code: RunnerErrorCode.commandReturnedNoResponse,

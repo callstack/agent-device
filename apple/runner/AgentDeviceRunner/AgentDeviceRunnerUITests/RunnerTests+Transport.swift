@@ -108,12 +108,8 @@ extension RunnerTests {
 
     do {
       let command = try JSONDecoder().decode(Command.self, from: body)
-      if command.command == .status {
-        completion((jsonResponse(status: 200, response: executeStatus(command: command)), false))
-        return
-      }
-      if command.command == .uptime {
-        completion((jsonResponse(status: 200, response: executeUptime()), false))
+      if let response = inlineResponse(for: command) {
+        completion((jsonResponse(status: 200, response: response), false))
         return
       }
       // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to
@@ -127,10 +123,9 @@ extension RunnerTests {
         command.command.rawValue,
         command.commandId ?? ""
       )
-      commandJournal.accept(command: command)
-      commandExecutionQueue.async {
-        do {
-          let response = try self.executeAccepted(command: command)
+      enqueueAccepted(command: command) { result in
+        switch result {
+        case .success(let response):
           NSLog(
             "AGENT_DEVICE_RUNNER_COMMAND_COMPLETED command=%@ commandId=%@ ok=%d",
             command.command.rawValue,
@@ -142,7 +137,7 @@ extension RunnerTests {
             result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
             completion: completion
           )
-        } catch {
+        case .failure(let error):
           NSLog(
             "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
             command.command.rawValue,
@@ -171,6 +166,32 @@ extension RunnerTests {
         ),
         false
       ))
+    }
+  }
+
+  // MARK: - Command Routing
+
+  /// Status and uptime read runner state without entering the journal or the command queue.
+  func inlineResponse(for command: Command) -> Response? {
+    switch command.command {
+    case .status:
+      return executeStatus(command: command)
+    case .uptime:
+      return executeUptime()
+    default:
+      return nil
+    }
+  }
+
+  /// Journal-accepts `command` and executes it on `commandExecutionQueue`; `completion` runs on that
+  /// queue.
+  func enqueueAccepted(
+    command: Command,
+    completion: @escaping (Result<Response, Error>) -> Void
+  ) {
+    commandJournal.accept(command: command)
+    commandExecutionQueue.async {
+      completion(Result { try self.executeAccepted(command: command) })
     }
   }
 
