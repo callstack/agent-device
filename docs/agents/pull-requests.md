@@ -32,6 +32,10 @@ Gross diff budget: 1,000 lines by `git diff --stat origin/main...HEAD`. Rename-o
 `refactor(move)` are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material
 content change.
 
+A user-visible change adds a `changelog.d/<issue>-<slug>.md` fragment (see `changelog.d/README.md`)
+instead of editing `CHANGELOG.md`. PRs never edit `CHANGELOG.md`; only the `npm version` release
+commit writes it, by folding pending fragments into a new version section.
+
 ## Commits
 
 Use conventional commit prefixes; no `[codex]` tags. Implementation commits come first. Enforcement

@@ -77,6 +77,11 @@ so name the version the CI lanes install and the published helper matches the CI
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
+### Changelog fragments, not `CHANGELOG.md` edits
+
+A user-visible change adds a `changelog.d/<slug>.md` fragment; see `changelog.d/README.md` for the
+format. Only the `npm version` release commit writes `CHANGELOG.md`.
+
 ### The version on main never equals a published version
 
 `release:publish` runs `release:mark-dev` right after `npm publish`, moving `package.json` (and the
