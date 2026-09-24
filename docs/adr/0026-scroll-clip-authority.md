@@ -2,8 +2,13 @@
 
 ## Status
 
-Proposed (2026-09-22). Refines ADR 0004's fact/interpretation boundary for scroll geometry; does not
-supersede it. Implementation contract: #2754.
+Accepted (2026-09-22). The ownership decision is shipped: #2758 reads an indicator's owner off the
+parent edge, climbing only same-frame ancestors — the tolerance the #2754 step 3 survey justified on
+real captures — and #2759 pairs the two eligibility lists and settles `ScrollArea` for macOS. Two
+#2754 steps stay open work rather than part of this decision: the runner-stage differential arm, and
+the typed ejection disposition behind the "every removed source" row below, which is that step's
+contract and not a description of `main`. Refines ADR 0004's fact/interpretation boundary for scroll
+geometry; does not supersede it.
 
 An interactive iOS snapshot of a list dropped every row after a row holding selectable text. A
 `UITextView` is a UIScrollView and XCTest publishes its scroll indicator inside the text, so the

@@ -102,16 +102,16 @@ those runtimes; it does not imply that Swift and TypeScript share an implementat
 The macOS XCTest runner is the desktop-surface exception: its already-presented nodes bypass the iOS
 presentation engine and continue through neutral snapshot assembly.
 
-The same split now holds for the three remaining Wave 4 policies tracked by #1983, so
-`src/snapshot/` is the host-side owner of snapshot policy generally rather than of presentation
-alone:
+The same split now holds for the three remaining Wave 4 policies tracked by #1983, so the host-side
+facet in `@agent-device/capture-kit` owns snapshot policy generally rather than presentation alone:
 
 - **Freshness recovery.** The freshness window, the Android staleness classification and its
-  thresholds, and the retry loop live in `src/snapshot/snapshot-freshness/`. The loop is
-  parameterized by a classifier and a retry schedule, so "how long may a backend lag behind a real
-  transition" is a policy input rather than a constant the loop owns. The schedule is stated as a
-  duration budget; the loop derives the deadline from the window's `markedAt` itself, so the
-  budget is always spent from the action and a caller has no absolute instant it could get wrong.
+  thresholds, and the retry loop live in `packages/capture-kit/src/snapshot/snapshot-freshness/`.
+  The loop is parameterized by a classifier and a retry schedule, so "how long may a backend lag
+  behind a real transition" is a policy input rather than a constant the loop owns. The schedule is
+  stated as a duration budget; the loop derives the deadline from the window's `markedAt` itself, so
+  the budget is always spent from the action and a caller has no absolute instant it could get
+  wrong.
   `src/daemon/session-snapshot-freshness.ts` keeps only what needs a session: reading and retiring
   the window on store-owned `SessionState`, and choosing the comparison baseline from snapshot
   lineage. It remains the declared R7 owner of `androidSnapshotFreshness`.
@@ -125,8 +125,8 @@ alone:
   reclassifying. No message shape is consulted anywhere on that path, so rewording helper or
   wrapper prose cannot move the reason, and prose that merely reads like a timeout does not become
   one — both directions are asserted end to end against the real producer.
-  `src/snapshot/snapshot-timeout-policy.ts` reads the reason; the human-facing hint is derived
-  from it rather than decided alongside it.
+  `packages/capture-kit/src/snapshot/snapshot-timeout-policy.ts` reads the reason; the
+  human-facing hint is derived from it rather than decided alongside it.
 
   The published `details.androidSnapshotTimeoutScreenshot` payload is vocabulary in
   `@agent-device/contracts/snapshot-timeout-evidence`, a union whose arms encode which claims can
@@ -136,13 +136,14 @@ alone:
   The daemon keeps the ordering that genuinely needs it: resolving a bound screenshot runtime,
   writing the artifact, annotating it from the stored observation, and emitting the diagnostics.
 - **Screenshot-overlay policy.** Which Android nodes earn an overlay ref, and what rectangle an
-  overlay for one of them covers, live in `src/snapshot/screenshot-overlay/`. The daemon keeps
-  approved artifact and ref assembly only: ranking, projection to screenshot pixels, drawing, and
-  PNG IO.
+  overlay for one of them covers, live in `packages/capture-kit/src/screenshot-overlay*.ts`. The
+  daemon keeps approved artifact and ref assembly only: ranking, projection to screenshot pixels,
+  drawing, and PNG IO.
 
-`scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction for the whole
-facet: nothing under `src/snapshot/` may import `src/daemon/`. It carries a positive control,
-because a filter that stopped matching would look identical to a boundary being obeyed.
+`scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction across the roots
+declared for `snapshot-policy` in `scripts/layering/architecture-ownership.ts`: nothing in those
+roots may import `src/daemon/`. It carries a positive control, because a filter that stopped
+matching would look identical to a boundary being obeyed.
 
 The residual call sites #1983 also named are audited and deliberately left in place.
 `src/daemon/direct-ios-selector.ts` carries no presentation policy: `isLocalIosRunnerSession` and

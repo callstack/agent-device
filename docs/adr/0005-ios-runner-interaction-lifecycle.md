@@ -65,12 +65,27 @@ therefore drained), and left intact by a transport failure or an unstamped recov
 healthy `ok` is never read as proof of drain because a private-AX snapshot can be served while an
 abandoned tree crawl still grinds on the XCTest main thread (#2552).
 
+What a `RUNNER_BUSY` refusal then costs the caller is keyed on the daemon's own per-command read-only
+trait, not on anything the runner reports: `RUNNER_COMMAND_TRAITS` in
+`packages/platform-apple/src/runner/runner-command-traits.ts`, read through `isReadOnlyRunnerCommand`
+where `runAppleRunnerCommand` decides whether to wrap the send in a resend loop. The asymmetry is
+shipped, and asserted in `runner-command-busy-resend.test.ts`: a read-only command treats the refusal
+as *not yet*, waiting the drain out on a budget sized to outlast it and resending until the runner
+answers or the window ends; a mutating command treats the same refusal as *not mine to send again* —
+one attempt, and the refusal reaches the caller unwrapped with nothing replayed. Neither path pays a
+status probe, because a structured reply already answered "did my command run?" (the bypass in
+`runner-lifecycle.ts`). The same trait already decides the startup-preflight skip above, so it is the
+single place a change to that classification lands.
+
 Close that would retain a runner for reuse first stops it when that occupancy is set, awaiting the
-stop so the lease is released before the next request, because a runner still finishing
-watchdog-abandoned work refuses every command until it drains or escalates to `RUNNER_WEDGED`; pooling
-it back to the next `open` hands the same stalled runner to the caller and `close` recovers nothing.
-Killing the process is the only way to abort uncancellable XCTest work. This is the `RUNNER_WEDGED`
-restart from #1105 applied at the close boundary rather than after the wedge threshold elapses.
+stop so the lease is released before the next request. A runner still finishing watchdog-abandoned
+work does refuse every command sent to it until it drains or escalates to `RUNNER_WEDGED`, and that
+fact is stated here for the close-and-pooling decision only: the read-only resend above is one live
+caller waiting the same refusal out on its own budget, and `close` does not inherit that wait on the
+pool's behalf. Pooling the stalled runner back hands it to the next `open` and `close` recovers
+nothing. Killing the process is the only way to abort uncancellable XCTest work. This is the
+`RUNNER_WEDGED` restart from #1105 applied at the close boundary rather than after the wedge
+threshold elapses.
 
 When XCTest reports a root accessibility snapshot failure such as `kAXErrorIllegalArgument`, the
 runner treats the cached app target as suspect. Interactive snapshots fail closed to a truncated
