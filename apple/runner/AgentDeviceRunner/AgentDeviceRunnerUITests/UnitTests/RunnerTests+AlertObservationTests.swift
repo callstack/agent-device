@@ -57,6 +57,25 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  func testAlertActivationAfterDeadlineDoesNotTapTheOriginal() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    let alert = try resolveAlertBeforeTheCommand()
+    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let frame = button.frame
+
+    let outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantPast)
+
+    XCTAssertNil(outcome, "an expired command must not synthesize a tap")
+    XCTAssertNil(activateAlertButton(alert, button: button, action: "accept", frame: .zero, deadline: .distantFuture))
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
   func testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline() throws {
     app.launchArguments = [
       "--agent-device-alert-replacement-regression",
@@ -102,7 +121,7 @@ extension RunnerTests {
     XCTAssertTrue(banner.waitForExistence(timeout: appExistenceTimeout), "the fixture keeps a banner up")
     let alert = try resolveAlertBeforeTheCommand()
 
-    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
+    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertBannerActivationDeadline))
 
     XCTAssertEqual(consultedInterruptions, [], "alert activation waited on XCTest's interruption handling")
     XCTAssertTrue(response.ok, String(describing: response.error))
@@ -136,6 +155,7 @@ extension RunnerTests {
   /// the deadline itself pays it in full. It buys the dozen reads after resolution 2.5 s each, above the
   /// 1.7 s a read cost on the worst hosted nights traced (#2708).
   static let alertActivationDeadline: TimeInterval = 30
+  static let alertBannerActivationDeadline: TimeInterval = 90
 
   private func resolveAlertBeforeTheCommand() throws -> RunnerAlert {
     try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance)))

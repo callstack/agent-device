@@ -69,6 +69,14 @@ extension RunnerTests {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
       let buttonFrame = button.frame
+      guard Date() < deadline else {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
+      }
+#if !os(tvOS)
+      guard !buttonFrame.isEmpty else {
+        return alertVerificationResponse(.unconfirmed, action: action, activated: false)
+      }
+#endif
       NSLog(
         "AGENT_DEVICE_RUNNER_ALERT_ACTIVATION action=%@ label=%@ frame=(%.1f,%.1f,%.1f,%.1f) point=(%.1f,%.1f)",
         action,
@@ -82,11 +90,8 @@ extension RunnerTests {
       // (#2546). The post-tap settle stays, because the verification below reads the alert this tap
       // replaces; an alert that dismisses and presents an identical replacement passes through a
       // window with no alert, and a first read landing there reports a dismissal nothing proved.
-      var outcome = RunnerInteractionOutcome.performed
-      withUIInterruptionHandlingDisabledIfSupported(alert.ownerApp) {
-        withBoundedInteractionIdleTimeoutIfSupported(alert.ownerApp, waits: .preEventSkipped) {
-          outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
-        }
+      guard let outcome = activateAlertButton(alert, button: button, action: action, frame: buttonFrame, deadline: deadline) else {
+        return alertVerificationResponse(.timedOut, action: action, activated: false)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
@@ -114,6 +119,31 @@ extension RunnerTests {
         items: alert.buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines) }
       )
     )
+  }
+
+  func activateAlertButton(
+    _ alert: RunnerAlert,
+    button: XCUIElement,
+    action: String,
+    frame: CGRect,
+    deadline: Date
+  ) -> RunnerInteractionOutcome? {
+    var outcome: RunnerInteractionOutcome?
+    withUIInterruptionHandlingDisabledIfSupported(alert.ownerApp) {
+      withBoundedInteractionIdleTimeoutIfSupported(alert.ownerApp, waits: .preEventSkipped) {
+        guard Date() < deadline else { return }
+#if !os(tvOS)
+        guard !frame.isEmpty else { return }
+#endif
+        outcome = activateElement(
+          app: alert.ownerApp,
+          element: button,
+          action: "alert \(action)",
+          resolvedFrame: frame
+        )
+      }
+    }
+    return outcome
   }
 
   /// Before each event XCTest looks for SpringBoard elements over the target and hands them to its

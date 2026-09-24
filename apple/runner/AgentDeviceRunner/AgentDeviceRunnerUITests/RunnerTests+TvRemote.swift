@@ -61,14 +61,19 @@ extension RunnerTests {
     return focused
   }
 
-  func activateElement(app: XCUIApplication, element: XCUIElement, action: String) -> RunnerInteractionOutcome {
+  func activateElement(
+    app: XCUIApplication,
+    element: XCUIElement,
+    action: String,
+    resolvedFrame: CGRect? = nil
+  ) -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, element: element, action: action) {
       return outcome
     }
 #if os(tvOS)
     return performElementTap(element)
 #else
-    let frame = element.frame
+    let frame = resolvedFrame ?? element.frame
     if !frame.isEmpty {
       // XCUIElement.tap() can fail the whole XCTest after navigation because it
       // re-resolves the tapped element even after the app removed it. Keep the
