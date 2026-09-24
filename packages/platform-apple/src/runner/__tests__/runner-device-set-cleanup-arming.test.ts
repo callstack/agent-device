@@ -284,3 +284,49 @@ test('the message tells a shim xcrun could not locate from one the probe ran out
   assert.match(messages[0] ?? '', /Xcode's simctl could not be located/);
   assert.match(messages[1] ?? '', /Xcode's simctl shim was not read within the probe budget/);
 });
+
+test('a restore that could not give the host set back outranks the shim refusal', async () => {
+  const layout = makeLayout();
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: { expectedVersion: '1051.17.7', installedVersion: '1155.4' },
+    devicectl: { hook: 'none' },
+  });
+
+  // Nothing is left to restore on the way in, so only the give-back's own reconcile can be made to
+  // fail: force `XCTestDevices` to keep reading as an orphaned symlink, and let only the give-back's
+  // unlink attempt refuse.
+  const realLstatSync = fs.lstatSync.bind(fs);
+  const lstatSpy = vi.spyOn(fs, 'lstatSync').mockImplementation(((
+    target: fs.PathLike,
+    options?: unknown,
+  ) => {
+    if (String(target) === layout.xctestDeviceSetPath) {
+      return { isSymbolicLink: () => true } as fs.Stats;
+    }
+    return (realLstatSync as (p: fs.PathLike, o?: unknown) => fs.Stats)(target, options);
+  }) as typeof fs.lstatSync);
+  const realUnlinkSync = fs.unlinkSync.bind(fs);
+  let unlinkAttempts = 0;
+  const unlinkSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(((target: fs.PathLike) => {
+    if (String(target) !== layout.xctestDeviceSetPath) {
+      realUnlinkSync(target);
+      return;
+    }
+    unlinkAttempts += 1;
+    if (unlinkAttempts > 1) {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    }
+  }) as typeof fs.unlinkSync);
+
+  try {
+    await assert.rejects(
+      acquire(layout, host),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'EACCES',
+    );
+    assert.equal(unlinkAttempts, 2, 'the redirect-in reconcile ran once, the give-back once more');
+    assert.equal(fs.existsSync(layout.lockDirPath), false, 'the lock still went back');
+  } finally {
+    lstatSpy.mockRestore();
+    unlinkSpy.mockRestore();
+  }
+});

@@ -89,10 +89,19 @@ export type RunnerStartupFailureFixture = Readonly<{
   hostTimeoutMs?: number;
   /** The invocation that produced {@link RunnerStartupFailureFixture.output}, once one is recorded. */
   command?: string;
-  /** `xcodebuild -version` recorded from that run, or `unobserved`. */
+  /**
+   * `xcodebuild -version` recorded from that run, or `unobserved`. The `xctest-device-set-redirect`
+   * site reads no `xcodebuild` output before refusing, so its entries record the shim's own
+   * `version.plist` reading instead, in that source's shape rather than `xcodebuild -version`'s; each
+   * one says so in its `note`.
+   */
   xcodeVersion: string;
   provenance: 'captured' | 'shipped-sniff-trigger' | 'invented-shape';
-  /** The tool's own stdout/stderr. */
+  /**
+   * The tool's own stdout/stderr, except on the `xctest-device-set-redirect` site: there the redirect
+   * refuses on the shim script's own text, before any tool runs, and this field carries that text
+   * instead.
+   */
   output: string;
   /** The argv the exec reported, which is never evidence of a cause (#2680). */
   args?: readonly string[];

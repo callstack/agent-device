@@ -295,7 +295,22 @@ test('the XCTest device-set refusal is classified by its typed shim list, never 
     "Refusing to redirect XCTest device set: Xcode's simctl expects CoreSimulator 1051.17.7; installed 1155.4";
 
   const typed = classifyRunnerStartupFailure(
-    new AppError('COMMAND_FAILED', message, { xcrunShims: [] }),
+    new AppError('COMMAND_FAILED', message, {
+      // The redirect only ever builds this message once `armed.length > 0`, so the typed fact this
+      // reads always carries at least one shim; an empty array is not a shape production publishes.
+      xcrunShims: [
+        {
+          tool: 'simctl',
+          shimPath: '/path/to/simctl',
+          hook: 'armed',
+          armedBy: 'version_mismatch',
+          expectedVersion: '1051.17.7',
+          frameworkInfoPlistPath:
+            '/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/Info.plist',
+          installedVersion: '1155.4',
+        },
+      ],
+    }),
   );
   const wordingOnly = classifyRunnerStartupFailure(new AppError('COMMAND_FAILED', message));
 

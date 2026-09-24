@@ -134,7 +134,10 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   }
 
   if (redirectRefusal !== null) {
-    await handBackDeviceSet(paths, lockDirPath, releaseLock);
+    const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
+    if (handBack.restoreFailure !== null) {
+      throw handBack.restoreFailure;
+    }
     throw redirectRefusal;
   }
 

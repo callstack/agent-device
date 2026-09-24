@@ -444,7 +444,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: {},
     buildFailure: {
       reason: 'xctest_device_set_cleanup_armed',
-      hint: 'While the selected Xcode does not match the installed CoreSimulator or CoreDevice framework, every call through its simctl or devicectl shim runs `xcodebuild -runFirstLaunch`, which deletes all devices in ~/Library/Developer/XCTestDevices. Select the Xcode that installed those frameworks (`xcode-select -s` or DEVELOPER_DIR); details.xcrunShims names each expected and installed version.',
+      hint: "The selected Xcode does not match the installed CoreSimulator or CoreDevice framework, or the shim could not be located or its version data could not be read in time. Until this is verified, its simctl or devicectl shim may run `xcodebuild -runFirstLaunch`, which deletes all devices in ~/Library/Developer/XCTestDevices. For a mismatch, select the Xcode that installed those frameworks (`xcode-select -s` or DEVELOPER_DIR); for an unreadable or timed-out probe, retry once the host is not under load. details.xcrunShims names each shim's state and its expected/installed versions when they could be read.",
     },
   },
 ];
