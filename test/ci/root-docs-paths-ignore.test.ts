@@ -11,6 +11,9 @@
 // prose-only PRs. This test reads the real workflow files and asserts the
 // behavior directly, via the same glob matcher the gate-manifest model uses
 // to decide whether a lane triggers for a given path.
+//
+// #2877 extends the same coverage to `changelog.d/**`: a PR that only adds a
+// changelog fragment must skip these lanes the same way a root doc PR does.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -55,4 +58,12 @@ test.each(WORKFLOWS)('%s skips a pull_request triggered by only a root doc', (fi
       `${file}'s paths-ignore must match ${rootDoc} (got ${JSON.stringify(ignored)})`,
     ).toBe(true);
   }
+});
+
+test.each(WORKFLOWS)('%s skips a pull_request triggered by only a changelog fragment', (file) => {
+  const ignored = pathsIgnore(file);
+  expect(
+    ignored.some((pattern) => matchesGlob(pattern, 'changelog.d/2799-example.md')),
+    `${file}'s paths-ignore must match changelog.d/2799-example.md (got ${JSON.stringify(ignored)})`,
+  ).toBe(true);
 });
