@@ -38,6 +38,14 @@ export function simctlCommand(args: ScopedSimctlArgs): ScopedSimctlCommand {
   return Object.freeze(['simctl', ...args] as const) as ScopedSimctlCommand;
 }
 
+async function runSimctlCommand(
+  runCommand: AppleToolCommandExecutor,
+  args: ScopedSimctlArgs,
+  options?: ExecOptions,
+): Promise<ExecResult> {
+  return await runCommand('xcrun', [...simctlCommand(args)], options);
+}
+
 function simctlCommandArgs(command: ScopedSimctlCommand): ScopedSimctlArgs {
   return Object.freeze(command.slice(1)) as ScopedSimctlArgs;
 }
@@ -55,7 +63,7 @@ export type AppleToolProvider = {
 const localAppleToolProvider: AppleToolProvider = {
   runCommand: runCmd,
   simctl: {
-    run: async (args, options) => await runCmd('xcrun', simctlCommand(args), options),
+    run: async (args, options) => await runSimctlCommand(runCmd, args, options),
   },
   devicectl: {
     run: async (args, options) => await runCmd('xcrun', ['devicectl', ...args], options),
@@ -90,8 +98,7 @@ export function createLocalAppleToolProvider(
   return {
     ...merged,
     simctl: provider.simctl ?? {
-      run: async (args, options) =>
-        await merged.runCommand('xcrun', [...simctlCommand(args)], options),
+      run: async (args, options) => await runSimctlCommand(merged.runCommand, args, options),
     },
     devicectl: provider.devicectl ?? {
       run: async (args, options) =>
