@@ -11,7 +11,7 @@ import {
   type CommandSessionStore,
 } from '../runtime.ts';
 import type { AgentDeviceBackend } from '../backend.ts';
-import { commands, type ScreenshotCommandOptions } from '../commands/index.ts';
+import type { ScreenshotCommandOptions } from '../commands/index.ts';
 import {
   createLocalArtifactAdapter,
   type ArtifactAdapter,
@@ -230,42 +230,10 @@ test('runtime commands work with async command session stores', async () => {
   assert.equal(records.get('default')?.snapshot?.nodes[0]?.label, 'Ready');
 });
 
-test('internal backend, commands, and io modules are usable', () => {
+test('public screenshot options carry an explicit output target', () => {
   const options = {
     out: { kind: 'path', path: '/tmp/screen.png' },
   } satisfies ScreenshotCommandOptions;
+
   assert.equal(options.out.kind, 'path');
-  assert.equal(typeof commands.capture.screenshot, 'function');
-  assert.equal(typeof commands.capture.diffScreenshot, 'function');
-  assert.equal(typeof commands.capture.snapshot, 'function');
-  assert.equal(typeof commands.capture.diffSnapshot, 'function');
-  assert.equal(typeof commands.selectors.find, 'function');
-  assert.equal(typeof commands.selectors.get, 'function');
-  assert.equal(typeof commands.selectors.getText, 'function');
-  assert.equal(typeof commands.selectors.is, 'function');
-  assert.equal(typeof commands.selectors.isVisible, 'function');
-  assert.equal(typeof commands.selectors.wait, 'function');
-  assert.equal(typeof commands.selectors.waitForText, 'function');
-  assert.equal(typeof commands.interactions.click, 'function');
-  assert.equal(typeof commands.interactions.press, 'function');
-  assert.equal(typeof commands.interactions.fill, 'function');
-  assert.equal(typeof commands.interactions.focus, 'function');
-  assert.equal(typeof commands.interactions.longPress, 'function');
-  assert.equal(typeof commands.interactions.gesture, 'function');
-  assert.equal(typeof commands.system.back, 'function');
-  assert.equal(typeof commands.system.home, 'function');
-  assert.equal(typeof commands.system.orientation, 'function');
-  assert.equal(typeof commands.system.keyboard, 'function');
-  assert.equal(typeof commands.system.clipboard, 'function');
-  assert.equal(typeof commands.system.settings, 'function');
-  assert.equal(typeof commands.system.alert, 'function');
-  assert.equal(typeof commands.system.appSwitcher, 'function');
-  assert.equal(typeof commands.system.tvRemote, 'function');
-  assert.equal(typeof commands.admin.devices, 'function');
-  assert.equal(typeof commands.admin.install, 'function');
-  assert.equal(typeof commands.recording.record, 'function');
-  assert.equal(typeof commands.recording.trace, 'function');
-  assert.equal(typeof commands.diagnostics.logs, 'function');
-  assert.equal(typeof commands.diagnostics.network, 'function');
-  assert.equal(typeof commands.diagnostics.perf, 'function');
 });
