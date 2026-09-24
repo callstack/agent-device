@@ -8,10 +8,13 @@ import {
 import { foldRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { errorResponse } from '@agent-device/kernel/contracts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
-import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
+import {
+  resolveBoundGenericRuntime,
+  unsupportedOperationResponse,
+  type RuntimeAdmissionBindings,
+} from './runtime-admission.ts';
 
 /** `fold <pose>`, parsed with the same aliases the CLI reader accepts. */
 export function readRequestedFoldPose(positionals: readonly string[]): FoldPose {
@@ -44,16 +47,10 @@ export async function resolveBoundFoldRuntime(
       use: foldRuntimeUse,
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
-      // Derive the refusal from the same `setFoldPose` fact that gates admission, so the command
-      // response keeps the fact's typed reason (e.g. `unsupported-device-scope`) and hint rather
-      // than the shared hint-only wording; capability and response never diverge.
+      // Reuse the shared generic-route refusal and add the fact's typed reason (e.g.
+      // `unsupported-device-scope`), so capability and response derive from one fact and never drift.
       unavailableResponse: (unavailable) =>
-        errorResponse(
-          'UNSUPPORTED_OPERATION',
-          'fold is not supported on this device',
-          { reason: unavailable.reason },
-          unavailable.hint ? { hint: unavailable.hint } : undefined,
-        ),
+        unsupportedOperationResponse('fold', unavailable, { reason: unavailable.reason }),
     },
     (runtime) => executeSetFoldPose(runtime, input),
   );
