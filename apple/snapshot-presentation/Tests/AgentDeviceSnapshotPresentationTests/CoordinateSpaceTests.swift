@@ -253,13 +253,14 @@ final class CoordinateSpaceTests: XCTestCase {
       ),
       .appOrientation
     )
-    // An app frame the capture could not resolve cannot anchor a rotation.
+    // An app frame the capture could not resolve cannot anchor a rotation. `.null` is what the one
+    // normalization pass hands over for a capture whose viewport fact is `missing` (#2891).
     XCTAssertEqual(
       SnapshotGeometrySpace.space(
         reportedBySurfaceHost: true,
         reportedFrame: rotated,
         inheritedFrom: .appOrientation,
-        appFrame: .infinite,
+        appFrame: .null,
         interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
       ),
       .appOrientation
@@ -421,7 +422,7 @@ final class CoordinateSpaceTests: XCTestCase {
       let expected = (namesQuarterTurn && !squareApp) ? testCase.oriented : testCase.native
       let normalized = SnapshotGeometrySpace.normalized(
         nodes: turnedSubtree(app: app, reportedLeaf: testCase.native.cgRect),
-        viewport: app,
+        viewport: .reported(rect: app),
         interfaceOrientation: testCase.interfaceOrientation
       )
       XCTAssertEqual(normalized.count, 4)
@@ -443,7 +444,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: app,
+      viewport: .reported(rect: app),
       interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
     XCTAssertEqual(
@@ -470,7 +471,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: app,
+      viewport: .reported(rect: app),
       interfaceOrientation: RunnerInterfaceOrientation.unknown
     )
     XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
@@ -483,7 +484,7 @@ final class CoordinateSpaceTests: XCTestCase {
     XCTAssertEqual(
       SnapshotGeometrySpace.normalized(
         nodes: [],
-        viewport: CGRect(x: 0, y: 0, width: 874, height: 402),
+        viewport: .reported(rect: CGRect(x: 0, y: 0, width: 874, height: 402)),
         interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
       ),
       []

@@ -464,7 +464,7 @@ extension RunnerTests {
       interactiveOnly: true, customActions: false)
     let acquired = SnapshotGeometrySpace.normalized(
       nodes: privateAXAcquisition(rawRoot: tree, hint: hint),
-      viewport: viewport,
+      viewport: .reported(rect: viewport),
       interfaceOrientation: RunnerInterfaceOrientation.portrait
     )
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
@@ -472,7 +472,7 @@ extension RunnerTests {
 
     let capture = try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
-        hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: viewport),
+        hint: hint, nodes: acquired, truncated: false, effectiveDepth: nil, viewport: .reported(rect: viewport)),
       options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false),
       policy: .cursorProjected
     )

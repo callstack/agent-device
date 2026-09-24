@@ -25,7 +25,11 @@ extension RunnerTests {
     policy: SnapshotVisibilityFold.Policy = .cursorProjected
   ) -> [SnapshotPresentationNode] {
     SnapshotVisibilityFold.fold(
-      nodes, viewport: viewport, interactiveOnly: interactiveOnly, policy: policy)
+      nodes,
+      viewport: .reported(rect: viewport),
+      interactiveOnly: interactiveOnly,
+      policy: policy
+    )
   }
 
   func testRegularFoldClipsScrollOverflowReparentsAndBooksHints() {

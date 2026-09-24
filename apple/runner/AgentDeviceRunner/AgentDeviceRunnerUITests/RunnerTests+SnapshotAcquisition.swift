@@ -140,8 +140,10 @@ extension RunnerTests {
     return nil
   }
 
-  func safeSnapshotViewport(app: XCUIApplication) -> CGRect {
-    safely("SNAPSHOT_VIEWPORT", CGRect.infinite) { snapshotViewport(app: app) }
+  /// The viewport as a declared fact. A read that raises leaves the capture with no box, which is
+  /// `.missing(reason: .notProvided)` and not a box that contains everything (#2891).
+  func safeSnapshotViewport(app: XCUIApplication) -> SnapshotViewport {
+    safely("SNAPSHOT_VIEWPORT", .missing(reason: .notProvided)) { snapshotViewport(app: app) }
   }
 
   private func describeSnapshotError(_ error: Error) -> String {
@@ -231,16 +233,13 @@ extension RunnerTests {
     return text.isEmpty ? nil : text
   }
 
-  private func snapshotViewport(app: XCUIApplication) -> CGRect {
+  private func snapshotViewport(app: XCUIApplication) -> SnapshotViewport {
 #if os(iOS)
     let appFrame = onScreenWindowFrame(app: app)
 #else
     let appFrame = app.frame
 #endif
-    if !appFrame.isNull && !appFrame.isEmpty {
-      return appFrame
-    }
-    return .infinite
+    return .reported(box: appFrame)
   }
 
   static func snapshotTraversalIdentity(

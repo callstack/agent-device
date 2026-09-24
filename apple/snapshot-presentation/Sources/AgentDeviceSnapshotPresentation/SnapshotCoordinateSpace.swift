@@ -164,10 +164,14 @@ public enum SnapshotGeometrySpace: Equatable {
 extension SnapshotGeometrySpace {
   public static func normalized(
     nodes: [RawAXNode],
-    viewport: CGRect,
+    viewport: SnapshotViewport,
     interfaceOrientation: Int
   ) -> [RawAXNode] {
     let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
+    // No viewport box means no app frame to be quarter-turned relative to either. `.null` is the box
+    // `isPlottable` refuses, so this pass turns nothing — the outcome `CGRect.infinite` produced
+    // before the fact carried the absence.
+    let appFrame = viewport.rect ?? .null
     var spaces = [SnapshotGeometrySpace](repeating: .appOrientation, count: nodes.count)
     var result: [RawAXNode] = []
     result.reserveCapacity(nodes.count)
@@ -180,7 +184,7 @@ extension SnapshotGeometrySpace {
         ),
         reportedFrame: node.rect.cgRect,
         inheritedFrom: parentIndex.map { spaces[$0] } ?? .appOrientation,
-        appFrame: viewport,
+        appFrame: appFrame,
         interfaceOrientation: interfaceOrientation
       )
       spaces[position] = nodeSpace

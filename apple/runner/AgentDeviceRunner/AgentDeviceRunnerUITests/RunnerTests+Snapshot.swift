@@ -21,7 +21,7 @@ extension RunnerTests {
   struct SnapshotTraversalContext {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
-    let viewport: CGRect
+    let viewport: SnapshotViewport
     /** Which way the app's interface is turned from the device's native space (#2612). */
     let interfaceOrientation: Int
     /**
@@ -455,7 +455,7 @@ extension RunnerTests {
           nodes: nodes,
           truncated: false,
           effectiveDepth: nil,
-          viewport: .infinite,
+          viewport: .missing(reason: .notProvided),
           interfaceOrientation: RunnerInterfaceOrientation.unknown
         ),
         .completed
@@ -492,11 +492,9 @@ extension RunnerTests {
     }
 
     // The synthetic root doubles as the daemon's viewport (find.ts prefers on-screen matches
-    // inside nodes[0].rect): use the real screen viewport when capture produced a finite one,
-    // so off-screen candidates can never inflate the root and masquerade as on-screen.
-    let rootRect = viewport.isInfinite || viewport.isNull || viewport.isEmpty
-      ? interactiveRootFrame(for: candidates)
-      : viewport
+    // inside nodes[0].rect): use the real screen viewport when the capture resolved one, so
+    // off-screen candidates can never inflate the root and masquerade as on-screen.
+    let rootRect = viewport.rect ?? interactiveRootFrame(for: candidates)
     nodes[0] = interactiveRootNode(rect: rootRect)
     for candidate in candidates {
       nodes.append(

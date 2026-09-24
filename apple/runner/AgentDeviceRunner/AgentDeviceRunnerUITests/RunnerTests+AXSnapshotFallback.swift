@@ -275,16 +275,17 @@ extension RunnerTests {
     !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: bundleId)
   }
 
-  /// The geometry this tier may anchor a rotation on. The bridge's own root frame is one more
-  /// reported box rather than the app's frame, so a capture anchored on it reports no interface
-  /// orientation and normalizes nothing: rotated system surfaces then stay as reported, which the
-  /// consumers already treat as geometry they cannot measure (#2612).
+  /// The geometry this tier may anchor a rotation on. The bridge's own root frame is declared
+  /// `.derived` rather than reported — it is a box this capture inferred for itself, not the app's
+  /// frame — so a capture anchored on it reports no interface orientation and normalizes nothing:
+  /// rotated system surfaces then stay as reported, which the consumers already treat as geometry
+  /// they cannot measure (#2612).
   private func privateAXSnapshotGeometry(
     app: XCUIApplication,
     bundleId: String?,
     rootFrame: CGRect
-  ) -> (viewport: CGRect, interfaceOrientation: Int) {
-    let fallback = rootFrame.isEmpty ? CGRect.infinite : rootFrame
+  ) -> (viewport: SnapshotViewport, interfaceOrientation: Int) {
+    let fallback = SnapshotViewport.derived(box: rootFrame)
     guard shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId) else {
       return (fallback, RunnerInterfaceOrientation.unknown)
     }
@@ -299,7 +300,7 @@ extension RunnerTests {
           interfaceOrientation: self.capturedInterfaceOrientation(app: app)
         )
       }
-      if anchor.viewport.isInfinite || anchor.viewport.isNull || anchor.viewport.isEmpty {
+      if anchor.viewport.rect == nil {
         return (fallback, RunnerInterfaceOrientation.unknown)
       }
       return (anchor.viewport, anchor.interfaceOrientation)
