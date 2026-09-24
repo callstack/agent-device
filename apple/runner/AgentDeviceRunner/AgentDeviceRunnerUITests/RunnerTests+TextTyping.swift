@@ -162,12 +162,15 @@ extension RunnerTests {
         return (currentTarget, nil)
       } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
-        // Text the command budget cannot carry at the synthesized pace goes through the verified
-        // application-wide typing instead. The synthesizer's pace is slowed for fields whose app
-        // owns the value, and a burst that long outlasts the command while the runner is still
-        // posting it. `app.typeText` is this branch's existing fallback and its value is
-        // verified afterwards, so the length costs the pace, not the check.
-        if SynthesizedDeliveryBudget.exceeds(textLength: value.count, delaySeconds: 0) {
+        // Text the command budget cannot carry at the synthesized pace goes through application-wide
+        // typing instead. The synthesizer's pace is slowed for fields whose app owns the value, and a
+        // burst that long outlasts the command while the runner is still posting it. The ceiling is
+        // what the command's watchdog leaves, so it is charged the whole command: an append peels its
+        // first character for warmup and a `--delay-ms` plan dispatches one character at a time, and
+        // neither chunk would look long on its own. This branch's target has no element to type into,
+        // so nothing can be read back afterwards: the value arrives unverified, as it does for this
+        // route's older synthesizer-unavailable fallback.
+        if SynthesizedDeliveryBudget.exceeds(textLength: text.count, delaySeconds: delaySeconds) {
           textEntryRoute = "xctest-application-fallback"
           NSLog(
             "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=xctest-application-fallback "

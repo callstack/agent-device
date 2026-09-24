@@ -148,6 +148,59 @@ extension RunnerTests {
     XCTAssertFalse(textField.exists)
   }
 
+  // Text past the delivery budget cannot be paced into a field the runner cannot resolve, so it goes
+  // through application-wide typing. The budget is charged the whole command, which is what the
+  // length below pins: an append peels its first character for warmup, so a per-dispatch charge
+  // would find both of its pieces inside the budget and pace all 215 characters. The target carries
+  // no element by construction, so nothing on that route can read the value back: the command reports
+  // it unverified and this test reads the field itself to show every character arrived.
+  func testOverBudgetTypeWithoutResolvableElementTypesApplicationWide() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+    ]
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    let tapCommand = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-soft-keyboard-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
+    )
+    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
+    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
+    try skipUnlessSoftwareKeyboardIsVisible()
+
+    let text = String(
+      repeating: "x",
+      count: SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0) + 1
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+    let result = typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: nil,
+        prefersFocusedElement: true,
+        fromTapWitness: true
+      ),
+      text: text,
+      delaySeconds: 0,
+      repairMode: .append,
+      synthesizer: PrivateXCTestTextEntrySynthesizer()
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertNil(result.failure)
+    XCTAssertEqual(result.textEntryRoute, "xctest-application-fallback")
+    XCTAssertNil(result.verified)
+    XCTAssertEqual(textField.value as? String, text)
+  }
+
   private struct UnavailableTextEntrySynthesizer: TextEntrySynthesizing {
     func enterText(
       app _: XCUIApplication,
@@ -187,6 +240,15 @@ extension RunnerTests {
     try XCTSkipIf(
       isKeyboardVisible(app: app),
       "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
+    )
+  }
+
+  // The mirror precondition. A simulator with a hardware keyboard attached can keep the software
+  // keyboard down even for a field that has a real input view, which is an environment fact.
+  private func skipUnlessSoftwareKeyboardIsVisible() throws {
+    try XCTSkipIf(
+      !isKeyboardVisible(app: app),
+      "software keyboard is down: this simulator cannot exercise the keyboard-visible typing branch"
     )
   }
 #endif

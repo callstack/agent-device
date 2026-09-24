@@ -345,7 +345,13 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
     UITextField *textField = [[UITextField alloc] init];
     textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
     textField.borderStyle = UITextBorderStyleRoundedRect;
-    textField.inputView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    // An empty input view keeps the software keyboard down, which is the hardware-keyboard responder
+    // these routes are addressed to. `--agent-device-text-entry-soft-keyboard` leaves the real input
+    // view in place, so a lane test can reach the branch that requires a visible keyboard.
+    if (![NSProcessInfo.processInfo.arguments
+           containsObject:@"--agent-device-text-entry-soft-keyboard"]) {
+      textField.inputView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
+    }
     [textField addTarget:self
                   action:@selector(agentDeviceTextEntryDidChange:)
         forControlEvents:UIControlEventEditingChanged];
