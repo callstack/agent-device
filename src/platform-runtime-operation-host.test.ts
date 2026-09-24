@@ -19,8 +19,21 @@ vi.mock('./platform-runtime-apple-tool-host.ts', () => ({
 vi.mock('./platform-runtime-toolchain-host.ts', () => ({
   createHostToolchainPreparer: () => capabilities.toolchains,
 }));
+vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/macos')>()),
+  captureMacOsSurfaceSnapshot: vi.fn(async () => ({
+    backend: 'macos-helper' as const,
+    producer: 'macos-helper' as const,
+    nodes: [],
+    truncated: false,
+  })),
+}));
 
-import { createPlatformRuntimeHost } from './platform-runtime-operation-host.ts';
+import { captureMacOsSurfaceSnapshot } from '@agent-device/platform-apple/macos';
+import {
+  createPlatformRuntimeHost,
+  loadMacOsSurfaceSnapshot,
+} from './platform-runtime-operation-host.ts';
 
 const snapshot = {
   captureSurface: async () => ({
@@ -70,4 +83,23 @@ test('composes focused deployment executors instead of a cross-family deployment
   expect(source).not.toContain('createHarmonyAppDeploymentExecutor');
   expect(source).not.toContain('appDeployment:');
   expect(existsSync(join(directory, 'platform-runtime-app-deployment-host.ts'))).toBe(false);
+});
+
+test.each([undefined, 'app'] as const)(
+  'the macOS surface loader refuses a %s surface the owner routes to the runner',
+  async (surface) => {
+    vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
+    await expect(loadMacOsSurfaceSnapshot({ surface })).rejects.toBeInstanceOf(TypeError);
+    expect(captureMacOsSurfaceSnapshot).not.toHaveBeenCalled();
+  },
+);
+
+test('the macOS surface loader forwards a helper-routed surface unchanged', async () => {
+  vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
+  const signal = new AbortController().signal;
+  await loadMacOsSurfaceSnapshot({ surface: 'frontmost-app', depth: 2 }, signal);
+  expect(captureMacOsSurfaceSnapshot).toHaveBeenCalledWith(
+    { surface: 'frontmost-app', depth: 2 },
+    signal,
+  );
 });

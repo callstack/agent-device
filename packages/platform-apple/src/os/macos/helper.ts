@@ -25,7 +25,7 @@ import {
   runCmdBackground,
   type ExecBackgroundResult,
 } from '@agent-device/host-kit/command';
-import type { SessionSurface } from '@agent-device/contracts/session';
+import type { MacOsHelperSurface, SessionSurface } from '@agent-device/contracts/session';
 import {
   hasScopedAppleToolProvider,
   resolveAppleToolProvider,
@@ -372,10 +372,10 @@ export async function runMacOsAlertAction(
 }
 
 export async function runMacOsSnapshotAction(
-  surface: Exclude<SessionSurface, 'app'>,
+  surface: MacOsHelperSurface,
   options: { bundleId?: string; signal?: AbortSignal } = {},
 ): Promise<{
-  surface: Exclude<SessionSurface, 'app'>;
+  surface: SessionSurface;
   nodes: MacOsSnapshotNode[];
   truncated: boolean;
   backend: 'macos-helper';
@@ -388,7 +388,7 @@ export async function runMacOsSnapshotAction(
 export async function runMacOsReadTextAction(
   x: number,
   y: number,
-  options: { bundleId?: string; surface?: SessionSurface } = {},
+  options: { surface: MacOsHelperSurface; bundleId?: string },
 ): Promise<{
   text: string;
 }> {
@@ -430,8 +430,8 @@ export async function runMacOsPressAction(
   x: number,
   y: number,
   options: {
+    surface: MacOsHelperSurface;
     bundleId?: string;
-    surface?: SessionSurface;
     holdMs?: number;
     /** Independent presses, each a single click; `--count` on every platform. */
     clicks?: number;
@@ -439,7 +439,7 @@ export async function runMacOsPressAction(
     doubleClick?: boolean;
     intervalMs?: number;
     signal?: AbortSignal;
-  } = {},
+  },
 ): Promise<{
   x: number;
   y: number;
@@ -473,7 +473,7 @@ export async function runMacOsPressAction(
 
 export async function runMacOsScreenshotAction(
   outPath: string,
-  options: { surface?: SessionSurface } = {},
+  options: { surface: MacOsHelperSurface },
 ): Promise<{
   path: string;
   surface?: SessionSurface;

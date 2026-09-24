@@ -14,7 +14,7 @@ import {
 } from './runner/index.ts';
 import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
-import type { SessionSurface } from '@agent-device/contracts/session';
+import { macOsHelperSurface, type MacOsHelperSurface } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
 import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -68,12 +68,14 @@ export function createAppleInteractor(
     close: (app) => closeIosApp(device, app, runnerOpts),
     screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
     snapshot: async (options) => await captureAppleSnapshot(device, options, runnerOpts),
-    // The live text at a point: helper for macOS desktop/menubar surfaces, XCTest runner for
+    // The live text at a point: helper for a helper-routed macOS surface, XCTest runner for
     // every other Apple leaf including a macOS app session.
-    readTextAtPoint: async (point, options) =>
-      usesMacOsHelperSurface(device, options?.surface)
-        ? await readMacOsSurfaceTextAtPoint(point, options)
-        : await readRunnerTextAtPoint(device, point, options, runnerOpts),
+    readTextAtPoint: async (point, options) => {
+      const helper = isMacOs(device) ? macOsHelperSurface(options?.surface) : undefined;
+      return helper
+        ? await readMacOsSurfaceTextAtPoint(point, helper, options?.appBundleId)
+        : await readRunnerTextAtPoint(device, point, options, runnerOpts);
+    },
     // The XCTest runner's own text reading: it observes the live accessibility hierarchy
     // directly, so it answers without the cost — and without the pruning — of a tree capture.
     // Only a positive answer is authoritative; see `FindTextResult`.
@@ -209,8 +211,9 @@ async function captureAppleSnapshot(
   options: SnapshotOptions | undefined,
   runnerOpts: RunnerCallOptions,
 ) {
-  if (isMacOs(device) && options?.surface && options.surface !== 'app') {
-    return await captureMacOsSurfaceSnapshot(options, options.signal);
+  const helper = isMacOs(device) ? macOsHelperSurface(options?.surface) : undefined;
+  if (helper) {
+    return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal);
   }
   return await captureAppleRunnerSnapshot(device, options, runnerOpts);
 }
@@ -386,20 +389,19 @@ async function runAppleScreenshot(
   options: ScreenshotOptions = {},
   runnerOpts: RunnerCallOptions,
 ): Promise<void> {
-  if (usesMacOsSurfaceScreenshot(device, options.surface)) {
+  const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
+  if (helper) {
     if (options.fullscreen) {
       throw new AppError(
         'INVALID_ARGS',
-        `screenshot --fullscreen is not accepted on the macOS ${options.surface} surface: it always captures the main display`,
+        `screenshot --fullscreen is not accepted on the macOS ${helper} surface: it always captures the main display`,
         {
           reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
-          surface: options.surface,
+          surface: helper,
         },
       );
     }
-    await runMacOsScreenshotAction(outPath, {
-      surface: options.surface,
-    });
+    await runMacOsScreenshotAction(outPath, { surface: helper });
     return;
   }
   if (options.captureBackend === 'runner') {
@@ -424,31 +426,15 @@ async function runAppleScreenshot(
   });
 }
 
-/**
- * Every surface this admits captures through the macOS helper's fixed main-display frame, so
- * `runAppleScreenshot` also keys its `--fullscreen` refusal directly off this predicate: whichever
- * surface routes here cannot vary its captured frame, helper-routed today or added later.
- */
-function usesMacOsSurfaceScreenshot(
-  device: DeviceInfo,
-  surface: ScreenshotOptions['surface'],
-): surface is Exclude<ScreenshotOptions['surface'], undefined | 'app'> {
-  return isMacOs(device) && surface !== undefined && surface !== 'app';
-}
-
-/** Only non-app macOS surfaces are helper-read; an app session is runner-read like any leaf. */
-function usesMacOsHelperSurface(device: DeviceInfo, surface: SessionSurface | undefined): boolean {
-  return isMacOs(device) && surface !== undefined && surface !== 'app';
-}
-
 async function readMacOsSurfaceTextAtPoint(
   point: Point,
-  options?: { appBundleId?: string; surface?: SessionSurface },
+  surface: MacOsHelperSurface,
+  appBundleId: string | undefined,
 ): Promise<string | undefined> {
   const { runMacOsReadTextAction } = await import('./os/macos/helper.ts');
   const result = await runMacOsReadTextAction(point.x, point.y, {
-    bundleId: options?.appBundleId,
-    surface: options?.surface,
+    bundleId: appBundleId,
+    surface,
   });
   return result.text;
 }

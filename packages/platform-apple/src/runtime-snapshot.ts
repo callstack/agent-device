@@ -11,6 +11,7 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
+import { macOsSurfaceBackend, type SessionSurface } from '@agent-device/contracts/session';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { hasSimulatorBridge } from './snapshot-observability.ts';
 import type { AppleSnapshotRoute } from './snapshot-route.ts';
@@ -27,11 +28,7 @@ export function bindAppleSnapshotRuntime(
     resolveInteractor: host.localInteractors.resolve,
   });
   const captureSnapshot = async (input: CaptureSnapshotInput) => {
-    if (
-      isMacOs(request.device) &&
-      input.options?.surface !== undefined &&
-      input.options.surface !== 'app'
-    ) {
+    if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
       return await host.snapshot.captureSurface(
         request.device,
         input.options,
@@ -66,7 +63,7 @@ type SnapshotRuntimeOperation = Pick<
  *
  * - No tracked app bundle id: the runner query is scoped to an application, so there is nothing
  *   to ask about.
- * - macOS on an explicit non-app surface: the runner reads the *application*, so a positive
+ * - macOS on a helper-routed surface: the runner reads the *application*, so a positive
  *   answer would describe the wrong surface. Reporting `false` sends the poll to the desktop
  *   surface capture, which is the reading that matches the request.
  *
@@ -106,15 +103,16 @@ async function admitAppleNativeFind(
   host: Pick<PlatformRuntimeHost, 'appleApplications'>,
   request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
   input: Readonly<{
-    options?: Readonly<{ appBundleId?: string; surface?: string }>;
+    options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
     execution?: Readonly<{ requestId?: string }>;
     signal?: AbortSignal;
   }>,
 ): Promise<AdmittedAppleNativeFind | undefined> {
   const appBundleId = input.options?.appBundleId;
   if (appBundleId === undefined) return undefined;
-  const surface = input.options?.surface;
-  if (isMacOs(request.device) && surface !== undefined && surface !== 'app') return undefined;
+  if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
+    return undefined;
+  }
   const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;
   signal.throwIfAborted();
   if (!(await runnerCanAnswerNow(host, request.device, input.execution))) return undefined;

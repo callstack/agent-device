@@ -9,6 +9,11 @@ import { listIosApps } from './core/app-resolution.ts';
 import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
+import {
+  SESSION_SURFACES,
+  type MacOsSurfaceBackend,
+  type SessionSurface,
+} from '@agent-device/contracts/session';
 import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
@@ -396,9 +401,19 @@ function expectTvRemoteFact(
   }
 }
 
-test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
-  'routes the macOS %s surface through the exact Apple surface host',
-  async (surface) => {
+const MACOS_SURFACE_BACKENDS: Record<SessionSurface, MacOsSurfaceBackend> = {
+  app: 'xctest',
+  'frontmost-app': 'macos-helper',
+  desktop: 'macos-helper',
+  menubar: 'macos-helper',
+};
+
+test.each([
+  ...SESSION_SURFACES.map((surface) => [surface, MACOS_SURFACE_BACKENDS[surface]] as const),
+  [undefined, 'xctest'] as const,
+])(
+  'the macOS %s surface captures and finds text through the %s backend',
+  async (surface, backend) => {
     const host = platformRuntimeHostFixture();
     const captureSurface = vi.fn(async () => ({
       backend: 'macos-helper' as const,
@@ -406,7 +421,14 @@ test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
       nodes: [],
       truncated: false,
     }));
-    const resolve = vi.fn(async () => ({}) as never);
+    const snapshot = vi.fn(async () => ({
+      backend: 'xctest' as const,
+      producer: 'apple-runner' as const,
+      nodes: [],
+      truncated: false,
+    }));
+    const findText = vi.fn(async () => ({ found: true }));
+    const resolve = vi.fn(async () => ({ snapshot, findText }) as never);
     const binding = await createApplePlatformRuntime({
       ...host,
       localInteractors: { resolve },
@@ -420,18 +442,18 @@ test.each(['frontmost-app', 'desktop', 'menubar'] as const)(
         progress: { report: () => {} },
       },
     });
+    const options = { surface, appBundleId: 'com.example.app', depth: 3 };
 
-    await expect(
-      binding.operations.captureSnapshot?.({
-        options: { surface, appBundleId: 'com.example.app', depth: 3 },
-      }),
-    ).resolves.toMatchObject({ backend: 'macos-helper' });
-    expect(captureSurface).toHaveBeenCalledWith(
-      leaves.macos,
-      { surface, appBundleId: 'com.example.app', depth: 3 },
-      expect.any(AbortSignal),
+    await binding.operations.captureSnapshot?.({ options });
+    const found = await binding.operations.findText?.({ text: 'Settings', options });
+
+    const helperRouted = backend === 'macos-helper';
+    expect(captureSurface.mock.calls).toEqual(
+      helperRouted ? [[leaves.macos, options, expect.any(AbortSignal)]] : [],
     );
-    expect(resolve).not.toHaveBeenCalled();
+    expect(snapshot).toHaveBeenCalledTimes(helperRouted ? 0 : 1);
+    expect(findText).toHaveBeenCalledTimes(helperRouted ? 0 : 1);
+    expect(found).toEqual({ found: !helperRouted });
   },
 );
 

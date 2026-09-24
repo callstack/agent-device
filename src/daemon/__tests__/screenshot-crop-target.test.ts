@@ -9,7 +9,11 @@ import {
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/device-fixtures.ts';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
-import type { SessionSurface } from '@agent-device/contracts/session';
+import {
+  SESSION_SURFACES,
+  type MacOsSurfaceBackend,
+  type SessionSurface,
+} from '@agent-device/contracts/session';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test } from 'vitest';
 import {
@@ -31,7 +35,7 @@ const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'android-device', device: ANDROID_DEVICE, surface: undefined },
   { target: 'macos-app-window', device: MACOS_DEVICE, surface: 'app' },
   { target: 'ios-physical', device: IOS_DEVICE, surface: undefined },
-  { target: 'macos-helper', device: MACOS_DEVICE, surface: undefined },
+  { target: 'macos-helper', device: MACOS_DEVICE, surface: 'desktop' },
   { target: 'web', device: WEB_DESKTOP_DEVICE, surface: undefined },
   { target: 'linux', device: LINUX_DEVICE, surface: undefined },
   { target: 'tvos', device: TVOS_SIMULATOR, surface: undefined },
@@ -65,6 +69,24 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
       });
     }
   }
+});
+
+const MACOS_SURFACE_BACKENDS: Record<SessionSurface, MacOsSurfaceBackend> = {
+  app: 'xctest',
+  'frontmost-app': 'macos-helper',
+  desktop: 'macos-helper',
+  menubar: 'macos-helper',
+};
+const MACOS_CROP_TARGETS: Record<MacOsSurfaceBackend, CropTargetDevice['target']> = {
+  xctest: 'macos-app-window',
+  'macos-helper': 'macos-helper',
+};
+
+test.each([
+  ...SESSION_SURFACES.map((surface) => [surface, MACOS_SURFACE_BACKENDS[surface]] as const),
+  [undefined, 'xctest'] as const,
+])('a macOS %s session crops in the frame of the backend that captures it', (surface, backend) => {
+  expect(classifyScreenshotCropTarget(MACOS_DEVICE, surface)).toBe(MACOS_CROP_TARGETS[backend]);
 });
 
 test('an apple device with an unpopulated reserved OS is a typed refusal, not a guess', () => {

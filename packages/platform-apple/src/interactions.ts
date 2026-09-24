@@ -10,6 +10,7 @@ import {
   type TextEntryRoute,
   type TypeTextBackendResult,
 } from '@agent-device/contracts/interactor-types';
+import { macOsHelperSurface, type MacOsHelperSurface } from '@agent-device/contracts/session';
 import {
   SCROLL_DURATION_MAX_MS,
   normalizeScrollDurationMs,
@@ -194,8 +195,9 @@ async function runApplePressPoint(
   point: { x: number; y: number },
   options: PressPointOptions,
 ): Promise<Record<string, unknown>> {
-  if (isMacOs(device) && options.surface && options.surface !== 'app') {
-    return await runMacOsSurfacePress(context, point, options);
+  const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
+  if (helper) {
+    return await runMacOsSurfacePress(context, point, options, helper);
   }
   if (options.button !== 'primary') {
     return await runAppleAlternateClick(device, context, runnerOpts, point, options.button);
@@ -216,11 +218,12 @@ async function runMacOsSurfacePress(
   context: RunnerContext,
   point: { x: number; y: number },
   options: PressPointOptions,
+  surface: MacOsHelperSurface,
 ): Promise<Record<string, unknown>> {
   if (options.button !== 'primary') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
-      `${options.button} click is not supported on macOS ${options.surface} sessions.`,
+      `${options.button} click is not supported on macOS ${surface} sessions.`,
     );
   }
   const { runMacOsPressAction } = await import('./os/macos/helper.ts');
@@ -228,7 +231,7 @@ async function runMacOsSurfacePress(
   // the same reading every other platform gives the two flags.
   const posted = await runMacOsPressAction(point.x, point.y, {
     bundleId: context.appBundleId,
-    surface: options.surface,
+    surface,
     holdMs: options.holdMs,
     clicks: options.count,
     doubleClick: options.doubleTap,
