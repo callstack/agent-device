@@ -319,3 +319,30 @@ test.each([undefined, 'get', 'accept', 'dismiss'] as const)(
     }
   },
 );
+
+// The refusal is retriable for the caller's own poll, but to the transport it is a definite runner
+// answer: no resend, no lost-response status probe, and no invalidation of a healthy session.
+test('a read refused over a not-running app is one definite answer, not a transport retry', async () => {
+  server = await startFakeRunnerServer({
+    snapshot: [
+      { kind: 'runnerError', code: 'APP_NOT_RUNNING', message: "app 'com.example' is not running" },
+    ],
+  });
+  seedSession(server.port);
+
+  await assert.rejects(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerErrorCode, 'APP_NOT_RUNNING');
+      assert.equal(error.details?.retriable, true);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    server.requests.map((request) => request.command).filter((command) => command !== 'uptime'),
+    ['snapshot'],
+  );
+  assert.equal(invalidateRunnerSessionMock.mock.calls.length, 0);
+});

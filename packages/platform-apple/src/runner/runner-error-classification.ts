@@ -9,7 +9,11 @@ import {
   type IosDeveloperDiskImageState,
   type IosDeveloperModeState,
 } from './host.ts';
-import { MAIN_THREAD_TIMEOUT_RUNNER_CODE, RUNNER_BUSY_RUNNER_CODE } from './runner-contract.ts';
+import {
+  APP_NOT_RUNNING_RUNNER_CODE,
+  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+  RUNNER_BUSY_RUNNER_CODE,
+} from './runner-contract.ts';
 
 export const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -66,6 +70,8 @@ type RunnerErrorMatch = {
 };
 
 const hasRetriableFlag: RunnerErrorDetailsMatch = (details) => details.retriable === true;
+const hasAppNotRunningRunnerCode: RunnerErrorDetailsMatch = (details) =>
+  details.runnerErrorCode === APP_NOT_RUNNING_RUNNER_CODE;
 /**
  * The host's own `DevToolsSecurity -status` read, published as typed details by the probe that
  * takes it. The build-failure rule below keys on this field and never on the probe's message, so
@@ -199,13 +205,19 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
  * `flagged_retriable` precedes the denials (an explicitly retriable error
  * stays retriable whatever its message says), and `usbmux_device_unattached`
  * sits first (retrying cannot attach a cable, and its typed verdict carries
- * the recovery hint a generic connect failure would replace).
+ * the recovery hint a generic connect failure would replace). `app_not_running`
+ * precedes it too: its retriable flag is for the caller's poll, not a resend.
  */
 export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   {
     reason: 'usbmux_device_unattached',
     match: { code: 'DEVICE_NOT_FOUND', details: hasUsbmuxDeviceUnattached },
     verdicts: { connectRetry: false },
+  },
+  {
+    reason: 'app_not_running',
+    match: { code: 'COMMAND_FAILED', details: hasAppNotRunningRunnerCode },
+    verdicts: { retryable: false, connectRetry: false },
   },
   {
     reason: 'flagged_retriable',

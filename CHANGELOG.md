@@ -33,6 +33,17 @@
   config that sets `screenshotFullscreen` for one of those surfaces now fails instead of succeeding
   with the same image it always produced; drop the flag there. macOS app sessions and every other
   platform keep accepting `--fullscreen` unchanged. (#2799)
+- Fixed (ios): no runner read launches a session app that is not running anymore. The XCTest runner
+  repaired foreground loss by calling `activate()`, which launches an app that is not running. After
+  `open <app> --relaunch --launch-url <url>` on a Simulator, iOS can hold the launch behind an
+  "Open in …?" confirmation, and the first read of the waiting session launched the app without the
+  URL. Reads — `snapshot`, `wait`, `is`, `get`, a reading `find`, and an interaction's leading reads
+  (the viewport read a `gesture` starts with, the capture that resolves a selector `click`/`fill`) —
+  now refuse with `COMMAND_FAILED`, `details.runnerErrorCode: "APP_NOT_RUNNING"`, `retriable: true`
+  and a hint to answer the prompt with `alert accept` or relaunch with `open`. A `wait` polls
+  through the refusal; the runner transport never resends it. Interactions that mutate without a
+  leading read (`press`, a coordinate `fill`, `swipe`, `scroll`, hardware keys) keep the foreground
+  repair and still bring a stopped app up.
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
   the bridge and the XCTest runner. The snapshot capability table has declared `hittable =

@@ -441,6 +441,11 @@ extension RunnerTests {
       let normalizedBundleId = command.appBundleId?
         .trimmingCharacters(in: .whitespacesAndNewlines)
       let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
+      if let bundleId = requestedBundleId,
+        let notRunning = notRunningReadResponse(command: command, bundleId: bundleId)
+      {
+        return .response(notRunning)
+      }
       if let bundleId = requestedBundleId {
         if currentBundleId != bundleId || currentApp == nil {
           _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")

@@ -316,6 +316,31 @@ extension RunnerTests {
     return foreign.count == 1 ? foreign.first : nil
   }
 
+  /// `activate()` on a not-running app is a bare launch, which would drop the URL of a launch
+  /// SpringBoard still holds behind its "Open in …?" confirmation; see `APP_NOT_RUNNING_RUNNER_CODE`.
+  func notRunningReadResponse(command: Command, bundleId: String) -> Response? {
+#if os(iOS)
+    guard isReadOnlyCommand(command),
+      XCUIApplication(bundleIdentifier: bundleId).state == .notRunning
+    else { return nil }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_READ_TARGET_NOT_RUNNING bundle=%@ command=%@",
+      bundleId,
+      command.command.rawValue
+    )
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: RunnerWireErrorCode.appNotRunning,
+        message: "app '\(bundleId)' is not running",
+        hint: "Reads do not launch the app. Relaunch it with open; if a system prompt such as a deep-link confirmation holds its launch, answer it with alert accept."
+      )
+    )
+#else
+    return nil
+#endif
+  }
+
   func activateTarget(bundleId: String, reason: String) -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: bundleId)
     let initialState = target.state

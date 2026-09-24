@@ -27,6 +27,18 @@ export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
  */
 export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
 
+/**
+ * The runner's own code for a read whose session app is not running. No runner read launches the
+ * app — a bare launch would drop the payload of a launch still pending, such as a deep link held
+ * behind SpringBoard's confirmation — so the runner refuses any command carrying its read-only
+ * trait, including a mutation's leading read (a gesture's viewport read, a selector's resolving
+ * capture). Only the iOS runner refuses (`#if os(iOS)`); the macOS, tvOS and visionOS runners keep the
+ * activate repair. The refusal describes one poll: the launch that confirmation releases may still be
+ * starting when the next read arrives, so it is retriable for a `wait`, while the transport reads
+ * it as a definite answer and never resends it.
+ */
+export const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
+
 export type RunnerCommand = {
   command:
     | 'tap'
@@ -175,15 +187,17 @@ export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = n
 /**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
- * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet, and
- * the scroll keyboard refusal for a surface the runner declined to swipe under the keys.
+ * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet,
+ * the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and the
+ * retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
  */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlySet<string> = new Set([
-  RUNNER_BUSY_RUNNER_CODE,
-  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
-  ALERT_NOT_FOUND_RUNNER_CODE,
-  SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE,
-  ...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true }> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
+  [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
+  [ALERT_NOT_FOUND_RUNNER_CODE, {}],
+  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
+  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
 ]);
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
@@ -202,13 +216,12 @@ export function classifyRunnerReportedError(
   runnerErrorCode: string | undefined,
 ): RunnerReportedErrorClass {
   const diagnosticOnly =
-    runnerErrorCode !== undefined && DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.has(runnerErrorCode);
+    runnerErrorCode === undefined
+      ? undefined
+      : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
   return Object.freeze({
     code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
-    details: Object.freeze({
-      runnerErrorCode,
-      ...(runnerErrorCode === RUNNER_BUSY_RUNNER_CODE ? { retriable: true as const } : {}),
-    }),
+    details: Object.freeze({ runnerErrorCode, ...diagnosticOnly }),
   });
 }
 

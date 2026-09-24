@@ -157,6 +157,8 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRecordStartThrowsTheCaptureRefusalItReceived \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDispatchResolvesItsOwnModalWithoutCoordinateTapRoutingProbe \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testReadRefusesToLaunchANotRunningSessionApp \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testNonReadCommandStillLaunchesANotRunningSessionApp \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus \

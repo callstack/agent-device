@@ -134,3 +134,39 @@ extension RunnerTests {
   }
 }
 #endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+extension RunnerTests {
+  /// Installed on every Simulator runtime and cheap to leave terminated.
+  private static let notRunningTargetBundleId = "com.apple.Preferences"
+
+  private func executeOnTerminatedTarget(_ json: String) throws -> (Response, XCUIApplication) {
+    let target = XCUIApplication(bundleIdentifier: Self.notRunningTargetBundleId)
+    target.terminate()
+    invalidateCachedTarget(reason: "unit_test_setup")
+    defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
+    return (try execute(command: try runnerCommandFixture(json)), target)
+  }
+
+  /// Covers a user-level read and a mutation's leading read (a gesture's `gestureViewport`).
+  func testReadRefusesToLaunchANotRunningSessionApp() throws {
+    for command in ["snapshot", "gestureViewport"] {
+      let (response, target) = try executeOnTerminatedTarget(
+        #"{"command":"\#(command)","commandId":"read","appBundleId":"\#(Self.notRunningTargetBundleId)"}"#
+      )
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.appNotRunning, command)
+      XCTAssertEqual(target.state, .notRunning, "\(command) must not launch the session app")
+      target.terminate()
+    }
+  }
+
+  func testNonReadCommandStillLaunchesANotRunningSessionApp() throws {
+    let (response, target) = try executeOnTerminatedTarget(
+      #"{"command":"activate","commandId":"repair","appBundleId":"\#(Self.notRunningTargetBundleId)"}"#
+    )
+    defer { target.terminate() }
+    XCTAssertTrue(response.ok)
+    XCTAssertNotEqual(target.state, .notRunning)
+  }
+}
+#endif
