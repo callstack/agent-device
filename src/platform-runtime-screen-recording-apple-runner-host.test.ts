@@ -5,6 +5,7 @@ import {
 } from './platform-runtime-screen-recording-apple-runner-host.ts';
 import { withAppleRunnerScreenRecordingTransport } from './platform-runtime-screen-recording-apple-runner-transport.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
+import { expectProducedRunnerRequests } from './__tests__/test-utils/runner-requests.ts';
 
 const runnerClient = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
@@ -53,4 +54,13 @@ test('focused simulator-only transport never warms a local Apple runner', async 
     },
   );
   expect(runnerClient.run).not.toHaveBeenCalled();
+});
+
+test('the clock anchor request matches its runner-requests.json entry', async () => {
+  runnerClient.run.mockReset();
+  runnerClient.run.mockResolvedValue({ currentUptimeMs: 1_000 });
+  await captureAppleClockAnchor(simulator, 'com.example.app');
+  expectProducedRunnerRequests(import.meta.filename, [
+    ['ios-simulator.recording-clock-anchor.snapshot', runnerClient.run.mock.calls[0]?.[1]],
+  ]);
 });

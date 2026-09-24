@@ -14,6 +14,7 @@ The daemon probes `http://127.0.0.1:<port>/command` for simulator and desktop fl
 ## Request Shape
 
 Every request includes a `command` field. Additional fields depend on the command family.
+The request vocabulary is `contracts/fixtures/runner-requests.json`: the requests production builds.
 
 Examples:
 

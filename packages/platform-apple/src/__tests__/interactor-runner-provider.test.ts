@@ -1,4 +1,3 @@
-import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type {
   Interactor,
   RunnerContext,
@@ -9,14 +8,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
-import type {
-  AppleRunnerCommandOptions,
-  AppleRunnerProvider,
-  RunnerCommand,
-} from '../runner/index.ts';
+import type { AppleRunnerProvider } from '../runner/index.ts';
 import { createAppleInteractor } from '../interactor.ts';
-
-type RecordedRunnerCall = { command: RunnerCommand; options: AppleRunnerCommandOptions };
+import {
+  recordingRunnerProvider,
+  runnerResultFor,
+  singlePointerPanPlan,
+  type RecordedRunnerCall,
+} from './recording-runner-provider.ts';
 
 function presentedSnapshot(result: SnapshotRuntimeResult): SnapshotResult {
   if ('stage' in result) throw new Error('Apple runner snapshot must be presented');
@@ -446,57 +445,3 @@ test('snapshot forwards either forceable preferredBackend into the emitted runne
   assert.equal(snapshots[0]?.command.preferredBackend, 'tree');
   assert.equal(snapshots[1]?.command.preferredBackend, undefined);
 });
-
-function recordingRunnerProvider(calls: RecordedRunnerCall[]): AppleRunnerProvider {
-  return {
-    hasLiveSession: () => true,
-    runCommand: async (_device, command, options) => {
-      calls.push({ command, options });
-      return runnerResultFor(command);
-    },
-  };
-}
-
-function runnerResultFor(command: RunnerCommand): Record<string, unknown> {
-  switch (command.command) {
-    case 'snapshot':
-      return {
-        nodes: [
-          { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'Button',
-            label: 'Go',
-            hittable: true,
-            rect: { x: 10, y: 10, width: 80, height: 40 },
-          },
-        ],
-      };
-    case 'gestureViewport':
-      return { x: 0, y: 0, x2: 390, y2: 844 };
-    case 'rotate':
-      return { orientation: command.orientation };
-    default:
-      return {};
-  }
-}
-
-function singlePointerPanPlan(): GesturePlan {
-  return {
-    topology: 'single',
-    intent: 'pan',
-    executionProfile: 'timed-pan',
-    durationMs: 120,
-    viewport: { x: 0, y: 0, width: 390, height: 844 },
-    pointers: [
-      {
-        pointerId: 0,
-        samples: [
-          { offsetMs: 0, point: { x: 100, y: 400 } },
-          { offsetMs: 120, point: { x: 100, y: 200 } },
-        ],
-      },
-    ],
-  };
-}
