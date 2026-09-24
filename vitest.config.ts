@@ -169,6 +169,9 @@ export default defineConfig({
             // #1781 A9: pins the root-doc paths-ignore entries directly against the
             // real workflow YAML, parse-only like its sibling above.
             'test/ci/root-docs-paths-ignore.test.ts',
+            // The changelog-fragment assembler (#2877): pure string transforms over fixture
+            // changelogs plus a scratch-directory CLI check, so it needs no device or subprocess.
+            'scripts/__tests__/changelog-release.test.ts',
             // The daemon leak oracle's lifecycle/residue rules (#1781 B1): pure
             // decisions over fixture state-dir listings, so they need no daemon,
             // device, or subprocess.

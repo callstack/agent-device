@@ -73,7 +73,7 @@ test('the npm package build covers every package-owned output before verificatio
 test('release publishing uploads the tarball that passed the package gate', () => {
   assert.equal(
     script('release:prepare'),
-    'node scripts/release-mark-dev.mjs --check-release-version && rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release',
+    'node scripts/release-mark-dev.mjs --check-release-version && node --experimental-strip-types scripts/changelog-release.ts --check && rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release',
   );
   assert.equal(
     script('release:publish'),
@@ -93,6 +93,20 @@ test('release publishing moves main off the released version', () => {
   );
   assert.match(script('release:publish'), / && pnpm release:mark-dev$/);
   assert.equal(script('release:mark-dev'), 'node scripts/release-mark-dev.mjs');
+});
+
+// #2877: PRs never edit CHANGELOG.md, so the release version commit is the only writer. It folds
+// changelog.d/ fragments into a new version section via the assembler, then stages both the
+// rewritten CHANGELOG.md and the fragment deletions alongside the existing server.json sync.
+test('the version lifecycle script assembles changelog fragments before staging the release commit', () => {
+  assert.equal(
+    script('version'),
+    'pnpm sync:mcp-metadata && node --experimental-strip-types scripts/changelog-release.ts && git add server.json CHANGELOG.md changelog.d',
+  );
+  assert.match(
+    script('release:prepare'),
+    / node --experimental-strip-types scripts\/changelog-release\.ts --check && /,
+  );
 });
 
 test('the package checker can retain the tarball it verifies for publishing', () => {
