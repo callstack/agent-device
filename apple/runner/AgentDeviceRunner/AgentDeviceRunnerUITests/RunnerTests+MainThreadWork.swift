@@ -57,12 +57,12 @@ extension RunnerTests {
   func runMainThreadWork<T>(
     _ operation: String,
     timeout: TimeInterval,
-    timeoutError: @escaping () -> Error,
-    onAbandoned: (() -> Void)? = nil,
-    _ work: @escaping () throws -> T
+    timeoutError: @escaping @Sendable () -> Error,
+    onAbandoned: (@Sendable () -> Void)? = nil,
+    _ work: @escaping @MainActor () throws -> T
   ) throws -> T {
     if Thread.isMainThread {
-      return try work()
+      return try Self.runOnMainActor(work).get()
     }
     mainThreadWorkLock.lock()
     let state = enqueueMainThreadWorkLocked(operation, work)
@@ -85,8 +85,8 @@ extension RunnerTests {
   func runMainThreadWorkIfIdle<T>(
     _ operation: String,
     timeout: TimeInterval,
-    timeoutError: @escaping () -> Error,
-    _ work: @escaping () throws -> T
+    timeoutError: @escaping @Sendable () -> Error,
+    _ work: @escaping @MainActor () throws -> T
   ) throws -> T? {
     if Thread.isMainThread {
       return nil
@@ -107,18 +107,25 @@ extension RunnerTests {
     )
   }
 
+  /// Runs `work` on the main thread the caller is already on. `MainActor.assumeIsolated` returns
+  /// only `Sendable` values, so the result leaves through a captured `Result`: a `T: Sendable` bound
+  /// on the hop would promise something no gate checks.
+  private static func runOnMainActor<T>(_ work: @MainActor () throws -> T) -> Result<T, Error> {
+    var result: Result<T, Error>?
+    MainActor.assumeIsolated {
+      result = Result { try work() }
+    }
+    return result!
+  }
+
   private func enqueueMainThreadWorkLocked<T>(
     _ operation: String,
-    _ work: @escaping () throws -> T
+    _ work: @escaping @MainActor () throws -> T
   ) -> MainThreadWorkState<T> {
     let state = MainThreadWorkState<T>()
     mainThreadWorkInFlightCount += 1
     DispatchQueue.main.async {
-      do {
-        state.result = .success(try work())
-      } catch {
-        state.result = .failure(error)
-      }
+      state.result = Self.runOnMainActor(work)
       self.mainThreadWorkLock.lock()
       self.mainThreadWorkInFlightCount -= 1
       let abandoned = state.abandoned
@@ -147,8 +154,8 @@ extension RunnerTests {
     _ state: MainThreadWorkState<T>,
     operation: String,
     timeout: TimeInterval,
-    timeoutError: @escaping () -> Error,
-    onAbandoned: (() -> Void)?
+    timeoutError: @escaping @Sendable () -> Error,
+    onAbandoned: (@Sendable () -> Void)?
   ) throws -> T {
     let waitResult = state.completed.wait(timeout: .now() + timeout)
     if waitResult == .timedOut {
@@ -191,7 +198,7 @@ extension RunnerTests {
     }
   }
 
-  func mainThreadExecutionTimeoutError() -> Error {
+  static func mainThreadExecutionTimeoutError() -> Error {
     NSError(
       domain: RunnerErrorDomain.general,
       code: RunnerErrorCode.mainThreadExecutionTimedOut,

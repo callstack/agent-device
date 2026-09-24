@@ -36,8 +36,8 @@ extension RunnerTests {
     /// `bootstrap` must produce the frame that sizes the writer and runs on the caller's thread.
     /// `frame` answers each tick with an image, or `nil` to drop the tick.
     func start(
-      bootstrap: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
-      frame: @escaping () -> RunnerImage?
+      bootstrap: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+      frame: @escaping @Sendable () -> RunnerImage?
     ) throws {
       let url = URL(fileURLWithPath: outputPath)
       let directory = url.deletingLastPathComponent()
@@ -132,7 +132,7 @@ extension RunnerTests {
 
       let timer = DispatchSource.makeTimerSource(queue: queue)
       timer.schedule(deadline: .now() + frameInterval, repeating: frameInterval)
-      timer.setEventHandler { [weak self] in
+      timer.setEventHandler { @Sendable [weak self] in
         guard let self else { return }
         if self.shouldStop() { return }
         guard let image = frame() else { return }
@@ -299,16 +299,17 @@ extension RunnerTests {
   /// while no other main-thread work is in flight, so it never queues behind a command.
   /// A capture still running after `recordingFrameCaptureTimeout` is abandoned and its frame dropped;
   /// its late result is never returned.
+  @MainActor
   func startRecording(
     _ recorder: ScreenRecorder,
-    capture: @escaping () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
+    capture: @escaping @MainActor () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
   ) throws {
     try recorder.start(bootstrap: capture) { [weak self] in
       guard let self else { return nil }
       return try? self.runMainThreadWorkIfIdle(
         "recording_frame",
         timeout: self.recordingFrameCaptureTimeout,
-        timeoutError: self.mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         try capture().get().image
       }

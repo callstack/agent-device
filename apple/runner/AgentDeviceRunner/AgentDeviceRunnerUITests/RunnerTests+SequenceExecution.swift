@@ -19,6 +19,7 @@ extension RunnerTests {
     let gestureEndUptimeMs: Double
   }
 
+  @MainActor
   func executeSequence(command: Command, activeApp: XCUIApplication) -> Response {
     guard let steps = command.steps, !steps.isEmpty else {
       return sequenceInvalidArgs("sequence requires at least one step")
@@ -136,6 +137,7 @@ extension RunnerTests {
     return nil
   }
 
+  @MainActor
   private func performSequenceStep(
     _ step: SequenceStep,
     activeApp: XCUIApplication,

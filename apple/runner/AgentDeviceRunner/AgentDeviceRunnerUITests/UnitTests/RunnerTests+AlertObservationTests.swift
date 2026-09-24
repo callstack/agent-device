@@ -2,14 +2,17 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  @MainActor
   func testAlertAcceptDoesNotActivateAReplacementWithASharedButton() throws {
     try assertReplacementAlertUntouched(action: "accept", arguments: [], confirmed: true)
   }
 
+  @MainActor
   func testAlertDismissDoesNotActivateAReplacementWithTheSameTitle() throws {
     try assertReplacementAlertUntouched(action: "dismiss", arguments: ["--agent-device-alert-same-title"], confirmed: true)
   }
 
+  @MainActor
   func testAlertCannotProveAnIdenticalReplacementAndDoesNotActivateIt() throws {
     try assertReplacementAlertUntouched(
       action: "accept",
@@ -18,6 +21,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func testAlertDeadlineBeforeActivationLeavesTheOriginalUntouched() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"]
     app.launch()
@@ -34,6 +38,7 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  @MainActor
   func testAlertHittableProbeCompletingAfterDeadlineLeavesTheOriginalUntouched() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"]
     app.launch()
@@ -57,6 +62,7 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  @MainActor
   func testAlertActivationAfterDeadlineDoesNotTapTheOriginal() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"]
     app.launch()
@@ -76,6 +82,7 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
   }
 
+  @MainActor
   func testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline() throws {
     app.launchArguments = [
       "--agent-device-alert-replacement-regression",
@@ -101,6 +108,7 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-busy-answer"].label, "Answered while busy")
   }
 
+  @MainActor
   func testAlertActivationDoesNotWaitOutANotificationBanner() throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-banner"]
     app.launch()
@@ -157,10 +165,12 @@ extension RunnerTests {
   static let alertActivationDeadline: TimeInterval = 30
   static let alertBannerActivationDeadline: TimeInterval = 90
 
+  @MainActor
   private func resolveAlertBeforeTheCommand() throws -> RunnerAlert {
     try XCTUnwrap(resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance)))
   }
 
+  @MainActor
   private func assertReplacementAlertUntouched(action: String, arguments: [String], confirmed: Bool) throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression"] + arguments
     app.launch()

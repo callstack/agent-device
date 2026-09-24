@@ -478,13 +478,14 @@ extension RunnerTests {
   /// and presentation. With a backend depth gate in `captureWithBackend`, private AX returns no
   /// capture, the plan falls through to the synthetic sparse root, and the daemon rejects that
   /// zero-rect root as a missing viewport.
+  @MainActor
   func testPrivateAXPinnedRegularDepthReachesAcquisitionAndPresentation() throws {
     app.launchArguments = ["--agent-device-selector-read-regression"]
     app.launch()
-    currentApp = app
-    currentBundleId = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
     defer {
-      currentApp = nil
+      mainOwned.app = nil
       clearPrivateAXAcceptedDepth(reason: "test-cleanup")
       app.terminate()
     }

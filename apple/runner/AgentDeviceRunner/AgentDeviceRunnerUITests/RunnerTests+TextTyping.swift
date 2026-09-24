@@ -3,6 +3,7 @@ import XCTest
 // Text typing, verification, and repair. Kept separate from focus/readiness so each
 // text-entry policy remains a bounded review surface.
 extension RunnerTests {
+  @MainActor
   func typeTextReliably(
     app: XCUIApplication,
     target: TextEntryTarget,

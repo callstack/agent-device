@@ -50,6 +50,7 @@ extension RunnerTests {
 
   /// The session app's `XCUIApplication.State` by name. A lifecycle read: the activation preflight
   /// is skipped, so `runningBackground` after `home` is reported rather than repaired away.
+  @MainActor
   func executeAppState(command: Command) -> Response {
     guard let bundleId = command.appBundleId?.trimmedNonEmpty else {
       return Response(
@@ -165,7 +166,7 @@ extension RunnerTests {
       return try runMainThreadWork(
         "command_execution",
         timeout: max(0.001, deadline.timeIntervalSinceNow),
-        timeoutError: mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         try self.executeOnMainSafely(
           command: command,
@@ -177,7 +178,7 @@ extension RunnerTests {
     return try runMainThreadWork(
       "command_execution",
       timeout: Self.mainThreadExecutionTimeout,
-      timeoutError: mainThreadExecutionTimeoutError
+      timeoutError: Self.mainThreadExecutionTimeoutError
     ) {
       try self.executeOnMainSafely(command: command, routeToSpringboard: routeToSpringboard)
     }
@@ -185,6 +186,7 @@ extension RunnerTests {
 
   // MARK: - Command Handling
 
+  @MainActor
   private func executeOnMainSafely(
     command: Command,
     alertDeadline: Date? = nil,
@@ -280,7 +282,7 @@ extension RunnerTests {
       let failureCountBefore = try runMainThreadWork(
         "recorded_failure_count",
         timeout: Self.mainThreadExecutionTimeout,
-        timeoutError: mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         self.currentXCTestFailureCount()
       }
@@ -297,7 +299,7 @@ extension RunnerTests {
       let recordedFailureResponse = try runMainThreadWork(
         "recorded_failure_count",
         timeout: Self.mainThreadExecutionTimeout,
-        timeoutError: mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         self.didRecordXCTestFailure(since: failureCountBefore)
           ? self.xctestRecordedFailureResponse(command: command, response: response)
@@ -307,7 +309,7 @@ extension RunnerTests {
         try runMainThreadWork(
           "target_invalidation",
           timeout: Self.mainThreadExecutionTimeout,
-          timeoutError: mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           self.invalidateCachedTarget(reason: "xctest_recorded_failure")
         }
@@ -322,7 +324,7 @@ extension RunnerTests {
         try runMainThreadWork(
           "target_invalidation",
           timeout: Self.mainThreadExecutionTimeout,
-          timeoutError: mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           self.invalidateCachedTarget(reason: "response_unavailable")
           self.sleepFor(self.retryCooldown)
@@ -333,6 +335,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   private func executeOnMain(
     command: Command,
     alertDeadline: Date?,
@@ -438,7 +441,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "terminate requires appBundleId"))
       }
       XCUIApplication(bundleIdentifier: bundleId).terminate()
-      if currentBundleId == bundleId {
+      if mainOwned.bundleId == bundleId {
         invalidateCachedTarget(reason: "target_terminated")
       }
       return Response(ok: true, data: DataPayload(message: "app terminated"))
@@ -455,6 +458,7 @@ extension RunnerTests {
   /// The target this command runs against, decided by its `launchPolicy` (#2890). Exhaustive over the
   /// policy so a new case is a compile error here rather than a fall-through that quietly launches or
   /// quietly refuses.
+  @MainActor
   func prepareActiveCommandContext(
     command: Command,
     routeToSpringboard: Bool = false
@@ -494,6 +498,7 @@ extension RunnerTests {
   /// place, and otherwise the requested session app is resolved and activated. What happens to a
   /// stopped app is the caller's `launchPolicy`; the `.existingApp` refusal belongs to
   /// `notRunningRefusal` because it is only meaningful once nothing is presented (#2890).
+  @MainActor
   private func prepareActivatedTarget(command: Command) -> ActiveCommandPreparation {
     if let presented = presentedSystemSurfaceHost() {
       // Serve and drive the presented surface IN PLACE: never activate it (that cancels what it
@@ -514,7 +519,7 @@ extension RunnerTests {
       return .response(notRunning)
     }
     if let bundleId = requestedBundleId {
-      if currentBundleId != bundleId || currentApp == nil {
+      if mainOwned.bundleId != bundleId || mainOwned.app == nil {
         _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
       } else {
         refreshCachedTargetIfProcessChanged(bundleId: bundleId)
@@ -525,7 +530,7 @@ extension RunnerTests {
     }
 
     // Read back after the bundle resolution above, which is what may have just bound a target.
-    var activeApp = currentApp ?? app
+    var activeApp = mainOwned.app ?? app
     if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
       activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
     } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
@@ -616,6 +621,7 @@ extension RunnerTests {
   /// The one activation bypass that depends on the request rather than on the command: a tap that
   /// needs nothing the preflight would bring forward. Commands whose own classification answers
   /// without the session app's foreground state are handled by their `launchPolicy` (#2890).
+  @MainActor
   func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
     // Coordinate-only synthesized taps can run after an AX-fatal foreground screen because they do not
@@ -664,25 +670,27 @@ extension RunnerTests {
       && command.y != nil
   }
 
+  @MainActor
   private func hasCachedTargetForActivationSkip(command: Command) -> Bool {
-    guard let currentApp, currentApp.state == .runningForeground else { return false }
+    guard let boundApp = mainOwned.app, boundApp.state == .runningForeground else { return false }
     guard let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
       !bundleId.isEmpty
     else {
       return true
     }
-    return currentBundleId == bundleId
+    return mainOwned.bundleId == bundleId
   }
 
+  @MainActor
   func resolveAppWithoutActivation(command: Command) -> XCUIApplication {
     guard let bundleId = command.appBundleId?
       .trimmingCharacters(in: .whitespacesAndNewlines),
       !bundleId.isEmpty
     else {
-      return currentApp ?? app
+      return mainOwned.app ?? app
     }
-    if currentBundleId == bundleId, let currentApp {
-      return currentApp
+    if mainOwned.bundleId == bundleId, let boundApp = mainOwned.app {
+      return boundApp
     }
     return XCUIApplication(bundleIdentifier: bundleId)
   }

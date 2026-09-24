@@ -2,6 +2,7 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  @MainActor
   func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
@@ -147,7 +148,7 @@ extension RunnerTests {
       }
       if let x = command.x, let y = command.y {
         let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
-          bundleId: currentBundleId
+          bundleId: mainOwned.bundleId
         )
         let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
           xCTestChannelPenalized: xCTestChannelPenalized
@@ -160,7 +161,7 @@ extension RunnerTests {
           textInput = nil
           NSLog(
             "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
-            currentBundleId ?? ""
+            mainOwned.bundleId ?? ""
           )
         }
         var fallback: GestureFallback?

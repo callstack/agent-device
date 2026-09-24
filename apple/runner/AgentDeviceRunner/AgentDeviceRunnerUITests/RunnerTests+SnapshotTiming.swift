@@ -24,11 +24,11 @@ enum SnapshotCapturePhase: Equatable {
 }
 
 struct SnapshotPhaseTimer {
-  private let now: () -> Date
+  private let now: @Sendable () -> Date
   private var acquisitionSeconds: TimeInterval = 0
   private var presentationSeconds: TimeInterval = 0
 
-  init(now: @escaping () -> Date = { Date() }) {
+  init(now: @escaping @Sendable () -> Date = { Date() }) {
     self.now = now
   }
 

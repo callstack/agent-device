@@ -15,7 +15,7 @@ extension RunnerTests {
         box.observedMainThread = try self.runMainThreadWork(
           "command_execution",
           timeout: 1,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           Thread.isMainThread
         }
@@ -47,7 +47,7 @@ extension RunnerTests {
         _ = try self.runMainThreadWork(
           "command_execution",
           timeout: 0,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           _ = releaseWork.wait(timeout: .now() + 2)
           return true
@@ -128,7 +128,7 @@ extension RunnerTests {
       _ = try? self.runMainThreadWork(
         "command_execution",
         timeout: 5,
-        timeoutError: self.mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         commandEntered.signal()
         _ = releaseCommand.wait(timeout: .now() + 3)
@@ -141,7 +141,7 @@ extension RunnerTests {
         outcome.whileInFlight = try self.runMainThreadWorkIfIdle(
           "recording_frame",
           timeout: 5,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) { () -> Bool in
           outcome.ranWhileInFlight = true
           return true
@@ -163,7 +163,7 @@ extension RunnerTests {
         outcome.whenIdle = try self.runMainThreadWorkIfIdle(
           "recording_frame",
           timeout: 5,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           Thread.isMainThread
         }
@@ -200,7 +200,7 @@ extension RunnerTests {
       _ = try? self.runMainThreadWork(
         "command_execution",
         timeout: 0,
-        timeoutError: self.mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         _ = releaseWork.wait(timeout: .now() + 3)
       }
@@ -212,7 +212,7 @@ extension RunnerTests {
         outcome.whileAbandoned = try self.runMainThreadWorkIfIdle(
           "recording_frame",
           timeout: 5,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) { () -> Bool in
           outcome.ranWhileAbandoned = true
           return true
@@ -230,7 +230,7 @@ extension RunnerTests {
         outcome.afterDrain = try self.runMainThreadWorkIfIdle(
           "recording_frame",
           timeout: 5,
-          timeoutError: self.mainThreadExecutionTimeoutError
+          timeoutError: Self.mainThreadExecutionTimeoutError
         ) {
           Thread.isMainThread
         }
@@ -276,7 +276,7 @@ extension RunnerTests {
         outcome.value = try self.runMainThreadWork(
           "command_execution",
           timeout: 0,
-          timeoutError: self.mainThreadExecutionTimeoutError,
+          timeoutError: Self.mainThreadExecutionTimeoutError,
           onAbandoned: { outcome.onAbandonedCalls += 1 }
         ) {
           _ = releaseWork.wait(timeout: .now() + 2)

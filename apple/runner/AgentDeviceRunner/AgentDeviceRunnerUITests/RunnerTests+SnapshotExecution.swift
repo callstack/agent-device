@@ -12,7 +12,7 @@ extension RunnerTests {
     let preparation: SnapshotCommandPreparation = try runMainThreadWork(
       "command_preparation",
       timeout: Self.mainThreadExecutionTimeout,
-      timeoutError: mainThreadExecutionTimeoutError
+      timeoutError: Self.mainThreadExecutionTimeoutError
     ) { () -> SnapshotCommandPreparation in
       switch try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false) {
       case .response(let response):
@@ -36,6 +36,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   private func prepareActiveCommandContextSafely(
     command: Command,
     routeToSpringboard: Bool
@@ -125,9 +126,9 @@ extension RunnerTests {
       try runMainThreadWork(
         "post_snapshot_delay_mark",
         timeout: 1,
-        timeoutError: mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
-        self.needsPostSnapshotInteractionDelay = true
+        self.mainOwned.needsPostSnapshotInteractionDelay = true
       }
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))

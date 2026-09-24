@@ -27,11 +27,12 @@ extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
 #if os(iOS)
+  @MainActor
   func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
     let restoreSynthesizedTap = try forceSynthesizedTapFailure()
     app.launch()
-    currentApp = app
-    runnerAccessibilityHealth = .healthy
+    mainOwned.app = app
+    mainOwned.accessibilityHealth = .healthy
     defer {
       restoreSynthesizedTap()
       invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -64,6 +65,7 @@ extension RunnerTests {
   // is where both are observable. If either regressed, readiness would silently stop taking the
   // fallback and spend the full readinessTimeout on every hardware-keyboard field, which no other
   // assertion would notice.
+  @MainActor
   func testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()

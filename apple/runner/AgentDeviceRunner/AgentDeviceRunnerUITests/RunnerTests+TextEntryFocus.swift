@@ -6,6 +6,7 @@ import XCTest
 // is RunnerTests+TextEntryReadiness.swift's question, and this file asks it rather than answering
 // it.
 extension RunnerTests {
+  @MainActor
   func rememberTextEntryTap(_ element: XCUIElement?) {
     guard let element, isTextEntryElement(element) else {
       clearRememberedTextEntryTap()
@@ -13,8 +14,8 @@ extension RunnerTests {
     }
     textEntryTapWitness = TextEntryTapWitness(
       element: element,
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier
+      bundleId: mainOwned.bundleId,
+      processIdentifier: mainOwned.processIdentifier
     )
   }
 
@@ -22,6 +23,7 @@ extension RunnerTests {
     textEntryTapWitness = nil
   }
 
+  @MainActor
   private func rememberedTextEntryTarget() -> TextEntryTarget? {
     guard let witness = textEntryTapWitness else {
       return nil
@@ -30,8 +32,8 @@ extension RunnerTests {
     // the element so a failed or interrupted type cannot reuse stale focus evidence.
     clearRememberedTextEntryTap()
     guard witness.matches(
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier
+      bundleId: mainOwned.bundleId,
+      processIdentifier: mainOwned.processIdentifier
     ) else {
       return nil
     }
@@ -80,6 +82,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)

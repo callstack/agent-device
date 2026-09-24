@@ -76,7 +76,7 @@ enum CommandLaunchPolicy: Equatable {
 /// rather than re-derive them from the same names.
 ///
 /// The classification is load-bearing for ADR-0002 session invalidation: `retryOnSessionLoss` gates
-/// the retry that nulls currentApp/currentBundleId, and `launchPolicy` — never the retry fact —
+/// the retry that clears the cached target, and `launchPolicy` — never the retry fact —
 /// decides whether a stopped app is brought up.
 struct CommandTraits {
   /// Whether the command needs the foreground-guard + stabilization preflight before running.

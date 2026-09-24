@@ -2,14 +2,15 @@ import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
+  @MainActor
   func testAlertDispatchResolvesItsOwnModalWithoutCoordinateTapRoutingProbe() throws {
     final class ResultBox {
       var routingProbeCount = 0
       var resolutionCount = 0
     }
     let box = ResultBox()
-    currentApp = springboard
-    currentBundleId = Self.springboardBundleId
+    mainOwned.app = springboard
+    mainOwned.bundleId = Self.springboardBundleId
     systemModalProbeOverrideForTesting = { _ in
       box.routingProbeCount += 1
       return nil
@@ -21,8 +22,8 @@ extension RunnerTests {
     defer {
       systemModalProbeOverrideForTesting = nil
       alertResolutionOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
     }
     let command = try runnerCommandFixture(
       #"{"command":"alert","commandId":"alert-routing-once","appBundleId":"com.apple.springboard","action":"get","timeoutMs":1000}"#
@@ -33,6 +34,7 @@ extension RunnerTests {
     XCTAssertEqual(box.routingProbeCount, 0)
   }
 
+  @MainActor
   func testAlertResolutionCannotBypassRequestedDeadline() throws {
     final class ResultBox {
       var observedDeadline: Date?
@@ -43,8 +45,8 @@ extension RunnerTests {
     let command = try runnerCommandFixture(
       #"{"command":"alert","commandId":"alert-deadline","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
     )
-    currentApp = springboard
-    currentBundleId = Self.springboardBundleId
+    mainOwned.app = springboard
+    mainOwned.bundleId = Self.springboardBundleId
     alertResolutionOverrideForTesting = { deadline in
       box.observedDeadline = deadline
       _ = releaseResolution.wait(timeout: .now() + 1)
@@ -54,8 +56,8 @@ extension RunnerTests {
     defer {
       releaseResolution.signal()
       alertResolutionOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
     }
 
     let commandStartedAt = Date()

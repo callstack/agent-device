@@ -23,6 +23,7 @@ private final class RunnerSynthesizedSwipeFailureStub: NSObject {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
 #if os(iOS)
+  @MainActor
   func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
     let selector = NSSelectorFromString(
       "synthesizeSwipeWithApplication:resolvedWindow:x:y:x2:y2:durationMs:"
@@ -40,7 +41,7 @@ extension RunnerTests {
       method_getImplementation(failureStubMethod)
     )
     app.launch()
-    runnerAccessibilityHealth = .healthy
+    mainOwned.accessibilityHealth = .healthy
     defer {
       method_setImplementation(synthesizedSwipeMethod, originalImplementation)
       invalidateCachedTarget(reason: "unit_test_cleanup")

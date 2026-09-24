@@ -2,11 +2,10 @@ import XCTest
 
 // MARK: - Snapshot capture target (#2781)
 //
-// Target identity (`currentApp`, `currentBundleId`, `currentAppProcessIdentifier`) and
-// `runnerAccessibilityHealth` are owned by main-thread lifecycle code. A capture plan runs on the
-// command queue, so it reads the identity from a `SnapshotCaptureTarget` taken on main while the
-// command is prepared, and writes health or invalidates the target only through
-// `applyMainOwnedSnapshotState`.
+// Target identity and accessibility health live in `RunnerMainOwnedState`, owned by main-thread
+// lifecycle code. A capture plan runs on the command queue, so it reads the identity from a
+// `SnapshotCaptureTarget` taken on main while the command is prepared, and writes health or
+// invalidates the target only through `applyMainOwnedSnapshotState`.
 
 /// The target one capture plan reads, taken once on the main thread.
 struct SnapshotCaptureTarget {
@@ -24,14 +23,14 @@ enum SnapshotCommandPreparation {
 /// The target a bounded XCTest probe arms its abandonment penalty with.
 ///
 /// The hook that arms the penalty fires on the command queue the moment the probe's slice is spent,
-/// while the probe's own work block may still be running on main. `currentBundleId` belongs to main,
-/// so it is never read across that boundary: a caller that already took the identity on main hands it
-/// over, and a caller that is on the command queue lets the probe's main-side block capture the
-/// identity main holds once the work actually starts (#2781).
+/// while the probe's own work block may still be running on main. `mainOwned.bundleId` belongs to
+/// main, so it is never read across that boundary: a caller that already took the identity on main
+/// hands it over, and a caller that is on the command queue lets the probe's main-side block capture
+/// the identity main holds once the work actually starts (#2781).
 enum SnapshotProbePenaltyTarget: Equatable {
   /// Identity a capture took on main when it prepared its target.
   case prepared(bundleId: String?)
-  /// Read `currentBundleId` inside the probe's main-side block.
+  /// Read `mainOwned.bundleId` inside the probe's main-side block.
   case mainOwnedTarget
 }
 
@@ -66,33 +65,36 @@ final class SnapshotProbePenaltyIdentity {
 }
 
 extension RunnerTests {
-  /// Main thread only: reads the lifecycle-owned target identity.
+  /// Reads the lifecycle-owned target identity.
+  @MainActor
   func takeSnapshotCaptureTarget(app: XCUIApplication) -> SnapshotCaptureTarget {
     SnapshotCaptureTarget(
       app: app,
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier
+      bundleId: mainOwned.bundleId,
+      processIdentifier: mainOwned.processIdentifier
     )
   }
 
   /// Runs `write` against main-owned runner state for a capture that may be on the command queue.
   /// Abandoned work ahead of the hop cannot be cancelled, so behind it the write queues without
   /// waiting: the capture answers now and the next command still observes the write.
-  func applyMainOwnedSnapshotState(_ operation: String, _ write: @escaping () -> Void) {
+  func applyMainOwnedSnapshotState(_ operation: String, _ write: @escaping @MainActor () -> Void) {
     if Thread.isMainThread {
-      write()
+      MainActor.assumeIsolated(write)
       return
     }
     guard !hasAbandonedMainThreadWork() else {
       NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_STATE_DEFERRED_XCTEST_OCCUPIED operation=%@", operation)
-      DispatchQueue.main.async(execute: write)
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated(write)
+      }
       return
     }
     do {
       try runMainThreadWork(
         operation,
         timeout: 1,
-        timeoutError: mainThreadExecutionTimeoutError,
+        timeoutError: Self.mainThreadExecutionTimeoutError,
         write
       )
     } catch {

@@ -180,6 +180,7 @@ extension RunnerTests {
 
   // MARK: - Target Activation
 
+  @MainActor
   func ensureRunnerHostAppActive(reason: String) {
     NSLog(
       "AGENT_DEVICE_RUNNER_HOST_ACTIVATE state=%d reason=%@",
@@ -191,9 +192,9 @@ extension RunnerTests {
     } else if app.state != .runningForeground {
       app.activate()
     }
-    currentApp = app
-    currentBundleId = nil
-    currentAppProcessIdentifier = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
+    mainOwned.processIdentifier = nil
     resetTargetBoundState()
   }
 
@@ -207,16 +208,18 @@ extension RunnerTests {
     lastLoggedGesturePolicyLines.removeAll()
   }
 
+  @MainActor
   func invalidateCachedTarget(reason: String) {
-    if currentApp != nil || currentBundleId != nil {
+    if mainOwned.app != nil || mainOwned.bundleId != nil {
       NSLog("AGENT_DEVICE_RUNNER_TARGET_CACHE_INVALIDATE reason=%@", reason)
     }
-    currentApp = nil
-    currentBundleId = nil
-    currentAppProcessIdentifier = nil
+    mainOwned.app = nil
+    mainOwned.bundleId = nil
+    mainOwned.processIdentifier = nil
     resetTargetBoundState()
   }
 
+  @MainActor
   func resetTargetAfterExternalRelaunch() -> Response {
     invalidateCachedTarget(reason: "external_app_relaunch")
     // The app process is replaced, but the retained runner survives. Clear
@@ -228,22 +231,23 @@ extension RunnerTests {
     return Response(ok: true, data: DataPayload(message: "target reset"))
   }
 
+  @MainActor
   func refreshCachedTargetIfProcessChanged(bundleId: String) {
-    guard currentBundleId == bundleId, currentApp != nil else { return }
+    guard mainOwned.bundleId == bundleId, mainOwned.app != nil else { return }
     let candidate = XCUIApplication(bundleIdentifier: bundleId)
     let observedProcessIdentifier = Self.processIdentifier(of: candidate)
     guard Self.shouldRefreshCachedTarget(
-      cachedProcessIdentifier: currentAppProcessIdentifier,
+      cachedProcessIdentifier: mainOwned.processIdentifier,
       observedProcessIdentifier: observedProcessIdentifier
     ) else { return }
     NSLog(
       "AGENT_DEVICE_RUNNER_TARGET_CACHE_REFRESH bundle=%@ previousPid=%d currentPid=%d",
       bundleId,
-      currentAppProcessIdentifier ?? 0,
+      mainOwned.processIdentifier ?? 0,
       observedProcessIdentifier ?? 0
     )
-    currentApp = candidate
-    currentAppProcessIdentifier = observedProcessIdentifier
+    mainOwned.app = candidate
+    mainOwned.processIdentifier = observedProcessIdentifier
     resetTargetBoundState()
     clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
     clearPrivateAXAcceptedDepth(reason: "target_process_changed")
@@ -280,11 +284,12 @@ extension RunnerTests {
     return false
   }
 
+  @MainActor
   func canUseFastForegroundAppGuard(
     activeApp: XCUIApplication,
     requestedBundleId: String?
   ) -> Bool {
-    guard let requestedBundleId, currentBundleId == requestedBundleId, currentApp != nil else {
+    guard let requestedBundleId, mainOwned.bundleId == requestedBundleId, mainOwned.app != nil else {
       return false
     }
     guard activeApp.state == .runningForeground else { return false }
@@ -292,6 +297,7 @@ extension RunnerTests {
     return true
   }
 
+  @MainActor
   func writeFastAppGuardMarker(bundleId: String, state: XCUIApplication.State) {
     // The command is on the adjacent COMMAND_ACCEPTED line; repeating it here would make a deduped
     // marker read as if only that command ever passed the guard.
@@ -342,6 +348,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   func activateTarget(bundleId: String, reason: String) -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: bundleId)
     let initialState = target.state
@@ -375,9 +382,9 @@ extension RunnerTests {
         otherActiveApplicationPid.map(String.init) ?? "-"
       )
     }
-    currentApp = target
-    currentBundleId = bundleId
-    currentAppProcessIdentifier = Self.processIdentifier(of: target)
+    mainOwned.app = target
+    mainOwned.bundleId = bundleId
+    mainOwned.processIdentifier = Self.processIdentifier(of: target)
     resetTargetBoundState()
     beginFirstInteractionStabilization()
     return target
@@ -388,6 +395,7 @@ extension RunnerTests {
   /// interaction themselves first (a scroll needs no extra wait, a text field is located, an alert
   /// button is read as hittable), which is what the dropped pre-event wait replaces rather than a
   /// check the runner skips (#2546).
+  @MainActor
   func withBoundedInteractionIdleTimeoutIfSupported(
     _ target: XCUIApplication,
     waits: RunnerInteractionIdleWaits,
@@ -410,6 +418,7 @@ extension RunnerTests {
   }
 
   // Some apps never report post-gesture quiescence, even after XCTest has synthesized the event.
+  @MainActor
   private func performWithQuiescenceSkippedIfSupported(
     _ target: XCUIApplication,
     waits: RunnerInteractionIdleWaits,
@@ -441,7 +450,7 @@ extension RunnerTests {
       options = skipPreEventQuiescence
     }
     withoutActuallyEscaping(operation) { escapableOperation in
-      let block: @convention(block) () -> Void = escapableOperation
+      let block: @MainActor @convention(block) () -> Void = { escapableOperation() }
       performWithOptions(
         target,
         selector,
@@ -466,10 +475,11 @@ extension RunnerTests {
 
   // MARK: - Interaction Stabilization
 
+  @MainActor
   func applyInteractionStabilizationIfNeeded() {
-    if needsPostSnapshotInteractionDelay {
+    if mainOwned.needsPostSnapshotInteractionDelay {
       sleepFor(postSnapshotInteractionDelay)
-      needsPostSnapshotInteractionDelay = false
+      mainOwned.needsPostSnapshotInteractionDelay = false
     }
     if let readyUptime = firstInteractionReadyUptime {
       sleepFor(readyUptime - ProcessInfo.processInfo.systemUptime)

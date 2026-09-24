@@ -3,16 +3,17 @@ import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  @MainActor
   func testSnapshotCaptureTargetKeepsPreparedIdentityAndLeavesWarmupExemptionPending() {
-    currentApp = app
-    currentBundleId = "com.example.prepared"
-    currentAppProcessIdentifier = 42
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.prepared"
+    mainOwned.processIdentifier = 42
     snapshotXCTestPenaltyWarmupExemption.isPending = true
     defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
 
     let target = takeSnapshotCaptureTarget(app: app)
-    currentBundleId = "com.example.replaced"
-    currentAppProcessIdentifier = 43
+    mainOwned.bundleId = "com.example.replaced"
+    mainOwned.processIdentifier = 43
 
     XCTAssertTrue(target.app === app)
     XCTAssertEqual(target.bundleId, "com.example.prepared")
@@ -24,15 +25,16 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  @MainActor
   func testBlockingModalSnapshotLeavesWarmupExemptionForTheFirstCapturePlan() throws {
-    currentApp = app
-    currentBundleId = "com.example.fresh-process"
-    currentAppProcessIdentifier = 42
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.fresh-process"
+    mainOwned.processIdentifier = 42
     snapshotXCTestPenaltyWarmupExemption.isPending = true
     systemModalProbeOverrideForTesting = { _ in DataPayload(message: "blocking system modal") }
     defer {
       systemModalProbeOverrideForTesting = nil
-      runnerAccessibilityHealth = .unknown
+      mainOwned.accessibilityHealth = .unknown
       invalidateCachedTarget(reason: "unit_test_cleanup")
     }
     let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)

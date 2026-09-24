@@ -119,6 +119,7 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  @MainActor
   func testResettingTargetBoundStateForgetsTheLastWrittenMarkers() {
     defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
     lastLoggedFastAppGuardLine = "AGENT_DEVICE_RUNNER_FAST_APP_GUARD bundle=app state=4"
@@ -128,6 +129,7 @@ extension RunnerTests {
     XCTAssertTrue(lastLoggedGesturePolicyLines.isEmpty, "a rebind must state the policy once more")
   }
 
+  @MainActor
   func testFastAppGuardMarkerWritesOnceUntilTheFactChanges() {
     var written: [String] = []
     runnerMarkerWriter = { written.append($0) }
@@ -152,6 +154,7 @@ extension RunnerTests {
   /// Installed on every Simulator runtime and cheap to leave terminated.
   private static let notRunningTargetBundleId = "com.apple.Preferences"
 
+  @MainActor
   private func executeOnTerminatedTarget(_ json: String) throws -> (Response, XCUIApplication) {
     let target = XCUIApplication(bundleIdentifier: Self.notRunningTargetBundleId)
     target.terminate()
@@ -163,6 +166,7 @@ extension RunnerTests {
   /// Covers a user-level read, a mutation's leading read (a gesture's `gestureViewport`), and the read
   /// that resolves a selector tap (`querySelector`, whose refusal the retry fact alone used to decide,
   /// #2890).
+  @MainActor
   func testReadRefusesToLaunchANotRunningSessionApp() throws {
     let bundleId = Self.notRunningTargetBundleId
     for request in [
@@ -177,6 +181,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func testNonReadCommandStillLaunchesANotRunningSessionApp() throws {
     let (response, target) = try executeOnTerminatedTarget(
       #"{"command":"activate","commandId":"repair","appBundleId":"\#(Self.notRunningTargetBundleId)"}"#

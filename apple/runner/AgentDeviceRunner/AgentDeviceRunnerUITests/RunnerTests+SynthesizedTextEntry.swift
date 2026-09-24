@@ -147,6 +147,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func runSynthesizedReplacementRoute(
     _ request: SynthesizedReplacementRequest
   ) -> SynthesizedReplacementRouteOutcome {

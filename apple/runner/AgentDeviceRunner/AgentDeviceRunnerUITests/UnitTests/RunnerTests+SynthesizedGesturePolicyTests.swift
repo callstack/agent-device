@@ -2,6 +2,7 @@ import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
+  @MainActor
   func testSynthesizedGesturePolicyMarkerWritesOncePerKindUntilTheDecisionChanges() {
     var written: [String] = []
     runnerMarkerWriter = { written.append($0) }

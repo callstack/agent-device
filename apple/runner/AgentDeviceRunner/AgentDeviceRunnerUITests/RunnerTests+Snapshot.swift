@@ -175,6 +175,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func recursiveTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
     hint: CaptureHint
@@ -327,7 +328,7 @@ extension RunnerTests {
   private func boundedBlockingSystemAlertSnapshotBody(
     deadline: Date,
     penaltyTarget: SnapshotProbePenaltyTarget,
-    probe: @escaping (Date) -> DataPayload?
+    probe: @escaping @MainActor (Date) -> DataPayload?
   ) -> DataPayload? {
     #if os(macOS)
       return nil
@@ -361,7 +362,7 @@ extension RunnerTests {
           )
         }
       ) {
-        penaltyIdentity.captureFromMain(bundleId: self.currentBundleId)
+        penaltyIdentity.captureFromMain(bundleId: self.mainOwned.bundleId)
         return probe(probeDeadline)
       }
     } catch {
@@ -437,6 +438,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func querySweepSnapshotAcquisition(
     app: XCUIApplication,
     hint: CaptureHint,
@@ -527,7 +529,7 @@ extension RunnerTests {
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_AX_UNAVAILABLE=%@", failure.message)
     applyMainOwnedSnapshotState("ax_unavailable_invalidation") {
-      self.runnerAccessibilityHealth = .unavailable
+      self.mainOwned.accessibilityHealth = .unavailable
       self.invalidateCachedTarget(reason: Self.axSnapshotUnavailableReason)
     }
     // This is a planned terminal result, so it carries the structured verdict like every other

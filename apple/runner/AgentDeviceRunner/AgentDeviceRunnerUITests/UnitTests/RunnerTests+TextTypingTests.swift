@@ -4,6 +4,7 @@ import XCTest
 // `textEntryMode: "append"`, and the bare submit key with no mode.
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  @MainActor
   func testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText() throws {
     let command = try runnerCommandFixture(
       #"{"command":"type","commandId":"type-without-focus","text":"hello","textEntryMode":"append"}"#
@@ -22,6 +23,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden() throws {
     // The fixture uses a real text responder with an empty input view to model hardware-keyboard input.
     let textField = try launchHardwareKeyboardFixture()
@@ -74,6 +76,7 @@ extension RunnerTests {
     XCTAssertEqual(textField.value as? String, "hardware-keyboard-again")
   }
 
+  @MainActor
   func testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap() throws {
     _ = try launchHardwareKeyboardFixture()
     try tapHardwareKeyboardInput(commandId: "tap-hardware-keyboard-submit")
@@ -93,6 +96,7 @@ extension RunnerTests {
     XCTAssertNil(textEntryTapWitness, "the submit must consume the tap witness it was addressed by")
   }
 
+  @MainActor
   func testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable() throws {
     let textField = try launchHardwareKeyboardFixture()
     try skipUnlessSoftwareKeyboardIsHidden()
@@ -116,6 +120,7 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
   }
 
+  @MainActor
   func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -154,6 +159,7 @@ extension RunnerTests {
   // pieces inside the budget and pace all these characters. The target carries no element by
   // construction, so nothing on that route can read the value back: the command reports it
   // unverified and this test reads the field itself to show every character arrived.
+  @MainActor
   func testOverBudgetTypeWithoutResolvableElementTypesApplicationWide() throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -235,6 +241,7 @@ extension RunnerTests {
     return textField
   }
 
+  @MainActor
   private func tapHardwareKeyboardInput(commandId: String) throws {
     let tapCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"\#(commandId)","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#

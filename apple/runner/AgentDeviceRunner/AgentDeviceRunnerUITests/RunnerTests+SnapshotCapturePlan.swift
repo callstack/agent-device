@@ -694,7 +694,7 @@ extension RunnerTests {
   ) -> DataPayload {
     let health: RunnerAccessibilityHealth = reason?.code == "ax-rejected" ? .unavailable : .healthy
     applyMainOwnedSnapshotState("accessibility_health") {
-      self.runnerAccessibilityHealth = health
+      self.mainOwned.accessibilityHealth = health
     }
     let payload = capture.payload
     let quality = SnapshotQuality(

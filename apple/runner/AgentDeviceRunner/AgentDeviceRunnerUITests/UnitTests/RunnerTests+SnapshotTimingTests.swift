@@ -106,14 +106,17 @@ extension RunnerTests {
   }
 
   func testSnapshotPhaseTimerReportsAcquisitionAndPresentationSeparately() {
-    var now = Date(timeIntervalSinceReferenceDate: 100)
-    var timer = SnapshotPhaseTimer(now: { now })
+    final class Clock {
+      var now = Date(timeIntervalSinceReferenceDate: 100)
+    }
+    let clock = Clock()
+    var timer = SnapshotPhaseTimer(now: { clock.now })
 
     _ = timer.measure(.acquisition) {
-      now = now.addingTimeInterval(2)
+      clock.now = clock.now.addingTimeInterval(2)
     }
     _ = timer.measure(.presentation) {
-      now = now.addingTimeInterval(5)
+      clock.now = clock.now.addingTimeInterval(5)
     }
 
     XCTAssertEqual(timer.timing.acquisitionMs, 2_000, accuracy: 0.001)

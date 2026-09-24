@@ -66,11 +66,12 @@ extension RunnerTests {
   // `os(iOS)` regions in this file are pure runner decisions and also run on the macOS host
   // lane (ci.yml) — see the classification convention in RunnerTests.swift.
 #if os(iOS)
+  @MainActor
   func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
     app.launch()
-    currentApp = app
-    currentBundleId = "com.example.stale-target"
-    currentAppProcessIdentifier = 42
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.stale-target"
+    mainOwned.processIdentifier = 42
     snapshotXCTestPenaltyWarmupExemption.isPending = true
     defer {
       invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -82,9 +83,9 @@ extension RunnerTests {
 
     _ = prepareActiveCommandContext(command: command)
 
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
-    XCTAssertNil(currentAppProcessIdentifier)
+    XCTAssertNil(mainOwned.app)
+    XCTAssertNil(mainOwned.bundleId)
+    XCTAssertNil(mainOwned.processIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
   }
 
@@ -92,6 +93,7 @@ extension RunnerTests {
   /// stands, leaves a stopped app stopped, and binds nothing, so the next read of that app is refused
   /// instead of answered by a bare launch (#2890). This is where the table's launch policy is proved
   /// on the platform that serves surfaces in place.
+  @MainActor
   func testPresentedSurfaceCommandLeavesAStoppedAppStoppedAndUnbound() throws {
     let unstarted = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
     defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
@@ -101,8 +103,8 @@ extension RunnerTests {
     ] {
       unstarted.terminate()
       pendingTargetActivation = nil
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
       let command = try runnerCommandFixture(request)
 
       guard case .context(let prepared) = prepareActiveCommandContext(command: command) else {
@@ -128,7 +130,7 @@ extension RunnerTests {
         "\(request) may not foreground the app it was told to leave alone"
       )
       XCTAssertNil(pendingTargetActivation, "\(request) may not record an activation fact")
-      XCTAssertNil(currentBundleId, "\(request) may not bind a target it never brought forward")
+      XCTAssertNil(mainOwned.bundleId, "\(request) may not bind a target it never brought forward")
     }
 
     let read = try runnerCommandFixture(
@@ -141,13 +143,14 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {
     app.launch()
-    currentApp = app
-    currentBundleId = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
     defer {
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
       app.terminate()
     }
     let tap = try runnerCommandFixture(
@@ -157,20 +160,21 @@ extension RunnerTests {
     XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
   }
 
+  @MainActor
   func testSkipAppActivationPreflightRejectsMissingChangedAndBackgroundTargets() throws {
     let coordinateTap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
     )
-    currentApp = nil
-    currentBundleId = nil
+    mainOwned.app = nil
+    mainOwned.bundleId = nil
     XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
 
     app.launch()
-    currentApp = app
-    currentBundleId = "com.example.current"
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.current"
     defer {
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
       app.terminate()
     }
     let changedBundleTap = try runnerCommandFixture(
@@ -180,20 +184,21 @@ extension RunnerTests {
     XCTAssertFalse(shouldSkipAppActivationPreflight(changedBundleTap))
 
     app.terminate()
-    currentApp = app
-    currentBundleId = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
 
     XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
   }
 
+  @MainActor
   func testPrepareActiveCommandContextRoutesBlockingSystemModalToSpringboard() throws {
     blockingSystemModalPresenceOverrideForTesting = true
-    currentApp = nil
-    currentBundleId = nil
+    mainOwned.app = nil
+    mainOwned.bundleId = nil
     defer {
       blockingSystemModalPresenceOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
     }
     let tap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
@@ -213,11 +218,15 @@ extension RunnerTests {
 
   func testExecuteDispatchedReturnsBusyBeforeBlockingSystemModalProbeDrains() throws {
     app.launch()
-    currentApp = app
-    currentBundleId = nil
+    MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = nil
+    }
     defer {
-      currentApp = nil
-      currentBundleId = nil
+      MainActor.assumeIsolated {
+        mainOwned.app = nil
+        mainOwned.bundleId = nil
+      }
       systemModalProbeOverrideForTesting = nil
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
       app.terminate()
@@ -299,14 +308,18 @@ extension RunnerTests {
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     let pendingBundleId = "com.example.routing-pending-stale"
     let settledBundleId = "com.example.routing-pending-settled"
-    currentApp = app
-    currentBundleId = pendingBundleId
+    MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = pendingBundleId
+    }
     snapshotXCTestPenaltyWarmupExemption.isPending = false
     clearSnapshotXCTestChannelPenalty(reason: "test-setup")
     defer {
       systemModalProbeOverrideForTesting = nil
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      invalidateCachedTarget(reason: "unit_test_cleanup")
+      MainActor.assumeIsolated {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+      }
       app.terminate()
     }
 
@@ -315,7 +328,7 @@ extension RunnerTests {
     let mainRelease = DispatchSemaphore(value: 0)
     DispatchQueue.main.async {
       _ = mainRelease.wait(timeout: .now() + 0.5)
-      self.currentBundleId = settledBundleId
+      self.mainOwned.bundleId = settledBundleId
     }
 
     let probeStarted = expectation(description: "system-modal routing probe started")
@@ -363,13 +376,14 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
+  @MainActor
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
     app.launch()
-    currentApp = app
-    currentBundleId = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
     defer {
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
       app.terminate()
     }
     let selectorTap = try runnerCommandFixture(
@@ -396,9 +410,10 @@ extension RunnerTests {
   // `#if os(iOS) …guards… #else return false #endif`, so on macOS this asserts a compile-time
   // literal and no edit to the iOS body could make it red. Its five siblings above and below
   // are gated for the same reason.
+  @MainActor
   func testSkipAppActivationPreflightRequiresCachedForegroundTarget() throws {
-    currentApp = nil
-    currentBundleId = nil
+    mainOwned.app = nil
+    mainOwned.bundleId = nil
     let scroll = try runnerCommandFixture(
       #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
     )
@@ -406,13 +421,14 @@ extension RunnerTests {
     XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
   }
 
+  @MainActor
   func testSkipAppActivationPreflightKeepsDragScrollAndSequenceOnForegroundGuard() throws {
     app.launch()
-    currentApp = app
-    currentBundleId = nil
+    mainOwned.app = app
+    mainOwned.bundleId = nil
     defer {
-      currentApp = nil
-      currentBundleId = nil
+      mainOwned.app = nil
+      mainOwned.bundleId = nil
       app.terminate()
     }
     let drag = try runnerCommandFixture(

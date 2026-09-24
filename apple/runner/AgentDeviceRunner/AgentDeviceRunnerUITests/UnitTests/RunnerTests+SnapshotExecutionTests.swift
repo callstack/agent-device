@@ -7,7 +7,9 @@ extension RunnerTests {
     abandonedMainThreadWorkCount = 1
     defer {
       abandonedMainThreadWorkCount = 0
-      needsPostSnapshotInteractionDelay = false
+      MainActor.assumeIsolated {
+        mainOwned.needsPostSnapshotInteractionDelay = false
+      }
     }
 
     let finished = expectation(description: "off-main caller finished")
@@ -21,12 +23,20 @@ extension RunnerTests {
     let abandonedWorkCount = abandonedMainThreadWorkCount
     mainThreadWorkLock.unlock()
     XCTAssertEqual(abandonedWorkCount, 1, "the skipped mark must not add an abandoned unit")
-    XCTAssertFalse(needsPostSnapshotInteractionDelay)
+    MainActor.assumeIsolated {
+      XCTAssertFalse(mainOwned.needsPostSnapshotInteractionDelay)
+    }
   }
 
   func testSnapshotFailureInvalidationQueuesBehindAbandonedMainThreadWorkWithoutWaiting() {
-    currentBundleId = "com.example.stale-target"
-    defer { currentBundleId = nil }
+    MainActor.assumeIsolated {
+      mainOwned.bundleId = "com.example.stale-target"
+    }
+    defer {
+      MainActor.assumeIsolated {
+        mainOwned.bundleId = nil
+      }
+    }
 
     final class ResultBox {
       var elapsed: TimeInterval?
@@ -42,17 +52,17 @@ extension RunnerTests {
       _ = try? self.runMainThreadWork(
         "command_execution",
         timeout: 0,
-        timeoutError: self.mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         mainBlocked.signal()
         _ = releaseMain.wait(timeout: .now() + 5)
+        box.bundleStillCachedWhileBlocked = self.mainOwned.bundleId != nil
         return true
       }
       _ = mainBlocked.wait(timeout: .now() + 2)
       let startedAt = Date()
       self.invalidateCachedTargetAfterSnapshotFailure()
       box.elapsed = Date().timeIntervalSince(startedAt)
-      box.bundleStillCachedWhileBlocked = self.currentBundleId != nil
       self.mainThreadWorkLock.lock()
       box.abandonedWhileBlocked = self.abandonedMainThreadWorkCount
       self.mainThreadWorkLock.unlock()
@@ -62,7 +72,9 @@ extension RunnerTests {
 
     wait(for: [finished], timeout: 8)
     let drainDeadline = Date().addingTimeInterval(2)
-    while hasAbandonedMainThreadWork() || currentBundleId != nil, Date() < drainDeadline {
+    while hasAbandonedMainThreadWork() || MainActor.assumeIsolated({ mainOwned.bundleId }) != nil,
+      Date() < drainDeadline
+    {
       sleepFor(0.005)
     }
 
@@ -78,7 +90,9 @@ extension RunnerTests {
     )
     XCTAssertEqual(box.abandonedWhileBlocked, 1, "the deferred drop must not add an abandoned unit")
     XCTAssertFalse(hasAbandonedMainThreadWork())
-    XCTAssertNil(currentBundleId, "the drop must run once the main thread frees")
+    MainActor.assumeIsolated {
+      XCTAssertNil(mainOwned.bundleId, "the drop must run once the main thread frees")
+    }
   }
 }
 #endif

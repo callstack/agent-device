@@ -33,11 +33,7 @@ extension RunnerTests {
       let combined = buffer + data
       if let body = self.parseRequest(data: combined) {
         self.handleRequestBody(body) { [weak self] result in
-          self?.sendResponse(result.data, over: connection) { [weak self] in
-            if result.shouldFinish {
-              self?.finish()
-            }
-          }
+          self?.sendResponse(result, over: connection)
         }
       } else {
         self.receiveRequest(connection: connection, buffer: combined)
@@ -46,9 +42,20 @@ extension RunnerTests {
   }
 
   private func sendResponse(
+    _ result: (data: Data, shouldFinish: Bool),
+    over connection: NWConnection
+  ) {
+    sendResponse(result.data, over: connection) {
+      if result.shouldFinish {
+        self.finish()
+      }
+    }
+  }
+
+  private func sendResponse(
     _ response: Data,
     over connection: NWConnection,
-    afterSend: @escaping () -> Void = {}
+    afterSend: @escaping @Sendable () -> Void = {}
   ) {
     connection.send(content: response, isComplete: true, completion: .contentProcessed { error in
       if let error {
@@ -89,7 +96,7 @@ extension RunnerTests {
 
   private func handleRequestBody(
     _ body: Data,
-    completion: @escaping ((data: Data, shouldFinish: Bool)) -> Void
+    completion: @escaping @Sendable ((data: Data, shouldFinish: Bool)) -> Void
   ) {
     guard String(data: body, encoding: .utf8) != nil else {
       completion((
@@ -187,7 +194,7 @@ extension RunnerTests {
   /// queue.
   func enqueueAccepted(
     command: Command,
-    completion: @escaping (Result<Response, Error>) -> Void
+    completion: @escaping @Sendable (Result<Response, Error>) -> Void
   ) {
     commandJournal.accept(command: command)
     commandExecutionQueue.async {
@@ -202,7 +209,7 @@ extension RunnerTests {
   /// false so the caller enqueues the (single) execution.
   func attachToInFlightCommandIfNeeded(
     command: Command,
-    completion: @escaping ((data: Data, shouldFinish: Bool)) -> Void
+    completion: @escaping @Sendable ((data: Data, shouldFinish: Bool)) -> Void
   ) -> Bool {
     guard let commandId = command.commandId?.trimmedNonEmpty else { return false }
     inFlightCommandLock.lock()
@@ -226,7 +233,7 @@ extension RunnerTests {
     result: (data: Data, shouldFinish: Bool),
     completion: ((data: Data, shouldFinish: Bool)) -> Void
   ) {
-    var waiters: [((data: Data, shouldFinish: Bool)) -> Void] = []
+    var waiters: [@Sendable ((data: Data, shouldFinish: Bool)) -> Void] = []
     if let commandId = command.commandId?.trimmedNonEmpty {
       inFlightCommandLock.lock()
       inFlightCommandIds.remove(commandId)

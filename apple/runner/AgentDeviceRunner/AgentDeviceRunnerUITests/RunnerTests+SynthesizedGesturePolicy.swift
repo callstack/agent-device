@@ -125,6 +125,7 @@ enum SynthesizedGestureAttempt {
 }
 
 extension RunnerTests {
+  @MainActor
   func synthesizedSequenceCoordinateContext(
     steps: [SequenceStep],
     app: XCUIApplication
@@ -161,6 +162,7 @@ extension RunnerTests {
       : .refused(timing: timing, message: message, hint: hint)
   }
 
+  @MainActor
   func logSynthesizedGesturePolicyDecision(
     kind: SynthesizedGesturePolicyKind,
     context: SynthesizedCoordinateContext?,

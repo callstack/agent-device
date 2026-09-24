@@ -21,6 +21,7 @@ extension RunnerTests {
     return max(0.001, timeoutMs / 1000)
   }
 
+  @MainActor
   func resolveAlert(app activeApp: XCUIApplication, deadline: Date) -> RunnerAlert? {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
     if let override = alertResolutionOverrideForTesting {
@@ -50,6 +51,7 @@ extension RunnerTests {
     return nil
   }
 
+  @MainActor
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
       guard let button = chooseAlertButton(alert.buttons, action: action) else {
@@ -121,6 +123,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func activateAlertButton(
     _ alert: RunnerAlert,
     button: XCUIElement,
@@ -296,6 +299,7 @@ extension RunnerTests {
   // for a fresh hittable read instead of spending it on a dropped tap. The hittable read
   // is itself a synchronous query a starved host can complete past the deadline, so a read
   // that lands late forfeits rather than buys back the one activation.
+  @MainActor
   private func waitUntilAlertButtonHittable(_ button: XCUIElement, deadline: Date) -> Bool {
     while Date() < deadline {
       if probeAlertButtonHittable(button, deadline: deadline) {
@@ -306,6 +310,7 @@ extension RunnerTests {
     return false
   }
 
+  @MainActor
   private func probeAlertButtonHittable(_ button: XCUIElement, deadline: Date) -> Bool {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
     if let override = alertButtonHittabilityProbeOverrideForTesting {

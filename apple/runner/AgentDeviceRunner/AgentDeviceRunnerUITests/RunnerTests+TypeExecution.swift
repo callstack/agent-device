@@ -2,6 +2,7 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  @MainActor
   func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
     guard let text = command.text else {
       return Response(ok: false, error: ErrorPayload(message: "type requires text"))
@@ -18,7 +19,7 @@ extension RunnerTests {
       : nil
     let focusStartedAt = Date()
 #if os(iOS)
-    let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
+    let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId)
     var resolvedCoordinateTarget: TextEntryTarget?
     if Self.shouldUseResolvedCoordinateTextEntryRoute(
       repairMode: textEntryMode,

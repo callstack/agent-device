@@ -2,6 +2,7 @@ import XCTest
 import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
+  @MainActor
   func synthesizedDragAt(
     app: XCUIApplication,
     x: Double,
@@ -89,6 +90,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   func synthesizedTapAt(
     app: XCUIApplication,
     x: Double,
@@ -276,6 +278,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   func axFreeSynthesizedDragPlan(
     app: XCUIApplication,
     x: Double,
@@ -364,12 +367,13 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func synthesizedCoordinateContext(
     app: XCUIApplication,
     policy: SynthesizedGesturePolicy
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
-    let health = runnerAccessibilityHealth
+    let health = mainOwned.accessibilityHealth
     let resolved = resolveRunnerWindow(app: app)
     guard let window = resolved.window else {
       return nil

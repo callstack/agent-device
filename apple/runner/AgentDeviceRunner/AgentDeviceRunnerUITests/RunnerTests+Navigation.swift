@@ -44,6 +44,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func tapInAppBackControl(app: XCUIApplication) -> InAppBackOutcome {
 #if os(macOS)
     if let back = macOSNavigationBackElement(app: app) {
@@ -60,8 +61,8 @@ extension RunnerTests {
       back.tap()
       return .performed
     }
-    if isSnapshotXCTestChannelPenalized(bundleId: currentBundleId) {
-      NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", currentBundleId ?? "")
+    if isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId) {
+      NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
     } else if let back = topNavigationBackElement(app: app) {
       tapElementCenter(app: app, element: back)
       return .performed
@@ -142,6 +143,7 @@ extension RunnerTests {
     return CGPoint(x: frame.minX + xOffset, y: frame.minY + yOffset)
   }
 
+  @MainActor
   private func tapTopLeadingNavigationFallback(app: XCUIApplication) -> InAppBackOutcome {
 #if os(iOS)
     let frame = onScreenWindowFrame(app: app)

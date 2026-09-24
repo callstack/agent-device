@@ -3,9 +3,10 @@ import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  @MainActor
   func testSnapshotAccessibilityUnavailableMarksSparseSnapshotRunnerFatal() {
-    currentApp = app
-    currentBundleId = "com.example.app"
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.app"
 
     let payload = snapshotAccessibilityUnavailable(
       failure: SnapshotCaptureFailure(
@@ -26,8 +27,8 @@ extension RunnerTests {
     XCTAssertEqual(payload.snapshotQuality?.state, .sparse)
     XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
     XCTAssertEqual(payload.snapshotQuality?.reason, Self.axSnapshotFailureMessage)
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
+    XCTAssertNil(mainOwned.app)
+    XCTAssertNil(mainOwned.bundleId)
   }
 
   func testRecoveredSnapshotMessagePreservesHint() {
@@ -62,11 +63,15 @@ extension RunnerTests {
   }
 
   func testSnapshotAccessibilityUnavailableQueuesInvalidationBehindAbandonedMainThreadWork() {
-    currentBundleId = "com.example.stale-target"
-    runnerAccessibilityHealth = .healthy
+    MainActor.assumeIsolated {
+      mainOwned.bundleId = "com.example.stale-target"
+      mainOwned.accessibilityHealth = .healthy
+    }
     defer {
-      currentBundleId = nil
-      runnerAccessibilityHealth = .unknown
+      MainActor.assumeIsolated {
+        mainOwned.bundleId = nil
+        mainOwned.accessibilityHealth = .unknown
+      }
     }
 
     final class ResultBox {
@@ -85,10 +90,12 @@ extension RunnerTests {
       _ = try? self.runMainThreadWork(
         "command_execution",
         timeout: 0,
-        timeoutError: self.mainThreadExecutionTimeoutError
+        timeoutError: Self.mainThreadExecutionTimeoutError
       ) {
         mainBlocked.signal()
         _ = releaseMain.wait(timeout: .now() + 5)
+        box.bundleStillCachedWhileBlocked = self.mainOwned.bundleId != nil
+        box.healthWhileBlocked = self.mainOwned.accessibilityHealth
         return true
       }
       _ = mainBlocked.wait(timeout: .now() + 2)
@@ -101,8 +108,6 @@ extension RunnerTests {
         )
       )
       box.elapsed = Date().timeIntervalSince(startedAt)
-      box.bundleStillCachedWhileBlocked = self.currentBundleId != nil
-      box.healthWhileBlocked = self.runnerAccessibilityHealth
       self.mainThreadWorkLock.lock()
       box.abandonedWhileBlocked = self.abandonedMainThreadWorkCount
       self.mainThreadWorkLock.unlock()
@@ -112,7 +117,9 @@ extension RunnerTests {
 
     wait(for: [finished], timeout: 8)
     let drainDeadline = Date().addingTimeInterval(2)
-    while hasAbandonedMainThreadWork() || currentBundleId != nil, Date() < drainDeadline {
+    while hasAbandonedMainThreadWork() || MainActor.assumeIsolated({ mainOwned.bundleId }) != nil,
+      Date() < drainDeadline
+    {
       sleepFor(0.005)
     }
 
@@ -134,8 +141,10 @@ extension RunnerTests {
     )
     XCTAssertEqual(box.abandonedWhileBlocked, 1, "the deferred write must not add an abandoned unit")
     XCTAssertFalse(hasAbandonedMainThreadWork())
-    XCTAssertNil(currentBundleId, "the invalidation must run once the main thread frees")
-    XCTAssertEqual(runnerAccessibilityHealth, .unavailable)
+    MainActor.assumeIsolated {
+      XCTAssertNil(mainOwned.bundleId, "the invalidation must run once the main thread frees")
+      XCTAssertEqual(mainOwned.accessibilityHealth, .unavailable)
+    }
   }
 
   func testQuerySweepSliceDeadlineIsTheTierSliceNotThePlanDeadline() {
@@ -241,13 +250,17 @@ extension RunnerTests {
     let targetBundleId = "com.callstack.agentdevice.runner.missing.snapshot-timeout-test"
     let snapshotTarget = XCUIApplication(bundleIdentifier: targetBundleId)
     let probeReleaseGate = DispatchSemaphore(value: 0)
-    currentApp = snapshotTarget
-    currentBundleId = targetBundleId
-    let captureTarget = takeSnapshotCaptureTarget(app: snapshotTarget)
+    let captureTarget = MainActor.assumeIsolated {
+      mainOwned.app = snapshotTarget
+      mainOwned.bundleId = targetBundleId
+      return takeSnapshotCaptureTarget(app: snapshotTarget)
+    }
     defer {
       probeReleaseGate.signal()
-      currentApp = nil
-      currentBundleId = nil
+      MainActor.assumeIsolated {
+        mainOwned.app = nil
+        mainOwned.bundleId = nil
+      }
       systemModalProbeOverrideForTesting = nil
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
     }

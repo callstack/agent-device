@@ -93,7 +93,7 @@ extension RunnerTests {
     }
   }
 
-  private func treeCaptureTimeoutError(sliceSeconds: TimeInterval) -> () -> Error {
+  private func treeCaptureTimeoutError(sliceSeconds: TimeInterval) -> @Sendable () -> Error {
     {
       SnapshotCaptureFailure(
         code: Self.xCTestSnapshotTimeoutCode,
@@ -103,7 +103,7 @@ extension RunnerTests {
     }
   }
 
-  func snapshotMainThreadTimeoutError(_ operation: String) -> () -> Error {
+  func snapshotMainThreadTimeoutError(_ operation: String) -> @Sendable () -> Error {
     {
       SnapshotCaptureFailure(
         code: Self.xCTestSnapshotTimeoutCode,
@@ -475,6 +475,7 @@ extension RunnerTests {
     return containerLabel == label && containerIdentifier == identifier
   }
 
+  @MainActor
   func flatInteractiveElements(
     app: XCUIApplication,
     deadline: Date
@@ -533,6 +534,7 @@ extension RunnerTests {
     return (elements, .completed)
   }
 
+  @MainActor
   func snapshotElementsQuery(
     _ fetch: () -> [XCUIElement]
   ) -> (elements: [XCUIElement], axUnavailable: Bool) {

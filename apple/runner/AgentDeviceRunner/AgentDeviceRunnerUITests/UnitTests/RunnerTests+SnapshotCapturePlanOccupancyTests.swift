@@ -94,10 +94,12 @@ extension RunnerTests {
     // resolution is slow, and it must not be the block the plan abandons.
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertFalse(app.frame.isEmpty)
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemption.isPending = true
-    let captureTarget = takeSnapshotCaptureTarget(app: app)
+    let captureTarget = MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = "com.callstack.agentdevice.runner.tree-capture-test"
+      return takeSnapshotCaptureTarget(app: app)
+    }
     RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
     RunnerBlockingSnapshotGate.entered = DispatchSemaphore(value: 0)
     let originalImplementation = method_getImplementation(snapshotMethod)
@@ -107,7 +109,9 @@ extension RunnerTests {
       method_setImplementation(snapshotMethod, originalImplementation)
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
       clearPrivateAXAcceptedDepth(reason: "test-cleanup")
-      invalidateCachedTarget(reason: "unit_test_cleanup")
+      MainActor.assumeIsolated {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+      }
       app.terminate()
     }
 
@@ -200,16 +204,20 @@ extension RunnerTests {
     app.launch()
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertFalse(app.frame.isEmpty)
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner.query-sweep-slice-test"
-    let captureTarget = takeSnapshotCaptureTarget(app: app)
+    let captureTarget = MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = "com.callstack.agentdevice.runner.query-sweep-slice-test"
+      return takeSnapshotCaptureTarget(app: app)
+    }
     RunnerSlowSweepQueryGate.reset()
     let originalImplementation = method_getImplementation(queryMethod)
     method_setImplementation(queryMethod, method_getImplementation(stubMethod))
     defer {
       method_setImplementation(queryMethod, originalImplementation)
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      invalidateCachedTarget(reason: "unit_test_cleanup")
+      MainActor.assumeIsolated {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+      }
       app.terminate()
     }
 
@@ -283,19 +291,23 @@ extension RunnerTests {
     app.launchArguments = ["--agent-device-selector-read-regression"]
     app.launch()
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner.query-sweep-timeout-test"
+    MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = "com.callstack.agentdevice.runner.query-sweep-timeout-test"
+    }
     snapshotXCTestPenaltyWarmupExemption.isPending = false
     clearSnapshotXCTestChannelPenalty(reason: "test-setup")
     RunnerSlowSweepQueryGate.reset()
-    let captureTarget = takeSnapshotCaptureTarget(app: app)
+    let captureTarget = MainActor.assumeIsolated { takeSnapshotCaptureTarget(app: app) }
     let originalImplementation = method_getImplementation(queryMethod)
     method_setImplementation(queryMethod, method_getImplementation(stubMethod))
     defer {
       method_setImplementation(queryMethod, originalImplementation)
       clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
       clearPrivateAXAcceptedDepth(reason: "test-cleanup")
-      invalidateCachedTarget(reason: "unit_test_cleanup")
+      MainActor.assumeIsolated {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+      }
       app.terminate()
     }
 
@@ -328,7 +340,7 @@ extension RunnerTests {
       do {
         box.secondPayload = try self.runSnapshotCapturePlan(
           Self.regularVisiblePlan,
-          target: self.takeSnapshotCaptureTarget(app: self.app),
+          target: captureTarget,
           options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
           terminal: .sparseWithFatalOnAXFailure,
           deadline: Date().addingTimeInterval(20)

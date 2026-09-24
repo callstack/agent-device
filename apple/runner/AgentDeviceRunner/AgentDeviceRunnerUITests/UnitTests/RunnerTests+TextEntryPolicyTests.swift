@@ -334,6 +334,7 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  @MainActor
   func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() {
     let synthesizer = RecordingTextEntrySynthesizer()
     // Springboard, not a bare `XCUIApplication()`: the commit wait now really polls (see below),
@@ -393,6 +394,7 @@ extension RunnerTests {
   // Springboard's home screen has no focused text input — the empty-text replacement path must
   // fail closed: it used to fall through to the vacuous-typing early return and report
   // `verified: true` for a clear that never ran.
+  @MainActor
   func testEmptyReplacementWithoutResolvableTargetFailsClosed() {
     let result = typeTextReliably(
       app: springboard,

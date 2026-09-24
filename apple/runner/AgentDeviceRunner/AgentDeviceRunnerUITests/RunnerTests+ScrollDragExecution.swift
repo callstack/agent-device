@@ -27,6 +27,7 @@ extension RunnerTests {
     )
   }
 
+  @MainActor
   func executeScrollDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -65,6 +66,7 @@ extension RunnerTests {
 
   /// Shared coordinate drag execution. Callers that pass `synthesized` take the iOS synthesized
   /// lane with that profile and fallback policy; the rest perform an XCTest coordinate drag.
+  @MainActor
   func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -125,6 +127,7 @@ extension RunnerTests {
     return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
   }
 
+  @MainActor
   private func executeSynthesizedDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -199,6 +202,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   private func executeCoordinateDragFallback(
     activeApp: XCUIApplication,
     x: Double,

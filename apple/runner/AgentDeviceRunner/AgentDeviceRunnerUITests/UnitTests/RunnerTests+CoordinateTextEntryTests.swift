@@ -2,6 +2,7 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  @MainActor
   func testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
@@ -18,9 +19,9 @@ extension RunnerTests {
     XCTAssertTrue(nonTextTarget.waitForExistence(timeout: appExistenceTimeout))
     let nonTextFrame = nonTextTarget.frame
     XCTAssertFalse(nonTextFrame.isEmpty)
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner"
-    currentAppProcessIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
 
     let focusCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-stale-responder-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#

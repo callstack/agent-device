@@ -34,15 +34,16 @@ extension RunnerTests {
 
   /// Launches the text-entry fixture, focuses its field, and penalizes the XCTest channel, so a
   /// coordinate replacement takes the synthesized first-responder route.
+  @MainActor
   func focusSynthesizedReplacementField(extraLaunchArguments: [String] = []) throws -> XCUIElement {
     app.launchArguments = ["--agent-device-text-entry-regression"] + extraLaunchArguments
     app.launch()
     XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
     XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner"
-    currentAppProcessIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
     let focusCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-replacement-field","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
     )
@@ -52,6 +53,7 @@ extension RunnerTests {
     return textField
   }
 
+  @MainActor
   func replaceSynthesizedFieldText(
     _ textField: XCUIElement,
     text: String,
@@ -77,6 +79,7 @@ extension RunnerTests {
     return response
   }
 
+  @MainActor
   func tearDownSynthesizedReplacementField() {
     clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
     invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -97,6 +100,7 @@ extension RunnerTests {
   ///   this window keeps up with one particular burst is not something the runner can promise.
   /// - The runner's: a field the app rewrote mid-burst never reports ok. An ok over a short value
   ///   was the original defect.
+  @MainActor
   func testSynthesizedReplacementPacesAnAppOwnedFieldAtItsAcknowledgeWindow() throws {
     let window = TextEntryTiming.synthesizedAcknowledgeWindowSeconds
     let textField = try focusSynthesizedReplacementField(extraLaunchArguments: [
@@ -133,6 +137,7 @@ extension RunnerTests {
   /// A replacement the command budget cannot carry is refused before the first character is posted,
   /// so a `fill` cannot end in a transport timeout that leaves the runner typing into a field nobody
   /// is waiting for and the next command finding it busy.
+  @MainActor
   func testSynthesizedReplacementRefusesTextBeyondTheDeliveryBudget() throws {
     let textField = try focusSynthesizedReplacementField()
     defer { tearDownSynthesizedReplacementField() }

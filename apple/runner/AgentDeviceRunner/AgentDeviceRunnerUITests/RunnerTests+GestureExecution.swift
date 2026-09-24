@@ -57,6 +57,7 @@ extension RunnerTests {
   ///
   /// NOTE: a new SYNTHESIS gesture must pass `idleTimeout: false` — the default `true` would wrap
   /// it in the scroll idle-timeout/quiescence-skip path and change its runtime behavior.
+  @MainActor
   func performGesture(
     _ app: XCUIApplication,
     idleTimeout: Bool = true,

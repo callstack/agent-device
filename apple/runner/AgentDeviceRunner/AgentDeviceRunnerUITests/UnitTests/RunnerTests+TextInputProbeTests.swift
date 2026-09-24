@@ -52,6 +52,7 @@ extension RunnerTests {
     XCTAssertEqual(scope.count, 1)
   }
 
+  @MainActor
   func testHealthyCoordinateTapPreservesBareTypingWitness() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
@@ -62,9 +63,9 @@ extension RunnerTests {
     let field = app.textFields["agent-device-hardware-keyboard-input"]
     XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
     let frame = field.frame
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner"
-    currentAppProcessIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
     clearSnapshotXCTestChannelPenalty(reason: "fresh-runner")
     let failures = currentXCTestFailureCount()
     let tap = try runnerCommandFixture(
@@ -73,7 +74,7 @@ extension RunnerTests {
     let tapped = try execute(command: tap)
     XCTAssertTrue(tapped.ok, String(describing: tapped.error))
     XCTAssertNotNil(textEntryTapWitness)
-    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: currentBundleId))
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId))
     try XCTSkipIf(isKeyboardVisible(app: app), "software keyboard is up; hidden-keyboard witness cannot be exercised")
     let type = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-healthy-probe","text":"probe-witness","textEntryMode":"append"}"#)
     let typed = try execute(command: type)
@@ -128,6 +129,7 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func testFreshCoordinateTapContainsUnavailableTextInputProbe() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()
@@ -140,9 +142,9 @@ extension RunnerTests {
     let target = app.staticTexts["Agent Device Runner"]
     XCTAssertTrue(target.waitForExistence(timeout: appExistenceTimeout))
     let frame = target.frame
-    currentApp = app
-    currentBundleId = "com.callstack.agentdevice.runner"
-    currentAppProcessIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
     clearSnapshotXCTestChannelPenalty(reason: "fresh-runner")
     let failures = currentXCTestFailureCount()
     textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Injected optional text input query failure")
@@ -152,7 +154,7 @@ extension RunnerTests {
     let response = try execute(command: command)
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
-    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: currentBundleId))
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId))
     XCTAssertNil(textEntryTapWitness)
     let type = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-unavailable-probe","text":"must-not-type","textEntryMode":"append"}"#)
     let typed = try execute(command: type)

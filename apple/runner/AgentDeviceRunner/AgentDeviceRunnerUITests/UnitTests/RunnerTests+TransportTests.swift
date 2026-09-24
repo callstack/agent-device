@@ -8,8 +8,11 @@ extension RunnerTests {
       Command.self,
       from: Data(#"{"command":"snapshot","commandId":"snapshot-coalesce"}"#.utf8)
     )
-    var primaryData: Data?
-    var waiterData: Data?
+    final class Delivered {
+      var primaryData: Data?
+      var waiterData: Data?
+    }
+    let delivered = Delivered()
     defer {
       inFlightCommandIds.removeAll()
       inFlightCommandWaiters.removeAll()
@@ -17,25 +20,25 @@ extension RunnerTests {
 
     XCTAssertFalse(
       attachToInFlightCommandIfNeeded(command: command) { result in
-        primaryData = result.data
+        delivered.primaryData = result.data
       }
     )
     XCTAssertTrue(
       attachToInFlightCommandIfNeeded(command: command) { result in
-        waiterData = result.data
+        delivered.waiterData = result.data
       }
     )
 
-    let delivered = Data("single-result".utf8)
+    let result = Data("single-result".utf8)
     deliverCommandResult(
       command: command,
-      result: (delivered, false)
+      result: (result, false)
     ) { result in
-      primaryData = result.data
+      delivered.primaryData = result.data
     }
 
-    XCTAssertEqual(primaryData, delivered)
-    XCTAssertEqual(waiterData, delivered)
+    XCTAssertEqual(delivered.primaryData, result)
+    XCTAssertEqual(delivered.waiterData, result)
     XCTAssertFalse(inFlightCommandIds.contains("snapshot-coalesce"))
     XCTAssertNil(inFlightCommandWaiters["snapshot-coalesce"])
   }
