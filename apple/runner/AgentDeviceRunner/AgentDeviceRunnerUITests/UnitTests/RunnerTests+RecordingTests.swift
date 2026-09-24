@@ -229,7 +229,7 @@ extension RunnerTests {
   func testRecordingFrameTimeoutDropsTheFrameAndResumesOnceTheWorkDrains() throws {
     let source = RecordingFrameSource()
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 10)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     defer { try? recorder.stop() }
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 3 }))
 
@@ -281,7 +281,7 @@ extension RunnerTests {
   func testRecordingPersistentWedgeKeepsOneCaptureQueuedOnMain() throws {
     let source = RecordingFrameSource()
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 20)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     defer { try? recorder.stop() }
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 2 }))
 
@@ -321,7 +321,7 @@ extension RunnerTests {
   func testRecordingStopDuringATimedOutCaptureAppendsNoLateFrame() throws {
     let source = RecordingFrameSource()
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 10)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 2 }))
 
     final class Observation {
@@ -361,7 +361,7 @@ extension RunnerTests {
   func testRecordingStopRefusesAFrameThatFinishedAtTheTimeoutBoundary() throws {
     let source = RecordingFrameSource()
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 10)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 2 }))
 
     final class Observation {
@@ -391,7 +391,7 @@ extension RunnerTests {
   func testRecordingAfterAStopDuringATimedOutCaptureStartsClean() throws {
     let first = RecordingFrameSource()
     let firstRecorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 10)
-    try MainActor.assumeIsolated { try startRecording(firstRecorder) { first.capture() } }
+    try startRecording(firstRecorder, from: first)
     XCTAssertTrue(pumpMainThread(until: { firstRecorder.appendedFrameSnapshotForTesting().count >= 2 }))
     let stopped = expectation(description: "first recording stopped during its timed-out capture")
     first.armWedge()
@@ -411,7 +411,7 @@ extension RunnerTests {
     let second = RecordingFrameSource()
     let secondOutputPath = recordingTestOutputPath()
     let secondRecorder = ScreenRecorder(outputPath: secondOutputPath, fps: 10)
-    try MainActor.assumeIsolated { try startRecording(secondRecorder) { second.capture() } }
+    try startRecording(secondRecorder, from: second)
     XCTAssertTrue(pumpMainThread(until: { secondRecorder.appendedFrameSnapshotForTesting().count >= 3 }))
     try secondRecorder.stop()
 
@@ -429,7 +429,7 @@ extension RunnerTests {
   func testRecordingFrameNeverQueuesBehindACommandsMainThreadWork() throws {
     let source = RecordingFrameSource()
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: 60)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     defer { try? recorder.stop() }
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 3 }))
 
@@ -480,7 +480,7 @@ extension RunnerTests {
     let interval = 1.0 / Double(fps)
     let source = RecordingFrameSource(captureDelay: interval * 1.6)
     let recorder = ScreenRecorder(outputPath: recordingTestOutputPath(), fps: fps)
-    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
+    try startRecording(recorder, from: source)
     defer { try? recorder.stop() }
     XCTAssertTrue(pumpMainThread(until: { recorder.appendedFrameSnapshotForTesting().count >= 2 }))
 
@@ -499,6 +499,10 @@ extension RunnerTests {
     XCTAssertTrue(occupancy.sampled)
     XCTAssertFalse(occupancy.sawAbandoned, "an ordinary slow capture is not abandoned work")
     XCTAssertFalse(occupancy.sawBusy, "an ordinary slow capture keeps the runner available")
+  }
+
+  private func startRecording(_ recorder: ScreenRecorder, from source: RecordingFrameSource) throws {
+    try MainActor.assumeIsolated { try startRecording(recorder) { source.capture() } }
   }
 
   private func recordingTestOutputPath() -> String {

@@ -33,7 +33,7 @@ extension RunnerTests {
       let combined = buffer + data
       if let body = self.parseRequest(data: combined) {
         self.handleRequestBody(body) { [weak self] result in
-          self?.sendResponse(result, over: connection)
+          self?.sendResult(result, over: connection)
         }
       } else {
         self.receiveRequest(connection: connection, buffer: combined)
@@ -41,7 +41,7 @@ extension RunnerTests {
     }
   }
 
-  private func sendResponse(
+  private func sendResult(
     _ result: (data: Data, shouldFinish: Bool),
     over connection: NWConnection
   ) {
