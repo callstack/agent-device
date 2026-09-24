@@ -28,14 +28,17 @@ import type { WaitCommandResult } from '@agent-device/contracts/wait';
 import type { DoctorCommandResult } from '@agent-device/contracts/observability';
 import type { RecordingCommandResult, TraceCommandResult } from '@agent-device/contracts/recording';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { expect, test } from 'vitest';
+import { test } from 'vitest';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
  * Exact-equality type predicate (invariant in both `A` and `B`). A seeded
  * `CommandResult<Name>` must resolve to *exactly* its contract result type — not
- * merely a one-directional assignable supertype — so these assertions are what
- * `tsc --noEmit` enforces; the `expect`s below only keep vitest's runner green.
+ * merely a one-directional assignable supertype. Every `= true` below is enforced by
+ * `tsc -b packages/command-registry`: a drifted mapping resolves the predicate to
+ * `false`, which `true` is not assignable to. The `void`s exist only because
+ * `noUnusedLocals` would otherwise reject the declarations; comparing an all-`true`
+ * array against itself at runtime could not fail for any production reason.
  */
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -70,7 +73,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const replayTest: Equal<CommandResult<'test'>, ReplaySuiteResult> = true;
   const record: Equal<CommandResult<'record'>, RecordingCommandResult> = true;
   const trace: Equal<CommandResult<'trace'>, TraceCommandResult> = true;
-  expect([
+  void [
     press,
     click,
     fill,
@@ -97,41 +100,14 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     replayTest,
     record,
     trace,
-  ]).toEqual([
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-  ]);
+  ];
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
   const unknown: Equal<CommandResult<'__unmigrated__'>, Record<string, unknown>> = true;
   // A seeded name narrows away from the bare Record bag.
   const seededIsNotRecord: Equal<CommandResult<'press'>, Record<string, unknown>> = false;
-  expect([unknown, seededIsNotRecord]).toEqual([true, false]);
+  void [unknown, seededIsNotRecord];
 });
 
 test('CommandResultMap is seeded only from already-existing contract result types', () => {
@@ -168,5 +144,5 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'record'
     | 'trace'
   > = true;
-  expect(keys).toBe(true);
+  void keys;
 });

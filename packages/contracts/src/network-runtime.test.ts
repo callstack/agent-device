@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { BoundDeviceRuntime } from './platform-runtime.ts';
 import { networkDumpUse } from './network-runtime-plan.ts';
@@ -36,21 +35,22 @@ function compileTimeCanonicalHostProof(host: NetworkRuntimeHost): void {
 }
 void compileTimeCanonicalHostProof;
 
-test('provider transport treats an empty dump as supported success', async () => {
-  const dump: NetworkProviderDump = async () => ({
-    backend: 'browserstack',
-    entries: [],
-    notes: ['No matching provider traffic was recorded.'],
-  });
+async function compileTimeProviderDumpCompositionProof(dump: NetworkProviderDump): Promise<void> {
   const result: NetworkDumpResult = {
     source: 'provider',
     ...(await dump({ maxEntries: 25, include: 'summary' })),
   };
+  void result;
+}
+void compileTimeProviderDumpCompositionProof;
 
-  assert.deepEqual(result, {
-    source: 'provider',
-    backend: 'browserstack',
-    entries: [],
-    notes: ['No matching provider traffic was recorded.'],
-  });
+test('the network runtime contract is enforced at compile time', () => {
+  // `network-runtime.ts` exports no runtime code, so there is nothing here to execute. The
+  // three proofs above are the file: each is a `tsc -b packages/contracts` claim. This test
+  // exists because Vitest needs the file to contain one — the body it replaces was not an
+  // assertion either, since it spread a fixture this file wrote and deep-equaled the result
+  // against a re-spelling of the same literal.
+  void compileTimeNetworkProjectionProof;
+  void compileTimeCanonicalHostProof;
+  void compileTimeProviderDumpCompositionProof;
 });

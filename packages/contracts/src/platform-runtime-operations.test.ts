@@ -123,7 +123,11 @@ const noOperationIsMissingFromTheList: [MissingFromList] extends [never] ? true 
 const noListedNameIsUnknown: [ExtraInList] extends [never] ? true : never = true;
 
 test('the runtime operation vocabulary is the operations union, with no duplicates', () => {
-  assert.equal(noOperationIsMissingFromTheList && noListedNameIsUnknown, true);
+  // The two declarations above are the assertion: a drifted vocabulary makes `true`
+  // non-assignable to the `never` they are annotated with. After erasure this pair is
+  // `true && true`, which no production change can contradict.
+  void noOperationIsMissingFromTheList;
+  void noListedNameIsUnknown;
   assert.equal(new Set(RUNTIME_OPERATION_NAMES).size, RUNTIME_OPERATION_NAMES.length);
   assert.equal(isRuntimeOperationName('captureSnapshot'), true);
   assert.equal(isRuntimeOperationName('notAnOperation'), false);

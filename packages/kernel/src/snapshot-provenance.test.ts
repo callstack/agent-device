@@ -20,9 +20,7 @@ test('the provenance table rejects cross-channel pairs at compile time', () => {
   };
   const stateWithoutProducer: SnapshotStateProvenance = { backend: 'android' };
 
-  expect([shared, crossChannel, foreignProducer, stateMismatch, stateWithoutProducer]).toHaveLength(
-    5,
-  );
+  void [shared, crossChannel, foreignProducer, stateMismatch, stateWithoutProducer];
 });
 
 test('snapshotStateProvenance extracts exactly the pair', () => {

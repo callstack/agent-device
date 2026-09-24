@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type {
   IosHittabilityEvidence,
@@ -115,9 +114,12 @@ const engineWithSecondPresentation: IosSnapshotEngine = {
 };
 
 test('iOS snapshot stage and engine surfaces stay closed', () => {
-  assert.equal(acquired.stage, 'acquired');
-  assert.equal(presented.stage, 'presented');
-  assert.deepEqual(['publish'] satisfies (keyof IosSnapshotEngine)[], ['publish']);
+  // The `satisfies` below is the engine-surface pin; the `@ts-expect-error` fixtures
+  // above are the stage-discrimination pins. Both are enforced by
+  // `tsc -b packages/contracts`, not at runtime: Vitest erases `satisfies`, which left
+  // this body comparing two identical array literals and reading `.stage` off fixtures
+  // this file wrote.
+  void (['publish'] satisfies (keyof IosSnapshotEngine)[]);
   void doubleStage;
   void skippedPresentation;
   void nonRunnerPresentation;

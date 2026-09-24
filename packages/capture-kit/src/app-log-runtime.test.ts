@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppLogBackgroundProcessRequest,
   AppLogCompletion,
-  AppLogProcessOwnership,
   AppLogProcessTransport,
   AppLogRuntimeHost,
 } from '@agent-device/contracts/app-log-runtime';
@@ -44,6 +43,24 @@ function compileTimeBackgroundCommandProof(): void {
   void invalid;
 }
 void compileTimeBackgroundCommandProof;
+
+function compileTimeAppLogHostPortProof(): void {
+  // Each annotation is the claim: which port a host may read through, and which transport a
+  // narrow process owner may hold. None of it is checkable at runtime, and none of it was —
+  // the bodies these replace asserted the arity of a lambda written beside them, read a key
+  // off an object literal they had just built, and called a template they had just defined.
+  const readTail: AppLogRuntimeHost['outputs']['readTail'] = async (_path, _maxBytes) =>
+    'existing suffix';
+  const resolveSession: AppLogRuntimeHost['artifacts']['resolveSession'] = (sessionId) => ({
+    outputPath: `/sessions/${sessionId}/app.log`,
+    pidPath: `/sessions/${sessionId}/app-log.pid`,
+  });
+  const transport = {
+    mode: 'transport-composed',
+  } satisfies AppLogProcessTransport;
+  void [readTail, resolveSession, transport];
+}
+void compileTimeAppLogHostPortProof;
 
 test('app-log live handle makes finish and forced async disposal idempotent', async () => {
   const finish = vi.fn(async () => ({ status: 'completed', result: completion }) as const);
@@ -166,52 +183,4 @@ test('app-log process marker decoding keeps incomplete or corrupt state distinct
       marker: { pid: 42, startTime: '12345', command: 'adb logcat' },
     },
   );
-});
-
-test('app-log ownership probe cannot collapse a mismatched live process into missing', () => {
-  const recoveryDecision = (
-    ownership: AppLogProcessOwnership,
-  ): 'complete' | 'reattach' | 'retain' => {
-    switch (ownership) {
-      case 'missing':
-        return 'complete';
-      case 'owned-alive':
-        return 'reattach';
-      case 'ownership-lost':
-        return 'retain';
-    }
-  };
-
-  assert.equal(recoveryDecision('missing'), 'complete');
-  assert.equal(recoveryDecision('owned-alive'), 'reattach');
-  assert.equal(recoveryDecision('ownership-lost'), 'retain');
-});
-
-test('app-log output host exposes only a bounded session-confined tail read', () => {
-  type ReadTail = AppLogRuntimeHost['outputs']['readTail'];
-  const readTail: ReadTail = async (_path, _maxBytes) => 'existing suffix';
-
-  assert.equal(readTail.length, 2);
-});
-
-test('app-log process transport keeps narrow provider composition separate from runtime ownership', () => {
-  const transport = {
-    mode: 'transport-composed',
-  } satisfies AppLogProcessTransport;
-
-  assert.equal(transport.mode, 'transport-composed');
-  assert.equal('start' in transport, false);
-});
-
-test('app-log artifact authority resolves canonical paths from durable session identity', () => {
-  type ResolveSession = AppLogRuntimeHost['artifacts']['resolveSession'];
-  const resolveSession: ResolveSession = (sessionId) => ({
-    outputPath: `/sessions/${sessionId}/app.log`,
-    pidPath: `/sessions/${sessionId}/app-log.pid`,
-  });
-
-  assert.deepEqual(resolveSession('session-a'), {
-    outputPath: '/sessions/session-a/app.log',
-    pidPath: '/sessions/session-a/app-log.pid',
-  });
 });

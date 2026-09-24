@@ -341,15 +341,10 @@ test('a listing row cannot be handed the node stages it does not declare', () =>
   // @ts-expect-error a listing row declares no poll budget to ask for.
   const pollBudget: Parameters<typeof selectorPollBudget>[0] = SELECTOR_PIPELINE_POLICIES.readList;
 
-  // The runtime half of the same claim, so the row cannot grow a node stage
-  // while the directives are updated to match.
-  assert.deepEqual(
-    Object.keys(SELECTOR_PIPELINE_POLICIES.readList).filter((stage) =>
-      ['promotion', 'offscreen', 'poll'].includes(stage),
-    ),
-    [],
-  );
-  assert.ok(nodeStages && pollBudget);
+  // Both locals are the same production object, so `nodeStages && pollBudget` could only
+  // restate it. The runtime half of the claim lives in "pipeline rows declare only the
+  // stages their kind enforces" below, which pins `readList`'s key set exhaustively.
+  void [nodeStages, pollBudget];
 });
 
 test('pipeline rows declare only the stages their kind enforces', () => {
