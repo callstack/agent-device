@@ -194,6 +194,8 @@ private final class AXFixtureClient: NSObject {
   private let keyboardFocusIdentity: String?
   private(set) var requests = 0
   private(set) var rejected = 0
+  /// Every attribute the bridge asked for, across requests: the request contract under test.
+  private(set) var requestedAttributes: [String] = []
 
   init(rejectLevelsAbove: Int?, vanishAtFrontier: Bool, keyboardFocusIdentity: String? = nil) {
     self.rejectLevelsAbove = rejectLevelsAbove
@@ -206,6 +208,7 @@ private final class AXFixtureClient: NSObject {
     forElement element: Any, attributes: Any, parameters: [String: Any], error: NSErrorPointer
   ) -> Any? {
     requests += 1
+    requestedAttributes.append(contentsOf: (attributes as? [Any] ?? []).compactMap { $0 as? String })
     let levels = (parameters["maxDepth"] as? NSNumber)?.intValue ?? 0
     if let limit = rejectLevelsAbove, levels > limit {
       rejected += 1
@@ -395,6 +398,15 @@ extension RunnerTests {
     XCTAssertEqual(root["focused"] as? Bool, false, "no focus of either kind is not focused")
     XCTAssertEqual(field["label"] as? String, "1")
     XCTAssertEqual(field["focused"] as? Bool, true, "keyboard focus alone is focused")
+    // The AX server answers only what it was asked for: the request must name keyboard focus, as
+    // the snapshot keypath or as the AX attribute XCElementSnapshot maps it to, or a real capture
+    // would come back without it and read false above.
+    XCTAssertTrue(
+      client.requestedAttributes.contains { $0.range(of: "keyboardfocus", options: .caseInsensitive) != nil },
+      "requested attributes name keyboard focus: \(client.requestedAttributes)")
+    XCTAssertTrue(
+      client.requestedAttributes.contains { $0.range(of: "hasfocus", options: .caseInsensitive) != nil },
+      "requested attributes still name the focus engine's focus: \(client.requestedAttributes)")
   }
 
   /// Every recovery case of the shared fixture, replayed through the real ladder, bridge
