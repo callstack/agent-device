@@ -478,22 +478,30 @@ test('classifyInteractionSurfaceChange reads a checked-only flip as a change', (
   assert.equal(classifyInteractionSurfaceChange(before, after), 'changed');
 });
 
-test('discriminatingSurfaceChangedWithinRect reads a flip at the same rect as no movement, and a moved row as movement', () => {
-  const rect = { x: 0, y: 0, width: 390, height: 844 };
-  const signature = (checked: boolean, y?: number) =>
-    buildInteractionSurfaceSignature(makeToggleSnapshot(checked, y).nodes);
+test.each([
+  { anonymous: false, label: 'a labelled switch' },
+  { anonymous: true, label: 'an anonymous switch' },
+])(
+  'discriminatingSurfaceChangedWithinRect reads a flip of $label at the same rect as no movement, and a moved one as movement',
+  ({ anonymous }) => {
+    const rect = { x: 0, y: 0, width: 390, height: 844 };
+    const signature = (checked: boolean, y?: number) =>
+      buildInteractionSurfaceSignature(makeToggleSnapshot(checked, y, anonymous).nodes);
 
-  assert.equal(
-    discriminatingSurfaceChangedWithinRect(signature(false), signature(true), rect),
-    false,
-  );
-  assert.equal(
-    discriminatingSurfaceChangedWithinRect(signature(false, 300), signature(false, 200), rect),
-    true,
-  );
-});
+    assert.equal(
+      discriminatingSurfaceChangedWithinRect(signature(false), signature(true), rect),
+      false,
+    );
+    assert.equal(
+      discriminatingSurfaceChangedWithinRect(signature(false, 300), signature(false, 200), rect),
+      true,
+    );
+  },
+);
 
-function makeToggleSnapshot(checked: boolean, y = 300): SnapshotState {
+// An anonymous switch has no identity, so its content is its type: the flip still changes only the
+// key, and a swipe that brushed it must not read as the list moving.
+function makeToggleSnapshot(checked: boolean, y = 300, anonymous = false): SnapshotState {
   const base = makeSnapshot('Inbox');
   return {
     ...base,
@@ -504,8 +512,7 @@ function makeToggleSnapshot(checked: boolean, y = 300): SnapshotState {
         index: 2,
         parentIndex: 0,
         type: 'android.widget.Switch',
-        identifier: 'wifi-switch',
-        label: 'Wi-Fi switch',
+        ...(anonymous ? {} : { identifier: 'wifi-switch', label: 'Wi-Fi switch' }),
         checked,
         rect: { x: 300, y, width: 60, height: 40 },
       },

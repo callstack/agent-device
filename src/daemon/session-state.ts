@@ -53,6 +53,13 @@ export type InteractionSurfaceEntry = {
    * comparison entirely.
    */
   identity?: string;
+  /**
+   * What the element is without the state it is in: `identity` where the node
+   * has one, else its type and role. A within-container movement check compares
+   * entries on this, in document order when repeated, because a state flip
+   * changes `key` at the same rect and is not movement.
+   */
+  content: string;
   x: number;
   y: number;
   width: number;

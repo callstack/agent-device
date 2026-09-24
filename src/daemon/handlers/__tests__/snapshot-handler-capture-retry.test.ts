@@ -97,6 +97,8 @@ test('captureSnapshot lazily retries pending no-change touch before returning fr
     preSignature: [
       {
         key: 'open-feed|Open feed||Button||hittable|#0',
+        identity: 'open-feed|Open feed||Button',
+        content: 'open-feed|Open feed||Button',
         x: 20,
         y: 120,
         width: 160,
@@ -240,6 +242,8 @@ test('captureSnapshot retries pending tap outcome before post-gesture stabilizat
     preSignature: [
       {
         key: '|Navigate to Third||android.widget.Button||hittable|#0',
+        identity: '|Navigate to Third||android.widget.Button',
+        content: '|Navigate to Third||android.widget.Button',
         x: 302,
         y: 1301,
         width: 476,

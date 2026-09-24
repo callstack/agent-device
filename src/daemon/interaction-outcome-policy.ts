@@ -467,10 +467,10 @@ export function summarizeDiscriminatingSurfaceDivergence(
 
 /**
  * Whether the DISCRIMINATING entries inside `rect` moved across a gesture: one left or entered the
- * region, or its rect moved beyond tolerance. Entries match on the flip-tolerant `identity` where
- * they have one, told apart by document order when repeated, and on `key` otherwise. A scroll moves
- * content, while a state flip inside the container (a switch the swipe brushed, a row it selected)
- * changes the key at the same rect and is not movement.
+ * region, or its rect moved beyond tolerance. Entries match on `content`: the flip-tolerant
+ * `identity` where they have one, the type and role of an anonymous node otherwise, told apart by
+ * document order when repeated. A scroll moves content, while a state flip inside the container (a
+ * switch the swipe brushed, a row it selected) changes the key at the same rect and is not movement.
  *
  * A whole-surface difference is not automatically the gesture's doing. A captured tree carries system
  * chrome with it, and on Android the status bar clocks and icons change on their own while the app's
@@ -500,10 +500,9 @@ function contentKeyed(
   const occurrences = new Map<string, number>();
   const keyed = new Map<string, InteractionSurfaceSignature[number]>();
   for (const entry of entries) {
-    const content = entry.identity ?? entry.key;
-    const occurrence = occurrences.get(content) ?? 0;
-    occurrences.set(content, occurrence + 1);
-    keyed.set(`${content}|#${occurrence}`, entry);
+    const occurrence = occurrences.get(entry.content) ?? 0;
+    occurrences.set(entry.content, occurrence + 1);
+    keyed.set(`${entry.content}|#${occurrence}`, entry);
   }
   return keyed;
 }
@@ -558,12 +557,18 @@ function buildInteractionSurfaceEntry(
   return {
     key: `${semanticKey}|#${occurrence}`,
     ...(identity ? { identity } : {}),
+    content: interactionSurfaceContent(node, identity),
     x: Math.round(node.rect.x),
     y: Math.round(node.rect.y),
     width: Math.round(node.rect.width),
     height: Math.round(node.rect.height),
     discriminating: !isNonDiscriminatingSurfaceNode(node, keyboardChromeRefs),
   };
+}
+
+/** What the element is without the state it is in: its identity, else the type and role of an anonymous node. */
+function interactionSurfaceContent(node: SnapshotNode, identity: string | undefined): string {
+  return identity ?? `${node.type ?? ''}|${node.role ?? ''}`;
 }
 
 /**
