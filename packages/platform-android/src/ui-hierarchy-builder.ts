@@ -347,6 +347,7 @@ function createAndroidRawSnapshotNode(
     type: node.type ?? undefined,
     label: node.label ?? undefined,
     value: node.value ?? undefined,
+    contentDescription: node.contentDescription,
     identifier: node.identifier ?? undefined,
     bundleId: node.packageName ?? undefined,
     rect: node.rect,

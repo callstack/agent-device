@@ -226,6 +226,13 @@ export type RawSnapshotNode = {
   subrole?: string;
   label?: string;
   value?: string;
+  /**
+   * Android content description when it is not already the `label`. An Android node is
+   * labelled by its text and falls back to the content description only when it has none,
+   * so an accessibility label the app set beside visible text (a labelled text view, a
+   * filled or hinted field) is carried here for consumers that want the accessible name.
+   */
+  contentDescription?: string;
   identifier?: string;
   rect?: Rect;
   enabled?: boolean;

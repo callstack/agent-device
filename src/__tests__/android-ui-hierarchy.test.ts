@@ -41,6 +41,7 @@ test('parseUiHierarchy reads double-quoted Android node attributes', () => {
   assert.equal(result.nodes.length, 1);
   assert.equal(result.nodes[0]!.value, 'Hello');
   assert.equal(result.nodes[0]!.label, 'Hello');
+  assert.equal(result.nodes[0]!.contentDescription, 'Greeting');
   assert.equal(result.nodes[0]!.identifier, 'com.demo:id/title');
   assert.deepEqual(result.nodes[0]!.rect, { x: 10, y: 20, width: 100, height: 40 });
   assert.equal(result.nodes[0]!.hittable, true);
@@ -111,7 +112,28 @@ test('interactive Android snapshots keep Compose semantic views inside actionabl
 
   assert.equal(result.nodes[0]?.hittable, true);
   assert.equal(result.nodes[1]?.label, 'Start a call');
+  assert.equal(result.nodes[1]?.contentDescription, undefined);
   assert.equal(result.nodes[1]?.parentIndex, 0);
+});
+
+test('an Android content description beside text is carried, and one that is the label is not repeated', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.EditText" package="com.example.app" text="Ada Lovelace" content-desc="Name field" resource-id="name-input" bounds="[0,0][390,44]" visible-to-user="true"/>
+  <node class="android.widget.EditText" package="com.example.app" text="Type your name" content-desc="Name field" hint-showing="true" resource-id="empty-input" bounds="[0,60][390,104]" visible-to-user="true"/>
+  <node class="android.widget.TextView" package="com.example.app" text="Plain controls" content-desc="Plain controls" bounds="[0,120][390,164]" visible-to-user="true"/>
+  <node class="android.widget.TextView" package="com.example.app" text="Untitled" bounds="[0,180][390,224]" visible-to-user="true"/>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+
+  assert.equal(result.nodes[0]?.label, 'Ada Lovelace');
+  assert.equal(result.nodes[0]?.contentDescription, 'Name field');
+  assert.equal(result.nodes[1]?.label, 'Type your name');
+  assert.equal(result.nodes[1]?.hintShowing, true);
+  assert.equal(result.nodes[1]?.contentDescription, 'Name field');
+  assert.equal(result.nodes[2]?.label, 'Plain controls');
+  assert.equal(result.nodes[2]?.contentDescription, undefined);
+  assert.equal(result.nodes[3]?.contentDescription, undefined);
 });
 
 test('interactive Android snapshots keep a fixed sibling outside filtered scroll content (#1377)', () => {

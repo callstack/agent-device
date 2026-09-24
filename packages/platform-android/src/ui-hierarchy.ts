@@ -298,11 +298,13 @@ function normalizeAndroidUiHierarchyNode(
   depth: number,
   parent: AndroidNode,
 ): AndroidUiHierarchy {
+  const label = attrs.text || attrs.desc;
   return attachAndroidSiblingOrder(
     {
       type: attrs.className,
-      label: attrs.text || attrs.desc,
+      label,
       value: attrs.text,
+      ...(attrs.desc && attrs.desc !== label ? { contentDescription: attrs.desc } : {}),
       identifier: attrs.resourceId,
       packageName: attrs.packageName,
       rect: attrs.rect,

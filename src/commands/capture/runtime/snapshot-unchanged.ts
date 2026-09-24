@@ -107,6 +107,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   subrole: true,
   label: true,
   value: true,
+  contentDescription: true,
   identifier: true,
   enabled: true,
   selected: true,

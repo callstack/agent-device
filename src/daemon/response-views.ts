@@ -110,6 +110,7 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'subrole',
   'label',
   'value',
+  'contentDescription',
   'identifier',
   'enabled',
   'selected',

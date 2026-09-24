@@ -8,6 +8,8 @@ export type AndroidUiHierarchy = {
   type: string | null;
   label: string | null;
   value: string | null;
+  /** The content description when the label is the text rather than it; see `RawSnapshotNode`. */
+  contentDescription?: string;
   identifier: string | null;
   packageName: string | null;
   rect?: Rect;
