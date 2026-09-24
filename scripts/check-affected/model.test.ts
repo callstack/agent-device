@@ -235,6 +235,7 @@ test('a payload capture inside a package selects the unit lane', () => {
   // a capture edit failed the gate open, which punished adding evidence rather than the absence of it.
   for (const file of [
     'packages/platform-apple/src/core/__tests__/fixtures/ios-device-info-details.json',
+    'packages/platform-apple/src/core/__tests__/fixtures/xcode27-time-profile.xml',
     'packages/platform-apple/src/snapshot-source/fixtures/wire-vocabulary.json',
   ]) {
     const result = plan([file]);
