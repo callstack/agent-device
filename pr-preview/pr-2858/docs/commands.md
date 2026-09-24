@@ -553,7 +553,8 @@ agent-device is text 'id="greeting"' "Welcome back"
 - Supported predicates are `visible`, `hidden`, `exists`, `absent`, `editable`, `selected`, `focused`, and `text`.
 - `is visible` checks whether the resolved element is present in the current visible snapshot viewport. A node without its own rect still passes when a visible ancestor within the viewport provides the on-screen geometry.
 - `is exists` only checks whether the selector matches in the current snapshot.
-- `is absent` passes only when the selector has zero matches in one readable, complete, unscoped, full-depth accessibility capture. It does not mean hidden; `--scope` and `--depth` are rejected, and sparse, unreadable, or truncated captures fail closed.
+- `is absent` passes only when the selector has zero matches in one readable, complete, settled, unscoped, full-depth accessibility capture. It does not mean hidden; `--scope` and `--depth` are rejected, and sparse, unreadable, truncated, or unsettled captures fail closed.
+- A read that answers from the first capture after a `scroll`, `swipe`, or `gesture swipe` waits for two consecutive captures to agree. When the surface is still changing when that budget runs out, `is`, `get`, `find`, and `wait` carry `unsettledGesture` (`{ "action", "positionals" }`) in `error.details` or `data` and append a warning, and `snapshot` appends the warning. A miss on that capture is not proof of absence: read again. `is absent` refuses it with `observation: "unsettled"`, and `wait absent` keeps polling.
 - `wait text` is a text-presence wait, not a hittability assertion.
 - Strict `wait absent` is not exported to Maestro's lenient `notVisible` condition; Maestro export reports it as unsupported unless an exact zero-candidate primitive becomes available.
 - `is text <selector> <value>` compares the resolved element text against the expected value.
@@ -813,7 +814,7 @@ state the session app was found in and why the runner activated it:
   tripped before dispatching.
 - The disclosure rides capture-consuming commands — `snapshot`, `find`, `get`, `is`, `wait`, and an
   interaction whose target tree was captured for it — at every response level, including
-  `--level digest`. It is disclosed only for the command that paid for the repair: a read answered
+  `--level digest`. On a failure the typed fact is in `error.details` and the sentence in its hint. It is disclosed only for the command that paid for the repair: a read answered
   from a cached or stored tree did no device work and reports no repair of its own.
 - In text mode the CLI prints every response warning as a `Warning:` line after the command's own
   output, for every command — not only `snapshot`. Four commands declare their stdout to be the
@@ -830,6 +831,15 @@ state the session app was found in and why the runner activated it:
   distinction matters, spend a `snapshot -i` and read its disclosure.
 - The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
   came before it are never replaced.
+- **No read launches a stopped app.** A command that only observes the app (`snapshot`, `wait`,
+  `is`, `get`, a reading `find`) repairs a backgrounded session app, but never launches one that is
+  not running — and neither does an interaction's leading read: the viewport read a `gesture` starts
+  with, or the capture that resolves a selector `click`/`fill`. A bare launch would start the app
+  without the URL of a launch that SpringBoard is still holding behind an "Open in …?" confirmation.
+  A refused command answers `COMMAND_FAILED`, `details.runnerErrorCode: "APP_NOT_RUNNING"` and
+  `retriable: true`, and `wait` keeps polling through it. Answer the prompt with `alert accept`, or
+  relaunch with `open`. Only an interaction that mutates without a leading read — `press`, a
+  coordinate `fill`, `swipe`, `scroll`, a hardware key — still brings a stopped app up.
 
 ## Clipboard
 
