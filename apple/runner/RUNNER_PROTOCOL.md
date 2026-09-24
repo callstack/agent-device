@@ -62,117 +62,11 @@ than silently applied:
 { "command": "rotate", "orientation": "landscape-left" }
 ```
 
-The current command names are defined in:
+The current command names and per-command traits are defined in:
 
-- [`../../packages/platform-apple/src/runner/runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts) — the `RunnerCommand` union (TypeScript side)
-- [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift) — the `CommandType` enum (Swift side)
-
-Per-command behavior the daemon keys on (read-only vs. mutating, whether a command is a readiness
-probe, whether it is exempt from or eligible to skip the readiness preflight) is declared once, as
-data, in
-[`../../packages/platform-apple/src/runner/runner-command-traits.ts`](../../packages/platform-apple/src/runner/runner-command-traits.ts)
-(`RUNNER_COMMAND_TRAITS`). Read that table instead of inferring traits from a command's name.
-
-## Recovery: `commandId`, the Command Journal, and `status`
-
-Every non-`status` request the daemon sends carries a `commandId` (`withRunnerCommandId` in
-[`runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)). The runner
-records each command's lifecycle — `accepted` → `started` → `completed`/`failed` — under that id in
-an in-memory journal
-([`RunnerCommandJournal`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift)),
-which also retains the completed response body for most commands (not `snapshot`/`screenshot`,
-whose payloads are too large to retain).
-
-If the daemon loses the transport response to a command (socket error, timeout), it does not blindly
-resend a mutation. It sends a follow-up request with `command: "status"` and `statusCommandId` set to
-the original command's id
-([`executeStatus`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift)),
-reads back the journaled lifecycle state, and decides from that state alone whether to return the
-retained response, treat the command as still in flight, treat it as failed, or give up and invalidate
-the session. That decision logic lives in one place:
-[`../../packages/platform-apple/src/runner/runner-command-recovery.ts`](../../packages/platform-apple/src/runner/runner-command-recovery.ts).
-
-## `runnerFatal` and `runnerMainThreadBusy` response fields
-
-Both are optional booleans on `data`
-([`DataPayload`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)):
-
-- `runnerFatal` (plus `runnerFatalReason`) marks a response whose failure means the runner session
-  itself is no longer trustworthy (for example, an AX snapshot the private backend cannot recover
-  from). The daemon reads it with `resolveRunnerFatalReason` /
-  `resolveRunnerFatalErrorReason` in
-  [`runner-error-classification.ts`](../../packages/platform-apple/src/runner/runner-error-classification.ts)
-  and invalidates the cached session instead of reusing it.
-- `runnerMainThreadBusy` is stamped only on `ok: true` responses. The stamping method,
-  `stampingCurrentMainThreadBusy`, is defined on `Response` in
-  [`RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift);
-  its one call site is the successful branch of `jsonResponse` in
-  [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift),
-  which passes it `currentMainThreadBusyState().reportsMainThreadBusy` — the watchdog-abandoned-work
-  read in
-  [`RunnerTests+MainThreadWork.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+MainThreadWork.swift).
-  A capture can succeed off a side channel (e.g. private-AX) while an abandoned tree crawl still
-  grinds, so `ok: true` alone does not mean the runner has drained — that is what the stamp is for.
-  On the TypeScript side, `runner-session.ts` sets `session.runnerMainThreadBusy` to the stamp's
-  value whenever a response carries one (`readRunnerMainThreadBusy(data) !== undefined`), and on a
-  thrown exchange sets it `true` for an occupancy-bearing error (`isRunnerMainThreadOccupiedError`)
-  or `false` for any other structured runner failure (`isStructuredRunnerFailure`). It leaves the
-  prior value untouched in exactly two cases: an `ok: true` response with no stamp (a
-  journal-replayed `status` reply is one such response), and a non-structured, transport-shaped
-  failure (aborted body read, malformed payload) that never reached a runner reply to read from.
-
-## Typed Runner Error Codes
-
-These are the runner's own vocabulary: on the wire they still arrive as `ok: false` with
-`error.code` set to one of them, and the daemon reads `error.code` through one classifier,
-[`classifyRunnerReportedError`](../../packages/platform-apple/src/runner/runner-contract.ts), which
-either passes typed daemon-facing families through (e.g. `RUNNER_WEDGED` → `AppError` code
-`RUNNER_WEDGED`) or keeps a code diagnostic-only (`COMMAND_FAILED` + `details.runnerErrorCode`) per
-the `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES` map in the same file. Never match on `error.message`.
-
-Three codes get a genuine daemon reaction; every other runner-reported code is diagnostic-only and
-is described only by pointer (below), never re-listed, to keep this doc from drifting out of sync
-with the registries that actually own it:
-
-- `RUNNER_BUSY` — in
-  [`DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`](../../packages/platform-apple/src/runner/runner-contract.ts)
-  (so it arrives as `COMMAND_FAILED` with `details.runnerErrorCode`), and also has a
-  `RUNNER_ERROR_RULES` row (`reason: 'runner_busy_refusal'` in
-  [`runner-error-classification.ts`](../../packages/platform-apple/src/runner/runner-error-classification.ts))
-  that marks it retryable. Produced when a new command arrives while abandoned main-thread work
-  (past the execution watchdog, still below the wedge threshold) is draining (`runnerBusyResponse`
-  in
-  [`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift)).
-  The daemon resends a read-only command across the drain window (`RUNNER_BUSY_RESEND_ATTEMPTS` in
-  [`runner-client.ts`](../../packages/platform-apple/src/runner/runner-client.ts)); a mutating
-  command is not resent — it surfaces the refusal.
-- `RUNNER_WEDGED` — absent from `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`, so it passes through typed
-  (`AppError` code `RUNNER_WEDGED`, not `COMMAND_FAILED`). Its `RUNNER_ERROR_RULES` row
-  (`reason: 'runner_main_thread_wedged'`, same file) marks it session-fatal. Produced when abandoned
-  main-thread work has outlived the wedge threshold, so a restart rather than waiting is the only
-  cure (`runnerWedgedResponse`, same Swift file as `runnerBusyResponse`). The session is invalidated
-  and the runner is restarted.
-- `MAIN_THREAD_TIMEOUT` — also in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES` (`COMMAND_FAILED` +
-  `details.runnerErrorCode`), but unlike `RUNNER_BUSY` it has **no** `RUNNER_ERROR_RULES` row; it is
-  read directly by name, alongside `RUNNER_BUSY`, inside `isRunnerMainThreadOccupiedError` in
-  `runner-error-classification.ts`. Produced when the command that itself tripped the execution
-  watchdog finally gets its (abandoned) dispatch's failure written as its response
-  (`commandFailedResponse` in
-  [`RunnerTests+Transport.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Transport.swift),
-  using `RunnerWireErrorCode.mainThreadTimeout` from
-  [`RunnerTests.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift)) — distinct
-  from a later command instead meeting a fast `RUNNER_BUSY` refusal. The daemon does not retry the
-  command that returned it (its wait already elapsed); `isRunnerMainThreadOccupiedError` still marks
-  the session busy so the next read's preflight/resend logic accounts for the drain.
-
-Every other runner-reported code the daemon currently keys on — `APP_NOT_RUNNING`,
-`ALERT_NOT_FOUND`, `SCROLL_KEYBOARD_OCCLUDES_SURFACE`, and the three `APP_SCREEN_*`
-capture-refusal codes — is diagnostic-only and carries no `RUNNER_ERROR_RULES` row. For those, read
-[`DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`](../../packages/platform-apple/src/runner/runner-contract.ts)
-for wire class and
-[`RUNNER_ERROR_RULES`](../../packages/platform-apple/src/runner/runner-error-classification.ts) for
-daemon reaction, then follow each code to the caller that actually reads it — do not re-derive or
-re-list their behavior here.
+- `RunnerCommand` in [`../../packages/platform-apple/src/runner/runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)
+- `RUNNER_COMMAND_TRAITS` in [`../../packages/platform-apple/src/runner/runner-command-traits.ts`](../../packages/platform-apple/src/runner/runner-command-traits.ts)
+- `CommandType` in [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## Response Shape
 
@@ -204,3 +98,29 @@ Successful and failed responses use the same top-level envelope:
 - Treat the TypeScript and Swift wire models as a single contract.
 - When adding, removing, or renaming a command, update the protocol fixtures/tests in the same change.
 - Keep this file focused on the actual wire shape rather than implementation details of command execution.
+
+## Recovery, Busy State, and Error Codes
+
+These behaviors are owned by code. This section only says where each one is declared; read the
+declaration for the current rules.
+
+- **Command ids and `status` recovery.** The daemon attaches a `commandId` with `withRunnerCommandId`
+  ([`runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)). The runner records commands in
+  `RunnerCommandJournal` ([`RunnerTests+CommandJournal.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandJournal.swift)) and
+  answers the `status` command in `executeStatus`
+  ([`RunnerTests+CommandDispatch.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+CommandDispatch.swift)). The daemon's recovery
+  decisions live in [`runner-command-recovery.ts`](../../packages/platform-apple/src/runner/runner-command-recovery.ts).
+- **`runnerMainThreadBusy`.** The runner stamps responses with `stampingCurrentMainThreadBusy`
+  ([`RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)) from `currentMainThreadBusyState()`
+  ([`RunnerTests+MainThreadWork.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+MainThreadWork.swift)). The daemon reads the
+  stamp in [`runner-session.ts`](../../packages/platform-apple/src/runner/runner-session.ts).
+- **`runnerFatal`.** A field of the response data (`runnerFatal` in
+  [`RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)). The daemon reads it in
+  `resolveRunnerFatalReason` ([`runner-session.ts`](../../packages/platform-apple/src/runner/runner-session.ts)).
+- **Runner error codes** (for example `RUNNER_BUSY`, `RUNNER_WEDGED`, `MAIN_THREAD_TIMEOUT`). The daemon
+  classifies a runner-reported code in `classifyRunnerReportedError`
+  ([`runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)): codes listed in `DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES`
+  arrive as `COMMAND_FAILED` with `details.runnerErrorCode`, and other codes pass through as typed
+  codes. How the daemon reacts to a failure (retry, resend, session-fatal) is declared in
+  `RUNNER_ERROR_RULES` and the helpers beside it
+  ([`runner-error-classification.ts`](../../packages/platform-apple/src/runner/runner-error-classification.ts)).
