@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { CliJsonResult } from '../cli-json.ts';
 import { type LiveContext, runStep } from './live-harness.ts';
 
@@ -59,12 +60,13 @@ export async function answerDeepLinkConfirmation(
     const details = arrived.json?.error?.details;
     const launchPending = details?.runnerErrorCode === APP_NOT_RUNNING;
     const reason = details?.reason;
-    const readableMiss = reason === 'wait_target_absent' || reason === 'wait_deadline_exceeded';
+    const readableMiss =
+      reason === WAIT_REASONS.targetAbsent || reason === WAIT_REASONS.deadlineExceeded;
     const interruptedCapture =
-      reason === 'wait_capture_stalled' || reason === 'wait_runner_restart_exhausted';
+      reason === WAIT_REASONS.captureStalled || reason === WAIT_REASONS.runnerRestartExhausted;
     if (!launchPending && !readableMiss && !interruptedCapture) return;
     if (!answered) answered = await acceptOpenConfirmation(device);
-    if (!answered && reason === 'wait_target_absent') return;
+    if (!answered && reason === WAIT_REASONS.targetAbsent) return;
   }
 }
 

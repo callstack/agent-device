@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { CliJsonResult } from './cli-json.ts';
 import {
   answerDeepLinkConfirmation,
@@ -15,16 +16,16 @@ const LANDED = result(0, { success: true });
 const LAUNCH_PENDING = result(1, {
   error: {
     code: 'COMMAND_FAILED',
-    details: { reason: 'wait_capture_stalled', runnerErrorCode: 'APP_NOT_RUNNING' },
+    details: { reason: WAIT_REASONS.captureStalled, runnerErrorCode: 'APP_NOT_RUNNING' },
   },
 });
 const WRONG_ROUTE = result(1, {
-  error: { code: 'COMMAND_FAILED', details: { reason: 'wait_target_absent' } },
+  error: { code: 'COMMAND_FAILED', details: { reason: WAIT_REASONS.targetAbsent } },
 });
 const READABLE_TIMEOUT = result(1, {
   error: {
     code: 'COMMAND_FAILED',
-    details: { reason: 'wait_deadline_exceeded', readableCaptures: 5, captureTruncated: true },
+    details: { reason: WAIT_REASONS.deadlineExceeded, readableCaptures: 5, captureTruncated: true },
   },
 });
 const OPEN_PROMPT = result(0, {
