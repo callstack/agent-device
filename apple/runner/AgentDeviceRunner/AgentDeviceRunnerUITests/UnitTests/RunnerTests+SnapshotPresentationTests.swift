@@ -635,7 +635,7 @@ extension RunnerTests {
     ) -> RawAXNode {
       RawAXNode(
         index: index, type: type, label: label, identifier: nil, value: nil,
-        rect: SnapshotRect(x: 10, y: 20 + index * 60, width: 100, height: 44),
+        rect: SnapshotRect(x: 10, y: Double(20 + index * 60), width: 100, height: 44),
         enabled: enabled, focused: nil, selected: nil, hittable: false,
         depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
       )

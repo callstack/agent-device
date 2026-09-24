@@ -9,11 +9,12 @@ extension RunnerTests {
     label: String? = nil,
     rect: SnapshotRect,
     depth: Int,
-    parentIndex: Int?
+    parentIndex: Int?,
+    hittable: Bool? = false
   ) -> RawAXNode {
     RawAXNode(
       index: index, type: type, label: label, identifier: nil, value: nil, rect: rect,
-      enabled: true, focused: nil, selected: nil, hittable: false, depth: depth,
+      enabled: true, focused: nil, selected: nil, hittable: hittable, depth: depth,
       parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil
     )
   }
@@ -157,19 +158,21 @@ extension RunnerTests {
   /// retained even when a scroll anchor clips it to nothing, so it is the retained node whose frame
   /// is degenerate -- and `nil` there would hand the #2638 wrapper verdict neither answer.
   func testFoldWithUnknownViewportWithholdsContainmentButNotFrameEvidence() throws {
-    let nodes: [RawAXNode] = [
+    // Source bits as `normalized()` leaves them when the viewport read failed: the root is decided,
+    // everything whose answer is containment is undecided.
+    let nodes = [
       Self.foldNode(0, type: "Application", label: "App",
         rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
       Self.foldNode(1, type: "ScrollView", label: "Scroll",
-        rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0),
+        rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0,
+        hittable: nil),
       Self.foldNode(2, type: "Window", label: "Clipped carrier",
-        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), depth: 2, parentIndex: 1),
+        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), depth: 2, parentIndex: 1,
+        hittable: nil),
       Self.foldNode(3, type: "Button", label: "Inside",
-        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), depth: 2, parentIndex: 1),
-    ].map { node in
-      // What `normalized()` leaves behind when the viewport read failed: undecided, not `false`.
-      node.replacing(rect: node.rect, hittable: node.parentIndex == nil ? false : nil)
-    }
+        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), depth: 2, parentIndex: 1,
+        hittable: nil),
+    ]
     let folded = SnapshotVisibilityFold.fold(
       nodes,
       viewport: .missing(reason: .notProvided),
