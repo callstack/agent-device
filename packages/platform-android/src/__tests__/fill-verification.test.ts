@@ -15,6 +15,7 @@ import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-s
 import {
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
+  type FillVerificationClock,
 } from '../fill-verification.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import {
@@ -93,42 +94,65 @@ test('verification samples re-read the hierarchy instead of sharing one capture'
 });
 
 test('a value the app renders late still verifies, as long as it lands before the deadline', async () => {
-  // Six samples of the hint before the value shows: about 900 ms in, past the retired schedule's
-  // last sample at 500 ms and inside the deadline.
+  // Six samples of the hint before the value shows: 900 ms in, past the retired schedule's last
+  // sample at 500 ms and inside the deadline.
   const session = createFillHelperSession({
     textForCapture: (captureIndex) => (captureIndex <= 6 ? 'Key echo' : 'chips'),
   });
+  const clock = createFakeClock();
 
   const verification = await withFillHelperProvider(
     session.provider,
     async () =>
-      await verifyAndroidFilledText(device, 10, 10, 'chips', {
-        helperSessionScope: 'daemon-session',
-      }),
+      await verifyAndroidFilledText(
+        device,
+        10,
+        10,
+        'chips',
+        { helperSessionScope: 'daemon-session' },
+        clock,
+      ),
   );
 
   assert.equal(verification.ok, true);
   assert.equal(session.captureCount(), 8, 'six hint samples, then the value held for two');
+  assert.equal(clock.now(), 1050, 'the value held from the 900 ms sample to the 1050 ms one');
 });
 
 test('a value that never lands is a mismatch at the deadline, not before it', async () => {
   const session = createFillHelperSession({ textForCapture: () => 'Key echo' });
-  const startedAt = Date.now();
+  const clock = createFakeClock();
 
   const verification = await withFillHelperProvider(
     session.provider,
     async () =>
-      await verifyAndroidFilledText(device, 10, 10, 'chips', {
-        helperSessionScope: 'daemon-session',
-      }),
+      await verifyAndroidFilledText(
+        device,
+        10,
+        10,
+        'chips',
+        { helperSessionScope: 'daemon-session' },
+        clock,
+      ),
   );
 
   assert.equal(verification.ok, false);
   assert.equal(verification.reason, 'text_mismatch');
-  assert.equal(verification.actual, 'Key echo', 'the last sample is the answer');
-  assert.ok(Date.now() - startedAt >= 1500, 'sampling ran to the deadline');
-  assert.ok(session.captureCount() >= 4, 'the deadline admits more samples than the old schedule');
+  assert.equal(verification.actual, 'Key echo', 'the sample at the deadline is the answer');
+  assert.equal(clock.now(), 1500, 'sampling ran to the deadline and not past it');
+  assert.equal(session.captureCount(), 11, 'a sample every 150 ms from 0 to 1500');
 });
+
+/** A clock the sampler advances by sleeping, so the deadline is reached without waiting it out. */
+function createFakeClock(): FillVerificationClock & { now(): number } {
+  let elapsed = 0;
+  return {
+    now: () => elapsed,
+    sleep: async (milliseconds) => {
+      elapsed += milliseconds;
+    },
+  };
+}
 
 test('the pre-action target read shares the daemon-session helper with the samples', async () => {
   const session = createFillHelperSession();

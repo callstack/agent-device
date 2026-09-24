@@ -55,15 +55,24 @@ type AndroidFillVerificationContext = {
 const FILL_VERIFICATION_SAMPLE_INTERVAL_MS = 150;
 const FILL_VERIFICATION_DEADLINE_MS = 1500;
 
+/** The clock the sampler paces itself by; a test hands in one it advances instead of waiting. */
+export type FillVerificationClock = Readonly<{
+  now(): number;
+  sleep(milliseconds: number): Promise<void>;
+}>;
+
+const wallClock: FillVerificationClock = Object.freeze({ now: () => Date.now(), sleep });
+
 export async function verifyAndroidFilledText(
   device: DeviceInfo,
   x: number,
   y: number,
   expected: string,
   helper: AndroidHelperSessionOptions = {},
+  clock: FillVerificationClock = wallClock,
 ): Promise<AndroidFillVerification> {
   const context = await readAndroidFillVerificationContext(device);
-  const deadline = Date.now() + FILL_VERIFICATION_DEADLINE_MS;
+  const deadline = clock.now() + FILL_VERIFICATION_DEADLINE_MS;
   let previous: AndroidFillVerification | null = null;
 
   for (;;) {
@@ -71,13 +80,13 @@ export async function verifyAndroidFilledText(
     if (verification.reason === 'ime_capture') {
       return verification;
     }
-    const remainingMs = deadline - Date.now();
+    const remainingMs = deadline - clock.now();
     if ((verification.ok && previous?.ok) || remainingMs <= 0) {
       return verification;
     }
     previous = verification;
     // The last sleep ends at the deadline, so the final sample starts there and not an interval later.
-    await sleep(Math.min(FILL_VERIFICATION_SAMPLE_INTERVAL_MS, remainingMs));
+    await clock.sleep(Math.min(FILL_VERIFICATION_SAMPLE_INTERVAL_MS, remainingMs));
   }
 }
 
