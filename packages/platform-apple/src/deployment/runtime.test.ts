@@ -390,6 +390,7 @@ test('simulator install failure surfaces the simctl stderr excerpt with no devic
     {
       code: 'COMMAND_FAILED',
       normalizedMessage: /Failed to install the requested application/,
+      hint: null,
     },
   );
   const [request] = run.mock.calls.find(([call]) => call.args.includes('install'))!;
@@ -424,6 +425,7 @@ test('simulator push failure surfaces the simctl stderr excerpt', async () => {
     {
       code: 'COMMAND_FAILED',
       normalizedMessage: /Invalid device state: Booted/,
+      hint: null,
     },
   );
   const [request] = run.mock.calls.find(([call]) => call.args.includes('push'))!;

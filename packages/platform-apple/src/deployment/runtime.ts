@@ -157,7 +157,6 @@ async function installAppleApp(
         },
     signal,
     'Apple app install failed',
-    { hint: (result) => devicectlHint(device, result) },
   );
 }
 
@@ -182,7 +181,6 @@ async function uninstallAppleApp(
     signal,
     `Apple app uninstall failed for ${bundleId}`,
     {
-      hint: (result) => devicectlHint(device, result),
       tolerate: (result) =>
         isMissingAppErrorOutput(`${result.stdout}\n${result.stderr}`.toLowerCase()),
     },
@@ -223,39 +221,29 @@ async function pushAppleNotification(
  * The one request path this module uses to run a tolerated Apple tool call: it forces
  * `allowFailure`, then guards the result itself through `requireExecSuccess` so a non-zero
  * exit always throws the same COMMAND_FAILED shape as every other exec call site, with the
- * caller's curated message and, optionally, a devicectl hint. `tolerate` lets a caller accept
- * a specific non-zero result (uninstall's "already missing" case) without losing that guard
- * for every other outcome.
+ * caller's curated message. A devicectl failure gets the same Developer Mode,
+ * developer-disk-image, and pairing hints the other devicectl call sites attach. `tolerate`
+ * lets a caller accept a specific non-zero result (uninstall's "already missing" case)
+ * without losing that guard for every other outcome.
  */
 async function runAppleTool(
   host: PlatformRuntimeHost,
   request: Omit<AppleToolRequest, 'allowFailure'>,
   signal: AbortSignal,
   message: string,
-  options?: Readonly<{
-    hint?: (result: HostCommandResult) => string | undefined;
-    tolerate?: (result: HostCommandResult) => boolean;
-  }>,
+  options?: Readonly<{ tolerate?: (result: HostCommandResult) => boolean }>,
 ): Promise<HostCommandResult> {
   const result = await host.appleTools.run({ ...request, allowFailure: true }, signal);
   if (options?.tolerate?.(result)) return result;
-  return requireExecSuccess(result, message, (failed) => {
-    const hint = options?.hint?.(failed);
-    return { cmd: 'xcrun', args: [request.tool, ...request.args], ...(hint ? { hint } : {}) };
-  });
-}
-
-/**
- * Physical iOS install/uninstall runs through devicectl: a failure gets the same Developer
- * Mode, developer-disk-image, and pairing hints the other devicectl call sites attach.
- * Simulator installs go through simctl, which this resolver does not classify.
- */
-function devicectlHint(
-  device: DeviceInfo,
-  result: Readonly<{ stdout: string; stderr: string }>,
-): string | undefined {
-  if (device.kind === 'simulator') return undefined;
-  return resolveIosDevicectlHint(result.stdout, result.stderr) ?? IOS_DEVICECTL_DEFAULT_HINT;
+  return requireExecSuccess(result, message, (failed) => ({
+    cmd: 'xcrun',
+    args: [request.tool, ...request.args],
+    ...(request.tool === 'devicectl'
+      ? {
+          hint: resolveIosDevicectlHint(failed.stdout, failed.stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+        }
+      : {}),
+  }));
 }
 
 function appleDeployFact(device: DeviceInfo): RuntimeOperationFact {
