@@ -59,11 +59,16 @@ test('boot-shaped failures are not retryable', () => {
   );
 });
 
-test('an explicitly retriable flag wins over any message denial', () => {
-  const flagged = runnerConnectFailure('xcodebuild_exited_early', 'xcodebuild exited early', {
-    retriable: true,
-  });
-  assert.equal(isRetryableRunnerError(flagged), true);
+test('only the runner busy refusal earns a resend; a retriable flag alone does not', () => {
+  const busy = classifyRunnerReportedError('RUNNER_BUSY');
+  assert.equal(isRetryableRunnerError(new AppError(busy.code, 'busy', busy.details)), true);
+  const notRunning = classifyRunnerReportedError('APP_NOT_RUNNING');
+  assert.equal(notRunning.details.retriable, true);
+  assert.equal(
+    isRetryableRunnerError(new AppError(notRunning.code, 'not running', notRunning.details)),
+    false,
+  );
+  assert.equal(isRetryableRunnerError(commandFailed('boom', { retriable: true })), false);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {

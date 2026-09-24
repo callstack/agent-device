@@ -9,11 +9,7 @@ import {
   type IosDeveloperDiskImageState,
   type IosDeveloperModeState,
 } from './host.ts';
-import {
-  APP_NOT_RUNNING_RUNNER_CODE,
-  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
-  RUNNER_BUSY_RUNNER_CODE,
-} from './runner-contract.ts';
+import { MAIN_THREAD_TIMEOUT_RUNNER_CODE, RUNNER_BUSY_RUNNER_CODE } from './runner-contract.ts';
 
 export const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -21,7 +17,7 @@ export const RUNNER_CACHE_RECOVERY_HINT =
 /**
  * Details evidence a rule requires beyond code and message. A predicate rather than a
  * fixed vocabulary because the useful evidence is a shape: a recorded deadline, a
- * preflight marker, a retriable flag. Every predicate below names one.
+ * preflight marker, a runner error code. Every predicate below names one.
  */
 type RunnerErrorDetailsMatch = (details: AppErrorDetails) => boolean;
 
@@ -69,9 +65,12 @@ type RunnerErrorMatch = {
   details?: RunnerErrorDetailsMatch;
 };
 
-const hasRetriableFlag: RunnerErrorDetailsMatch = (details) => details.retriable === true;
-const hasAppNotRunningRunnerCode: RunnerErrorDetailsMatch = (details) =>
-  details.runnerErrorCode === APP_NOT_RUNNING_RUNNER_CODE;
+/**
+ * The runner refused the command before running it while abandoned main-thread work drains (#1105).
+ * A resend keys on this code, never on `details.retriable`: that flag tells a caller's poll to try
+ * again, and its other producers (a not-running app, a spent startup budget, an unavailable
+ * toolchain probe, an external provider) must not be resent inside one request.
+ */
 const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
   details.runnerErrorCode === RUNNER_BUSY_RUNNER_CODE;
 /**
@@ -210,11 +209,8 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
  * and since #2680 so does the one classification of startup failures — a row
  * carries recovery verdicts, a `buildFailure` reason and hint, or both.
  * Per axis, the FIRST matching rule that defines the axis wins — which is why
- * `flagged_retriable` precedes the denials (an explicitly retriable error
- * stays retriable whatever its message says), and `usbmux_device_unattached`
- * sits first (retrying cannot attach a cable, and its typed verdict carries
- * the recovery hint a generic connect failure would replace). `app_not_running`
- * precedes it too: its retriable flag is for the caller's poll, not a resend.
+ * `usbmux_device_unattached` sits first (retrying cannot attach a cable, and its
+ * typed verdict carries the recovery hint a generic connect failure would replace).
  */
 export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
   {
@@ -223,21 +219,10 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: { connectRetry: false },
   },
   {
-    reason: 'app_not_running',
-    match: { code: 'COMMAND_FAILED', details: hasAppNotRunningRunnerCode },
-    verdicts: { retryable: false, connectRetry: false },
-  },
-  {
-    // Named before the generic retriable flag so diagnostics say what refused, not that a flag
-    // was set. Nothing ran: the runner answered before dispatching the command (#1105).
+    // Nothing ran: the runner answered before dispatching the command (#1105).
     reason: 'runner_busy_refusal',
     match: { code: 'COMMAND_FAILED', details: hasRunnerBusyCode },
     verdicts: { retryable: true, connectRetry: true, drainResend: true },
-  },
-  {
-    reason: 'flagged_retriable',
-    match: { code: 'COMMAND_FAILED', details: hasRetriableFlag },
-    verdicts: { retryable: true, connectRetry: true },
   },
   {
     // Says `artifactSuspect: false` on purpose: a boot that cannot compile is not cured by wiping

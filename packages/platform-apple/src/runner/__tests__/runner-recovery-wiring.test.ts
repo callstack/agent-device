@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { RunnerSession } from '../runner-session.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
-import type { RunnerCommand } from '../runner-contract.ts';
+import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
+import {
+  createRunnerPhaseBudget,
+  requireRunnerPhaseRemainingMs,
+  resolveExpectedRunnerCacheMetadata,
+} from '../runner-cache-metadata.ts';
 import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
 
 /**
@@ -298,7 +304,8 @@ test.each([undefined, 'get', 'accept', 'dismiss'] as const)(
   'alert action %s selects provider retries by mutation semantics',
   async (action) => {
     const commands: RunnerCommand[] = [];
-    const failure = new AppError('COMMAND_FAILED', 'response unavailable', { retriable: true });
+    const busy = classifyRunnerReportedError('RUNNER_BUSY');
+    const failure = new AppError(busy.code, 'runner busy', busy.details);
     const result = withAppleRunnerProvider(
       async (_device, command) => {
         commands.push(command);
@@ -345,4 +352,90 @@ test('a read refused over a not-running app is one definite answer, not a transp
     ['snapshot'],
   );
   assert.equal(invalidateRunnerSessionMock.mock.calls.length, 0);
+});
+
+test('a read the runner refused as busy is resent on the same session', async () => {
+  server = await startFakeRunnerServer({
+    snapshot: [
+      { kind: 'runnerError', code: 'RUNNER_BUSY', message: 'runner is draining' },
+      { kind: 'ok', data: { captured: true } },
+    ],
+    status: [
+      {
+        kind: 'ok',
+        data: {
+          lifecycleState: 'failed',
+          lifecycleErrorCode: 'RUNNER_BUSY',
+          lifecycleErrorMessage: 'runner is draining',
+        },
+      },
+    ],
+  });
+  seedSession(server.port);
+
+  assert.deepEqual(await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }), {
+    captured: true,
+  });
+  assert.equal(server.requests.filter((request) => request.command === 'snapshot').length, 2);
+  assert.equal(invalidateRunnerSessionMock.mock.calls.length, 0);
+});
+
+// `retriable` on these tells the caller's next request to try again. Resending inside this request
+// would open a fresh startup budget per attempt, or second-guess a provider's own transport policy.
+const readSnapshot = () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' });
+const sessionStarts = () => ensureRunnerSessionMock.mock.calls.length;
+
+test.each([
+  {
+    producer: 'a spent startup budget',
+    reason: 'runner_phase_budget_exhausted',
+    arrange: () => {
+      ensureRunnerSessionMock.mockImplementation(async () =>
+        requireRunnerPhaseRemainingMs(createRunnerPhaseBudget(0, undefined), 'runner_startup'),
+      );
+      return { run: readSnapshot, sends: sessionStarts };
+    },
+  },
+  {
+    producer: 'an unreadable toolchain',
+    reason: 'apple_toolchain_probe_unavailable',
+    arrange: () => {
+      resetAllProcessMemosForTests();
+      appleRunnerTestHost.update({
+        runCmdSync: () => ({ exitCode: 1, stdout: '', stderr: 'xcode-select: error' }),
+      });
+      ensureRunnerSessionMock.mockImplementation(async () =>
+        resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR),
+      );
+      return { run: readSnapshot, sends: sessionStarts };
+    },
+  },
+  {
+    producer: 'an external runner provider',
+    reason: 'provider_transport_unavailable',
+    arrange: () => {
+      let calls = 0;
+      const provider = async () => {
+        calls += 1;
+        throw new AppError('COMMAND_FAILED', 'provider transport unavailable', {
+          reason: 'provider_transport_unavailable',
+          retriable: true,
+        });
+      };
+      return {
+        run: () => withAppleRunnerProvider(provider, { deviceId: IOS_SIMULATOR.id }, readSnapshot),
+        sends: () => calls,
+      };
+    },
+  },
+])('a retriable read failure from $producer is not resent', async ({ reason, arrange }) => {
+  const { run, sends } = arrange();
+
+  await assert.rejects(run(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, reason);
+    assert.equal(error.details?.retriable, true);
+    return true;
+  });
+  assert.equal(sends(), 1);
 });
