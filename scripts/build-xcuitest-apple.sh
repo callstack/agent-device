@@ -146,24 +146,49 @@ if [ -n "${AGENT_DEVICE_XCUITEST_ARCHS:-}" ]; then
   ARCH_BUILD_SETTINGS="ARCHS=$AGENT_DEVICE_XCUITEST_ARCHS"
 fi
 
-node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild build-for-testing \
-  -project "$PROJECT_PATH" \
-  -scheme "$SCHEME" \
-  -destination "$DESTINATION" \
-  -derivedDataPath "$DERIVED_PATH" \
-  AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID="$RUNNER_APP_BUNDLE_ID" \
-  AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID="$RUNNER_TEST_BUNDLE_ID" \
-  COMPILER_INDEX_STORE_ENABLE=NO \
-  ENABLE_CODE_COVERAGE=NO \
-  ONLY_ACTIVE_ARCH=YES \
-  ENABLE_PREVIEWS=NO \
-  ENABLE_DEBUG_DYLIB=NO \
-  -IDEPackageSupportDisableManifestSandbox=1 \
-  -IDEPackageSupportDisablePluginExecutionSandbox=1 \
-  ENABLE_USER_SCRIPT_SANDBOXING=NO \
-  OTHER_SWIFT_FLAGS="$SWIFT_FLAGS" \
-  $ARCH_BUILD_SETTINGS \
-  $SIGNING_BUILD_SETTINGS
+build_for_testing() {
+  node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild build-for-testing \
+    -project "$PROJECT_PATH" \
+    -scheme "$SCHEME" \
+    -destination "$DESTINATION" \
+    -derivedDataPath "$DERIVED_PATH" \
+    AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID="$RUNNER_APP_BUNDLE_ID" \
+    AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID="$RUNNER_TEST_BUNDLE_ID" \
+    COMPILER_INDEX_STORE_ENABLE=NO \
+    ENABLE_CODE_COVERAGE=NO \
+    ONLY_ACTIVE_ARCH=YES \
+    ENABLE_PREVIEWS=NO \
+    ENABLE_DEBUG_DYLIB=NO \
+    -IDEPackageSupportDisableManifestSandbox=1 \
+    -IDEPackageSupportDisablePluginExecutionSandbox=1 \
+    ENABLE_USER_SCRIPT_SANDBOXING=NO \
+    OTHER_SWIFT_FLAGS="$SWIFT_FLAGS" \
+    $ARCH_BUILD_SETTINGS \
+    $SIGNING_BUILD_SETTINGS
+}
+
+# The isolation scan reads the compiler diagnostics in the build log, and an incremental build
+# prints them only for the files it recompiles.
+REUSED_DERIVED_DATA=0
+if [ -d "$DERIVED_PATH/Build/Intermediates.noindex" ]; then
+  REUSED_DERIVED_DATA=1
+fi
+mkdir -p "$DERIVED_PATH/Logs"
+BUILD_LOG="$DERIVED_PATH/Logs/agent-device-build-for-testing.log"
+BUILD_STATUS_FILE="$DERIVED_PATH/Logs/agent-device-build-for-testing.status"
+{
+  BUILD_STATUS=0
+  build_for_testing 2>&1 || BUILD_STATUS=$?
+  printf '%s\n' "$BUILD_STATUS" > "$BUILD_STATUS_FILE"
+} | tee "$BUILD_LOG"
+BUILD_STATUS="$(cat "$BUILD_STATUS_FILE")"
+if [ "$BUILD_STATUS" -ne 0 ]; then
+  exit "$BUILD_STATUS"
+fi
+if [ "$REUSED_DERIVED_DATA" = 1 ]; then
+  echo "Isolation scan covers only the files this build recompiled: it reused DerivedData at $DERIVED_PATH. Run pnpm build:xcuitest:$PLATFORM:clean to scan every file." >&2
+fi
+node --experimental-strip-types scripts/runner-isolation-diagnostics.ts "$BUILD_LOG"
 
 if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then
   node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"
