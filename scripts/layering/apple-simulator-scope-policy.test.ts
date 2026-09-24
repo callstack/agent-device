@@ -6,6 +6,8 @@ import {
 } from './apple-simulator-scope-policy.ts';
 
 const APPLE_SRC = 'packages/platform-apple/src/';
+const SIMCTL_ARGV_MESSAGE =
+  /^builds a simctl argv outside core\/simctl\.ts and core\/tool-provider\.ts; build it with buildSimctlArgsForDevice or buildSimctlArgsForAddress$/;
 const HAND_BUILT_MESSAGE =
   /^hands xcrun an argv whose tool is not a literal non-simctl name; build a simctl argv with buildSimctlArgsForDevice or buildSimctlArgsForAddress$/;
 const FORGED_MESSAGE =
@@ -29,14 +31,32 @@ const FORGED_ARGV =
 const FORGED_ADDRESS = 'const address = { udid, simulatorSetPath } as SimulatorAddress;\n';
 
 test('the #2818 bridge spawn through a plain xcrun executor is refused', () => {
-  assertFlagged(`${APPLE_SRC}snapshot-source/host.ts`, HAND_BUILT_BRIDGE, HAND_BUILT_MESSAGE);
+  assertFlagged(`${APPLE_SRC}snapshot-source/host.ts`, HAND_BUILT_BRIDGE, SIMCTL_ARGV_MESSAGE);
 });
 
-test('an xcrun argv must name its tool as a literal other than simctl', () => {
+test('a simctl argv is refused however it reaches an executor', () => {
   for (const source of [
-    "const tool = 'simctl';\nrunCmd('xcrun', [tool, 'spawn', udid, bin]);\n",
+    "const argv = ['simctl', 'spawn', udid, bin];\nrunCmd('xcrun', argv);\n",
+    "const argv = ['simctl', 'spawn', udid, bridge];\nrunCmdBackground('xcrun', argv, { detached: true });\n",
+    "const argv = ['simctl', 'spawn', udid, 'log', 'stream'];\nhost.commands.run({ executable: 'xcrun', args: argv });\n",
+    "const argv = ['simctl', 'boot', udid];\nconst alias = argv;\nrunCmd('xcrun', alias);\n",
+    "const argv = ['simctl', 'boot', udid];\nrunCmd('xcrun', [...argv]);\n",
+    "const head = ['simctl'];\nrunCmd('xcrun', [...head, 'boot', udid]);\n",
+    "const tool = 'simctl';\nconst argv = [tool, 'spawn', udid, bin];\nrunCmd('xcrun', argv);\n",
+    "const tool = `simctl`;\nrunCmdBackground('xcrun', [tool, 'spawn', udid, bin]);\n",
     "runCmd('xcrun', [`simctl`, 'boot', udid]);\n",
     "host.commands.run({ executable: 'xcrun', args: ['simctl', 'spawn', udid, 'log', 'stream'] });\n",
+    "const tools = ['simctl', 'devicectl'];\n",
+  ]) {
+    assertFlagged(`${APPLE_SRC}logs/start.ts`, source, SIMCTL_ARGV_MESSAGE);
+  }
+});
+
+test('an inline xcrun argv must name its tool as a literal other than simctl', () => {
+  for (const source of [
+    "runCmd('xcrun', [tool, 'spawn', udid, bin]);\n",
+    "runCmd('xcrun', [`${tool}`, 'boot', udid]);\n",
+    "host.commands.run({ executable: 'xcrun', args: [request.tool, ...request.args] });\n",
   ]) {
     assertFlagged(`${APPLE_SRC}logs/start.ts`, source, HAND_BUILT_MESSAGE);
   }
@@ -65,9 +85,13 @@ test('a cast to a simulator-scope brand is refused outside the mint modules', ()
   );
 });
 
-test('the mint modules may cast to the brands they mint', () => {
+test('the mint modules may build and cast to the brands they mint', () => {
+  const mintSource =
+    FORGED_ARGV +
+    FORGED_ADDRESS +
+    "return Object.freeze(['simctl', ...args] as const) as ScopedSimctlCommand;\n";
   for (const mint of [`${APPLE_SRC}core/simctl.ts`, `${APPLE_SRC}core/tool-provider.ts`]) {
-    assert.deepEqual(violationsFor(mint, FORGED_ARGV + FORGED_ADDRESS), [], mint);
+    assert.deepEqual(violationsFor(mint, mintSource), [], mint);
   }
 });
 
@@ -84,7 +108,8 @@ test('named tools, builder output, pass-through argv and simctl text elsewhere a
         "runCmdBackground('xcrun', buildSimctlArgsForAddress(simulator, ['spawn', simulator.udid]));",
         "host.commands.run({ executable: 'log', args: ['stream'] });",
         "host.appleTools.run({ tool: 'simctl', args: scopeSimctlArgsForDevice(device, ['boot', id]) });",
-        "const tools = ['simctl', 'devicectl'];",
+        "const tools = ['devicectl', 'simctl'];",
+        "const tool = 'simctl';",
         "if (args.includes('--set') || tool === 'simctl') note(tool);",
       ].join('\n'),
     ),

@@ -1,19 +1,21 @@
-// Catches: the two simctl scope bypasses `tsc` cannot reject. (1) A hand-built argv at an xcrun
-//   invocation: `runXcrun` accepts only a `ScopedSimctlCommand` or a named non-simctl tool, but
-//   the plain executors (`runCmd('xcrun', …)`, `runCmdBackground('xcrun', …)`, an
-//   `executable: 'xcrun'` spec) take any string argv, so an inline argv there must name its tool
-//   as a string literal other than `simctl`. (2) A cast to `ScopedSimctlArgs`,
-//   `ScopedSimctlCommand` or `SimulatorAddress` outside the modules that mint them. Either form
-//   runs against the default CoreSimulator set: `Invalid device` for a simulator in a scoped set,
-//   or a different simulator with the same udid.
+// Catches: the simctl scope bypasses `tsc` cannot reject. `runXcrun` accepts only a
+//   `ScopedSimctlCommand` or a named non-simctl tool, but the plain executors (`runCmd`,
+//   `runCmdBackground`, an `executable: 'xcrun'` spec) take any string argv, so every simctl argv
+//   reaching them must be builder output. (1) An array whose first element names simctl (the
+//   literal, a quasi-only template, or a same-file binding of either) outside the brand mints,
+//   however it later travels: inline, held in a variable, aliased or spread. (2) At an xcrun
+//   invocation, an inline argv whose tool is not a string literal other than `simctl`. (3) A cast
+//   to `ScopedSimctlArgs`, `ScopedSimctlCommand` or `SimulatorAddress` outside the brand mints.
+//   Every form runs against the default CoreSimulator set: `Invalid device` for a simulator in a
+//   scoped set, or a different simulator with the same udid.
 // Evidence: #2784 (fixed by #2818): the AX snapshot bridge (`snapshot-source/host.ts`) and the
 //   fold HID helper (`foldable/simulator-hid.ts`) built `['simctl', 'spawn', udid, ...]` from a
 //   bare udid and lost the set; #2824 moved every call site onto `core/simctl.ts` and checked it
 //   with a manual `git grep "'--set'"`.
-// Cost: 225 LOC (109 rule + 116 test).
+// Cost: 300 LOC (159 rule + 141 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that scoped simulator
 //   sets (`--ios-simulator-device-set`) are no longer supported, or when no production xcrun
-//   invocation takes a plain string argv.
+//   executor takes a plain string argv.
 
 import { parseSync } from 'oxc-parser';
 import { propertyName, visitAst } from './layering-ast.ts';
@@ -30,6 +32,9 @@ const BRAND_MINTS = new Set([
 ]);
 const BRANDS = new Set(['ScopedSimctlArgs', 'ScopedSimctlCommand', 'SimulatorAddress']);
 
+const SIMCTL_ARGV_MESSAGE =
+  'builds a simctl argv outside core/simctl.ts and core/tool-provider.ts; build it with ' +
+  'buildSimctlArgsForDevice or buildSimctlArgsForAddress';
 const HAND_BUILT_MESSAGE =
   'hands xcrun an argv whose tool is not a literal non-simctl name; build a simctl argv with ' +
   'buildSimctlArgsForDevice or buildSimctlArgsForAddress';
@@ -53,14 +58,31 @@ export function appleSimulatorScopeViolations(
   const violations: LayeringViolation[] = [];
   for (const [file, source] of sources) {
     if (!isPolicedSimulatorScopeFile(file)) continue;
+    const program = parseSync(file, source).program;
+    const simctlBindings = simctlNameBindings(program);
+    const isMint = BRAND_MINTS.has(file);
+    const buildsSimctlArgv = (array: AstNode) => {
+      const tool = firstElement(array);
+      return (
+        !isMint &&
+        (namesSimctl(tool) || (tool?.type === 'Identifier' && simctlBindings.has(tool.name)))
+      );
+    };
     const report = (node: AstNode, message: string) =>
       violations.push({ rule: RULE, file, line: lineAt(source, node.start), message });
-    visitAst(parseSync(file, source).program, (node) => {
+    visitAst(program, (node) => {
+      if (node.type === 'ArrayExpression' && buildsSimctlArgv(node)) {
+        report(node, SIMCTL_ARGV_MESSAGE);
+      }
       const argv = xcrunArgv(node);
-      if (argv?.type === 'ArrayExpression' && !namesNonSimctlTool(argv)) {
+      if (
+        argv?.type === 'ArrayExpression' &&
+        !buildsSimctlArgv(argv) &&
+        !namesNonSimctlTool(argv)
+      ) {
         report(argv, HAND_BUILT_MESSAGE);
       }
-      if (!BRAND_MINTS.has(file) && castsToBrand(node)) report(node, FORGED_MESSAGE);
+      if (!isMint && castsToBrand(node)) report(node, FORGED_MESSAGE);
     });
   }
   return violations;
@@ -82,9 +104,37 @@ function xcrunArgv(node: AstNode): AstNode | undefined {
 
 /** A spread passes an argv through like a variable; any other first element must name the tool. */
 function namesNonSimctlTool(argv: AstNode): boolean {
-  const tool = (argv.elements as AstNode[])[0];
+  const tool = firstElement(argv);
   if (tool?.type === 'SpreadElement') return true;
   return tool?.type === 'Literal' && typeof tool.value === 'string' && tool.value !== 'simctl';
+}
+
+function firstElement(array: AstNode): AstNode | undefined {
+  return (array.elements as (AstNode | null)[])[0] ?? undefined;
+}
+
+/** `'simctl'` or `` `simctl` ``, the two spellings of the tool name as a constant. */
+function namesSimctl(node: AstNode | undefined): boolean {
+  if (isLiteral(node, 'simctl')) return true;
+  if (node?.type !== 'TemplateLiteral' || (node.expressions as unknown[]).length > 0) return false;
+  const [quasi] = node.quasis as AstNode[];
+  return (quasi?.value as { cooked?: string } | undefined)?.cooked === 'simctl';
+}
+
+/** Names bound anywhere in the file to a constant spelling of `simctl`, whatever their scope. */
+function simctlNameBindings(program: unknown): Set<unknown> {
+  const bindings = new Set<unknown>();
+  visitAst(program, (node) => {
+    const id = node.id as AstNode | undefined;
+    if (
+      node.type === 'VariableDeclarator' &&
+      id?.type === 'Identifier' &&
+      namesSimctl(node.init as AstNode)
+    ) {
+      bindings.add(id.name);
+    }
+  });
+  return bindings;
 }
 
 function castsToBrand(node: AstNode): boolean {
