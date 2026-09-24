@@ -6,10 +6,10 @@ import {
 } from './apple-simulator-scope-policy.ts';
 
 const APPLE_SRC = 'packages/platform-apple/src/';
-const ARGV_MESSAGE =
-  /^builds or forges simctl argv outside core\/simctl\.ts; use scopeSimctlArgsForDevice\/runSimctlForDevice or a SimulatorAddress from simulatorAddressFor\(device\)$/;
-const SET_SCOPE_MESSAGE =
-  /^set-scope simctl builder outside its owners; a call that names a udid takes its set from the device \(scopeSimctlArgsForDevice\) or its SimulatorAddress$/;
+const HAND_BUILT_MESSAGE =
+  /^hands xcrun an argv whose tool is not a literal non-simctl name; build a simctl argv with buildSimctlArgsForDevice or buildSimctlArgsForAddress$/;
+const FORGED_MESSAGE =
+  /^forges a simulator-scope brand outside core\/simctl\.ts and core\/tool-provider\.ts; mint it with simulatorAddressFor, scopeSimctlArgsForDevice or buildSimctlArgsForDevice$/;
 
 function violationsFor(file: string, source: string) {
   return appleSimulatorScopeViolations(new Map([[file, source]]));
@@ -23,78 +23,73 @@ function assertFlagged(file: string, source: string, message: RegExp): void {
   assert.match(violations[0]!.message, message);
 }
 
-const HAND_BUILT_SPAWN = "runXcrun(['simctl', 'spawn', udid, binary]);\n";
 const HAND_BUILT_BRIDGE = "runCmdBackground('xcrun', ['simctl', 'spawn', udid, bridge]);\n";
-const EXPLICIT_DEFAULT_SET =
-  "scopeSimctlArgs(['spawn', udid, bin], { simulatorSetPath: undefined });\n";
-const ALIASED_SET_SCOPE = "import { scopeSimctlArgs as scope } from '../core/simctl.ts';\n";
 const FORGED_ARGV =
   "resolveAppleToolProvider().simctl.run(['spawn', udid, bin] as unknown as ScopedSimctlArgs);\n";
 const FORGED_ADDRESS = 'const address = { udid, simulatorSetPath } as SimulatorAddress;\n';
-const HAND_PREFIX = "const args = ['--set', path, ...args];\n";
 
-test('the two #2818 hand-built simctl spawns are refused', () => {
-  assertFlagged(`${APPLE_SRC}foldable/simulator-hid.ts`, HAND_BUILT_SPAWN, ARGV_MESSAGE);
-  assertFlagged(`${APPLE_SRC}snapshot-source/host.ts`, HAND_BUILT_BRIDGE, ARGV_MESSAGE);
+test('the #2818 bridge spawn through a plain xcrun executor is refused', () => {
+  assertFlagged(`${APPLE_SRC}snapshot-source/host.ts`, HAND_BUILT_BRIDGE, HAND_BUILT_MESSAGE);
 });
 
-test('the set-scope builder is refused outside its owners, aliased or not', () => {
-  assertFlagged(`${APPLE_SRC}foldable/simulator-hid.ts`, EXPLICIT_DEFAULT_SET, SET_SCOPE_MESSAGE);
-  assertFlagged(`${APPLE_SRC}snapshot-source/host.ts`, ALIASED_SET_SCOPE, SET_SCOPE_MESSAGE);
+test('an xcrun argv must name its tool as a literal other than simctl', () => {
+  for (const source of [
+    "const tool = 'simctl';\nrunCmd('xcrun', [tool, 'spawn', udid, bin]);\n",
+    "runCmd('xcrun', [`simctl`, 'boot', udid]);\n",
+    "host.commands.run({ executable: 'xcrun', args: ['simctl', 'spawn', udid, 'log', 'stream'] });\n",
+  ]) {
+    assertFlagged(`${APPLE_SRC}logs/start.ts`, source, HAND_BUILT_MESSAGE);
+  }
 });
 
-test('a forged scoped argv or simulator address is refused', () => {
-  assertFlagged('src/platform-runtime-planted.ts', FORGED_ARGV, ARGV_MESSAGE);
-  assertFlagged(`${APPLE_SRC}foldable/simulator-hid.ts`, FORGED_ADDRESS, ARGV_MESSAGE);
+test('the tool provider has no exemption for a hand-built simctl argv', () => {
+  assertFlagged(
+    `${APPLE_SRC}core/tool-provider.ts`,
+    "runCmd('xcrun', ['simctl', ...args]);\n",
+    HAND_BUILT_MESSAGE,
+  );
+});
+
+test('a cast to a simulator-scope brand is refused outside the mint modules', () => {
+  assertFlagged('src/platform-runtime-planted.ts', FORGED_ARGV, FORGED_MESSAGE);
+  assertFlagged(
+    `${APPLE_SRC}core/simulator.ts`,
+    'return argv as ScopedSimctlCommand;\n',
+    FORGED_MESSAGE,
+  );
+  assertFlagged(`${APPLE_SRC}foldable/simulator-hid.ts`, FORGED_ADDRESS, FORGED_MESSAGE);
   assertFlagged(
     `${APPLE_SRC}foldable/simulator-hid.ts`,
     'const address = <SimulatorAddress>{ udid, simulatorSetPath };\n',
-    ARGV_MESSAGE,
+    FORGED_MESSAGE,
   );
 });
 
-test('a hand-rolled --set prefix is refused outside core/simctl.ts', () => {
-  assertFlagged(`${APPLE_SRC}foldable/simulator-hid.ts`, HAND_PREFIX, ARGV_MESSAGE);
+test('the mint modules may cast to the brands they mint', () => {
+  for (const mint of [`${APPLE_SRC}core/simctl.ts`, `${APPLE_SRC}core/tool-provider.ts`]) {
+    assert.deepEqual(violationsFor(mint, FORGED_ARGV + FORGED_ADDRESS), [], mint);
+  }
 });
 
-test('the argv owners may build, prefix and mint', () => {
-  const owner = `${APPLE_SRC}core/simctl.ts`;
-  for (const source of [
-    HAND_BUILT_SPAWN,
-    HAND_BUILT_BRIDGE,
-    EXPLICIT_DEFAULT_SET,
-    ALIASED_SET_SCOPE,
-    FORGED_ARGV,
-    FORGED_ADDRESS,
-    HAND_PREFIX,
-  ]) {
-    assert.deepEqual(violationsFor(owner, source), [], source);
-  }
+test('named tools, builder output, pass-through argv and simctl text elsewhere are not violations', () => {
   assert.deepEqual(
     violationsFor(
       `${APPLE_SRC}core/tool-provider.ts`,
-      "provider.simctl.run(toolArgs as unknown as ScopedSimctlArgs, options);\nrunCmd('xcrun', ['simctl', ...args]);\n",
+      [
+        "runCmd('xcrun', ['devicectl', ...args]);",
+        "runCmd('xcrun', ['--find', name]);",
+        "runCmd('xcrun', simctlCommand(args));",
+        "runCmd('xcrun', [...argv]);",
+        "runCmdBackground('xcrun', args);",
+        "runCmdBackground('xcrun', buildSimctlArgsForAddress(simulator, ['spawn', simulator.udid]));",
+        "host.commands.run({ executable: 'log', args: ['stream'] });",
+        "host.appleTools.run({ tool: 'simctl', args: scopeSimctlArgsForDevice(device, ['boot', id]) });",
+        "const tools = ['simctl', 'devicectl'];",
+        "if (args.includes('--set') || tool === 'simctl') note(tool);",
+      ].join('\n'),
     ),
     [],
   );
-});
-
-test('the tool provider may not forge an address or a --set prefix', () => {
-  assertFlagged(`${APPLE_SRC}core/tool-provider.ts`, FORGED_ADDRESS, ARGV_MESSAGE);
-  assertFlagged(`${APPLE_SRC}core/tool-provider.ts`, HAND_PREFIX, ARGV_MESSAGE);
-});
-
-test('the calls that name no device may take set scope', () => {
-  for (const file of [`${APPLE_SRC}simulator-inventory.ts`, `${APPLE_SRC}logs/doctor.ts`]) {
-    assert.deepEqual(
-      violationsFor(
-        file,
-        "import { scopeSimctlArgs } from './core/simctl.ts';\nscopeSimctlArgs(['help'], { simulatorSetPath: undefined });\n",
-      ),
-      [],
-      file,
-    );
-  }
 });
 
 test('tests, fixtures and scripts are not policed', () => {
@@ -106,38 +101,16 @@ test('tests, fixtures and scripts are not policed', () => {
     'test/integration/provider-scenarios/providers.ts',
   ]) {
     assert.equal(isPolicedSimulatorScopeFile(file), false, file);
-    assert.deepEqual(violationsFor(file, HAND_BUILT_SPAWN + EXPLICIT_DEFAULT_SET), [], file);
+    assert.deepEqual(violationsFor(file, HAND_BUILT_BRIDGE + FORGED_ADDRESS), [], file);
   }
   assert.equal(isPolicedSimulatorScopeFile(`${APPLE_SRC}foldable/simulator-hid.ts`), true);
   assert.equal(isPolicedSimulatorScopeFile('src/platform-runtime-apple-tool-host.ts'), true);
 });
 
-test('devicectl argv and scoped device calls are not simctl violations', () => {
-  assert.deepEqual(
-    violationsFor(
-      `${APPLE_SRC}deployment/runtime.ts`,
-      [
-        "host.appleTools.run({ tool: 'devicectl', args: ['device', 'install', 'app', '--device', id] });",
-        "host.appleTools.run({ tool: 'simctl', args: scopeSimctlArgsForDevice(device, ['boot', device.id]) });",
-        "runXcrun(buildSimctlArgsForAddress(simulatorAddressFor(device), ['spawn', device.id]));",
-      ].join('\n'),
-    ),
-    [],
-  );
-});
-
-test('an unaliased import of the set-scope builder is one violation', () => {
-  assertFlagged(
-    `${APPLE_SRC}snapshot-source/host.ts`,
-    "import { scopeSimctlArgs } from '../core/simctl.ts';\n",
-    SET_SCOPE_MESSAGE,
-  );
-});
-
-test('a violation reports the line of the offending node', () => {
+test('a violation reports the line of the offending argv', () => {
   const [violation] = violationsFor(
-    `${APPLE_SRC}foldable/simulator-hid.ts`,
-    `const a = 1;\n\n${HAND_BUILT_SPAWN}`,
+    `${APPLE_SRC}snapshot-source/host.ts`,
+    `const a = 1;\n\n${HAND_BUILT_BRIDGE}`,
   );
   assert.equal(violation!.line, 3);
 });
