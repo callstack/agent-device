@@ -316,22 +316,39 @@ export function waitTimeoutError(
   deadline: WaitPollDeadline | undefined,
 ): AppError {
   const evidence = polling.failureEvidence();
-  if (deadline === 'runner-restart-exhausted') {
-    return waitRunnerRestartExhaustedError(message, evidence);
+  switch (deadline) {
+    case 'runner-restart-exhausted':
+      return waitRunnerRestartExhaustedError(message, evidence);
+    case 'readiness-exhausted':
+      return waitReadinessExhaustedError(message, evidence);
+    case 'capture-stalled':
+      // Whether a content verdict outranks the stall verdict is the caller's policy; a refusal is
+      // preserved either way.
+      rethrowNeverReadableCause(polling, evidence, polling.preserveUnreadableOnStall === true);
+      return waitCaptureStalledError(message, evidence);
+    case 'capture-truncated':
+      return waitDeadlineExceededError(message, evidence);
+    case undefined:
+      rethrowNeverReadableCause(polling, evidence, true);
+      return evidence.readableCaptures === 0
+        ? waitCaptureStalledError(message, evidence)
+        : waitTargetAbsentError(message, evidence);
+    default:
+      return assertNever(deadline);
   }
-  if (deadline === 'readiness-exhausted') return waitReadinessExhaustedError(message, evidence);
-  if (deadline === 'capture-stalled') {
-    // Whether a content verdict outranks the stall verdict is the caller's policy; a refusal is
-    // preserved either way.
-    rethrowNeverReadableCause(polling, evidence, polling.preserveUnreadableOnStall === true);
-    return waitCaptureStalledError(message, evidence);
-  }
-  if (deadline === 'capture-truncated') return waitDeadlineExceededError(message, evidence);
+}
 
-  rethrowNeverReadableCause(polling, evidence, true);
-  return evidence.readableCaptures === 0
-    ? waitCaptureStalledError(message, evidence)
-    : waitTargetAbsentError(message, evidence);
+/**
+ * Whether the deadline's cause was reported by the work it cancelled — a runner restart or
+ * readiness work — rather than inferred from the captures. Such a cause outranks evidence an
+ * earlier readable capture left behind.
+ */
+export function isSelfReportedWaitDeadline(deadline: WaitPollDeadline | undefined): boolean {
+  return deadline === 'runner-restart-exhausted' || deadline === 'readiness-exhausted';
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled wait deadline: ${String(value)}`);
 }
 
 function runnerRestartTimeoutEvidence(error: unknown): Partial<WaitFailureEvidence> | undefined {

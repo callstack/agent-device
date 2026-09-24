@@ -1,9 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import {
-  readinessPhaseDetails,
-  WAIT_REASONS,
-  type ReadinessPhase,
-} from '@agent-device/contracts/wait';
+import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   type DeviceBinding,
@@ -748,10 +744,11 @@ test('strict wait absent does not mask a runner restart after an earlier present
 });
 
 /**
- * The platform's cancellation as production throws it when the wait deadline lands before the
- * target is observable: the runner start or the Simulator app discovery was still running.
+ * The platform's cancellation as production throws it when the wait deadline lands mid-capture.
+ * With a phase, the runner start or the Simulator app discovery was still running; without one,
+ * the capture was cancelled in steady-state work such as the cached target re-check.
  */
-function readinessCancelledCapture(phase: ReadinessPhase, beforeStall: SnapshotResult[] = []) {
+function cancelledCapture(phase: ReadinessPhase | undefined, beforeStall: SnapshotResult[] = []) {
   const readable = [...beforeStall];
   return vi.fn(async (input: CaptureSnapshotInput) => {
     const next = readable.shift();
@@ -762,14 +759,14 @@ function readinessCancelledCapture(phase: ReadinessPhase, beforeStall: SnapshotR
       if (signal.aborted) return resolve();
       signal.addEventListener('abort', () => resolve(), { once: true });
     });
-    throw createRequestCanceledError(readinessPhaseDetails(phase), signal.reason);
+    throw createRequestCanceledError(phase ? { readinessPhase: phase } : {}, signal.reason);
   });
 }
 
 test.for(['runner-start', 'target-discovery'] as const)(
   'a %s that outlasts the wait reports readiness exhaustion, not a capture stall',
   async (phase) => {
-    const harness = waitRuntimeHarness({ captureSnapshot: readinessCancelledCapture(phase) });
+    const harness = waitRuntimeHarness({ captureSnapshot: cancelledCapture(phase) });
 
     const { response } = await runWait(['text', 'Ready', '50'], harness);
 
@@ -788,7 +785,7 @@ test.for(['runner-start', 'target-discovery'] as const)(
 );
 
 test('strict wait absent reports readiness exhaustion over an earlier present capture', async () => {
-  const captureSnapshot = readinessCancelledCapture('target-discovery', [
+  const captureSnapshot = cancelledCapture('target-discovery', [
     {
       nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Ready', hittable: true }],
       backend: 'web',
@@ -806,6 +803,48 @@ test('strict wait absent reports readiness exhaustion over an earlier present ca
     readinessPhase: 'target-discovery',
     readableCaptures: 1,
   });
+});
+
+test('strict wait absent keeps its present evidence when a steady-state capture is cancelled', async () => {
+  const captureSnapshot = cancelledCapture(undefined, [
+    {
+      nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Ready', hittable: true }],
+      backend: 'web',
+      producer: 'agent-browser',
+    },
+  ]);
+  const harness = waitRuntimeHarness({ captureSnapshot });
+
+  const { response } = await runWait(['absent', 'label="Ready"', '800'], harness);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.details).toMatchObject({
+    reason: WAIT_REASONS.targetPresent,
+    readableCaptures: 1,
+  });
+  expect(response.error.details?.readinessPhase).toBeUndefined();
+});
+
+test('a positive wait whose steady-state capture is cancelled reports the deadline, not readiness', async () => {
+  const captureSnapshot = cancelledCapture(undefined, [
+    {
+      nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }],
+      backend: 'web',
+      producer: 'agent-browser',
+    },
+  ]);
+  const harness = waitRuntimeHarness({ captureSnapshot });
+
+  const { response } = await runWait(['text', 'Ready', '800'], harness);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.details).toMatchObject({
+    reason: WAIT_REASONS.deadlineExceeded,
+    readableCaptures: 1,
+  });
+  expect(response.error.details?.readinessPhase).toBeUndefined();
 });
 
 test('a readable capture that lacks the target stays target-absent, not capture-stalled', async () => {

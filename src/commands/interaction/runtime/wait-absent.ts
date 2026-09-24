@@ -22,6 +22,7 @@ import type {
 } from './selector-wait.ts';
 import {
   createWaitPolling,
+  isSelfReportedWaitDeadline,
   type WaitFailureEvidence,
   waitTimeoutError,
   type WaitPollDeadline,
@@ -88,11 +89,10 @@ export async function waitForAbsent<Runtime extends SelectorWaitRuntime>(
     await polling.sleepUntilNextPoll();
   }
 
-  // A runner restart or unfinished readiness is the authoritative deadline cause
-  // even when an earlier readable poll saw the target. Returning stale
-  // target-present evidence would hide the retriable cause and make callers stop
-  // retrying for the wrong reason.
-  if (deadline === 'runner-restart-exhausted' || deadline === 'readiness-exhausted') {
+  // A self-reported deadline cause is authoritative even when an earlier readable
+  // poll saw the target. Returning stale target-present evidence would hide the
+  // retriable cause and make callers stop retrying for the wrong reason.
+  if (isSelfReportedWaitDeadline(deadline)) {
     throw waitTimeoutError(
       `wait absent timed out for selector: ${selectorExpression}`,
       polling,

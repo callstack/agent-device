@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import type { ReadinessPhase } from '@agent-device/contracts/wait';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
 import {
   readSimctlDevicesByRuntime,
@@ -57,6 +58,7 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
         signal,
         timeoutMs: TARGET_IDENTITY_TIMEOUT_MS,
       });
+      signal.throwIfAborted();
       if (observed === cached.processStartTime) return cached;
     }
     targets.delete(key);
@@ -67,10 +69,23 @@ export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTarget
         return target;
       },
       wait: (waitMs, stop) =>
-        waitForDetachedAttempt({ waitMs, signal, stop, cancelled: () => signal.reason }),
+        waitForDetachedAttempt({
+          waitMs,
+          signal,
+          stop,
+          cancelled: () => discoveryCancelled(signal),
+        }),
       pending: () => targetError(TARGET_DISCOVERY_PENDING, device, appBundleId),
     });
   };
+}
+
+/** A caller cancelled while it waited on a running discovery: its time went to readiness work. */
+function discoveryCancelled(signal: AbortSignal): AppError {
+  return createRequestCanceledError(
+    { readinessPhase: 'target-discovery' satisfies ReadinessPhase },
+    signal.reason,
+  );
 }
 
 /**

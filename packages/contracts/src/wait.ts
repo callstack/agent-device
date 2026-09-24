@@ -29,16 +29,12 @@ export type WaitReason = (typeof WAIT_REASONS)[keyof typeof WAIT_REASONS];
 
 /**
  * Work a platform does before it can observe the target at all: starting the Apple XCTest runner,
- * or discovering the Simulator app process the host AX bridge reads. A platform cancelled during
- * that work names it on the error it throws, through {@link readinessPhaseDetails}.
+ * or discovering the Simulator app process the host AX bridge reads. Only the code doing that work
+ * at the moment of cancellation names it, as `details.readinessPhase` on the error it throws.
  */
 const READINESS_PHASES = ['runner-start', 'target-discovery'] as const;
 
 export type ReadinessPhase = (typeof READINESS_PHASES)[number];
-
-export function readinessPhaseDetails(phase: ReadinessPhase): { readinessPhase: ReadinessPhase } {
-  return { readinessPhase: phase };
-}
 
 export function readinessPhaseOf(
   details: Readonly<Record<string, unknown>> | undefined,
