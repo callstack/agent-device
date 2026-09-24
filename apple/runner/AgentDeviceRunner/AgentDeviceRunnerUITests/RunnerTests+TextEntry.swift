@@ -32,7 +32,7 @@ extension RunnerTests {
       case .commitNotObserved:
         return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms 80. Do not use type, which appends to whatever committed."
       case .synthesisBudgetExceeded:
-        return "Fill about \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time and append the rest with separate type commands, keeping each command inside that budget. A lower --delay-ms does not help: this route is chosen when the accessibility channel is already degraded, and every character interval counts against the same budget."
+        return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time without --delay-ms and append the rest with separate type commands, keeping each command inside that budget. --delay-ms lowers the budget, because every character then pays its own synthesize call and the delay: \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.08)) characters at --delay-ms 80. A longer timeout does not help: this route is chosen when the accessibility channel is already degraded, and the pace is what makes the text long."
       }
     }
   }

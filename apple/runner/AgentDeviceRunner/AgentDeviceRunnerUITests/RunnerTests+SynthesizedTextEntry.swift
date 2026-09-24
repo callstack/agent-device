@@ -82,16 +82,22 @@ extension RunnerTests {
     text: String,
     delaySeconds: Double
   ) -> [SynthesizedReplacementStep] {
-    let characters = Array(text)
-    guard delaySeconds > 0, characters.count > 1 else {
+    guard synthesizedReplacementIsSpaced(characterCount: text.count, delaySeconds: delaySeconds)
+    else {
       return [SynthesizedReplacementStep(text: text, replacesExistingText: true)]
     }
-    return characters.enumerated().map { index, character in
+    return Array(text).enumerated().map { index, character in
       SynthesizedReplacementStep(
         text: String(character),
         replacesExistingText: index == 0
       )
     }
+  }
+
+  /// Whether a replacement is posted one character per synthesize call, `delaySeconds` apart,
+  /// rather than as one burst.
+  static func synthesizedReplacementIsSpaced(characterCount: Int, delaySeconds: Double) -> Bool {
+    delaySeconds > 0 && characterCount > 1
   }
 
   /// What a synthesized burst costs in wall clock, and the ceiling it has to fit inside before the
@@ -103,11 +109,21 @@ extension RunnerTests {
       1.0 / Double(RunnerSynthesizedTextEntry.typingSpeedCharactersPerSecond())
     }
 
-    /// Seconds the plan spends posting. A delayed plan posts one character per request and pays a
-    /// synthesize round trip for each, so this understates it; the margin this ceiling leaves
-    /// against the command budget covers what a round trip costs beyond the character interval.
+    /// Seconds one synthesize call costs beyond typing its characters. A one-character call at the
+    /// 83 ms pace took 222 ms on average on an iPhone 17 Pro simulator (212-617 ms over 235 calls),
+    /// which a spaced plan pays once per character.
+    static let synthesizeCallOverhead: TimeInterval = 0.15
+
+    /// Seconds the plan spends posting, charged per `synthesizedReplacementSteps` step: each
+    /// synthesize call types its characters at the pace and pays its overhead, and a spaced plan
+    /// sleeps `delaySeconds` between two calls.
     static func projectedSeconds(textLength: Int, delaySeconds: TimeInterval) -> TimeInterval {
-      Double(textLength) * max(delaySeconds, characterInterval)
+      let calls = synthesizedReplacementIsSpaced(characterCount: textLength, delaySeconds: delaySeconds)
+        ? textLength
+        : 1
+      return Double(textLength) * characterInterval
+        + Double(calls) * synthesizeCallOverhead
+        + Double(calls - 1) * delaySeconds
     }
 
     static func exceeds(textLength: Int, delaySeconds: TimeInterval) -> Bool {
@@ -115,9 +131,13 @@ extension RunnerTests {
         > TextEntryTiming.synthesizedDeliveryCeiling
     }
 
-    /// Longest text that fits at `delaySeconds`, which is what the refusal tells the caller.
+    /// Longest text `exceeds` admits at `delaySeconds`, which is what the refusal tells the caller.
     static func maxTextLength(delaySeconds: TimeInterval) -> Int {
-      Int(TextEntryTiming.synthesizedDeliveryCeiling / max(delaySeconds, characterInterval))
+      var length = 1
+      while !exceeds(textLength: length + 1, delaySeconds: delaySeconds) {
+        length += 1
+      }
+      return length
     }
   }
 

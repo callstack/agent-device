@@ -268,11 +268,26 @@ extension RunnerTests {
       TextEntryTiming.synthesizedDeliveryCeiling + TextEntryTiming.synthesizedCommitCeiling,
       45
     )
-    // An operator-spaced plan pays per character too, so its budget shrinks rather than timing out.
-    XCTAssertLessThan(
-      SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2),
-      fits
+  }
+
+  // A spaced plan posts each character in its own synthesize call and sleeps between two of them,
+  // so a character costs the pace, the call's overhead and the delay together, not the larger of
+  // pace and delay. `--delay-ms 80` is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
+  func testSpacedDeliveryBudgetChargesEachCharacterItsCallAndDelay() {
+    let delay = 0.08
+    let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
+    XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: delay))
+    XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: delay))
+    XCTAssertEqual(
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: 10, delaySeconds: delay)
+        - SynthesizedDeliveryBudget.projectedSeconds(textLength: 9, delaySeconds: delay),
+      SynthesizedDeliveryBudget.characterInterval
+        + SynthesizedDeliveryBudget.synthesizeCallOverhead
+        + delay,
+      accuracy: 1e-9
     )
+    XCTAssertLessThan(fits, SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0))
+    XCTAssertLessThan(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2), fits)
   }
 
   func testSynthesizedBudgetExceededCarriesItsOwnCodeAndRecovery() {
@@ -281,8 +296,12 @@ extension RunnerTests {
       "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
     )
     // The recovery has to tell the caller to split the text: waiting it out or raising a timeout
-    // does nothing, because the pace is what makes the burst long, not the host being slow.
-    XCTAssertTrue(TextEntryFailure.synthesisBudgetExceeded.hint.contains("characters at a time"))
+    // does nothing, because the pace is what makes the burst long, not the host being slow. A
+    // delayed request fits fewer characters, so the hint names both budgets rather than promising
+    // the undelayed one to a caller retrying with --delay-ms.
+    let hint = TextEntryFailure.synthesisBudgetExceeded.hint
+    XCTAssertTrue(hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time"))
+    XCTAssertTrue(hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.08)) characters at --delay-ms 80"))
   }
 
 #if os(iOS)
