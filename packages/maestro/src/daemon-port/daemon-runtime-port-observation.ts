@@ -408,6 +408,7 @@ export function maestroSnapshotSignature(snapshot: SnapshotState): string {
             enabled: node.enabled ?? false,
             selected: node.selected ?? false,
             focused: node.focused ?? false,
+            checked: node.checked ?? false,
             bounds: maestroSnapshotBounds(node.rect),
           })),
       ),

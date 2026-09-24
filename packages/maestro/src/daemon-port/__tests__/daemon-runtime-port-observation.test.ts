@@ -359,10 +359,24 @@ test('normalizes absent attributes like Maestro iOS hierarchy mapping', () => {
       enabled: false,
       selected: false,
       focused: false,
+      checked: false,
     },
   ]);
 
   expect(maestroSnapshotSignature(first)).toBe(maestroSnapshotSignature(second));
+});
+
+test('a checked-only flip changes the snapshot signature', () => {
+  // An Android switch tapped on: nothing about it moves or renames, only `checked` flips. The
+  // same signature before and after would read the tap as a no-op and retap it off again.
+  const off = makeSnapshot([
+    { index: 0, type: 'android.widget.Switch', label: 'Wi-Fi', checked: false },
+  ]);
+  const on = makeSnapshot([
+    { index: 0, type: 'android.widget.Switch', label: 'Wi-Fi', checked: true },
+  ]);
+
+  expect(maestroSnapshotSignature(off)).not.toBe(maestroSnapshotSignature(on));
 });
 
 test('excludes agent-device presentation metadata from Maestro hierarchy signatures', () => {
