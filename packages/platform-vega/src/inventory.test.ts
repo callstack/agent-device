@@ -5,7 +5,7 @@ import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform-runtime-host';
-import { createVegaInventory, parseVegaDeviceList } from './inventory.ts';
+import { createVegaInventory } from './inventory.ts';
 
 const scope: PlatformRequestScope = {
   signal: new AbortController().signal,
@@ -27,7 +27,19 @@ test('Vega inventory resolves the default CLI lazily and accepts only its virtua
 
   const devices = await createVegaInventory(host).discover({}, scope);
 
-  assert.deepEqual(devices, parseVegaDeviceList('VirtualDevice : tv\n'));
+  // Spelled out rather than compared against `parseVegaDeviceList(...)`: using the parser as the
+  // expected value lets both sides move together, which is exactly how a dropped `physical` row or
+  // a wrong `kind`/`booted` mapping would stay invisible.
+  assert.deepEqual(devices, [
+    {
+      platform: 'vega',
+      id: 'VirtualDevice',
+      name: 'Vega Virtual Device (VirtualDevice)',
+      kind: 'emulator',
+      target: 'tv',
+      booted: true,
+    },
+  ]);
 });
 
 test('Vega inventory fails closed when only an unsupported physical target is present', async () => {

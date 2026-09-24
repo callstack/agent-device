@@ -71,15 +71,21 @@ test('the tail follows a file its writer keeps appending to', async () => {
 test('a tail whose file disappears stops on its own instead of throwing', async () => {
   const logPath = logPathIn();
   fs.writeFileSync(logPath, '');
-  const tail = tailRunnerLogFile({ file: { logPath, startOffset: 0 }, onOutput: () => {} });
+  const chunks: string[] = [];
+  const tail = tailRunnerLogFile({
+    file: { logPath, startOffset: 0 },
+    onOutput: (chunk) => chunks.push(chunk),
+  });
   fs.rmSync(logPath);
 
   await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.deepEqual(chunks, []);
 
   // Writing a fresh file must not restart a tail that already gave up.
   fs.writeFileSync(logPath, 'AGENT_DEVICE_RUNNER_LISTENER_READY\n');
   await new Promise((resolve) => setTimeout(resolve, 120));
   tail.drain();
+  assert.deepEqual(chunks, []);
 });
 
 test('drain reads what the file gained and then stops following it', async () => {
