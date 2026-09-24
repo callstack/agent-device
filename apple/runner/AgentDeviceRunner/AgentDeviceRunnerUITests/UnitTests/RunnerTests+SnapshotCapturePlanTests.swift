@@ -162,7 +162,7 @@ extension RunnerTests {
     let payload = stampedSnapshotPayload(
       capture,
       backend: .recursiveTree,
-      state: "healthy",
+      state: .healthy,
       reason: nil
     )
 
@@ -187,7 +187,7 @@ extension RunnerTests {
         customActions: coverage
       ),
       backend: .recursiveTree,
-      state: "healthy",
+      state: .healthy,
       reason: nil
     )
     XCTAssertNil(silent.message)
@@ -200,7 +200,7 @@ extension RunnerTests {
         effectiveDepth: 4
       ),
       backend: .privateAX,
-      state: "recovered",
+      state: .recovered,
       reason: (reason: "tree capture timed out", code: "budget")
     )
     XCTAssertEqual(underlying.message, "underlying")
@@ -224,24 +224,24 @@ extension RunnerTests {
     // The CI signature behind `is absent ... capture was truncated`: a complete private AX
     // tree selected while the XCTest channel is penalized is whole, and must say so.
     let recovered = stampedSnapshotPayload(
-      complete, backend: .privateAX, state: "recovered", reason: deferred)
-    XCTAssertEqual(recovered.snapshotQuality?.state, "recovered")
+      complete, backend: .privateAX, state: .recovered, reason: deferred)
+    XCTAssertEqual(recovered.snapshotQuality?.state, .recovered)
     XCTAssertEqual(recovered.truncated, false)
 
     let depthLimited = stampedSnapshotPayload(
       SnapshotBackendCapture(payload: complete.payload, effectiveDepth: 56),
-      backend: .privateAX, state: "recovered", reason: deferred)
+      backend: .privateAX, state: .recovered, reason: deferred)
     XCTAssertEqual(depthLimited.truncated, true)
 
     let cappedPayload = stampedSnapshotPayload(
       SnapshotBackendCapture(
         payload: DataPayload(nodes: complete.payload.nodes ?? [], truncated: true),
         effectiveDepth: nil),
-      backend: .recursiveTree, state: "healthy", reason: nil)
+      backend: .recursiveTree, state: .healthy, reason: nil)
     XCTAssertEqual(cappedPayload.truncated, true)
 
     let sparse = stampedSnapshotPayload(
-      complete, backend: .querySweep, state: "sparse",
+      complete, backend: .querySweep, state: .sparse,
       reason: ("snapshot returned no semantic controls or content", "sparse-tree"))
     XCTAssertEqual(sparse.truncated, true)
   }
@@ -260,7 +260,7 @@ extension RunnerTests {
     let payload = stampedSnapshotPayload(
       capture,
       backend: .recursiveTree,
-      state: "healthy",
+      state: .healthy,
       reason: nil
     )
 
@@ -291,7 +291,7 @@ extension RunnerTests {
     let payload = stampedSnapshotPayload(
       capture,
       backend: .recursiveTree,
-      state: "healthy",
+      state: .healthy,
       reason: nil
     )
 
@@ -507,7 +507,7 @@ extension RunnerTests {
 
     let quality = try XCTUnwrap(capped.snapshotQuality)
     XCTAssertEqual(quality.backend, SnapshotBackendKind.privateAX.rawValue)
-    XCTAssertNotEqual(quality.state, "sparse")
+    XCTAssertNotEqual(quality.state, .sparse)
     let nodes = try XCTUnwrap(capped.nodes)
     XCTAssertGreaterThan(nodes.count, 1)
     XCTAssertEqual(nodes.map(\.depth).max(), 1)

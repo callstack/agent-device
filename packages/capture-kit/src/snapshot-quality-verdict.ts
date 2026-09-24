@@ -1,11 +1,6 @@
-import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import { isSnapshotQualityState, type SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
-const SNAPSHOT_QUALITY_STATES = new Set<SnapshotQualityVerdict['state']>([
-  'healthy',
-  'recovered',
-  'sparse',
-]);
 const SNAPSHOT_QUALITY_BACKENDS = new Set<SnapshotQualityVerdict['backend']>(
   Object.keys(SNAPSHOT_QUALITY_BACKEND_CAPABILITIES) as SnapshotQualityVerdict['backend'][],
 );
@@ -26,10 +21,8 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
   // Validate the load-bearing union fields: an object with an unknown state/backend is not a
   // verdict this version understands, so it falls through as verdict-absent and the legacy
   // node-shape detectors run instead of being silently suppressed by a malformed payload.
-  if (
-    typeof raw.state !== 'string' ||
-    !SNAPSHOT_QUALITY_STATES.has(raw.state as SnapshotQualityVerdict['state'])
-  ) {
+  const state = raw.state;
+  if (!isSnapshotQualityState(state)) {
     return undefined;
   }
   if (
@@ -40,7 +33,7 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
   }
   const timing = readSnapshotQualityTiming(raw.timing);
   return {
-    state: raw.state as SnapshotQualityVerdict['state'],
+    state,
     backend: raw.backend as SnapshotQualityVerdict['backend'],
     reason: typeof raw.reason === 'string' ? raw.reason : undefined,
     // An unknown reasonCode is dropped, not rejected: a forward-version runner that adds one

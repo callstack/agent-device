@@ -23,7 +23,7 @@ extension RunnerTests {
     XCTAssertEqual(payload.runnerFatalReason, Self.axSnapshotUnavailableReason)
     // The planned terminal result carries the structured verdict like every other planned
     // snapshot — downstream sparse handling keys off it, not off node shapes.
-    XCTAssertEqual(payload.snapshotQuality?.state, "sparse")
+    XCTAssertEqual(payload.snapshotQuality?.state, .sparse)
     XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
     XCTAssertEqual(payload.snapshotQuality?.reason, Self.axSnapshotFailureMessage)
     XCTAssertNil(currentApp)

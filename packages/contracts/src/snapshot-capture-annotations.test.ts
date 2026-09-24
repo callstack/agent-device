@@ -29,3 +29,36 @@ test('absent or non-array warnings stay absent on the serialized annotations', (
     undefined,
   );
 });
+
+test('every wire verdict state survives the serialized annotations', () => {
+  for (const state of ['healthy', 'recovered', 'sparse']) {
+    const verdict = {
+      state,
+      backend: 'private-ax',
+      reason: 'tree capture timed out',
+      reasonCode: 'budget',
+      effectiveDepth: 56,
+      collapsedLeafIndexes: [3],
+      customActions: { read: 12, candidates: 19, truncated: 1, blocked: false },
+      timing: { acquisitionMs: 12.5, presentationMs: 34.75 },
+    };
+    assert.deepEqual(
+      readSerializedSnapshotCaptureAnnotations({ snapshotQuality: verdict }).snapshotQuality,
+      verdict,
+    );
+  }
+});
+
+/**
+ * This reader runs on the daemon's serialized response, and it used to project any string into the
+ * verdict type. A state the declared vocabulary does not name now reads as verdict-absent, which is
+ * what lets the shape-based fallback stay in charge instead of a disclosure for nothing.
+ */
+test('a state outside the declared vocabulary drops the serialized verdict', () => {
+  for (const state of ['heathy', 'healthy ', 'Sparse', 'degraded', '', 42, null, undefined]) {
+    const annotations = readSerializedSnapshotCaptureAnnotations({
+      snapshotQuality: { state, backend: 'tree' },
+    });
+    assert.equal(annotations.snapshotQuality, undefined, JSON.stringify(state));
+  }
+});

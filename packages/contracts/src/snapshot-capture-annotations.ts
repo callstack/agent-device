@@ -1,3 +1,4 @@
+import { isSnapshotQualityState } from '@agent-device/kernel/snapshot';
 import type { IosTargetActivation, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
@@ -91,9 +92,11 @@ function readTargetActivation(value: unknown): IosTargetActivation | undefined {
 function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
-  return typeof raw.state === 'string' && typeof raw.backend === 'string'
-    ? (raw as SnapshotQualityVerdict)
-    : undefined;
+  // `state` decides whether a capture reads as degraded, so it goes through the declared
+  // vocabulary instead of a cast: this reader sees whatever a runner or an older daemon put on the
+  // wire, and a state it cannot name must read as verdict-absent.
+  if (!isSnapshotQualityState(raw.state) || typeof raw.backend !== 'string') return undefined;
+  return raw as SnapshotQualityVerdict;
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {

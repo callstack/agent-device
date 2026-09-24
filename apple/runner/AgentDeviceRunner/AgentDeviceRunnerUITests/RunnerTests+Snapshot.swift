@@ -542,7 +542,7 @@ extension RunnerTests {
     return sparseTruncatedSnapshotPayload(
       message: recoveredSnapshotMessage(failure),
       snapshotQuality: SnapshotQuality(
-        state: "sparse",
+        state: .sparse,
         backend: SnapshotBackendKind.recursiveTree.rawValue,
         reason: failure.message,
         reasonCode: "ax-rejected",

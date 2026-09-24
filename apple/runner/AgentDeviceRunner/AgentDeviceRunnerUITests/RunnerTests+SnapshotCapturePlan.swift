@@ -8,11 +8,21 @@ import AgentDeviceSnapshotPresentation
 // stamp the outcome with a structured quality verdict so the daemon renders state instead of
 // re-deriving it from node shapes. Recovery ordering is data here, never a per-call-site branch.
 
+/// The closed set of verdict states the host accepts. The wire strings are the shared table at
+/// `contracts/fixtures/ios-snapshot-quality-states.json`, which `allCases` is pinned to; `reasonCode`
+/// stays open because an unknown one costs only its wording, never the verdict.
+enum SnapshotQualityState: String, Codable, CaseIterable {
+  /// First backend produced a usable tree.
+  case healthy
+  /// A later backend did.
+  case recovered
+  /// No backend produced a usable tree; the best attempt is returned as-is.
+  case sparse
+}
+
 /// Structured quality verdict shipped with every iOS snapshot payload.
 struct SnapshotQuality: Codable {
-  /// healthy: first backend produced a usable tree. recovered: a later backend did.
-  /// sparse: no backend produced a usable tree; the best attempt is returned as-is.
-  let state: String
+  let state: SnapshotQualityState
   /// Backend that produced the returned payload: tree | queries | private-ax.
   let backend: String
   /// Why recovery ran (first failure), why the payload is degraded, or why an internal backend
@@ -391,7 +401,7 @@ extension RunnerTests {
       return stampedSnapshotPayload(
         capture,
         backend: kind,
-        state: recovered ? "recovered" : "healthy",
+        state: recovered ? .recovered : .healthy,
         reason: recovered || firstFailure?.code == "requested-backend" ? firstFailure : nil
       )
     }
@@ -416,11 +426,11 @@ extension RunnerTests {
     }
 
     let fallbackPayload =
-      best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: "sparse", reason: firstFailure) }
+      best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: .sparse, reason: firstFailure) }
       ?? stampedSnapshotPayload(
         SnapshotBackendCapture(payload: sparseTruncatedSnapshotPayload(), effectiveDepth: nil),
         backend: effectivePlan.last ?? plan.last ?? .recursiveTree,
-        state: "sparse",
+        state: .sparse,
         reason: firstFailure
       )
     return fallbackPayload
@@ -680,7 +690,7 @@ extension RunnerTests {
   func stampedSnapshotPayload(
     _ capture: SnapshotBackendCapture,
     backend: SnapshotBackendKind,
-    state: String,
+    state: SnapshotQualityState,
     reason: (reason: String, code: String)?
   ) -> DataPayload {
     let health: RunnerAccessibilityHealth = reason?.code == "ax-rejected" ? .unavailable : .healthy
@@ -705,7 +715,7 @@ extension RunnerTests {
       // "recovered") stays untruncated, so strict absence reads can trust it. Only a real cap
       // (payload truncation, a depth-limited private AX capture) or a sparse terminal payload
       // is truncated.
-      truncated: payload.truncated == true || state == "sparse" || capture.effectiveDepth != nil,
+      truncated: payload.truncated == true || state == .sparse || capture.effectiveDepth != nil,
       qualityPayload: capture.qualityPayload.flatMap { quality in
         guard let nodes = quality.nodes else { return nil }
         return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)

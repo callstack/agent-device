@@ -49,6 +49,20 @@ test('readSnapshotQualityVerdict rejects unknown state or backend as verdict-abs
   assert.equal(readSnapshotQualityVerdict(null), undefined);
 });
 
+test('readSnapshotQualityVerdict reads every declared wire state', () => {
+  for (const state of ['healthy', 'recovered', 'sparse'] as const) {
+    assert.deepEqual(readSnapshotQualityVerdict({ state, backend: 'tree' }), {
+      state,
+      backend: 'tree',
+      reason: undefined,
+      reasonCode: undefined,
+      customActions: undefined,
+      effectiveDepth: undefined,
+      collapsedLeafIndexes: undefined,
+    });
+  }
+});
+
 test('readSnapshotQualityVerdict keeps the verdict but drops an unknown reasonCode', () => {
   // Forward-compat: a newer runner adding a reasonCode must still yield a usable verdict.
   const verdict = readSnapshotQualityVerdict({

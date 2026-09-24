@@ -149,7 +149,7 @@ extension RunnerTests {
     XCTAssertNil(box.error)
     let quality = try XCTUnwrap(box.payload?.snapshotQuality)
     XCTAssertEqual(quality.backend, SnapshotBackendKind.privateAX.rawValue)
-    XCTAssertEqual(quality.state, "recovered")
+    XCTAssertEqual(quality.state, .recovered)
     XCTAssertTrue(
       quality.reason?.contains("tree capture exceeded") == true,
       "the tree XPC, not the viewport read, must be the abandoned block: \(quality.reason ?? "nil")"
@@ -345,7 +345,7 @@ extension RunnerTests {
       SnapshotBackendKind.privateAX.rawValue,
       "a sweep that ended on its slice deadline is a tier timeout, not an accepted capture"
     )
-    XCTAssertEqual(quality?.state, "recovered")
+    XCTAssertEqual(quality?.state, .recovered)
     XCTAssertGreaterThan(box.payload?.nodes?.count ?? 0, 1, "private AX answers with a real tree")
     XCTAssertFalse(box.abandonedAtReturn, "the sweep must answer inside its own main-thread hop")
     XCTAssertTrue(
