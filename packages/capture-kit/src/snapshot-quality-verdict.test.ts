@@ -134,6 +134,7 @@ const VERDICT_PAYLOADS: unknown[] = [
   { state: 'sparse', backend: 'tree', timing: { acquisitionMs: 12.5 } },
   { state: 'sparse', backend: 'tree', timing: { acquisitionMs: 12.5, presentationMs: 34.75 } },
   { state: 'sparse', backend: 'tree', reasonCode: 'future-code' },
+  { state: 'recovered', backend: 'android-helper', reasonCode: 'requested-backend' },
   { state: 'degraded', backend: 'tree' },
   { state: 'sparse', backend: 'uiautomator' },
   { state: 'constructor', backend: 'constructor' },

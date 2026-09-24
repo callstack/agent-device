@@ -2,12 +2,10 @@ import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
 /**
- * The verdict names this version can speak, each keyed against its kernel union so a map cannot
- * fall behind it: a name added there without a key here is a compile error, where a set literal
- * merely typed as the union stays green and this reader drops the verdict as verdict-absent. These
- * readers hold the maps rather than importing the kernel's, because this module's eager closure is
- * frozen at its merge-base size. The strategies need no map: `SNAPSHOT_QUALITY_BACKEND_CAPABILITIES`
- * is the accepted set, keyed by the same names.
+ * The verdict names this version can speak, keyed against the kernel unions so a map cannot fall
+ * behind one. They cannot be one shared kernel predicate: this module's eager closure is frozen at
+ * its merge-base size (#2872). The strategies need no map — `SNAPSHOT_QUALITY_BACKEND_CAPABILITIES`
+ * is already keyed by exactly those names.
  */
 const DECLARED_STATES: Record<SnapshotQualityState, true> = {
   healthy: true,

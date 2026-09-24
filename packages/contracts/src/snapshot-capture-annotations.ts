@@ -7,12 +7,9 @@ import type {
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
 /**
- * The two verdict names this host has to be able to speak: `state` decides whether a capture reads
- * as degraded, and `backend` names the recovery strategy in the warning line. Each map is keyed
- * against its kernel union, so a name added there without a key here is a compile error, where a set
- * literal merely typed as the union stays green and a runner's verdict is dropped as
- * verdict-absent. The maps live here rather than behind a kernel import because
- * `facades/capture.ts` pins its eager module closure and `kernel/snapshot.ts` is not in it.
+ * The verdict names this host has to speak, each keyed against its kernel union so a name added
+ * there without a key here is a compile error. They cannot be one shared kernel predicate: the
+ * eager-closure gate keeps `kernel/snapshot.ts` out of `facades/capture.ts` (#2872).
  */
 const DECLARED_STATES: Record<SnapshotQualityState, true> = {
   healthy: true,
@@ -114,15 +111,10 @@ function readTargetActivation(value: unknown): IosTargetActivation | undefined {
 }
 
 /**
- * Re-read of a fact this module published, in the shape `readTargetActivation` above also uses: the
- * two names that decide presentation are checked, and the verdict is forwarded as published. Named
- * apart from capture-kit's stricter `readSnapshotQualityVerdict`, which normalizes an untrusted
- * runner payload and reads every field. Reading
- * This one cannot share that code — the eager-closure gate freezes both readers' module closures and
- * the duplication gate refuses a second normalization — so the pair is pinned together by
- * `snapshot-quality-verdict.test.ts`. What stays guaranteed here is the part only this boundary can
- * check: a name this version cannot speak reads as verdict-absent, so a version-skewed runner cannot
- * hand the host a degradation it would present under a state or strategy nobody declared.
+ * Re-read of a fact this module published, in the shape `readTargetActivation` above uses: the two
+ * names that decide presentation are checked, the rest is forwarded as published. capture-kit's
+ * `readSnapshotQualityVerdict` normalizes an untrusted runner payload field by field; the two
+ * readings are pinned to each other in `snapshot-quality-verdict.test.ts`.
  */
 function readPublishedSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
   if (!value || typeof value !== 'object') return undefined;

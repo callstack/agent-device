@@ -27,11 +27,11 @@ export type SnapshotQualityTiming = {
 /**
  * The verdict states a capture plan may stamp. This tuple is the ONE declaration of that
  * vocabulary, and `SnapshotQualityVerdict['state']` is its projection; readers hold exhaustive maps
- * over the union rather than importing this module, because the eager-closure gate freezes their
- * loading shape. This tuple and the Apple runner's `SnapshotQualityState.allCases` are each pinned
- * to `contracts/fixtures/ios-snapshot-quality-states.json` as a set, so a state one side renames,
- * adds, or deletes without the other goes red there instead of arriving as a verdict the host
- * cannot name — which reads as verdict-absent and drops the disclosure with it.
+ * over the union instead of importing this module, because the eager-closure gate freezes their
+ * loading shape (#2872). This tuple and the Apple runner's `SnapshotQualityState.allCases` are each
+ * pinned as a set to `contracts/fixtures/ios-snapshot-quality-states.json`, so a state one side
+ * renames, adds, or deletes without the other goes red there instead of arriving as a verdict the
+ * host cannot name — which reads as verdict-absent and drops the disclosure with it.
  */
 export const SNAPSHOT_QUALITY_STATES = ['healthy', 'recovered', 'sparse'] as const;
 

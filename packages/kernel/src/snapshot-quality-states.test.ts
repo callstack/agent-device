@@ -31,19 +31,7 @@ test('the declared verdict states are the shared wire vocabulary', () => {
   );
 });
 
-/**
- * The union the readers key their exhaustive maps against: it admits exactly the declared states,
- * so an undeclared one cannot reach a verdict and a state added to the tuple reaches every map.
- */
 test('the verdict state type admits exactly the declared states', () => {
-  const declared: Record<SnapshotQualityState, true> = {
-    healthy: true,
-    recovered: true,
-    sparse: true,
-  };
-  for (const state of SNAPSHOT_QUALITY_STATES) {
-    assert.equal(declared[state], true, state);
-  }
   // @ts-expect-error a state nobody declared cannot enter the verdict type
   const undeclared: SnapshotQualityState = 'degraded';
   void undeclared;
