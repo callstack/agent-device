@@ -128,6 +128,7 @@ export default defineConfig({
             // Parses ios.yml and the runner's Swift sources: no Xcode, no simulator, and
             // the check it guards is what keeps the PR lane's `-only-testing:` list honest.
             'scripts/__tests__/xctest-selection.test.ts',
+            'scripts/__tests__/ios-xctest-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',

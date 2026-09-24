@@ -45,6 +45,7 @@ provider, and coverage tests mock the typed HDC seam. Real validation is local h
 Apple runner changes run `pnpm check:xctest-selection` and build the affected target. The source
 `#if` guard is the XCTest lane classification — never maintain a second test-name list. Pure runner
 decisions use the macOS host lane; iOS/XCTest semantics need a simulator lane.
+The iOS PR lane runs its XCTest list for native inputs or uncertain diffs; main and nightly remain broad.
 
 Local host-lane XCTest may need signing and automation permission:
 

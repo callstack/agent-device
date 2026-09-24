@@ -8,7 +8,8 @@
 //   - host    macos.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
-//   - pr      ios.yml, iOS Simulator, every PR: the hand-written `-only-testing:` list.
+//   - pr      ios.yml, iOS Simulator, when runner inputs change on a PR (and on every main
+//             push): the hand-written `-only-testing:` list.
 //   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
@@ -51,7 +52,7 @@ const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runn
 /** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
 export const HOST_WORKFLOW_FILE = '.github/workflows/macos.yml';
 
-/** The PR lane, whose `-only-testing:` list decides what every pull request runs on the simulator. */
+/** The PR lane, whose `-only-testing:` list decides what selected pull requests run on the simulator. */
 export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
 
 /** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
@@ -349,7 +350,7 @@ export function formatSummary(report: SelectionReport): string {
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
     `(${HOST_WORKFLOW_FILE}, macOS, every PR) reaches ${host}, PR list (${PR_WORKFLOW_FILE}, ` +
-    `iOS Simulator, every PR) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
+    `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
     `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
 }
