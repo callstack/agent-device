@@ -2,7 +2,7 @@ import AgentDeviceSnapshotPresentation
 
 // MARK: - Wire Models
 
-enum CommandType: String, Codable {
+enum CommandType: String, Codable, CaseIterable {
   case tap
   case mouseClick
   case longPress
