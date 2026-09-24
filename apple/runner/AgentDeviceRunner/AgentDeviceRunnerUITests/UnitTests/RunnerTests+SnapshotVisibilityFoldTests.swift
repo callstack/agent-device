@@ -26,7 +26,7 @@ extension RunnerTests {
   ) -> [SnapshotPresentationNode] {
     SnapshotVisibilityFold.fold(
       nodes,
-      viewport: .reported(rect: viewport),
+      viewport: .reported(box: viewport),
       interactiveOnly: interactiveOnly,
       policy: policy
     )

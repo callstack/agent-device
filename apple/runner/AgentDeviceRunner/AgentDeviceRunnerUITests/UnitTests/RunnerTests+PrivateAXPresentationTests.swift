@@ -43,7 +43,7 @@ extension RunnerTests {
     return try SnapshotPresentation.presentRegular(
       SnapshotAcquisition(
         hint: hint, nodes: nodes, truncated: false, effectiveDepth: nil,
-        viewport: .reported(rect: viewport),
+        viewport: .reported(box: viewport),
         interfaceOrientation: RunnerInterfaceOrientation.portrait),
       options: PresentationOptions(
         interactiveOnly: interactiveOnly, depth: nil, scope: nil, raw: false),
@@ -60,7 +60,7 @@ extension RunnerTests {
   ) -> [RawAXNode] {
     SnapshotGeometrySpace.normalized(
       nodes: privateAXAcquisition(rawRoot: rawRoot, hint: hint),
-      viewport: .reported(rect: viewport),
+      viewport: .reported(box: viewport),
       interfaceOrientation: interfaceOrientation
     )
   }

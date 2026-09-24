@@ -422,7 +422,7 @@ final class CoordinateSpaceTests: XCTestCase {
       let expected = (namesQuarterTurn && !squareApp) ? testCase.oriented : testCase.native
       let normalized = SnapshotGeometrySpace.normalized(
         nodes: turnedSubtree(app: app, reportedLeaf: testCase.native.cgRect),
-        viewport: .reported(rect: app),
+        viewport: .reported(box: app),
         interfaceOrientation: testCase.interfaceOrientation
       )
       XCTAssertEqual(normalized.count, 4)
@@ -444,7 +444,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: .reported(rect: app),
+      viewport: .reported(box: app),
       interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
     )
     XCTAssertEqual(
@@ -471,7 +471,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: .reported(rect: app),
+      viewport: .reported(box: app),
       interfaceOrientation: RunnerInterfaceOrientation.unknown
     )
     XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
@@ -484,7 +484,7 @@ final class CoordinateSpaceTests: XCTestCase {
     XCTAssertEqual(
       SnapshotGeometrySpace.normalized(
         nodes: [],
-        viewport: .reported(rect: CGRect(x: 0, y: 0, width: 874, height: 402)),
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 874, height: 402)),
         interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
       ),
       []

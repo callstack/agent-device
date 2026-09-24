@@ -28,7 +28,7 @@ final class InvariantTests: XCTestCase {
 
     let stats = try SnapshotPresentationInvariant.validateRegularWithStats(
       nodes,
-      viewport: .reported(rect: viewport),
+      viewport: .reported(box: viewport),
       policy: .cursorProjected
     )
 
