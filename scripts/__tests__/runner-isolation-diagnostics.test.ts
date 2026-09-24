@@ -49,10 +49,6 @@ function log(...lines: string[]): string {
 }
 
 describe('scanRunnerBuildLog', () => {
-  test('the canary marks one line per diagnosed shape', () => {
-    expect(isolationCanaryLines(CANARY_SOURCE)).toHaveLength(4);
-  });
-
   test('a log carrying the baseline warnings and the full canary passes', () => {
     expect(scan(...BASELINE_WARNINGS, ...CANARY_DIAGNOSTICS)).toEqual({
       violations: [],

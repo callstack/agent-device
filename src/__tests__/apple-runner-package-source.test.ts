@@ -186,7 +186,7 @@ test('package apple runner source skips the unit-test directory and the isolatio
   assert.equal(
     fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerIsolationCanary.swift`)),
     false,
-    'the isolation scan canary compiles only in repo gate builds',
+    'the isolation scan canary compiles only in scripts/build-xcuitest-apple.sh builds',
   );
 });
 

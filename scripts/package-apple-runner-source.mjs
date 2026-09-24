@@ -28,7 +28,8 @@ const LEGACY_OUTPUT_DIRS = [
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
-// The isolation scan's positive control compiles only in this repo's gate builds.
+// The isolation scan's positive control compiles only in scripts/build-xcuitest-apple.sh builds:
+// the repo gates and the prebuilt release runner. Runners built from this package omit it.
 const SKIPPED_RUNNER_FILE_PATHS = new Set([
   path.join('AgentDeviceRunner', 'AgentDeviceRunnerUITests', 'RunnerIsolationCanary.swift'),
 ]);
