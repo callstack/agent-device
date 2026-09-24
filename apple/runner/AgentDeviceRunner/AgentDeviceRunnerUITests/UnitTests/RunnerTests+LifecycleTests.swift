@@ -2,10 +2,13 @@ import Foundation
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+/// One row of the cross-language golden table. Its `query` column names the shared fact — this alert
+/// request changes nothing — which each side maps to its own consumer: replay eligibility here, and
+/// the TypeScript `readOnly` trait there.
 private struct AlertCommandTraitsFixture: Decodable {
   let name: String
   let command: Command
-  let readOnly: Bool
+  let query: Bool
 }
 
 extension RunnerTests {
@@ -26,7 +29,7 @@ extension RunnerTests {
     for fixture in cases {
       XCTAssertEqual(
         fixture.command.traits.retryOnSessionLoss,
-        fixture.readOnly,
+        fixture.query,
         fixture.name
       )
     }
