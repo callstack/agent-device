@@ -170,7 +170,8 @@ export default defineConfig({
             // real workflow YAML, parse-only like its sibling above.
             'test/ci/root-docs-paths-ignore.test.ts',
             // The changelog-fragment assembler (#2877): pure string transforms over fixture
-            // changelogs plus a scratch-directory CLI check, so it needs no device or subprocess.
+            // changelogs plus a scratch-directory CLI check. It needs no device; its one
+            // subprocess is a `git show v0.21.13:CHANGELOG.md` read for the migration guard.
             'scripts/__tests__/changelog-release.test.ts',
             // The daemon leak oracle's lifecycle/residue rules (#1781 B1): pure
             // decisions over fixture state-dir listings, so they need no daemon,

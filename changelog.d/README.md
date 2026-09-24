@@ -6,7 +6,8 @@ running `scripts/changelog-release.ts` to fold every fragment present into a new
 and delete the fragments it consumed.
 
 This file is the only non-fragment file kept in this directory, so the directory stays in place
-when no fragments are pending.
+when no fragments are pending. The assembler ignores dotfiles such as `.DS_Store`; every other
+entry must be a valid fragment.
 
 ## Adding a fragment
 

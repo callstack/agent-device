@@ -205,6 +205,18 @@ test('CLI: a fragment without the .md extension is rejected, not silently skippe
   expect(() => runCli({ root, check: false })).toThrow(/must end in "\.md"/);
 });
 
+test('CLI: a dotfile in changelog.d is neither a fragment nor a refusal', () => {
+  const root = scratchRepo();
+  fs.writeFileSync(path.join(root, 'changelog.d', '.DS_Store'), '\u0000\u0001binary');
+
+  assert.equal(runCli({ root, check: false }), 0);
+  assert.deepEqual(fs.readdirSync(path.join(root, 'changelog.d')).sort(), [
+    '.DS_Store',
+    'README.md',
+  ]);
+  assert.equal(runCli({ root, check: true }), 0);
+});
+
 // Repository guard: every fragment `readFragments` would actually consume (other than README.md)
 // must have a valid name and pass parseFragment, so a malformed or wrongly-named fragment is
 // caught before it ships instead of being silently skipped by a stricter enumeration.

@@ -150,15 +150,16 @@ const FRAGMENTS_DIR = 'changelog.d';
 const README = 'README.md';
 
 /**
- * Every `changelog.d` entry other than `README.md`, regardless of extension. The assembler and
- * `--check` both consume this exact list, so an entry that is not a valid `<slug>.md` fragment
- * fails `parseFragment` instead of being silently skipped by an extension filter.
+ * Every `changelog.d` entry other than `README.md` and dotfiles (such as `.DS_Store`), regardless
+ * of extension. The assembler and `--check` both consume this exact list, so an entry that is not
+ * a valid `<slug>.md` fragment fails `parseFragment` instead of being silently skipped by an
+ * extension filter.
  */
 export function readFragments(dir: string): ChangelogFragment[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter((name) => name !== README)
+    .filter((name) => name !== README && !name.startsWith('.'))
     .sort()
     .map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), 'utf8') }));
 }
