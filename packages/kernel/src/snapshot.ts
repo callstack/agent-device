@@ -25,22 +25,18 @@ export type SnapshotQualityTiming = {
 };
 
 /**
- * The verdict states a capture plan may stamp. This tuple is the ONE accepted set; its order is the
- * order of `contracts/fixtures/ios-snapshot-quality-states.json`, which both this module and the
- * Apple runner's `SnapshotQualityState.allCases` are pinned to positionally. A state one side
- * renames or adds without the other goes red there, instead of arriving as a verdict the host
- * cannot name — which reads as verdict-absent and drops the disclosure with it.
+ * The verdict states a capture plan may stamp. This tuple is the ONE declaration of that
+ * vocabulary, and `SnapshotQualityVerdict['state']` is its projection; readers hold exhaustive maps
+ * over the union rather than importing this module, because the eager-closure gate freezes their
+ * loading shape. Its order is the order of
+ * `contracts/fixtures/ios-snapshot-quality-states.json`, which this module and the Apple runner's
+ * `SnapshotQualityState.allCases` are pinned to positionally, so a state one side renames or adds
+ * without the other goes red there instead of arriving as a verdict the host cannot name — which
+ * reads as verdict-absent and drops the disclosure with it.
  */
 export const SNAPSHOT_QUALITY_STATES = ['healthy', 'recovered', 'sparse'] as const;
 
 export type SnapshotQualityState = (typeof SNAPSHOT_QUALITY_STATES)[number];
-
-/** Whether `value` is a declared verdict state; the only gate readers apply to the wire field. */
-export function isSnapshotQualityState(value: unknown): value is SnapshotQualityState {
-  return (
-    typeof value === 'string' && (SNAPSHOT_QUALITY_STATES as readonly string[]).includes(value)
-  );
-}
 
 export type SnapshotQualityVerdict = {
   state: SnapshotQualityState;

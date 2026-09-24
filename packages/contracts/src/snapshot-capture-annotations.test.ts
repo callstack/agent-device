@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { SNAPSHOT_QUALITY_STATES } from '@agent-device/kernel/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 
@@ -31,7 +32,7 @@ test('absent or non-array warnings stay absent on the serialized annotations', (
 });
 
 test('every wire verdict state survives the serialized annotations', () => {
-  for (const state of ['healthy', 'recovered', 'sparse']) {
+  for (const state of SNAPSHOT_QUALITY_STATES) {
     const verdict = {
       state,
       backend: 'private-ax',
@@ -55,7 +56,17 @@ test('every wire verdict state survives the serialized annotations', () => {
  * what lets the shape-based fallback stay in charge instead of a disclosure for nothing.
  */
 test('a state outside the declared vocabulary drops the serialized verdict', () => {
-  for (const state of ['heathy', 'healthy ', 'Sparse', 'degraded', '', 42, null, undefined]) {
+  for (const state of [
+    'heathy',
+    'healthy ',
+    'Sparse',
+    'degraded',
+    'constructor',
+    '',
+    42,
+    null,
+    undefined,
+  ]) {
     const annotations = readSerializedSnapshotCaptureAnnotations({
       snapshotQuality: { state, backend: 'tree' },
     });

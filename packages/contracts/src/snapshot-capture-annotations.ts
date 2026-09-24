@@ -1,6 +1,22 @@
-import { isSnapshotQualityState } from '@agent-device/kernel/snapshot';
-import type { IosTargetActivation, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type {
+  IosTargetActivation,
+  SnapshotQualityState,
+  SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
+
+/**
+ * Every declared state, keyed against the kernel union so this map cannot fall behind it: a state
+ * added there without a key here is a compile error, where a cast or a set literal merely typed as
+ * the union stays green and a runner's verdict is dropped as verdict-absent. This reader holds the
+ * map rather than importing the kernel's, because `facades/capture.ts` pins its eager module
+ * closure and `kernel/snapshot.ts` is not in it.
+ */
+const snapshotQualityStatesAreTheVocabulary: Record<SnapshotQualityState, true> = {
+  healthy: true,
+  recovered: true,
+  sparse: true,
+};
 
 export type SnapshotCaptureAnalysis = {
   rawNodeCount: number;
@@ -97,6 +113,10 @@ function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | un
   // wire, and a state it cannot name must read as verdict-absent.
   if (!isSnapshotQualityState(raw.state) || typeof raw.backend !== 'string') return undefined;
   return raw as SnapshotQualityVerdict;
+}
+
+function isSnapshotQualityState(value: unknown): value is SnapshotQualityState {
+  return typeof value === 'string' && Object.hasOwn(snapshotQualityStatesAreTheVocabulary, value);
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {

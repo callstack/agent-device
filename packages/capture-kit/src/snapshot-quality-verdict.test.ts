@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
+import { SNAPSHOT_QUALITY_STATES } from '@agent-device/kernel/snapshot';
 import {
   isSparseSnapshotQualityVerdict,
   preferredSnapshotBackendForVerdict,
@@ -47,10 +48,12 @@ test('readSnapshotQualityVerdict rejects unknown state or backend as verdict-abs
   assert.equal(readSnapshotQualityVerdict({ state: 'sparse', backend: 'mystery' }), undefined);
   assert.equal(readSnapshotQualityVerdict({ backend: 'tree' }), undefined);
   assert.equal(readSnapshotQualityVerdict(null), undefined);
+  // An inherited key is not a declared state: membership stays on the map's own keys.
+  assert.equal(readSnapshotQualityVerdict({ state: 'constructor', backend: 'tree' }), undefined);
 });
 
 test('readSnapshotQualityVerdict reads every declared wire state', () => {
-  for (const state of ['healthy', 'recovered', 'sparse'] as const) {
+  for (const state of SNAPSHOT_QUALITY_STATES) {
     assert.deepEqual(readSnapshotQualityVerdict({ state, backend: 'tree' }), {
       state,
       backend: 'tree',

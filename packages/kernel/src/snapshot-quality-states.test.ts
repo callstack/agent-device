@@ -2,11 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import {
-  SNAPSHOT_QUALITY_STATES,
-  isSnapshotQualityState,
-  type SnapshotQualityState,
-} from './snapshot.ts';
+import { SNAPSHOT_QUALITY_STATES, type SnapshotQualityState } from './snapshot.ts';
 
 const SNAPSHOT_QUALITY_STATES_FIXTURE_PATH = path.resolve(
   import.meta.dirname,
@@ -34,15 +30,19 @@ test('the declared verdict states are the shared wire vocabulary', () => {
   );
 });
 
-test('state predicate accepts exactly the declared states', () => {
+/**
+ * The union the readers key their exhaustive maps against: it admits exactly the declared states,
+ * so an undeclared one cannot reach a verdict and a state added to the tuple reaches every map.
+ */
+test('the verdict state type admits exactly the declared states', () => {
+  const declared: Record<SnapshotQualityState, true> = {
+    healthy: true,
+    recovered: true,
+    sparse: true,
+  };
   for (const state of SNAPSHOT_QUALITY_STATES) {
-    assert.equal(isSnapshotQualityState(state), true, state);
+    assert.equal(declared[state], true, state);
   }
-  assert.equal(isSnapshotQualityState('degraded'), false);
-  assert.equal(isSnapshotQualityState('Healthy'), false);
-  assert.equal(isSnapshotQualityState(''), false);
-  assert.equal(isSnapshotQualityState(undefined), false);
-  assert.equal(isSnapshotQualityState(42), false);
   // @ts-expect-error a state nobody declared cannot enter the verdict type
   const undeclared: SnapshotQualityState = 'degraded';
   void undeclared;

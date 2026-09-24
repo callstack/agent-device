@@ -1,5 +1,20 @@
-import { isSnapshotQualityState, type SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
+
+/**
+ * Every declared state, keyed against the kernel union so this map cannot fall behind it: a state
+ * added there without a key here is a compile error, where a set literal merely typed as the union
+ * stays green and this reader drops the verdict as verdict-absent.
+ */
+const snapshotQualityStatesAreTheVocabulary: Record<SnapshotQualityState, true> = {
+  healthy: true,
+  recovered: true,
+  sparse: true,
+};
+
+function isSnapshotQualityState(value: unknown): value is SnapshotQualityState {
+  return typeof value === 'string' && Object.hasOwn(snapshotQualityStatesAreTheVocabulary, value);
+}
 
 const SNAPSHOT_QUALITY_BACKENDS = new Set<SnapshotQualityVerdict['backend']>(
   Object.keys(SNAPSHOT_QUALITY_BACKEND_CAPABILITIES) as SnapshotQualityVerdict['backend'][],
