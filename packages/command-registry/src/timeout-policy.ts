@@ -43,16 +43,11 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 };
 
 /**
- * `fold`'s worst case sums every step budget on the route (platform-apple owns the constants;
- * command-registry does not import them, so the figures below are copied, not derived):
- *   - display-inventory query (foldable check):        5s
- *   - fold-helper preparation (toolchain probe + build): 60s
- *   - HID dispatch (60s max keyframe duration + 10s):   70s
- *   - hinge settle reads (4 attempts x 20s):            80s
- *   - lit-panel display-inventory query:                 5s
- *   total: 220s. The envelope below covers that with margin.
+ * Covers the fold route's worst-case ledger (display inventory, fold-helper preparation, HID
+ * dispatch, hinge settle reads, final display inventory) plus the daemon-result margin. Proven by
+ * the ledger test: `test/integration/provider-scenarios/ios-fold.test.ts`.
  */
-const FOLD_REQUEST_TIMEOUT_MS = 240_000;
+const FOLD_REQUEST_TIMEOUT_MS = 255_000;
 
 export const FOLD_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   budget: { source: 'none' },

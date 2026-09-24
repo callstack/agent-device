@@ -143,10 +143,9 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     reinstall: 180_000,
     install_source: 180_000,
     longpress: 210_000,
-    // fold: display-inventory query + fold-helper preparation + HID dispatch + hinge settle
-    // reads + lit-panel display-inventory query can sum to 220s worst case; the policy covers
-    // that with margin.
-    fold: 240_000,
+    // fold: proven by the worst-case ledger test in
+    // test/integration/provider-scenarios/ios-fold.test.ts.
+    fold: 255_000,
     // #1774: base allocation budget (300s) + client/daemon race margin (30s).
     lease_allocate: 330_000,
     test: 'unbounded',
