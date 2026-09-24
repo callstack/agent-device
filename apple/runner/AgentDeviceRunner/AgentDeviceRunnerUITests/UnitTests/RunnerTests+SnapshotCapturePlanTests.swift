@@ -282,7 +282,7 @@ extension RunnerTests {
         nodes: [],
         truncated: false,
         effectiveDepth: nil,
-        viewport: .reported(rect: CGRect(x: 0, y: 0, width: 402, height: 874))
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 402, height: 874))
       ),
       options: options
     )

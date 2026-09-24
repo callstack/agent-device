@@ -97,7 +97,7 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: .reported(rect: viewport)
+      viewport: .reported(box: viewport)
     )
   }
 
@@ -147,7 +147,7 @@ extension RunnerTests {
       ],
       truncated: false,
       effectiveDepth: nil,
-      viewport: .reported(rect: CGRect(x: 0, y: 0, width: 320, height: 240))
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 320, height: 240))
     )
 
     let options = PresentationOptions(
@@ -203,7 +203,7 @@ extension RunnerTests {
       ],
       truncated: false,
       effectiveDepth: nil,
-      viewport: .reported(rect: CGRect(x: 0, y: 0, width: 320, height: 240))
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 320, height: 240))
     )
 
     let options = PresentationOptions(
@@ -254,7 +254,7 @@ extension RunnerTests {
           nodes: nodes,
           truncated: false,
           effectiveDepth: nil,
-          viewport: .reported(rect: CGRect(x: 0, y: 0, width: 100, height: 100))
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
         ),
         options: options
       ).nodes)
@@ -309,7 +309,7 @@ extension RunnerTests {
     XCTAssertThrowsError(
       try SnapshotPresentationInvariant.validateRegular(
         folded,
-        viewport: .reported(rect: viewport),
+        viewport: .reported(box: viewport),
         policy: .cursorProjected
       )
     ) { error in
