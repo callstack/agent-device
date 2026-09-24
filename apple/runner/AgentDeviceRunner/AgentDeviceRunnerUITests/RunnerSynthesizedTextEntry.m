@@ -10,11 +10,13 @@ static NSString *const RunnerTextSynthesisSurface = @"text";
 // its field's value and re-applies it after the edit (a controlled React Native `TextInput`, an
 // async validator) can acknowledge: such a write lands between two characters of the burst and
 // erases what was typed while it was in flight, leaving a value that is stable short of the
-// request. 12 characters/second spaces them ~83 ms apart, so an app whose write-back lands inside
-// one character interval no longer has anything to erase. It is not immunity: a render still in
-// flight 150 ms after an edit corrupted an 11-character burst at this pace too. The
-// `--agent-device-text-entry-app-owned-value` fixture and the pace policy test pin this bound; the
-// delivery ceiling in TextEntryTiming bounds what the pace costs a long text.
+// request. 12 characters/second spaces them ~83 ms apart on average, which reduces that loss but
+// does not remove it: XCTest does not space the characters evenly, and two of them can reach the
+// app a few milliseconds apart. Against a fixture app that acknowledges each edit within 40 ms, 60
+// characters/second left 1 of 11 characters in 20 of 20 bursts, and this pace left 10 or 11. The
+// command refuses a field left short; back-pressure from the field (#2906) is what would prevent
+// it. The app-owned-value lane test pins the average spacing the app sees, and the delivery budget
+// in TextEntryTiming bounds what the pace costs a long text.
 static const NSUInteger RunnerTextEntryTypingSpeedCharactersPerSecond = 12;
 
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);

@@ -68,7 +68,7 @@ final class RunnerTests: XCTestCase {
   // interactions clear it before it can become stale.
   var textEntryTapWitness: TextEntryTapWitness?
   let maxRequestBytes = 2 * 1024 * 1024
-  let mainThreadExecutionTimeout: TimeInterval = 30
+  static let mainThreadExecutionTimeout: TimeInterval = 30
   let appExistenceTimeout: TimeInterval = 30
   let retryCooldown: TimeInterval = 0.2
   let postSnapshotInteractionDelay: TimeInterval = 0.2

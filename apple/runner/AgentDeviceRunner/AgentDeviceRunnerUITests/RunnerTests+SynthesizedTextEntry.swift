@@ -109,11 +109,6 @@ extension RunnerTests {
       1.0 / Double(RunnerSynthesizedTextEntry.typingSpeedCharactersPerSecond())
     }
 
-    /// Seconds one synthesize call costs beyond typing its characters. A one-character call at the
-    /// 83 ms pace took 222 ms on average on an iPhone 17 Pro simulator (212-617 ms over 235 calls),
-    /// which a spaced plan pays once per character.
-    static let synthesizeCallOverhead: TimeInterval = 0.15
-
     /// Seconds the plan spends posting, charged per `synthesizedReplacementSteps` step: each
     /// synthesize call types its characters at the pace and pays its overhead, and a spaced plan
     /// sleeps `delaySeconds` between two calls.
@@ -122,7 +117,7 @@ extension RunnerTests {
         ? textLength
         : 1
       return Double(textLength) * characterInterval
-        + Double(calls) * synthesizeCallOverhead
+        + Double(calls) * TextEntryTiming.synthesizeCallOverhead
         + Double(calls - 1) * delaySeconds
     }
 

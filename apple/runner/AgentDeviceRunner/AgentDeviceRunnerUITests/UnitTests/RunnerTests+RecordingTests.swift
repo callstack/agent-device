@@ -448,7 +448,7 @@ extension RunnerTests {
         for _ in 0..<2 {
           try self.runMainThreadWork(
             "command_execution",
-            timeout: self.mainThreadExecutionTimeout,
+            timeout: Self.mainThreadExecutionTimeout,
             timeoutError: self.mainThreadExecutionTimeoutError
           ) {
             Thread.sleep(forTimeInterval: self.recordingFrameCaptureTimeout + 0.3)

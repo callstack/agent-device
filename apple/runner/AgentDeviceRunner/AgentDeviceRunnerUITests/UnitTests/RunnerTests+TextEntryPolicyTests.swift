@@ -241,10 +241,10 @@ extension RunnerTests {
     )
   }
 
-  // The pace is the guarantee that a field the app owns survives a replacement, so it cannot drift
-  // on its own: one character interval has to leave that app at least twice the acknowledge window
-  // the route is sized for, or the burst outruns the render and loses the characters in flight
-  // again (#2080). Raising the pace or shrinking the window both land here.
+  // The pace is what keeps a field the app owns from losing most of a replacement (#2080), so it
+  // cannot drift on its own: one character interval has to leave that app at least twice the
+  // acknowledge window the route is sized for. The host lane runs this on every PR; the iOS lane's
+  // app-owned-value test checks the spacing the app actually receives.
   func testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit() {
     XCTAssertGreaterThanOrEqual(
       SynthesizedDeliveryBudget.characterInterval,
@@ -253,28 +253,21 @@ extension RunnerTests {
   }
 
   // Characters are delivered while the private synthesize call is still running, so text longer
-  // than the delivery ceiling would still be arriving when the transport gives up on the command —
-  // leaving a runner mid-burst that the next command finds busy. The budget turns that into a
-  // refusal decided up front, at the boundary and not after the first character is posted.
+  // than the delivery ceiling would still be arriving when the main-thread watchdog abandons the
+  // command. The budget turns that into a refusal decided up front, at the boundary and not after
+  // the first character is posted.
   func testSynthesizedDeliveryBudgetRefusesTextThatOutrunsTheCommand() {
     let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)
     XCTAssertGreaterThan(fits, 0)
     XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: 0))
     XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: 0))
-    // The burst and the commit wait it is followed by both have to fit the runner's per-command
-    // budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s in packages/platform-apple/src/runner/
-    // runner-transport.ts), which also carries focus, clear and verification.
-    XCTAssertLessThanOrEqual(
-      TextEntryTiming.synthesizedDeliveryCeiling + TextEntryTiming.synthesizedCommitCeiling,
-      45
-    )
   }
 
   // A spaced plan posts each character in its own synthesize call and sleeps between two of them,
   // so a character costs the pace, the call's overhead and the delay together, not the larger of
-  // pace and delay. `--delay-ms 80` is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
+  // pace and delay. The delay checked is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
   func testSpacedDeliveryBudgetChargesEachCharacterItsCallAndDelay() {
-    let delay = 0.08
+    let delay = Double(TextEntryTiming.recoveryDelayMilliseconds) / 1000
     let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
     XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: delay))
     XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: delay))
@@ -282,7 +275,7 @@ extension RunnerTests {
       SynthesizedDeliveryBudget.projectedSeconds(textLength: 10, delaySeconds: delay)
         - SynthesizedDeliveryBudget.projectedSeconds(textLength: 9, delaySeconds: delay),
       SynthesizedDeliveryBudget.characterInterval
-        + SynthesizedDeliveryBudget.synthesizeCallOverhead
+        + TextEntryTiming.synthesizeCallOverhead
         + delay,
       accuracy: 1e-9
     )
@@ -301,7 +294,11 @@ extension RunnerTests {
     // the undelayed one to a caller retrying with --delay-ms.
     let hint = TextEntryFailure.synthesisBudgetExceeded.hint
     XCTAssertTrue(hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time"))
-    XCTAssertTrue(hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.08)) characters at --delay-ms 80"))
+    let recoveryDelay = TextEntryTiming.recoveryDelayMilliseconds
+    let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
+      delaySeconds: Double(recoveryDelay) / 1000
+    )
+    XCTAssertTrue(hint.contains("\(recoveryBudget) characters at --delay-ms \(recoveryDelay)"))
   }
 
 #if os(iOS)

@@ -70,6 +70,9 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger textEntryWriteBacks;
 @property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
 @property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
+@property(nonatomic, assign) NSTimeInterval textEntryBurstStartTime;
+@property(nonatomic, assign) NSUInteger textEntryBurstEdits;
+@property(nonatomic, assign) NSTimeInterval textEntryBurstMinGap;
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
@@ -182,9 +185,14 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 }
 
 - (void)updateTextEntryWriteBackStatus {
-  self.textEntryWriteBackStatus.text = [NSString stringWithFormat:@"Edits: %lu; write-backs: %lu",
-                                               (unsigned long)self.textEntryRenderedEdits,
-                                               (unsigned long)self.textEntryWriteBacks];
+  NSTimeInterval burstSpan = self.textEntryLastEditTime - self.textEntryBurstStartTime;
+  self.textEntryWriteBackStatus.text = [NSString
+    stringWithFormat:@"edits=%lu write-backs=%lu burst-edits=%lu burst-ms=%lu min-gap-ms=%lu",
+                     (unsigned long)self.textEntryRenderedEdits,
+                     (unsigned long)self.textEntryWriteBacks,
+                     (unsigned long)self.textEntryBurstEdits,
+                     (unsigned long)llround(burstSpan * 1000),
+                     (unsigned long)llround(self.textEntryBurstMinGap * 1000)];
 }
 
 - (void)presentAlertFixtureReplacement:(BOOL)replacement {
@@ -244,23 +252,22 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 }
 #endif
 
-// How fast an app that owns this field's value can acknowledge edits: one render per window. An
-// edit that arrives inside that window overtook the render still in flight, so the value that
-// render commits predates it and writing it erases the characters that got ahead of the app. The
-// app then reads its own erasure back into its model, which is why the field stays wrong instead of
-// healing when the burst finishes. The window is decided at the edit rather than scheduled, so a
-// loaded host, which stretches the gaps between characters, can only make this app keep up better.
-static const NSTimeInterval AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds = 0.04;
-
-static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(id argument) {
+// How fast an app that owns this field's value can acknowledge edits: one render per window, passed
+// by the test as `--agent-device-text-entry-acknowledge-window <seconds>`. An edit that arrives
+// inside that window overtook the render still in flight, so the value that render commits predates
+// it and writing it erases the characters that got ahead of the app. The app then reads its own
+// erasure back into its model, which is why the field stays wrong instead of healing when the burst
+// finishes. The window is decided at the edit rather than scheduled, so a loaded host, which
+// stretches the gaps between characters, can only make this app keep up better.
+static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
-  NSUInteger index = [arguments indexOfObject:argument];
-  if (index == NSNotFound || index + 1 >= arguments.count) {
-    return AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds;
-  }
-  NSTimeInterval seconds = [arguments[index + 1] doubleValue];
-  return seconds > 0 ? seconds : AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds;
+  NSUInteger index = [arguments indexOfObject:@"--agent-device-text-entry-acknowledge-window"];
+  return index == NSNotFound || index + 1 >= arguments.count ? 0 : [arguments[index + 1] doubleValue];
 }
+
+// Edits further apart than this belong to different bursts: one runner command's characters arrive
+// well inside it, and two commands are separated by at least a commit-wait poll and a status read.
+static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
@@ -268,8 +275,16 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(id argument) {
   // flight, and the field settles stable short of the request.
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
     NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
-    BOOL overtookARender = self.textEntryRenderedValue != nil &&
-      (now - self.textEntryLastEditTime) < self.textEntryAcknowledgeWindowSeconds;
+    NSTimeInterval gap = now - self.textEntryLastEditTime;
+    BOOL overtookARender = self.textEntryRenderedValue != nil && gap < self.textEntryAcknowledgeWindowSeconds;
+    if (self.textEntryBurstEdits == 0 || gap > AgentDeviceTextEntryBurstBreakSeconds) {
+      self.textEntryBurstStartTime = now;
+      self.textEntryBurstEdits = 0;
+      self.textEntryBurstMinGap = 0;
+    } else if (self.textEntryBurstEdits == 1 || gap < self.textEntryBurstMinGap) {
+      self.textEntryBurstMinGap = gap;
+    }
+    self.textEntryBurstEdits += 1;
     self.textEntryLastEditTime = now;
     if (overtookARender) {
       if (![textField.text isEqualToString:self.textEntryRenderedValue]) {
@@ -343,8 +358,7 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(id argument) {
       [textField.heightAnchor constraintEqualToConstant:44],
     ]];
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
-      self.textEntryAcknowledgeWindowSeconds =
-        AgentDeviceTextEntryAcknowledgeWindow(@"--agent-device-text-entry-acknowledge-window");
+      self.textEntryAcknowledgeWindowSeconds = AgentDeviceTextEntryAcknowledgeWindow();
       // Reports how many edits this app rendered and how many writes it had to make because a
       // character overtook one, so a lane test can tell a burst the app kept up with from an inert
       // fixture. Counts only: no field content crosses into the test.

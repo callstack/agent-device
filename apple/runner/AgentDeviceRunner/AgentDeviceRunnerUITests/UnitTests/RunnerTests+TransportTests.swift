@@ -56,7 +56,7 @@ extension RunnerTests {
       box.result = result
       executed.fulfill()
     }
-    guard XCTWaiter.wait(for: [executed], timeout: mainThreadExecutionTimeout + 5) == .completed,
+    guard XCTWaiter.wait(for: [executed], timeout: Self.mainThreadExecutionTimeout + 5) == .completed,
       let result = box.result
     else {
       throw NSError(

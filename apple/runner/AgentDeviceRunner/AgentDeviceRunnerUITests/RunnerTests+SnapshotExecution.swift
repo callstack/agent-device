@@ -11,7 +11,7 @@ extension RunnerTests {
   private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
     let preparation: SnapshotCommandPreparation = try runMainThreadWork(
       "command_preparation",
-      timeout: mainThreadExecutionTimeout,
+      timeout: Self.mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) { () -> SnapshotCommandPreparation in
       switch try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false) {
