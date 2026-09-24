@@ -157,11 +157,14 @@ public struct PresentationOptions: Equatable {
 /// What a capture knows about the viewport hosting its tree: the three cases of the host's
 /// `IosViewportEvidence` (#2891). No rectangle stands for "unknown".
 public enum SnapshotViewport: Equatable {
-  /// A box `SnapshotGeometry.isPositiveFinite` accepted. Only the factories below construct one.
+  /// A box that was checked on the way in. The initializer is the only gate: no caller, inside this
+  /// package or outside it, holds a `Box` whose rectangle `SnapshotGeometry.isPositiveFinite`
+  /// refuses, so a `.reported` case never needs re-checking what it was handed.
   public struct Box: Equatable {
     public let rect: CGRect
 
-    init(positiveFinite rect: CGRect) {
+    init?(checked rect: CGRect) {
+      guard SnapshotGeometry.isPositiveFinite(rect) else { return nil }
       self.rect = rect
     }
   }
@@ -194,15 +197,13 @@ public enum SnapshotViewport: Equatable {
     box: CGRect,
     interfaceOrientation: Int = RunnerInterfaceOrientation.unknown
   ) -> SnapshotViewport {
-    SnapshotGeometry.isPositiveFinite(box)
-      ? .reported(Box(positiveFinite: box), interfaceOrientation: interfaceOrientation)
-      : .missing(reason: .invalid)
+    guard let checked = Box(checked: box) else { return .missing(reason: .invalid) }
+    return .reported(checked, interfaceOrientation: interfaceOrientation)
   }
 
   public static func derived(box: CGRect) -> SnapshotViewport {
-    SnapshotGeometry.isPositiveFinite(box)
-      ? .derived(Box(positiveFinite: box))
-      : .missing(reason: .invalid)
+    guard let checked = Box(checked: box) else { return .missing(reason: .invalid) }
+    return .derived(checked)
   }
 }
 
