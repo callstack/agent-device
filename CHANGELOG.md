@@ -8,6 +8,12 @@
   the parser read only the old element, so every row resolved no stack at all. Both spellings now
   parse through the same `id`/`ref` resolution, so a profile recorded with an older Xcode reports
   what it did before. (#2860)
+- Fixed (ios): `alert get`, `accept`, or `dismiss` with no alert on screen no longer reads every
+  element of the app to look for a popover's dismiss region. That walk cost one XCTest round trip
+  per element, plus XCTest's retry cycle for each element that vanished mid-walk. On a loading
+  WebView it outran the 10 s alert budget and kept the runner's main thread busy for more than 30 s
+  after the command failed, so later commands failed with `RUNNER_BUSY`. The dismiss region is now
+  found with one predicate query per window set. (#2491)
 - Changed (apple): a read-only runner command is resent inside the same request only when the
   runner refused it as `RUNNER_BUSY`. Before, any `COMMAND_FAILED` carrying `details.retriable:
   true` was sent up to three times. That flag tells a caller's own poll, such as `wait`, to try

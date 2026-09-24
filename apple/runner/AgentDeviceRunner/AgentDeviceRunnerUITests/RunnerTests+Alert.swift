@@ -161,21 +161,20 @@ extension RunnerTests {
     elements.first { isVisibleElement($0) }
   }
 
+  /// The marker is matched inside XCTest's query, so the screen is read once per query. Reading each
+  /// descendant instead costs one round trip per element, and on a screen whose tree changes while
+  /// it is read (a loading web view) each vanished element adds XCTest's retry cycle.
   private func firstDismissPopupWindow(in app: XCUIApplication) -> XCUIElement? {
-    safeElementsQuery {
-      app.windows.allElementsBoundByIndex
-    }.first { window in
-      if !isVisibleElement(window) { return false }
-      if isDismissPopupMarker(window.label) || isDismissPopupMarker(window.identifier) {
-        return true
-      }
-      return safeElementsQuery {
-        window.descendants(matching: .any).allElementsBoundByIndex
-      }.contains { descendant in
-        isDismissPopupMarker(descendant.label) || isDismissPopupMarker(descendant.identifier)
-      }
-    }
+    firstExistingElement(in: safeElementsQuery {
+      app.windows.matching(Self.dismissPopupMarker).allElementsBoundByIndex +
+        app.windows.containing(Self.dismissPopupMarker).allElementsBoundByIndex
+    })
   }
+
+  private static let dismissPopupMarker: NSPredicate = {
+    let marker = #"\s*dismiss popup\s*"#
+    return NSPredicate(format: "label MATCHES[c] %@ OR identifier MATCHES[c] %@", marker, marker)
+  }()
 
   private func chooseAlertButton(_ buttons: [XCUIElement], action: String) -> XCUIElement? {
     if action == "accept" {

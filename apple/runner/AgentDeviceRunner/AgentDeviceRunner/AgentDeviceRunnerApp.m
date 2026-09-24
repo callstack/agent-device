@@ -295,6 +295,23 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
     ]];
   }
 
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {
+    for (NSUInteger row = 0; row < 150; row++) {
+      UILabel *rowLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60 + (row % 30) * 24, 400, 16)];
+      rowLabel.text = [NSString stringWithFormat:@"Crowded row %lu", (unsigned long)row];
+      rowLabel.accessibilityIdentifier = [NSString stringWithFormat:@"agent-device-crowded-row-%lu", (unsigned long)row];
+      [self.view addSubview:rowLabel];
+    }
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"]) {
+    UIButton *dismissRegion = [UIButton buttonWithType:UIButtonTypeSystem];
+    dismissRegion.accessibilityIdentifier = @" Dismiss Popup ";
+    [dismissRegion setTitle:@"Close popover" forState:UIControlStateNormal];
+    dismissRegion.frame = CGRectMake(40, 40, 200, 44);
+    [self.view addSubview:dismissRegion];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-selector-read-regression"]) {
     NSString *const duplicateIdentifier = @"agent-device-selector-read-duplicate";
 
