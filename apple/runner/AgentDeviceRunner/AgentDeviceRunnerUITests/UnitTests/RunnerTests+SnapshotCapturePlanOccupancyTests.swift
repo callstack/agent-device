@@ -8,6 +8,7 @@ import ObjectiveC.runtime
 /// semaphore, and one shared across runs would carry leftover signals into the next run.
 private enum RunnerBlockingSnapshotGate {
   static var release = DispatchSemaphore(value: 0)
+  static var entered = DispatchSemaphore(value: 0)
 }
 
 /// Stands in for `-[XCUIElement snapshotWithError:]` so the tree tier's XPC grinds the way it does
@@ -21,6 +22,7 @@ private final class RunnerBlockingSnapshotStub: NSObject {
 
   @objc(snapshotWithError:)
   func snapshot() throws -> XCUIElementSnapshot {
+    RunnerBlockingSnapshotGate.entered.signal()
     _ = RunnerBlockingSnapshotGate.release.wait(timeout: .now() + Self.leakGuard)
     throw NSError(
       domain: "AgentDeviceRunner.tests",
@@ -92,14 +94,12 @@ extension RunnerTests {
     // resolution is slow, and it must not be the block the plan abandons.
     XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
     XCTAssertFalse(app.frame.isEmpty)
-    // The traversal context reads the viewport under a 1 s cap; a cold first read can overrun it
-    // and abandon the wrong block, so pay it here, uncapped.
-    _ = safeSnapshotViewport(app: app, readingOrientation: true)
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemption.isPending = true
     let captureTarget = takeSnapshotCaptureTarget(app: app)
     RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
+    RunnerBlockingSnapshotGate.entered = DispatchSemaphore(value: 0)
     let originalImplementation = method_getImplementation(snapshotMethod)
     method_setImplementation(snapshotMethod, method_getImplementation(stubMethod))
     defer {
@@ -116,6 +116,7 @@ extension RunnerTests {
       var error: Error?
       var abandonedAfterPlan: Int?
       var penalizedAfterPlan: Bool?
+      var blockingTreeEntered = false
     }
     let box = ResultBox()
     let planned = expectation(description: "capture plan answered while the tree XPC grinds")
@@ -135,6 +136,7 @@ extension RunnerTests {
       box.abandonedAfterPlan = self.abandonedMainThreadWorkCount
       self.mainThreadWorkLock.unlock()
       box.penalizedAfterPlan = self.isSnapshotXCTestChannelPenalized(bundleId: captureTarget.bundleId)
+      box.blockingTreeEntered = RunnerBlockingSnapshotGate.entered.wait(timeout: .now()) == .success
       RunnerBlockingSnapshotGate.release.signal()
       planned.fulfill()
     }
@@ -146,6 +148,7 @@ extension RunnerTests {
     }
 
     XCTAssertNil(box.error)
+    XCTAssertTrue(box.blockingTreeEntered, "the tree XPC must enter before the plan answers")
     let quality = try XCTUnwrap(box.payload?.snapshotQuality)
     XCTAssertEqual(quality.backend, SnapshotBackendKind.privateAX.rawValue)
     XCTAssertEqual(quality.state, .recovered)

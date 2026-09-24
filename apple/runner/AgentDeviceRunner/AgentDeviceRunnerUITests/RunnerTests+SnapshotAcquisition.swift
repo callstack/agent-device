@@ -38,22 +38,22 @@ extension RunnerTests {
     captureDeadline: Date = .distantFuture,
     treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
-    // The viewport and the interface orientation are one hop: geometry that arrives in the device's
-    // native space can only be placed relative to the app's own frame and rotation, and asking for
-    // the pair twice would read them at two different moments of a rotation.
-    let viewport = try runMainThreadWork(
-      "snapshot_viewport",
-      timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
-      timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
-    ) {
-      self.safeSnapshotViewport(app: app, readingOrientation: true)
-    }
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
     guard let rootSnapshot = try captureSnapshotRootBounded(app, sliceSeconds: slice) else {
       return nil
     }
 
+    // The viewport and the interface orientation are one hop: geometry that arrives in the device's
+    // native space can only be placed relative to the app's own frame and rotation, and asking for
+    // the pair twice would read them at two different moments of a rotation.
+    let viewport = try runMainThreadWork(
+      "snapshot_viewport",
+      timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
+      timeoutError: snapshotMainThreadTimeoutError("reading snapshot viewport")
+    ) {
+      self.safeSnapshotViewport(app: app, readingOrientation: true)
+    }
     // Read after the tree, so the band is never older than the tree it will be compared against: a
     // keyboard that appeared while the tree was being captured would otherwise publish `absent`
     // beside key nodes that the tap guard would then have to trust less than the absence (#2660).
