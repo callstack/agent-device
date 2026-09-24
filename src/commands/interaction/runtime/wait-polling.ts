@@ -1,5 +1,10 @@
 import { AppError, asAppError, type AppErrorDetails } from '@agent-device/kernel/errors';
-import { WAIT_REASONS, type WaitReason } from '@agent-device/contracts/wait';
+import {
+  readinessPhaseOf,
+  WAIT_REASONS,
+  type ReadinessPhase,
+  type WaitReason,
+} from '@agent-device/contracts/wait';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { selectorPollBudget } from '@agent-device/selectors/selector-pipeline';
 import {
@@ -15,20 +20,25 @@ import { runWithinWaitDeadline } from './wait-deadline.ts';
  */
 export const DEFAULT_WAIT_TIMEOUT_MS = SELECTOR_PIPELINE_POLICIES.wait.poll.defaultTimeoutMs;
 
-export type WaitPollDeadline = 'capture-stalled' | 'capture-truncated' | 'runner-restart-exhausted';
+export type WaitPollDeadline =
+  | 'capture-stalled'
+  | 'capture-truncated'
+  | 'runner-restart-exhausted'
+  | 'readiness-exhausted';
 
 /**
  * How one poll ended: a readable capture, an unreadable content verdict the wait rode out, a
  * producer refusal the wait rode out because the producer itself classified it as retriable, the
- * deadline cancelling the capture in flight, or that cancellation carrying runner-restart
- * evidence. Whether a readable capture matched is the caller's verdict, not the poll's.
+ * deadline cancelling the capture in flight, or that cancellation landing in a runner restart or
+ * in readiness work. Whether a readable capture matched is the caller's verdict, not the poll's.
  */
 export type WaitPollOutcome =
   | 'readable'
   | 'unreadable'
   | 'retriable'
   | 'deadline'
-  | 'runner-restart';
+  | 'runner-restart'
+  | 'readiness';
 
 /** One poll on the wait's own clock: when it started after the wait began and how long it ran. */
 export type WaitPollRecord = {
@@ -54,6 +64,7 @@ export type WaitFailureEvidence = {
   runnerRestartCommandId?: string;
   runnerInvalidatedSessionId?: string;
   runnerRestartSessionId?: string;
+  readinessPhase?: ReadinessPhase;
   logPath?: string;
   diagnosticId?: string;
 };
@@ -139,15 +150,12 @@ export function createWaitPolling(
         recordPoll(completedPollOutcome(captureWasReadable, unobserved.lastUnobservedCause()));
         return result;
       }
-      const runnerRestart = runnerRestartTimeoutEvidence(result.error);
-      recordPoll(runnerRestart ? 'runner-restart' : 'deadline');
-      timeoutEvidence = runnerRestart ?? {};
+      const cancelled = cancelledPoll(result.error, unobserved.readableCaptures());
+      recordPoll(cancelled.outcome);
+      timeoutEvidence = cancelled.evidence;
       // A capture that only becomes readable after its deadline is not evidence for this wait.
       // Count only captures that completed before runWithinWaitDeadline returned a timeout.
-      return {
-        timedOut: true as const,
-        deadline: timedOutDeadline(runnerRestart !== undefined, unobserved.readableCaptures()),
-      };
+      return { timedOut: true as const, deadline: cancelled.deadline };
     },
     hasTimeRemaining: () => remainingMs() > 0,
     failureEvidence: (): WaitFailureEvidence => ({
@@ -177,14 +185,37 @@ function completedPollOutcome(
 }
 
 /**
- * Why the deadline, not the target, ended the wait. A poll is a backend stall when no completed
+ * Why the deadline, not the target, ended the wait. A cancellation that landed in a runner restart
+ * or in readiness work says so itself. Otherwise a poll is a backend stall when no completed
  * capture established a readable observation; the poll index is not evidence. This remains true
  * after one or more unreadable content verdicts followed by a capture that consumes the remaining
  * budget.
  */
-function timedOutDeadline(runnerRestarted: boolean, readableCaptures: number): WaitPollDeadline {
-  if (runnerRestarted) return 'runner-restart-exhausted';
-  return readableCaptures === 0 ? 'capture-stalled' : 'capture-truncated';
+function cancelledPoll(
+  error: unknown,
+  readableCaptures: number,
+): {
+  outcome: WaitPollOutcome;
+  deadline: WaitPollDeadline;
+  evidence: Partial<WaitFailureEvidence>;
+} {
+  const runnerRestart = runnerRestartTimeoutEvidence(error);
+  if (runnerRestart) {
+    return {
+      outcome: 'runner-restart',
+      deadline: 'runner-restart-exhausted',
+      evidence: runnerRestart,
+    };
+  }
+  const readinessPhase = readinessPhaseOf(error instanceof AppError ? error.details : undefined);
+  if (readinessPhase) {
+    return { outcome: 'readiness', deadline: 'readiness-exhausted', evidence: { readinessPhase } };
+  }
+  return {
+    outcome: 'deadline',
+    deadline: readableCaptures === 0 ? 'capture-stalled' : 'capture-truncated',
+    evidence: {},
+  };
 }
 
 function compactPollTimeline(polls: readonly WaitPollRecord[]): WaitPollRecord[] {
@@ -209,6 +240,15 @@ function waitRunnerRestartExhaustedError(message: string, evidence: WaitFailureE
     ...evidence,
     retriable: true,
     hint: 'An iOS runner restart consumed the wait timeout before a readable snapshot completed. Inspect the diagnostics log for the runner invalidation/restart sequence, then retry.',
+  });
+}
+
+function waitReadinessExhaustedError(message: string, evidence: WaitFailureEvidence): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    reason: WAIT_REASONS.readinessExhausted,
+    ...evidence,
+    retriable: true,
+    hint: `The wait timeout ended during readiness work (${evidence.readinessPhase}), before that poll could capture the screen. Retry with a timeout long enough to cover it.`,
   });
 }
 
@@ -279,6 +319,7 @@ export function waitTimeoutError(
   if (deadline === 'runner-restart-exhausted') {
     return waitRunnerRestartExhaustedError(message, evidence);
   }
+  if (deadline === 'readiness-exhausted') return waitReadinessExhaustedError(message, evidence);
   if (deadline === 'capture-stalled') {
     // Whether a content verdict outranks the stall verdict is the caller's policy; a refusal is
     // preserved either way.

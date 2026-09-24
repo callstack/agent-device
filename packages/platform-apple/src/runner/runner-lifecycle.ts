@@ -1,5 +1,11 @@
-import { AppError, asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  asAppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { readinessPhaseDetails } from '@agent-device/contracts/wait';
 import { emitDiagnostic } from './host.ts';
 import { RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
@@ -265,13 +271,13 @@ export async function executeRunnerCommand(
   const recycleKey = runnerRecycleLedgerKey(options, command);
   let session: RunnerSession | undefined;
   let recycleBootBegun = false;
+  const liveness = readRunnerSessionLiveness(device.id)?.liveness ?? 'gone';
   try {
     // A request that already used a runner session and finds no runner process is about to pay
     // for a recycle boot (~25s): bound that to the per-request recycle budget so a hostile screen
     // fails fast with a preserved session instead of stacking runner boots (#1105).
     // `gone` and `stopped` are the two liveness answers that mean no runner is answering now, so
     // this command is the one that would start a process (#2662).
-    const liveness = readRunnerSessionLiveness(device.id)?.liveness ?? 'gone';
     if (
       (liveness === 'gone' || liveness === 'stopped') &&
       hasRunnerRequestTouchedSession(recycleKey)
@@ -301,9 +307,15 @@ export async function executeRunnerCommand(
   } catch (error) {
     if (options.expectedRunnerSessionId !== undefined) throw error;
     const appErr = asAppError(error, 'COMMAND_FAILED');
-    if (session && session.state === 'starting' && isRequestCanceledError(appErr)) {
-      await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
-      throw error;
+    const runnerStarting = session ? session.state === 'starting' : liveness !== 'ready';
+    if (runnerStarting && isRequestCanceledError(appErr)) {
+      if (session) {
+        await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
+      }
+      throw createRequestCanceledError(
+        { ...appErr.details, ...readinessPhaseDetails('runner-start') },
+        appErr,
+      );
     }
     if (shouldRestartRunnerBeforeCommandSend(appErr) && session) {
       assertRunnerRequestActive(options.requestId);

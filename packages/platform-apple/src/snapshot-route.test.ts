@@ -783,3 +783,51 @@ test('a slow app discovery keeps observation on the bridge while no runner can a
     vi.useRealTimers();
   }
 });
+
+test('a deadline during a slow app discovery names the discovery as the readiness phase', async () => {
+  // The capture never reached the bridge or the runner: its whole cost was finding the target, so
+  // the cancellation says so instead of reading as a capture that produced nothing (#2343).
+  const run = vi.fn(async (args: string[]) => {
+    if (args[0] === 'spawn') await new Promise<never>(() => {});
+    return {
+      stdout: JSON.stringify({
+        devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+      }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => false },
+    },
+    {
+      source: sourceReturning(bridgeAcquisition()),
+      resolveTarget: createSimulatorSnapshotTargetResolver(),
+    },
+  );
+  const deadline = new AbortController();
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        const capture = route.capture(ios, input, deadline.signal, fallback);
+        const settled = expect(capture).rejects.toMatchObject({
+          code: 'COMMAND_FAILED',
+          details: { reason: 'request_canceled', readinessPhase: 'target-discovery' },
+        });
+        await vi.advanceTimersByTimeAsync(3_000);
+        deadline.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+        await settled;
+        expect(fallback).not.toHaveBeenCalled();
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});

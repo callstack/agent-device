@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
@@ -217,6 +219,66 @@ test('a failed restart preserves the invalidated runner evidence', async () => {
     });
   } finally {
     await restartedServer.close();
+  }
+});
+
+// A runner that has not answered yet is readiness work, not observation: a caller whose deadline
+// lands there needs to know the start consumed it, so the cancellation names the phase (#2343).
+test('a cancellation during a runner start names the start as the readiness phase', async () => {
+  const unanswered = await startFakeRunnerServer([]);
+  await unanswered.close();
+  const starting = { ...makeRunnerSession(unanswered.port), state: 'starting' as const };
+  ensureRunnerSessionMock.mockResolvedValue(starting);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 50);
+
+  await expect(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }, { signal: controller.signal }),
+  ).rejects.toMatchObject({
+    details: { reason: 'request_canceled', readinessPhase: 'runner-start' },
+  });
+  expect(invalidateRunnerSessionMock).toHaveBeenCalledWith(
+    starting,
+    'runner_startup_request_canceled',
+  );
+});
+
+test('a cancellation before any runner session exists names the start as the readiness phase', async () => {
+  ensureRunnerSessionMock.mockImplementation(
+    async (_device: unknown, options: { signal?: AbortSignal }) =>
+      await new Promise((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () => reject(createRequestCanceledError()), {
+          once: true,
+        });
+      }),
+  );
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 20);
+
+  await expect(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }, { signal: controller.signal }),
+  ).rejects.toMatchObject({ details: { readinessPhase: 'runner-start' } });
+});
+
+test('a cancellation of a command on a ready runner is not readiness work', async () => {
+  const silent = http.createServer(() => {});
+  await new Promise<void>((resolve) => silent.listen(0, '127.0.0.1', resolve));
+  try {
+    seedSession((silent.address() as AddressInfo).port);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 50);
+
+    const command = runAppleRunnerCommand(
+      IOS_SIMULATOR,
+      { command: 'snapshot' },
+      { signal: controller.signal },
+    );
+
+    await expect(command).rejects.toMatchObject({ details: { reason: 'request_canceled' } });
+    await expect(command).rejects.not.toHaveProperty('details.readinessPhase');
+  } finally {
+    silent.closeAllConnections();
+    await new Promise<void>((resolve) => silent.close(() => resolve()));
   }
 });
 

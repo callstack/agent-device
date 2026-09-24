@@ -16,7 +16,8 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { readinessPhaseDetails } from '@agent-device/contracts/wait';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createSimulatorSnapshotSource,
@@ -140,7 +141,7 @@ export function createAppleSnapshotRoute(
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
       } catch (error) {
-        signal.throwIfAborted();
+        throwIfTargetResolutionCancelled(signal);
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
         return await runFallback(
           device.id,
@@ -245,6 +246,15 @@ async function resolveTargetForObservation(
       if (await host.appleApplications.hasLiveRunnerSession(device, execution)) throw error;
     }
   }
+}
+
+/**
+ * A capture cancelled before its target was resolved never reached the bridge or the runner, so the
+ * cancellation names the readiness work that consumed it rather than reading as a failed capture.
+ */
+function throwIfTargetResolutionCancelled(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  throw createRequestCanceledError(readinessPhaseDetails('target-discovery'), signal.reason);
 }
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {

@@ -1,6 +1,10 @@
 import { expect, test, vi } from 'vitest';
-import { WAIT_REASONS } from '@agent-device/contracts/wait';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  readinessPhaseDetails,
+  WAIT_REASONS,
+  type ReadinessPhase,
+} from '@agent-device/contracts/wait';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -741,6 +745,67 @@ test('strict wait absent does not mask a runner restart after an earlier present
     readableCaptures: 1,
   });
   expect(response.error.details?.reason).not.toBe(WAIT_REASONS.targetPresent);
+});
+
+/**
+ * The platform's cancellation as production throws it when the wait deadline lands before the
+ * target is observable: the runner start or the Simulator app discovery was still running.
+ */
+function readinessCancelledCapture(phase: ReadinessPhase, beforeStall: SnapshotResult[] = []) {
+  const readable = [...beforeStall];
+  return vi.fn(async (input: CaptureSnapshotInput) => {
+    const next = readable.shift();
+    if (next) return next;
+    const signal = input.signal;
+    if (!signal) throw new Error('the poll deadline never reached the platform');
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) return resolve();
+      signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    throw createRequestCanceledError(readinessPhaseDetails(phase), signal.reason);
+  });
+}
+
+test.for(['runner-start', 'target-discovery'] as const)(
+  'a %s that outlasts the wait reports readiness exhaustion, not a capture stall',
+  async (phase) => {
+    const harness = waitRuntimeHarness({ captureSnapshot: readinessCancelledCapture(phase) });
+
+    const { response } = await runWait(['text', 'Ready', '50'], harness);
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.details).toMatchObject({
+      reason: WAIT_REASONS.readinessExhausted,
+      readinessPhase: phase,
+      retriable: true,
+      readableCaptures: 0,
+      captures: 1,
+      polls: [{ startedMs: 0, outcome: 'readiness' }],
+    });
+    expect(response.error.details?.captureStalled).toBeUndefined();
+  },
+);
+
+test('strict wait absent reports readiness exhaustion over an earlier present capture', async () => {
+  const captureSnapshot = readinessCancelledCapture('target-discovery', [
+    {
+      nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Ready', hittable: true }],
+      backend: 'web',
+      producer: 'agent-browser',
+    },
+  ]);
+  const harness = waitRuntimeHarness({ captureSnapshot });
+
+  const { response } = await runWait(['absent', 'label="Ready"', '800'], harness);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.details).toMatchObject({
+    reason: WAIT_REASONS.readinessExhausted,
+    readinessPhase: 'target-discovery',
+    readableCaptures: 1,
+  });
 });
 
 test('a readable capture that lacks the target stays target-absent, not capture-stalled', async () => {
