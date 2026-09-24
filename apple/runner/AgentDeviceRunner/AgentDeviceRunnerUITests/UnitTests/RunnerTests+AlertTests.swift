@@ -10,6 +10,7 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
+  @MainActor
   func testAlertResolutionWithoutAnAlertDoesNotReadEveryElementOfTheScreen() throws {
     launchCrowdedScreen(extraArguments: [])
     defer { terminateCrowdedScreen() }
@@ -21,6 +22,7 @@ extension RunnerTests {
     XCTAssertLessThan(Date().timeIntervalSince(startedAt), RunnerTests.defaultAlertCommandTimeout / 2)
   }
 
+  @MainActor
   func testAlertResolutionFindsADismissPopupMarkerOnACrowdedScreen() throws {
     launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup"])
     defer { terminateCrowdedScreen() }
@@ -33,6 +35,7 @@ extension RunnerTests {
     XCTAssertTrue(alert.buttons.contains { $0.identifier == " Dismiss Popup " })
   }
 
+  @MainActor
   func testAlertResolutionFindsAWindowThatIsItselfTheDismissPopupMarker() throws {
     launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup-window"])
     defer { terminateCrowdedScreen() }
@@ -51,6 +54,7 @@ extension RunnerTests {
     XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
   }
 
+  @MainActor
   private func terminateCrowdedScreen() {
     invalidateCachedTarget(reason: "unit_test_cleanup")
     app.terminate()

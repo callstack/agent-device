@@ -177,10 +177,11 @@ extension RunnerTests {
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
+  @MainActor
   func testSynthesizedSequenceTapFallsBackToXCTestCoordinateTapWhenAccessibilityIsUnavailable() throws {
     let restoreSynthesizedTap = try forceSynthesizedTapFailure()
     app.launch()
-    currentApp = app
+    mainOwned.app = app
     defer {
       restoreSynthesizedTap()
       invalidateCachedTarget(reason: "unit_test_cleanup")
@@ -189,7 +190,7 @@ extension RunnerTests {
     let label = app.staticTexts["Agent Device Runner"]
     XCTAssertTrue(label.waitForExistence(timeout: appExistenceTimeout))
     let point = CGPoint(x: label.frame.midX, y: label.frame.midY)
-    runnerAccessibilityHealth = .unavailable
+    mainOwned.accessibilityHealth = .unavailable
     let command = try runnerCommandFixture(
       #"{"command":"sequence","commandId":"sequence-synthesized-tap-fallback","steps":[{"kind":"tap","x":\#(point.x),"y":\#(point.y),"synthesized":true}]}"#
     )

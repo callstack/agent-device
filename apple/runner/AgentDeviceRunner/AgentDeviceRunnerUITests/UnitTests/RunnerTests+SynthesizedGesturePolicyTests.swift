@@ -106,9 +106,10 @@ extension RunnerTests {
     XCTAssertNil(synthesizedPolicyKind(forSequenceStep: sequenceStep("longPress", synthesized: true)))
   }
 
+  @MainActor
   func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
-      runnerAccessibilityHealth = health
+      mainOwned.accessibilityHealth = health
       for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
         let label = "axHealth=\(health.rawValue) context=\(context == nil ? "unresolved" : "resolved")"
         let attempt = performSynthesizedGesture(
@@ -122,8 +123,9 @@ extension RunnerTests {
     }
   }
 
+  @MainActor
   func testSynthesizedGestureFallbackFollowsItsKindAndTheResolvedAccessibilityHealth() {
-    runnerAccessibilityHealth = .healthy
+    mainOwned.accessibilityHealth = .healthy
     let unavailable = synthesizedGestureTestContext(accessibilityHealth: .unavailable)
     let unknown = synthesizedGestureTestContext(accessibilityHealth: .unknown)
     let cases: [(SynthesizedGesturePolicyKind, SynthesizedCoordinateContext?, String)] = [
