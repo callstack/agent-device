@@ -111,6 +111,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   identifier: true,
   enabled: true,
   selected: true,
+  checked: true,
   focused: true,
   heading: true,
   roleDescription: true,

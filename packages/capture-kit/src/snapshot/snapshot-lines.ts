@@ -195,6 +195,21 @@ export function formatRole(type: string): string {
   return lookupRoleLabel(normalized) || normalized || 'element';
 }
 
+/**
+ * The state markers every rendering path prints, and the states a snapshot diff compares: the diff
+ * renders its lines without text-surface summarizing, and a fact it weighs has to be visible in the
+ * line it prints, or a flip reads as a changed pair whose two lines look identical. Both checked
+ * answers render, since a checkable control shown plain would hide that it toggles; a node that
+ * cannot be checked carries neither.
+ */
+export function stateMarkers(node: SnapshotNode): string[] {
+  const markers: string[] = [];
+  if (node.enabled === false) markers.push('disabled');
+  if (node.selected === true) markers.push('selected');
+  if (node.checked !== undefined) markers.push(node.checked ? 'checked' : 'unchecked');
+  return markers;
+}
+
 function lookupRoleLabel(normalized: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(ROLE_LABELS, normalized)
     ? ROLE_LABELS[normalized]
@@ -238,13 +253,7 @@ function buildLineMetadata(
   options: SnapshotLineFormatOptions,
   textSurface: { text: string; isLargeSurface: boolean; shouldSummarize: boolean },
 ): string[] {
-  const metadata: string[] = [];
-  if (node.enabled === false) metadata.push('disabled');
-  // Selection is a state a snapshot diff can report as changed, and the diff renders its lines
-  // without text-surface summarizing. A fact the diff compares has to be visible in the line it
-  // prints, or a selection flip reads as a changed pair whose two lines look identical.
-  if (node.selected === true) metadata.push('selected');
-  metadata.push(...(node.presentationHints ?? []));
+  const metadata = [...stateMarkers(node), ...(node.presentationHints ?? [])];
   if (!options.summarizeTextSurfaces) {
     return uniqueMetadata(metadata);
   }

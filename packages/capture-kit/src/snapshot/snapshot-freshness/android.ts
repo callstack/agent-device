@@ -28,11 +28,12 @@ export function isNavigationSensitiveAction(command: string): boolean {
 
 /**
  * Route signature of an Android snapshot, from the fields the Android backend actually carries.
- * The helper serializes no `role`, `checked` or `long-clickable` (declared residue,
- * #1832), so a signature keying on them would compare constants and claim discrimination it does
- * not have. `selected` is left out as a judgement call rather than an inability: a tab-bar tap
- * flips it on two nodes, which the 90%-identical threshold below absorbs at every tree size this
- * check runs on, so keying on it would only add capture retries.
+ * The helper serializes no `role` or `long-clickable` (declared residue, #1832), so a signature
+ * keying on them would compare constants and claim discrimination it does not have. `selected`
+ * and `checked` are left out as a judgement call rather than an inability: a tab-bar tap flips
+ * selection on two nodes and a toggle tap flips one checked state, which the 90%-identical
+ * threshold below absorbs at every tree size this check runs on, so keying on them would only add
+ * capture retries.
  */
 export function buildSnapshotSignatures(nodes: SnapshotState['nodes']): string[] {
   return nodes.map((node) =>

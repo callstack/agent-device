@@ -39,6 +39,8 @@ export type AndroidUiNodeMetadata = {
   heading?: boolean;
   /** Helper-only: the localized role description an app set beside the class, verbatim. */
   roleDescription?: string;
+  /** Helper-only, present on a checkable control: the checked state of a switch, checkbox, or radio. */
+  checked?: boolean;
   password?: boolean;
   editable?: boolean;
   selectionStart?: number;
@@ -175,6 +177,7 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalBoolAttr('selected', 'selected'),
     ...optionalBoolAttr('heading', 'heading'),
     ...optionalStringAttr('roleDescription', 'role-description'),
+    ...optionalBoolAttr('checked', 'checked'),
     ...optionalNumberAttr('drawingOrder', 'drawing-order'),
     ...optionalBoolAttr('scrollable', 'scrollable'),
     ...optionalBoolAttr('canScrollForward', 'can-scroll-forward'),
@@ -331,6 +334,7 @@ function normalizeAndroidUiHierarchyNode(
       selected: attrs.selected,
       heading: attrs.heading,
       roleDescription: attrs.roleDescription,
+      checked: attrs.checked,
       editable: attrs.editable,
       password: attrs.password,
       hintShowing: attrs.hintShowing,

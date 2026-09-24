@@ -69,6 +69,12 @@ final class AccessibilityTreeXml {
     // unselected control reports selected=false and a helper older than this attribute reports
     // nothing at all.
     appendAttribute(xml, "selected", Boolean.toString(node.isSelected()));
+    // Present only on a checkable control, with both answers: an unchecked switch reports
+    // checked=false, while a node that cannot be checked reports nothing, like a helper older than
+    // this attribute.
+    if (node.isCheckable()) {
+      appendAttribute(xml, "checked", Boolean.toString(node.isChecked()));
+    }
     boolean scrollable = node.isScrollable();
     if (scrollable) {
       appendAttribute(xml, "scrollable", "true");
@@ -164,9 +170,8 @@ final class AccessibilityTreeXml {
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && node.isHeading();
   }
 
-  // Declared residue (agent-device #1832): checked / checkable / long-clickable are not serialized,
-  // so toggle state is invisible to agents. Adding them is a helper protocol change (new attributes
-  // + host parser + fields on the wire node), tracked there.
+  // Declared residue (agent-device #1832): long-clickable is not serialized. Adding it is a helper
+  // protocol change (new attribute + host parser + field on the wire node).
   private static void appendDrawingOrderAttribute(StringBuilder xml, AccessibilityNodeInfo node) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
       appendAttribute(xml, "drawing-order", Integer.toString(node.getDrawingOrder()));

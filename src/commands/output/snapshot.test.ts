@@ -820,3 +820,28 @@ test('formatSnapshotLine marks selection anywhere, and keeps text-surface metada
   assert.doesNotMatch(line, /\[editable\]/);
   assert.doesNotMatch(line, /\[scrollable\]/);
 });
+
+test.each([
+  [true, /\[checked\]/],
+  [false, /\[unchecked\]/],
+])(
+  'formatSnapshotLine renders both checked answers on the default path (%s)',
+  (checked, marker) => {
+    const line = formatSnapshotLine(
+      {
+        ref: 'e2',
+        index: 0,
+        depth: 0,
+        type: 'Switch',
+        label: 'Wi-Fi switch',
+        enabled: true,
+        checked,
+      },
+      0,
+      false,
+    );
+    // A checkable control rendered as plain would hide that it toggles, and the diff compares the
+    // state, so the line prints whichever answer the helper observed.
+    assert.match(line, marker);
+  },
+);

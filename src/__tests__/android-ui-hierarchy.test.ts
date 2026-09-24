@@ -272,6 +272,29 @@ test('a published Android snapshot carries the heading flag and the role descrip
   );
 });
 
+// A settings screen: the helper writes `checked` on the checkable switch and radio, with both
+// answers, and nothing on the label beside them.
+const ANDROID_TOGGLES_XML = `<hierarchy>
+  <node class="android.widget.LinearLayout" resource-id="com.example.app:id/toggles" bounds="[0,0][390,200]" enabled="true" visible-to-user="true">
+    <node class="android.widget.TextView" resource-id="com.example.app:id/wifi-label" text="Wi-Fi" bounds="[0,0][195,100]" enabled="true" visible-to-user="true"/>
+    <node class="android.widget.Switch" resource-id="com.example.app:id/wifi-switch" content-desc="Wi-Fi switch" bounds="[195,0][390,100]" clickable="true" enabled="true" visible-to-user="true" checked="true"/>
+    <node class="android.widget.RadioButton" resource-id="com.example.app:id/size-small" text="Small" bounds="[0,100][390,200]" clickable="true" enabled="true" visible-to-user="true" checked="false"/>
+  </node>
+</hierarchy>`;
+
+test('a published Android snapshot carries the checked state of checkable controls only', () => {
+  const nodes = publishUiHierarchy(ANDROID_TOGGLES_XML).nodes;
+  const byId = (identifier: string) => nodes.find((node) => node.identifier === identifier)!;
+
+  assert.equal(byId('com.example.app:id/wifi-switch').checked, true);
+  assert.equal(byId('com.example.app:id/size-small').checked, false);
+  assert.equal(byId('com.example.app:id/wifi-label').checked, undefined);
+  assert.deepEqual(
+    Array.from(androidUiNodes(ANDROID_TOGGLES_XML)).map((node) => node.checked),
+    [undefined, undefined, true, false],
+  );
+});
+
 test('parseUiHierarchy discards stale inactive Android application windows', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" package="com.example.app" bounds="[0,0][390,844]" window-index="0" window-type="1" window-layer="10" window-active="true" window-focused="true" window-bounds="[0,0][390,844]">

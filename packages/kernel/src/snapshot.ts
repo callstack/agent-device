@@ -251,6 +251,8 @@ export type RawSnapshotNode = {
   rect?: Rect;
   enabled?: boolean;
   selected?: boolean;
+  /** Checked state of a checkable control (switch, checkbox, radio); absent means not checkable or unavailable. */
+  checked?: boolean;
   focused?: boolean;
   /** Accessibility heading flag an app set on the node; absent means not a heading or unavailable. */
   heading?: boolean;

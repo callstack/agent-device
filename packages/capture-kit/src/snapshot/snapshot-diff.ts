@@ -5,6 +5,7 @@ import {
   displayLabel,
   formatRole,
   formatSnapshotLine,
+  stateMarkers,
 } from './snapshot-lines.ts';
 
 export type SnapshotDiffResult = {
@@ -27,8 +28,9 @@ type SnapshotComparableLine = {
 function snapshotNodeToComparableLine(node: SnapshotNode, depthOverride?: number): string {
   const role = formatRole(node.type ?? 'Element');
   const textPart = displayLabel(node, role);
-  const enabledPart = node.enabled === false ? 'disabled' : 'enabled';
-  const selectedPart = node.selected === true ? 'selected' : 'unselected';
+  // The states the rendered line prints are the states the key compares, from one function, so a
+  // fact the diff weighs is always visible in the line it prints.
+  const statePart = stateMarkers(node).join(',');
   const hittablePart = node.hittable === true ? 'hittable' : 'not-hittable';
   const depthPart = String(depthOverride ?? node.depth ?? 0);
   // The rendered line carries the actions list, so the comparable key has to as
@@ -36,9 +38,7 @@ function snapshotNodeToComparableLine(node: SnapshotNode, depthOverride?: number
   // silently differs from the baseline's. JSON-encoded because the names are
   // app-authored and may contain the field separator.
   const actionsPart = node.actions ? JSON.stringify(node.actions) : '';
-  return [depthPart, role, textPart, enabledPart, selectedPart, hittablePart, actionsPart].join(
-    '|',
-  );
+  return [depthPart, role, textPart, statePart, hittablePart, actionsPart].join('|');
 }
 
 export function buildSnapshotDiff(

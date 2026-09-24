@@ -19,6 +19,7 @@ export type AndroidUiHierarchy = {
   selected?: boolean;
   heading?: boolean;
   roleDescription?: string;
+  checked?: boolean;
   editable?: boolean;
   password?: boolean;
   hintShowing?: boolean;
