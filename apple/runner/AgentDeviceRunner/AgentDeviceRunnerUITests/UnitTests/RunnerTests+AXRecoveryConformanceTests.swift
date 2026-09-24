@@ -154,6 +154,7 @@ private final class AXFixtureSnapshot: NSObject {
   @objc let enabled: NSNumber = true
   @objc let selected: NSNumber = false
   @objc let hasFocus: NSNumber = false
+  @objc let hasKeyboardFocus: NSNumber = false
   @objc let children: [AXFixtureSnapshot]
   @objc let accessibilityElement: AXFixtureElement?
 

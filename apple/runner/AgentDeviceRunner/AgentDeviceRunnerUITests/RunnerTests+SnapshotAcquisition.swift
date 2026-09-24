@@ -416,14 +416,21 @@ extension RunnerTests {
     return node
   }
 
+  // `hasFocus` is the focus engine's answer (tvOS, keyboard navigation); the field a software
+  // keyboard is typing into holds `hasKeyboardFocus` instead, which the text-entry preflight already
+  // consults. The snapshot reports either, so the field under the keyboard reads as focused.
   private func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
-    var focused = false
+    return snapshotBool(snapshot, forKey: "hasKeyboardFocus") || snapshotBool(snapshot, forKey: "hasFocus")
+  }
+
+  private func snapshotBool(_ snapshot: XCUIElementSnapshot, forKey key: String) -> Bool {
+    var result = false
     _ = RunnerObjCExceptionCatcher.catchException({
-      if let value = (snapshot as! NSObject).value(forKey: "hasFocus") as? Bool {
-        focused = value
+      if let value = (snapshot as! NSObject).value(forKey: key) as? Bool {
+        result = value
       }
     })
-    return focused
+    return result
   }
 
   private func snapshotIsSelected(_ snapshot: XCUIElementSnapshot) -> Bool {
