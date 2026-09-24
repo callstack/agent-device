@@ -89,7 +89,11 @@ test.each([undefined, 'app'] as const)(
   'the macOS surface loader refuses a %s surface the owner routes to the runner',
   async (surface) => {
     vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
-    await expect(loadMacOsSurfaceSnapshot({ surface })).rejects.toBeInstanceOf(TypeError);
+    const refusal = loadMacOsSurfaceSnapshot({ surface });
+    await expect(refusal).rejects.toBeInstanceOf(TypeError);
+    await expect(refusal).rejects.toThrow(
+      'Apple surface capture requires a helper-routed macOS surface',
+    );
     expect(captureMacOsSurfaceSnapshot).not.toHaveBeenCalled();
   },
 );
