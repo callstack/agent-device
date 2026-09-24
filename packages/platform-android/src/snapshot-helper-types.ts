@@ -90,6 +90,8 @@ export type AndroidSnapshotHelperMetadata = {
   nodeCount?: number;
   truncated?: boolean;
   elapsedMs?: number;
+  /** Physical pixels per dp of the captured display, as the helper's own `DisplayMetrics` say. */
+  pixelDensity?: number;
   transport?: AndroidSnapshotHelperTransport;
   sessionReused?: boolean;
 };

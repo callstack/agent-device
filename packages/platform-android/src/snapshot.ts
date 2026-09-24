@@ -410,6 +410,7 @@ function formatAndroidHelperCaptureResult(
     xml: capture.xml,
     metadata: {
       backend: 'android-helper',
+      pixelDensity: capture.metadata.pixelDensity,
       helperVersion: artifact.manifest.version,
       helperApiVersion: capture.metadata.helperApiVersion,
       helperTransport: capture.metadata.transport,

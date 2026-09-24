@@ -16,6 +16,7 @@ test('parses the session envelope and snapshot metadata', () => {
       captureMode: 'interactive-windows',
       windowCount: '2',
       nodeCount: '1',
+      pixelDensity: '2.625',
     },
   });
 
@@ -27,6 +28,7 @@ test('parses the session envelope and snapshot metadata', () => {
       captureMode: 'interactive-windows',
       windowCount: 2,
       nodeCount: 1,
+      pixelDensity: 2.625,
       waitForIdleTimeoutMs: undefined,
       waitForIdleQuietMs: undefined,
       timeoutMs: undefined,

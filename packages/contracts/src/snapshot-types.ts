@@ -43,6 +43,13 @@ export type BackendSnapshotOptions = SnapshotOptions & {
 };
 export type AndroidSnapshotBackendMetadata = {
   backend: 'android-helper';
+  /**
+   * Physical pixels per density-independent pixel of the display the bounds are measured on, as
+   * the helper's `DisplayMetrics` report it (2.625 on a 420 dpi phone). Node rects and the points
+   * `press` takes stay in physical pixels; a consumer that lays out in dp divides by it. Absent on
+   * an older helper.
+   */
+  pixelDensity?: number;
   helperVersion?: string;
   helperApiVersion?: string;
   helperTransport?: string;
