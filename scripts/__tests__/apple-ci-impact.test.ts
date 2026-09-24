@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { parse } from 'yaml';
@@ -111,4 +113,44 @@ test('bridge proof runs for its owning sources and uncertain tooling changes', (
   expect(selectAppleBridgeProof(['src/index.ts']).run).toBe(false);
   expect(selectAppleBridgeProof(null).run).toBe(true);
   expect(selectAppleBridgeProof([]).run).toBe(true);
+});
+
+test('a shallow PR merge still yields a known change set for both selectors', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-ci-impact-'));
+  const source = path.join(root, 'source');
+  const shallow = path.join(root, 'shallow');
+  fs.mkdirSync(source);
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  try {
+    git(source, 'init', '-q', '-b', 'main');
+    git(source, 'config', 'user.email', 'test@example.com');
+    git(source, 'config', 'user.name', 'Test');
+    git(source, 'commit', '--allow-empty', '-qm', 'base');
+    const base = git(source, 'rev-parse', 'HEAD');
+    git(source, 'checkout', '-qb', 'feature');
+    fs.mkdirSync(path.join(source, 'src'));
+    fs.writeFileSync(path.join(source, 'src', 'feature.ts'), 'export const feature = true;\n');
+    git(source, 'add', '.');
+    git(source, 'commit', '-qm', 'feature');
+    git(source, 'checkout', '-q', 'main');
+    git(source, 'merge', '-q', '--no-ff', '-m', 'merge', 'feature');
+    git(root, 'clone', '-q', '--depth=1', '--branch', 'main', `file://${source}`, shallow);
+    git(shallow, 'fetch', '-q', 'origin', base, '--depth=1');
+    expect(git(shallow, 'rev-parse', '--is-shallow-repository')).toBe('true');
+    const select = (target: string) =>
+      execFileSync(
+        process.execPath,
+        ['--experimental-strip-types', path.join(repoRoot, 'scripts/apple-ci-impact.ts'), target],
+        {
+          cwd: shallow,
+          encoding: 'utf8',
+          env: { ...process.env, BASE_SHA: base, GITHUB_EVENT_NAME: 'pull_request' },
+        },
+      );
+    expect(select('xctest')).toContain('skip;');
+    expect(select('bridge')).toContain('skip;');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

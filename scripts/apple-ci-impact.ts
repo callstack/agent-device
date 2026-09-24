@@ -53,7 +53,7 @@ export function selectAppleBridgeProof(changedPaths: readonly string[] | null): 
 
 function changedPathsFromGit(baseSha: string): string[] | null {
   if (!/^[a-f0-9]{40}$/.test(baseSha)) return null;
-  const result = spawnSync('git', ['diff', '--name-only', '-z', `${baseSha}...HEAD`], {
+  const result = spawnSync('git', ['diff', '--name-only', '-z', baseSha, 'HEAD'], {
     encoding: 'utf8',
   });
   if (result.error || result.status !== 0 || result.stdout === null) return null;

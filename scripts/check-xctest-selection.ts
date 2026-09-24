@@ -8,9 +8,7 @@
 //   - host    macos.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
-//   - pr      ios.yml, iOS Simulator, when runner inputs change on a PR (and on every main
-//             push): methods compiled only for iOS, plus shared methods with platform-
-//             dependent bodies, derived from Swift guards.
+//   - pr      ios.yml, iOS Simulator: tests with iOS-specific Swift bodies, when selected.
 //   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
@@ -20,10 +18,8 @@
 // platform rather than treating a source-level `func test…` as running everywhere. What it
 // holds:
 //
-//   1. Every `-skip-testing:` identifier names a declared method that compiles for its lane,
-//      and the PR workflow consumes the generated list. `xcodebuild` treats a skip identifier
-//      matching nothing as an empty set, which re-admits `RunnerTests/testCommand` — not a test
-//      but the runner's server entry point, which opens an NWListener and waits 24 hours.
+//   1. Every `-skip-testing:` identifier compiles for its lane. An unknown skip re-admits
+//      `RunnerTests/testCommand`, the server entry point that waits 24 hours.
 //   2. Every declared method is reachable by at least one lane. A test gated to a platform
 //      no lane runs (the tvOS-only pair this check found) is dark from the day it is written.
 //   3. The entry point is reachable by no lane at all.
@@ -51,7 +47,6 @@ const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runn
 /** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
 export const HOST_WORKFLOW_FILE = '.github/workflows/macos.yml';
 
-/** The PR lane, whose generated iOS-specific list runs on selected pull requests. */
 export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
 
 /** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
@@ -158,11 +153,8 @@ export type SelectionReport = {
   readonly dark: readonly string[];
   /** Lanes that reach the entry point — a failure (a 24-hour hang). */
   readonly entryPointReachedBy: readonly LaneId[];
-  /** Whether the PR workflow runs and consumes the generated iOS-specific list. */
   readonly prWorkflowWiringFailures: readonly string[];
-  /** Shared methods whose bodies differ between iOS and macOS builds. */
   readonly sharedPlatformBranchIds: readonly string[];
-  /** Shared method bodies whose platform behavior could not be classified. */
   readonly sharedPlatformBranchFailures: readonly string[];
 };
 
@@ -212,7 +204,6 @@ function laneReach(
   );
 }
 
-/** Run iOS-only methods and shared methods with platform-dependent bodies. */
 export function iosPrTestIdentifiers(
   declaredTests: readonly DeclaredTest[],
   sharedPlatformBranchIds: readonly string[],

@@ -97,6 +97,11 @@ extension RunnerTests {
     // into the runner's temporary directory.
     let fileName = URL(fileURLWithPath: message).lastPathComponent
     XCTAssertTrue(message.hasSuffix(fileName), message)
+#if os(iOS)
+    XCTAssertTrue(message.hasPrefix("tmp/"), message)
+#elseif os(macOS)
+    XCTAssertTrue(message.hasPrefix("/"), message)
+#endif
     let storedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
     XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: storedPath)), pngData)
     XCTAssertEqual(response.data?.screenshotMetadata?.pixelsPerPoint, 3)
