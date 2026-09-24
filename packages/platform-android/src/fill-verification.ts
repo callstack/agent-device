@@ -44,13 +44,10 @@ type AndroidFillVerificationContext = {
 };
 
 /**
- * How the samples that verify a fill are spaced, and how long they keep coming. The typed text
- * reaches the accessibility tree when the app renders it, which a React Native controlled input on a
- * loaded emulator does later than the three fixed samples (at 0, 150 and 500 ms elapsed: sleeps of
- * 0, 150 and 350 ms before each) allowed; an otherwise passing fill failed twice on a 4-vCPU CI
- * emulator while the field still showed its hint. So the window is a deadline: sampling continues
- * until the text has held for two consecutive samples, which on a fast device is sooner than the
- * old schedule's last sample, and the sample taken at the deadline is the answer.
+ * The sampling rule that verifies a fill: a hierarchy sample every 150 ms until the typed text has
+ * held for two consecutive samples or the deadline has passed, and the sample taken at the deadline
+ * is the answer. The typed text reaches the accessibility tree when the app renders it, and a
+ * React Native controlled input on a loaded emulator renders it late.
  */
 const FILL_VERIFICATION_SAMPLE_INTERVAL_MS = 150;
 const FILL_VERIFICATION_DEADLINE_MS = 1500;

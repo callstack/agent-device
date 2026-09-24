@@ -1,6 +1,6 @@
-// Fill reads the live hierarchy at least three times per attempt (one pre-action target read plus
-// the settling samples, 150 ms apart, until the text has held for two of them or the deadline has
-// passed). `am instrument` force-stops whatever is already instrumenting the helper package, so a
+// Fill reads the live hierarchy at least three times per attempt: one pre-action target read plus
+// the settling samples, every 150 ms until the text has held for two of them or the deadline has
+// passed. `am instrument` force-stops whatever is already instrumenting the helper package, so a
 // command-scoped capture stops the automation-helper session after every one of those reads and the
 // next read pays a fresh `am instrument` start. These tests pin who owns the helper session across
 // the samples and how long the samples keep coming — not what one sample concludes, which
@@ -94,8 +94,7 @@ test('verification samples re-read the hierarchy instead of sharing one capture'
 });
 
 test('a value the app renders late still verifies, as long as it lands before the deadline', async () => {
-  // Six samples of the hint before the value shows: 900 ms in, past the retired schedule's last
-  // sample at 500 ms and inside the deadline.
+  // Six samples of the hint before the value shows, 900 ms in and inside the deadline.
   const session = createFillHelperSession({
     textForCapture: (captureIndex) => (captureIndex <= 6 ? 'Key echo' : 'chips'),
   });
