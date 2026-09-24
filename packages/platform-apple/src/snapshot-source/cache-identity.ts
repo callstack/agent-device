@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import path from 'node:path';
 import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { snapshotSourceError, type SnapshotSourceError } from './errors.ts';
@@ -33,26 +31,6 @@ export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridgeRuntime.m',
   'SnapshotBridgeCapture.m',
 ] as const;
-
-export async function fingerprintSnapshotBridgeSource(
-  host: SnapshotSourceHost,
-  root: string,
-  deadline: SnapshotSourceDeadline,
-): Promise<string> {
-  const hash = createHash('sha256');
-  for (const sourceFile of SNAPSHOT_BRIDGE_SOURCE_FILENAMES) {
-    const filePath = path.join(root, sourceFile);
-    remainingSnapshotSourceMs(deadline, 'native-source-fingerprint-deadline');
-    if (!host.exists(filePath)) {
-      throw snapshotSourceError('unsupported', 'native-source-missing', { filePath });
-    }
-    hash.update(sourceFile);
-    hash.update('\0');
-    hash.update(await host.readBinary(filePath));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
 
 export async function readSnapshotSourceToolchain(
   host: SnapshotSourceHost,
