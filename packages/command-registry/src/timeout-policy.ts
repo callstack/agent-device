@@ -43,11 +43,16 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 };
 
 /**
- * `fold` spends up to four bounded CoreDevice hinge reads (`IOS_HINGE_ANGLE_TIMEOUT_MS` each on a
- * wedged host) after a 30s helper build and up to 60s of timed HID motion, which can sum past the
- * standard envelope; the envelope covers that worst case with the usual margin.
+ * `fold`'s worst case sums every step budget on the route (platform-apple owns the constants;
+ * command-registry does not import them, so the figures below are copied, not derived):
+ *   - display-inventory query (foldable check):        5s
+ *   - fold-helper preparation (toolchain probe + build): 60s
+ *   - HID dispatch (60s max keyframe duration + 10s):   70s
+ *   - hinge settle reads (4 attempts x 20s):            80s
+ *   - lit-panel display-inventory query:                 5s
+ *   total: 220s. The envelope below covers that with margin.
  */
-const FOLD_REQUEST_TIMEOUT_MS = 210_000;
+const FOLD_REQUEST_TIMEOUT_MS = 240_000;
 
 export const FOLD_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   budget: { source: 'none' },

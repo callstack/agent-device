@@ -103,7 +103,10 @@ export type SnapshotSourceHost = Readonly<{
   remove(path: string): Promise<void>;
   acquireLock(
     path: string,
-    options: { deadline: SnapshotSourceDeadline },
+    /** `description` names the contended resource in a stall's diagnostic, e.g. "iOS Simulator
+     * snapshot bridge cache"; every lock holder states its own, since this host is shared by every
+     * runtime clang build in the package. */
+    options: { deadline: SnapshotSourceDeadline; description: string },
   ): Promise<() => Promise<void>>;
   emitDiagnostic(event: {
     level?: 'debug' | 'info' | 'warn' | 'error';

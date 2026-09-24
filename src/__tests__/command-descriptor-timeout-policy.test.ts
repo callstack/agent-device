@@ -143,9 +143,10 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     reinstall: 180_000,
     install_source: 180_000,
     longpress: 210_000,
-    // fold: one macOS helper press (30s) plus up to four bounded CoreDevice hinge reads (20s
-    // each on a wedged host) can pass the default envelope; the policy covers that worst case.
-    fold: 210_000,
+    // fold: display-inventory query + fold-helper preparation + HID dispatch + hinge settle
+    // reads + lit-panel display-inventory query can sum to 220s worst case; the policy covers
+    // that with margin.
+    fold: 240_000,
     // #1774: base allocation budget (300s) + client/daemon race margin (30s).
     lease_allocate: 330_000,
     test: 'unbounded',

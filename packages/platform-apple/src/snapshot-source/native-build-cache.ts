@@ -24,6 +24,8 @@ export async function ensureNativeBuildCacheEntry(
     cacheRoot: string;
     cacheKey: string;
     binaryFilename: string;
+    /** Names the contended resource in a lock-stall diagnostic; every caller states its own. */
+    lockDescription: string;
     /** Written alongside `cacheKey` and the built binary's sha256 once a build publishes. */
     manifest: Readonly<Record<string, unknown>>;
     /** Whether a candidate manifest still describes `manifest`; the binary hash is checked separately. */
@@ -35,7 +37,11 @@ export async function ensureNativeBuildCacheEntry(
   const { host, deadline, cacheRoot, cacheKey, binaryFilename } = input;
   const entryPath = path.join(cacheRoot, cacheKey);
   return await withProcessLock({
-    acquire: () => host.acquireLock(path.join(cacheRoot, `${cacheKey}.lock`), { deadline }),
+    acquire: () =>
+      host.acquireLock(path.join(cacheRoot, `${cacheKey}.lock`), {
+        deadline,
+        description: input.lockDescription,
+      }),
     task: async () => {
       const cached = await readValidCacheEntry(
         host,

@@ -1,71 +1,34 @@
-import path from 'node:path';
 import type { FoldKeyframe, FoldPose } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { makeHostTemporaryDirectory, removeHostDirectory } from '@agent-device/host-kit/host-file';
-import { findProjectRoot } from '@agent-device/host-kit/version';
 import { runSimctlForDevice } from '../core/simctl.ts';
-import { runXcrun } from '../core/tool-provider.ts';
+import { ensureFoldHelperBinary } from './fold-helper-cache.ts';
 
-/** Compiles for the selected Xcode and dispatches inside exactly the requested simulator. */
+/** Builds (or reuses the cached build of) the fold helper, then dispatches inside the requested simulator. */
 export async function sendSimulatorFoldPose(
   device: DeviceInfo,
   pose: FoldPose | readonly FoldKeyframe[],
   signal?: AbortSignal,
+  options: Readonly<{ cacheRoot?: string }> = {},
 ): Promise<void> {
   signal?.throwIfAborted();
-  const directory = await makeHostTemporaryDirectory('agent-device-fold-');
-  try {
-    const binary = path.join(directory, 'fold');
-    const build = await runXcrun(
-      [
-        '--sdk',
-        'iphonesimulator',
-        'clang',
-        '-mios-simulator-version-min=15.0',
-        '-fobjc-arc',
-        '-Wall',
-        '-Wextra',
-        '-Werror',
-        '-framework',
-        'Foundation',
-        '-framework',
-        'IOKit',
-        path.join(findProjectRoot(), 'apple', 'fold-helper', 'Fold.m'),
-        '-o',
-        binary,
-      ],
-      { signal, timeoutMs: 30_000, allowFailure: true },
+  const binary = await ensureFoldHelperBinary({ signal, cacheRoot: options.cacheRoot });
+  signal?.throwIfAborted();
+  const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
+  const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
+  const sent = await runSimctlForDevice(device, ['spawn', device.id, binary.path, payload], {
+    signal,
+    timeoutMs: durationMs + 10_000,
+    // simctl must forward termination to the guest before the host kills it.
+    kill: { signal: 'SIGTERM', graceMs: 1000 },
+    allowFailure: true,
+  });
+  if (sent.exitCode !== 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Unable to send the simulator hinge pose',
+      execFailureDetails(sent, { reason: 'fold-hid-dispatch-failed', deviceId: device.id }),
     );
-    if (build.exitCode !== 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Unable to build the simulator fold helper',
-        execFailureDetails(build, {
-          reason: 'fold-helper-build-failed',
-          hint: 'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.',
-        }),
-      );
-    }
-    signal?.throwIfAborted();
-    const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
-    const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);
-    const sent = await runSimctlForDevice(device, ['spawn', device.id, binary, payload], {
-      signal,
-      timeoutMs: durationMs + 10_000,
-      // simctl must forward termination to the guest before the host kills it.
-      kill: { signal: 'SIGTERM', graceMs: 1000 },
-      allowFailure: true,
-    });
-    if (sent.exitCode !== 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Unable to send the simulator hinge pose',
-        execFailureDetails(sent, { reason: 'fold-hid-dispatch-failed', deviceId: device.id }),
-      );
-    }
-  } finally {
-    await removeHostDirectory(directory);
   }
 }

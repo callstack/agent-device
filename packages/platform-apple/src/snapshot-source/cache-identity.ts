@@ -11,13 +11,17 @@ import type { SnapshotSourceHost } from './types.ts';
  * identity therefore execs one Xcode-owned binary rather than two, because a toolchain probe that
  * cannot answer fails the whole job with nothing but a cache key at stake (#2712).
  */
-export type SnapshotSourceToolchainIdentity = Readonly<{
+export type HostToolchainIdentity = Readonly<{
   xcode: string;
   macosProductVersion: string;
   macosBuild: string;
   architecture: 'arm64' | 'x86_64';
-  simulatorRuntime: string;
 }>;
+
+export type SnapshotSourceToolchainIdentity = HostToolchainIdentity &
+  Readonly<{
+    simulatorRuntime: string;
+  }>;
 
 export const SNAPSHOT_BRIDGE_SOURCE_FILENAMES = [
   'SnapshotBridge.m',
@@ -32,30 +36,38 @@ export const SNAPSHOT_BRIDGE_COMPILE_FILENAMES = [
   'SnapshotBridgeCapture.m',
 ] as const;
 
-export async function readSnapshotSourceToolchain(
+/**
+ * The host's active toolchain, independent of any simulator runtime: which Xcode `xcrun` resolves
+ * against, the macOS build it runs on, and its architecture. Shared by every runtime clang build in
+ * this package, so a cache keyed on it is invalidated exactly when switching `DEVELOPER_DIR` would
+ * change what clang produces (#2796).
+ */
+export async function readHostToolchainIdentity(
   host: SnapshotSourceHost,
-  simulatorRuntime: string,
   deadline: SnapshotSourceDeadline,
-): Promise<SnapshotSourceToolchainIdentity> {
+): Promise<HostToolchainIdentity> {
   // The one Xcode-owned binary this read execs: SnapshotSourceToolchainIdentity says why (#2712).
   const xcode = await toolOutput(host, 'xcodebuild', ['-version'], deadline);
   const macosProductVersion = await toolOutput(host, 'sw_vers', ['-productVersion'], deadline);
   const macosBuild = await toolOutput(host, 'sw_vers', ['-buildVersion'], deadline);
   const architecture = await toolOutput(host, 'uname', ['-m'], deadline);
-  const runtime = simulatorRuntime.trim();
-  if (!runtime) throw snapshotSourceError('unsupported', 'simulator-runtime-missing');
   if (architecture !== 'arm64' && architecture !== 'x86_64') {
     throw snapshotSourceError('unsupported', 'simulator-architecture-unsupported', {
       architecture,
     });
   }
-  return {
-    xcode,
-    macosProductVersion,
-    macosBuild,
-    architecture,
-    simulatorRuntime: runtime,
-  };
+  return { xcode, macosProductVersion, macosBuild, architecture };
+}
+
+export async function readSnapshotSourceToolchain(
+  host: SnapshotSourceHost,
+  simulatorRuntime: string,
+  deadline: SnapshotSourceDeadline,
+): Promise<SnapshotSourceToolchainIdentity> {
+  const identity = await readHostToolchainIdentity(host, deadline);
+  const runtime = simulatorRuntime.trim();
+  if (!runtime) throw snapshotSourceError('unsupported', 'simulator-runtime-missing');
+  return { ...identity, simulatorRuntime: runtime };
 }
 
 async function toolOutput(

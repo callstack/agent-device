@@ -185,7 +185,7 @@ async function acquireSnapshotSourceLock(
     timeoutMs: remainingSnapshotSourceMs(deadline, 'cache-lock-deadline'),
     pollMs: 100,
     ownerGraceMs: 5_000,
-    description: 'iOS Simulator snapshot bridge cache',
+    description: options.description,
   });
   const signal = deadline.signal;
   if (!signal) return await pending;

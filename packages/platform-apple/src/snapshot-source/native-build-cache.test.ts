@@ -32,6 +32,7 @@ test('a cache hit skips the build, and a manifest or binary mismatch rebuilds', 
       cacheRoot,
       cacheKey,
       binaryFilename: 'built',
+      lockDescription: 'test native build cache',
       manifest,
       manifestMatches: (candidate) =>
         nativeBuildManifestFieldsMatch(candidate, manifest, ['schemaVersion', 'sourceHash']),
@@ -102,6 +103,7 @@ test('a failed build leaves no cache entry, and a later call can retry', async (
       cacheRoot,
       cacheKey,
       binaryFilename: 'built',
+      lockDescription: 'test native build cache',
       manifest,
       manifestMatches: (candidate) =>
         nativeBuildManifestFieldsMatch(candidate, manifest, ['schemaVersion', 'sourceHash']),

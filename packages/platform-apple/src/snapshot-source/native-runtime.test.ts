@@ -4,7 +4,7 @@ import path from 'node:path';
 import { beforeAll, describe, test } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
-import { BUILD_TIMEOUT_MS } from './cache.ts';
+import { buildSnapshotBridgeCompileArgv, BUILD_TIMEOUT_MS } from './cache.ts';
 import { createSnapshotSourceDeadline, remainingSnapshotSourceMs } from './deadline.ts';
 
 // The host bridge compile is budgeted from a deadline sized to production's build ceiling, not a
@@ -93,6 +93,42 @@ const recoveryFixture = JSON.parse(readFileSync(recoveryFixturePath, 'utf8')) as
   version: number;
   recoveryCases: readonly { name: string }[];
 };
+
+// #2796: the production compile drops -Werror so a stale toolchain warning cannot fail a build; this
+// is the gate that keeps a new SnapshotBridge*.m warning from passing CI unnoticed. It runs the
+// production argv (`buildSnapshotBridgeCompileArgv`) against the real iphonesimulator SDK with
+// -Werror appended, so a warning fails here instead of nowhere.
+describe.skipIf(process.platform !== 'darwin')('bridge warning gate', () => {
+  // The compile runs in beforeAll, not in the test body: it is a real clang invocation (see the
+  // unit slow-test budget in docs/agents/testing.md), and this file's other describe blocks
+  // already keep their compiles out of test-case wall time the same way.
+  let compiled: { exitCode: number; stderr: string };
+  beforeAll(async () => {
+    const nativeRoot = path.resolve(import.meta.dirname, '../../../../apple/snapshot-bridge');
+    const binary = path.join(await mkdtempForTest('snapshot-bridge-werror-'), 'snapshot-bridge');
+    const architecture = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+    const argv = buildSnapshotBridgeCompileArgv({
+      architecture,
+      sourceRoot: nativeRoot,
+      outputPath: binary,
+    });
+    const wextraIndex = argv.indexOf('-Wextra');
+    assert.ok(wextraIndex >= 0, 'the production argv carries -Wextra');
+    const werrorArgv = [
+      ...argv.slice(0, wextraIndex + 1),
+      '-Werror',
+      ...argv.slice(wextraIndex + 1),
+    ];
+    compiled = await runCmd('xcrun', werrorArgv, {
+      allowFailure: true,
+      timeoutMs: BUILD_TIMEOUT_MS,
+    });
+  }, COMPILE_HOOK_TIMEOUT_MS);
+
+  test('the production bridge argv compiles clean under -Werror', () => {
+    assert.equal(compiled.exitCode, 0, compiled.stderr);
+  });
+});
 
 describe.skipIf(process.platform !== 'darwin')(
   'shared AX recovery conformance (host bridge)',

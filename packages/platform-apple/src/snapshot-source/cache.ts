@@ -24,6 +24,7 @@ import type {
 
 const CACHE_SCHEMA_VERSION = 1 as const;
 const BRIDGE_FILENAME = 'snapshot-bridge';
+const BRIDGE_LOCK_DESCRIPTION = 'iOS Simulator snapshot bridge cache';
 const MANIFEST_FIELDS = [
   'schemaVersion',
   'protocolVersion',
@@ -31,7 +32,32 @@ const MANIFEST_FIELDS = [
   'sourceHash',
   'cacheKey',
   'toolchain',
+  'compileArgv',
 ] as const;
+
+/**
+ * The bridge cache key, folding in the compile argv (built with placeholder `sourceRoot` and
+ * `outputPath` values, which vary by install and by build and would otherwise make the key
+ * unstable) alongside `sourceHash` and `toolchain`, so a change to a compiler flag or framework
+ * list — covered by neither — cannot serve a binary built from a different command line (#2796
+ * follow-up).
+ */
+export function snapshotBridgeCacheKey(
+  input: Readonly<{
+    sourceHash: string;
+    toolchain: SnapshotSourceToolchainIdentity;
+    compileArgv: readonly string[];
+  }>,
+): string {
+  return nativeBuildCacheKey({
+    schemaVersion: CACHE_SCHEMA_VERSION,
+    protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
+    sourceVersion: SNAPSHOT_SOURCE_VERSION,
+    sourceHash: input.sourceHash,
+    toolchain: input.toolchain,
+    compileArgv: input.compileArgv,
+  });
+}
 
 /**
  * @internal Upper bound on a single snapshot-bridge clang invocation, exposed for the host bridge
@@ -59,13 +85,12 @@ export async function ensureSnapshotBridgeBinary(
     deadline,
   );
   const toolchain = await readSnapshotSourceToolchain(input.host, input.runtime, deadline);
-  const cacheKey = nativeBuildCacheKey({
-    schemaVersion: CACHE_SCHEMA_VERSION,
-    protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-    sourceVersion: SNAPSHOT_SOURCE_VERSION,
-    sourceHash,
-    toolchain,
+  const compileArgv = buildSnapshotBridgeCompileArgv({
+    architecture: toolchain.architecture,
+    sourceRoot: '',
+    outputPath: '',
   });
+  const cacheKey = snapshotBridgeCacheKey({ sourceHash, toolchain, compileArgv });
   const cacheRoot =
     input.cacheRoot ?? path.join(input.host.homeDirectory(), '.agent-device', 'snapshot-source');
   const manifest = {
@@ -75,6 +100,7 @@ export async function ensureSnapshotBridgeBinary(
     sourceHash,
     cacheKey,
     toolchain,
+    compileArgv,
   };
   const entry = await ensureNativeBuildCacheEntry({
     host: input.host,
@@ -82,6 +108,7 @@ export async function ensureSnapshotBridgeBinary(
     cacheRoot,
     cacheKey,
     binaryFilename: BRIDGE_FILENAME,
+    lockDescription: BRIDGE_LOCK_DESCRIPTION,
     manifest,
     manifestMatches: (candidate) =>
       nativeBuildManifestFieldsMatch(candidate, manifest, MANIFEST_FIELDS),
@@ -111,11 +138,39 @@ export async function ensureSnapshotBridgeBinary(
 }
 
 /**
- * One clang invocation for the bridge sources. A compile exec this module asked to be killed is
- * reported with the budget it hit: after the identity read stopped opening `xcrun` of its own
- * (#2712), this is the process's first `xcrun` exec, and the exec layer's bare
- * `xcrun timed out after Nms` would land on a job as an unattributed command failure again.
+ * The production `xcrun`/clang argv for the bridge sources, exposed so a darwin-only conformance
+ * test can compile it with `-Werror` appended and a unit test can assert it never carries `-Werror`
+ * on its own (#2796).
  */
+export function buildSnapshotBridgeCompileArgv(
+  input: Readonly<{
+    architecture: SnapshotSourceToolchainIdentity['architecture'];
+    sourceRoot: string;
+    outputPath: string;
+  }>,
+): readonly string[] {
+  return [
+    '--sdk',
+    'iphonesimulator',
+    'clang',
+    '-arch',
+    input.architecture,
+    '-mios-simulator-version-min=15.0',
+    '-fobjc-arc',
+    '-Wall',
+    '-Wextra',
+    '-framework',
+    'Foundation',
+    '-framework',
+    'CoreGraphics',
+    ...SNAPSHOT_BRIDGE_COMPILE_FILENAMES.map((sourceFile) =>
+      path.join(input.sourceRoot, sourceFile),
+    ),
+    '-o',
+    input.outputPath,
+  ];
+}
+
 async function compileSnapshotBridge(
   host: SnapshotSourceHost,
   deadline: SnapshotSourceDeadline,
@@ -126,25 +181,7 @@ async function compileSnapshotBridge(
   return execNativeBuildClang({
     host,
     deadline,
-    argv: [
-      '--sdk',
-      'iphonesimulator',
-      'clang',
-      '-arch',
-      architecture,
-      '-mios-simulator-version-min=15.0',
-      '-fobjc-arc',
-      '-Werror',
-      '-Wall',
-      '-Wextra',
-      '-framework',
-      'Foundation',
-      '-framework',
-      'CoreGraphics',
-      ...SNAPSHOT_BRIDGE_COMPILE_FILENAMES.map((sourceFile) => path.join(sourceRoot, sourceFile)),
-      '-o',
-      outputPath,
-    ],
+    argv: buildSnapshotBridgeCompileArgv({ architecture, sourceRoot, outputPath }),
     budgetMs: BUILD_TIMEOUT_MS,
     deadlineReason: 'native-build-deadline',
     label: 'bridge',
