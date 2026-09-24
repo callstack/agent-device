@@ -261,17 +261,18 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
  * a shared landmark never matches off its route and sends every caller into the probe — and
  * `alert get` against a live WKWebView screen is the XCTest query that exceeds the runner's
  * execution watchdog, leaving every later command refused as `RUNNER_BUSY` (#2484 follow-up). The
- * landmark must therefore be a native node the route renders before its content, and the budget
- * above must outlast a cold mount, so the probe is reached only when something really is blocking.
+ * landmark must therefore be a native node the route renders before its content, and its wait
+ * budget must outlast a cold mount, so the probe is reached only when something really is blocking.
  */
 export async function acceptDeepLinkConfirmationIfPresent(
   context: LiveContext,
   destination: readonly string[],
+  firstWaitMs = DEEP_LINK_DESTINATION_WAIT_MS,
 ): Promise<void> {
   const arrived = await runStep(
     context,
     'wait for deep-link destination before inspecting system UI',
-    ['wait', ...destination, DEEP_LINK_DESTINATION_WAIT_MS],
+    ['wait', ...destination, firstWaitMs],
     { allowFailure: true },
   );
   if (arrived.status === 0) return;
