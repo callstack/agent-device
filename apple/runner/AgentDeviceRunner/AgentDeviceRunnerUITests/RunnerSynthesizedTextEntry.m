@@ -11,9 +11,10 @@ static NSString *const RunnerTextSynthesisSurface = @"text";
 // async validator) can acknowledge: such a write lands between two characters of the burst and
 // erases what was typed while it was in flight, leaving a value that is stable short of the
 // request. 12 characters/second spaces them ~83 ms apart, so an app whose write-back lands inside
-// one character interval no longer has anything to erase. It is not immunity: a write-back still in
+// one character interval no longer has anything to erase. It is not immunity: a render still in
 // flight 150 ms after an edit corrupted an 11-character burst at this pace too. The
-// `--agent-device-text-entry-async-value-write` lane test pins the relationship.
+// `--agent-device-text-entry-app-owned-value` fixture and the pace policy test pin this bound; the
+// delivery ceiling in TextEntryTiming bounds what the pace costs a long text.
 static const NSUInteger RunnerTextEntryTypingSpeedCharactersPerSecond = 12;
 
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);
@@ -61,6 +62,10 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 @end
 
 @implementation RunnerSynthesizedTextEntry
+
++ (NSUInteger)typingSpeedCharactersPerSecond {
+  return RunnerTextEntryTypingSpeedCharactersPerSecond;
+}
 
 + (RunnerSynthesizedTextEntryResult *)synthesizeTextWithApplication:(id)application
                                                                text:(NSString *)text {

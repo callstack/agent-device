@@ -241,6 +241,50 @@ extension RunnerTests {
     )
   }
 
+  // The pace is the guarantee that a field the app owns survives a replacement, so it cannot drift
+  // on its own: one character interval has to leave that app at least twice the acknowledge window
+  // the route is sized for, or the burst outruns the render and loses the characters in flight
+  // again (#2080). Raising the pace or shrinking the window both land here.
+  func testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit() {
+    XCTAssertGreaterThanOrEqual(
+      SynthesizedDeliveryBudget.characterInterval,
+      2 * TextEntryTiming.synthesizedAcknowledgeWindowSeconds
+    )
+  }
+
+  // Characters are delivered while the private synthesize call is still running, so text longer
+  // than the delivery ceiling would still be arriving when the transport gives up on the command —
+  // leaving a runner mid-burst that the next command finds busy. The budget turns that into a
+  // refusal decided up front, at the boundary and not after the first character is posted.
+  func testSynthesizedDeliveryBudgetRefusesTextThatOutrunsTheCommand() {
+    let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)
+    XCTAssertGreaterThan(fits, 0)
+    XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: 0))
+    XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: 0))
+    // The burst and the commit wait it is followed by both have to fit the runner's per-command
+    // budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s in packages/platform-apple/src/runner/
+    // runner-transport.ts), which also carries focus, clear and verification.
+    XCTAssertLessThanOrEqual(
+      TextEntryTiming.synthesizedDeliveryCeiling + TextEntryTiming.synthesizedCommitCeiling,
+      45
+    )
+    // An operator-spaced plan pays per character too, so its budget shrinks rather than timing out.
+    XCTAssertLessThan(
+      SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2),
+      fits
+    )
+  }
+
+  func testSynthesizedBudgetExceededCarriesItsOwnCodeAndRecovery() {
+    XCTAssertEqual(
+      TextEntryFailure.synthesisBudgetExceeded.rawValue,
+      "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
+    )
+    // The recovery has to tell the caller to split the text: waiting it out or raising a timeout
+    // does nothing, because the pace is what makes the burst long, not the host being slow.
+    XCTAssertTrue(TextEntryFailure.synthesisBudgetExceeded.hint.contains("characters at a time"))
+  }
+
 #if os(iOS)
   func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() {
     let synthesizer = RecordingTextEntrySynthesizer()

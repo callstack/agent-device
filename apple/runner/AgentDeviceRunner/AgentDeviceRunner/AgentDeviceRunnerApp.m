@@ -66,8 +66,11 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
-@property(nonatomic, assign) NSUInteger textEntryWriteBackAttempts;
-@property(nonatomic, assign) NSUInteger textEntryWriteBackApplies;
+@property(nonatomic, assign) NSUInteger textEntryRenderedEdits;
+@property(nonatomic, assign) NSUInteger textEntryWriteBacks;
+@property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
+@property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
+@property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -179,9 +182,9 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 }
 
 - (void)updateTextEntryWriteBackStatus {
-  self.textEntryWriteBackStatus.text = [NSString stringWithFormat:@"Write-backs: %lu attempted, %lu applied",
-                                               (unsigned long)self.textEntryWriteBackAttempts,
-                                               (unsigned long)self.textEntryWriteBackApplies];
+  self.textEntryWriteBackStatus.text = [NSString stringWithFormat:@"Edits: %lu; write-backs: %lu",
+                                               (unsigned long)self.textEntryRenderedEdits,
+                                               (unsigned long)self.textEntryWriteBacks];
 }
 
 - (void)presentAlertFixtureReplacement:(BOOL)replacement {
@@ -241,34 +244,43 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 }
 #endif
 
-// How long after an edit this fixture writes the value it observed back into the field. The write
-// has to land after the next character of a fast burst has arrived for it to erase anything, and
-// the lane test needs it to land before the next character of a paced burst does, so the window is
-// one character interval at the old 60 characters/second (16.7ms) to one at the pace synthesized
-// text entry now types at (~83ms). 25ms sits near the fast end, which keeps the slow side
-// comfortable on a loaded host at the cost of a thin margin on the fast side.
-static const NSTimeInterval AgentDeviceTextEntryAsyncWriteDelaySeconds = 0.025;
+// How fast an app that owns this field's value can acknowledge edits: one render per window. An
+// edit that arrives inside that window overtook the render still in flight, so the value that
+// render commits predates it and writing it erases the characters that got ahead of the app. The
+// app then reads its own erasure back into its model, which is why the field stays wrong instead of
+// healing when the burst finishes. The window is decided at the edit rather than scheduled, so a
+// loaded host, which stretches the gaps between characters, can only make this app keep up better.
+static const NSTimeInterval AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds = 0.04;
+
+static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(id argument) {
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  NSUInteger index = [arguments indexOfObject:argument];
+  if (index == NSNotFound || index + 1 >= arguments.count) {
+    return AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds;
+  }
+  NSTimeInterval seconds = [arguments[index + 1] doubleValue];
+  return seconds > 0 ? seconds : AgentDeviceTextEntryDefaultAcknowledgeWindowSeconds;
+}
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
-  // A field whose app owns its value: like a controlled React Native `TextInput`, this fixture
-  // re-applies the value it observed a moment after the edit that produced it. A replacement burst
-  // typed faster than that write lands loses whatever it typed while the write was in flight, and
-  // the field settles stable short of the requested text.
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-async-value-write"]) {
-    NSString *observedText = [textField.text copy];
-    __weak UITextField *weakTextField = textField;
-    dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(AgentDeviceTextEntryAsyncWriteDelaySeconds * NSEC_PER_SEC)),
-      dispatch_get_main_queue(),
-      ^{
-        self.textEntryWriteBackAttempts += 1;
-        UITextField *field = weakTextField;
-        if (field != nil && field.window != nil && ![field.text isEqualToString:observedText]) {
-          field.text = observedText;
-          self.textEntryWriteBackApplies += 1;
-        }
-        [self updateTextEntryWriteBackStatus];
-      });
+  // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
+  // typed faster than the app renders loses the characters that arrived while a render was in
+  // flight, and the field settles stable short of the request.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
+    NSTimeInterval now = NSProcessInfo.processInfo.systemUptime;
+    BOOL overtookARender = self.textEntryRenderedValue != nil &&
+      (now - self.textEntryLastEditTime) < self.textEntryAcknowledgeWindowSeconds;
+    self.textEntryLastEditTime = now;
+    if (overtookARender) {
+      if (![textField.text isEqualToString:self.textEntryRenderedValue]) {
+        textField.text = self.textEntryRenderedValue;
+        self.textEntryWriteBacks += 1;
+      }
+    } else {
+      self.textEntryRenderedValue = [textField.text copy];
+      self.textEntryRenderedEdits += 1;
+    }
+    [self updateTextEntryWriteBackStatus];
   }
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
       textField.text.length > 0) {
@@ -330,10 +342,12 @@ static const NSTimeInterval AgentDeviceTextEntryAsyncWriteDelaySeconds = 0.025;
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:44],
     ]];
-    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-async-value-write"]) {
-      // Reports how many write-backs this fixture ran and how many of them changed the field, so a
-      // lane test can tell a burst that survived the race from an inert fixture. Counts only: no
-      // field content crosses into the test.
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
+      self.textEntryAcknowledgeWindowSeconds =
+        AgentDeviceTextEntryAcknowledgeWindow(@"--agent-device-text-entry-acknowledge-window");
+      // Reports how many edits this app rendered and how many writes it had to make because a
+      // character overtook one, so a lane test can tell a burst the app kept up with from an inert
+      // fixture. Counts only: no field content crosses into the test.
       self.textEntryWriteBackStatus = [[UILabel alloc] init];
       self.textEntryWriteBackStatus.accessibilityIdentifier = @"agent-device-text-entry-write-backs";
       self.textEntryWriteBackStatus.translatesAutoresizingMaskIntoConstraints = NO;

@@ -94,11 +94,59 @@ extension RunnerTests {
     }
   }
 
+  /// What a synthesized burst costs in wall clock, and the ceiling it has to fit inside before the
+  /// first character is posted. `synthesizedReplacementSteps` decides how a text is posted; this
+  /// decides whether the runner may start posting it at all.
+  enum SynthesizedDeliveryBudget {
+    /// Seconds between two characters of one synthesized burst.
+    static var characterInterval: TimeInterval {
+      1.0 / Double(RunnerSynthesizedTextEntry.typingSpeedCharactersPerSecond())
+    }
+
+    /// Seconds the plan spends posting. A delayed plan posts one character per request and pays a
+    /// synthesize round trip for each, so this understates it; the margin this ceiling leaves
+    /// against the command budget covers what a round trip costs beyond the character interval.
+    static func projectedSeconds(textLength: Int, delaySeconds: TimeInterval) -> TimeInterval {
+      Double(textLength) * max(delaySeconds, characterInterval)
+    }
+
+    static func exceeds(textLength: Int, delaySeconds: TimeInterval) -> Bool {
+      projectedSeconds(textLength: textLength, delaySeconds: delaySeconds)
+        > TextEntryTiming.synthesizedDeliveryCeiling
+    }
+
+    /// Longest text that fits at `delaySeconds`, which is what the refusal tells the caller.
+    static func maxTextLength(delaySeconds: TimeInterval) -> Int {
+      Int(TextEntryTiming.synthesizedDeliveryCeiling / max(delaySeconds, characterInterval))
+    }
+  }
+
   func runSynthesizedReplacementRoute(
     _ request: SynthesizedReplacementRequest
   ) -> SynthesizedReplacementRouteOutcome {
 #if os(iOS)
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
+    if SynthesizedDeliveryBudget.exceeds(
+      textLength: request.text.count,
+      delaySeconds: request.delaySeconds
+    ) {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement "
+          + "reason=delivery-budget-refused chars=%d budgetChars=%d",
+        request.text.count,
+        SynthesizedDeliveryBudget.maxTextLength(delaySeconds: request.delaySeconds)
+      )
+      return .completed(
+        TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: request.text,
+          observedText: nil,
+          textEntryRoute: "synthesized-first-responder-replacement",
+          failure: .synthesisBudgetExceeded
+        )
+      )
+    }
     let steps = Self.synthesizedReplacementSteps(
       text: request.text,
       delaySeconds: request.delaySeconds

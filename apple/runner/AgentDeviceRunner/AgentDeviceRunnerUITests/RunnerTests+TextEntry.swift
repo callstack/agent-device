@@ -8,6 +8,7 @@ extension RunnerTests {
     case notFocused = "TEXT_INPUT_NOT_FOCUSED"
     case synthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
     case commitNotObserved = "TEXT_INPUT_COMMIT_NOT_OBSERVED"
+    case synthesisBudgetExceeded = "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
 
     var message: String {
       switch self {
@@ -17,6 +18,8 @@ extension RunnerTests {
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       case .commitNotObserved:
         return "The runner could not confirm the typed text reached the field."
+      case .synthesisBudgetExceeded:
+        return "The text is longer than one runner command can type at this pace."
       }
     }
 
@@ -28,6 +31,8 @@ extension RunnerTests {
         return "Show the software keyboard, then retry type."
       case .commitNotObserved:
         return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms 80. Do not use type, which appends to whatever committed."
+      case .synthesisBudgetExceeded:
+        return "Fill about \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time and append the rest with separate type commands, keeping each command inside that budget. A lower --delay-ms does not help: this route is chosen when the accessibility channel is already degraded, and every character interval counts against the same budget."
       }
     }
   }
@@ -49,12 +54,23 @@ extension RunnerTests {
     /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is
     /// condemned at exactly the same instant it always was (see `SynthesizedCommitDeadline`).
     static let synthesizedCommitStallTimeout: TimeInterval = 3.0
-    /// The commit wait's absolute bound, however long characters keep arriving. Sits well inside
-    /// the daemon's per-command budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s), which also has to cover
-    /// focus, clear and verification around this wait. Synthesized delivery happens before this
-    /// wait starts, so long text spends its character intervals upstream of it: a 240-character
-    /// `fill` measures ~21s end to end at the bounded pace, and the budget runs out near 500.
+    /// The commit wait's absolute bound, however long characters keep arriving. Synthesized
+    /// delivery happens before this wait starts and is bounded by `synthesizedDeliveryCeiling`, so
+    /// the two together stay inside the daemon's per-command budget
+    /// (`RUNNER_COMMAND_TIMEOUT_MS`, 45s), which also has to cover focus, clear and verification.
     static let synthesizedCommitCeiling: TimeInterval = 10.0
+    /// How long a synthesized burst may spend posting its characters. The private synthesize call
+    /// delivers as it returns, so this is the slice of the 45s command budget the burst itself may
+    /// take, with the commit ceiling, focus, clear and verification subtracted and margin left for
+    /// the round trip each character costs. Text that does not fit is refused before the first
+    /// character is posted: a transport timeout would end the command with the runner still typing,
+    /// and the next command would find it busy.
+    static let synthesizedDeliveryCeiling: TimeInterval = 30.0
+    /// The edit-acknowledge budget the synthesized pace is sized for: an app that renders each edit
+    /// within this window has nothing to erase when a burst replaces its field, and one that needs
+    /// longer loses the characters that arrive while a render is in flight.
+    /// `testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit` pins the pace against it.
+    static let synthesizedAcknowledgeWindowSeconds: TimeInterval = 0.04
     static let synthesizedCommitPollInterval: TimeInterval = 0.2
   }
 
