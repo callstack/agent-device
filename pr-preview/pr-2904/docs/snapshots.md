@@ -113,17 +113,29 @@ the strategy owns which tiers it may use.
 
 ## Android node metadata
 
+Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
+`press`, `fill`, and the gesture commands take. `androidSnapshot.pixelDensity` on a helper capture
+is the display's physical pixels per density-independent pixel, as the helper's `DisplayMetrics`
+report it (a 420 dpi phone reports `2.625`, a `wm density` override included); a consumer that works
+in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
+already, so it carries no such factor.
+
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`selected`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`, `placeholder`,
-`selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports them. Explicit
-`false` and `0` are kept; an absent field means the fact was unavailable, not false. `hintShowing`
-and `placeholder` need Android API 26 or later, `heading` API 28 or later.
+`selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,
+`placeholder`, `selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports
+them. Explicit `false` and `0` are kept; an absent field means the fact was unavailable, not false.
+`hintShowing` and `placeholder` need Android API 26 or later, `heading` API 28 or later.
 
 - `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
   segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
   `false`; an older helper APK omits the field, which means the answer is unavailable rather than
   unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
   selector, and a Maestro `selected:` qualifier all match on it.
+- `checked` is the checked state of a checkable control — a switch, a checkbox, a radio button, or a
+  view an app marked checkable. Android reports it as `true` or `false` on those nodes only; a node
+  that cannot be checked, or an older helper APK, omits the field. Snapshot text marks the node
+  `[checked]` or `[unchecked]`, so a toggle that reads as plain text is one Android did not report as
+  checkable.
 - `heading` is the accessibility heading flag an app sets on a node, the way React Native's
   `accessibilityRole="header"` does on a plain `View`; it is present only as `true`.
 - `roleDescription` is the localized role description an app sets beside the native class, verbatim

@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2904/static/js/index.68cba70142.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2904/static/js/index.9094b0c0fb.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -156,17 +156,28 @@ an empty tree.</li>
 have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.</li>
 </ul>
 <h2 class="rp-toc-include" id="android-node-metadata"><a href="#android-node-metadata" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Android node metadata</h2>
+<p>Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
+<code>press</code>, <code>fill</code>, and the gesture commands take. <code>androidSnapshot.pixelDensity</code> on a helper capture
+is the display&#x27;s physical pixels per density-independent pixel, as the helper&#x27;s <code>DisplayMetrics</code>
+report it (a 420 dpi phone reports <code>2.625</code>, a <code>wm density</code> override included); a consumer that works
+in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
+already, so it carries no such factor.</p>
 <p>Android snapshot nodes and <code>get attrs</code> (including the digest response) carry the native
-<code>selected</code>, <code>heading</code>, <code>roleDescription</code>, <code>editable</code>, <code>password</code>, <code>hintShowing</code>, <code>placeholder</code>,
-<code>selectionStart</code>, and <code>selectionEnd</code> facts whenever the accessibility tree reports them. Explicit
-<code>false</code> and <code>0</code> are kept; an absent field means the fact was unavailable, not false. <code>hintShowing</code>
-and <code>placeholder</code> need Android API 26 or later, <code>heading</code> API 28 or later.</p>
+<code>selected</code>, <code>checked</code>, <code>heading</code>, <code>roleDescription</code>, <code>editable</code>, <code>password</code>, <code>hintShowing</code>,
+<code>placeholder</code>, <code>selectionStart</code>, and <code>selectionEnd</code> facts whenever the accessibility tree reports
+them. Explicit <code>false</code> and <code>0</code> are kept; an absent field means the fact was unavailable, not false.
+<code>hintShowing</code> and <code>placeholder</code> need Android API 26 or later, <code>heading</code> API 28 or later.</p>
 <ul>
 <li><code>selected</code> is the accessibility selected state an app sets on a control — the active bottom-tab or
 segmented-control item, or the chosen row of a list. Android reports it explicitly as <code>true</code> or
 <code>false</code>; an older helper APK omits the field, which means the answer is unavailable rather than
 unselected. Snapshot text marks the node <code>[selected]</code>, and <code>is selected</code>, a <code>selected=true</code>
 selector, and a Maestro <code>selected:</code> qualifier all match on it.</li>
+<li><code>checked</code> is the checked state of a checkable control — a switch, a checkbox, a radio button, or a
+view an app marked checkable. Android reports it as <code>true</code> or <code>false</code> on those nodes only; a node
+that cannot be checked, or an older helper APK, omits the field. Snapshot text marks the node
+<code>[checked]</code> or <code>[unchecked]</code>, so a toggle that reads as plain text is one Android did not report as
+checkable.</li>
 <li><code>heading</code> is the accessibility heading flag an app sets on a node, the way React Native&#x27;s
 <code>accessibilityRole=&quot;header&quot;</code> does on a plain <code>View</code>; it is present only as <code>true</code>.</li>
 <li><code>roleDescription</code> is the localized role description an app sets beside the native class, verbatim

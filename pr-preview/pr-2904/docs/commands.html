@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2904/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2904/static/js/index.68cba70142.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2904/static/js/index.9094b0c0fb.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -351,8 +351,8 @@ and mark exactly ordered covered controls <code>interactionBlocked: &quot;covere
 act on stale React Native screens. API 23 cannot report sibling <code>drawing-order</code>, so this scan fails
 conservative and <code>androidSnapshot.occlusionScanUnavailable: true</code> discloses the difference.
 Android <code>--raw</code> is the acquired tree: it also keeps nodes Android marks invisible and stale
-application windows. The helper does not report <code>checked</code>/<code>checkable</code> state, and it caps
-captures at 5000 nodes before any <code>--scope</code> applies (<code>truncated: true</code>).</li>
+application windows. The helper caps captures at 5000 nodes before any <code>--scope</code> applies
+(<code>truncated: true</code>).</li>
 <li><code>truncated: true</code> means the backend cut the capture at one of its limits — the Android helper
 and the iOS Simulator AX bridge at 5000 nodes, the XCTest runner and the web provider at their
 own bounds. Every backend walks the tree in document order, so what falls off is what comes
