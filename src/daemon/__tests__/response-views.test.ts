@@ -20,10 +20,6 @@ const SNAPSHOT_DATA: DaemonResponseData = {
   appName: 'Demo', // a non-cheap field that the digest intentionally drops
 };
 
-test('snapshot view is registered', () => {
-  expect(typeof snapshotView).toBe('function');
-});
-
 test('digest collapses the node tree to count + actionable refs + cheap signals', () => {
   const digest = snapshotView!(SNAPSHOT_DATA, 'digest');
   expect(digest).toEqual({
@@ -121,10 +117,6 @@ const SCREENSHOT_DATA: DaemonResponseData = {
     },
   ], // cheap retrieval handle — preserved
 };
-
-test('screenshot view is registered', () => {
-  expect(typeof screenshotView).toBe('function');
-});
 
 test('digest collapses overlay geometry to count + leveled refs, keeps cheap fields', () => {
   const digest = screenshotView!(SCREENSHOT_DATA, 'digest');
@@ -235,9 +227,7 @@ const COMPACT_NODE = {
   hittable: true,
 };
 
-test('find and get views are registered (shared selector-read view)', () => {
-  expect(typeof findView).toBe('function');
-  expect(typeof getView).toBe('function');
+test('find and get share one selector-read view', () => {
   expect(findView).toBe(getView);
 });
 
@@ -388,7 +378,6 @@ const SETTLE_DATA: DaemonResponseData = {
 };
 
 test('interaction settle views are registered for all four touch commands', () => {
-  expect(typeof RESPONSE_VIEWS.press).toBe('function');
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.click);
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.fill);
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.longpress);
@@ -570,10 +559,6 @@ const NETWORK_DATA: DaemonResponseData = {
   warnings: ['Network capture omitted one malformed log line.'],
   artifacts: [{ field: 'path', artifactType: 'app-log', artifactId: 'artifact-network-log' }],
 };
-
-test('network view is registered', () => {
-  expect(typeof networkView).toBe('function');
-});
 
 test('network digest keeps the whole dump + every entry identity, dropping only payload material', () => {
   const digest = networkView!(NETWORK_DATA, 'digest');

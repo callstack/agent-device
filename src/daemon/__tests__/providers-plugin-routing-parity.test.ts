@@ -124,9 +124,8 @@ test('providers.platformGatedResolvers facet is byte-identical to the former han
 });
 
 test('every family carries the providers facet with the resolvers it owns', () => {
-  // Apple owns ios + macos (SAME plugin instance). Unlike appLog/perf, EVERY family
-  // owns at least one platform-specific resolver, so all four carry the facet.
-  assert.equal(getPlugin('apple'), getPlugin('apple'));
+  // The exact-array form (not the membership scan above) is what catches a facet listing a
+  // resolver twice. Harmonyos carries no facet at all, so five families are asserted here.
   assert.deepEqual([...getPlugin('apple').providers!.platformGatedResolvers].sort(), [
     'appleRunnerProvider',
     'appleToolProvider',

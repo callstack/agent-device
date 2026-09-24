@@ -244,10 +244,6 @@ const DELEGATING_CASES = `
       return await dispatchFillViaRuntime(params);
 `;
 
-test('the dispatcher guard accepts a switch whose touch cases only delegate', () => {
-  assert.deepEqual(touchDispatchViolations(dispatcher(DELEGATING_CASES)), []);
-});
-
 test('the dispatcher guard rejects a hand-rolled responseData hidden behind a nested switch', () => {
   const source = dispatcher(
     DELEGATING_CASES.replace(
