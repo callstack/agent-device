@@ -126,9 +126,10 @@ Platform adapters consume the canonical plan:
   Live iOS characterization of an eased sampled schedule against the linear ones in
   [issue #1586](https://github.com/callstack/agent-device/issues/1586) confirmed that distinction:
   the schedules crossed the same fling-recognizer thresholds in the tested range but produced
-  materially different post-release ScrollView positions and long-duration recognition behavior. The distinction is intentional policy at the Apple adapter
-  boundary, not a second interpretation of a `GesturePlan`; changes require live evidence for both
-  recognizer activation and post-release content movement.
+  materially different post-release ScrollView positions and long-duration recognition behavior. The
+  distinction is intentional policy at the Apple adapter boundary, not a second interpretation of a
+  `GesturePlan`; changes require live evidence for both recognizer activation and post-release
+  content movement.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. A one-contact
   endpoint plan becomes pointer down, one timed W3C `pointerMove` from start to end, and pointer up;
   the driver owns interpolation across that W3C tick. Multi-touch remains capability-gated until a
