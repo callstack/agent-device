@@ -1,21 +1,29 @@
 import type {
   IosTargetActivation,
+  SnapshotCaptureBackend,
   SnapshotQualityState,
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
 /**
- * Every declared state, keyed against the kernel union so this map cannot fall behind it: a state
- * added there without a key here is a compile error, where a cast or a set literal merely typed as
- * the union stays green and a runner's verdict is dropped as verdict-absent. This reader holds the
- * map rather than importing the kernel's, because `facades/capture.ts` pins its eager module
- * closure and `kernel/snapshot.ts` is not in it.
+ * The two verdict names this host has to be able to speak: `state` decides whether a capture reads
+ * as degraded, and `backend` names the recovery strategy in the warning line. Each map is keyed
+ * against its kernel union, so a name added there without a key here is a compile error, where a set
+ * literal merely typed as the union stays green and a runner's verdict is dropped as
+ * verdict-absent. The maps live here rather than behind a kernel import because
+ * `facades/capture.ts` pins its eager module closure and `kernel/snapshot.ts` is not in it.
  */
-const snapshotQualityStatesAreTheVocabulary: Record<SnapshotQualityState, true> = {
+const DECLARED_STATES: Record<SnapshotQualityState, true> = {
   healthy: true,
   recovered: true,
   sparse: true,
+};
+const DECLARED_BACKENDS: Record<SnapshotCaptureBackend, true> = {
+  tree: true,
+  queries: true,
+  'private-ax': true,
+  'android-helper': true,
 };
 
 export type SnapshotCaptureAnalysis = {
@@ -105,18 +113,30 @@ function readTargetActivation(value: unknown): IosTargetActivation | undefined {
     : undefined;
 }
 
+/**
+ * Re-read of a fact this module published, in the shape `readTargetActivation` above also uses: the
+ * two names that decide presentation are checked, and the verdict is forwarded as published. Reading
+ * an untrusted runner payload is capture-kit's `readSnapshotQualityVerdict`, which normalizes every
+ * field; this one cannot share that code (the eager-closure gate freezes both readers' module
+ * closures, and the duplication gate refuses a second normalization), so the pair is pinned together
+ * by `snapshot-quality-verdict.test.ts`. What stays guaranteed here is the part only this boundary
+ * can check: a name this version cannot speak reads as verdict-absent, so a version-skewed runner
+ * cannot hand the host a degradation it would present under a state or strategy nobody declared.
+ */
 function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
-  // `state` decides whether a capture reads as degraded, so it goes through the declared
-  // vocabulary instead of a cast: this reader sees whatever a runner or an older daemon put on the
-  // wire, and a state it cannot name must read as verdict-absent.
-  if (!isSnapshotQualityState(raw.state) || typeof raw.backend !== 'string') return undefined;
+  if (!isDeclared(DECLARED_STATES, raw.state) || !isDeclared(DECLARED_BACKENDS, raw.backend)) {
+    return undefined;
+  }
   return raw as SnapshotQualityVerdict;
 }
 
-function isSnapshotQualityState(value: unknown): value is SnapshotQualityState {
-  return typeof value === 'string' && Object.hasOwn(snapshotQualityStatesAreTheVocabulary, value);
+function isDeclared<Key extends string, Value>(
+  vocabulary: Record<Key, Value>,
+  value: unknown,
+): value is Key {
+  return typeof value === 'string' && Object.hasOwn(vocabulary, value);
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {

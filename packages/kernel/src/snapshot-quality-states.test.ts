@@ -20,12 +20,13 @@ function readSnapshotQualityStatesFixture(): string[] {
 
 /**
  * The tuple's own claim, stated on `SNAPSHOT_QUALITY_STATES`: the fixture is its wire vocabulary,
- * and the runner's `SnapshotQualityState.allCases` is pinned to the same file by a unit test.
+ * and the runner's `SnapshotQualityState.allCases` is pinned to the same file by a unit test. As a
+ * set: the names are the contract, and a reordering breaks no verdict anywhere.
  */
 test('the declared verdict states are the shared wire vocabulary', () => {
   assert.deepEqual(
-    readSnapshotQualityStatesFixture(),
-    [...SNAPSHOT_QUALITY_STATES],
+    new Set(readSnapshotQualityStatesFixture()),
+    new Set(SNAPSHOT_QUALITY_STATES),
     'update the fixture and the Swift enum together with the tuple',
   );
 });

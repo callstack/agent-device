@@ -4,8 +4,8 @@
  *
  * Defined here (the foundational snapshot type module) rather than in
  * capture-kit's snapshot-quality-verdict.ts so SnapshotNode can reference it without a cyclic
- * import; that module owns reading a verdict off the wire, and the vocabularies below are the
- * states and strategies it admits.
+ * import. Ownership splits three ways: this module owns the vocabularies below, capture-kit parses
+ * an untrusted runner payload into them, and contracts re-hydrates a verdict this repo published.
  */
 /**
  * Which capture STRATEGY produced a snapshot, within one platform's plan —
@@ -28,11 +28,10 @@ export type SnapshotQualityTiming = {
  * The verdict states a capture plan may stamp. This tuple is the ONE declaration of that
  * vocabulary, and `SnapshotQualityVerdict['state']` is its projection; readers hold exhaustive maps
  * over the union rather than importing this module, because the eager-closure gate freezes their
- * loading shape. Its order is the order of
- * `contracts/fixtures/ios-snapshot-quality-states.json`, which this module and the Apple runner's
- * `SnapshotQualityState.allCases` are pinned to positionally, so a state one side renames or adds
- * without the other goes red there instead of arriving as a verdict the host cannot name — which
- * reads as verdict-absent and drops the disclosure with it.
+ * loading shape. This tuple and the Apple runner's `SnapshotQualityState.allCases` are each pinned
+ * to `contracts/fixtures/ios-snapshot-quality-states.json` as a set, so a state one side renames,
+ * adds, or deletes without the other goes red there instead of arriving as a verdict the host
+ * cannot name — which reads as verdict-absent and drops the disclosure with it.
  */
 export const SNAPSHOT_QUALITY_STATES = ['healthy', 'recovered', 'sparse'] as const;
 

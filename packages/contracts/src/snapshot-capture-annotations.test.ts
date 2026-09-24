@@ -73,3 +73,17 @@ test('a state outside the declared vocabulary drops the serialized verdict', () 
     assert.equal(annotations.snapshotQuality, undefined, JSON.stringify(state));
   }
 });
+
+/**
+ * `backend` names the recovery strategy in the user-facing warning line, so it goes through the
+ * declared strategies too: a strategy this version cannot name is not a verdict it can present. The
+ * optional fields are forwarded as published (see the reader); normalizing them is capture-kit.
+ */
+test('an undeclared backend drops the serialized verdict', () => {
+  for (const backend of ['uiautomator', 'tree ', 'Tree', 'constructor', '', 42, null, undefined]) {
+    const annotations = readSerializedSnapshotCaptureAnnotations({
+      snapshotQuality: { state: 'sparse', backend },
+    });
+    assert.equal(annotations.snapshotQuality, undefined, JSON.stringify(backend));
+  }
+});

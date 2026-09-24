@@ -2,33 +2,36 @@ import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
 /**
- * Every declared state, keyed against the kernel union so this map cannot fall behind it: a state
- * added there without a key here is a compile error, where a set literal merely typed as the union
- * stays green and this reader drops the verdict as verdict-absent.
+ * The verdict names this version can speak, each keyed against its kernel union so a map cannot
+ * fall behind it: a name added there without a key here is a compile error, where a set literal
+ * merely typed as the union stays green and this reader drops the verdict as verdict-absent. These
+ * readers hold the maps rather than importing the kernel's, because this module's eager closure is
+ * frozen at its merge-base size. The strategies need no map: `SNAPSHOT_QUALITY_BACKEND_CAPABILITIES`
+ * is the accepted set, keyed by the same names.
  */
-const snapshotQualityStatesAreTheVocabulary: Record<SnapshotQualityState, true> = {
+const DECLARED_STATES: Record<SnapshotQualityState, true> = {
   healthy: true,
   recovered: true,
   sparse: true,
 };
 
-function isSnapshotQualityState(value: unknown): value is SnapshotQualityState {
-  return typeof value === 'string' && Object.hasOwn(snapshotQualityStatesAreTheVocabulary, value);
-}
+const DECLARED_REASON_CODES: Record<NonNullable<SnapshotQualityVerdict['reasonCode']>, true> = {
+  'ax-rejected': true,
+  'sparse-tree': true,
+  budget: true,
+  'no-nodes': true,
+  'capture-failed': true,
+  'presentation-failed': true,
+  deferred: true,
+  'requested-backend': true,
+};
 
-const SNAPSHOT_QUALITY_BACKENDS = new Set<SnapshotQualityVerdict['backend']>(
-  Object.keys(SNAPSHOT_QUALITY_BACKEND_CAPABILITIES) as SnapshotQualityVerdict['backend'][],
-);
-const SNAPSHOT_QUALITY_REASON_CODES = new Set<NonNullable<SnapshotQualityVerdict['reasonCode']>>([
-  'ax-rejected',
-  'sparse-tree',
-  'budget',
-  'no-nodes',
-  'capture-failed',
-  'presentation-failed',
-  'deferred',
-  'requested-backend',
-]);
+function isDeclared<Key extends string, Value>(
+  vocabulary: Record<Key, Value>,
+  value: unknown,
+): value is Key {
+  return typeof value === 'string' && Object.hasOwn(vocabulary, value);
+}
 
 export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
   if (!value || typeof value !== 'object') return undefined;
@@ -36,30 +39,20 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
   // Validate the load-bearing union fields: an object with an unknown state/backend is not a
   // verdict this version understands, so it falls through as verdict-absent and the legacy
   // node-shape detectors run instead of being silently suppressed by a malformed payload.
-  const state = raw.state;
-  if (!isSnapshotQualityState(state)) {
-    return undefined;
-  }
   if (
-    typeof raw.backend !== 'string' ||
-    !SNAPSHOT_QUALITY_BACKENDS.has(raw.backend as SnapshotQualityVerdict['backend'])
+    !isDeclared(DECLARED_STATES, raw.state) ||
+    !isDeclared(SNAPSHOT_QUALITY_BACKEND_CAPABILITIES, raw.backend)
   ) {
     return undefined;
   }
   const timing = readSnapshotQualityTiming(raw.timing);
   return {
-    state,
-    backend: raw.backend as SnapshotQualityVerdict['backend'],
+    state: raw.state,
+    backend: raw.backend,
     reason: typeof raw.reason === 'string' ? raw.reason : undefined,
     // An unknown reasonCode is dropped, not rejected: a forward-version runner that adds one
     // still yields a usable verdict (only the budget-specific wording is keyed off it).
-    reasonCode:
-      typeof raw.reasonCode === 'string' &&
-      SNAPSHOT_QUALITY_REASON_CODES.has(
-        raw.reasonCode as NonNullable<SnapshotQualityVerdict['reasonCode']>,
-      )
-        ? (raw.reasonCode as SnapshotQualityVerdict['reasonCode'])
-        : undefined,
+    reasonCode: isDeclared(DECLARED_REASON_CODES, raw.reasonCode) ? raw.reasonCode : undefined,
     customActions: readCustomActionCoverage(raw.customActions),
     effectiveDepth: typeof raw.effectiveDepth === 'number' ? raw.effectiveDepth : undefined,
     collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
