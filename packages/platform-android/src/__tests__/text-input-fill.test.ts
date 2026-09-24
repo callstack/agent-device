@@ -628,8 +628,8 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
     },
   );
 
-  // One pre-action target read plus the three settling samples.
-  assert.equal(captureCount, 4);
+  // One pre-action target read plus the two settling samples the text held for.
+  assert.equal(captureCount, 3);
   assert.equal(spawnArgs.length, 1);
   assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 0);
   assert.equal(processes[0]?.exitCode, null);

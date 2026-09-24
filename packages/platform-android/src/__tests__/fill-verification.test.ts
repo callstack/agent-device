@@ -1,8 +1,9 @@
-// Fill reads the live hierarchy four times per attempt (one pre-action target read plus the
-// 0/150/350 ms settling samples). `am instrument` force-stops whatever is already instrumenting the
-// helper package, so a command-scoped capture stops the automation-helper session after every one of
-// those reads and the next read pays a fresh `am instrument` start. These tests pin who owns the
-// helper session across the samples — not what the samples conclude, which
+// Fill reads the live hierarchy at least three times per attempt (one pre-action target read plus
+// the settling samples, 150 ms apart, until the text has held for two of them or the deadline has
+// passed). `am instrument` force-stops whatever is already instrumenting the helper package, so a
+// command-scoped capture stops the automation-helper session after every one of those reads and the
+// next read pays a fresh `am instrument` start. These tests pin who owns the helper session across
+// the samples and how long the samples keep coming — not what one sample concludes, which
 // fill-diagnostics/input-actions-fill own.
 
 import { afterEach, beforeEach, test } from 'vitest';
@@ -50,7 +51,7 @@ test('daemon-session verification samples reuse one warm helper session', async 
   );
 
   assert.equal(verification.ok, true);
-  assert.equal(session.captureCount(), 3);
+  assert.equal(session.captureCount(), 2, 'the text held for two samples');
   assert.equal(session.spawnArgs.length, 1, 'one instrumentation start for every sample');
   assert.equal(session.processes[0]?.exitCode, null, 'the session must outlive the command');
   assert.equal(session.forwardRemovals(), 0);
@@ -64,15 +65,15 @@ test('command-scoped verification samples release the helper after every sample'
     async () => await verifyAndroidFilledText(device, 10, 10, 'chips'),
   );
 
-  assert.equal(session.captureCount(), 3);
-  assert.equal(session.spawnArgs.length, 3, 'each sample pays its own instrumentation start');
-  assert.equal(session.forwardRemovals(), 3);
+  assert.equal(session.captureCount(), 2);
+  assert.equal(session.spawnArgs.length, 2, 'each sample pays its own instrumentation start');
+  assert.equal(session.forwardRemovals(), 2);
 });
 
 test('verification samples re-read the hierarchy instead of sharing one capture', async () => {
-  // The 0/150/350 ms samples exist to observe settling. Sharing the session must not turn into
-  // sharing its capture: replaying the first sample's still-settling text would report a mismatch
-  // for a field that did take the value.
+  // The samples exist to observe settling. Sharing the session must not turn into sharing its
+  // capture: replaying the first sample's still-settling text would report a mismatch for a field
+  // that did take the value.
   const settlingText = ['chi', 'chip', 'chips'];
   const session = createFillHelperSession({
     textForCapture: (captureIndex) => settlingText[captureIndex - 1] ?? 'chips',
@@ -86,9 +87,47 @@ test('verification samples re-read the hierarchy instead of sharing one capture'
       }),
   );
 
-  assert.equal(session.captureCount(), 3);
+  assert.equal(session.captureCount(), 4, 'two settling samples, then the text held for two');
   assert.equal(verification.actual, 'chips', 'the last sample is read from its own capture');
   assert.equal(verification.ok, true);
+});
+
+test('a value the app renders late still verifies, as long as it lands before the deadline', async () => {
+  // Six samples of the hint before the value shows: about 900 ms in, past the retired schedule's
+  // last sample at 500 ms and inside the deadline.
+  const session = createFillHelperSession({
+    textForCapture: (captureIndex) => (captureIndex <= 6 ? 'Key echo' : 'chips'),
+  });
+
+  const verification = await withFillHelperProvider(
+    session.provider,
+    async () =>
+      await verifyAndroidFilledText(device, 10, 10, 'chips', {
+        helperSessionScope: 'daemon-session',
+      }),
+  );
+
+  assert.equal(verification.ok, true);
+  assert.equal(session.captureCount(), 8, 'six hint samples, then the value held for two');
+});
+
+test('a value that never lands is a mismatch at the deadline, not before it', async () => {
+  const session = createFillHelperSession({ textForCapture: () => 'Key echo' });
+  const startedAt = Date.now();
+
+  const verification = await withFillHelperProvider(
+    session.provider,
+    async () =>
+      await verifyAndroidFilledText(device, 10, 10, 'chips', {
+        helperSessionScope: 'daemon-session',
+      }),
+  );
+
+  assert.equal(verification.ok, false);
+  assert.equal(verification.reason, 'text_mismatch');
+  assert.equal(verification.actual, 'Key echo', 'the last sample is the answer');
+  assert.ok(Date.now() - startedAt >= 1500, 'sampling ran to the deadline');
+  assert.ok(session.captureCount() >= 4, 'the deadline admits more samples than the old schedule');
 });
 
 test('the pre-action target read shares the daemon-session helper with the samples', async () => {
@@ -105,7 +144,7 @@ test('the pre-action target read shares the daemon-session helper with the sampl
   });
 
   assert.equal(target?.resourceId, 'com.example:id/field');
-  assert.equal(session.captureCount(), 4);
+  assert.equal(session.captureCount(), 3);
   assert.equal(session.spawnArgs.length, 1);
   assert.equal(session.forwardRemovals(), 0);
 });
