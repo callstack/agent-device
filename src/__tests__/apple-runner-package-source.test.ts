@@ -137,7 +137,7 @@ test('package apple runner source empties removed lines so line numbers still ma
   }
 });
 
-test('package apple runner source skips the explicit unit-test directory', async () => {
+test('package apple runner source skips the unit-test directory and the isolation canary', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-unit-tests-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
   writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
@@ -161,6 +161,16 @@ test('package apple runner source skips the explicit unit-test directory', async
     `${uitestsDir}/RunnerTests+RuntimeSibling.swift`,
     ['extension RunnerTests {', '  func runtimeSiblingHelper() {}', '}', ''].join('\n'),
   );
+  writeFixtureFile(
+    root,
+    `${uitestsDir}/RunnerIsolationCanary.swift`,
+    [
+      '#if AGENT_DEVICE_RUNNER_ISOLATION_CANARY',
+      'enum RunnerIsolationCanary {}',
+      '#endif',
+      '',
+    ].join('\n'),
+  );
 
   await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 
@@ -172,6 +182,11 @@ test('package apple runner source skips the explicit unit-test directory', async
   assert.ok(
     fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+RuntimeSibling.swift`)),
     'the skeleton skip must not drop files with shippable runtime content',
+  );
+  assert.equal(
+    fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerIsolationCanary.swift`)),
+    false,
+    'the isolation scan canary compiles only in repo gate builds',
   );
 });
 

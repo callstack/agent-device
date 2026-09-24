@@ -28,6 +28,10 @@ const LEGACY_OUTPUT_DIRS = [
 ];
 const SKIPPED_DIR_NAMES = new Set(['.build', '.swiftpm', 'UnitTests', 'xcuserdata']);
 const SKIPPED_ROOT_FILES = new Set(['README.md', 'RUNNER_PROTOCOL.md']);
+// The isolation scan's positive control compiles only in this repo's gate builds.
+const SKIPPED_RUNNER_FILE_PATHS = new Set([
+  path.join('AgentDeviceRunner', 'AgentDeviceRunnerUITests', 'RunnerIsolationCanary.swift'),
+]);
 // XCTest discovers instance methods named test*; anything matching this that survives stripping
 // would ship to (and compile on) every user's machine. Only the runner's command-loop entrypoint
 // is a legitimate test method in the packaged source.
@@ -57,7 +61,9 @@ function packageAppleRunnerSource(options = {}) {
     strippedCommentBytes: 0,
   };
 
-  processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary);
+  processDirectory(sourceRoot, options.checkOnly ? undefined : outputRoot, '', summary, {
+    skipFilePaths: SKIPPED_RUNNER_FILE_PATHS,
+  });
   packageSnapshotPresentationSource(root, options, summary);
   return summary;
 }
