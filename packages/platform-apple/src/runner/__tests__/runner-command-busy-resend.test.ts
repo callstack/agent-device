@@ -165,6 +165,36 @@ test('a wait deadline landing mid-window rethrows the last RUNNER_BUSY refusal, 
   assert.deepEqual(sentCommands(), ['snapshot']);
 });
 
+test('a wait deadline landing mid-fetch during a resend still rethrows the RUNNER_BUSY refusal', async () => {
+  vi.useFakeTimers();
+  const deadline = new AbortController();
+  mockExecuteRunnerCommandWithSession.mockRejectedValueOnce(busyRefusal()).mockImplementationOnce(
+    (_device, _session, _command, _logPath, _timeoutMs, signal: AbortSignal | undefined) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+  );
+
+  const pending = runAppleRunnerCommand(
+    IOS_SIMULATOR,
+    { command: 'snapshot' },
+    { requestId: 'req-wait-mid-fetch', signal: deadline.signal },
+  );
+  const settled = pending.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  // Past the first 200ms delay: the second send is in flight when the deadline lands.
+  await vi.advanceTimersByTimeAsync(250);
+  deadline.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+  await vi.advanceTimersByTimeAsync(0);
+  const error = await settled;
+
+  assert.ok(error instanceof AppError, `expected the refusal, got ${String(error)}`);
+  assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+  assert.deepEqual(sentCommands(), ['snapshot', 'snapshot']);
+});
+
 test('a cancelled request wakes the RUNNER_BUSY delay and reports the cancellation', async () => {
   vi.useFakeTimers();
   const request = new AbortController();

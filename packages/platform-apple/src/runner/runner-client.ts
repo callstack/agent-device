@@ -1,6 +1,5 @@
 import { retryWithPolicy, emitDiagnostic, getRequestSignal, isRequestCanceled } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   ensureRunnerSession,
   readRunnerSessionLiveness,
@@ -59,14 +58,18 @@ function readOnlyResendBudget(error: unknown): number {
 }
 
 /**
- * Whether the request itself was cancelled, as opposed to one caller's deadline on this command.
- * A `wait` bounds each poll with its own abort signal; that deadline landing inside the resend
- * window must not erase the refusal the runner already gave.
+ * Whether the caller's own deadline ended this command, as opposed to the request being cancelled.
+ * A `wait` bounds each poll with an abort signal whose reason is a `TimeoutError`
+ * (`runWithinWaitDeadline`); a cancelled request aborts through the registered request signal or
+ * the cancellation registry. The typed reason decides, so a deadline that lands mid-fetch (surfacing
+ * as whatever the transport threw on abort) is read the same way as one that wakes a delay.
  */
-function isRunnerRequestCancelled(options: AppleRunnerCommandOptions): boolean {
-  return (
-    isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted === true
-  );
+function callerDeadlineExpired(options: AppleRunnerCommandOptions): boolean {
+  if (isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted) {
+    return false;
+  }
+  const reason: unknown = options.signal?.aborted ? options.signal.reason : undefined;
+  return reason instanceof DOMException && reason.name === 'TimeoutError';
 }
 
 export async function runAppleRunnerCommand(
@@ -104,9 +107,7 @@ export async function runAppleRunnerCommand(
     // A caller's deadline (a `wait` poll bounding this capture) that lands mid-window still has an
     // answer: the runner refused, and that typed refusal is what the caller can act on. Only a
     // cancelled request reports as a bare cancellation.
-    if (isRequestCanceledError(error) && lastBusyRefusal && !isRunnerRequestCancelled(options)) {
-      throw lastBusyRefusal;
-    }
+    if (lastBusyRefusal && callerDeadlineExpired(options)) throw lastBusyRefusal;
     throw error;
   }
 }
