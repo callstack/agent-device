@@ -282,6 +282,28 @@ test.each(Object.entries(leaves))(
   },
 );
 
+// A simulator scoped to a non-default set is refused by the owner's own fact, before any display
+// probe or HID effect: CoreDevice's display inventory and hinge-angle readback cannot resolve it,
+// so ADR 0025's post-dispatch verification is impossible. The default-set iOS leaf stays admitted.
+test('refuses the fold fact for a scoped simulator set and binds no pose operation', async () => {
+  const scoped = appleDevice({ simulatorSetPath: '/tmp/scoped-set' });
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device: scoped,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  expect(binding.facts.operations.setFoldPose).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-scope',
+    hint: expect.stringContaining('/tmp/scoped-set'),
+  });
+  expect(binding.operations.setFoldPose).toBeUndefined();
+});
+
 /**
  * The Action Button is a physical control on iPhone and iPad leaves only. visionOS is the leaf that
  * separates this from `orientation`'s mobile-input reading: a headset has a Digital Crown and no

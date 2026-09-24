@@ -159,6 +159,12 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
     command: 'fold',
     device: testDevice,
     unavailable,
+    // The fold route derives its refusal from the fact, so the wire error keeps the typed reason.
+    refusal: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'fold is not supported on this device',
+      details: { reason: 'unsupported-platform-leaf' },
+    },
   });
 });
 

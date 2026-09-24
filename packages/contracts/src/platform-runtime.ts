@@ -126,6 +126,7 @@ export type RuntimeOperationUnavailability = Readonly<{
     | 'unsupported-platform-leaf'
     | 'unsupported-device-kind'
     | 'unsupported-device-backend'
+    | 'unsupported-device-scope'
     | 'unsupported-provider-mode'
     | 'owner-capability-missing';
   hint?: string;
@@ -406,6 +407,7 @@ function isRuntimeOperationUnavailabilityReason(
     value === 'unsupported-platform-leaf' ||
     value === 'unsupported-device-kind' ||
     value === 'unsupported-device-backend' ||
+    value === 'unsupported-device-scope' ||
     value === 'unsupported-provider-mode' ||
     value === 'owner-capability-missing'
   );
