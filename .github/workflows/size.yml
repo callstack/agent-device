@@ -7,7 +7,6 @@ on:
       - 'website/**'
       - 'README.md'
       - 'AGENTS.md'
-      - 'CHANGELOG.md'
       - 'CONTEXT.md'
       - 'CONTRIBUTING.md'
       - 'LICENSE'

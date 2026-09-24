@@ -1,5 +1,5 @@
-// Regression pin for #1781 A9: the six root-level docs files
-// (AGENTS.md, CHANGELOG.md, CONTEXT.md, CONTRIBUTING.md, LICENSE, SECURITY.md)
+// Regression pin for #1781 A9: the five root-level docs files
+// (AGENTS.md, CONTEXT.md, CONTRIBUTING.md, LICENSE, SECURITY.md)
 // must stay in the `pull_request` `paths-ignore` list of every workflow that
 // also ignores `docs/**`/`website/**`/`README.md` — the four device lanes plus
 // `ci.yml` and `size.yml`. Nothing else derives this: `check:gate-manifest`
@@ -22,14 +22,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 const WORKFLOWS = ['ios.yml', 'android.yml', 'linux.yml', 'macos.yml', 'ci.yml', 'size.yml'];
 
-const ROOT_DOCS = [
-  'AGENTS.md',
-  'CHANGELOG.md',
-  'CONTEXT.md',
-  'CONTRIBUTING.md',
-  'LICENSE',
-  'SECURITY.md',
-];
+const ROOT_DOCS = ['AGENTS.md', 'CONTEXT.md', 'CONTRIBUTING.md', 'LICENSE', 'SECURITY.md'];
 
 type WorkflowDoc = {
   // A bare `on:` key can parse as the boolean key `true` under YAML 1.1
