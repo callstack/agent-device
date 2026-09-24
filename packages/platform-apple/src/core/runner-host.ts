@@ -95,6 +95,8 @@ export const appleRunnerHost: AppleRunnerHost = {
   runAppleToolCommand,
   runXcrun,
   readApplePlistJson,
+  probeXcrunShimFirstLaunchHooks: async (options) =>
+    await (await import('./xcrun-shim-first-launch.ts')).probeXcrunShimFirstLaunchHooks(options),
   buildSimctlArgsForDevice,
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,

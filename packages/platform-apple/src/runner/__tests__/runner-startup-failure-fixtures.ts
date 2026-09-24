@@ -43,7 +43,8 @@ import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-
 export type RunnerStartupFailureSite =
   | 'build-for-testing'
   | 'host-dev-tools-security'
-  | 'device-readiness';
+  | 'device-readiness'
+  | 'xctest-device-set-redirect';
 
 /**
  * The two states a device reports about itself (#2683), in the shape `readIosDeviceReadiness`
@@ -347,6 +348,23 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     provenance: 'shipped-sniff-trigger',
     output: 'Developer mode is currently disabled for development tools.\n',
     note: "Host-side refusal. It says nothing about the device's Developer Mode toggle (#2683 reads that).",
+  },
+  {
+    id: 'xcode-26-2-simctl-shim-first-launch',
+    reason: 'xctest_device_set_cleanup_armed',
+    site: 'xctest-device-set-redirect',
+    command: 'grep -A4 EXPECTED_VERSION "$(xcrun --find simctl)"',
+    xcodeVersion: 'Xcode 26.2 (17C52)',
+    provenance: 'captured',
+    output: [
+      'EXPECTED_VERSION="1051.17.7"',
+      'CURRENT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/Info.plist" 2>&1)"',
+      '',
+      'if [[ "${EXPECTED_VERSION}" != "${CURRENT_VERSION}" ]]; then',
+      '    "${DEVELOPER_DIR}/usr/bin/xcodebuild" -runFirstLaunch >&2',
+      '',
+    ].join('\n'),
+    note: 'The shim text, not tool output: the redirect refuses on what the shim would do, before any xcodebuild runs (#2935). Installed CoreSimulator on that host was 1155.4. The Xcode version was read from its version.plist, not from `xcodebuild -version`.',
   },
 ];
 

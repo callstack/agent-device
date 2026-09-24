@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { resolveRunnerLaunchLogPath } from '../runner-io.ts';
@@ -17,6 +18,8 @@ import {
   redirectRelease,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { withFakeXcrunHost, writeFakeXcrunShims } from './xcrun-shim-fixtures.ts';
+import { acquireXcodebuildSimulatorSetRedirect as acquireRealSimulatorSetRedirect } from '../runner-device-set.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -385,6 +388,51 @@ test('a scoped simulator-set session stays on the kill path that restores the re
   assert.match(diagnostics, /"reason":"simulator_set_redirect"/);
   assert.ok(readRunnerSessionLiveness(device.id));
   assert.equal(redirectRelease.mock.calls.length, 0);
+});
+
+test('an armed xcrun shim refuses a scoped-set session before the runner launches', async () => {
+  const root = mkdtempForTestSync('runner-lifecycle-armed-shim-');
+  const requestedSetPath = path.join(root, 'user-set');
+  const xctestDeviceSetPath = path.join(root, 'XCTestDevices');
+  fs.mkdirSync(requestedSetPath, { recursive: true });
+  fs.mkdirSync(xctestDeviceSetPath, { recursive: true });
+  const host = writeFakeXcrunShims(root, {
+    simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
+    devicectl: { expectedVersion: '506.6', installedVersion: '629.3' },
+    xcdevice: { hook: 'none' },
+    xctrace: { hook: 'none' },
+  });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(
+    async (device: DeviceInfo) =>
+      await acquireRealSimulatorSetRedirect(device, {
+        xctestDeviceSetPath,
+        lockDirPath: path.join(root, 'xctest-device-set.lock'),
+        xcrunShimPaths: host.xcrunShimPaths,
+      }),
+  );
+  mockEnsureXctestrunArtifact.mockResolvedValue({
+    xctestrunPath: '/tmp/base-runner.xctestrun',
+    derived: '/tmp/derived',
+    cache: 'exact',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'manifest',
+  });
+  const device = {
+    ...IOS_SIMULATOR,
+    id: 'runner-lifecycle-armed-shim',
+    simulatorSetPath: requestedSetPath,
+  };
+
+  await assert.rejects(
+    withFakeXcrunHost(host, () => ensureRunnerSession(device, {})),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'xctest_device_set_cleanup_armed',
+  );
+
+  assert.equal(mockRunCmdBackground.mock.calls.length, 0, 'no test-without-building was spawned');
+  assert.equal(fs.lstatSync(xctestDeviceSetPath).isSymbolicLink(), false);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 // #2681: the handoff lanes and every gate that keeps a runner on the kill path.

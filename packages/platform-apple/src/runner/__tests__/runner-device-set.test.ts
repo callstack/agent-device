@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { defaultRedirectProbeToFakeShims, writeHooklessXcrunShims } from './xcrun-shim-fixtures.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
   resolveXcodebuildSimulatorDeviceSetPath,
@@ -14,6 +15,10 @@ import {
 // A runner build runs under the XCTest device-set redirect, which is a lock like any other, so
 // the two failures it can report have an order: the build that failed outranks a redirect it could
 // not hand back, and a build that succeeded does not get to hide one.
+
+beforeEach(() => {
+  defaultRedirectProbeToFakeShims(writeHooklessXcrunShims(mkdtempForTestSync('device-set-shims-')));
+});
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',

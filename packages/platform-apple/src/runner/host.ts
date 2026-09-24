@@ -18,6 +18,7 @@ import type * as ApplePlistXml from '../core/plist-xml.ts';
 import type * as AppleRunnerOwnerState from '../core/runner-owner-state.ts';
 import type * as AppleSimctl from '../core/simctl.ts';
 import type * as AppleToolProvider from '../core/tool-provider.ts';
+import type * as AppleXcrunShimFirstLaunch from '../core/xcrun-shim-first-launch.ts';
 
 /**
  * The host-capability port for the Apple runner client. Every effectful or
@@ -82,6 +83,7 @@ export type AppleRunnerHost = Pick<
   Pick<typeof KernelDeviceShell, 'shellQuote'> &
   Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
   Pick<typeof AppleToolProvider, 'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson'> &
+  Pick<typeof AppleXcrunShimFirstLaunch, 'probeXcrunShimFirstLaunchHooks'> &
   Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice'> &
   Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
     /**
@@ -115,6 +117,11 @@ export type {
   IosDeveloperModeState,
   IosDeviceReadiness,
 } from '../core/physical-device-coredevice.ts';
+
+export type {
+  ArmedXcrunShimFirstLaunchHook,
+  XcrunShimProbeOptions,
+} from '../core/xcrun-shim-first-launch.ts';
 
 let boundHost: AppleRunnerHost | undefined;
 
@@ -184,6 +191,7 @@ export const bootFailureHint = delegate('bootFailureHint');
 export const runAppleToolCommand = delegate('runAppleToolCommand');
 export const runXcrun = delegate('runXcrun');
 export const readApplePlistJson = delegate('readApplePlistJson');
+export const probeXcrunShimFirstLaunchHooks = delegate('probeXcrunShimFirstLaunchHooks');
 export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');
 export const visitXmlPlistEntries = delegate('visitXmlPlistEntries');
 export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDeviceControl');

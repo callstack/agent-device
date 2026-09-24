@@ -137,8 +137,13 @@ export async function runAppleToolCommand(
   return await resolveAppleToolProvider().runCommand(cmd, args, options);
 }
 
+/** Every Xcode tool agent-device runs through `xcrun`, each of which resolves to a file in the selected Xcode. */
+export const XCRUN_TOOL_NAMES = ['simctl', 'devicectl', 'xcdevice', 'xctrace'] as const;
+
+export type XcrunToolName = (typeof XCRUN_TOOL_NAMES)[number];
+
 /** An xcrun argv for a tool other than simctl; a simctl argv is a ScopedSimctlCommand. */
-type XcrunToolArgs = readonly ['devicectl' | 'xcdevice' | 'xctrace', ...string[]];
+type XcrunToolArgs = readonly [Exclude<XcrunToolName, 'simctl'>, ...string[]];
 
 export async function runXcrun(
   args: ScopedSimctlCommand | XcrunToolArgs,

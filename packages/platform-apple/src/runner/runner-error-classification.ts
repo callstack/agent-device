@@ -80,6 +80,9 @@ const hasRunnerBusyCode: RunnerErrorDetailsMatch = (details) =>
  */
 const hasDevToolsSecurityStatus: RunnerErrorDetailsMatch = (details) =>
   typeof details.devToolsSecurityStatus === 'string';
+/** The per-shim first-launch hooks the XCTest device-set redirect read before refusing. */
+const hasXcrunShimFirstLaunchHooks: RunnerErrorDetailsMatch = (details) =>
+  Array.isArray(details.xcrunShims);
 const hasUsbmuxDeviceUnattached: RunnerErrorDetailsMatch = (details) =>
   details.usbmuxDeviceAttached === false;
 const hasRunnerConnectFailureReason =
@@ -157,6 +160,7 @@ export const RUNNER_STARTUP_FAILURE_REASONS = [
   'signing_provisioning_profile_missing',
   'signing_unspecified',
   'devtools_security_developer_mode_disabled',
+  'xctest_device_set_cleanup_armed',
   ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   'build_failed_unclassified',
 ] as const;
@@ -432,6 +436,15 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     buildFailure: {
       reason: 'devtools_security_developer_mode_disabled',
       hint: 'Run `sudo DevToolsSecurity -enable`, then retry the iOS runner. UI test runners start suspended until Xcode/testmanagerd can attach.',
+    },
+  },
+  {
+    reason: 'xctest_device_set_cleanup_armed',
+    match: { code: 'COMMAND_FAILED', details: hasXcrunShimFirstLaunchHooks },
+    verdicts: {},
+    buildFailure: {
+      reason: 'xctest_device_set_cleanup_armed',
+      hint: 'While the selected Xcode does not match the installed CoreSimulator or CoreDevice framework, every call through its simctl or devicectl shim runs `xcodebuild -runFirstLaunch`, which deletes all devices in ~/Library/Developer/XCTestDevices. Select the Xcode that installed those frameworks (`xcode-select -s` or DEVELOPER_DIR); details.xcrunShims names each expected and installed version.',
     },
   },
 ];

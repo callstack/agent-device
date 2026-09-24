@@ -59,6 +59,7 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, string> = {
   signing_provisioning_profile_missing: 'AGENT_DEVICE_IOS_PROVISIONING_PROFILE',
   signing_unspecified: 'Automatic Signing',
   devtools_security_developer_mode_disabled: 'DevToolsSecurity -enable',
+  xctest_device_set_cleanup_armed: 'xcode-select -s',
   // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
   // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
   // preflight publishing them is asserted.
@@ -287,6 +288,20 @@ test('an identical message without the typed host fact is not read as a DevTools
   assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
   assert.match(String(envelope.hint), CACHE_RECOVERY_HINT);
   assert.doesNotMatch(String(envelope.hint), /DevToolsSecurity/);
+});
+
+test('the XCTest device-set refusal is classified by its typed shim list, never by its wording', () => {
+  const message =
+    "Refusing to redirect XCTest device set: Xcode's simctl expects CoreSimulator 1051.17.7; installed 1155.4";
+
+  const typed = classifyRunnerStartupFailure(
+    new AppError('COMMAND_FAILED', message, { xcrunShims: [] }),
+  );
+  const wordingOnly = classifyRunnerStartupFailure(new AppError('COMMAND_FAILED', message));
+
+  assert.equal(typed.reason, 'xctest_device_set_cleanup_armed');
+  assert.ok(typed.hint.includes(HINT_FOR_REASON.xctest_device_set_cleanup_armed));
+  assert.equal(wordingOnly.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
 });
 
 test('an app identifier named without the availability fact is not read as a taken bundle id', async () => {

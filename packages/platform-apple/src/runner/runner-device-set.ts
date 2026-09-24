@@ -9,8 +9,12 @@ import {
   readProcessStartTime,
   acquireProcessLock,
   withProcessLock,
+  probeXcrunShimFirstLaunchHooks,
+  type ArmedXcrunShimFirstLaunchHook,
+  type XcrunShimProbeOptions,
 } from './host.ts';
 import type { ProcessLockRelease } from '@agent-device/host-kit/file';
+import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 
 const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
 const XCTEST_DEVICE_SET_BACKUP_SUFFIX = '.agent-device-backup';
@@ -34,7 +38,7 @@ export type XcodebuildSimulatorSetRedirectHandle = {
   releaseBestEffort: () => Promise<void>;
 };
 
-type XcodebuildSimulatorSetRedirectOptions = {
+type XcodebuildSimulatorSetRedirectOptions = XcrunShimProbeOptions & {
   xctestDeviceSetPath?: string;
   backupPath?: string;
   lockDirPath?: string;
@@ -106,6 +110,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 
   const paths = { xctestDeviceSetPath, backupPath };
   let needsRedirect = false;
+  let cleanupArmedRefusal: AppError | null = null;
 
   // One try, so the lock cannot be given back and then worked under: the restore of an interrupted
   // build's leftovers runs first because the same-set check follows symlinks, and `XCTestDevices` left
@@ -115,6 +120,9 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     reconcileXcodebuildSimulatorSetRedirect(paths);
     needsRedirect = !sameResolvedPath(requestedSetPath, xctestDeviceSetPath);
     if (needsRedirect) {
+      cleanupArmedRefusal = await xctestDeviceSetCleanupArmedRefusal(options);
+    }
+    if (needsRedirect && cleanupArmedRefusal === null) {
       installDeviceSetRedirect(paths, requestedSetPath);
     }
   } catch (error) {
@@ -122,6 +130,11 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     // failure that ends the acquire.
     const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
     throw redirectFailure(error, handBack, { requestedSetPath, ...paths });
+  }
+
+  if (cleanupArmedRefusal !== null) {
+    await handBackDeviceSet(paths, lockDirPath, releaseLock);
+    throw cleanupArmedRefusal;
   }
 
   if (!needsRedirect) {
@@ -152,6 +165,38 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     release: () => giveBack(true),
     releaseBestEffort: () => giveBack(false),
   };
+}
+
+/**
+ * The refusal for a host where an Xcode shim would run `xcodebuild -runFirstLaunch`, which deletes
+ * every device in `XCTestDevices` and so, through the redirect, every device in the requested set.
+ * Its reason and hint come from {@link classifyRunnerStartupFailure}, keyed on `xcrunShims`.
+ */
+async function xctestDeviceSetCleanupArmedRefusal(
+  options: XcrunShimProbeOptions,
+): Promise<AppError | null> {
+  const xcrunShims = await probeXcrunShimFirstLaunchHooks({
+    xcrunShimPaths: options.xcrunShimPaths,
+  });
+  const armed = xcrunShims.filter(
+    (shim): shim is ArmedXcrunShimFirstLaunchHook => shim.hook === 'armed',
+  );
+  if (armed.length === 0) return null;
+  const message = `Refusing to redirect XCTest device set: ${armed.map(describeArmedShim).join('; ')}`;
+  const { reason, hint } = classifyRunnerStartupFailure(
+    new AppError('COMMAND_FAILED', message, { xcrunShims }),
+  );
+  return new AppError('COMMAND_FAILED', message, { reason, hint, xcrunShims });
+}
+
+function describeArmedShim(shim: ArmedXcrunShimFirstLaunchHook): string {
+  if (shim.shimPath === null) return `Xcode's ${shim.tool} could not be located`;
+  const framework =
+    /([^/]+)\.framework\//.exec(shim.frameworkInfoPlistPath ?? '')?.[1] ?? 'its framework';
+  return (
+    `Xcode's ${shim.tool} expects ${framework} ${shim.expectedVersion ?? '(unreadable)'}; ` +
+    `installed ${shim.installedVersion ?? '(unreadable)'}`
+  );
 }
 
 /** The two paths a redirect moves around: where the host keeps its set, and where this run put it. */
