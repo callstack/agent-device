@@ -132,9 +132,9 @@ test('provider transport carries the Action Button press without an app activati
   });
 });
 
-// A hinge pose is posed through Xcode Device Hub on the host, which a provider-owned device has no
-// access to, so the provider fixture states the refusal cell and admission refuses before anything
-// reaches the transport: no runner call, no local Device Hub press.
+// A hinge pose is sent by a HID helper the host spawns inside a local iOS simulator, which a
+// provider-owned device is not, so the provider fixture states the refusal cell and admission
+// refuses before anything reaches the transport.
 test('provider transport refuses a fold before any runner traffic', async () => {
   await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);

@@ -225,7 +225,8 @@ test('Android refuses the fold fact on every kind', async () => {
       createAndroidPlatformRuntime(androidNavigationHost()),
       runtimeDevice,
     );
-    // A foldable hinge is posed through Xcode Device Hub; no adb surface poses one.
+    // fold drives only foldable iPhone simulators; the Android emulator posture control is not
+    // driven yet.
     expect(binding.facts.operations.setFoldPose).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',

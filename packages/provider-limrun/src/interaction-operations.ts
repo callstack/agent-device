@@ -341,11 +341,14 @@ export function limrunSystemButtonOperationFacts(
   });
 }
 
-/** A foldable hinge is posed through the host's Xcode Device Hub, which no Limrun session has. */
+/**
+ * `fold` sends a HID hinge event through a helper the daemon host spawns inside one of its own iOS
+ * simulators with `simctl spawn`; a Limrun session's device is not a host simulator.
+ */
 export const LIMRUN_FOLD_UNAVAILABLE = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'fold poses a foldable iPhone simulator through Xcode Device Hub on the host, which no Limrun session exposes.',
+  hint: 'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a Limrun session has no such simulator.',
 } as const);
 
 /** The fold refusal both Limrun legs share. */

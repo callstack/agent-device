@@ -245,7 +245,7 @@ const systemButtonUnavailable = Object.freeze({
 const foldUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'fold poses a foldable iPhone simulator through Xcode Device Hub, which no WebDriver backend exposes.',
+  hint: 'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 } as const);
 
 /**

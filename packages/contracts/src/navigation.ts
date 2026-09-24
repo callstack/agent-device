@@ -52,7 +52,7 @@ export type OrientationCommandResult = {
  * `fold` — `{ action: 'fold', pose, hingeAngleDegrees, screen?, message }`.
  *
  * Unlike `orientation`, there is no unconfirmed variant: the Apple owner reads the hinge angle
- * back from CoreDevice after pressing the Device Hub pose control, and reports a pose only when
+ * back from CoreDevice after the simulator HID helper sends the pose, and reports a pose only when
  * that reading agrees with the request. `screen` names the panel the device lights afterwards and
  * that panel's native point size (ADR 0025); it is the panel's geometry, not the app viewport, so a
  * caller must take a fresh snapshot before placing a tap.
