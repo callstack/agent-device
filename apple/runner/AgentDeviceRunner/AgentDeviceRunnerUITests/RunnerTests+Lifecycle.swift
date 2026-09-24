@@ -399,7 +399,7 @@ extension RunnerTests {
   func withBoundedInteractionIdleTimeoutIfSupported(
     _ target: XCUIApplication,
     waits: RunnerInteractionIdleWaits,
-    operation: () -> Void
+    operation: @MainActor () -> Void
   ) {
     let setter = NSSelectorFromString("setWaitForIdleTimeout:")
     let supportsWaitForIdleTimeout = target.responds(to: setter)
@@ -422,7 +422,7 @@ extension RunnerTests {
   private func performWithQuiescenceSkippedIfSupported(
     _ target: XCUIApplication,
     waits: RunnerInteractionIdleWaits,
-    operation: () -> Void
+    operation: @MainActor () -> Void
   ) {
     let selector = NSSelectorFromString("_performWithInteractionOptions:block:")
     guard target.responds(to: selector) else {
@@ -450,7 +450,7 @@ extension RunnerTests {
       options = skipPreEventQuiescence
     }
     withoutActuallyEscaping(operation) { escapableOperation in
-      let block: @MainActor @convention(block) () -> Void = { escapableOperation() }
+      let block: @convention(block) () -> Void = { _ = runOnMainActor(escapableOperation) }
       performWithOptions(
         target,
         selector,

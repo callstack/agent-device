@@ -80,13 +80,13 @@ extension RunnerTests {
   /// waiting: the capture answers now and the next command still observes the write.
   func applyMainOwnedSnapshotState(_ operation: String, _ write: @escaping @MainActor () -> Void) {
     if Thread.isMainThread {
-      MainActor.assumeIsolated(write)
+      _ = runOnMainActor(write)
       return
     }
     guard !hasAbandonedMainThreadWork() else {
       NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_STATE_DEFERRED_XCTEST_OCCUPIED operation=%@", operation)
       DispatchQueue.main.async {
-        MainActor.assumeIsolated(write)
+        _ = runOnMainActor(write)
       }
       return
     }

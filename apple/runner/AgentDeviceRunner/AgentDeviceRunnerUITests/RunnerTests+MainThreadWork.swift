@@ -62,7 +62,7 @@ extension RunnerTests {
     _ work: @escaping @MainActor () throws -> T
   ) throws -> T {
     if Thread.isMainThread {
-      return try Self.runOnMainActor(work).get()
+      return try runOnMainActor(work).get()
     }
     mainThreadWorkLock.lock()
     let state = enqueueMainThreadWorkLocked(operation, work)
@@ -107,17 +107,6 @@ extension RunnerTests {
     )
   }
 
-  /// Runs `work` on the main thread the caller is already on. `MainActor.assumeIsolated` returns
-  /// only `Sendable` values, so the result leaves through a captured `Result`: a `T: Sendable` bound
-  /// on the hop would promise something no gate checks.
-  private static func runOnMainActor<T>(_ work: @MainActor () throws -> T) -> Result<T, Error> {
-    var result: Result<T, Error>?
-    MainActor.assumeIsolated {
-      result = Result { try work() }
-    }
-    return result!
-  }
-
   private func enqueueMainThreadWorkLocked<T>(
     _ operation: String,
     _ work: @escaping @MainActor () throws -> T
@@ -125,7 +114,7 @@ extension RunnerTests {
     let state = MainThreadWorkState<T>()
     mainThreadWorkInFlightCount += 1
     DispatchQueue.main.async {
-      state.result = Self.runOnMainActor(work)
+      state.result = runOnMainActor(work)
       self.mainThreadWorkLock.lock()
       self.mainThreadWorkInFlightCount -= 1
       let abandoned = state.abandoned
