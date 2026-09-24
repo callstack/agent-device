@@ -152,6 +152,37 @@ extension RunnerTests {
     XCTAssertFalse(cursorProjected.contains { $0.raw.label == "Outside scroll clip" })
   }
 
+  /// #2891: with no viewport box the fold withholds the bit for everything whose answer is
+  /// containment, and still answers for what its own frame decides. A `visibilityExempt` carrier is
+  /// retained even when a scroll anchor clips it to nothing, so it is the retained node whose frame
+  /// is degenerate -- and `nil` there would hand the #2638 wrapper verdict neither answer.
+  func testFoldWithUnknownViewportWithholdsContainmentButNotFrameEvidence() throws {
+    let nodes: [RawAXNode] = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "ScrollView", label: "Scroll",
+        rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0),
+      Self.foldNode(2, type: "Window", label: "Clipped carrier",
+        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), depth: 2, parentIndex: 1),
+      Self.foldNode(3, type: "Button", label: "Inside",
+        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), depth: 2, parentIndex: 1),
+    ].map { node in
+      // What `normalized()` leaves behind when the viewport read failed: undecided, not `false`.
+      node.replacing(rect: node.rect, hittable: node.parentIndex == nil ? false : nil)
+    }
+    let folded = SnapshotVisibilityFold.fold(
+      nodes,
+      viewport: .missing(reason: .notProvided),
+      interactiveOnly: false,
+      policy: .cursorProjected
+    )
+
+    let carrier = try XCTUnwrap(folded.first { $0.raw.label == "Clipped carrier" })
+    XCTAssertEqual(carrier.raw.hittable, false, "a clipped-to-nothing frame is evidence, not a gap")
+    let inside = try XCTUnwrap(folded.first { $0.raw.label == "Inside" })
+    XCTAssertNil(inside.raw.hittable, "containment is undecided until a box exists")
+  }
+
   func testScrollContainerTypeNamesMatchElementTypeSet() {
     XCTAssertEqual(
       SnapshotVisibilityFold.scrollContainerTypeNames,

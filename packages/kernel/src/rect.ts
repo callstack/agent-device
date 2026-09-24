@@ -22,13 +22,13 @@ function isCGRectInfinite(rect: Rect): boolean {
 }
 
 /**
- * Twin of `SnapshotGeometry.isPositiveFinite` on the runner, and the one place a box becomes a fact
- * this rule may plot or measure (#2891). Three refusals, each reachable by a different input: a
- * non-finite component; a box whose finite components still overflow its own right or bottom edge;
- * and `CGRect.infinite`, which the two numeric checks let through and which the Swift twin refuses
- * with `!rect.isInfinite`. The sentinel is refused by value here rather than in one producer's
- * parser because every TypeScript producer — the simulator AX bridge, the runner wire, a remote
- * provider's tree — feeds this one guard, and a viewport box that survives it makes every node
+ * Twin of `SnapshotGeometry.isPositiveFinite` on the runner, and the guard every viewport read passes
+ * a box through before it becomes evidence (#2891). Three refusals, each reachable by a different
+ * input: a non-finite component; a box whose finite components still overflow its own right or
+ * bottom edge; and `CGRect.infinite`, which the two numeric checks let through and which the Swift
+ * twin refuses with `!rect.isInfinite`. The sentinel is refused by value here rather than in one
+ * producer's parser because the producers are many — the simulator AX bridge, the runner wire, a
+ * remote provider's tree — and a viewport box that reaches the guard-free predicate makes every node
  * center on the screen land inside it.
  */
 export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
@@ -63,9 +63,12 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
  * with a positive finite frame whose center falls inside the viewport. It is the TypeScript twin of
  * the runner's Swift `SnapshotGeometry.isGeometricallyActionable`, including `CGRect.contains`'s
  * half-open right/bottom edges; `contracts/fixtures/snapshot-actionability-policy.json` pins both.
- * Callers without a viewport box withhold the bit instead of asking. The host AX bridge derives the
- * source bit from the node's own frame and the fold intersects it with the clipped frame, so a
- * `hittable:` selector cannot tell the two producers apart.
+ * Callers without a viewport box withhold the bit instead of asking. The `viewport` argument is
+ * trusted rather than re-checked, because a `boolean`-returning rule cannot answer "no idea": pass a
+ * box {@link isPositiveFiniteRect} accepted — the Swift twin needs no such request, since an unknown
+ * viewport is not representable in its `SnapshotViewport`. The host AX bridge derives the source bit
+ * from the node's own frame and the fold intersects it with the clipped frame, so a `hittable:`
+ * selector cannot tell the two producers apart.
  */
 export function isGeometricallyActionable(
   enabled: boolean,

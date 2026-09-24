@@ -624,8 +624,9 @@ extension RunnerTests {
   }
 
   /// #2891: a capture whose viewport read failed publishes no `hittable` bit at all. Pinned on the
-  /// encoded objects rather than the decoded model, because `false` and an absent bit are the same
-  /// `Bool?` in Swift and only the wire tells them apart — and the #2638 wrapper verdict reads a
+  /// encoded objects rather than on `capture.nodes`, because the promise is about the wire: a test
+  /// over the Swift values would still pass if a custom encoder started writing `"hittable":null`
+  /// for `nil`, which is a shape no host decoder is specified for. The #2638 wrapper verdict reads a
   /// declared `false` as evidence that the wrapper is inert.
   func testAMissingViewportOmitsTheHittableBitFromTheWire() throws {
     func node(

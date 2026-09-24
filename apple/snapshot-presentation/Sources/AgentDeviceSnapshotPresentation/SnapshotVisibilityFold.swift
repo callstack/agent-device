@@ -205,15 +205,12 @@ public enum SnapshotVisibilityFold {
               selected: node.selected,
               hittable: node.parentIndex == nil
                 ? false
-                : node.hittable.flatMap { sourceHittable in
-                  sourceHittable
-                    ? SnapshotGeometry.isGeometricallyActionable(
-                      enabled: node.enabled,
-                      frame: decision.effectiveFrame,
-                      viewport: viewport
-                    )
-                    : false
-                },
+                : clippedHittability(
+                  source: node.hittable,
+                  enabled: node.enabled,
+                  clippedFrame: decision.effectiveFrame,
+                  viewport: viewport
+                ),
               depth: outDepth,
               parentIndex: keptIndex,
               hiddenContentAbove: node.hiddenContentAbove,
@@ -242,6 +239,25 @@ public enum SnapshotVisibilityFold {
       )
     }
     return applyHiddenContentHints(hints, to: kept)
+  }
+
+  /// The fold's share of the `hittable` policy (#2891). A declared `false` is kept; anything the
+  /// source left undecided is re-decided on the clipped frame, which refuses a disabled or
+  /// degenerate node with no viewport to consult and answers `nil` only while containment is the
+  /// open question. A `visibilityExempt` carrier clipped to nothing by a scroll anchor is that
+  /// `nil` today, and its own frame already answers the question.
+  private static func clippedHittability(
+    source: Bool?,
+    enabled: Bool,
+    clippedFrame: CGRect,
+    viewport: SnapshotViewport
+  ) -> Bool? {
+    if source == false { return false }
+    return SnapshotGeometry.isGeometricallyActionable(
+      enabled: enabled,
+      frame: clippedFrame,
+      viewport: viewport
+    )
   }
 
 }
