@@ -487,13 +487,27 @@ resolved the covered screen's button and the flow failed on an assertion about t
 arrived, and a `presentation: "formSheet"` route's fields matched intermittently (#2638).
 
 Decision. The fold applies modal containment: when the last transition view under a container carries
-UIKit's dimming view as its direct child, the earlier transition views whose frame that dimmed area
-spans are cut, with their subtrees, from the regular and interactive projections. Both ends of the
-claim are producer facts rather than an ordering guess — the dimming view is UIKit's own declaration
-that it dims what sits behind, and its frame is the producer's rectangle, which is what a covered
-container must be inside. A presentation with no dimming view, and any container whose earlier
-sibling is not a transition view, keep today's behavior: containment is asserted only where the
-producer states it, so the rule fails closed rather than guessing which siblings are shadows.
+UIKit's dimming view as its direct child and the producer reports that dimming view takes touches
+(`userInteractionEnabled: true`), the earlier transition views whose frame that dimmed area spans are
+cut, with their subtrees, from the regular and interactive projections. Every part of the claim is a
+producer fact rather than an ordering guess — the dimming view is UIKit's own declaration that it dims
+what sits behind, its interaction state says whether a touch there reaches what sits behind, and its
+frame is the producer's rectangle, which is what a covered container must be inside. A presentation
+with no dimming view, a dimming view the producer did not read or reports passing touches through,
+and any container whose earlier sibling is not a transition view keep today's behavior: containment
+is asserted only where the producer states it, so the rule fails closed rather than guessing which
+siblings are shadows.
+
+A sheet resting at an undimmed detent (`largestUndimmedDetentIdentifier`, react-native-screens
+`sheetLargestUndimmedDetentIndex`) is why the interaction state is part of the claim. UIKit keeps the
+dimming view in the tree at the same window-sized frame, and the presenting screen stays reachable: on
+react-navigation's form-sheet example a press on the presenting screen's `Height Steps` button
+navigates while the `Custom Dimming` sheet rests at its smallest detent. The bridge reports that
+dimming view `userInteractionEnabled: false`, and `true` for the dimmed form sheet and the card modal.
+No attribute the bridge already read told them apart, and `XC_kAXXCAttributeIsVisible` cannot either:
+it reads false for the undimmed sheet's dimming view and for the card modal's. The bridge reads the
+attribute for dimming views alone, in one follow-up read per view: requesting it on every node cost
+about half again the capture time on a 492-node tree, while the targeted read did not move it.
 Every source the cut removes is counted in the presentation's
 `stats.modalContainedNodeCount` — internal evidence, per ADR 0026, never wire vocabulary — because
 the same screen either side of an animation otherwise moves hundreds of comparable lines with nothing
@@ -508,8 +522,8 @@ exactly the 567-versus-76 divergence being fixed, since visibility filtering rea
 the mark; and cutting at acquisition would leak the decision into `--raw`, which owes the reader the
 tree the platform reported. Raw therefore still carries the covered screens.
 
-Producers that report no UIKit class names never trigger the cut, and that is a fact about their
-output rather than a backend exception in the fold: the runner already omits modal-contained content
+Producers that report no UIKit class names or no dimming-view interaction state never trigger the
+cut, and that is a fact about their output rather than a backend exception in the fold: the runner already omits modal-contained content
 from its own queries, `appium-source` and `limrun-ios-tree` report element types and no classes, and
 the macOS desktop surface arrives already presented. A scope naming a modal-contained screen now
 publishes an empty projection, which is the same healthy empty answer any other unmatched scope gives

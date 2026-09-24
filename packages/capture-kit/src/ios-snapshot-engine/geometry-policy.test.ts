@@ -12,12 +12,15 @@ type PresentationShape = Readonly<{
   containerRole?: string;
   rect?: Rect;
   dimming?: 'direct' | 'nested';
+  /** What the producer read from the dimming view; `undefined` means it did not read it. */
+  dimmingTakesTouches?: boolean;
 }>;
 
 /**
  * Mirrors a react-navigation capture: the presenting container carries only a drop shadow with
  * UIKit's dimming view below it, while each modal presentation carries a dimming view as a
- * direct child of its transition view.
+ * direct child of its transition view. The Simulator AX bridge reads `userInteractionEnabled`
+ * on every dimming view, so the fixture defaults to the dimmed state it reports.
  */
 function presentationSubtree(
   start: number,
@@ -26,11 +29,12 @@ function presentationSubtree(
   shape: PresentationShape,
 ): RawSnapshotNode[] {
   const rect = shape.rect ?? VIEWPORT;
+  const takesTouches = 'dimmingTakesTouches' in shape ? shape.dimmingTakesTouches : true;
   const dimmingRect: Rect = {
-    x: -rect.width,
-    y: -rect.height,
-    width: rect.width * 3,
-    height: rect.height * 3,
+    x: -VIEWPORT.width,
+    y: -VIEWPORT.height,
+    width: VIEWPORT.width * 3,
+    height: VIEWPORT.height * 3,
   };
   const nodes: RawSnapshotNode[] = [
     snapshotNode(start, depth, parentIndex, 'UITransitionView', 'Other'),
@@ -51,27 +55,20 @@ function presentationSubtree(
       height: 40,
     }),
   ];
-  if ((shape.dimming ?? 'direct') === 'direct') {
-    nodes.splice(
-      1,
-      0,
-      snapshotNode(start + 4, depth + 1, start, 'UIDimmingView', 'Other', undefined, dimmingRect),
-    );
-  } else {
-    nodes.splice(
-      2,
-      0,
-      snapshotNode(
-        start + 4,
-        depth + 2,
-        start + 1,
-        'UIDimmingView',
-        'Other',
-        undefined,
-        dimmingRect,
-      ),
-    );
-  }
+  const direct = (shape.dimming ?? 'direct') === 'direct';
+  const dimming = snapshotNode(
+    start + 4,
+    depth + (direct ? 1 : 2),
+    direct ? start : start + 1,
+    'UIDimmingView',
+    'Other',
+    undefined,
+    dimmingRect,
+  );
+  nodes.splice(direct ? 1 : 2, 0, {
+    ...dimming,
+    ...(takesTouches === undefined ? {} : { userInteractionEnabled: takesTouches }),
+  });
   return nodes;
 }
 
@@ -176,7 +173,7 @@ test('fails closed when the last sibling is not a presentation container', () =>
   const nodes = windowWith([
     ...presentationSubtree(1, 1, 0, { title: 'Article by Dalek' }),
     snapshotNode(6, 1, 0, '_UIAlertControllerView', 'Other', 'Don’t leave'),
-    snapshotNode(7, 2, 6, 'UIDimmingView', 'Other'),
+    { ...snapshotNode(7, 2, 6, 'UIDimmingView', 'Other'), userInteractionEnabled: true },
   ]);
   expect(collectModalContainedIndexes(nodes).size).toBe(0);
 });
@@ -193,12 +190,15 @@ test('fails closed when the dimming view does not span the earlier container', (
   const nodes = windowWith([
     ...presentationSubtree(1, 1, 0, { title: 'Article by Dalek' }),
     snapshotNode(6, 1, 0, 'UITransitionView', 'Other'),
-    snapshotNode(7, 2, 6, 'UIDimmingView', 'Other', undefined, {
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    }),
+    {
+      ...snapshotNode(7, 2, 6, 'UIDimmingView', 'Other', undefined, {
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      }),
+      userInteractionEnabled: true,
+    },
     snapshotNode(8, 2, 6, 'UIDropShadowView', 'Other', undefined, SHEET),
   ]);
   expect(collectModalContainedIndexes(nodes).size).toBe(0);
@@ -220,4 +220,40 @@ test('contains a full-screen presentation that a sheet does not geometrically co
   expect([...collectModalContainedIndexes(nodes)].sort((left, right) => left - right)).toEqual([
     1, 2, 3, 4, 5,
   ]);
+});
+
+test('leaves the presenting screen reachable under a sheet at an undimmed detent', () => {
+  const nodes = windowWith([
+    ...presentationSubtree(1, 1, 0, {
+      title: 'Form Sheet',
+      containerRole: 'RCTSurfaceHostingProxyRootView',
+      dimming: 'nested',
+      dimmingTakesTouches: false,
+    }),
+    ...presentationSubtree(6, 1, 0, {
+      title: 'Custom Dimming',
+      rect: { x: 8, y: 654, width: 386, height: 212 },
+      dimmingTakesTouches: false,
+    }),
+  ]);
+  expect(collectModalContainedIndexes(nodes).size).toBe(0);
+  const folded = foldIosSnapshot(nodes, VIEWPORT, false, 'cursor-projected');
+  expect(folded.nodes.flatMap((node) => (node.raw.label ? [node.raw.label] : []))).toEqual([
+    'Form Sheet',
+    'Push from Form Sheet',
+    'Custom Dimming',
+    'Push from Custom Dimming',
+  ]);
+});
+
+test('fails closed when the producer did not read whether the dimming view takes touches', () => {
+  const nodes = windowWith([
+    ...presentationSubtree(1, 1, 0, { title: 'Article by Dalek' }),
+    ...presentationSubtree(6, 1, 0, {
+      title: 'Albums',
+      rect: SHEET,
+      dimmingTakesTouches: undefined,
+    }),
+  ]);
+  expect(collectModalContainedIndexes(nodes).size).toBe(0);
 });

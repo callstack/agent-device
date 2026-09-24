@@ -1,6 +1,10 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { collectChildrenByParent, type SnapshotTreeRuleContext } from './tree.ts';
+import {
+  collectChildrenByParent,
+  collectSubtreeByParentLinks,
+  type SnapshotTreeRuleContext,
+} from './tree.ts';
 
 export function collectIosStructuralIdentifierSuppression(
   nodes: RawSnapshotNode[],
@@ -26,22 +30,4 @@ export function collectIosStructuralIdentifierSuppression(
     }
     context.suppressNode(node, content);
   }
-}
-
-function collectSubtreeByParentLinks(
-  root: RawSnapshotNode,
-  childrenByParent: ReadonlyMap<number, RawSnapshotNode[]>,
-): RawSnapshotNode[] {
-  const descendants: RawSnapshotNode[] = [];
-  const visited = new Set<number>([root.index]);
-  const pending = [...(childrenByParent.get(root.index) ?? [])];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current || visited.has(current.index)) continue;
-    visited.add(current.index);
-    descendants.push(current);
-    const children = childrenByParent.get(current.index);
-    if (children) pending.push(...children);
-  }
-  return descendants;
 }

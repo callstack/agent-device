@@ -429,3 +429,27 @@ test('a window reporting the app box quarter-turned is counted as an unresolved 
     0,
   );
 });
+
+test('the bridge tree publishes whether a dimming view takes touches', () => {
+  const dimming = (enabled?: unknown) => ({
+    [application]: 'UIDimmingView',
+    [frame]: { X: -390, Y: -844, Width: 1170, Height: 2532 },
+    ...(enabled === undefined ? {} : { XC_kAXXCAttributeIsUserInteractionEnabled: enabled }),
+    [children]: [],
+  });
+  const decode = (enabled?: unknown) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'Application', [children]: [dimming(enabled)] },
+      { truncated: false },
+      limits,
+    ).nodes[1];
+
+  assert.equal(decode(true)?.userInteractionEnabled, true);
+  assert.equal(decode(false)?.userInteractionEnabled, false, 'a sheet at an undimmed detent');
+  assert.equal(decode()?.userInteractionEnabled, undefined, 'an unread fact stays unknown');
+  assert.throws(
+    () => decode(1),
+    (error: unknown) =>
+      error instanceof SnapshotSourceError && error.failureCode === 'user-interaction-invalid',
+  );
+});

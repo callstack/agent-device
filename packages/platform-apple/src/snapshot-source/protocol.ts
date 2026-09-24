@@ -3,7 +3,7 @@ import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceLimits } from './types.ts';
 
 export const SNAPSHOT_SOURCE_PROTOCOL_VERSION = 1;
-export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.6.0';
+export const SNAPSHOT_SOURCE_VERSION = 'agent-device-simulator-ax-v1.7.0';
 const FRAME_HEADER_BYTES = 4;
 
 export const SNAPSHOT_SOURCE_WIRE_KEYS = Object.freeze([
@@ -45,6 +45,7 @@ export const SNAPSHOT_SOURCE_ATTRIBUTE_KEYS = Object.freeze([
   'XC_kAXXCAttributeFrame',
   'XC_kAXXCAttributeAutomationType',
   'XC_kAXXCAttributeTraits',
+  'XC_kAXXCAttributeIsUserInteractionEnabled',
   'XC_kAXXCAttributeChildren',
 ] as const);
 

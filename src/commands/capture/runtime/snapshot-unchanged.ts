@@ -88,6 +88,7 @@ type ComparableSnapshotNode = Omit<
   | 'selectionStart'
   | 'selectionEnd'
   | 'visibleToUser'
+  | 'userInteractionEnabled'
   | 'inheritsLabel'
   | 'inheritsIdentifier'
 >;

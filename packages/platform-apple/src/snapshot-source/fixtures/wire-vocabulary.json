@@ -1,6 +1,6 @@
 {
   "protocolVersion": 1,
-  "sourceVersion": "agent-device-simulator-ax-v1.6.0",
+  "sourceVersion": "agent-device-simulator-ax-v1.7.0",
   "requestKeys": [
     "verb",
     "requestId",
@@ -38,6 +38,7 @@
     "XC_kAXXCAttributeFrame",
     "XC_kAXXCAttributeAutomationType",
     "XC_kAXXCAttributeTraits",
+    "XC_kAXXCAttributeIsUserInteractionEnabled",
     "XC_kAXXCAttributeChildren"
   ]
 }

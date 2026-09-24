@@ -18,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.6.0";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.7.0";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -34,8 +34,11 @@ static NSString *const kAttributeFrame = @"XC_kAXXCAttributeFrame";
 static NSString *const kAttributeAutomationType = @"XC_kAXXCAttributeAutomationType";
 static NSString *const kAttributeTraits = @"XC_kAXXCAttributeTraits";
 static NSString *const kAttributeChildren = @"XC_kAXXCAttributeChildren";
+static NSString *const kAttributeIsUserInteractionEnabled = @"XC_kAXXCAttributeIsUserInteractionEnabled";
+static NSString *const kPresentationDimmingViewClass = @"UIDimmingView";
 static NSString *const kSnapshotAttributes = @"UIAccessibilitySnapshotKeyAttributes";
 static NSString *const kSnapshotChildren = @"UIAccessibilitySnapshotKeyChildren";
+static NSString *const kSnapshotElement = @"UIAccessibilitySnapshotKeyElement";
 static NSString *const kXctAutomationSupportPath =
     @"/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework/XCTAutomationSupport";
 static NSString *const kAxRuntimePath =
@@ -202,8 +205,35 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   return nil;
 }
 
+/*
+ * Whether a presentation's dimming view takes touches is what separates a sheet that blocks the
+ * content under it from one resting at an undimmed detent, and nothing else in the tree says so.
+ * It is read for dimming views alone: requesting it for every node costs about half again the
+ * capture time.
+ */
+- (nullable NSNumber *)userInteractionEnabledForSnapshot:(NSDictionary *)snapshot
+                                                 options:(nullable NSDictionary *)options
+{
+  id element = snapshot[kSnapshotElement];
+  NSNumber *attribute = [options[@"attributes"] firstObject];
+  if (!element || ![attribute isKindOfClass:NSNumber.class]) return nil;
+  @try {
+    NSError *failure = nil;
+    NSDictionary *read = [_framework userTestingSnapshotForElement:element options:options error:&failure];
+    if (![read isKindOfClass:NSDictionary.class]) return nil;
+    NSDictionary *attributes = read[kSnapshotAttributes];
+    if (![attributes isKindOfClass:NSDictionary.class]) return nil;
+    id value = attributes[attribute];
+    return [value isKindOfClass:NSNumber.class] ? @([(NSNumber *)value boolValue]) : nil;
+  } @catch (NSException *exception) {
+    (void)exception;
+    return nil;
+  }
+}
+
 - (nullable NSDictionary *)nodeFromSnapshot:(id)snapshot
                               namesByNumber:(NSDictionary<NSNumber *, NSString *> *)namesByNumber
+                         interactionOptions:(nullable NSDictionary *)interactionOptions
                                       depth:(NSUInteger)depth
                                    maxDepth:(NSUInteger)maxDepth
                                    maxNodes:(NSUInteger)maxNodes
@@ -233,6 +263,11 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     id safe = [self jsonValue:attributes[number] name:name];
     if (safe) node[name] = safe;
   }
+  if ([node[kAttributeElementType] isEqual:kPresentationDimmingViewClass]) {
+    NSNumber *interaction = [self userInteractionEnabledForSnapshot:(NSDictionary *)snapshot
+                                                            options:interactionOptions];
+    if (interaction) node[kAttributeIsUserInteractionEnabled] = interaction;
+  }
 
   NSArray *children = ((NSDictionary *)snapshot)[kSnapshotChildren];
   if (![children isKindOfClass:NSArray.class]) {
@@ -246,6 +281,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     for (id child in children) {
       NSDictionary *built = [self nodeFromSnapshot:child
                                      namesByNumber:namesByNumber
+                                interactionOptions:interactionOptions
                                              depth:depth + 1
                                           maxDepth:maxDepth
                                              maxNodes:maxNodes
@@ -317,6 +353,15 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   options[@"maxDepth"] = @(maxDepth);
   options[@"maxChildren"] = @(maxNodes);
   options[@"maxArrayCount"] = @(maxNodes);
+  NSArray<NSNumber *> *interactionAttribute = _attributeNumbersForNames(@[ kAttributeIsUserInteractionEnabled ]);
+  NSMutableDictionary *interactionOptions = nil;
+  if ([interactionAttribute isKindOfClass:NSArray.class] && interactionAttribute.count == 1) {
+    interactionOptions = [options mutableCopy];
+    interactionOptions[@"attributes"] = interactionAttribute;
+    interactionOptions[@"maxDepth"] = @0;
+    interactionOptions[@"maxChildren"] = @0;
+    interactionOptions[@"maxArrayCount"] = @0;
+  }
   BOOL automationEnabled = [self assertAutomationMode:YES];
   NSError *runtimeError = nil;
   id snapshot = nil;
@@ -372,6 +417,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   NSUInteger count = 0;
   NSDictionary *tree = [self nodeFromSnapshot:snapshot
                                 namesByNumber:namesByNumber
+                           interactionOptions:interactionOptions
                                         depth:0
                                      maxDepth:maxDepth
                                         maxNodes:maxNodes

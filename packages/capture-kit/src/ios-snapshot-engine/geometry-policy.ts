@@ -1,7 +1,7 @@
 import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { collectChildrenByParent, collectSubtreeIndexes } from './tree.ts';
+import { collectChildrenByParent, collectSubtreeByParentLinks } from './tree.ts';
 import type { IosSnapshotFoldPolicy } from './types.ts';
 
 const SCROLL_CONTAINER_TYPES = new Set(['collectionview', 'scrollview', 'table']);
@@ -244,10 +244,12 @@ type CoveringPresentation = Readonly<{
  * container, and the host accessibility snapshot reports siblings in that subview order. A
  * presenting container carries only a drop shadow, so a direct-child dimming view separates a
  * modal presentation from an ordinary container, and its dimmed area says which earlier
- * presentation the user can no longer reach.
+ * presentation the user can no longer reach. A sheet resting at an undimmed detent keeps that
+ * dimming view with user interaction disabled and touches reach the content under it, so the
+ * rule asserts containment only when the producer states the dimming view takes touches.
  *
- * Producers that report no UIKit class names — the XCTest runner, whose own queries already
- * omit modal-contained content — never trigger this rule.
+ * Producers that report no UIKit class names or no `userInteractionEnabled` — the XCTest runner,
+ * whose own queries already omit modal-contained content — never trigger this rule.
  */
 export function collectModalContainedIndexes(
   nodes: readonly RawSnapshotNode[],
@@ -258,10 +260,10 @@ export function collectModalContainedIndexes(
     const covering = findCoveringPresentation(siblings, childrenByParent);
     if (!covering) continue;
     for (const sibling of siblings.slice(0, -1)) {
-      if (isDimmedByPresentation(covering, sibling)) {
-        for (const index of collectSubtreeIndexes(sibling.index, childrenByParent)) {
-          contained.add(index);
-        }
+      if (!isDimmedByPresentation(covering, sibling)) continue;
+      contained.add(sibling.index);
+      for (const descendant of collectSubtreeByParentLinks(sibling, childrenByParent)) {
+        contained.add(descendant.index);
       }
     }
   }
@@ -275,8 +277,10 @@ function findCoveringPresentation(
   const last = siblings.at(-1);
   if (!last || !isPresentationContainer(last)) return undefined;
   const dimming = (childrenByParent.get(last.index) ?? []).find(isPresentationDimmingView);
-  const dimmingRect = dimming && isPositiveFiniteRect(dimming.rect) ? dimming.rect : undefined;
-  return dimmingRect ? { container: last, dimmingRect } : undefined;
+  if (dimming?.userInteractionEnabled !== true || !isPositiveFiniteRect(dimming.rect)) {
+    return undefined;
+  }
+  return { container: last, dimmingRect: dimming.rect };
 }
 
 function isDimmedByPresentation(covering: CoveringPresentation, sibling: RawSnapshotNode): boolean {

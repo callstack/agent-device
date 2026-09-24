@@ -55,13 +55,15 @@
   arrived, and `presentation: "formSheet"` fields matched intermittently (#2638). Geometry cannot
   close this: a sheet leaves most of the covered screen uncovered, and the occlusion pass only
   treats floating chrome as a cover. The presentation cut now applies modal containment — when the
-  last transition view under a container carries UIKit's dimming view as its direct child, the
-  earlier transition views that dimmed area spans, and everything under them, are cut from the
-  regular and interactive snapshots. A presentation UIKit does not dim is left as it was, so the cut
-  asserts containment only where the producer states it. `snapshot --raw` still reports the covered
-  screens, and producers that report no UIKit class names — the XCTest runner, whose own queries
-  answered 76 nodes for that same state, plus `appium-source` and `limrun-ios-tree` — never trigger
-  the cut. All 39 flows of React Navigation's Maestro suite pass on an iPhone 17 Simulator running
+  last transition view under a container carries UIKit's dimming view as its direct child and that
+  dimming view takes touches, the earlier transition views that dimmed area spans, and everything
+  under them, are cut from the regular and interactive snapshots. The bridge now reads
+  `userInteractionEnabled` on dimming views (source version v1.7.0) because a sheet resting at an
+  undimmed detent keeps its dimming view while the screen under it stays reachable; that sheet, and
+  any presentation UIKit does not dim, is left as it was, so the cut asserts containment only where
+  the producer states it. `snapshot --raw` still reports the covered screens, and producers that
+  report no UIKit class names — the XCTest runner, whose own queries answered 76 nodes for that same
+  state, plus `appium-source` and `limrun-ios-tree` — never trigger the cut. All 39 flows of React Navigation's Maestro suite pass on an iPhone 17 Simulator running
   iOS 26.2 with this change, including two that never passed on the bridge.
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on

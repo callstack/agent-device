@@ -239,6 +239,8 @@ export type RawSnapshotNode = {
   selectionStart?: number;
   selectionEnd?: number;
   visibleToUser?: boolean;
+  /** UIKit `isUserInteractionEnabled`; absent means the producer did not read it, not false. */
+  userInteractionEnabled?: boolean;
   hittable?: boolean;
   depth?: number;
   parentIndex?: number;

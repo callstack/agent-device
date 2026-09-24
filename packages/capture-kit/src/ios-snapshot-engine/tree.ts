@@ -25,21 +25,23 @@ export function collectChildrenByParent(
   return childrenByParent;
 }
 
-/** Walks a subtree through parent links only, so it does not require reported depths. */
-export function collectSubtreeIndexes(
-  startIndex: number,
+/** A node's descendants, walked through parent links only so reported depths are not needed. */
+export function collectSubtreeByParentLinks(
+  root: RawSnapshotNode,
   childrenByParent: ReadonlyMap<number, RawSnapshotNode[]>,
-): number[] {
-  const indexes: number[] = [];
-  const pending = [startIndex];
+): RawSnapshotNode[] {
+  const descendants: RawSnapshotNode[] = [];
+  const visited = new Set<number>([root.index]);
+  const pending = [...(childrenByParent.get(root.index) ?? [])];
   while (pending.length > 0) {
-    const index = pending.pop()!;
-    indexes.push(index);
-    for (const child of childrenByParent.get(index) ?? []) {
-      pending.push(child.index);
-    }
+    const current = pending.pop();
+    if (!current || visited.has(current.index)) continue;
+    visited.add(current.index);
+    descendants.push(current);
+    const children = childrenByParent.get(current.index);
+    if (children) pending.push(...children);
   }
-  return indexes;
+  return descendants;
 }
 
 const descendantEndPositionCache = new WeakMap<RawSnapshotNode[], number[]>();

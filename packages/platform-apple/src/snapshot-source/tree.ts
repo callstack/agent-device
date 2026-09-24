@@ -20,6 +20,7 @@ const ATTRIBUTE = Object.freeze({
   frame: 'XC_kAXXCAttributeFrame',
   automationType: 'XC_kAXXCAttributeAutomationType',
   traits: 'XC_kAXXCAttributeTraits',
+  userInteractionEnabled: 'XC_kAXXCAttributeIsUserInteractionEnabled',
   children: 'XC_kAXXCAttributeChildren',
 });
 
@@ -245,6 +246,7 @@ function nodeFacts(
   // Publishes `selected: true` only when the selected bit is set and omits it otherwise — the same
   // shape the XCTest tree produces, so a `selected:` selector cannot tell the producers apart.
   const selected = traits === undefined || (traits & SELECTED_TRAIT) === 0n ? undefined : true;
+  const userInteractionEnabled = optionalBoolean(value[ATTRIBUTE.userInteractionEnabled]);
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
@@ -265,6 +267,7 @@ function nodeFacts(
     ...(frame ? { rect: frame } : {}),
     ...(enabled === undefined ? {} : { enabled }),
     ...(selected === undefined ? {} : { selected }),
+    ...(userInteractionEnabled === undefined ? {} : { userInteractionEnabled }),
     depth,
   };
 }
@@ -393,6 +396,14 @@ function traitsFromGuest(value: unknown): bigint | undefined {
     throw snapshotSourceError('malformed-tree', 'traits-invalid');
   }
   return BigInt(value);
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'boolean') {
+    throw snapshotSourceError('malformed-tree', 'user-interaction-invalid');
+  }
+  return value;
 }
 
 function optionalInteger(value: unknown): number | undefined {
