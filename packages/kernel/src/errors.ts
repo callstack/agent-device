@@ -285,6 +285,32 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** One command a retry loop ran and could not make succeed, kept in the tool's own terms. */
+export type CommandAttemptFailure = {
+  args: readonly string[];
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
+/**
+ * The per-attempt view a retry loop attaches to its refusal, so the caller can tell which spelling
+ * the device rejected rather than only that all of them failed. Stderr is truncated per attempt, not
+ * in total: every attempt keeps a head of its own, because the loop usually fails for a reason that
+ * appears in only one of them.
+ */
+const COMMAND_ATTEMPT_STDERR_BUDGET = 400;
+
+export function summarizeCommandAttemptFailures(
+  failures: CommandAttemptFailure[],
+): Array<{ args: string; exitCode: number; stderr: string }> {
+  return failures.map((failure) => ({
+    args: failure.args.join(' '),
+    exitCode: failure.exitCode,
+    stderr: failure.stderr.slice(0, COMMAND_ATTEMPT_STDERR_BUDGET),
+  }));
+}
+
 export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {
   if (err instanceof AppError) return err;
   if (err instanceof Error) {

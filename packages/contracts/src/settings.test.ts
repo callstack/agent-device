@@ -1,14 +1,18 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { READABLE_SETTINGS } from './platform-runtime-operations.ts';
+import type { SettingsUpdateOptions } from './client-settings.ts';
 import {
+  APPEARANCE_ACTIONS,
   describeSettingRead,
   describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   MACOS_PERMISSION_TARGETS,
   MOBILE_PERMISSION_TARGETS,
+  parseAppearanceAction,
   parsePermissionAction,
   parsePermissionTarget,
+  parseSettingState,
   parseTextSizeCategory,
   PERMISSION_ACTIONS,
   PERMISSION_MODES,
@@ -18,6 +22,7 @@ import {
   SETTINGS_USAGE_OVERRIDE,
   TEXT_SIZE_CATEGORIES,
   textSizeSettingPayload,
+  type AppearanceAction,
   type PermissionAction,
   type PermissionTarget,
   type ReadableSetting,
@@ -264,5 +269,65 @@ describe('permission vocabulary types', () => {
     expectTypeOf<'accessibility'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'screen-recording'>().not.toMatchTypeOf<PermissionTarget>();
     expectTypeOf<'input-monitoring'>().not.toMatchTypeOf<PermissionTarget>();
+  });
+});
+
+// Fixed expected data on purpose: these are the acceptance sets the Apple and Android settings
+// owners each enforced in their own copy of the same parser before the copies were deleted. The
+// two parsers agreed byte for byte, including the refusal wording, so one declaration now carries
+// both — and a widened or narrowed set here fails here rather than diverging one platform at a
+// time, which is the only way the copies could have drifted unnoticed.
+const APPEARANCE_SET = ['light', 'dark', 'toggle'] as const;
+
+describe('parseAppearanceAction', () => {
+  test('holds the appearances every settings surface already accepted, in help order', () => {
+    expect([...APPEARANCE_ACTIONS]).toEqual([...APPEARANCE_SET]);
+  });
+
+  test('accepts each appearance under each normalization', () => {
+    for (const action of APPEARANCE_SET) {
+      for (const normalize of NORMALIZATIONS) {
+        expect(parseAppearanceAction(normalize(action))).toBe(action);
+      }
+    }
+  });
+
+  test('refuses an appearance outside the vocabulary with the accepted list', () => {
+    for (const state of ['bright', '', '   ', 'light-dark']) {
+      expectInvalidArgs(
+        () => parseAppearanceAction(state),
+        `Invalid appearance state: ${state}. Use ${[...APPEARANCE_SET].join('|')}.`,
+      );
+    }
+  });
+});
+
+describe('parseSettingState', () => {
+  test('maps every on and off spelling in any casing', () => {
+    for (const state of ['on', 'ON', 'true', 'TRUE', '1']) {
+      expect(parseSettingState(state)).toBe(true);
+    }
+    for (const state of ['off', 'OFF', 'false', 'FALSE', '0']) {
+      expect(parseSettingState(state)).toBe(false);
+    }
+  });
+
+  test('refuses a state that spells neither, and keeps padding unaccepted', () => {
+    // Padding is not one of these spellings: unlike an appearance name, a state reaches `settings
+    // put` as an argument, where a stray space is a caller bug rather than a casing variant.
+    for (const state of ['maybe', '2', '', ' on ']) {
+      expectInvalidArgs(() => parseSettingState(state), `Invalid setting state: ${state}`);
+    }
+  });
+});
+
+describe('appearance vocabulary types', () => {
+  test('the vocabulary stays the appearance state the published client type carries', () => {
+    // The CLI's membership set, both platform parsers, and the published client union are all built
+    // from this one declaration now. The union itself stays spelled out in `client-settings.ts` so
+    // the shipped .d.ts keeps its literal shape; this pin is what stops the two drifting.
+    expectTypeOf<AppearanceAction>().toEqualTypeOf<
+      Extract<SettingsUpdateOptions, { setting: 'appearance' }>['state']
+    >();
   });
 });

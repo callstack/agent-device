@@ -1,8 +1,14 @@
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  summarizeCommandAttemptFailures,
+  type CommandAttemptFailure,
+} from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import {
+  parseAppearanceAction,
+  parseSettingState,
   parseTextSizeCategory,
   textSizeSettingPayload,
   TEXT_SIZE_CATEGORIES,
@@ -11,12 +17,6 @@ import {
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
-import {
-  parseAppearanceAction,
-  parseSettingState,
-  summarizeCommandAttemptFailures,
-  type CommandAttemptFailure,
-} from './settings-parsing.ts';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';

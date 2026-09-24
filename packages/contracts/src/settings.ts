@@ -71,6 +71,23 @@ export const TEXT_SIZE_CATEGORIES = [
 export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
 
 /**
+ * The appearances `settings appearance` accepts, in the order `settings` help lists them. Apple
+ * applies them natively; Android maps them onto `ui_night_mode`. Acceptance is not support.
+ */
+export const APPEARANCE_ACTIONS = ['light', 'dark', 'toggle'] as const;
+
+export type AppearanceAction = (typeof APPEARANCE_ACTIONS)[number];
+
+/**
+ * The state spellings `settings <setting> <state>` accepts. Unlike the appearance and permission
+ * vocabularies these are aliases onto a boolean rather than a name the device echoes back, so
+ * membership — not {@link findVocabularyName} — decides, and padding stays rejected: an
+ * `adb shell settings put` argument with a stray space in it is a caller bug, not a spelling.
+ */
+const SETTING_STATE_ON = ['on', 'true', '1'];
+const SETTING_STATE_OFF = ['off', 'false', '0'];
+
+/**
  * The settings that answer a bare `settings <setting>` with the value the target holds. This is the
  * vocabulary every settings type and every settings owner reads it from; the matching value is
  * `READABLE_SETTINGS` in `platform-runtime-operations.ts`, where the CLI hub can evaluate it, and
@@ -137,7 +154,7 @@ export type SettingOptions = {
 const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
 const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';
 const SETTINGS_ANIMATIONS_USAGE = 'animations <on|off>';
-const SETTINGS_APPEARANCE_USAGE = 'appearance <light|dark|toggle>';
+const SETTINGS_APPEARANCE_USAGE = `appearance <${APPEARANCE_ACTIONS.join('|')}>`;
 const SETTINGS_FACEID_USAGE = 'faceid <match|nonmatch|enroll|unenroll>';
 const SETTINGS_TOUCHID_USAGE = 'touchid <match|nonmatch|enroll|unenroll>';
 const SETTINGS_FINGERPRINT_USAGE = 'fingerprint <match|nonmatch>';
@@ -243,4 +260,26 @@ export function parsePermissionTarget(value: string | undefined): PermissionTarg
     'INVALID_ARGS',
     `permission setting requires a target: ${MOBILE_PERMISSION_TARGETS.join('|')}`,
   );
+}
+
+/**
+ * The appearance a caller asked for. Every surface that sets one parses here first: `simctl` and
+ * `adb` both answer a bad token with a tool-specific error or a silent no-op, so the refusal has to
+ * name the accepted set before a device is touched.
+ */
+export function parseAppearanceAction(state: string): AppearanceAction {
+  const parsed = findVocabularyName(APPEARANCE_ACTIONS, state);
+  if (parsed !== undefined) return parsed;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid appearance state: ${state}. Use ${APPEARANCE_ACTIONS.join('|')}.`,
+  );
+}
+
+/** The boolean a `settings <setting> <state>` positional spells, in any casing. */
+export function parseSettingState(state: string): boolean {
+  const normalized = state.toLowerCase();
+  if (SETTING_STATE_ON.includes(normalized)) return true;
+  if (SETTING_STATE_OFF.includes(normalized)) return false;
+  throw new AppError('INVALID_ARGS', `Invalid setting state: ${state}`);
 }

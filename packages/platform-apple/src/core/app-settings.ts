@@ -1,24 +1,24 @@
 import {
   getUnsupportedMacOsSettingMessage,
   type MobilePermissionTarget,
+  parseAppearanceAction,
   parsePermissionAction,
   parsePermissionTarget,
+  parseSettingState,
   type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  summarizeCommandAttemptFailures,
+  type CommandAttemptFailure,
+} from '@agent-device/kernel/errors';
 import { readHostDirectory, removeHostPath } from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
-import {
-  parseAppearanceAction,
-  parseSettingState,
-  summarizeCommandAttemptFailures,
-  type CommandAttemptFailure,
-} from './settings-parsing.ts';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';

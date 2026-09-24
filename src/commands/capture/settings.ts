@@ -1,6 +1,7 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import {
+  APPEARANCE_ACTIONS,
   MACOS_PERMISSION_TARGETS,
   MOBILE_PERMISSION_TARGETS,
   parseTextSizeCategory,
@@ -172,7 +173,7 @@ type AppearanceState = Extract<SettingsUpdateOptions, { setting: 'appearance' }>
 
 const ON_OFF_SETTINGS = setOf<OnOffSetting>('wifi', 'airplane', 'location', 'animations');
 const ON_OFF_STATES = setOf<OnOffState>('on', 'off');
-const APPEARANCE_STATES = setOf<AppearanceState>('light', 'dark', 'toggle');
+const APPEARANCE_STATES = setOf<AppearanceState>(...APPEARANCE_ACTIONS);
 const BIOMETRIC_SETTINGS = setOf<BiometricSetting>('faceid', 'touchid');
 const BIOMETRIC_STATES = setOf<BiometricState>('match', 'nonmatch', 'enroll', 'unenroll');
 const FINGERPRINT_STATES = setOf<FingerprintState>('match', 'nonmatch');

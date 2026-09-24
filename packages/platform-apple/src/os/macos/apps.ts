@@ -1,9 +1,9 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { parseAppearanceAction } from '@agent-device/contracts/settings';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parseAppearanceAction } from '../../core/settings-parsing.ts';
 import {
   createAppResolutionCache,
   type AppResolutionCacheScope,
