@@ -296,7 +296,7 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {
-    for (NSUInteger row = 0; row < 150; row++) {
+    for (NSUInteger row = 0; row < 500; row++) {
       UILabel *rowLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60 + (row % 30) * 24, 400, 16)];
       rowLabel.text = [NSString stringWithFormat:@"Crowded row %lu", (unsigned long)row];
       rowLabel.accessibilityIdentifier = [NSString stringWithFormat:@"agent-device-crowded-row-%lu", (unsigned long)row];
@@ -304,9 +304,10 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
     }
   }
 
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"]) {
+  BOOL markedButton = [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"];
+  if (markedButton || [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup-window"]) {
     UIButton *dismissRegion = [UIButton buttonWithType:UIButtonTypeSystem];
-    dismissRegion.accessibilityIdentifier = @" Dismiss Popup ";
+    dismissRegion.accessibilityIdentifier = markedButton ? @" Dismiss Popup " : @"agent-device-close-popover";
     [dismissRegion setTitle:@"Close popover" forState:UIControlStateNormal];
     dismissRegion.frame = CGRectMake(40, 40, 200, 44);
     [self.view addSubview:dismissRegion];
@@ -355,6 +356,11 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 
   self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
   self.window.rootViewController = [[AgentDeviceRunnerViewController alloc] init];
+#if TARGET_OS_IOS
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup-window"]) {
+    self.window.accessibilityIdentifier = @"Dismiss popup";
+  }
+#endif
   [self.window makeKeyAndVisible];
 }
 

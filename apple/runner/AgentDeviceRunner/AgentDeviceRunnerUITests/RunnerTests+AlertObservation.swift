@@ -68,9 +68,8 @@ extension RunnerTests {
   }
 
   private func containsDismissPopupMarker(_ snapshot: XCUIElementSnapshot) -> Bool {
-    [snapshot.label, snapshot.identifier].contains {
-      $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("dismiss popup") == .orderedSame
-    } || snapshot.children.contains { containsDismissPopupMarker($0) }
+    [snapshot.label, snapshot.identifier].contains { isDismissPopupMarker($0) } ||
+      snapshot.children.contains { containsDismissPopupMarker($0) }
   }
 
   private func alertPresentation(_ snapshot: XCUIElementSnapshot) -> RunnerAlertPresentation {

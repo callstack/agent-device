@@ -33,10 +33,22 @@ extension RunnerTests {
     XCTAssertTrue(alert.buttons.contains { $0.identifier == " Dismiss Popup " })
   }
 
+  func testAlertResolutionFindsAWindowThatIsItselfTheDismissPopupMarker() throws {
+    launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup-window"])
+    defer { terminateCrowdedScreen() }
+
+    let alert = try XCTUnwrap(
+      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+    )
+    XCTAssertEqual(alert.source, .dismissPopup)
+    XCTAssertEqual(alert.root.identifier, "Dismiss popup")
+    XCTAssertTrue(alert.buttons.contains { $0.identifier == "agent-device-close-popover" })
+  }
+
   private func launchCrowdedScreen(extraArguments: [String]) {
     app.launchArguments = ["--agent-device-crowded-screen"] + extraArguments
     app.launch()
-    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-149"].waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
   }
 
   private func terminateCrowdedScreen() {
