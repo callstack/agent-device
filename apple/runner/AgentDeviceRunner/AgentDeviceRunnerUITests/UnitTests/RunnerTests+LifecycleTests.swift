@@ -9,7 +9,7 @@ private struct AlertCommandTraitsFixture: Decodable {
 }
 
 extension RunnerTests {
-  func testAlertReadOnlyClassificationMatchesGoldenTable() throws {
+  func testAlertRetryFactMatchesTheSharedGoldenTable() throws {
     let fixtureURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -24,7 +24,11 @@ extension RunnerTests {
     )
     XCTAssertEqual(cases.map { $0.command.action }, [nil, "get", "accept", "dismiss"])
     for fixture in cases {
-      XCTAssertEqual(isReadOnlyCommand(fixture.command), fixture.readOnly, fixture.name)
+      XCTAssertEqual(
+        fixture.command.traits.retryOnSessionLoss,
+        fixture.readOnly,
+        fixture.name
+      )
     }
   }
 
@@ -153,14 +157,19 @@ extension RunnerTests {
     return (try execute(command: try runnerCommandFixture(json)), target)
   }
 
-  /// Covers a user-level read and a mutation's leading read (a gesture's `gestureViewport`).
+  /// Covers a user-level read, a mutation's leading read (a gesture's `gestureViewport`), and the read
+  /// that resolves a selector tap (`querySelector`, whose refusal the retry fact alone used to decide,
+  /// #2890).
   func testReadRefusesToLaunchANotRunningSessionApp() throws {
-    for command in ["snapshot", "gestureViewport"] {
-      let (response, target) = try executeOnTerminatedTarget(
-        #"{"command":"\#(command)","commandId":"read","appBundleId":"\#(Self.notRunningTargetBundleId)"}"#
-      )
-      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.appNotRunning, command)
-      XCTAssertEqual(target.state, .notRunning, "\(command) must not launch the session app")
+    let bundleId = Self.notRunningTargetBundleId
+    for request in [
+      #"{"command":"snapshot","commandId":"read","appBundleId":"\#(bundleId)"}"#,
+      #"{"command":"gestureViewport","commandId":"read","appBundleId":"\#(bundleId)"}"#,
+      #"{"command":"querySelector","selectorKey":"label","selectorValue":"Settings","commandId":"read","appBundleId":"\#(bundleId)"}"#
+    ] {
+      let (response, target) = try executeOnTerminatedTarget(request)
+      XCTAssertEqual(response.error?.code, RunnerWireErrorCode.appNotRunning, request)
+      XCTAssertEqual(target.state, .notRunning, "\(request) must not launch the session app")
       target.terminate()
     }
   }

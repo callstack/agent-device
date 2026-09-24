@@ -222,7 +222,7 @@ extension RunnerTests {
         invalidateCachedTarget(reason: "xctest_recorded_failure")
         return failureResponse
       }
-      if !hasRetried, shouldRetryCommand(command), shouldRetryResponse(response) {
+      if !hasRetried, command.traits.retryOnSessionLoss, shouldRetryResponse(response) {
         NSLog(
           "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=response_unavailable",
           command.command.rawValue
@@ -281,7 +281,7 @@ extension RunnerTests {
         }
         return recordedFailureResponse
       }
-      if !hasRetried, shouldRetryCommand(command), shouldRetryResponse(response) {
+      if !hasRetried, command.traits.retryOnSessionLoss, shouldRetryResponse(response) {
         NSLog(
           "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=response_unavailable",
           command.command.rawValue
@@ -426,7 +426,10 @@ extension RunnerTests {
     var systemSurface: SystemSurfaceHost? = nil
     if routeToSpringboard {
       activeApp = springboard
-    } else if shouldSkipAppActivationPreflight(command) {
+    } else if command.traits.launchPolicy == .noApp || shouldSkipAppActivationPreflight(command) {
+      // A command that answers from an in-place surface or from state the runner already holds, or a
+      // synthesized coordinate tap whose cached target is already foreground: none of them may bring
+      // anything forward, so the target is resolved as it stands.
       activeApp = resolveAppWithoutActivation(command: command)
     } else if let presented = presentedSystemSurfaceHost() {
       // Serve and drive the presented surface IN PLACE: never activate it (that cancels what it
@@ -434,15 +437,17 @@ extension RunnerTests {
       // command resolves back to the still-bound session app (#2438).
       activeApp = presented.app
       systemSurface = presented.host
-      if isInteractionCommand(command.command) {
+      if command.traits.isInteraction {
         applyInteractionStabilizationIfNeeded()
       }
-    } else if !isRunnerLifecycleCommand(command.command) {
+    } else {
+      // The launch policy decides what happens to a stopped app here: `.existingApp` was refused
+      // above, and `.mayLaunch` brings the app up through the activation below.
       let normalizedBundleId = command.appBundleId?
         .trimmingCharacters(in: .whitespacesAndNewlines)
       let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
       if let bundleId = requestedBundleId,
-        let notRunning = notRunningReadResponse(command: command, bundleId: bundleId)
+        let notRunning = notRunningRefusal(command: command, bundleId: bundleId)
       {
         return .response(notRunning)
       }
@@ -480,7 +485,7 @@ extension RunnerTests {
         }
       }
 
-      if isInteractionCommand(command.command) {
+      if command.traits.isInteraction {
         if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
           activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
         } else if requestedBundleId == nil, activeApp.state != .runningForeground {
@@ -533,7 +538,7 @@ extension RunnerTests {
     if response.data?.runnerFatal == true {
       return nil
     }
-    guard !isReadOnlyCommand(command), !isRunnerLifecycleCommand(command.command) else {
+    guard command.traits.convertsRecordedFailure else {
       return nil
     }
     return Response(
@@ -546,19 +551,11 @@ extension RunnerTests {
     )
   }
 
+  /// The one activation bypass that depends on the request rather than on the command: a tap that
+  /// needs nothing the preflight would bring forward. Commands whose own classification answers
+  /// without the session app's foreground state are handled by their `launchPolicy` (#2890).
   func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
-    if command.command == .alert {
-      return true
-    }
-    // A hardware Action Button press belongs to the system, not to the session app: the Shortcut or
-    // App Intent behind it is expected to run whether that app is foregrounded, backgrounded, or
-    // terminated, and activating first would foreground exactly what the press should leave alone.
-    // The press keeps its recorded-failure conversion, which `isLifecycle` would have removed
-    // (#2699, #2702 review).
-    if command.command == .actionButton {
-      return true
-    }
     // Coordinate-only synthesized taps can run after an AX-fatal foreground screen because they do not
     // need app activation, window lookup, keyboard lookup, or element resolution. Selector/text
     // interactions intentionally stay on the normal AX path because they need an element query.

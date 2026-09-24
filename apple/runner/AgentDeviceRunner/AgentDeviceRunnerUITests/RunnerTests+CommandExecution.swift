@@ -8,7 +8,7 @@ extension RunnerTests {
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
-    if command.command != .tap && command.command != .type && !isReadOnlyCommand(command) {
+    if command.traits.clearsRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
     switch command.command {
