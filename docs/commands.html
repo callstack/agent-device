@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.688216d4a9.js"></script>
+<script defer src="/agent-device/static/js/index.4a3222994f.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -741,6 +741,15 @@ infer that the foreground held from a command that said nothing
 distinction matters, spend a <code>snapshot -i</code> and read its disclosure.</li>
 <li>The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
 came before it are never replaced.</li>
+<li><strong>No read launches a stopped app.</strong> A command that only observes the app (<code>snapshot</code>, <code>wait</code>,
+<code>is</code>, <code>get</code>, a reading <code>find</code>) repairs a backgrounded session app, but never launches one that is
+not running — and neither does an interaction&#x27;s leading read: the viewport read a <code>gesture</code> starts
+with, or the capture that resolves a selector <code>click</code>/<code>fill</code>. A bare launch would start the app
+without the URL of a launch that SpringBoard is still holding behind an &quot;Open in …?&quot; confirmation.
+A refused command answers <code>COMMAND_FAILED</code>, <code>details.runnerErrorCode: &quot;APP_NOT_RUNNING&quot;</code> and
+<code>retriable: true</code>, and <code>wait</code> keeps polling through it. Answer the prompt with <code>alert accept</code>, or
+relaunch with <code>open</code>. Only an interaction that mutates without a leading read — <code>press</code>, a
+coordinate <code>fill</code>, <code>swipe</code>, <code>scroll</code>, a hardware key — still brings a stopped app up.</li>
 </ul>
 <h2 class="rp-toc-include" id="clipboard"><a href="#clipboard" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Clipboard</h2>
 <div class="rp-codeblock language-bash"><div class="rp-codeblock__content"><div class="rp-codeblock__content__scroll-container rp-scrollbar rp-scrollbar--always"><pre class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)" tabindex="0" data-lang="bash"><code><span class="line"><span style="color:var(--shiki-token-function)">agent-device</span><span style="color:var(--shiki-token-string)"> clipboard</span><span style="color:var(--shiki-token-string)"> read</span></span>
