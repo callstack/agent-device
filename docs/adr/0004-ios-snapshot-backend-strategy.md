@@ -312,7 +312,10 @@ root clip to violate, and a node whose actionability depends on containment has 
 wire, as on the host bridge; disabled or degenerate nodes stay declared `false`. A rectangle becomes a
 `Box` only through the initializer that checks it, and the shared guard refuses `CGRect.infinite` by
 identity — its components and its extents are all finite, so no comparison would have caught the
-value a failed read leaves behind. The runner route's
+value a failed read leaves behind. The two twins were not twins before #2908 landed: the Swift guard
+already refused that value by identity, while the TypeScript one accepted it and both accepted finite
+components whose right or bottom edge overflowed. Both now refuse both shapes, and every box either
+guard accepted and is neither of those two shapes is still classified the same way. The runner route's
 host evidence comes from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in
 `packages/capture-kit/src/ios-snapshot-acquisition.ts`). `contracts/fixtures/snapshot-actionability-policy.json`
 pins the predicate for shapes the 320x240 fold fixture cannot reach.

@@ -623,7 +623,8 @@ extension RunnerTests {
     XCTAssertNotNil(keyQ, "`q` key must be presented under --depth \(options.depth ?? -1)")
   }
 
-  /// #2891: a capture whose viewport read failed publishes no `hittable` bit at all. Pinned on the
+  /// #2891: a capture whose viewport read failed publishes no `hittable` for a node whose answer is
+  /// containment, while a root and a disabled node stay a declared `false`. Pinned on the
   /// encoded objects rather than on `capture.nodes`, because the promise is about the wire: a test
   /// over the Swift values would still pass if a custom encoder started writing `"hittable":null`
   /// for `nil`, which is a shape no host decoder is specified for. The #2638 wrapper verdict reads a

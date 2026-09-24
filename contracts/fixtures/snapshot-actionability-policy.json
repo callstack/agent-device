@@ -132,7 +132,7 @@
       "nodeRectGuardPasses": false
     },
     {
-      "name": "finite components and finite extents can still spell an unmeasurable box: it overflows its own right edge, so the extent check refuses it",
+      "name": "finite components can still spell an unmeasurable box: the box overflows its own right edge out to infinity, so the extent check refuses it",
       "swift": true,
       "typescript": true,
       "enabled": true,

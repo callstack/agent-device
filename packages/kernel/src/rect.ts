@@ -65,8 +65,9 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
  * half-open right/bottom edges; `contracts/fixtures/snapshot-actionability-policy.json` pins both.
  * Callers without a viewport box withhold the bit instead of asking. The `viewport` argument is
  * trusted rather than re-checked, because a `boolean`-returning rule cannot answer "no idea": pass a
- * box {@link isPositiveFiniteRect} accepted — the Swift twin needs no such request, since an unknown
- * viewport is not representable in its `SnapshotViewport`. The host AX bridge derives the source bit
+ * box {@link isPositiveFiniteRect} accepted. The Swift twin needs no such request because it takes
+ * `SnapshotViewport`, whose `.missing` case is the absence of a box, and returns `Bool?`, which can.
+ * The host AX bridge derives the source bit
  * from the node's own frame and the fold intersects it with the clipped frame, so a `hittable:`
  * selector cannot tell the two producers apart.
  */
