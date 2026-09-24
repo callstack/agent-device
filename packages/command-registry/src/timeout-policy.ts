@@ -5,7 +5,6 @@ import type { CommandTimeoutBudget, CommandTimeoutPolicy } from './types.ts';
 // declared per command on the descriptors, so their values live beside them.
 
 const DAEMON_REQUEST_TIMEOUT_MS = 90_000;
-export const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
 
 // Keep this above the longest platform install subprocess timeout so the client
 // envelope does not abort a still-progressing device install first.
@@ -15,6 +14,12 @@ export const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 // diagnostics) wins the race against the client envelope. Never shrinks the
 // envelope below the command's declared base.
 const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
+
+/** Daemon-side runner budget for `prepare` without `--timeout` (`readPrepareIosRunnerTimeoutMs`). */
+export const PREPARE_STARTUP_BUDGET_MS = 240_000;
+
+export const PREPARE_REQUEST_TIMEOUT_MS =
+  PREPARE_STARTUP_BUDGET_MS + REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
 
 /**
  * How long a lease lifecycle provider may spend allocating one lease (cloud
