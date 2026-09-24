@@ -113,6 +113,20 @@ test('parseFragment: a leading non-bullet line fails validation', () => {
   );
 });
 
+test('parseFragment: an unknown kind is rejected as an invalid line', () => {
+  expect(() =>
+    parseFragment({ name: 'ok.md', text: '- Info: not one of the allowed kinds.\n' }),
+  ).toThrow(/invalid line/);
+});
+
+test('parseFragment: a leading indented line has no bullet to attach to and fails validation', () => {
+  // The line matches the continuation pattern, but `current` is still undefined at this point,
+  // so the `current &&` guard must not let it through as a continuation.
+  expect(() =>
+    parseFragment({ name: 'ok.md', text: '  indented before any bullet\n- Fixed: x.\n' }),
+  ).toThrow(/invalid line/);
+});
+
 test('no fragments: the input comes back unchanged, even with an unmigrated Unreleased heading', () => {
   const withUnreleased = '# Changelog\n\n## Unreleased\n\n- Fixed: pending.\n\n## 0.21.12\n\n';
   assert.equal(
@@ -149,6 +163,45 @@ test('CLI --check exits 1 while a fragment remains and 0 once only README.md is 
   assert.equal(runCli({ root, check: true }), 1);
   assert.equal(runCli({ root, check: false }), 0);
   assert.equal(runCli({ root, check: true }), 0);
+});
+
+test('CLI double-run: assembling into an already-released version heading throws', () => {
+  const root = scratchRepo();
+  assert.equal(runCli({ root, check: false }), 0);
+
+  // Simulate a second commit landing before the next version bump: a new fragment arrives, but
+  // package.json's version is unchanged, so the "## 0.22.0" heading already exists.
+  fs.writeFileSync(
+    path.join(root, 'changelog.d', '9999-second.md'),
+    '- Fixed: a second, unconsumed fragment.\n',
+  );
+  expect(() => runCli({ root, check: false })).toThrow(/already has a "## 0\.22\.0" section/);
+});
+
+test('CLI refusal leaves CHANGELOG.md and the pending fragment untouched on disk', () => {
+  const root = scratchRepo();
+  assert.equal(runCli({ root, check: false }), 0);
+
+  const fragmentPath = path.join(root, 'changelog.d', '9999-second.md');
+  const fragmentText = '- Fixed: a second, unconsumed fragment.\n';
+  fs.writeFileSync(fragmentPath, fragmentText);
+  const changelogPath = path.join(root, 'CHANGELOG.md');
+  const changelogBefore = fs.readFileSync(changelogPath, 'utf8');
+
+  expect(() => runCli({ root, check: false })).toThrow();
+
+  assert.equal(fs.readFileSync(changelogPath, 'utf8'), changelogBefore);
+  assert.equal(fs.readFileSync(fragmentPath, 'utf8'), fragmentText);
+});
+
+test('CLI: a fragment without the .md extension is rejected, not silently skipped', () => {
+  const root = scratchRepo();
+  fs.writeFileSync(path.join(root, 'changelog.d', '9999-no-extension'), '- Fixed: x.\n');
+
+  // The same enumeration (`readFragments`) feeds both --check and the default run, so a
+  // wrongly-named entry fails loudly in either mode instead of being filtered out by one of them.
+  expect(() => runCli({ root, check: true })).toThrow(/must end in "\.md"/);
+  expect(() => runCli({ root, check: false })).toThrow(/must end in "\.md"/);
 });
 
 // Repository guard: every fragment `readFragments` would actually consume (other than README.md)

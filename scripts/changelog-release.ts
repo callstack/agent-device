@@ -1,12 +1,9 @@
-// The release-version commit's changelog step (#2877): PRs never edit `CHANGELOG.md`. Instead a
-// PR adds `changelog.d/<slug>.md`, and `npm version` runs this to fold every fragment present into
-// one new `## <version>` section, then deletes the fragments it consumed. `changelog.d/README.md`
-// documents the fragment format for contributors; this module is its enforcement.
+// Folds `changelog.d/*.md` fragments into `CHANGELOG.md` as a new `## <version>` section, run by
+// the `npm version` lifecycle script. See `changelog.d/README.md` for the fragment format.
 //
-// Exports a pure core (parseFragment, assembleChangelog) so scripts/__tests__/changelog-release.test.ts
-// can prove ordering, refusals and idempotence without touching the filesystem. The CLI below is a
-// thin wrapper: default mode assembles and writes, `--check` (wired into `release:prepare`) fails
-// a release that would otherwise ship with `changelog.d/` fragments still unconsumed.
+// `parseFragment`/`assembleChangelog` are pure; `runCli` is the filesystem half, parameterized by
+// `root` so it can target a scratch directory. `--check` (wired into `release:prepare`) fails a
+// release that would otherwise ship with `changelog.d/` fragments still unconsumed.
 
 import fs from 'node:fs';
 import path from 'node:path';
