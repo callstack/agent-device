@@ -18,12 +18,17 @@ test('Apple app-log predicate covers bundle and executable provenance', () => {
 
 test('Apple app-log arguments preserve simulator-set and CoreDevice launch semantics', () => {
   assert.deepEqual(
-    buildIosSimulatorLogStreamArgs({
-      deviceId: 'sim-1',
-      appBundleId: 'com.example.app',
-      executableName: 'ExampleExec',
-      simulatorSetPath: '/tmp/tenant-a/simulators',
-    }),
+    buildIosSimulatorLogStreamArgs(
+      {
+        platform: 'apple',
+        id: 'sim-1',
+        name: 'iPhone 17',
+        kind: 'simulator',
+        target: 'mobile',
+        simulatorSetPath: '/tmp/tenant-a/simulators',
+      },
+      { appBundleId: 'com.example.app', executableName: 'ExampleExec' },
+    ),
     [
       'simctl',
       '--set',

@@ -9,6 +9,7 @@ vi.mock('./system-surface-presence.ts', () => ({
 }));
 import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import { simulatorAddressFor } from './core/simctl.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
@@ -26,7 +27,7 @@ const ios = {
 } as const satisfies DeviceInfo;
 
 const target = {
-  udid: ios.id,
+  simulator: simulatorAddressFor(ios),
   runtime: 'iOS 26.0',
   pid: 42,
   generation: '42:launch-a',
@@ -489,7 +490,7 @@ test('a slow app discovery yields to a live runner within its wait slice, then s
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const run = vi.fn(async (args: string[]) => {
+  const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
     return {
       stdout:
@@ -555,7 +556,7 @@ test('an open waits out a slow app discovery, so the first capture after it star
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const run = vi.fn(async (args: string[]) => {
+  const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
     return {
       stdout:
@@ -729,7 +730,7 @@ test('a slow app discovery keeps observation on the bridge while no runner can a
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const run = vi.fn(async (args: string[]) => {
+  const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await released;
     return {
       stdout:

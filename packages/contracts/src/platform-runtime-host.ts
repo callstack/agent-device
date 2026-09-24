@@ -55,12 +55,15 @@ export type HostCommandRunner = Readonly<{
 
 export type AppleXcrunTool = 'simctl' | 'devicectl' | 'xctrace';
 
-export type AppleToolRequest = Readonly<{
-  tool: AppleXcrunTool;
-  args: readonly string[];
-  timeoutMs?: number;
-  allowFailure?: boolean;
-}>;
+declare const scopedSimctlArgs: unique symbol;
+/** simctl argv (after the tool name) already scoped to its simulator set; minted only by platform-apple. */
+export type ScopedSimctlArgs = readonly string[] & { readonly [scopedSimctlArgs]: true };
+
+export type AppleToolRequest = Readonly<{ timeoutMs?: number; allowFailure?: boolean }> &
+  (
+    | Readonly<{ tool: 'simctl'; args: ScopedSimctlArgs }>
+    | Readonly<{ tool: Exclude<AppleXcrunTool, 'simctl'>; args: readonly string[] }>
+  );
 
 /** Request-bound foreground Apple tooling backed by the selected scoped provider. */
 export type AppleToolHost = Readonly<{

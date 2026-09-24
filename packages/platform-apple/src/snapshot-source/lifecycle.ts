@@ -55,7 +55,7 @@ export class SnapshotBridgeManager {
 
   async request(input: SnapshotBridgeRequest): Promise<SnapshotBridgeEnvelope> {
     if (this.closed) throw snapshotSourceError('unsupported', 'source-closed');
-    return await this.withSimulatorLock(input.target.udid, input.deadline, () =>
+    return await this.withSimulatorLock(input.target.simulator.udid, input.deadline, () =>
       this.requestInSimulator(input),
     );
   }
@@ -64,7 +64,7 @@ export class SnapshotBridgeManager {
     if (this.closed) throw snapshotSourceError('unsupported', 'source-closed');
     const deadline = input.deadline;
     remainingSnapshotSourceMs(deadline, 'bridge-request-deadline');
-    const previousSession = this.sessions.get(input.target.udid);
+    const previousSession = this.sessions.get(input.target.simulator.udid);
     const session = await this.ensureSession(input, deadline);
     try {
       const targetStartTime = await this.readTargetStartTime(input.target, deadline);
@@ -127,7 +127,7 @@ export class SnapshotBridgeManager {
     input: SnapshotBridgeRequest,
     deadline: SnapshotSourceDeadline,
   ): Promise<BridgeSession> {
-    const key = input.target.udid;
+    const key = input.target.simulator.udid;
     const existing = this.sessions.get(key);
     if (existing && existing.bridgePath === input.bridge.path && existing.process.isAlive()) {
       if (!existing.socket || existing.socket.destroyed) {
@@ -137,14 +137,18 @@ export class SnapshotBridgeManager {
     }
     if (existing) await this.removeSession(existing, true);
 
-    const socketPath = snapshotSourceSocketPath(this.host, input.target.udid, this.ownerId);
+    const socketPath = snapshotSourceSocketPath(
+      this.host,
+      input.target.simulator.udid,
+      this.ownerId,
+    );
     await this.host.ensureDirectory(path.dirname(socketPath));
     await this.host.remove(socketPath);
-    const bridgeProcess = this.host.start(input.target, input.bridge.path, socketPath, {
+    const bridgeProcess = this.host.start(input.target.simulator, input.bridge.path, socketPath, {
       signal: deadline.signal,
     });
     const session: BridgeSession = {
-      udid: input.target.udid,
+      udid: input.target.simulator.udid,
       bridgePath: input.bridge.path,
       socketPath,
       process: bridgeProcess,

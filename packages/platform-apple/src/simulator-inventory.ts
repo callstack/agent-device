@@ -2,6 +2,7 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
+  ScopedSimctlArgs,
 } from '@agent-device/contracts/platform-runtime-host';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -26,7 +27,7 @@ type SimctlListDevicesPayload = {
 
 const BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
 
-export function buildSimctlListArgs(simulatorSetPath: string | undefined): string[] {
+export function buildSimctlListArgs(simulatorSetPath: string | undefined): ScopedSimctlArgs {
   return scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath });
 }
 

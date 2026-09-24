@@ -89,6 +89,7 @@ async function recoverSimulatorTraffic(
   appLogPath: string,
   signal: AbortSignal,
 ): Promise<{ scan: NetworkScan; lineCount: number } | undefined> {
+  const startedAt = input.appLogSnapshot?.startedAt;
   const args = scopeSimctlArgsForDevice(device, [
     'spawn',
     device.id,
@@ -99,13 +100,10 @@ async function recoverSimulatorTraffic(
     '--info',
     '--predicate',
     buildPredicate(input.appBundleId as string),
-  ]);
-  const startedAt = input.appLogSnapshot?.startedAt;
-  args.push(
     ...(typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt > 0
       ? ['--start', `@${Math.floor(startedAt / 1000)}`]
       : ['--last', '5m']),
-  );
+  ]);
   const result = await host.appleTools.run(
     { tool: 'simctl', args, allowFailure: true, timeoutMs: 4_000 },
     signal,

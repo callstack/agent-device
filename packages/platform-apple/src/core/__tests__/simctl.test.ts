@@ -1,12 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
-  buildSimctlArgs,
+  buildSimctlArgsForAddress,
   buildSimctlArgsForDevice,
   readSimctlDevicesByRuntime,
   readSimctlDeviceState,
   scopeSimctlArgs,
   scopeSimctlArgsForDevice,
+  simulatorAddressFor,
+  type SimulatorAddress,
 } from '../simctl.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -18,10 +20,11 @@ const IOS_SIMULATOR: DeviceInfo = {
   target: 'mobile',
 };
 
-test('buildSimctlArgs uses --set when simulator set path is provided', () => {
-  const args = buildSimctlArgs(['list', 'devices', '-j'], {
-    simulatorSetPath: '/tmp/tenant-a/simulator-set',
-  });
+test('buildSimctlArgsForAddress uses --set when the address names a simulator set', () => {
+  const args = buildSimctlArgsForAddress(
+    simulatorAddressFor({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulator-set' }),
+    ['list', 'devices', '-j'],
+  );
   assert.deepEqual(args, [
     'simctl',
     '--set',
@@ -84,6 +87,31 @@ test('scopeSimctlArgsForDevice scopes simulators only', () => {
     'sim-1',
   ]);
 });
+
+test('simulatorAddressFor carries the set of iOS-family simulators only', () => {
+  const scoped = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-d/simulator-set' };
+  assert.deepEqual(simulatorAddressFor(scoped), {
+    udid: 'sim-1',
+    simulatorSetPath: '/tmp/tenant-d/simulator-set',
+  });
+  assert.deepEqual(simulatorAddressFor({ ...scoped, kind: 'device' }), {
+    udid: 'sim-1',
+    simulatorSetPath: undefined,
+  });
+  assert.deepEqual(simulatorAddressFor({ ...scoped, platform: 'android', kind: 'emulator' }), {
+    udid: 'sim-1',
+    simulatorSetPath: undefined,
+  });
+});
+
+function compileTimeSimulatorScopeProof(): void {
+  // @ts-expect-error A set-scope call states its set; leaving it out does not mean the default set.
+  void scopeSimctlArgs(['list']);
+  // @ts-expect-error A simulator address is minted from its DeviceInfo, never written by hand.
+  const forged: SimulatorAddress = { udid: 'sim-1', simulatorSetPath: undefined };
+  void forged;
+}
+void compileTimeSimulatorScopeProof;
 
 const LISTING = JSON.stringify({
   devices: {

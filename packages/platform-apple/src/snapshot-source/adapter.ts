@@ -121,7 +121,7 @@ export function createSimulatorSnapshotSource(
 // fallow-ignore-next-line complexity
 function validateRequest(request: SnapshotSourceRequest): void {
   if (
-    !request.target.udid.trim() ||
+    !request.target.simulator.udid.trim() ||
     !request.target.runtime.trim() ||
     !request.target.generation.trim() ||
     !Number.isSafeInteger(request.target.pid) ||

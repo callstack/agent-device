@@ -10,11 +10,13 @@ import {
   SNAPSHOT_SOURCE_VERSION,
 } from './protocol.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
+import { simulatorAddressFor } from '../core/simctl.ts';
 import type {
   SnapshotSourceHost,
   SnapshotSourceLimits,
   SnapshotSourceProcess,
   SnapshotSourceSocket,
+  SnapshotSourceTarget,
 } from './types.ts';
 
 const limits: SnapshotSourceLimits = {
@@ -25,8 +27,16 @@ const limits: SnapshotSourceLimits = {
   maxDurationMs: 100,
 };
 
+const simulatorDevice = {
+  platform: 'apple',
+  id: 'simulator-1',
+  name: 'iPhone 17',
+  kind: 'simulator',
+  target: 'mobile',
+} as const;
+
 const target = {
-  udid: 'simulator-1',
+  simulator: simulatorAddressFor(simulatorDevice),
   runtime: 'iOS 26.2',
   pid: 123,
   generation: 'generation-1',
@@ -39,6 +49,12 @@ const bridge = {
   protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
   sourceVersion: SNAPSHOT_SOURCE_VERSION,
 };
+
+function compileTimeSnapshotTargetProof(): SnapshotSourceTarget {
+  // @ts-expect-error A target names its simulator through an address minted from its DeviceInfo.
+  return { udid: 'simulator-1', runtime: 'iOS 26.2', pid: 123, generation: 'generation-1' };
+}
+void compileTimeSnapshotTargetProof;
 
 test('the bridge manager reuses a healthy per-device helper and stops it exactly once', async () => {
   const fixture = createLifecycleFixture();
@@ -56,7 +72,10 @@ test('the bridge manager reuses a healthy per-device helper and stops it exactly
 test('the helper starts inside the simulator set that owns the target', async () => {
   const fixture = createLifecycleFixture();
   const manager = new SnapshotBridgeManager(fixture.host);
-  const scopedTarget = { ...target, simulatorSetPath: '/tmp/scoped-set' };
+  const scopedTarget = {
+    ...target,
+    simulator: simulatorAddressFor({ ...simulatorDevice, simulatorSetPath: '/tmp/scoped-set' }),
+  };
 
   await manager.request({
     target: scopedTarget,
@@ -66,7 +85,9 @@ test('the helper starts inside the simulator set that owns the target', async ()
     deadline: deadline(),
   });
 
-  assert.deepEqual(fixture.startedTargets, [scopedTarget]);
+  assert.deepEqual(fixture.startedTargets, [
+    { udid: 'simulator-1', simulatorSetPath: '/tmp/scoped-set' },
+  ]);
   await manager.close();
 });
 

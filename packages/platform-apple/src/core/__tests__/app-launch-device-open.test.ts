@@ -64,7 +64,7 @@ test('openIosDevice leaves the macOS desktop target alone', async () => {
   const provider = createLocalAppleToolProvider({
     simctl: {
       run: async (args) => {
-        simctlCalls.push(args);
+        simctlCalls.push([...args]);
         return { exitCode: 0, stdout: '', stderr: '' };
       },
     },

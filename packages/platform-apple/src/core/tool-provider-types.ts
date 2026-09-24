@@ -1,4 +1,5 @@
 import type { AppsFilter } from '@agent-device/contracts/device';
+import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
 import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import type { IosAppInfo } from './app-info.ts';
 
@@ -17,6 +18,10 @@ export type AppleToolAvailabilityChecker = (cmd: string) => Promise<boolean>;
 
 export type AppleXcrunToolProvider = {
   run: AppleToolSubcommandExecutor;
+};
+
+export type AppleSimctlToolProvider = {
+  run: (args: ScopedSimctlArgs, options?: ExecOptions) => Promise<ExecResult>;
 };
 
 export type AppleMacOsHelperProvider = {

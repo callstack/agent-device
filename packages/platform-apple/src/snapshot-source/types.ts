@@ -5,6 +5,7 @@ import type {
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SimulatorAddress } from '../core/simctl.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 
 export type SnapshotSourceLimits = Readonly<{
@@ -16,14 +17,12 @@ export type SnapshotSourceLimits = Readonly<{
 }>;
 
 export type SnapshotSourceTarget = Readonly<{
-  udid: string;
+  simulator: SimulatorAddress;
   runtime: string;
   pid: number;
   generation: string;
   targetId?: string;
   processStartTime?: string;
-  /** Device set that owns `udid`; absent for the default CoreSimulator set. */
-  simulatorSetPath?: string;
 }>;
 
 export type SnapshotSourceRequest = Readonly<{
@@ -84,7 +83,7 @@ export type SnapshotSourceHost = Readonly<{
   homeDirectory(): string;
   run(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
   start(
-    target: Pick<SnapshotSourceTarget, 'udid' | 'simulatorSetPath'>,
+    simulator: SimulatorAddress,
     bridgePath: string,
     socketPath: string,
     options?: { signal?: AbortSignal },

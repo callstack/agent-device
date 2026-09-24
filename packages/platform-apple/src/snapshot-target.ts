@@ -1,7 +1,12 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
-import { readSimctlDevicesByRuntime, runSimctlForDevice } from './core/simctl.ts';
+import {
+  readSimctlDevicesByRuntime,
+  runSimctlForDevice,
+  simulatorAddressFor,
+  type SimulatorAddress,
+} from './core/simctl.ts';
 import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
 
 /** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */
@@ -19,13 +24,12 @@ const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
 const TARGET_DISCOVERY_PENDING = 'simulator-target-discovery-pending';
 
 export type SimulatorSnapshotTarget = Readonly<{
-  udid: string;
+  simulator: SimulatorAddress;
   runtime: string;
   pid: number;
   generation: string;
   targetId: string;
   processStartTime: string;
-  simulatorSetPath?: string;
 }>;
 
 export type SimulatorSnapshotTargetResolver = (
@@ -111,13 +115,12 @@ async function resolveSimulatorSnapshotTarget(
     throw targetError('simulator-target-identity-unavailable', device, appBundleId);
   }
   return Object.freeze({
-    udid: device.id,
+    simulator: simulatorAddressFor(device),
     runtime,
     pid: job.pid,
     generation: `${job.pid}:${job.label}:${processStartTime}`,
     targetId: `${device.id}:${appBundleId}`,
     processStartTime,
-    ...(device.simulatorSetPath ? { simulatorSetPath: device.simulatorSetPath } : {}),
   });
 }
 

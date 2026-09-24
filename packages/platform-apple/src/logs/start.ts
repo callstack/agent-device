@@ -159,12 +159,7 @@ async function commandForAppleAppLogs(
   const executableName = await resolveSimulatorExecutable(host, device, appBundleId, signal);
   return {
     executable: 'xcrun',
-    args: buildIosSimulatorLogStreamArgs({
-      deviceId: device.id,
-      appBundleId,
-      executableName,
-      simulatorSetPath: device.simulatorSetPath,
-    }),
+    args: buildIosSimulatorLogStreamArgs(device, { appBundleId, executableName }),
     allowFailure: true,
   } as const;
 }

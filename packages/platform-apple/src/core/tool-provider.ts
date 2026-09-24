@@ -5,15 +5,16 @@ import {
   type ExecOptions,
   type ExecResult,
 } from '@agent-device/host-kit/command';
+import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import { createLocalAppleMacOsHostProvider } from '../os/macos/host-provider.ts';
 import type {
   AppleMacOsHelperProvider,
   AppleMacOsHostProvider,
   ApplePlistProvider,
+  AppleSimctlToolProvider,
   AppleToolAvailabilityChecker,
   AppleToolCommandExecutor,
-  AppleToolSubcommandExecutor,
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
 
@@ -29,7 +30,7 @@ export type {
 
 export type AppleToolProvider = {
   runCommand: AppleToolCommandExecutor;
-  simctl: AppleXcrunToolProvider;
+  simctl: AppleSimctlToolProvider;
   devicectl: AppleXcrunToolProvider;
   macosHelper?: AppleMacOsHelperProvider;
   macosHost?: AppleMacOsHostProvider;
@@ -118,7 +119,7 @@ export async function runXcrun(args: string[], options?: ExecOptions): Promise<E
   const provider = resolveAppleToolProvider();
   const [tool, ...toolArgs] = args;
   if (tool === 'simctl') {
-    return await provider.simctl.run(toolArgs, options);
+    return await provider.simctl.run(toolArgs as unknown as ScopedSimctlArgs, options);
   }
   if (tool === 'devicectl') {
     return await provider.devicectl.run(toolArgs, options);
@@ -149,7 +150,9 @@ function coerceRunCommand(run: AppleToolCommandExecutor): AppleToolCommandExecut
   return async (cmd, args, options) => coerceExecResult(await run(cmd, args, options));
 }
 
-function coerceRun(run: AppleToolSubcommandExecutor): AppleToolSubcommandExecutor {
+function coerceRun<Args>(
+  run: (args: Args, options?: ExecOptions) => Promise<ExecResult>,
+): (args: Args, options?: ExecOptions) => Promise<ExecResult> {
   return async (args, options) => coerceExecResult(await run(args, options));
 }
 

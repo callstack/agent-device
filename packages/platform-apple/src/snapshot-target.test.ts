@@ -18,7 +18,7 @@ const signal = () => new AbortController().signal;
 
 function targetFixture() {
   const state = { pid: 42, launch: 'launch-a', start: 'start-a' as string | null };
-  const run = vi.fn(async (args: string[], _options?: { timeoutMs?: number }) => ({
+  const run = vi.fn(async (args: readonly string[], _options?: { timeoutMs?: number }) => ({
     stdout: args.includes('spawn')
       ? `90\t0\tUIKitApplication:com.example.app.beta[wrong][rb-legacy]\n${state.pid}\t0\tUIKitApplication:${app}[${state.launch}][rb-legacy]`
       : JSON.stringify({
@@ -53,7 +53,7 @@ test('an unchanged OS process reuses its exact app target without another simctl
     const second = await fixture.resolve(ios, app, signal());
     expect(second).toBe(first);
     expect(first).toEqual({
-      udid: ios.id,
+      simulator: { udid: ios.id, simulatorSetPath: undefined },
       runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-0',
       pid: 42,
       generation: `42:UIKitApplication:${app}[launch-a][rb-legacy]:start-a`,
@@ -73,7 +73,7 @@ test('a target in a scoped simulator set carries that set to the bridge', async 
       app,
       signal(),
     );
-    expect(target.simulatorSetPath).toBe('/tmp/scoped-set');
+    expect(target.simulator.simulatorSetPath).toBe('/tmp/scoped-set');
     expect(fixture.run.mock.calls.map(([args]) => args.slice(0, 2))).toEqual([
       ['--set', '/tmp/scoped-set'],
       ['--set', '/tmp/scoped-set'],
@@ -167,7 +167,7 @@ function deferredSpawn(fixture: ReturnType<typeof targetFixture>) {
     release = resolve;
   });
   const respond = fixture.run.getMockImplementation()!;
-  fixture.run.mockImplementation(async (args: string[]) =>
+  fixture.run.mockImplementation(async (args: readonly string[]) =>
     args[0] === 'spawn' ? await released.then(() => respond(args)) : await respond(args),
   );
   return release;
@@ -255,7 +255,7 @@ test('a failed runtime probe does not release the slot while the launch-job prob
   const fixture = targetFixture();
   const release = deferredSpawn(fixture);
   const respond = fixture.run.getMockImplementation()!;
-  fixture.run.mockImplementation(async (args: string[], options) =>
+  fixture.run.mockImplementation(async (args: readonly string[], options) =>
     args[0] === 'list'
       ? { stdout: '', stderr: 'simctl list failed', exitCode: 1 }
       : await respond(args, options),

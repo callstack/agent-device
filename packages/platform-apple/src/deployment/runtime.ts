@@ -228,7 +228,7 @@ async function pushAppleNotification(
  */
 async function runAppleTool(
   host: PlatformRuntimeHost,
-  request: Omit<AppleToolRequest, 'allowFailure'>,
+  request: AppleToolRequest,
   signal: AbortSignal,
   message: string,
   options?: Readonly<{ tolerate?: (result: HostCommandResult) => boolean }>,

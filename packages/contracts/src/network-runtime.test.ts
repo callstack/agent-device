@@ -21,6 +21,7 @@ function compileTimeNetworkProjectionProof(
 void compileTimeNetworkProjectionProof;
 
 function compileTimeCanonicalHostProof(host: NetworkRuntimeHost): void {
+  // @ts-expect-error Raw simctl argv cannot cross the Apple tool port; scope it in platform-apple.
   void host.appleTools.run({ tool: 'simctl', args: ['spawn', 'sim-1', 'log', 'show'] });
   void host.appleTools.run({
     tool: 'simctl',

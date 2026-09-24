@@ -5,6 +5,7 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { simulatorAddressFor } from './core/simctl.ts';
 import { createLaunchObservationProbe } from './snapshot-observability.ts';
 import type { SnapshotSourceFailure, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
 import type { SimulatorSnapshotTarget } from './snapshot-target.ts';
@@ -20,7 +21,7 @@ const simulator = {
 } as const satisfies DeviceInfo;
 
 const target = {
-  udid: simulator.id,
+  simulator: simulatorAddressFor(simulator),
   runtime: 'iOS 26.0',
   pid: 42,
   generation: '42:launch-a',

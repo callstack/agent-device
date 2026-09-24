@@ -56,7 +56,7 @@ test('request platform provider scope applies Apple tool provider only for Apple
             },
             simctl: {
               run: async (args) => {
-                calls.push(args);
+                calls.push([...args]);
                 return { exitCode: 0, stdout: 'simctl-ok', stderr: '' };
               },
             },

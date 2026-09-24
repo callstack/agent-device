@@ -1,6 +1,7 @@
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import { appLogCommandSucceeded, bestEffortAppLogCheck } from '@agent-device/capture-kit';
+import { scopeSimctlArgs } from '../core/simctl.ts';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import {
   checkCoreDeviceConsoleCaptureSupport,
@@ -27,7 +28,7 @@ export async function doctorAppleAppLogs(
           await host.appleTools.run(
             {
               tool: 'simctl',
-              args: ['help'],
+              args: scopeSimctlArgs(['help'], { simulatorSetPath: undefined }),
               allowFailure: true,
             },
             signal,

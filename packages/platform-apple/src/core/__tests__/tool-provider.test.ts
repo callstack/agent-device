@@ -3,10 +3,17 @@ import { test } from 'vitest';
 import {
   createLocalAppleToolProvider,
   readApplePlistJson,
+  resolveAppleToolProvider,
   runAppleToolCommand,
   runXcrun,
   withAppleToolProvider,
 } from '../tool-provider.ts';
+
+function compileTimeScopedSimctlProof(): void {
+  // @ts-expect-error Raw simctl argv cannot reach the provider; scope it in core/simctl.ts.
+  void resolveAppleToolProvider().simctl.run(['spawn', 'sim-1', 'bridge']);
+}
+void compileTimeScopedSimctlProof;
 
 test('scoped Apple tool provider handles xcrun execution', async () => {
   const calls: Array<[string, string[]]> = [];
@@ -35,7 +42,7 @@ test('scoped Apple tool provider prefers semantic simctl and devicectl hooks', a
     },
     simctl: {
       run: async (args) => {
-        calls.push(['simctl', args]);
+        calls.push(['simctl', [...args]]);
         return { exitCode: 0, stdout: 'simctl', stderr: '' };
       },
     },

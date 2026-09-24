@@ -10,6 +10,7 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { createSnapshotSourceHost } from './host.ts';
 import { createSimulatorSnapshotSource } from './adapter.ts';
+import { simulatorAddressFor } from '../core/simctl.ts';
 import { DEPTH_HINT_PROBE_BACK_AFTER_USES } from './depth-hints.ts';
 import {
   encodeSnapshotBridgeFrame,
@@ -47,7 +48,11 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
 
   try {
     const result = await source.acquire({
-      target: { ...sourceTarget, targetId: 'target-1', simulatorSetPath: '/tmp/scoped-set' },
+      target: {
+        ...targetForTest('/tmp/scoped-set'),
+        generation: 'generation-1',
+        targetId: 'target-1',
+      },
       hint,
     });
     assert.deepEqual(
@@ -472,9 +477,16 @@ type AdapterFixture = {
   startedTargets: Array<Parameters<SnapshotSourceHost['start']>[0]>;
 };
 
-function targetForTest() {
+function targetForTest(simulatorSetPath?: string) {
   return {
-    udid: 'simulator-1',
+    simulator: simulatorAddressFor({
+      platform: 'apple',
+      id: 'simulator-1',
+      name: 'iPhone 17',
+      kind: 'simulator',
+      target: 'mobile',
+      ...(simulatorSetPath ? { simulatorSetPath } : {}),
+    }),
     runtime: 'iOS 26.2',
     pid: 321,
   };

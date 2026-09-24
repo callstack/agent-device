@@ -277,13 +277,13 @@ async function fallbackAfterFailure(
   if (opensGenerationCircuit(failure)) disabledGenerations.add(generationKey(failedTarget));
   emitRouteDiagnostic(
     failure.code,
-    { id: failedTarget.udid },
+    { id: failedTarget.simulator.udid },
     failedTarget.generation,
     cause,
     failure.details,
   );
   return await runFallback(
-    failedTarget.udid,
+    failedTarget.simulator.udid,
     input,
     fallback,
     identity.lineage,

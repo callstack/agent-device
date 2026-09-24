@@ -8,7 +8,7 @@ import { screenshotIos } from '../screenshot.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 
-function startsWithArgs(args: string[], expected: string[]): boolean {
+function startsWithArgs(args: readonly string[], expected: string[]): boolean {
   return expected.every((value, index) => args[index] === value);
 }
 
@@ -29,7 +29,7 @@ test('screenshotIos caches simulator screen scale per device', async () => {
   const provider = createLocalAppleToolProvider({
     simctl: {
       run: async (args) => {
-        calls.push(args);
+        calls.push([...args]);
         if (startsWithArgs(args, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'])) {
           return { exitCode: 0, stdout: '3\n', stderr: '' };
         }
