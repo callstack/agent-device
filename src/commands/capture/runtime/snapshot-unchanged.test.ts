@@ -73,6 +73,8 @@ test.each<Partial<SnapshotNode>>([
   { contentDescription: 'Create a draft' },
   { enabled: false },
   { selected: true },
+  { checked: true },
+  { checked: false },
   { focused: true },
   { placeholder: 'Key echo' },
   { hittable: false },

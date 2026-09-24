@@ -2,6 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
+import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import { contextFromFlags, type DaemonCommandContext } from './context.ts';
@@ -465,8 +466,11 @@ export function summarizeDiscriminatingSurfaceDivergence(
 }
 
 /**
- * Whether the DISCRIMINATING entries inside `rect` differ across a gesture, on the same key-matched,
- * rect-tolerant view `haveIdenticalDiscriminatingSurfaces` uses — restricted to one region.
+ * Whether the DISCRIMINATING entries inside `rect` moved across a gesture: one left or entered the
+ * region, or its rect moved beyond tolerance. Entries match on the flip-tolerant `identity` where
+ * they have one, told apart by document order when repeated, and on `key` otherwise. A scroll moves
+ * content, while a state flip inside the container (a switch the swipe brushed, a row it selected)
+ * changes the key at the same rect and is not movement.
  *
  * A whole-surface difference is not automatically the gesture's doing. A captured tree carries system
  * chrome with it, and on Android the status bar clocks and icons change on their own while the app's
@@ -478,17 +482,30 @@ export function discriminatingSurfaceChangedWithinRect(
   after: InteractionSurfaceSignature,
   rect: Rect,
 ): boolean {
-  const beforeInRect = discriminatingEntriesWithinRect(before, rect);
-  const afterByKey = new Map(
-    discriminatingEntriesWithinRect(after, rect).map((entry) => [entry.key, entry]),
-  );
-  for (const entry of beforeInRect) {
-    const other = afterByKey.get(entry.key);
+  const beforeInRect = contentKeyed(discriminatingEntriesWithinRect(before, rect));
+  const afterInRect = contentKeyed(discriminatingEntriesWithinRect(after, rect));
+  for (const [content, entry] of beforeInRect) {
+    const other = afterInRect.get(content);
     if (!other) return true;
     if (!rectsWithinTolerance(entry, other)) return true;
-    afterByKey.delete(entry.key);
+    afterInRect.delete(content);
   }
-  return afterByKey.size > 0;
+  return afterInRect.size > 0;
+}
+
+/** Entries by what they are rather than the state they are in; repeated content is told apart by document order. */
+function contentKeyed(
+  entries: InteractionSurfaceSignature,
+): Map<string, InteractionSurfaceSignature[number]> {
+  const occurrences = new Map<string, number>();
+  const keyed = new Map<string, InteractionSurfaceSignature[number]>();
+  for (const entry of entries) {
+    const content = entry.identity ?? entry.key;
+    const occurrence = occurrences.get(content) ?? 0;
+    occurrences.set(content, occurrence + 1);
+    keyed.set(`${content}|#${occurrence}`, entry);
+  }
+  return keyed;
 }
 
 function discriminatingEntriesWithinRect(
@@ -552,7 +569,7 @@ function buildInteractionSurfaceEntry(
 /**
  * What the element IS — never where it sits, and never volatile state a gesture
  * is expected to change. `interactionSurfaceSemanticKey` deliberately folds in
- * `hittable`/`enabled`/`selected` and an occurrence index, which is right for
+ * the states `stateMarkers` prints, `hittable`, and an occurrence index, which is right for
  * "did these two back-to-back captures agree" and wrong for "is this the same
  * element as before the gesture": scrolling flips `hittable` the moment a
  * node's centre leaves the viewport, so keying on it evicts precisely the
@@ -584,6 +601,11 @@ function isNonDiscriminatingSurfaceNode(
   return isViewportRootNode(node) || (node.ref !== undefined && keyboardChromeRefs.has(node.ref));
 }
 
+/**
+ * What the element is and the state it is in. The states are the ones `stateMarkers` prints, so the
+ * outcome lane, the unchanged-snapshot comparison, and the diff weigh one list: a tap whose only
+ * effect is a toggle is a change here, not a no-op to retry.
+ */
 function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {
   const semanticKey = [
     node.identifier,
@@ -591,8 +613,7 @@ function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {
     node.value,
     node.type,
     node.role,
-    node.enabled === false ? 'disabled' : 'enabled',
-    node.selected === true ? 'selected' : 'unselected',
+    ...stateMarkers(node),
     node.hittable === true ? 'hittable' : 'not-hittable',
   ]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))

@@ -338,6 +338,18 @@ test('attrs digest keeps explicit false/zero/empty field facts; unavailable ones
   }
 });
 
+test('attrs digest carries both checked answers, and none for a node that cannot be checked', () => {
+  for (const checked of [true, false]) {
+    const digest = getView!({ ref: 'e7', node: { ...MATCHED_NODE, checked } }, 'digest');
+    expect(digest.node).toEqual({ ...COMPACT_NODE, checked });
+  }
+  const plain = getView!({ ref: 'e7', node: MATCHED_NODE }, 'digest').node as Record<
+    string,
+    unknown
+  >;
+  expect('checked' in plain).toBe(false);
+});
+
 test('find/get default and full return today’s shape unchanged (same reference)', () => {
   const data: DaemonResponseData = { ref: '@e7', text: 'Sign in', node: MATCHED_NODE };
   expect(findView!(data, 'default')).toBe(data);

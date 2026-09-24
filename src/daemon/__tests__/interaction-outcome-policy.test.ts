@@ -467,3 +467,48 @@ test('discriminatingSurfaceChangedWithinRect counts content appearing inside the
 
   assert.equal(discriminatingSurfaceChangedWithinRect(before, after, LIST_RECT), true);
 });
+
+// Android is the only producer of `checked`, and a tap whose only effect is a toggle changes nothing
+// else on a screen without a mirrored label. The outcome lane has to read the flip as a change, or a
+// no-change retry taps the switch straight back.
+test('classifyInteractionSurfaceChange reads a checked-only flip as a change', () => {
+  const before = buildInteractionSurfaceSignature(makeToggleSnapshot(false).nodes);
+  const after = buildInteractionSurfaceSignature(makeToggleSnapshot(true).nodes);
+
+  assert.equal(classifyInteractionSurfaceChange(before, after), 'changed');
+});
+
+test('discriminatingSurfaceChangedWithinRect reads a flip at the same rect as no movement, and a moved row as movement', () => {
+  const rect = { x: 0, y: 0, width: 390, height: 844 };
+  const signature = (checked: boolean, y?: number) =>
+    buildInteractionSurfaceSignature(makeToggleSnapshot(checked, y).nodes);
+
+  assert.equal(
+    discriminatingSurfaceChangedWithinRect(signature(false), signature(true), rect),
+    false,
+  );
+  assert.equal(
+    discriminatingSurfaceChangedWithinRect(signature(false, 300), signature(false, 200), rect),
+    true,
+  );
+});
+
+function makeToggleSnapshot(checked: boolean, y = 300): SnapshotState {
+  const base = makeSnapshot('Inbox');
+  return {
+    ...base,
+    nodes: [
+      ...base.nodes,
+      {
+        ref: 'e3',
+        index: 2,
+        parentIndex: 0,
+        type: 'android.widget.Switch',
+        identifier: 'wifi-switch',
+        label: 'Wi-Fi switch',
+        checked,
+        rect: { x: 300, y, width: 60, height: 40 },
+      },
+    ],
+  };
+}

@@ -388,6 +388,34 @@ test('a difference outside the scrolled container does not buy the movement clai
   assert.equal(spy.calls(), 1);
 });
 
+// Android reports `checked`, and a swipe that starts on a switch can flip it. On its own the flip is
+// identity-invariant and reads as an unchanged surface. Beside a change elsewhere, such as the status
+// clock ticking, the pair reads as changed, and the within-container check then sees a switch whose
+// key differs at the same rect: a state flip, not the list moving, so it buys no movement claim.
+test('a toggle the swipe flipped inside the container does not buy the movement claim', async () => {
+  const chrome = {
+    type: 'Image',
+    identifier: 'status-clock',
+    label: '2:40',
+    rect: { x: 20, y: 20, width: 60, height: 20 },
+  } as SnapshotNode;
+  const toggle = (checked: boolean) =>
+    ({
+      type: 'android.widget.Switch',
+      identifier: 'wifi-switch',
+      label: 'Wi-Fi switch',
+      checked,
+      rect: { x: 300, y: 320, width: 60, height: 40 },
+    }) as SnapshotNode;
+  const { observation } = observe({
+    baseline: baselineOf([...screen(0), chrome, toggle(false)]),
+    screens: [[...screen(0), { ...chrome, label: '2:41' } as SnapshotNode, toggle(true)]],
+  });
+
+  assert.equal(await observation, 'unobserved');
+  assertWithheld('change-outside-container');
+});
+
 test('a surface with no container to confine the claim to keeps the whole-surface answer', async () => {
   const rowsOnly = (offset: number) => screen(offset).filter((node) => node.type !== 'ScrollView');
   const { observation } = observe({
