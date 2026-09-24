@@ -26,6 +26,16 @@ test('the PR workflow applies the impact decision to the XCTest step', () => {
   );
 });
 
+test('macOS clean-install proof follows live UI replay', () => {
+  const workflow = fs.readFileSync(path.resolve('.github/workflows/macos.yml'), 'utf8');
+  const replay = workflow.indexOf('- name: Run macOS integration test');
+  const proof = workflow.indexOf(
+    '- name: Verify clean-installed Simulator snapshot bridge preparation',
+  );
+  expect(replay).toBeGreaterThan(-1);
+  expect(proof).toBeGreaterThan(replay);
+});
+
 test('native runner and golden-table changes run XCTest; TypeScript runtime changes use live E2E', () => {
   for (const file of [
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
