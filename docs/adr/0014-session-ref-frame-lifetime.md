@@ -275,8 +275,9 @@ specialized route. The completeness gate covers every command projected to the d
 generic fallbacks, so a missing facet cannot hide an unclassified mutation. Mutations performed by
 unrelated external tools remain outside this session guarantee.
 
-This policy is not derived from Apple runner `readOnly`. Runner traits govern retry, liveness,
-readiness probes, and preflight skipping at a lower wire-command seam. `refFrameEffect` governs
+This policy is not derived from the runner-side classification. Apple runner command traits govern
+retry eligibility, launch policy, and the recorded-failure conversion at a lower wire-command seam,
+while the TypeScript `readOnly` trait is the one that also gates readiness probes. `refFrameEffect` governs
 daemon session authorization and includes commands that never reach the Apple runner. Narrow
 consistency tests may cover direct mappings, but blanket parity would couple different concepts.
 

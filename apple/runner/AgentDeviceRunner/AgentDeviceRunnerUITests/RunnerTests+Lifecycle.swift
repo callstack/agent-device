@@ -316,11 +316,12 @@ extension RunnerTests {
     return foreign.count == 1 ? foreign.first : nil
   }
 
-  /// `activate()` on a not-running app is a bare launch, which would drop the URL of a launch
-  /// SpringBoard still holds behind its "Open in …?" confirmation; see `APP_NOT_RUNNING_RUNNER_CODE`.
-  func notRunningReadResponse(command: Command, bundleId: String) -> Response? {
+  /// The `.existingApp` refusal: `activate()` on a not-running app is a bare launch, which would drop
+  /// the URL of a launch SpringBoard still holds behind its "Open in …?" confirmation; see
+  /// `APP_NOT_RUNNING_RUNNER_CODE` (#2852).
+  func notRunningRefusal(command: Command, bundleId: String) -> Response? {
 #if os(iOS)
-    guard isReadOnlyCommand(command),
+    guard command.traits.launchPolicy == .existingApp,
       XCUIApplication(bundleIdentifier: bundleId).state == .notRunning
     else { return nil }
     NSLog(
@@ -450,41 +451,17 @@ extension RunnerTests {
     }
   }
 
-  func shouldRetryCommand(_ command: Command) -> Bool {
-    isReadOnlyCommand(command)
-  }
+  // MARK: - Session-Loss Retry
 
   func shouldRetryException(_ command: Command, message: String) -> Bool {
-    guard shouldRetryCommand(command) else { return false }
+    guard command.traits.retryOnSessionLoss else { return false }
     // XCTest raises this AX error as an ObjC exception whose reason is the only handle on it.
     return message.lowercased().contains("kaxerrorservernotfound")
-  }
-
-  // MARK: - Command Classification
-
-  func isReadOnlyCommand(_ command: Command) -> Bool {
-    switch command.command.traits.readOnly {
-    case .always:
-      return true
-    case .never:
-      return false
-    case .conditional:
-      // Today only `alert` is conditional: read-only when getting, mutating otherwise.
-      return (command.action ?? "get").lowercased() == "get"
-    }
   }
 
   func shouldRetryResponse(_ response: Response) -> Bool {
     guard response.ok == false else { return false }
     return response.error?.retryableFailure != nil
-  }
-
-  func isInteractionCommand(_ command: CommandType) -> Bool {
-    return command.traits.isInteraction
-  }
-
-  func isRunnerLifecycleCommand(_ command: CommandType) -> Bool {
-    return command.traits.isLifecycle
   }
 
   // MARK: - Interaction Stabilization
