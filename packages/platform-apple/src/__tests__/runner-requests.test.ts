@@ -131,6 +131,10 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     MACOS_DEVICE,
     (i) => i.scroll('down', { amount: 0.5, durationMs: 300 }),
   ],
+  'macos.desktop-scroll.pixels': [
+    MACOS_DEVICE,
+    (i) => i.scroll('up', { pixels: 200, durationMs: 300 }),
+  ],
   'ios-simulator.interactor-find-text.text': [
     IOS_SIMULATOR,
     (i) => i.findText!('Ready', { appBundleId: APP }),
