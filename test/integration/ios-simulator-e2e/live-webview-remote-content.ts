@@ -5,6 +5,7 @@ import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmati
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';
+// Temporary CI probe: measure the XCTest skip route for an iOS E2E-only PR diff.
 // Native chrome of the lab, rendered with the route and before the page: it proves the deep link
 // landed without asking the runner to query a screen whose web view is still loading.
 const LAB_CHROME_ID = 'close-webview-lab';
