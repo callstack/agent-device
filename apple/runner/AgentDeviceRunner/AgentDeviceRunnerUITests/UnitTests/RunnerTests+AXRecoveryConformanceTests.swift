@@ -154,28 +154,35 @@ private final class AXFixtureSnapshot: NSObject {
   @objc let enabled: NSNumber = true
   @objc let selected: NSNumber = false
   @objc let hasFocus: NSNumber = false
-  @objc let hasKeyboardFocus: NSNumber = false
+  @objc let hasKeyboardFocus: NSNumber
   @objc let children: [AXFixtureSnapshot]
   @objc let accessibilityElement: AXFixtureElement?
 
-  init(node: AXFixtureNode, children: [AXFixtureSnapshot], element: AXFixtureElement?) {
+  init(node: AXFixtureNode, children: [AXFixtureSnapshot], element: AXFixtureElement?, keyboardFocus: Bool = false) {
     identifier = node.identity
     label = node.identity
+    hasKeyboardFocus = NSNumber(value: keyboardFocus)
     self.children = children
     accessibilityElement = element
   }
 
   /// `levels` node levels rooted at `node`; the deepest returned level loses its live element
-  /// when the fixture says the frontier vanished.
-  static func fragment(_ node: AXFixtureNode, levels: Int, vanishAtFrontier: Bool) -> AXFixtureSnapshot {
+  /// when the fixture says the frontier vanished. The node named by `keyboardFocusIdentity` holds
+  /// the software keyboard's focus, the way a text field being typed into does.
+  static func fragment(
+    _ node: AXFixtureNode, levels: Int, vanishAtFrontier: Bool, keyboardFocusIdentity: String? = nil
+  ) -> AXFixtureSnapshot {
     let boundary = levels <= 1
     let children = boundary
       ? []
-      : node.children.map { fragment($0, levels: levels - 1, vanishAtFrontier: vanishAtFrontier) }
+      : node.children.map {
+        fragment($0, levels: levels - 1, vanishAtFrontier: vanishAtFrontier, keyboardFocusIdentity: keyboardFocusIdentity)
+      }
     return AXFixtureSnapshot(
       node: node,
       children: children,
-      element: boundary && vanishAtFrontier ? nil : AXFixtureElement(node: node))
+      element: boundary && vanishAtFrontier ? nil : AXFixtureElement(node: node),
+      keyboardFocus: node.identity == keyboardFocusIdentity)
   }
 }
 
@@ -184,12 +191,14 @@ private final class AXFixtureSnapshot: NSObject {
 private final class AXFixtureClient: NSObject {
   private let rejectLevelsAbove: Int?
   private let vanishAtFrontier: Bool
+  private let keyboardFocusIdentity: String?
   private(set) var requests = 0
   private(set) var rejected = 0
 
-  init(rejectLevelsAbove: Int?, vanishAtFrontier: Bool) {
+  init(rejectLevelsAbove: Int?, vanishAtFrontier: Bool, keyboardFocusIdentity: String? = nil) {
     self.rejectLevelsAbove = rejectLevelsAbove
     self.vanishAtFrontier = vanishAtFrontier
+    self.keyboardFocusIdentity = keyboardFocusIdentity
   }
 
   @objc(requestSnapshotForElement:attributes:parameters:error:)
@@ -206,7 +215,8 @@ private final class AXFixtureClient: NSObject {
       return nil
     }
     guard let element = element as? AXFixtureElement else { return nil }
-    return AXFixtureSnapshot.fragment(element.node, levels: levels, vanishAtFrontier: vanishAtFrontier)
+    return AXFixtureSnapshot.fragment(
+      element.node, levels: levels, vanishAtFrontier: vanishAtFrontier, keyboardFocusIdentity: keyboardFocusIdentity)
   }
 }
 
@@ -363,6 +373,28 @@ extension RunnerTests {
       observation.nodes = signature.nodes
     }
     return observation
+  }
+
+  /// The bridge asks the AX server for `hasKeyboardFocus` beside `hasFocus` and reports either as
+  /// `focused`: the field a software keyboard is typing into holds keyboard focus only, and a
+  /// capture that read `hasFocus` alone left it unfocused.
+  func testPrivateAXBridgeReportsKeyboardFocusAsFocused() throws {
+    let rootNode = AXFixtureNode.build(AXRecoveryFixture.Tree(chain: 2, fan: nil))
+    let client = AXFixtureClient(rejectLevelsAbove: nil, vanishAtFrontier: false, keyboardFocusIdentity: "1")
+    let response = RunnerAXSnapshotBridge.snapshotTree(
+      withClient: client,
+      target: AXFixtureElement(node: rootNode),
+      maxDepth: 2,
+      maxNodes: 10,
+      deepExtensionCallLimit: 0,
+      customActionLimit: 0,
+      deadline: .distantFuture)
+    let root = try XCTUnwrap(response["root"] as? [String: Any])
+    let field = try XCTUnwrap((root["children"] as? [[String: Any]])?.first)
+    XCTAssertEqual(root["label"] as? String, "0")
+    XCTAssertEqual(root["focused"] as? Bool, false, "no focus of either kind is not focused")
+    XCTAssertEqual(field["label"] as? String, "1")
+    XCTAssertEqual(field["focused"] as? Bool, true, "keyboard focus alone is focused")
   }
 
   /// Every recovery case of the shared fixture, replayed through the real ladder, bridge

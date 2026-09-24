@@ -51,14 +51,20 @@ extension RunnerTests {
     return TvRemoteButton(rawValue: raw.lowercased())
   }
 
+  // Either focus is focus, the same pair the snapshot producers read: `hasFocus` is the focus
+  // engine's answer, `hasKeyboardFocus` the text field's under a software keyboard.
   func elementHasFocus(_ element: XCUIElement) -> Bool {
-    var focused = false
+    return elementBool(element, forKey: "hasKeyboardFocus") || elementBool(element, forKey: "hasFocus")
+  }
+
+  private func elementBool(_ element: XCUIElement, forKey key: String) -> Bool {
+    var result = false
     _ = RunnerObjCExceptionCatcher.catchException({
-      if let value = (element as NSObject).value(forKey: "hasFocus") as? Bool {
-        focused = value
+      if let value = (element as NSObject).value(forKey: key) as? Bool {
+        result = value
       }
     })
-    return focused
+    return result
   }
 
   func activateElement(
