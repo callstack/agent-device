@@ -66,31 +66,6 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Verify clean-installed Simulator snapshot bridge preparation and the fold-helper -Werror gate
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch origin "$BASE_SHA" --depth=1
-          if git diff --quiet "$BASE_SHA"...HEAD -- \
-            apple/snapshot-bridge \
-            apple/fold-helper \
-            packages/platform-apple/src/snapshot-source \
-            packages/platform-apple/src/foldable \
-            scripts/check-package.ts \
-            scripts/size-report-install.mjs \
-            scripts/size-report-package.mjs \
-            .github/workflows/ios.yml \
-            .github/workflows/macos.yml; then
-            echo "Snapshot bridge and fold-helper sources are unchanged; skipping preparation proof."
-            exit 0
-          fi
-          pnpm build
-          pnpm exec vitest run \
-            packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
-            packages/platform-apple/src/foldable/fold-helper-cache.test.ts
-          pnpm check:package -- --verify-snapshot-bridge-preparation
-
       - name: Run macOS command coverage contract
         uses: ./.github/actions/run-gate
         with: { gate: macos-coverage }
@@ -176,6 +151,32 @@ jobs:
             2
             --report-junit
             test/artifacts/replays-macos.junit.xml
+
+      # Clean-install verification may raise macOS local-network permission UI; keep it after replay.
+      - name: Verify clean-installed Simulator snapshot bridge preparation and the fold-helper -Werror gate
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$BASE_SHA" --depth=1
+          if git diff --quiet "$BASE_SHA"...HEAD -- \
+            apple/snapshot-bridge \
+            apple/fold-helper \
+            packages/platform-apple/src/snapshot-source \
+            packages/platform-apple/src/foldable \
+            scripts/check-package.ts \
+            scripts/size-report-install.mjs \
+            scripts/size-report-package.mjs \
+            .github/workflows/ios.yml \
+            .github/workflows/macos.yml; then
+            echo "Snapshot bridge and fold-helper sources are unchanged; skipping preparation proof."
+            exit 0
+          fi
+          pnpm build
+          pnpm exec vitest run \
+            packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
+            packages/platform-apple/src/foldable/fold-helper-cache.test.ts
+          pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Upload macOS artifacts
         if: always()
