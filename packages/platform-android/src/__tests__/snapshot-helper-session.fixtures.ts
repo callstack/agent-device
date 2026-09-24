@@ -521,3 +521,16 @@ function readSessionPort(args: readonly string[]): number {
   assert.notEqual(index, -1);
   return Number(args[index + 1]);
 }
+
+/** A capture holding only system-UI chrome: the helper answered, but no app content. */
+export function androidSystemWindowOnlyXml(): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node window-index="0" window-type="3" window-layer="30" window-active="true" window-focused="true" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node content-desc="Back" class="android.widget.ImageButton" package="com.android.systemui" bounds="[0,792][96,844]" clickable="true" enabled="true" focusable="true" visible-to-user="true" />',
+    '    <node content-desc="Home" class="android.widget.ImageButton" package="com.android.systemui" bounds="[147,792][243,844]" clickable="true" enabled="true" focusable="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+}

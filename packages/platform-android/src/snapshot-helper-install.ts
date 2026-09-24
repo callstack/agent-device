@@ -32,6 +32,13 @@ export function forgetAndroidSnapshotHelperInstall(options: {
 /**
  * @internal Test isolation hook for process-global snapshot helper install cache.
  */
+const ANDROID_SNAPSHOT_HELPER_NOT_CURRENT = 'android-snapshot-helper-not-current';
+
+/** A `current-only` check found no current helper: nothing ran, so there is nothing to recover. */
+export function isAndroidSnapshotHelperNotCurrentError(error: unknown): boolean {
+  return asAppError(error).details?.reason === ANDROID_SNAPSHOT_HELPER_NOT_CURRENT;
+}
+
 export function resetAndroidSnapshotHelperInstallCache(): void {
   installedSnapshotHelpers.clear();
 }
@@ -147,7 +154,7 @@ export async function ensureAndroidSnapshotHelper(options: {
       'COMMAND_FAILED',
       'Android snapshot helper is not installed at the current version',
       {
-        reason: 'android-snapshot-helper-not-current',
+        reason: ANDROID_SNAPSHOT_HELPER_NOT_CURRENT,
         packageName,
         versionCode,
         installedVersionCode,

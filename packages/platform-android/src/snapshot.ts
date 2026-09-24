@@ -45,6 +45,7 @@ import {
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
 import { getLiveAndroidSnapshotHelperSession } from './snapshot-helper-session-lifecycle.ts';
+import { isAndroidSnapshotHelperNotCurrentError } from './snapshot-helper-install.ts';
 import {
   getAndroidSnapshotHelperSessionDeviceKey,
   isAndroidSnapshotHelperRuntimeOccupiedError,
@@ -492,6 +493,7 @@ async function captureAndroidHelperContentAttempt(params: {
     helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
   } catch (error) {
     options.signal?.throwIfAborted();
+    if (isAndroidSnapshotHelperNotCurrentError(error)) throw error;
     return {
       outcome: 'captured',
       capture: await rejectAndroidHelperCaptureFailure({
