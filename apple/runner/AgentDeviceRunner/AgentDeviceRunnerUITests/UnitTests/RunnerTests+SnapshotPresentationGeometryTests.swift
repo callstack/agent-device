@@ -6,7 +6,7 @@ extension RunnerTests {
   func testEffectiveGeometryIntersectsViewportAndAncestorClip() {
     let effective = SnapshotGeometry.effectiveFrame(
       reportedFrame: CGRect(x: 350, y: 80, width: 100, height: 100),
-      viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
+      viewport: .reported(rect: CGRect(x: 0, y: 0, width: 402, height: 874)),
       ancestorClip: CGRect(x: 300, y: 100, width: 80, height: 80)
     )
 
@@ -17,7 +17,7 @@ extension RunnerTests {
     let reported = CGRect(x: 500, y: 120, width: 100, height: 44)
     let effective = SnapshotGeometry.effectiveFrame(
       reportedFrame: reported,
-      viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
+      viewport: .reported(rect: CGRect(x: 0, y: 0, width: 402, height: 874)),
       ancestorClip: nil
     )
 

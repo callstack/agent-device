@@ -21,7 +21,7 @@ final class RegularDepthTests: XCTestCase {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: viewport
+      viewport: .reported(rect: viewport)
     )
 
     let result = try XCTUnwrap(SnapshotPresentation.present(acquisition, options: options))

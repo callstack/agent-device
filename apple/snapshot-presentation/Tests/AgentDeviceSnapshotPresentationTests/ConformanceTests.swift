@@ -49,7 +49,7 @@ final class ConformanceTests: XCTestCase {
         ],
         truncated: false,
         effectiveDepth: nil,
-        viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
+        viewport: .reported(rect: CGRect(x: 0, y: 0, width: 100, height: 100))
       ),
       options: options,
       policy: .cursorProjected

@@ -97,7 +97,7 @@ extension RunnerTests {
         },
         truncated: false,
         effectiveDepth: nil,
-        viewport: fixture.viewport.cgRect
+        viewport: .reported(rect: fixture.viewport.cgRect)
       )
       let options = PresentationOptions(
         interactiveOnly: false,
