@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { assertWaitText, snapshotNodes } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.ts';
+import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';

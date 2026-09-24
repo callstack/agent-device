@@ -11,19 +11,13 @@ import {
   assertJsonContains,
   assertWaitText,
 } from './live-assertions.ts';
+import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
 const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
-/**
- * Deliberately generous. This budget decides whether the alert probe below runs at all, so it must
- * outlast the slowest honest route mount on a cold CI simulator — the WebView lab took over 2.5 s
- * there while rendering correctly. Waiting longer costs nothing when a confirmation really is up,
- * because the route never renders until it is accepted; being too short costs the whole scenario.
- */
-const DEEP_LINK_DESTINATION_WAIT_MS = '15000';
 /** The Automation lab's own first landmark; see `acceptDeepLinkConfirmationIfPresent`. */
 const AUTOMATION_LAB_LANDMARK = ['text', 'Automation lab'] as const;
 const AUTOMATION_DEEP_LINK =
@@ -251,42 +245,6 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
   );
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
-}
-
-/**
- * iOS sometimes puts an "Open in <app>?" confirmation in front of a custom-scheme deep link, so a
- * scenario that launched one must accept it before asserting anything. `destination` is the `wait`
- * predicate for the route's own first landmark, and it decides whether the alert probe runs at all:
- * a landmark that arrived proves no confirmation is in the way. Each caller passes its own, because
- * a shared landmark never matches off its route and sends every caller into the probe — and
- * `alert get` against a live WKWebView screen is the XCTest query that exceeds the runner's
- * execution watchdog, leaving every later command refused as `RUNNER_BUSY` (#2484 follow-up). The
- * landmark must therefore be a native node the route renders before its content, and the budget
- * above must outlast a cold mount, so the probe is reached only when something really is blocking.
- */
-export async function acceptDeepLinkConfirmationIfPresent(
-  context: LiveContext,
-  destination: readonly string[],
-): Promise<void> {
-  const arrived = await runStep(
-    context,
-    'wait for deep-link destination before inspecting system UI',
-    ['wait', ...destination, DEEP_LINK_DESTINATION_WAIT_MS],
-    { allowFailure: true },
-  );
-  if (arrived.status === 0) return;
-
-  const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get'], {
-    allowFailure: true,
-  });
-  if (alert.status !== 0) return;
-  const alertInfo = alert.json?.data;
-  assert.match(String(alertInfo?.message), /^Open in\b/, JSON.stringify(alert.json));
-  assert.ok(
-    Array.isArray(alertInfo?.items) && alertInfo.items.includes('Open'),
-    JSON.stringify(alert.json),
-  );
-  await runStep(context, 'accept deep-link confirmation', ['alert', 'accept']);
 }
 
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {

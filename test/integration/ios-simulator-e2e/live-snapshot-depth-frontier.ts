@@ -6,7 +6,7 @@ import {
   type LiveSnapshotNode as SnapshotNode,
   snapshotNodes,
 } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.ts';
+import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
