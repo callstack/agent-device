@@ -191,7 +191,8 @@ test(
             .length,
           2,
         );
-        assertSnapshotCountInRange(snapshots, 2, 3);
+        // Each launchApp open captures the launched app once before it returns.
+        assertSnapshotCountInRange(snapshots, 4, 5);
       },
     );
   },

@@ -124,7 +124,10 @@ export type OpenApplicationTiming = Readonly<{
   openDispatchDurationMs?: number;
   launchUrlDurationMs?: number;
   postOpenSettleDurationMs?: number;
-  /** What a Simulator open learned about the launched app before returning (see the Apple owner). */
+  /**
+   * What the open learned about the launched app's readability before returning, set by a local
+   * iOS Simulator and by Android (see each platform owner).
+   */
   postOpenObservation?: 'observable' | 'unobservable' | 'not-eligible';
 }>;
 

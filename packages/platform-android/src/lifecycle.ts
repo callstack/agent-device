@@ -164,8 +164,33 @@ async function openAndroidApplication(
   if (appBundleId) {
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);
   }
-  timing.postOpenSettleDurationMs = 0;
+  const settleStartedAtMs = Date.now();
+  timing.postOpenObservation = await observeAndroidLaunch(binding, input, appBundleId);
+  timing.postOpenSettleDurationMs = elapsed(settleStartedAtMs);
   return { appBundleId, timing };
+}
+
+/**
+ * `am start -W` returns once the activity draws its first frame, which can be a splash or an empty
+ * root while the app still mounts its views, so the open itself captures the launched app. The
+ * capture's content verdict and its bounded re-capture decide readiness. The open still succeeds
+ * when the app stays unreadable or the capture fails: the capture reports why in its own
+ * diagnostics, and the next observation meets the same state.
+ */
+async function observeAndroidLaunch(
+  binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
+  input: OpenApplicationInput,
+  appBundleId: string | undefined,
+): Promise<NonNullable<OpenApplicationOutcome['timing']['postOpenObservation']>> {
+  if (!appBundleId) return 'not-eligible';
+  const interactor = await binding.resolveInteractor(input.execution, appBundleId);
+  try {
+    await interactor.snapshot({ appBundleId, signal: binding.signal });
+    return 'observable';
+  } catch {
+    binding.signal.throwIfAborted();
+    return 'unobservable';
+  }
 }
 
 function elapsed(startedAtMs: number): number {
