@@ -48,6 +48,45 @@ test('recovers an empty iOS simulator dump from bounded simctl log history', asy
   );
 });
 
+test.each([
+  ['a session start', { state: 'active', startedAt: 1_000 } as const, ['--start', '@1']],
+  ['no session start', undefined, ['--last', '5m']],
+])(
+  'scopes the whole log-show argv of a scoped-set simulator after %s',
+  async (_label, snapshot, window) => {
+    const runSimctl = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
+    await dumpAppleNetworkTraffic(
+      host({ runSimctl }),
+      { ...simulator, simulatorSetPath: '/tmp/scoped-set' },
+      input(snapshot ? { appLogSnapshot: snapshot } : {}),
+      new AbortController().signal,
+    );
+
+    expect(runSimctl).toHaveBeenCalledWith(
+      {
+        tool: 'simctl',
+        args: [
+          '--set',
+          '/tmp/scoped-set',
+          'spawn',
+          'sim-1',
+          'log',
+          'show',
+          '--style',
+          'compact',
+          '--info',
+          '--predicate',
+          expect.any(String),
+          ...window,
+        ],
+        allowFailure: true,
+        timeoutMs: 4_000,
+      },
+      expect.any(AbortSignal),
+    );
+  },
+);
+
 test('preserves the simulator no-HTTP explanation after recovery returns app lines', async () => {
   const result = await dumpAppleNetworkTraffic(
     host({

@@ -21,6 +21,21 @@ test('simulator doctor routes the exact simctl probe through appleTools', async 
   );
 });
 
+test('simulator doctor probes simctl without a set, even for a scoped-set simulator', async () => {
+  const appleToolRun = vi.fn(async () => ({ stdout: 'simctl help', stderr: '', exitCode: 0 }));
+  const fixture = hostFixture({ appleToolRun });
+
+  await doctorAppleAppLogs(
+    fixture.host,
+    appleDevice({ simulatorSetPath: '/tmp/scoped-set' }),
+    'com.example.app',
+  );
+  expect(appleToolRun).toHaveBeenCalledWith(
+    { tool: 'simctl', args: ['help'], allowFailure: true },
+    undefined,
+  );
+});
+
 test('CoreDevice doctor routes version discovery through appleTools', async () => {
   const appleToolRun = vi.fn(async (request) => ({
     stdout: request.args.includes('--help')
