@@ -37,8 +37,8 @@ function foldScopeUnavailable(simulatorSetPath: string) {
  * The simulator leaf that can carry a hinge: iPhone and iPad. Which *model* inside it actually
  * folds is not in `DeviceInfo`, so the operation answers that from CoreDevice's display table and
  * refuses a single-panel simulator with a typed `UNSUPPORTED_OPERATION`, the way the runner
- * answers for the Action Button hardware. A simulator scoped to a non-default set is refused here
- * too: its pose cannot be read back through CoreDevice, so no display probe or HID effect runs.
+ * answers for the Action Button hardware. A simulator scoped to a non-default set is refused too;
+ * see {@link foldScopeUnavailable}.
  */
 function appleFoldFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator') return foldKindUnavailable;

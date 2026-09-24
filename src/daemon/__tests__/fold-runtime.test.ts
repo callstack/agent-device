@@ -16,7 +16,7 @@ import {
   foldRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { deviceShape } from '@agent-device/kernel/device';
+import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
@@ -60,13 +60,14 @@ function runtimeHarness(
     pose: 'open',
     hingeAngleDegrees: 180,
   })),
+  device: DeviceInfo = testDevice,
 ) {
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
-    device: { ...deviceShape(testDevice), providerMode: 'local' },
+    device: { ...deviceShape(device), providerMode: 'local' },
     operations: { setFoldPose: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
   };
   const binding = {
-    device: testDevice,
+    device,
     owner: localRuntimeOwner('apple'),
     facts,
     operations: { setFoldPose },
@@ -166,6 +167,37 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
       details: { reason: 'unsupported-platform-leaf' },
     },
   });
+});
+
+// The scoped-set refusal is a real route outcome, not just a narrowed binding: a scoped session's
+// `setFoldPose` fact refuses on admission, so the wire error carries the typed reason and the set
+// name, and the device is never bound or posed.
+test('refuses a scoped simulator set on the route with the typed reason, never binding', async () => {
+  const scopedDevice: DeviceInfo = { ...testDevice, simulatorSetPath: '/tmp/scoped-set' };
+  const scopeRefusal = {
+    available: false,
+    reason: 'unsupported-device-scope',
+    hint: 'fold cannot resolve a simulator scoped to the set at "/tmp/scoped-set".',
+  } as const;
+  const harness = runtimeHarness(scopeRefusal, vi.fn(), scopedDevice);
+
+  const resolved = await resolveBoundFoldRuntime({
+    device: scopedDevice,
+    positionals: ['half-open'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(false);
+  if (resolved.ok || resolved.response.ok) throw new Error('the scoped-set fact admitted fold');
+  expect(resolved.response.error).toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: 'fold is not supported on this device',
+    hint: expect.stringContaining('/tmp/scoped-set'),
+    details: { reason: 'unsupported-device-scope' },
+  });
+  expect(harness.bindDevice).not.toHaveBeenCalled();
+  expect(harness.setFoldPose).not.toHaveBeenCalled();
 });
 
 test('passes the validated timed intent to the admitted fold owner', async () => {

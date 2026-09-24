@@ -82,7 +82,7 @@ test('a scoped simulator set binds no pose operation and never reaches a hinge',
   expect(mockPose).not.toHaveBeenCalled();
 });
 
-test('the routed fold response refuses a scoped simulator set with the typed reason before any tool call', () => {
+test('the narrowed fold use refuses a scoped simulator set with the typed fact reason and hint', () => {
   const refusal = thrownBy(() => narrowDeviceBinding(foldBinding(scopedDuo), foldRuntimeUse)) as {
     code?: string;
     details?: { reason?: string; hint?: string };
@@ -90,7 +90,6 @@ test('the routed fold response refuses a scoped simulator set with the typed rea
   expect(refusal.code).toBe('UNSUPPORTED_OPERATION');
   expect(refusal.details?.reason).toBe('unsupported-device-scope');
   expect(refusal.details?.hint).toContain('/tmp/scoped-set');
-  expect(mockPose).not.toHaveBeenCalled();
 });
 
 test('a scoped set never outranks the existing kind and OS refusals', () => {
