@@ -140,7 +140,7 @@ export function createAppleSnapshotRoute(
       try {
         target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
       } catch (error) {
-        if (signal.aborted) throw isRequestCanceledError(error) ? error : signal.reason;
+        rethrowIfResolutionCancelled(signal, error);
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
         return await runFallback(
           device.id,
@@ -245,6 +245,14 @@ async function resolveTargetForObservation(
       if (await host.appleApplications.hasLiveRunnerSession(device, execution)) throw error;
     }
   }
+}
+
+/**
+ * A cancelled target resolution rethrows the resolver's own cancellation, which names the readiness
+ * phase only when the resolver was waiting on a running discovery.
+ */
+function rethrowIfResolutionCancelled(signal: AbortSignal, error: unknown): void {
+  if (signal.aborted) throw isRequestCanceledError(error) ? error : signal.reason;
 }
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
