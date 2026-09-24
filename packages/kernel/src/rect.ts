@@ -29,13 +29,22 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
 
 /**
  * The shared `hittable` predicate every iOS snapshot producer publishes (#1933): an enabled node
- * with a positive frame whose center falls inside the viewport. It is the TypeScript twin of the
- * runner's Swift `SnapshotGeometry.isGeometricallyActionable`, including `CGRect.contains`'s
+ * with a positive finite frame whose center falls inside the viewport. It is the TypeScript twin of
+ * the runner's Swift `SnapshotGeometry.isGeometricallyActionable`, including `CGRect.contains`'s
  * half-open right/bottom edges — a center landing exactly on the viewport's right or bottom edge is
- * not hittable on either producer. The host AX bridge derives the source bit from the node's own
- * frame and the fold intersects it with the clipped frame, so a `hittable:` selector cannot tell the
- * two producers apart. Kept here so both packages read one definition rather than each re-encoding
- * the rule.
+ * not hittable on either producer — and including the node-rect precondition, which Swift used to
+ * spell null/empty and therefore called a negative-width or infinite box actionable here and not
+ * there (#2891). `contracts/fixtures/snapshot-actionability-policy.json` pins both sides.
+ *
+ * `viewport` is total by construction: a caller only reaches this once `resolveViewportEvidence` in
+ * `packages/capture-kit/src/ios-snapshot-engine/invariants.ts` has a positive finite rect to hand
+ * over, and it throws `missing-viewport`/`invalid-viewport` otherwise. That refusal is this
+ * predicate's own unknown-viewport case, and it fails in the same direction as the runner's, which
+ * declares the state as `SnapshotViewport.missing` and publishes no actionability (#2891).
+ *
+ * The host AX bridge derives the source bit from the node's own frame and the fold intersects it
+ * with the clipped frame, so a `hittable:` selector cannot tell the two producers apart. Kept here
+ * so both packages read one definition rather than each re-encoding the rule.
  */
 export function isGeometricallyActionable(
   enabled: boolean,

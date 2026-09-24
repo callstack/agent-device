@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import fc from 'fast-check';
+import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
+import { isGeometricallyActionable, isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { resolveViewportEvidence } from '../packages/capture-kit/src/ios-snapshot-engine/invariants.ts';
 import {
   compareDifferentialCases,
   swiftToolchainAvailable,
@@ -124,3 +130,102 @@ function assertWithinKillCriterion(startedAt: number, seed: number): void {
       String(seed),
   );
 }
+
+type ActionabilityRect = Readonly<{ x: number; y: number; width: number; height: number }>;
+type ActionabilityViewport =
+  | Readonly<{ kind: 'reported' | 'derived'; rect: ActionabilityRect }>
+  | Readonly<{ kind: 'missing'; reason: 'not-provided' | 'invalid' }>;
+type ActionabilityVector = Readonly<{
+  name: string;
+  enabled: boolean;
+  node: ActionabilityRect | Readonly<{ infinite: true }>;
+  viewport: ActionabilityViewport;
+  hittable: boolean;
+  nodeRectGuardPasses: boolean;
+}>;
+
+const ACTIONABILITY_POLICY_PATH = path.resolve(
+  import.meta.dirname,
+  '..',
+  'contracts',
+  'fixtures',
+  'snapshot-actionability-policy.json',
+);
+
+/** The box a platform hands back when it resolved none — JSON has no literal for infinity. */
+const INFINITE_RECT: Rect = {
+  x: Number.NEGATIVE_INFINITY,
+  y: Number.NEGATIVE_INFINITY,
+  width: Number.POSITIVE_INFINITY,
+  height: Number.POSITIVE_INFINITY,
+};
+
+function readActionabilityVectors(): readonly ActionabilityVector[] {
+  const table = JSON.parse(fs.readFileSync(ACTIONABILITY_POLICY_PATH, 'utf8')) as {
+    cases: readonly ActionabilityVector[];
+  };
+  assert.ok(table.cases.length > 0, 'actionability vector table must not be empty');
+  assert.equal(
+    new Set(table.cases.map((vector) => vector.name)).size,
+    table.cases.length,
+    'actionability vector names must be unique',
+  );
+  return table.cases;
+}
+
+function toRect(node: ActionabilityVector['node']): Rect {
+  return 'infinite' in node ? INFINITE_RECT : node;
+}
+
+function missingViewportReason(reason: 'not-provided' | 'invalid'): string {
+  return reason === 'invalid' ? 'invalid-viewport' : 'missing-viewport';
+}
+
+// The Swift twin of these same rows is ActionabilityPolicyTests in
+// apple/snapshot-presentation/Tests, run by `swift test --package-path apple/snapshot-presentation`
+// in this very command. The fold differential above cannot carry them: the host engine refuses to
+// fold a regular presentation at all without a positive finite viewport (`resolveViewportEvidence`),
+// so an unknown viewport has no TypeScript fold outcome to compare a runner outcome against.
+test('the shared hittable predicate agrees with every golden actionability vector', () => {
+  for (const vector of readActionabilityVectors()) {
+    const node = toRect(vector.node);
+    assert.equal(
+      isPositiveFiniteRect(node),
+      vector.nodeRectGuardPasses,
+      `${vector.name}: node-rect guard`,
+    );
+    if (vector.viewport.kind === 'missing') {
+      const evidence: IosViewportEvidence = vector.viewport;
+      const expectedReason = missingViewportReason(vector.viewport.reason);
+      assert.throws(
+        () => resolveViewportEvidence(evidence),
+        (error: unknown) => (error as { reason?: string }).reason === expectedReason,
+        `${vector.name}: the host declines the capture rather than answer the predicate`,
+      );
+      assert.equal(vector.hittable, false, `${vector.name}: the unknown viewport fails closed`);
+      continue;
+    }
+    assert.equal(
+      isGeometricallyActionable(vector.enabled, node, vector.viewport.rect),
+      vector.hittable,
+      vector.name,
+    );
+  }
+});
+
+test('the actionability table covers every viewport kind without a vacuous missing row', () => {
+  const vectors = readActionabilityVectors();
+  assert.deepEqual([...new Set(vectors.map((vector) => vector.viewport.kind))].sort(), [
+    'derived',
+    'missing',
+    'reported',
+  ]);
+  for (const vector of vectors) {
+    if (vector.viewport.kind !== 'missing') continue;
+    assert.equal(
+      vector.nodeRectGuardPasses,
+      true,
+      `${vector.name}: a missing-viewport row needs a node the guard accepts`,
+    );
+  }
+});
