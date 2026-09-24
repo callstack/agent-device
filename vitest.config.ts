@@ -125,10 +125,11 @@ export default defineConfig({
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
             'scripts/__tests__/npm-skills-exclusion.test.ts',
             'scripts/__tests__/simulator-skills-contract.test.ts',
-            // Parses ios.yml and the runner's Swift sources: no Xcode, no simulator, and
-            // the check it guards is what keeps the PR lane's `-only-testing:` list honest.
+            // Parse Swift guards and declarations before deriving the simulator selection.
+            'scripts/__tests__/swift-conditional-compilation.test.ts',
+            'scripts/__tests__/xctest-declarations.test.ts',
             'scripts/__tests__/xctest-selection.test.ts',
-            'scripts/__tests__/ios-xctest-impact.test.ts',
+            'scripts/__tests__/apple-ci-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',

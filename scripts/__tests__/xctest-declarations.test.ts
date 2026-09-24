@@ -67,6 +67,50 @@ describe('the declaration scan', () => {
     ).toEqual([`${TARGET}/RunnerTests/testGolden`]);
   });
 
+  test('discovers tests in indented extensions and new files without a name list', () => {
+    expect(
+      parseDeclaredTests(TARGET, [
+        {
+          file: 'UnitTests/NewScreenCaptureTests.swift',
+          text:
+            '#if os(iOS)\n' +
+            '  extension RunnerTests {\n' +
+            '    func testObservedScreenCapture() {}\n' +
+            '  }\n' +
+            '#endif\n',
+        },
+        {
+          file: 'NewTests.swift',
+          text: '    extension RunnerTests {\n        func testAnotherIndent() {}\n    }\n',
+        },
+      ]),
+    ).toEqual([
+      `${TARGET}/RunnerTests/testAnotherIndent`,
+      `${TARGET}/RunnerTests/testObservedScreenCapture`,
+    ]);
+  });
+
+  test('fails closed when a test-shaped declaration cannot be classified', () => {
+    expect(() => parseDeclaredTests(TARGET, source('func testOutsideAType() {}\n'))).toThrow(
+      'RunnerTests+Fixture.swift:1: unrecognized XCTest declaration',
+    );
+    expect(() =>
+      parseDeclaredTests(
+        TARGET,
+        source('extension RunnerTests {\n  func testGeneric<T>() {}\n}\n'),
+      ),
+    ).toThrow('RunnerTests+Fixture.swift:2: unrecognized XCTest declaration');
+    expect(() =>
+      parseDeclaredTests(TARGET, source('extension RunnerTests { func testInline() {} }\n')),
+    ).toThrow('RunnerTests+Fixture.swift:1: unrecognized XCTest declaration');
+    expect(() =>
+      parseDeclaredTests(
+        TARGET,
+        source('extension RunnerTests {\n  @available(iOS 17, *) func testAttributed() {}\n}\n'),
+      ),
+    ).toThrow('RunnerTests+Fixture.swift:2: unrecognized XCTest declaration');
+  });
+
   test('attributes each declared method to the platforms that compile it', () => {
     expect(
       parseDeclaredTestsByPlatform(

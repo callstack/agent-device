@@ -440,6 +440,12 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   ];
 };
 
+const ownsAppleRunnerBuildSource = (file: string): boolean =>
+  file.startsWith('apple/runner/') ||
+  file.startsWith('apple/snapshot-presentation/') ||
+  (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
+  file.endsWith('.swift');
+
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
   rule: string;
@@ -455,19 +461,19 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
       file.startsWith('apple/snapshot-presentation/') ||
       file === 'contracts/fixtures/ios-snapshot-engine-conformance.json',
   },
-  // Both platform builds compile the same runner sources, and each is a separate
-  // gate in a separate lane, so a Swift change owns both.
+  // The native runner cache hashes these source trees for both Apple targets.
+  // Keep the build owner broader than the current file extensions.
   {
     check: 'swift-runner-ios',
     rule: 'own:swift',
     detail: 'Swift runner sources require the iOS XCUITest build',
-    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+    owns: ownsAppleRunnerBuildSource,
   },
   {
     check: 'swift-runner-macos',
     rule: 'own:swift',
     detail: 'Swift runner sources require the macOS XCUITest build',
-    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+    owns: ownsAppleRunnerBuildSource,
   },
   // The PR lane names each runner XCTest method it runs, so renaming or deleting one
   // silently shrinks that lane. Selected here so the drift shows up on the change that

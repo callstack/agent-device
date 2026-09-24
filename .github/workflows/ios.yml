@@ -106,7 +106,7 @@ jobs:
           if [ "${{ github.event_name }}" = 'pull_request' ]; then
             git fetch origin "$BASE_SHA" --depth=1 || echo 'Base fetch failed; XCTest selection will fail open.'
           fi
-          node --experimental-strip-types scripts/ios-xctest-impact.ts
+          node --experimental-strip-types scripts/apple-ci-impact.ts xctest
 
       - name: Establish host focus canary
         id: host-focus-canary
@@ -137,128 +137,22 @@ jobs:
           preferred-device-name: iPhone 17 Pro
 
       - name: Run targeted iOS runner XCTest regressions
-        if: steps.xctest-impact.outputs.run == 'true'
+        id: ios-xctest
+        if: steps.xctest-impact.outputs.run != 'false'
         run: |
-          set -o pipefail
+          set -euo pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
+          IOS_PR_TEST_ARGS=()
+          IOS_PR_TEST_IDS="$(node --experimental-strip-types scripts/check-xctest-selection.ts --ios-pr-tests)"
+          while IFS= read -r test_id; do
+            IOS_PR_TEST_ARGS+=("-only-testing:$test_id")
+          done <<< "$IOS_PR_TEST_IDS"
+          test "${#IOS_PR_TEST_ARGS[@]}" -gt 0
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedSequenceTapFallsBackToXCTestCoordinateTapWhenAccessibilityIsUnavailable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRecordStartThrowsTheCaptureRefusalItReceived \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDispatchResolvesItsOwnModalWithoutCoordinateTapRoutingProbe \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testReadRefusesToLaunchANotRunningSessionApp \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testNonReadCommandStillLaunchesANotRunningSessionApp \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEmptyReplacementWithoutResolvableTargetFailsClosed \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportKeyboardClipMatchesGoldenParityTable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportPolicyUsesParityTableConstants \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollViewportDispatchKeepsTheUnclippedFrameAsItsCoordinateRotationBasis \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedGesturePoliciesMatchCommandContracts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFreshCoordinateTapContainsUnavailableTextInputProbe \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeIssueScopeIsThreadBound \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbePreservesEnclosingRunnerWait \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSuppressedAxIssueMakesTextInputProbeUnavailable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHealthyCoordinateTapPreservesBareTypingWitness \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextInputProbeContainmentExcludesRequiredReadsAndLaterIssues \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTextInputCandidateMustBeEnabledAndContainTheTouchPoint \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testApplicationStateRawValuesMatchTheActivationDecoder \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testMissingBundleCommandInvalidatesCompleteCachedTargetState \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCachedTargetInvalidationClearsProcessBoundState \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScreenshotDisplayFactsReEncodeEveryGoldenTableRowUnderTheTablesKey \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScreenshotResultCarriesNoDisplayFactsWhenNothingResolved \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptTreatsOpenAsAffirmative \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptDoesNotActivateAReplacementWithASharedButton \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDismissDoesNotActivateAReplacementWithTheSameTitle \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertCannotProveAnIdenticalReplacementAndDoesNotActivateIt \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertDeadlineBeforeActivationLeavesTheOriginalUntouched \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertHittableProbeCompletingAfterDeadlineLeavesTheOriginalUntouched \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertActivationDoesNotWaitOutANotificationBanner \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionWithoutAnAlertDoesNotReadEveryElementOfTheScreen \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionFindsADismissPopupMarkerOnACrowdedScreen \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionFindsAWindowThatIsItselfTheDismissPopupMarker \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSystemModalProbeSliceSharesAndClampsToPlanDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsNestedClipGeometryCumulative \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsFramelessSemanticCarriersNonActionableAndNonClipping \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawPresentationKeepsReportedOffscreenAndFramelessFacts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFixedSeedRegularPresentationMaintainsCumulativeClipInvariant \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationFailureKeepsItsNamedSnapshotQualityReason \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection \
-             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureHintIsTheOnlyAcquisitionViewOfARequest \
-             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthCutsPresentationNotAcquisition \
-             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testVisibilityFoldKeepsIndependentChildPastClippedParent \
-             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthKeepsTurnedKeyboardSubtreeAfterOneNormalizationPass \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldClipsScrollOverflowReparentsAndBooksHints \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyFoldsWithoutAncestorCursor \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyDoesNotClipToScrollAncestor \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryIntersectsViewportAndAncestorClip \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryKeepsReportedOriginWhenFullyClipped \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationRoutesThroughVisibilityFold \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotAcquisitionDoesNotReintroduceRunnerOcclusionScan \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollContainerTypeNamesMatchElementTypeSet \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredTreeBackendPinsRegularPlanAndLeavesStructuredEvidence \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawDiagnosticPlanCarriesOnlyBackendsThatCanServeRaw \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotBackendDeclarationsMatchCapabilityFixture \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testProjectionMismatchFailureIsStructuredAndNotAnAxFailure \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionKeepsEveryAcquiredNode \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionAppliesRequestedTraversalDepth \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXAcquisitionDoesNotInterpretScope \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDecodedPreferredBackendReachesOptionsAndApplicablePlan \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSparsePayloadReasonMatrix \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testStampedPayloadTruncationTracksCompletenessNotRecoveryProvenance \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledNeedsEnoughSamples \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledTrueWhenWindowMatches \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnFailedCapture \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionsRequestPinsPrivateAXBackend \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXNodesCarryAnnotatedCustomActions \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRequestPinnedBackendReportsItsOwnReason \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testStampedPayloadCarriesDisclosuresOnlyInTheVerdict \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAbandonedTreeCaptureSkipsQuerySweepAndHonorsWarmupExemption \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testNonInteractiveQuerySweepStopsAtTheSliceItsCallerWaitsFor \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testQuerySweepThatEndsOnItsSliceDeadlinePenalizesChannelAndReachesPrivateAX \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapRoutingPenalizesTheIdentityMainSettledOnWhileTheWriteWasPending \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBlockingModalSnapshotLeavesWarmupExemptionForTheFirstCapturePlan \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPinnedRegularDepthReachesAcquisitionAndPresentation 2>&1 | tee /tmp/agent-device-runner-regressions.log
+            "${IOS_PR_TEST_ARGS[@]}" 2>&1 | tee /tmp/agent-device-runner-regressions.log
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const log = readFileSync("/tmp/agent-device-runner-regressions.log", "utf8");
@@ -328,6 +222,17 @@ jobs:
         run: |
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/device/01-physical-lifecycle.ad --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device-smoke --report-junit test/artifacts/replays-ios-device-smoke.junit.xml
+
+      - name: Assert iOS XCTest selection was honored
+        if: always()
+        env:
+          SELECTED: ${{ steps.xctest-impact.outputs.run }}
+          OUTCOME: ${{ steps.ios-xctest.outcome }}
+        run: |
+          if [ "$SELECTED" = 'true' ] && [ "$OUTCOME" = 'skipped' ]; then
+            echo '::error::iOS runner XCTest was selected but its step was skipped.'
+            exit 1
+          fi
 
       - name: Upload iOS artifacts
         if: always()

@@ -7,8 +7,8 @@ extension RunnerTests {
   /// against a second handwritten table: the decoder maps the integer the runner stamps, and #2726
   /// shipped `runningBackground` and `runningBackgroundSuspended` reversed.
   ///
-  /// The host lane runs this on every PR, and `.github/workflows/ios.yml` lists it for the simulator
-  /// lane so the suspended case — compiled out of the macOS build below — is pinned on every PR too.
+  /// The host lane runs this on every PR; the simulator lane derives it from the platform branch
+  /// below so the suspended case, compiled out of the macOS build, is pinned on every PR too.
   /// `packages/platform-apple/src/runner/__tests__/target-activation.test.ts` reads these calls back
   /// and compares them with its decode table, so a table that drifts from them fails on any host
   /// instead of waiting for a lane to report a mislabelled repair.

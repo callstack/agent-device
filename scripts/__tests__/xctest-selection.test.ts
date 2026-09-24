@@ -1,8 +1,8 @@
 // The check that keeps the runner XCTest lanes honest is itself only as good as its
 // parsers, and all of its inputs are files nobody edits with this check in mind. So: the
-// real tree must pass, a planted typo in the real workflow text must fail — in both flag
-// directions, because an unknown `-skip-testing:` entry re-arms a whole-bundle lane's
-// 24-hour hang on `RunnerTests/testCommand` — and a planted guard that compiles a test out
+// real tree must pass, a broken generated PR selector and a planted typo in a whole-bundle
+// `-skip-testing:` flag must fail (the latter re-arms the 24-hour `testCommand` hang), and a
+// planted guard that compiles a test out
 // of every lane must fail as "dark". Synthetic sources cover the shapes the real tree
 // happens not to contain today.
 
@@ -17,6 +17,7 @@ import {
   formatSummary,
   GUARDED_WORKFLOWS,
   HOST_WORKFLOW_FILE,
+  iosPrTestIdentifiers,
   LANES,
   loadReport,
   NIGHTLY_WORKFLOW_FILE,
@@ -48,12 +49,18 @@ function realSources() {
   return readSwiftSources(path.join(repoRoot, RUNNER_TESTS_DIR));
 }
 
-/** Workflow texts that skip the entry point on both whole-bundle lanes and list `pr` on the PR lane. */
-function laneWorkflows(pr: readonly string[] = []): WorkflowSource[] {
+/** Workflow texts that skip the entry point and consume the guard-derived PR selection. */
+function laneWorkflows(): WorkflowSource[] {
   return [
     { workflow: HOST_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
     { workflow: NIGHTLY_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
-    { workflow: PR_WORKFLOW_FILE, text: pr.map((id) => `-only-testing:${id}`).join('\n') },
+    {
+      workflow: PR_WORKFLOW_FILE,
+      text:
+        'node --experimental-strip-types scripts/check-xctest-selection.ts --ios-pr-tests\n' +
+        'IOS_PR_TEST_ARGS+=("-only-testing:$test_id")\n' +
+        'xcodebuild "${IOS_PR_TEST_ARGS[@]}"',
+    },
   ];
 }
 
@@ -69,8 +76,9 @@ describe('the real tree', () => {
     const { declared, host, pr, nightly, dark } = counts(report);
     // Not pinned to today's exact numbers; the invariants are the shape. The host lane
     // (macOS) and the nightly (iOS) both skip only the entry point, so together with the
-    // simulator-only guard they cover everything else; the PR list is a proper subset of
-    // the nightly; and the entry point is the only method outside every lane.
+    // simulator-only guard they cover everything else; the PR lane runs iOS-only methods
+    // and shared methods with platform-dependent bodies. The entry point is the only method
+    // outside every lane.
     expect(host).toBeGreaterThan(0);
     expect(nightly).toBeGreaterThan(pr);
     expect(pr).toBeGreaterThan(0);
@@ -79,6 +87,19 @@ describe('the real tree', () => {
     expect(reachedAnywhere.size).toBe(declared - 1);
     expect(reachedAnywhere.has(ENTRY_POINT)).toBe(false);
     for (const id of report.reach.pr) expect(report.reach.nightly.has(id)).toBe(true);
+    expect(iosPrTestIdentifiers(report.declaredTests, report.sharedPlatformBranchIds)).toEqual([
+      ...report.reach.pr,
+    ]);
+    expect(
+      report.reach.pr.has(
+        `${TARGET}/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds`,
+      ),
+    ).toBe(true);
+    expect(
+      report.reach.pr.has(
+        `${TARGET}/RunnerTests/testApplicationStateRawValuesMatchTheActivationDecoder`,
+      ),
+    ).toBe(true);
   });
 
   test('the whole-bundle lanes skip the runner server entry point, which is not a test', () => {
@@ -110,7 +131,8 @@ describe('the real tree', () => {
 
   test('the declared set covers every addressable method in the target directory', () => {
     // Derived independently of the check: the directory is globbed here, with this test's
-    // own regex, because the Xcode project uses a PBXFileSystemSynchronizedRootGroup — every
+    // own loose declaration count, because the Xcode project uses a
+    // PBXFileSystemSynchronizedRootGroup — every
     // .swift file in it is a member. Reusing the check's own file filter would make this
     // tautological, and a name-based filter is exactly the bug it caught
     // (RunnerTapPointPolicy.swift declared a test and does not start with "RunnerTests").
@@ -121,7 +143,9 @@ describe('the real tree', () => {
         if (entry.isDirectory()) return total + countAddressableMethods(entryPath);
         if (!entry.isFile() || !entry.name.endsWith('.swift')) return total;
         const text = fs.readFileSync(entryPath, 'utf8');
-        return total + (text.match(/^ {2}(?:[\w@]+ )*func test/gm)?.length ?? 0);
+        return (
+          total + (text.match(/^[ \t]*(?:[\w@]+[ \t]+)*func[ \t]+test\w*[ \t]*\(/gm)?.length ?? 0)
+        );
       }, 0);
     const counted = countAddressableMethods(directory);
 
@@ -164,24 +188,36 @@ describe('the real tree', () => {
 });
 
 describe('a planted typo', () => {
-  test('a renamed test in the PR `-only-testing:` list is reported with its line', () => {
-    const workflow = fs.readFileSync(path.join(repoRoot, PR_WORKFLOW_FILE), 'utf8');
-    const first = parseFlaggedTests(PR_WORKFLOW_FILE, workflow).find(
-      (entry) => entry.flag === 'only-testing',
-    );
-    if (!first) throw new Error('ios.yml has no -only-testing entries to plant a typo in');
-    const typo = `${first.identifier}Renamed`;
-
+  test('a disconnected PR selector fails the workflow wiring check', () => {
+    const workflow = laneWorkflows().find((entry) => entry.workflow === PR_WORKFLOW_FILE);
+    if (!workflow?.text) throw new Error('Missing synthetic PR workflow');
     const report = buildReport(
       TARGET,
-      realSources(),
-      realWorkflows({ [PR_WORKFLOW_FILE]: workflow.replace(first.identifier, typo) }),
+      source(
+        `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
+      ),
+      laneWorkflows().map((entry) =>
+        entry.workflow === PR_WORKFLOW_FILE
+          ? { ...entry, text: workflow.text?.replace('--ios-pr-tests', '--wrong-mode') ?? null }
+          : entry,
+      ),
     );
+    expect(reportFailures(report).join('\n')).toContain('does not invoke');
+  });
 
-    expect(report.unknown).toEqual([
-      { workflow: PR_WORKFLOW_FILE, flag: 'only-testing', identifier: typo, line: first.line },
-    ]);
-    expect(reportFailures(report).join('\n')).toContain(typo);
+  test('a handwritten PR identifier cannot silently narrow the generated selection', () => {
+    const report = buildReport(
+      TARGET,
+      source(
+        `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
+      ),
+      laneWorkflows().map((entry) =>
+        entry.workflow === PR_WORKFLOW_FILE
+          ? { ...entry, text: `${entry.text}\n-only-testing:${TARGET}/RunnerTests/testIosOnly` }
+          : entry,
+      ),
+    );
+    expect(reportFailures(report).join('\n')).toContain('hand-maintained XCTest selection');
   });
 
   test.each([
@@ -209,38 +245,77 @@ describe('a planted typo', () => {
     },
   );
 
-  test('a deleted test is reported even though the surviving list still passes', () => {
-    const kept = `${ENTRY_SOURCE}extension RunnerTests {\n  func testKept() {}\n}\n`;
-    const workflows = laneWorkflows([
-      `${TARGET}/RunnerTests/testKept`,
-      `${TARGET}/RunnerTests/testGone`,
-    ]);
-
+  test('adding or removing an iOS-only method changes the PR selection automatically', () => {
+    const iosMethod = '#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n';
+    const id = `${TARGET}/RunnerTests/testIosOnly`;
     expect(
-      buildReport(
-        TARGET,
-        source(`${kept}extension RunnerTests {\n  func testGone() {}\n}\n`),
-        workflows,
-      ).unknown,
-    ).toEqual([]);
-    expect(
-      buildReport(TARGET, source(kept), workflows).unknown.map((entry) => entry.identifier),
-    ).toEqual([`${TARGET}/RunnerTests/testGone`]);
+      buildReport(TARGET, source(`${ENTRY_SOURCE}${iosMethod}`), laneWorkflows()).reach.pr.has(id),
+    ).toBe(true);
+    expect(buildReport(TARGET, source(ENTRY_SOURCE), laneWorkflows()).reach.pr.has(id)).toBe(false);
   });
 
-  test('a listed test the PR lane platform never compiles is reported, not silently unmatched', () => {
-    // Declared, so the rename check passes — but ios.yml builds for iOS, and an
-    // `os(macOS)` guard means the identifier matches nothing there.
+  test.each(['os(iOS)', 'canImport(UIKit)', 'targetEnvironment(simulator)'])(
+    'a shared method with an in-body %s branch enters the generated PR selection',
+    (condition) => {
+      const report = buildReport(
+        TARGET,
+        source(
+          `${ENTRY_SOURCE}extension RunnerTests {\n  func testSharedBranch() {\n#if ${condition}\n    XCTAssertTrue(true)\n#else\n    XCTAssertFalse(true)\n#endif\n  }\n}\n`,
+        ),
+        laneWorkflows(),
+      );
+      const id = `${TARGET}/RunnerTests/testSharedBranch`;
+      expect(report.declaredTests.find((test) => test.identifier === id)?.platforms).toEqual([
+        'iOS',
+        'macOS',
+        'tvOS',
+      ]);
+      expect(report.sharedPlatformBranchIds).toEqual([id]);
+      expect(report.reach.pr.has(id)).toBe(true);
+      expect(reportFailures(report)).toEqual([]);
+    },
+  );
+
+  test('a platform-neutral in-body compile flag does not duplicate a host test', () => {
     const report = buildReport(
       TARGET,
       source(
-        `${ENTRY_SOURCE}extension RunnerTests {\n#if os(macOS)\n  func testHostOnly() {}\n#endif\n}\n`,
+        `${ENTRY_SOURCE}extension RunnerTests {\n  func testSharedDebug() {\n#if DEBUG\n    XCTAssertTrue(true)\n#endif\n  }\n}\n`,
       ),
-      laneWorkflows([`${TARGET}/RunnerTests/testHostOnly`]),
+      laneWorkflows(),
+    );
+    expect(report.sharedPlatformBranchIds).toEqual([]);
+    expect(report.reach.pr.has(`${TARGET}/RunnerTests/testSharedDebug`)).toBe(false);
+  });
+
+  test('ambiguous shared method names fail closed instead of losing platform branches', () => {
+    const report = buildReport(
+      TARGET,
+      source(
+        `${ENTRY_SOURCE}extension RunnerTests {\n  func testSameName() {}\n}\nfinal class OtherTests: XCTestCase {\n  func testSameName() {}\n}\n`,
+      ),
+      laneWorkflows(),
+    );
+    expect(reportFailures(report).join('\n')).toContain(
+      'ambiguous shared XCTest method testSameName',
+    );
+  });
+
+  test('a skip flag naming a test that its lane cannot compile is reported', () => {
+    const report = buildReport(
+      TARGET,
+      source(
+        `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
+      ),
+      laneWorkflows().map((entry) =>
+        entry.workflow === HOST_WORKFLOW_FILE
+          ? { ...entry, text: `${entry.text}\n-skip-testing:${TARGET}/RunnerTests/testIosOnly` }
+          : entry,
+      ),
     );
     expect(report.unknown).toEqual([]);
     expect(report.uncompiled.map((entry) => entry.identifier)).toEqual([
-      `${TARGET}/RunnerTests/testHostOnly`,
+      `${TARGET}/RunnerTests/testIosOnly`,
     ]);
     expect(reportFailures(report).join('\n')).toContain('never compiles');
   });
@@ -276,7 +351,7 @@ describe('a planted guard', () => {
     const id = `${TARGET}/RunnerTests/testLaunchesApp`;
     expect(report.reach.host.has(id)).toBe(false);
     expect(report.reach.nightly.has(id)).toBe(true);
-    expect(report.reach.pr.has(id)).toBe(false);
+    expect(report.reach.pr.has(id)).toBe(true);
     expect(reportFailures(report)).toEqual([]);
   });
 
@@ -284,15 +359,19 @@ describe('a planted guard', () => {
     const report = buildReport(TARGET, source(ENTRY_SOURCE), [
       { workflow: HOST_WORKFLOW_FILE, text: 'run: xcodebuild test-without-building' },
       { workflow: NIGHTLY_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
-      { workflow: PR_WORKFLOW_FILE, text: `-only-testing:${TARGET}/RunnerTests/testOther` },
+      laneWorkflows().find((entry) => entry.workflow === PR_WORKFLOW_FILE)!,
     ]);
     expect(report.entryPointReachedBy).toEqual(['host']);
     expect(reportFailures(report).join('\n')).toContain('reachable by lane(s): host');
   });
 
-  test('the PR list naming the entry point is reported too', () => {
-    const report = buildReport(TARGET, source(ENTRY_SOURCE), laneWorkflows([ENTRY_POINT]));
-    expect(report.entryPointReachedBy).toEqual(['pr']);
+  test('the generated PR selection excludes the entry point even under an iOS-only guard', () => {
+    const report = buildReport(
+      TARGET,
+      source(`#if os(iOS)\n${ENTRY_SOURCE}#endif\n`),
+      laneWorkflows(),
+    );
+    expect(report.reach.pr.has(ENTRY_POINT)).toBe(false);
   });
 });
 
@@ -386,9 +465,7 @@ describe('the blind-parse guards', () => {
 
   test('a guarded workflow that no longer exists fails instead of leaving a stale claim', () => {
     const report = buildReport(TARGET, oneTest(), [
-      ...laneWorkflows([`${TARGET}/RunnerTests/testOne`]).filter(
-        (entry) => entry.workflow !== NIGHTLY_WORKFLOW_FILE,
-      ),
+      ...laneWorkflows().filter((entry) => entry.workflow !== NIGHTLY_WORKFLOW_FILE),
       { workflow: NIGHTLY_WORKFLOW_FILE, text: null },
     ]);
     expect(reportFailures(report).join('\n')).toContain(NIGHTLY_WORKFLOW_FILE);
@@ -411,7 +488,7 @@ describe('the summary line', () => {
     const { declared, host, pr, nightly, dark } = counts(report);
     const summary = formatSummary(report);
     expect(summary).toContain(`${declared} declared`);
-    expect(summary).toContain(`reaches ${host}, PR list`);
+    expect(summary).toContain(`reaches ${host}, PR iOS-specific lane`);
     expect(summary).toContain(`selects ${pr}, nightly`);
     expect(summary).toContain(`reaches ${nightly};`);
     expect(summary).toContain(`${dark} reachable by no lane`);

@@ -1,0 +1,114 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { expect, test } from 'vitest';
+import { parse } from 'yaml';
+import { selectAppleBridgeProof, selectIosXctests } from '../apple-ci-impact.ts';
+import { selectChecks } from '../check-affected/model.ts';
+
+const repoRoot = path.resolve(import.meta.dirname, '../..');
+
+function cacheInputs(action: string): string[] {
+  const doc = parse(action) as { runs?: { steps?: Array<{ id?: string; run?: string }> } };
+  const sourceHash = doc.runs?.steps?.find((step) => step.id === 'source-hash')?.run ?? '';
+  const expressions = [...sourceHash.matchAll(/hashFiles\(([\s\S]*?)\)/g)];
+  expect(expressions.length).toBeGreaterThan(0);
+  return expressions.flatMap((expression) =>
+    [...expression[1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]!),
+  );
+}
+
+test('every runner build-cache input triggers the PR XCTest lane', () => {
+  const action = fs.readFileSync(
+    path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
+    'utf8',
+  );
+  expect(cacheInputs(action)).toContain('packages/platform-apple/src/runner/**');
+  expect(cacheInputs(action)).toContain('!packages/platform-apple/src/runner/__tests__/**');
+  const uncovered = (text: string) =>
+    cacheInputs(text)
+      .filter((input) => !input.startsWith('!'))
+      .filter((input) => {
+        const path = input.replace(/\*\*?$/, 'probe.ts');
+        const plan = selectChecks({ changedFiles: [path] });
+        return !plan.failOpen && !plan.checks.includes('swift-runner-ios');
+      });
+  expect(uncovered(action)).toEqual([]);
+  expect(
+    uncovered(action.replace('apple/runner/**', 'packages/platform-apple/src/snapshot-source/**')),
+  ).toEqual(['packages/platform-apple/src/snapshot-source/**']);
+  expect(
+    uncovered(
+      action.replace(
+        'hashFiles(',
+        "hashFiles('packages/platform-apple/src/foldable/**',\n          ",
+      ),
+    ),
+  ).toEqual(['packages/platform-apple/src/foldable/**']);
+});
+
+test('the PR workflow applies the impact decision to the XCTest step', () => {
+  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ios.yml'), 'utf8');
+  expect(workflow).toContain('node --experimental-strip-types scripts/apple-ci-impact.ts xctest');
+  expect(workflow).toMatch(
+    /- name: Run targeted iOS runner XCTest regressions\n\s+id: ios-xctest\n\s+if: steps\.xctest-impact\.outputs\.run != 'false'/,
+  );
+  expect(workflow).toContain('if [ "$SELECTED" = \'true\' ] && [ "$OUTCOME" = \'skipped\' ]');
+});
+
+test('macOS clean-install proof follows live UI replay', () => {
+  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/macos.yml'), 'utf8');
+  const replay = workflow.indexOf('- name: Run macOS integration test');
+  const proof = workflow.indexOf(
+    '- name: Verify clean-installed Simulator snapshot bridge preparation',
+  );
+  expect(replay).toBeGreaterThan(-1);
+  expect(proof).toBeGreaterThan(replay);
+  expect(workflow).toContain('node --experimental-strip-types scripts/apple-ci-impact.ts bridge');
+  expect(workflow).toContain("steps.bridge-impact.outputs.run != 'false'");
+});
+
+test('native runner and golden-table changes run XCTest; TypeScript runtime changes use live E2E', () => {
+  for (const file of [
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests.swift',
+    'apple/snapshot-presentation/Sources/Presenter.swift',
+    'packages/platform-apple/src/runner/runner-icon.ts',
+    'contracts/fixtures/scroll-gesture.json',
+    '.github/workflows/ios.yml',
+    'scripts/apple-ci-impact.ts',
+  ]) {
+    expect(selectIosXctests('pull_request', [file]).run, file).toBe(true);
+  }
+  for (const file of [
+    'packages/platform-apple/src/snapshot-source/cache.ts',
+    'packages/platform-apple/src/runner/__tests__/runner-icon.test.ts',
+    'apple/fold-helper/fold-helper.c',
+    'test/integration/ios-simulator-e2e/live-runner.ts',
+  ]) {
+    expect(selectIosXctests('pull_request', [file]), file).toMatchObject({ run: false });
+  }
+});
+
+test('pushes and uncertain diffs keep the full XCTest selection', () => {
+  expect(selectIosXctests('push', ['src/index.ts']).run).toBe(true);
+  expect(selectIosXctests('pull_request', null).run).toBe(true);
+  expect(selectIosXctests('pull_request', []).run).toBe(true);
+  expect(selectIosXctests('pull_request', ['src/index.ts', 'package.json']).run).toBe(true);
+});
+
+test('bridge proof runs for its owning sources and uncertain tooling changes', () => {
+  for (const file of [
+    'apple/snapshot-bridge/Bridge.c',
+    'apple/fold-helper/Helper.c',
+    'apple/new-native-module/Source.m',
+    'packages/platform-apple/src/snapshot-source/native-runtime.ts',
+    'packages/platform-apple/src/foldable/fold-helper-cache.ts',
+    'packages/platform-apple/src/new-module/runtime.ts',
+    'scripts/check-package.ts',
+    '.github/workflows/macos.yml',
+  ]) {
+    expect(selectAppleBridgeProof([file]).run, file).toBe(true);
+  }
+  expect(selectAppleBridgeProof(['src/index.ts']).run).toBe(false);
+  expect(selectAppleBridgeProof(null).run).toBe(true);
+  expect(selectAppleBridgeProof([]).run).toBe(true);
+});
