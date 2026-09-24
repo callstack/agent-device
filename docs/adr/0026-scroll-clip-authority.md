@@ -6,9 +6,8 @@ Accepted (2026-09-22). The ownership decision is shipped: #2758 reads an indicat
 parent edge, climbing only same-frame ancestors — the tolerance the #2754 step 3 survey justified on
 real captures — and #2759 pairs the two eligibility lists and settles `ScrollArea` for macOS. Two
 #2754 steps stay open work rather than part of this decision: the runner-stage differential arm, and
-the typed ejection disposition behind the "every removed source" row below, which is that step's
-contract and not a description of `main`. Refines ADR 0004's fact/interpretation boundary for scroll
-geometry; does not supersede it.
+the typed ejection disposition the "every removed source" row below names. Refines ADR 0004's
+fact/interpretation boundary for scroll geometry; does not supersede it.
 
 An interactive iOS snapshot of a list dropped every row after a row holding selectable text. A
 `UITextView` is a UIScrollView and XCTest publishes its scroll indicator inside the text, so the
@@ -27,7 +26,7 @@ walking up past the indicator's parent, and that guess decided which nodes exist
 | Removing a node **because a scroll band hides it** | Requires evidence: the clip fold's result, or a band whose owner is the indicator's parent. A guess about ownership may not do it |
 | Removing a node by semantic delegation — a collapsed row, a duplicate label, a wrapper's content | Out of scope here. That is compaction, and it keeps its own authority |
 | Weaker evidence than a parent edge | Directional hints (`hiddenContentAbove` / `hiddenContentBelow`) and nothing that changes membership |
-| Every removed source | Ends with a typed disposition. Internal evidence, never wire vocabulary |
+| Every removed source | Must end with a typed disposition — the open #2754 step 5 contract, not shipped code. Internal evidence, never wire vocabulary |
 
 ## Contracts
 
@@ -52,8 +51,12 @@ neither eligible set contains it, and the iOS runner never emits it — it origi
 `AXScrollArea` mapping. That helper's trees do reach these rules, through `snapshot-desktop-surface.ts`
 → `ios-snapshot-runtime.ts` → `publishIosSnapshot`, so on that surface a `ScrollArea` host can be dropped
 by eligibility while its children re-parent past it, which leaves a parent-edge lookup with no owner.
-Reusing this rule for macOS therefore needs a `ScrollArea` eligibility decision made there, not carried
-over from the iOS claim above.
+Reusing this rule for macOS therefore needed a `ScrollArea` eligibility decision made there, not
+carried over from the iOS claim above, and #2759 made it with cases rather than by admitting the
+type for iOS's sake: `scrollarea` stays out of both eligible sets, a `ScrollArea` carrying content
+survives eligibility on those trees and owns its band, and a label-less one is dropped, leaving its
+indicator with no owner to band — which under-clips (safe) instead of mis-clipping the enclosing
+list (`eligibility-parity.test.ts`).
 
 **Why the band exists at all.** XCTest reports a scroll view's frame spanning the bars and the safe
 area, not the visible track. In the pinned Settings tree the `CollectionView` frame is the whole screen,
@@ -61,16 +64,17 @@ area, not the visible track. In the pinned Settings tree the `CollectionView` fr
 cannot express visibility, and deleting indicator clipping would return content that is scrolled under
 the chrome. The band is necessary; only *who owns it* was ever in question.
 
-**Visibility ejection needs evidence, and every ejection is recorded.** Most of the engine's 23 removal
-sites delegate semantics or drop decoration — a collapsed row, a duplicate label, a wrapper's content, a
-system indicator — and this ADR does not touch their authority. It governs the four visibility-driven
-sites among them, the scroll band's one and the keyboard band's three, alongside the clip fold's own
-inclusion decision in `geometry-policy.ts`. Of those, the scroll band is the one a weak signal can reach,
-and directional hints are its safe outlet when nothing is the indicator's parent. Every source index ends
-either presented, with its representatives, or removed with a typed reason, which makes the ledger complete
-by construction rather than gated. The existing `presentedIndexesBySourceIndex` in
-`ios-snapshot-engine/semantic-index.ts` is the shape to extend; a second parallel ledger would be a second
-source of truth.
+**Visibility ejection needs evidence, and every ejection must be recorded.** Most of the engine's 23
+removal sites delegate semantics or drop decoration — a collapsed row, a duplicate label, a
+wrapper's content, a system indicator — and this ADR does not touch their authority. It governs the
+four visibility-driven sites among them, the scroll band's one and the keyboard band's three,
+alongside the clip fold's own inclusion decision in `geometry-policy.ts`. Of those, the scroll band
+is the one a weak signal can reach, and directional hints are its safe outlet when nothing is the
+indicator's parent. Every source index must end either presented, with its representatives, or
+removed with a typed reason, which makes the ledger complete by construction rather than gated;
+#2754 step 5 still owes that reason, and `presentedIndexesBySourceIndex` in
+`ios-snapshot-engine/semantic-index.ts` records representatives and no removal reason today. That
+ledger is the shape to extend; a second parallel ledger would be a second source of truth.
 
 ## Refuted alternatives
 
@@ -123,10 +127,12 @@ source of truth.
   upward. So `findScrollIndicatorContainer` returns null when the node is itself a scroll type;
   `runner-presentation.test.ts` pins a scroll host labelled as an indicator leaving its parent list's
   band intact.
-- **macOS is already a second consumer of these rules.** Desktop capture runs the engine through
-  `snapshot-desktop-surface.ts` → `ios-snapshot-runtime.ts` → `publishIosSnapshot`, and its trees carry
-  `ScrollArea`, which neither eligible set admits. The parent-edge rule needs its own decision there
-  before it is reused, not a carry-over from the iOS claim.
+- **macOS is already a second consumer of these rules, and #2759 settled its `ScrollArea`
+  question.** Desktop capture runs the engine through `snapshot-desktop-surface.ts` →
+  `ios-snapshot-runtime.ts` → `publishIosSnapshot`, and its trees carry `ScrollArea`, which neither
+  eligible set admits: a content-bearing one survives eligibility and owns its band; a label-less
+  one is dropped and leaves its indicator with no owner, under-clipping instead of mis-clipping the
+  list. `eligibility-parity.test.ts` pins both outcomes and the TS/Swift eligibility pair.
 - **Ejection inventory precedes any API change.** 23 suppression sites across ten rules, and two of them
   (`scroll`, `transitions`) already rewrite rects on other nodes in the same pass that ejects — the
   combination the proposed API split claimed to make impossible.

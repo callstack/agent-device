@@ -65,17 +65,17 @@ therefore drained), and left intact by a transport failure or an unstamped recov
 healthy `ok` is never read as proof of drain because a private-AX snapshot can be served while an
 abandoned tree crawl still grinds on the XCTest main thread (#2552).
 
-What a `RUNNER_BUSY` refusal then costs the caller is keyed on the daemon's own per-command read-only
-trait, not on anything the runner reports: `RUNNER_COMMAND_TRAITS` in
-`packages/platform-apple/src/runner/runner-command-traits.ts`, read through `isReadOnlyRunnerCommand`
-where `runAppleRunnerCommand` decides whether to wrap the send in a resend loop. The asymmetry is
-shipped, and asserted in `runner-command-busy-resend.test.ts`: a read-only command treats the refusal
-as *not yet*, waiting the drain out on a budget sized to outlast it and resending until the runner
-answers or the window ends; a mutating command treats the same refusal as *not mine to send again* —
-one attempt, and the refusal reaches the caller unwrapped with nothing replayed. Neither path pays a
-status probe, because a structured reply already answered "did my command run?" (the bypass in
-`runner-lifecycle.ts`). The same trait already decides the startup-preflight skip above, so it is the
-single place a change to that classification lands.
+What a `RUNNER_BUSY` refusal then costs the caller turns on the daemon's own per-command read-only
+trait, not on any runner-side classification of the command: `RUNNER_COMMAND_TRAITS` in
+`packages/platform-apple/src/runner/runner-command-traits.ts`, read through
+`isReadOnlyRunnerCommand` where `runAppleRunnerCommand` decides whether to wrap the send in a resend
+loop. The asymmetry is shipped, and asserted in `runner-command-busy-resend.test.ts`: a read-only
+command treats the refusal as *not yet*, waiting the drain out on the busy-specific budget sized to
+outlast it and resending until the runner answers or the window ends; a mutating command treats the
+same refusal as *not mine to send again* — one attempt, and the refusal reaches the caller unwrapped
+with nothing replayed. Neither path pays a status probe, because a structured reply already answered
+"did my command run?" (the bypass in `runner-lifecycle.ts`). The same trait already decides the
+startup-preflight skip above, so it is the single place a change to that classification lands.
 
 Close that would retain a runner for reuse first stops it when that occupancy is set, awaiting the
 stop so the lease is released before the next request. A runner still finishing watchdog-abandoned

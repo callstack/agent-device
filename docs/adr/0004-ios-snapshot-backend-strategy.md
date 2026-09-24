@@ -140,9 +140,10 @@ facet in `@agent-device/capture-kit` owns snapshot policy generally rather than 
   daemon keeps approved artifact and ref assembly only: ranking, projection to screenshot pixels,
   drawing, and PNG IO.
 
-`scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction across the roots
-declared for `snapshot-policy` in `scripts/layering/architecture-ownership.ts`: nothing in those
-roots may import `src/daemon/`. It carries a positive control, because a filter that stopped
+`scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction, but only across
+the roots `snapshot-policy` declares in `scripts/layering/architecture-ownership.ts`: nothing in
+that snapshot tree may import `src/daemon/`, while the overlay modules beside the tree sit outside
+those roots and are outside that gate. It carries a positive control, because a filter that stopped
 matching would look identical to a boundary being obeyed.
 
 The residual call sites #1983 also named are audited and deliberately left in place.
