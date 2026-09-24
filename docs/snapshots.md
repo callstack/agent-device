@@ -114,15 +114,21 @@ the strategy owns which tiers it may use.
 ## Android node metadata
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`selected`, `editable`, `password`, `hintShowing`, `selectionStart`, and `selectionEnd` facts
-whenever the accessibility tree reports them. Explicit `false` and `0` are kept; an absent field
-means the fact was unavailable, not false. `hintShowing` needs Android API 26 or later.
+`selected`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`, `selectionStart`,
+and `selectionEnd` facts whenever the accessibility tree reports them. Explicit `false` and `0` are
+kept; an absent field means the fact was unavailable, not false. `hintShowing` needs Android API 26
+or later, `heading` API 28 or later.
 
 - `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
   segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
   `false`; an older helper APK omits the field, which means the answer is unavailable rather than
   unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
   selector, and a Maestro `selected:` qualifier all match on it.
+- `heading` is the accessibility heading flag an app sets on a node, the way React Native's
+  `accessibilityRole="header"` does on a plain `View`; it is present only as `true`.
+- `roleDescription` is the localized role description an app sets beside the native class, verbatim
+  (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
+  not say what the control is. The `type` stays the class; a consumer maps the description to a role.
 - `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
   reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
   before reading `value` as the entered contents.
