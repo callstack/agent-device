@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2837/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2837/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2837/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2837/static/js/index.7e6ea8e70a.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2837/static/js/index.8dfeec61f4.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -497,7 +497,8 @@ Two-finger <code>gesture pan</code> and <code>gesture transform</code> are suppo
 <li>Supported predicates are <code>visible</code>, <code>hidden</code>, <code>exists</code>, <code>absent</code>, <code>editable</code>, <code>selected</code>, <code>focused</code>, and <code>text</code>.</li>
 <li><code>is visible</code> checks whether the resolved element is present in the current visible snapshot viewport. A node without its own rect still passes when a visible ancestor within the viewport provides the on-screen geometry.</li>
 <li><code>is exists</code> only checks whether the selector matches in the current snapshot.</li>
-<li><code>is absent</code> passes only when the selector has zero matches in one readable, complete, unscoped, full-depth accessibility capture. It does not mean hidden; <code>--scope</code> and <code>--depth</code> are rejected, and sparse, unreadable, or truncated captures fail closed.</li>
+<li><code>is absent</code> passes only when the selector has zero matches in one readable, complete, settled, unscoped, full-depth accessibility capture. It does not mean hidden; <code>--scope</code> and <code>--depth</code> are rejected, and sparse, unreadable, truncated, or unsettled captures fail closed.</li>
+<li>A read that answers from the first capture after a <code>scroll</code>, <code>swipe</code>, or <code>gesture swipe</code> waits for two consecutive captures to agree. When the surface is still changing when that budget runs out, <code>is</code>, <code>get</code>, <code>find</code>, and <code>wait</code> carry <code>unsettledGesture</code> (<code>{ &quot;action&quot;, &quot;positionals&quot; }</code>) in <code>error.details</code> or <code>data</code> and append a warning, and <code>snapshot</code> appends the warning. A miss on that capture is not proof of absence: read again. <code>is absent</code> refuses it with <code>observation: &quot;unsettled&quot;</code>, and <code>wait absent</code> keeps polling.</li>
 <li><code>wait text</code> is a text-presence wait, not a hittability assertion.</li>
 <li>Strict <code>wait absent</code> is not exported to Maestro&#x27;s lenient <code>notVisible</code> condition; Maestro export reports it as unsupported unless an exact zero-candidate primitive becomes available.</li>
 <li><code>is text &lt;selector&gt; &lt;value&gt;</code> compares the resolved element text against the expected value.</li>
@@ -723,7 +724,7 @@ never observed it, and <code>interaction_foreground_guard</code> when an interac
 tripped before dispatching.</li>
 <li>The disclosure rides capture-consuming commands — <code>snapshot</code>, <code>find</code>, <code>get</code>, <code>is</code>, <code>wait</code>, and an
 interaction whose target tree was captured for it — at every response level, including
-<code>--level digest</code>. It is disclosed only for the command that paid for the repair: a read answered
+<code>--level digest</code>. On a failure the typed fact is in <code>error.details</code> and the sentence in its hint. It is disclosed only for the command that paid for the repair: a read answered
 from a cached or stored tree did no device work and reports no repair of its own.</li>
 <li>In text mode the CLI prints every response warning as a <code>Warning:</code> line after the command&#x27;s own
 output, for every command — not only <code>snapshot</code>. Four commands declare their stdout to be the
