@@ -47,6 +47,8 @@ test('a simctl argv is refused however it reaches an executor', () => {
     "runCmd('xcrun', [`simctl`, 'boot', udid]);\n",
     "host.commands.run({ executable: 'xcrun', args: ['simctl', 'spawn', udid, 'log', 'stream'] });\n",
     "const tools = ['simctl', 'devicectl'];\n",
+    "runCmd('xcrun', ['--sdk', 'iphonesimulator', 'simctl', 'boot', udid]);\n",
+    "const tool = 'simctl';\nconst argv = ['-v', tool, 'spawn', udid, bin];\nrunCmd('xcrun', argv);\n",
   ]) {
     assertFlagged(`${APPLE_SRC}logs/start.ts`, source, SIMCTL_ARGV_MESSAGE);
   }
@@ -102,6 +104,7 @@ test('named tools, builder output, pass-through argv and simctl text elsewhere a
       [
         "runCmd('xcrun', ['devicectl', ...args]);",
         "runCmd('xcrun', ['--find', name]);",
+        "runCmd('xcrun', ['--sdk', sdkName, '--show-sdk-version']);",
         "runCmd('xcrun', simctlCommand(args));",
         "runCmd('xcrun', [...argv]);",
         "runCmdBackground('xcrun', args);",

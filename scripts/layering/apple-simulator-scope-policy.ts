@@ -1,9 +1,10 @@
 // Catches: the simctl scope bypasses `tsc` cannot reject. `runXcrun` accepts only a
 //   `ScopedSimctlCommand` or a named non-simctl tool, but the plain executors (`runCmd`,
 //   `runCmdBackground`, an `executable: 'xcrun'` spec) take any string argv, so every simctl argv
-//   reaching them must be builder output. (1) An array whose first element names simctl (the
-//   literal, a quasi-only template, or a same-file binding of either) outside the brand mints,
-//   however it later travels: inline, held in a variable, aliased or spread. (2) At an xcrun
+//   reaching them must be builder output. (1) An array whose tool names simctl (the literal, a
+//   quasi-only template, or a same-file binding of either; the first element, or any element
+//   after leading xcrun options such as `--sdk`) outside the brand mints, however it later
+//   travels: inline, held in a variable, aliased or spread. (2) At an xcrun
 //   invocation, an inline argv whose tool is not a string literal other than `simctl`. (3) A cast
 //   to `ScopedSimctlArgs`, `ScopedSimctlCommand` or `SimulatorAddress` outside the brand mints.
 //   Every form runs against the default CoreSimulator set: `Invalid device` for a simulator in a
@@ -12,7 +13,7 @@
 //   fold HID helper (`foldable/simulator-hid.ts`) built `['simctl', 'spawn', udid, ...]` from a
 //   bare udid and lost the set; #2824 moved every call site onto `core/simctl.ts` and checked it
 //   with a manual `git grep "'--set'"`.
-// Cost: 300 LOC (159 rule + 141 test).
+// Cost: 311 LOC (167 rule + 144 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that scoped simulator
 //   sets (`--ios-simulator-device-set`) are no longer supported, or when no production xcrun
 //   executor takes a plain string argv.
@@ -61,12 +62,14 @@ export function appleSimulatorScopeViolations(
     const program = parseSync(file, source).program;
     const simctlBindings = simctlNameBindings(program);
     const isMint = BRAND_MINTS.has(file);
+    const isSimctl = (element: AstNode | null) =>
+      namesSimctl(element ?? undefined) ||
+      (element?.type === 'Identifier' && simctlBindings.has(element.name));
     const buildsSimctlArgv = (array: AstNode) => {
-      const tool = firstElement(array);
-      return (
-        !isMint &&
-        (namesSimctl(tool) || (tool?.type === 'Identifier' && simctlBindings.has(tool.name)))
-      );
+      if (isMint) return false;
+      const elements = array.elements as (AstNode | null)[];
+      const [tool] = elements;
+      return isSimctl(tool ?? null) || (isXcrunOption(tool) && elements.some(isSimctl));
     };
     const report = (node: AstNode, message: string) =>
       violations.push({ rule: RULE, file, line: lineAt(source, node.start), message });
@@ -107,6 +110,11 @@ function namesNonSimctlTool(argv: AstNode): boolean {
   const tool = firstElement(argv);
   if (tool?.type === 'SpreadElement') return true;
   return tool?.type === 'Literal' && typeof tool.value === 'string' && tool.value !== 'simctl';
+}
+
+/** A leading `-` literal is an xcrun option (`--sdk`, `--find`), so the tool name comes later. */
+function isXcrunOption(node: AstNode | null | undefined): boolean {
+  return node?.type === 'Literal' && typeof node.value === 'string' && node.value.startsWith('-');
 }
 
 function firstElement(array: AstNode): AstNode | undefined {
