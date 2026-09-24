@@ -791,7 +791,7 @@ test.for(['rejects', 'exits'] as const)(
     // A known target is re-checked with one `ps` per capture; no discovery runs. A deadline that
     // lands there must stay a plain cancellation, or a wait would report readiness exhaustion over
     // evidence its earlier polls already gathered (#2343 review).
-    const run = vi.fn(async (args: string[]) => ({
+    const run = vi.fn(async (args: readonly string[]) => ({
       stdout:
         args[0] === 'spawn'
           ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
@@ -807,19 +807,21 @@ test.for(['rejects', 'exits'] as const)(
     });
     let psCalls = 0;
     const runCommand = vi.fn(
-      async (cmd: string, args: string[], options?: { signal?: AbortSignal }) => {
+      async (cmd: string, args: readonly string[], options?: { signal?: AbortSignal }) => {
         if (cmd !== 'ps' || ++psCalls === 1) return { stdout: 'start-a', stderr: '', exitCode: 0 };
         recheckStarted();
-        return await new Promise((resolve, reject) => {
-          options?.signal?.addEventListener(
-            'abort',
-            () =>
-              psOnAbort === 'rejects'
-                ? reject(createRequestCanceledError({ cmd, args }))
-                : resolve({ stdout: '', stderr: '', exitCode: 1 }),
-            { once: true },
-          );
-        });
+        return await new Promise<{ stdout: string; stderr: string; exitCode: number }>(
+          (resolve, reject) => {
+            options?.signal?.addEventListener(
+              'abort',
+              () =>
+                psOnAbort === 'rejects'
+                  ? reject(createRequestCanceledError({ cmd, args }))
+                  : resolve({ stdout: '', stderr: '', exitCode: 1 }),
+              { once: true },
+            );
+          },
+        );
       },
     );
     const fallback = vi.fn(async () => runnerResult());
@@ -865,7 +867,7 @@ test.for(['rejects', 'exits'] as const)(
 test('a deadline during a slow app discovery names the discovery as the readiness phase', async () => {
   // The capture never reached the bridge or the runner: its whole cost was finding the target, so
   // the cancellation says so instead of reading as a capture that produced nothing (#2343).
-  const run = vi.fn(async (args: string[]) => {
+  const run = vi.fn(async (args: readonly string[]) => {
     if (args[0] === 'spawn') await new Promise<never>(() => {});
     return {
       stdout: JSON.stringify({
