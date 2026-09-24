@@ -91,8 +91,8 @@ toolchain per command:
   reports it as `overlayWarning` on `record stop` rather than returning a broken file. Only reach
   for `record start --hide-touches` when you want the fastest raw capture, not to dodge the defect.
   See ADR 0025 and #2707.
-- An app must adopt the UIScene lifecycle to launch on iOS 27.1 at all: a legacy
-  `UIApplicationDelegate` app traps at launch inside
+- An app built with the iOS 27 SDK must adopt the UIScene lifecycle to launch on an iOS 27.0 or
+  27.1 simulator at all: a legacy `UIApplicationDelegate` app traps at launch inside
   `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, which reads like a broken
   device but is not one.
 - The 27.1 runtime in this beta accepts only the `iPhone Duo` device type, so a second non-foldable
