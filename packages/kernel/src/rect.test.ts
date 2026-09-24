@@ -4,11 +4,61 @@ import type { Rect } from './snapshot.ts';
 import {
   containsPoint,
   isGeometricallyActionable,
+  isPositiveFiniteRect,
   isRectVisibleInViewport,
   pickLargestRect,
 } from './rect.ts';
 
 const VIEWPORT: Rect = { x: 0, y: 0, width: 300, height: 500 };
+
+/** `CGRectInfinite` spelled in the doubles Apple spells it with: what a failed read crosses a wire in. */
+const CG_RECT_INFINITE: Rect = {
+  x: -Number.MAX_VALUE / 2,
+  y: -Number.MAX_VALUE / 2,
+  width: Number.MAX_VALUE,
+  height: Number.MAX_VALUE,
+};
+
+test('isPositiveFiniteRect refuses the three boxes its numeric twins cannot measure (#2891)', () => {
+  assert.equal(isPositiveFiniteRect({ x: 0, y: 0, width: 390, height: 844 }), true);
+  assert.equal(isPositiveFiniteRect(CG_RECT_INFINITE), false, 'the Apple no-box sentinel');
+  assert.equal(
+    isPositiveFiniteRect({ x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 1 }),
+    false,
+    'finite components that overflow their own right edge',
+  );
+  assert.equal(
+    isPositiveFiniteRect({ x: 0, y: 0, width: Number.POSITIVE_INFINITY, height: 1 }),
+    false,
+  );
+  assert.equal(isPositiveFiniteRect({ x: 0, y: 0, width: 10, height: Number.NaN }), false);
+  assert.equal(isPositiveFiniteRect({ x: 0, y: 0, width: 0, height: 10 }), false);
+  assert.equal(isPositiveFiniteRect({ x: 0, y: 0, width: -10, height: 10 }), false);
+  assert.equal(isPositiveFiniteRect(undefined), false);
+});
+
+/**
+ * Non-vacuity for the sentinel: every component and every extent of it is finite, so the guard's
+ * identity refusal is the only thing standing between a failed viewport read and a box that
+ * contains every node center on the screen.
+ */
+test('the sentinel would survive any check that only looks at components and extents', () => {
+  const components = [
+    CG_RECT_INFINITE.x,
+    CG_RECT_INFINITE.y,
+    CG_RECT_INFINITE.width,
+    CG_RECT_INFINITE.height,
+  ];
+  assert.ok(components.every(Number.isFinite));
+  assert.ok(Number.isFinite(CG_RECT_INFINITE.x + CG_RECT_INFINITE.width));
+  assert.ok(Number.isFinite(CG_RECT_INFINITE.y + CG_RECT_INFINITE.height));
+  assert.equal(CG_RECT_INFINITE.x + CG_RECT_INFINITE.width / 2, 0, 'its center is (0, 0)');
+  assert.equal(
+    isPositiveFiniteRect({ ...CG_RECT_INFINITE, height: 123 }),
+    true,
+    'one byte off is a real box',
+  );
+});
 
 test('containsPoint is inclusive on every edge and requires all four bounds', () => {
   assert.equal(containsPoint(VIEWPORT, 0, 0), true);

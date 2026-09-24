@@ -135,6 +135,40 @@ test('the bridge reader stamps geometric hittable onto every raw node, matching 
   );
 });
 
+test('a root whose frame is the Apple no-box sentinel declares an invalid viewport, not a whole-screen one (#2891)', () => {
+  // Every component and extent of this box is finite, so only the shared box guard refuses it. If
+  // it were taken as a reported viewport, every node center on the screen would land inside it.
+  const sentinel = {
+    X: -Number.MAX_VALUE / 2,
+    Y: -Number.MAX_VALUE / 2,
+    Width: Number.MAX_VALUE,
+    Height: Number.MAX_VALUE,
+  };
+  const result = decodeSnapshotBridgeTree(
+    {
+      [application]: 'Application',
+      [frame]: sentinel,
+      [children]: [
+        {
+          [automationType]: 9,
+          [label]: 'Continue',
+          [frame]: { X: 20, Y: 700, Width: 120, Height: 48 },
+          [children]: [],
+        },
+      ],
+    },
+    { truncated: false },
+    limits,
+  );
+
+  assert.deepEqual(result.viewport, { kind: 'missing', reason: 'invalid' });
+  assert.deepEqual(
+    result.nodes.map((node) => node.hittable),
+    [undefined, undefined],
+    'a refused viewport publishes no hittable claim at all',
+  );
+});
+
 test('the bridge tree counts web-hosted remote leaves that reach the viewport', () => {
   const viewport = { X: 0, Y: 0, Width: 390, Height: 844 };
   const remoteLeaf = (rect?: Record<string, number>) => ({

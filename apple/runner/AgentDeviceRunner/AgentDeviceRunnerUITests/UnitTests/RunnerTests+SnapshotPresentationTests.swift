@@ -622,5 +622,55 @@ extension RunnerTests {
     XCTAssertNotNil(band, "keyboard plane must be presented under --depth \(options.depth ?? -1)")
     XCTAssertNotNil(keyQ, "`q` key must be presented under --depth \(options.depth ?? -1)")
   }
+
+  /// #2891: a capture whose viewport read failed publishes no `hittable` bit at all. Pinned on the
+  /// encoded objects rather than the decoded model, because `false` and an absent bit are the same
+  /// `Bool?` in Swift and only the wire tells them apart — and the #2638 wrapper verdict reads a
+  /// declared `false` as evidence that the wrapper is inert.
+  func testAMissingViewportOmitsTheHittableBitFromTheWire() throws {
+    func node(
+      _ index: Int, _ type: String, _ label: String,
+      enabled: Bool, parent: Int?, depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: 10, y: 20 + index * 60, width: 100, height: 44),
+        enabled: enabled, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    let acquired = [
+      node(0, "Application", "App", enabled: true, parent: nil, depth: 0),
+      node(1, "Button", "Continue", enabled: true, parent: 0, depth: 1),
+      node(2, "Button", "Sold out", enabled: false, parent: 0, depth: 1),
+    ]
+    let viewport = SnapshotViewport.missing(reason: .notProvided)
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
+      SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: SnapshotGeometrySpace.normalized(nodes: acquired, viewport: viewport),
+        truncated: false,
+        effectiveDepth: nil,
+        viewport: viewport
+      ),
+      options: options
+    ))
+    let objects = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(capture.nodes)) as? [[String: Any]]
+    )
+
+    // Containment is the one thing a capture with no box cannot decide, so the key is not there.
+    let undecided = try XCTUnwrap(objects.first { $0["label"] as? String == "Continue" })
+    XCTAssertFalse(
+      undecided.keys.contains("hittable"),
+      "an unknown viewport publishes no bit: \(undecided.keys.sorted())"
+    )
+    // Enablement and the root rule need no box, so those stay declared answers rather than gaps.
+    let disabled = try XCTUnwrap(objects.first { $0["label"] as? String == "Sold out" })
+    XCTAssertEqual(disabled["hittable"] as? Bool, false, "a disabled node is decided without a box")
+    let root = try XCTUnwrap(objects.first { $0["label"] as? String == "App" })
+    XCTAssertEqual(root["hittable"] as? Bool, false, "a root has nothing to hit through")
+  }
 }
 #endif

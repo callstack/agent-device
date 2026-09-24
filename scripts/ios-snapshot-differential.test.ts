@@ -163,6 +163,17 @@ const NON_FINITE_RECT: Rect = {
   height: Number.POSITIVE_INFINITY,
 };
 
+/**
+ * What `{"infinite": true}` means on this side: `CGRect.infinite` spelled in the doubles Apple
+ * spells it with, which is exactly the shape a failed read arrives in over a JSON wire.
+ */
+const CG_RECT_INFINITE: Rect = {
+  x: -Number.MAX_VALUE / 2,
+  y: -Number.MAX_VALUE / 2,
+  width: Number.MAX_VALUE,
+  height: Number.MAX_VALUE,
+};
+
 function declaresItsAsymmetry(vector: ActionabilityVector): boolean {
   const hasReason = typeof vector.asymmetry === 'string' && vector.asymmetry.length > 0;
   return (vector.swift && vector.typescript) !== hasReason;
@@ -186,6 +197,10 @@ function readActionabilityVectors(): readonly ActionabilityVector[] {
       `${vector.name}: row must declare the TypeScript side`,
     );
     assert.ok(
+      vector.swift || vector.typescript,
+      `${vector.name}: a row no language runs asserts nothing`,
+    );
+    assert.ok(
       declaresItsAsymmetry(vector),
       `${vector.name}: a row both languages do not share must name the asymmetry`,
     );
@@ -195,12 +210,7 @@ function readActionabilityVectors(): readonly ActionabilityVector[] {
 
 function toRect(node: ActionabilityVector['node']): Rect {
   if ('nonFinite' in node) return NON_FINITE_RECT;
-  if ('infinite' in node) {
-    throw new Error(
-      "CGRect.infinite is Apple's value and no row reaching TypeScript may stand for it: " +
-        'that row belongs to the Swift side alone',
-    );
-  }
+  if ('infinite' in node) return CG_RECT_INFINITE;
   return node;
 }
 
@@ -215,7 +225,9 @@ test('the shared hittable predicate agrees with every golden actionability vecto
       `${vector.name}: node-rect guard`,
     );
     if (vector.viewport.kind === 'missing') {
-      throw new Error(`${vector.name}: the TypeScript predicate takes a box`);
+      assert.fail(
+        `${vector.name}: the TypeScript predicate takes a box, so this row is Swift-only`,
+      );
     }
     assert.equal(
       isGeometricallyActionable(vector.enabled, node, vector.viewport.rect),
@@ -223,6 +235,37 @@ test('the shared hittable predicate agrees with every golden actionability vecto
       vector.name,
     );
   }
+});
+
+/**
+ * Non-vacuity for the row that started #2891: `CGRect.infinite` is built of finite components and
+ * finite extents, so if this spelling ever stopped being a value the numeric checks accept, the
+ * sentinel row would be silently replaying some other unusable box and the sentinel would go
+ * untested on this side.
+ */
+test('the infinite row is a box only the guard itself can refuse', () => {
+  const box = [
+    CG_RECT_INFINITE.x,
+    CG_RECT_INFINITE.y,
+    CG_RECT_INFINITE.width,
+    CG_RECT_INFINITE.height,
+  ];
+  assert.ok(
+    box.every(Number.isFinite),
+    "CGRect.infinite's components are finite Doubles; a spelling that is not cannot stand for it",
+  );
+  assert.ok(
+    [
+      CG_RECT_INFINITE.x + CG_RECT_INFINITE.width,
+      CG_RECT_INFINITE.y + CG_RECT_INFINITE.height,
+    ].every(Number.isFinite),
+    "CGRect.infinite's extents are finite too, so an extent check alone would accept it",
+  );
+  assert.equal(
+    isPositiveFiniteRect(CG_RECT_INFINITE),
+    false,
+    "the guard itself is what refuses Apple's no-box sentinel",
+  );
 });
 
 test('the TypeScript rows cover every viewport kind that carries a box', () => {

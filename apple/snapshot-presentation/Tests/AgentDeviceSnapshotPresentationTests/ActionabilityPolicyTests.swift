@@ -75,6 +75,10 @@ final class ActionabilityPolicyTests: XCTestCase {
     var declaresItsAsymmetry: Bool {
       (swift && typescript) != (asymmetry?.isEmpty == false)
     }
+
+    var runsSomewhere: Bool {
+      swift || typescript
+    }
   }
 
   func testActionabilityPolicyAgreesWithEveryGoldenVector() throws {
@@ -89,6 +93,10 @@ final class ActionabilityPolicyTests: XCTestCase {
       ["reported", "derived", "missing"]
     )
     for testCase in table.cases {
+      XCTAssertTrue(
+        testCase.runsSomewhere,
+        "\(testCase.name): a row no language runs asserts nothing"
+      )
       XCTAssertTrue(
         testCase.declaresItsAsymmetry,
         "\(testCase.name): a row both languages do not share must name the asymmetry"
@@ -112,6 +120,30 @@ final class ActionabilityPolicyTests: XCTestCase {
         ),
         testCase.hittable,
         testCase.name
+      )
+    }
+  }
+
+  /// A box the guard refuses must never become a declared viewport, because one that is unbounded
+  /// contains every center on the screen and would make the whole tree actionable (#2891).
+  func testARefusedBoxNeverBecomesADeclaredViewport() {
+    let magnitude = CGFloat.greatestFiniteMagnitude
+    let overflowing = CGRect(x: magnitude, y: 0, width: magnitude, height: 1)
+    XCTAssertTrue(
+      CGRect.infinite.origin.x.isFinite && CGRect.infinite.size.width.isFinite,
+      "the sentinel is built of finite Doubles, so only the guard itself can refuse it"
+    )
+    XCTAssertTrue(CGRect.infinite.maxX.isFinite, "and so are its extents")
+    for refused in [CGRect.infinite, overflowing, CGRect.null, CGRect.zero] {
+      XCTAssertEqual(
+        SnapshotViewport.reported(box: refused),
+        .missing(reason: .invalid),
+        "a reported viewport refused \(refused)"
+      )
+      XCTAssertEqual(
+        SnapshotViewport.derived(box: refused),
+        .missing(reason: .invalid),
+        "a derived viewport refused \(refused)"
       )
     }
   }

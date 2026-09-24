@@ -1,5 +1,5 @@
 {
-  "description": "Golden vector table for the shared `hittable` predicate (#1933, #2891), for input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach. RULE: a node is actionable when it is enabled, its own rect is positive and finite, and its center falls inside the viewport box, half-open on the right and bottom edges. Implementations: SnapshotGeometry.isGeometricallyActionable (Swift, replayed by ActionabilityPolicyTests) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). The viewport is the declared fact `reported`, `derived`, or `missing` (IosViewportEvidence). `hittable: null` is the absent bit: with no viewport box, containment is undecided. Every row declares `swift` and `typescript`; a row one side skips carries `asymmetry`.",
+  "description": "Golden vector table for the shared `hittable` predicate (#1933, #2891), for input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach. RULE: a node is actionable when it is enabled, its own rect passes the box guard below, and its center falls inside the viewport box, half-open on the right and bottom edges. BOX GUARD: a box is usable when all four components are finite, both extents (x+width, y+height) are finite, the size is positive, and it is not CGRect.infinite — whose components and extents are all finite, so only identity refuses it. SnapshotGeometry.isPositiveFinite (Swift) and isPositiveFiniteRect in packages/kernel/src/rect.ts are the twins that enforce exactly this, one per language. Implementations of the predicate: SnapshotGeometry.isGeometricallyActionable (Swift, replayed by ActionabilityPolicyTests) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). The viewport is the declared fact `reported`, `derived`, or `missing` (IosViewportEvidence); a box the guard refuses never becomes `reported`. `hittable: null` is the absent bit: with no viewport box, containment is undecided, while a disabled or degenerate node is still a declared `false` because that half of the rule needs no box. Every row declares `swift` and `typescript` and at least one must run it; a row one side skips carries `asymmetry`.",
   "cases": [
     {
       "name": "a center strictly inside the reported box is actionable",
@@ -122,10 +122,9 @@
       "nodeRectGuardPasses": true
     },
     {
-      "name": "Apple's no-box sentinel is not actionable: CGRect.infinite is made of finite Doubles whose center is (0,0), so only the platform that owns that value can refuse it by identity",
+      "name": "Apple's no-box sentinel is not actionable on either language: its components and extents are all finite and its center is (0,0), so the box guard refuses it by value in both",
       "swift": true,
-      "typescript": false,
-      "asymmetry": "Swift decodes {\"infinite\": true} as CGRect.infinite; TypeScript has no such value, and frameFromGuest in packages/platform-apple/src/snapshot-source/tree.ts refuses a frame whose components are not Number.isFinite before the predicate ever sees it, which is the row below. The sentinel's components are finite, so TypeScript would call them actionable: the refusal belongs to the producer that parses an Apple frame, not to a magic value inside the shared rule.",
+      "typescript": true,
       "enabled": true,
       "node": { "infinite": true },
       "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
@@ -133,7 +132,22 @@
       "nodeRectGuardPasses": false
     },
     {
-      "name": "a node rect whose components are not finite is not actionable on either producer, and the component checks refuse it before any center is computed",
+      "name": "finite components and finite extents can still spell an unmeasurable box: it overflows its own right edge, so the extent check refuses it",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": {
+        "x": 1.7976931348623157e308,
+        "y": 0,
+        "width": 1.7976931348623157e308,
+        "height": 1
+      },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "a node rect whose components are not finite is refused by the box guard before any center is computed; the bridge decoder refuses to decode such a frame earlier still, so this row pins the guard and not a producer",
       "swift": true,
       "typescript": true,
       "enabled": true,
