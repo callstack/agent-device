@@ -9,7 +9,8 @@ import {
 } from '../simulator.ts';
 import { runXcrun } from '../tool-provider.ts';
 
-vi.mock('../tool-provider.ts', () => ({
+vi.mock('../tool-provider.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../tool-provider.ts')>()),
   runAppleToolCommand: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
   runXcrun: vi.fn(),
 }));

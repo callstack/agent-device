@@ -28,7 +28,7 @@ export async function readAppleHingeAngle(
   device: DeviceInfo,
   options: { signal?: AbortSignal } = {},
 ): Promise<number> {
-  const args = [
+  const args: ['devicectl', ...string[]] = [
     'devicectl',
     'device',
     'motion',

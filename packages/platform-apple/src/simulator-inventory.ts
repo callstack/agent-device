@@ -2,11 +2,10 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,
-  ScopedSimctlArgs,
 } from '@agent-device/contracts/platform-runtime-host';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { scopeSimctlArgs } from './core/simctl.ts';
+import { simctlListDevicesArgs } from './core/simctl.ts';
 import {
   isSupportedAppleRuntime,
   resolveAppleOs,
@@ -26,10 +25,6 @@ type SimctlListDevicesPayload = {
 };
 
 const BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
-
-export function buildSimctlListArgs(simulatorSetPath: string | undefined): ScopedSimctlArgs {
-  return scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath });
-}
 
 export function parseSimctlAppleDevices(
   payload: SimctlListDevicesPayload,
@@ -65,7 +60,7 @@ export async function listAppleSimulators(
   const result = await host.appleTools.run(
     {
       tool: 'simctl',
-      args: buildSimctlListArgs(simulatorSetPath),
+      args: simctlListDevicesArgs(simulatorSetPath),
       ...(request.booted === true ? { timeoutMs: BOOTED_SIMULATOR_PROBE_TIMEOUT_MS } : {}),
     },
     scope.signal,

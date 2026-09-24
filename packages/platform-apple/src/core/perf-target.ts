@@ -8,7 +8,7 @@ import type { IosDeviceProcessInfo } from './app-info.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { readInfoPlistString } from './plist.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
-import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
+import { runAppleToolCommand, runXcrun, type ScopedSimctlCommand } from './tool-provider.ts';
 
 const APPLE_PERF_TIMEOUT_MS = 15_000;
 
@@ -152,25 +152,26 @@ export async function readAppleProcessSamples(
   device: DeviceInfo,
   executable: { executableName: string; executablePath?: string },
 ): Promise<AppleProcessSample[]> {
-  const args = isMacOs(device)
-    ? ['-axo', 'pid=,%cpu=,rss=,command=']
-    : buildSimctlArgsForDevice(device, [
-        'spawn',
-        device.id,
-        'ps',
-        '-axo',
-        'pid=,%cpu=,rss=,command=',
-      ]);
   const result = isMacOs(device)
-    ? await runAppleToolCommand('ps', args, { timeoutMs: APPLE_PERF_TIMEOUT_MS })
-    : await runAppleSimulatorProcessCommand(args);
+    ? await runAppleToolCommand('ps', ['-axo', 'pid=,%cpu=,rss=,command='], {
+        timeoutMs: APPLE_PERF_TIMEOUT_MS,
+      })
+    : await runAppleSimulatorProcessCommand(
+        buildSimctlArgsForDevice(device, [
+          'spawn',
+          device.id,
+          'ps',
+          '-axo',
+          'pid=,%cpu=,rss=,command=',
+        ]),
+      );
   const { matchesAppleExecutableProcess } = await import('./perf-process-identity.ts');
   return parseApplePsOutput(result.stdout).filter((processInfo) =>
     matchesAppleExecutableProcess(processInfo.command, executable),
   );
 }
 
-async function runAppleSimulatorProcessCommand(args: string[]): Promise<ExecResult> {
+async function runAppleSimulatorProcessCommand(args: ScopedSimctlCommand): Promise<ExecResult> {
   const result = await runXcrun(args, {
     allowFailure: true,
     timeoutMs: APPLE_PERF_TIMEOUT_MS,

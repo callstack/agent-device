@@ -14,6 +14,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
+import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
 import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
 import {
@@ -67,7 +68,7 @@ test('request platform provider scope applies Apple tool provider only for Apple
         },
       },
     },
-    async () => await runXcrun(['simctl', 'list', 'devices', '-j']),
+    async () => await runXcrun(buildSimctlArgsForDevice(IOS_SIMULATOR, ['list', 'devices', '-j'])),
   );
 
   assert.equal(result.stdout, 'simctl-ok');
@@ -104,7 +105,10 @@ test('request platform provider scope follows explicit apps selector for existin
             },
           },
         },
-        async () => await runXcrun(['simctl', 'listapps', OTHER_IOS_SIMULATOR.id]),
+        async () =>
+          await runXcrun(
+            buildSimctlArgsForDevice(OTHER_IOS_SIMULATOR, ['listapps', OTHER_IOS_SIMULATOR.id]),
+          ),
       ),
   );
 
@@ -207,7 +211,8 @@ test('request platform provider scopes stay isolated across concurrent requests'
           }),
       },
     },
-    async () => (await runXcrun(['simctl', 'list', 'devices', '-j'])).stdout,
+    async () =>
+      (await runXcrun(buildSimctlArgsForDevice(IOS_SIMULATOR, ['list', 'devices', '-j']))).stdout,
   );
 
   assert.deepEqual(await Promise.all([androidTask, appleTask]), ['android-ok', 'apple-ok']);

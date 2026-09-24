@@ -306,7 +306,7 @@ export async function exportAppleXctraceData(params: {
   failureMessage: string;
   failureDetails: Record<string, unknown>;
 }): Promise<string> {
-  const exportArgs = [
+  const exportArgs: ['xctrace', ...string[]] = [
     'xctrace',
     'export',
     '--input',
@@ -376,7 +376,7 @@ function buildAppleXctraceRecordArgs(params: {
   target: AppleXctraceRecordTarget;
   timeLimit?: string;
   outPath: string;
-}): string[] {
+}): ['xctrace', ...string[]] {
   return [
     'xctrace',
     'record',

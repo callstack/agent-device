@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  buildSimctlListArgs,
-  listAppleSimulators,
-  parseSimctlAppleDevices,
-} from './simulator-inventory.ts';
+import { listAppleSimulators, parseSimctlAppleDevices } from './simulator-inventory.ts';
 import { commandResult, createInventoryHost, inventoryScope } from './inventory.fixtures.ts';
 
 const simulatorPayload = {
@@ -118,7 +114,6 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
     ['iphone-1', 'tv-1'],
   );
   assert.deepEqual(observed, ['iphone-1']);
-  assert.deepEqual(buildSimctlListArgs(undefined), ['list', 'devices', '-j']);
 });
 
 test('simulator inventory classifies malformed native output as a command failure', async () => {

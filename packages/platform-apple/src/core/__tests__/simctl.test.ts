@@ -5,8 +5,9 @@ import {
   buildSimctlArgsForDevice,
   readSimctlDevicesByRuntime,
   readSimctlDeviceState,
-  scopeSimctlArgs,
   scopeSimctlArgsForDevice,
+  simctlAvailabilityProbeArgs,
+  simctlListDevicesArgs,
   simulatorAddressFor,
   type SimulatorAddress,
 } from '../simctl.ts';
@@ -59,19 +60,20 @@ test('buildSimctlArgsForDevice leaves non-simulator commands unchanged', () => {
   assert.deepEqual(args, ['simctl', 'bootstatus', 'sim-1', '-b']);
 });
 
-test('scopeSimctlArgs prefixes a trimmed simulator set and omits a blank one', () => {
-  assert.deepEqual(scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath: ' /tmp/set ' }), [
+test('simctlListDevicesArgs prefixes a trimmed simulator set and omits a blank one', () => {
+  assert.deepEqual(simctlListDevicesArgs(' /tmp/set '), [
     '--set',
     '/tmp/set',
     'list',
     'devices',
     '-j',
   ]);
-  assert.deepEqual(scopeSimctlArgs(['list', 'devices', '-j'], { simulatorSetPath: '  ' }), [
-    'list',
-    'devices',
-    '-j',
-  ]);
+  assert.deepEqual(simctlListDevicesArgs('  '), ['list', 'devices', '-j']);
+  assert.deepEqual(simctlListDevicesArgs(undefined), ['list', 'devices', '-j']);
+});
+
+test('simctlAvailabilityProbeArgs names no set', () => {
+  assert.deepEqual(simctlAvailabilityProbeArgs(), ['help']);
 });
 
 test('scopeSimctlArgsForDevice scopes simulators only', () => {
@@ -105,11 +107,13 @@ test('simulatorAddressFor carries the set of iOS-family simulators only', () => 
 });
 
 function compileTimeSimulatorScopeProof(): void {
-  // @ts-expect-error A set-scope call states its set; leaving it out does not mean the default set.
-  void scopeSimctlArgs(['list']);
   // @ts-expect-error A simulator address is minted from its DeviceInfo, never written by hand.
   const forged: SimulatorAddress = { udid: 'sim-1', simulatorSetPath: undefined };
   void forged;
+  // @ts-expect-error Set scope is private; a call that names no device goes through a named mint.
+  type SetScope = (typeof import('../simctl.ts'))['scopeSimctlArgs'];
+  const setScope: SetScope | undefined = undefined;
+  void setScope;
 }
 void compileTimeSimulatorScopeProof;
 

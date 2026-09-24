@@ -28,6 +28,20 @@ export type {
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
 
+declare const scopedSimctlCommand: unique symbol;
+/** The xcrun argv of one simctl call: `simctl` followed by arguments already scoped to their set. */
+export type ScopedSimctlCommand = readonly ['simctl', ...string[]] & {
+  readonly [scopedSimctlCommand]: true;
+};
+
+export function simctlCommand(args: ScopedSimctlArgs): ScopedSimctlCommand {
+  return Object.freeze(['simctl', ...args] as const) as ScopedSimctlCommand;
+}
+
+function simctlCommandArgs(command: ScopedSimctlCommand): ScopedSimctlArgs {
+  return Object.freeze(command.slice(1)) as ScopedSimctlArgs;
+}
+
 export type AppleToolProvider = {
   runCommand: AppleToolCommandExecutor;
   simctl: AppleSimctlToolProvider;
@@ -41,7 +55,7 @@ export type AppleToolProvider = {
 const localAppleToolProvider: AppleToolProvider = {
   runCommand: runCmd,
   simctl: {
-    run: async (args, options) => await runCmd('xcrun', ['simctl', ...args], options),
+    run: async (args, options) => await runCmd('xcrun', simctlCommand(args), options),
   },
   devicectl: {
     run: async (args, options) => await runCmd('xcrun', ['devicectl', ...args], options),
@@ -76,7 +90,8 @@ export function createLocalAppleToolProvider(
   return {
     ...merged,
     simctl: provider.simctl ?? {
-      run: async (args, options) => await merged.runCommand('xcrun', ['simctl', ...args], options),
+      run: async (args, options) =>
+        await merged.runCommand('xcrun', [...simctlCommand(args)], options),
     },
     devicectl: provider.devicectl ?? {
       run: async (args, options) =>
@@ -115,16 +130,22 @@ export async function runAppleToolCommand(
   return await resolveAppleToolProvider().runCommand(cmd, args, options);
 }
 
-export async function runXcrun(args: string[], options?: ExecOptions): Promise<ExecResult> {
+/** An xcrun argv for a tool other than simctl; a simctl argv is a ScopedSimctlCommand. */
+type XcrunToolArgs = readonly ['devicectl' | 'xcdevice' | 'xctrace', ...string[]];
+
+export async function runXcrun(
+  args: ScopedSimctlCommand | XcrunToolArgs,
+  options?: ExecOptions,
+): Promise<ExecResult> {
   const provider = resolveAppleToolProvider();
-  const [tool, ...toolArgs] = args;
-  if (tool === 'simctl') {
-    return await provider.simctl.run(toolArgs as unknown as ScopedSimctlArgs, options);
+  if (args[0] === 'simctl') {
+    return await provider.simctl.run(simctlCommandArgs(args), options);
   }
+  const [tool, ...toolArgs] = args;
   if (tool === 'devicectl') {
     return await provider.devicectl.run(toolArgs, options);
   }
-  return await runAppleToolCommand('xcrun', args, options);
+  return await runAppleToolCommand('xcrun', [...args], options);
 }
 
 export async function readApplePlistJson(

@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildSimctlArgsForDevice } from '../core/simctl.ts';
+import type { ScopedSimctlCommand } from '../core/tool-provider.ts';
 
 export function buildAppleLogPredicate(appBundleId: string, executableName?: string): string {
   const escapedBundleId = escapePredicateString(appBundleId);
@@ -25,7 +26,7 @@ export function buildAppleLogPredicate(appBundleId: string, executableName?: str
 export function buildIosSimulatorLogStreamArgs(
   device: DeviceInfo,
   params: { appBundleId: string; executableName?: string },
-): string[] {
+): ScopedSimctlCommand {
   return buildSimctlArgsForDevice(device, [
     'spawn',
     device.id,

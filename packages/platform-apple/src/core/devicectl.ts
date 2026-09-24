@@ -60,7 +60,7 @@ export async function runIosDevicectl(
     tolerateOutput?: (stdout: string, stderr: string) => boolean;
   } = {},
 ): Promise<void> {
-  const fullArgs = ['devicectl', ...args];
+  const fullArgs: ['devicectl', ...string[]] = ['devicectl', ...args];
   const result = await runXcrun(fullArgs, {
     allowFailure: true,
     signal: options.signal,
@@ -202,7 +202,7 @@ export type IosDevicectlJsonOutcome =
  */
 export async function runIosDevicectlJsonRequest(options: {
   jsonPrefix: string;
-  args: string[];
+  args: ['devicectl', ...string[]];
   timeoutMs?: number;
   signal?: AbortSignal;
   tolerateFailurePayload?: (payload: unknown) => boolean;
@@ -211,7 +211,7 @@ export async function runIosDevicectlJsonRequest(options: {
     hostTemporaryDirectory(),
     `${options.jsonPrefix}-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
   );
-  const args = [...options.args, '--json-output', jsonPath];
+  const args: ['devicectl', ...string[]] = [...options.args, '--json-output', jsonPath];
   try {
     const result = await runXcrun(args, {
       allowFailure: true,
@@ -248,7 +248,7 @@ async function runIosDevicectlJsonCommand(
   device: DeviceInfo,
   options: {
     jsonPrefix: string;
-    args: string[];
+    args: ['devicectl', ...string[]];
     failureMessage: string;
     parseFailureMessage: string;
     fallbackHint?: string;

@@ -159,7 +159,13 @@ async function rejectXctestRunnerFileCopy(device: DeviceInfo): Promise<never> {
 
 async function ensureXctestDeviceReady(device: DeviceInfo, signal?: AbortSignal): Promise<void> {
   const timeoutSeconds = Math.max(1, Math.ceil(IOS_DEVICE_READY_TIMEOUT_MS / 1000));
-  const args = ['xcdevice', 'wait', '--both', `--timeout=${timeoutSeconds}`, device.id];
+  const args: ['xcdevice', ...string[]] = [
+    'xcdevice',
+    'wait',
+    '--both',
+    `--timeout=${timeoutSeconds}`,
+    device.id,
+  ];
   const result = await runXcrun(args, {
     allowFailure: true,
     signal,

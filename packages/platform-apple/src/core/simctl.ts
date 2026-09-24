@@ -2,10 +2,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
-import { runXcrun } from './tool-provider.ts';
-
-/** The set of a simctl call that names no device; `undefined` names the default set on purpose. */
-export type SimulatorSetScope = Readonly<{ simulatorSetPath: string | undefined }>;
+import { runXcrun, simctlCommand, type ScopedSimctlCommand } from './tool-provider.ts';
 
 declare const simulatorAddress: unique symbol;
 /** A simulator udid with the set that holds it; minted only from a DeviceInfo. */
@@ -19,22 +16,23 @@ export function simulatorAddressFor(device: DeviceInfo): SimulatorAddress {
   return Object.freeze({ udid: device.id, simulatorSetPath }) as SimulatorAddress;
 }
 
-/** Arguments that follow the `simctl` tool name for a call that names no device. */
-export function scopeSimctlArgs(
+function scopeSimctlArgs(
+  simulatorSetPath: string | undefined,
   args: readonly string[],
-  scope: SimulatorSetScope,
 ): ScopedSimctlArgs {
-  const simulatorSetPath = resolveIosSimulatorDeviceSetPath(scope.simulatorSetPath);
-  const scoped = simulatorSetPath ? ['--set', simulatorSetPath, ...args] : [...args];
+  const resolvedSetPath = resolveIosSimulatorDeviceSetPath(simulatorSetPath);
+  const scoped = resolvedSetPath ? ['--set', resolvedSetPath, ...args] : [...args];
   return Object.freeze(scoped) as ScopedSimctlArgs;
 }
 
-/** Arguments that follow the `simctl` tool name, scoped to the set holding the addressed simulator. */
-export function scopeSimctlArgsForAddress(
-  address: SimulatorAddress,
-  args: readonly string[],
-): ScopedSimctlArgs {
-  return scopeSimctlArgs(args, { simulatorSetPath: address.simulatorSetPath });
+/** `simctl help`: probes that simctl runs at all, so it names no set. */
+export function simctlAvailabilityProbeArgs(): ScopedSimctlArgs {
+  return scopeSimctlArgs(undefined, ['help']);
+}
+
+/** `simctl list devices -j` over one simulator set; `undefined` lists the default set. */
+export function simctlListDevicesArgs(simulatorSetPath: string | undefined): ScopedSimctlArgs {
+  return scopeSimctlArgs(simulatorSetPath, ['list', 'devices', '-j']);
 }
 
 /** Arguments that follow the `simctl` tool name, scoped to the simulator set holding the device. */
@@ -42,18 +40,21 @@ export function scopeSimctlArgsForDevice(
   device: DeviceInfo,
   args: readonly string[],
 ): ScopedSimctlArgs {
-  return scopeSimctlArgsForAddress(simulatorAddressFor(device), args);
+  return scopeSimctlArgs(simulatorAddressFor(device).simulatorSetPath, args);
 }
 
 export function buildSimctlArgsForAddress(
   address: SimulatorAddress,
   args: readonly string[],
-): string[] {
-  return ['simctl', ...scopeSimctlArgsForAddress(address, args)];
+): ScopedSimctlCommand {
+  return simctlCommand(scopeSimctlArgs(address.simulatorSetPath, args));
 }
 
-export function buildSimctlArgsForDevice(device: DeviceInfo, args: readonly string[]): string[] {
-  return ['simctl', ...scopeSimctlArgsForDevice(device, args)];
+export function buildSimctlArgsForDevice(
+  device: DeviceInfo,
+  args: readonly string[],
+): ScopedSimctlCommand {
+  return buildSimctlArgsForAddress(simulatorAddressFor(device), args);
 }
 
 export function runSimctlForDevice(

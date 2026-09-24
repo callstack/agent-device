@@ -22,7 +22,10 @@ const simctl = vi.hoisted(() => ({
   calls: [] as string[],
 }));
 
-vi.mock('../packages/platform-apple/src/core/tool-provider.ts', () => ({
+vi.mock('../packages/platform-apple/src/core/tool-provider.ts', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../packages/platform-apple/src/core/tool-provider.ts')
+  >()),
   runXcrun: async (args: string[]) => {
     const idx = args.indexOf('listapps');
     const deviceId = idx >= 0 ? args[idx + 1] : undefined;

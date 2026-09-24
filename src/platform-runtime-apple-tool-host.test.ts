@@ -4,6 +4,7 @@ import {
   type AppleToolProvider,
   withAppleToolProvider,
 } from '@agent-device/platform-apple/tool-provider';
+import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 
 test('Apple tool host uses a full scoped provider when local xcrun is unavailable', async () => {
@@ -40,6 +41,26 @@ test('Apple tool host uses a full scoped provider when local xcrun is unavailabl
     signal,
     timeoutMs: 42,
   });
+});
+
+test('Apple tool host hands a simctl request to the simctl provider with its scoped args intact', async () => {
+  const run = vi.fn(async () => ({ stdout: 'booted', stderr: '', exitCode: 0 }));
+  const runCommand = vi.fn();
+  const provider = createLocalAppleToolProvider({ runCommand, simctl: { run } });
+  const args = Object.freeze(['--set', '/tmp/set', 'boot', 'sim-1']) as ScopedSimctlArgs;
+
+  await withAppleToolProvider(provider, async () => {
+    await expect(
+      createAppleToolHost().run({ tool: 'simctl', args, allowFailure: true }, undefined),
+    ).resolves.toEqual({ stdout: 'booted', stderr: '', exitCode: 0 });
+  });
+
+  expect(run).toHaveBeenCalledWith(['--set', '/tmp/set', 'boot', 'sim-1'], {
+    allowFailure: true,
+    signal: undefined,
+    timeoutMs: undefined,
+  });
+  expect(runCommand).not.toHaveBeenCalled();
 });
 
 test('Apple tool host rejects pre-aborted requests before invoking the provider', async () => {

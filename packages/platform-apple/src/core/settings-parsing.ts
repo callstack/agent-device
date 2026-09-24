@@ -21,7 +21,7 @@ export function parseSettingState(state: string): boolean {
 
 // fallow-ignore-next-line code-duplication
 export type CommandAttemptFailure = {
-  args: string[];
+  args: readonly string[];
   stdout: string;
   stderr: string;
   exitCode: number;

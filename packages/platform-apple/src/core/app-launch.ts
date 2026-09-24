@@ -27,7 +27,7 @@ import {
   launchFailureHint,
 } from './launch-diagnostics.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { runXcrun } from './tool-provider.ts';
+import { runXcrun, type ScopedSimctlCommand } from './tool-provider.ts';
 import { closeMacOsApp, openMacOsApp } from '../os/macos/apps.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
@@ -301,7 +301,7 @@ function buildIosSimulatorLaunchArgs(
 }
 
 async function runIosSimulatorConsoleLaunch(
-  launchArgs: string[],
+  launchArgs: ScopedSimctlCommand,
   logPath: string,
 ): Promise<Awaited<ReturnType<typeof runXcrun>>> {
   await ensureHostDirectory(path.dirname(logPath));
