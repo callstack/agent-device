@@ -8,7 +8,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import { errorResponse } from '@agent-device/kernel/contracts';
+import { unsupportedOperationResponse } from './runtime-admission.ts';
 
 export type RuntimeCommandHandlerParams = Readonly<{
   req: DaemonRequest;
@@ -18,18 +18,16 @@ export type RuntimeCommandHandlerParams = Readonly<{
   bindDevice?: BindDeviceRuntime;
 }>;
 
-/** Shared facts-first admission for request-scoped runtime command handlers. */
+/**
+ * Shared facts-first admission for request-scoped runtime command handlers. Availability is the
+ * only thing decided here; the refusal wording, `details.reason`, and hint come from the same
+ * `unsupportedOperationResponse` the generic route uses, so both seams keep one wire shape.
+ */
 export function unavailableRuntimeOperationResponse(
   command: string,
   fact: RuntimeOperationFact,
 ): DaemonResponse | undefined {
-  if (fact.available) return undefined;
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    `${command} is not supported on this device`,
-    { reason: fact.reason },
-    fact.hint ? { hint: fact.hint } : undefined,
-  );
+  return fact.available ? undefined : unsupportedOperationResponse(command, fact);
 }
 
 export function requireRuntimeFacts(

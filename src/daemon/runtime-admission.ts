@@ -43,20 +43,19 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
 export type { RuntimeAdmissionBindings };
 
 /**
- * The refusal every generic runtime-admitted route reports when its exact owner did not admit a
- * required operation. The `<command> is not supported on this device` wording and the hint are
- * owned here; a route that carries typed evidence passes it as `details` rather than restating the
- * refusal, so its response and the shared default can never drift apart.
+ * The one refusal the daemon reports when a device's exact runtime owner did not admit an
+ * operation. Both seams — this generic route and the request-scoped session handlers — build their
+ * `UNSUPPORTED_OPERATION` here, so the `<command> is not supported on this device` sentence, the
+ * typed `details.reason`, and the hint have a single owner and one wire shape.
  */
 export function unsupportedOperationResponse(
   command: string,
   unavailable: RuntimeOperationUnavailability,
-  details?: Record<string, unknown>,
 ): DaemonFailureResponse {
   return errorResponse(
     'UNSUPPORTED_OPERATION',
     `${command} is not supported on this device`,
-    details,
+    { reason: unavailable.reason },
     unavailable.hint ? { hint: unavailable.hint } : undefined,
   );
 }

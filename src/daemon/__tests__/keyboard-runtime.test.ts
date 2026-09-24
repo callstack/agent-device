@@ -195,6 +195,7 @@ test('android status is refused on iOS with the retired in-handler hint', async 
         code: 'UNSUPPORTED_OPERATION',
         message: 'keyboard status is not supported on this device',
         hint: unavailable.hint,
+        details: { reason: unavailable.reason },
       },
     },
   });

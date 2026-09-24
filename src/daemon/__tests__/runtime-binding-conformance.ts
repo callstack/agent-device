@@ -226,7 +226,7 @@ export async function refuseUnavailableExactOwnerFact(
   return resolved.response;
 }
 
-/** The wording `admitRuntimeOperations` gives every single-use route it refuses. */
+/** The wording and shape `admitRuntimeOperations` gives every single-use route it refuses. */
 function unsupportedOperationRefusal(
   command: ConformedRuntimeCommand,
   unavailable: RuntimeOperationUnavailability,
@@ -234,6 +234,7 @@ function unsupportedOperationRefusal(
   return {
     code: 'UNSUPPORTED_OPERATION',
     message: `${command} is not supported on this device`,
+    details: { reason: unavailable.reason },
     ...(unavailable.hint ? { hint: unavailable.hint } : {}),
   };
 }

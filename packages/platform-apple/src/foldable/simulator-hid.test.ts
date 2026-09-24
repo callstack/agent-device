@@ -70,6 +70,9 @@ test('streams all keyframes in one process with a duration-derived timeout', asy
   expect(dispatches).toBe(1);
 });
 
+// Transport-level only: this pins that a pose dispatch routes through runSimctlForDevice, which
+// targets the UDID inside its scoped set. It is NOT end-to-end scoped-fold support — `appleFoldFact`
+// refuses `unsupported-device-scope` at runtime admission before this dispatch is ever reached.
 test('HID dispatch addresses the UDID inside its scoped simulator set', async () => {
   const dispatches: string[][] = [];
   await withAppleToolProvider(

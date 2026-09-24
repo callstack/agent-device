@@ -160,24 +160,19 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
     command: 'fold',
     device: testDevice,
     unavailable,
-    // The fold route derives its refusal from the fact, so the wire error keeps the typed reason.
-    refusal: {
-      code: 'UNSUPPORTED_OPERATION',
-      message: 'fold is not supported on this device',
-      details: { reason: 'unsupported-platform-leaf' },
-    },
   });
 });
 
 // The scoped-set refusal is a real route outcome, not just a narrowed binding: a scoped session's
-// `setFoldPose` fact refuses on admission, so the wire error carries the typed reason and the set
-// name, and the device is never bound or posed.
+// `setFoldPose` fact refuses on admission, so the wire error carries the typed reason and the fact's
+// own hint, and the device is never bound or posed. The hint is a sentinel the route could never
+// compose, so the assertion proves propagation without re-typing production's wording.
 test('refuses a scoped simulator set on the route with the typed reason, never binding', async () => {
   const scopedDevice: DeviceInfo = { ...testDevice, simulatorSetPath: '/tmp/scoped-set' };
   const scopeRefusal = {
     available: false,
     reason: 'unsupported-device-scope',
-    hint: 'fold cannot resolve a simulator scoped to the set at "/tmp/scoped-set".',
+    hint: 'SCOPED-SET-HINT-SENTINEL',
   } as const;
   const harness = runtimeHarness(scopeRefusal, vi.fn(), scopedDevice);
 
@@ -193,7 +188,7 @@ test('refuses a scoped simulator set on the route with the typed reason, never b
   expect(resolved.response.error).toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
     message: 'fold is not supported on this device',
-    hint: expect.stringContaining('/tmp/scoped-set'),
+    hint: 'SCOPED-SET-HINT-SENTINEL',
     details: { reason: 'unsupported-device-scope' },
   });
   expect(harness.bindDevice).not.toHaveBeenCalled();

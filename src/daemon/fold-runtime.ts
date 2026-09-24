@@ -10,11 +10,7 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '@agent-device/kernel/success-text';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
-import {
-  resolveBoundGenericRuntime,
-  unsupportedOperationResponse,
-  type RuntimeAdmissionBindings,
-} from './runtime-admission.ts';
+import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 
 /** `fold <pose>`, parsed with the same aliases the CLI reader accepts. */
 export function readRequestedFoldPose(positionals: readonly string[]): FoldPose {
@@ -47,10 +43,6 @@ export async function resolveBoundFoldRuntime(
       use: foldRuntimeUse,
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
-      // Reuse the shared generic-route refusal and add the fact's typed reason (e.g.
-      // `unsupported-device-scope`), so capability and response derive from one fact and never drift.
-      unavailableResponse: (unavailable) =>
-        unsupportedOperationResponse('fold', unavailable, { reason: unavailable.reason }),
     },
     (runtime) => executeSetFoldPose(runtime, input),
   );
