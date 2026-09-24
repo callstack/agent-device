@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed (ios): `perf cpu profile report --kind xctrace` on Xcode 27 no longer fails with
+  `Apple xctrace CPU report contained no samples` on a trace that holds thousands of samples. Xcode
+  27 exports each `time-profile` sample stack as `<tagged-backtrace>` instead of `<backtrace>`, and
+  the parser read only the old element, so every row resolved no stack at all. Both spellings now
+  parse through the same `id`/`ref` resolution, so a profile recorded with an older Xcode reports
+  what it did before. (#2860)
 - Changed (apple): a read-only runner command is resent inside the same request only when the
   runner refused it as `RUNNER_BUSY`. Before, any `COMMAND_FAILED` carrying `details.retriable:
   true` was sent up to three times. That flag tells a caller's own poll, such as `wait`, to try

@@ -4,6 +4,11 @@ import { findAllXmlNodes, indexXmlNodesById, resolveXmlReference } from './perf-
 
 const APPLE_TIME_PROFILE_FUNCTION_LIMIT = 10;
 
+// Xcode 27 renamed the `time-profile` stack element and its `engineering-type` to
+// `<tagged-backtrace>` while keeping the same `<frame>` children and `id`/`ref` reuse, so both
+// spellings carry one sampled stack.
+const APPLE_TIME_PROFILE_STACK_ELEMENT_NAMES = new Set(['backtrace', 'tagged-backtrace']);
+
 export type AppleTimeProfileFunction = {
   symbol: string;
   binary?: string;
@@ -78,14 +83,14 @@ function readRowWeightNs(row: XmlNode, nodesById: Map<string, XmlNode>): number 
 }
 
 function readInnermostFrame(row: XmlNode, nodesById: Map<string, XmlNode>): XmlNode | undefined {
-  const backtrace = resolveXmlReference(
-    row.children.find((node) => node.name === 'backtrace'),
+  const stack = resolveXmlReference(
+    row.children.find((node) => APPLE_TIME_PROFILE_STACK_ELEMENT_NAMES.has(node.name)),
     nodesById,
   );
   // xctrace lists a sampled backtrace from the innermost frame outward. The first
   // frame therefore owns self time; a focused multi-frame test pins this ordering.
   return resolveXmlReference(
-    backtrace?.children.find((node) => node.name === 'frame'),
+    stack?.children.find((node) => node.name === 'frame'),
     nodesById,
   );
 }
