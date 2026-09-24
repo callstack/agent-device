@@ -2,6 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { BackendSnapshotResult } from '../backend.ts';
 import {
   buildSnapshotPresentationKey,
+  inheritPostGestureOutcome,
   snapshotPresentationOptionsFromFlags,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -9,8 +10,8 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
-import { recordActivationProof } from './capture-disclosure.ts';
-import type { RequestActivationProof } from './capture-disclosure.ts';
+import { recordCaptureProof } from './capture-disclosure.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
@@ -36,7 +37,7 @@ export type SelectorCaptureRuntimeParams = {
    * Filled ONLY by a capture this request actually took, never by a cache tier — the foreground
    * repair a route may disclose has to be one the route paid for (#2682).
    */
-  activationProof?: RequestActivationProof;
+  captureProof?: RequestCaptureProof;
   /**
    * The request-bound capture from `resolveBoundSelectorCapture`: every cache tier, recovery
    * re-capture, and poll below reaches the platform through it. Required since find (R35) —
@@ -134,22 +135,28 @@ async function captureSelectorSnapshot(params: {
   const { params: runtimeParams, request } = params;
   const snapshot = await runCapture(runtimeParams, request, request.snapshotScope);
   if (request.recovery?.legacyIosSparse && isLegacySparseIosInteractiveSnapshot(snapshot)) {
-    return await recoverLegacySparseIosSnapshot({
-      runtimeParams,
-      request,
-      policy: request.recovery.legacyIosSparse,
-    });
+    return inheritPostGestureOutcome(
+      snapshot,
+      await recoverLegacySparseIosSnapshot({
+        runtimeParams,
+        request,
+        policy: request.recovery.legacyIosSparse,
+      }),
+    );
   }
   if (
     request.recovery?.sparseVerdictQueryScope?.shouldScope &&
     isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)
   ) {
-    return await recoverSparseVerdictWithQueryScope({
-      runtimeParams,
-      request,
-      policy: request.recovery.sparseVerdictQueryScope,
+    return inheritPostGestureOutcome(
       snapshot,
-    });
+      await recoverSparseVerdictWithQueryScope({
+        runtimeParams,
+        request,
+        policy: request.recovery.sparseVerdictQueryScope,
+        snapshot,
+      }),
+    );
   }
   return snapshot;
 }
@@ -222,7 +229,7 @@ async function runCapture(
   // Recorded here rather than at the caller that consumes the result: a sparse recovery re-capture
   // DISCARDS this tree and returns a fresh one, and the repair this capture paid for belongs to the
   // request, not to whichever tree survives (#2682).
-  return recordActivationProof(params.activationProof, capture.snapshot);
+  return recordCaptureProof(params.captureProof, capture.snapshot);
 }
 
 function readReusableLastSnapshot(params: {
@@ -274,7 +281,7 @@ function canUseSessionSnapshotCache(
   if (request.cache?.useSessionSnapshot !== true) return false;
   if (getActiveAndroidSnapshotFreshness(session)) return false;
   if (shouldBypassForPostGestureStabilization(session, request)) return false;
-  return session.snapshot?.unsettledGesture === undefined;
+  return session.snapshot?.postGestureOutcome?.kind !== 'unsettled';
 }
 
 function isFreshSelectorSnapshot(snapshot: SnapshotState, timestamp: number): boolean {

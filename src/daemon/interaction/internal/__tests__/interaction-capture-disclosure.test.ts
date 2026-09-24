@@ -1,7 +1,8 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import {
   attachRefs,
   type IosTargetActivation,
+  type PostGestureOutcome,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
@@ -9,6 +10,14 @@ import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
+import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+
+vi.mock('../../../snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+});
 
 const FACT: IosTargetActivation = {
   reason: 'stale_target',
@@ -123,4 +132,77 @@ test('a press that consumes no capture is not disclosed against an older tree', 
     expect(response.data?.warnings).toBeUndefined();
     expect(response.data?.targetActivation).toBeUndefined();
   }
+});
+
+const UNSETTLED: PostGestureOutcome = {
+  kind: 'unsettled',
+  gesture: { action: 'scroll', positionals: ['down'] },
+};
+
+/** A press by selector right after a scroll whose list never stops moving. */
+async function pressAfterUnsettledScroll(selector: string) {
+  const sessionStore = makeSessionStore();
+  const session = makeSession('default');
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['down'], flags: {} });
+  sessionStore.set('default', session);
+  let call = 0;
+  legacyDispatchCapture.mockImplementation(async () => {
+    call += 1;
+    return {
+      backend: 'xctest',
+      nodes: [
+        { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          depth: 1,
+          type: 'Cell',
+          label: 'Wi-Fi',
+          rect: { x: 16, y: 600 - call * 37, width: 370, height: 52 },
+          hittable: true,
+        },
+      ],
+    };
+  });
+  const realSetTimeout = globalThis.setTimeout;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  let done = false;
+  const pending = handleInteractionCommands({
+    req: { token: 't', session: 'default', command: 'press', positionals: [selector], flags: {} },
+    sessionName: 'default',
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  }).finally(() => (done = true));
+  // The route awaits real I/O between polls, so the faked clock advances while the test yields.
+  while (!done) {
+    await vi.advanceTimersByTimeAsync(50);
+    await new Promise((resolve) => realSetTimeout(resolve, 1));
+  }
+  const response = await pending;
+  vi.useRealTimers();
+  return { response, stored: sessionStore.get('default')?.snapshot };
+}
+
+/**
+ * The miss on the interactive capture is retried on a full tree at once; that retry reads the same
+ * moving surface, so neither the response nor the stored tree may present the miss as settled.
+ */
+test('a press that misses on a surface still moving after a scroll reports the unsettled outcome', async () => {
+  const { response, stored } = await pressAfterUnsettledScroll('label="General"');
+
+  expect(response?.ok === false && response.error).toMatchObject({
+    hint: expect.stringContaining(formatPostGestureOutcomeWarning(UNSETTLED)),
+    details: { reason: 'selector_not_found', postGestureOutcome: UNSETTLED },
+  });
+  expect(stored?.postGestureOutcome).toEqual(UNSETTLED);
+});
+
+test('a press that lands on a surface still moving after a scroll reports the outcome once', async () => {
+  const { response } = await pressAfterUnsettledScroll('label="Wi-Fi"');
+
+  expect(response?.ok && response.data).toMatchObject({
+    postGestureOutcome: UNSETTLED,
+    warnings: [formatPostGestureOutcomeWarning(UNSETTLED)],
+  });
 });

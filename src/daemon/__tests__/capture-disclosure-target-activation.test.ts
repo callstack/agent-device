@@ -54,7 +54,7 @@ test('a failure response appends the repair to its hint and keeps the original d
   assert.equal(response.error.message, 'selector missed');
   assert.equal(response.error.code, 'COMMAND_FAILED');
   assert.equal(response.error.details?.blockedBy, 'android_foreground_surface');
-  assert.match(String(response.error.details?.hint), /prior state runningBackground/);
+  assert.match(String(response.error.hint), /prior state runningBackground/);
 });
 
 test('a capture with no repair leaves the response byte-identical', () => {
@@ -64,7 +64,7 @@ test('a capture with no repair leaves the response byte-identical', () => {
 });
 
 /**
- * A failure carries the sentence in `error.details.hint`. That carrier is exactly where a route could
+ * A failure carries the sentence in `error.hint`. That carrier is exactly where a route could
  * cheaply borrow the previous command's repair off the stored snapshot and blame it on this request,
  * so the repair travels only on the request's own proof (#2682).
  */
@@ -77,7 +77,7 @@ test('a failure does not borrow a repair the stored snapshot happens to carry', 
   const response = withCaptureDisclosures({
     response: failed,
     consumedTree: { targetActivation: FACT },
-    activationProof: {},
+    captureProof: {},
   });
 
   assert.equal(response, failed);
@@ -95,7 +95,7 @@ test('surface and foreground disclosures ride one response together', () => {
       iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
       targetActivation: FACT,
     },
-    activationProof: { state: { targetActivation: FACT } },
+    captureProof: { targetActivation: FACT },
   });
   const data = dataOf(response);
   assert.match(String(data.warning), /system web sign-in sheet/);
@@ -117,22 +117,22 @@ test('a repair that passes through two wrappers is named once in the failure hin
       details: { hint: 'Use snapshot to see the current tree.' },
     },
   };
-  const proof = { state: { targetActivation: FACT } };
+  const proof = { targetActivation: FACT };
 
   const once = withCaptureDisclosures({
     response: missed,
     consumedTree: { targetActivation: FACT },
-    activationProof: proof,
+    captureProof: proof,
   });
   const twice = withCaptureDisclosures({
     response: once,
     consumedTree: { targetActivation: FACT },
-    activationProof: proof,
+    captureProof: proof,
   });
 
   assert.equal(twice.ok, false);
   if (twice.ok) return;
-  const hint = String(twice.error.details?.hint);
+  const hint = String(twice.error.hint);
   assert.equal(
     hint.split(iosTargetActivationDisclosure(FACT)).length - 1,
     1,

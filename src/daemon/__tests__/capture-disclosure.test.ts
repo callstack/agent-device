@@ -148,7 +148,7 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.message).toMatch(/wait timed out for text: Bakery list/);
-  expect(String(response.error.details?.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+  expect(String(response.error.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
 });
 
 test('sessionless read-only find still discloses the occluding system surface', async () => {
@@ -204,7 +204,7 @@ test('disclosure appends after an existing failure hint instead of replacing it'
   );
   expect(response.ok).toBe(false);
   if (response.ok) return;
-  const hint = String(response.error.details?.hint);
+  const hint = String(response.error.hint);
   expect(hint).toContain('prior hint text');
   expect(hint).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
   expect(hint.indexOf('prior hint text')).toBeLessThan(
@@ -261,7 +261,7 @@ test('sessionless wait timeout still discloses the occluding system surface', as
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(sessionStore.get('default')).toBeUndefined();
-  expect(String(response.error.details?.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
+  expect(String(response.error.hint)).toContain(ANDROID_SYSTEM_SURFACE_DISCLOSURE);
 });
 
 // --- #2438: an in-place iOS system surface (web sign-in sheet) discloses on the same shared seam ---
@@ -350,7 +350,7 @@ test('mutating find that misses on an in-place system surface still discloses it
 
   expect(response?.ok).toBe(false);
   if (response?.ok) return;
-  expect(String(response?.error.details?.hint)).toContain(WEB_SIGN_IN_DISCLOSURE);
+  expect(String(response?.error.hint)).toContain(WEB_SIGN_IN_DISCLOSURE);
 });
 
 test('the shared disclosure helper reports an iOS system surface on both outcomes', () => {
@@ -368,13 +368,13 @@ test('the shared disclosure helper reports an iOS system surface on both outcome
   );
   expect(failed.ok).toBe(false);
   if (failed.ok) return;
-  expect(String(failed.error.details?.hint)).toContain(WEB_SIGN_IN_DISCLOSURE);
+  expect(String(failed.error.hint)).toContain(WEB_SIGN_IN_DISCLOSURE);
 });
 
 /**
  * A timed-out `wait text` polled the device and the runner had to re-activate the session app to
  * answer those polls (#2682). The disclosure arrives on the failure the same way the occlusion one
- * does: in `error.details.hint`.
+ * does: in `error.hint`.
  */
 test('wait timeout whose polls required a foreground repair discloses the repair', async () => {
   const sessionStore = makeSessionStore();
@@ -412,7 +412,7 @@ test('wait timeout whose polls required a foreground repair discloses the repair
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
-  expect(String(response.error.details?.hint)).toContain(
+  expect(String(response.error.hint)).toContain(
     iosTargetActivationDisclosure(TARGET_ACTIVATION_FACT),
   );
 });

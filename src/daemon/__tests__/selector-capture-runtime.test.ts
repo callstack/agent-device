@@ -9,7 +9,7 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from '../daemon-request.ts';
-import { type RequestActivationProof, withCaptureDisclosures } from '../capture-disclosure.ts';
+import { type RequestCaptureProof, withCaptureDisclosures } from '../capture-disclosure.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
@@ -223,14 +223,14 @@ function proofRuntime(params: {
       : {}),
   } as never);
   const consumedSnapshot: { state?: SnapshotState } = {};
-  const activationProof: RequestActivationProof = {};
+  const captureProof: RequestCaptureProof = {};
   const runtime = createSelectorCaptureRuntime({
     device: session.device,
     session,
     sessionStore,
     sessionName: params.sessionName,
     consumedSnapshot,
-    activationProof,
+    captureProof,
     capture: boundCapture,
     req: {
       token: 't',
@@ -240,7 +240,7 @@ function proofRuntime(params: {
       flags: {},
     },
   });
-  return { runtime, consumedSnapshot, activationProof };
+  return { runtime, consumedSnapshot, captureProof };
 }
 
 /**
@@ -264,12 +264,12 @@ test('a session-snapshot cache hit consumes a repaired tree without earning the 
 
   expect(boundCapture).not.toHaveBeenCalled();
   expect(holders.consumedSnapshot.state?.targetActivation).toEqual(REPAIR);
-  expect(holders.activationProof.state).toBeUndefined();
+  expect(holders.captureProof.targetActivation).toBeUndefined();
 
   const response = withCaptureDisclosures({
     response: { ok: true, data: { nodes: [] } } as DaemonResponse,
     consumedTree: holders.consumedSnapshot.state,
-    activationProof: holders.activationProof,
+    captureProof: holders.captureProof,
   });
   expect(response.ok).toBe(true);
   if (response.ok) {
@@ -287,7 +287,7 @@ test('a capture the request took itself earns the repair proof', async () => {
   await holders.runtime.capture({ flags: {}, cache: { useSessionSnapshot: true } });
 
   expect(boundCapture).toHaveBeenCalledTimes(1);
-  expect(holders.activationProof.state?.targetActivation).toEqual(REPAIR);
+  expect(holders.captureProof.targetActivation).toEqual(REPAIR);
 });
 
 /**
@@ -310,7 +310,7 @@ test('a later fact-less capture does not erase an earlier repair proof', async (
   await holders.runtime.capture({ flags: {}, cache: { forceFresh: true } });
 
   expect(boundCapture).toHaveBeenCalledTimes(2);
-  expect(holders.activationProof.state?.targetActivation).toEqual(REPAIR);
+  expect(holders.captureProof.targetActivation).toEqual(REPAIR);
 });
 
 function makeCaptureRuntime(sessionName: string) {

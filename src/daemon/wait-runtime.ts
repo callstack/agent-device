@@ -54,7 +54,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   // Wait builds its runtime directly (no createBoundSelectorRuntime), so the consumed-snapshot slot
   // must be initialized here too or sessionless waits have nowhere to report the capture from.
   params.consumedSnapshot ??= {};
-  params.activationProof ??= {};
+  params.captureProof ??= {};
   // A pure sleep consumes no capture, so it never earns the system-surface disclosure below.
   if (parsed.kind === 'sleep') {
     return await executeWaitRequest(
@@ -86,7 +86,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
       params.platformResourceCleanup,
     ),
     consumedTree: consumedSessionSnapshot(params),
-    activationProof: params.activationProof,
+    captureProof: params.captureProof,
   });
 }
 
@@ -187,7 +187,7 @@ async function executeWaitRequest(
           session,
           device,
           capture: waitOperations.capture,
-          activationProof: params.activationProof,
+          captureProof: params.captureProof,
         },
         response,
       )

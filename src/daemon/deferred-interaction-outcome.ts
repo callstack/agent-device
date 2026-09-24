@@ -13,7 +13,6 @@ import {
   isNavigationSensitiveAction,
   type SnapshotFreshnessMode,
 } from '@agent-device/capture-kit/snapshot-freshness';
-import { withGestureNoEffectWarning } from './gesture-no-effect.ts';
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
@@ -354,13 +353,13 @@ export async function capturePostGestureStabilizedResult<T>(params: {
   return outcome;
 }
 
-/** The stabilized attempt as a capture result: the tree carries an unsettled outcome as its own fact. */
+/** The stabilized attempt as a capture result: the tree carries the gesture's outcome as its own fact. */
 function resolvedPostGestureCapture(
   stabilized: PostGestureStabilityOutcome<DeferredOutcomeSnapshotAttempt>,
 ): DeferredOutcomeCaptureResult {
   const { snapshot, annotations } = stabilized.value;
-  if (stabilized.unsettledGesture) snapshot.unsettledGesture = stabilized.unsettledGesture;
-  return { snapshot, ...withGestureNoEffectWarning(annotations, stabilized.gestureNoEffect) };
+  if (stabilized.postGestureOutcome) snapshot.postGestureOutcome = stabilized.postGestureOutcome;
+  return { snapshot, ...annotations };
 }
 
 function isPostGestureStabilizingAction(

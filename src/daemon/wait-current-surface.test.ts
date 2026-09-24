@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 
 import { ANDROID_EMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
-import type { RequestActivationProof } from './capture-disclosure.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 
@@ -113,10 +113,10 @@ test('the decoration capture records the foreground repair it paid for', async (
     targetActivation: repair,
     nodes: [{ index: 0, depth: 0, type: 'Button', label: 'Receipt' }],
   })) as unknown as BoundSelectorCapture;
-  const activationProof: RequestActivationProof = {};
+  const captureProof: RequestCaptureProof = {};
 
   await maybeWaitTimeoutSurfaceResponse(
-    { req, session: undefined, device: ANDROID_EMULATOR, capture, activationProof },
+    { req, session: undefined, device: ANDROID_EMULATOR, capture, captureProof },
     {
       ok: false as const,
       error: {
@@ -127,5 +127,5 @@ test('the decoration capture records the foreground repair it paid for', async (
     },
   );
 
-  expect(activationProof.state).toMatchObject({ targetActivation: repair });
+  expect(captureProof.targetActivation).toEqual(repair);
 });

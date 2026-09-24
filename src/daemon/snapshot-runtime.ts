@@ -4,7 +4,7 @@ import {
   SNAPSHOT_COMMAND_OPTION_KEYS,
   snapshotOptionsFromFlags,
 } from '@agent-device/kernel/snapshot';
-import type { RequestActivationProof } from './capture-disclosure.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
 import { withTargetActivationDisclosure } from './capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from './sparse-fallback-screenshot.ts';
@@ -15,7 +15,7 @@ import type { SessionState } from './session-state.ts';
 export async function dispatchSnapshotViaRuntime(
   params: SnapshotRuntimeRouteParams,
 ): Promise<DaemonResponse> {
-  const activationProof: RequestActivationProof = {};
+  const captureProof: RequestCaptureProof = {};
   const response = await dispatchSnapshotRuntimeCommand({
     ...params,
     command: 'snapshot',
@@ -33,9 +33,7 @@ export async function dispatchSnapshotViaRuntime(
       });
       // This request's own capture, read here rather than off the stored snapshot: a snapshot that
       // failed before capturing must not inherit the previous command's repair (#2682).
-      if (result.targetActivation && !activationProof.state) {
-        activationProof.state = { targetActivation: result.targetActivation };
-      }
+      if (result.targetActivation) captureProof.targetActivation ??= result.targetActivation;
       const refsGeneration = publishedSnapshotGeneration(
         request,
         params.sessionStore.get(resolvedSessionName),
@@ -83,7 +81,7 @@ export async function dispatchSnapshotViaRuntime(
   // own annotations, so re-deriving it from the stored snapshot would copy a sentence the response
   // already carries — and on a snapshot that failed before capturing, would credit it with a surface
   // it never observed (#2682).
-  return withTargetActivationDisclosure(response, activationProof.state);
+  return withTargetActivationDisclosure(response, captureProof);
 }
 
 function publishedSnapshotGeneration(

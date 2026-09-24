@@ -129,7 +129,7 @@ export async function searchForVisibleElement(
 /** Why a missed probe says nothing about where the element is, if it says nothing. */
 function unreadSurface(result: CliJsonResult): 'moving' | 'stalled' | undefined {
   const details = result.json?.error?.details;
-  if (details?.unsettledGesture !== undefined) return 'moving';
+  if (details?.postGestureOutcome?.kind === 'unsettled') return 'moving';
   return details?.captureStalled === true ? 'stalled' : undefined;
 }
 

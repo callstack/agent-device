@@ -20,11 +20,15 @@
 - Fixed (mobile): a read taken right after a `scroll`, `swipe`, or `gesture swipe` no longer reports
   a definite miss when the surface never settled. When post-gesture stabilization ran out of budget
   on a surface still moving, `is visible` answered a plain `selector_not_found` and `is absent`
-  passed. That capture now carries `unsettledGesture`: `is`, `get`, `find`, and `wait` report it (in
-  `error.details` or `data`) with an appended warning, `snapshot` appends the warning, `is absent`
-  refuses with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures
-  afresh. Click, press, and fill by selector do not disclose it yet. A failed read now also carries
-  `targetActivation` in `error.details`, the same place as `unsettledGesture`.
+  passed. The capture now carries `postGestureOutcome` (`{ kind, gesture: { action, positionals } }`)
+  with `kind: "unsettled"`, and so does a re-capture taken at once to recover or widen it. A proven
+  no-effect gesture rides the same field with `kind: "no-effect"`; before, its warning reached only
+  `snapshot`. `is`, `get`, `find`, `wait`, and every interaction that captured it (`click`, `press`,
+  `fill`, and the other touch and gesture commands) report the field in `data` or `error.details`
+  with an appended warning; `snapshot` appends the warning. `is absent` refuses an unsettled capture
+  with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures afresh.
+  A failed read also carries `targetActivation` in `error.details`, and a failed interaction now
+  keeps the disclosure sentences in its hint.
 - Fixed (ios): `open` on a local Simulator now waits for the launched app's discovery before it
   decides whether the app is observable. On a loaded host `simctl spawn launchctl list` outlasts one
   1.5 s discovery wait slice, and the launch observation read that slice as an unobservable app, so

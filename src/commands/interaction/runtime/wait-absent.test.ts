@@ -145,7 +145,10 @@ test('wait absent does not take a miss on a surface still moving after a gesture
   const unsettled = {
     snapshot: {
       ...makeSnapshotState([]),
-      unsettledGesture: { action: 'scroll', positionals: ['down'] },
+      postGestureOutcome: {
+        kind: 'unsettled' as const,
+        gesture: { action: 'scroll', positionals: ['down'] },
+      },
     },
   };
   const device = absentDevice([unsettled, snapshot('Removed')]);

@@ -5,7 +5,11 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
+import {
+  findNodeByRef,
+  inheritPostGestureOutcome,
+  normalizeRef,
+} from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
   AgentDeviceRuntime,
@@ -390,7 +394,9 @@ async function resolveSelectorInteractionTarget(
     params.pipeline,
   );
   if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
+    const interactive = capture.snapshot;
     capture = await captureInteractionSnapshot(runtime, options, false);
+    inheritPostGestureOutcome(interactive, capture.snapshot);
     resolved = resolveActionSelector(
       capture.snapshot.nodes,
       selectorExpression,

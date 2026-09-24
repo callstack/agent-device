@@ -72,7 +72,7 @@ export function absenceCaptureOptionMessage(
 export function classifyAbsenceObservation(
   snapshot: Pick<
     SnapshotState,
-    'backend' | 'nodes' | 'snapshotQuality' | 'truncated' | 'unsettledGesture'
+    'backend' | 'nodes' | 'snapshotQuality' | 'truncated' | 'postGestureOutcome'
   >,
   matches: readonly SnapshotNode[],
 ): AbsenceObservation {
@@ -100,7 +100,10 @@ export function classifyAbsenceObservation(
     };
   }
   if (matchCount === 0) {
-    return { kind: snapshot.unsettledGesture ? 'unsettled' : 'absent', matches: 0 };
+    return {
+      kind: snapshot.postGestureOutcome?.kind === 'unsettled' ? 'unsettled' : 'absent',
+      matches: 0,
+    };
   }
   return { kind: 'present', matches: matchCount, firstMatch: firstMatch! };
 }

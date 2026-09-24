@@ -104,7 +104,7 @@ export async function dispatchFindReadOnlyViaRuntime(
   return withCaptureDisclosures({
     response,
     consumedTree: consumedSessionSnapshot(params),
-    activationProof: params.activationProof,
+    captureProof: params.captureProof,
   });
 }
 
@@ -182,7 +182,7 @@ export async function dispatchGetViaRuntime(
   return withCaptureDisclosures({
     response,
     consumedTree: consumedSessionSnapshot(params),
-    activationProof: params.activationProof,
+    captureProof: params.captureProof,
   });
 }
 
@@ -242,7 +242,7 @@ export async function dispatchIsViaRuntime(
   return withCaptureDisclosures({
     response: await maybeAndroidForegroundBlockerResponse(params, response, `is ${predicate}`),
     consumedTree: consumedSessionSnapshot(params),
-    activationProof: params.activationProof,
+    captureProof: params.captureProof,
   });
 }
 

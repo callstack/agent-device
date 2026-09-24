@@ -1,7 +1,10 @@
 import path from 'node:path';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
+import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../session-store.ts';
@@ -22,6 +25,10 @@ const REPAIR: IosTargetActivation = {
 
 beforeEach(() => {
   legacyDispatchCapture.mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('a snapshot that captured a repaired tree discloses the repair it paid for', async () => {
@@ -95,11 +102,48 @@ test('a snapshot refused before it captured reports no repair and no surface it 
 
   expect(response.ok).toBe(false);
   if (response.ok) return;
-  const hint = String(response.error.details?.hint ?? '');
+  const hint = String(response.error.hint ?? '');
   expect(hint.includes(iosTargetActivationDisclosure(REPAIR))).toBe(false);
   expect(hint.includes('was not foreground')).toBe(false);
   expect(hint.includes('system web sign-in sheet')).toBe(false);
   expect(JSON.stringify(response.error.details ?? {})).not.toContain('targetActivation');
+});
+
+/** A scroll that moved nothing reaches the agent on the snapshot that proved it (#1600). */
+test('a snapshot after a scroll that moved nothing warns and stamps the no-effect outcome', async () => {
+  const input = scenario({});
+  const button = {
+    index: 0,
+    depth: 0,
+    type: 'Button',
+    label: 'Continue',
+    rect: { x: 0, y: 0, width: 100, height: 44 },
+    hittable: true,
+  };
+  const session = input.sessionStore.get(input.sessionName)!;
+  session.snapshot = makeSnapshotState([button], { backend: 'xctest' });
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['up'], flags: {} });
+  legacyDispatchCapture.mockResolvedValue({ backend: 'xctest', truncated: false, nodes: [button] });
+  const outcome: PostGestureOutcome = {
+    kind: 'no-effect',
+    gesture: { action: 'scroll', positionals: ['up'] },
+  };
+
+  const realSetTimeout = globalThis.setTimeout;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  let done = false;
+  const pending = dispatchSnapshot(input).finally(() => (done = true));
+  // The route awaits real I/O between polls, so the faked clock advances while the test yields.
+  while (!done) {
+    await vi.advanceTimersByTimeAsync(100);
+    await new Promise((resolve) => realSetTimeout(resolve, 1));
+  }
+  const response = await pending;
+
+  expect(response.ok && response.data?.warnings).toContain(
+    formatPostGestureOutcomeWarning(outcome),
+  );
+  expect(input.sessionStore.get(input.sessionName)?.snapshot?.postGestureOutcome).toEqual(outcome);
 });
 
 function scenario(params: { storedRepair?: boolean }) {

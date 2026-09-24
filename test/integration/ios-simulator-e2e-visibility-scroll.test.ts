@@ -16,13 +16,15 @@ function result(status: number, details?: Record<string, unknown>): CliJsonResul
   };
 }
 
-const UNSETTLED = { unsettledGesture: { action: 'scroll', positionals: [] } };
+const UNSETTLED = {
+  postGestureOutcome: { kind: 'unsettled', gesture: { action: 'scroll', positionals: [] } },
+};
 
 /**
  * A vertical list the search drives. Offsets are in viewports; the target is visible while the
  * offset lies inside `visible`. Each scroll moves by the next planned travel, clamped to the list
  * bounds. `movesUntilSettled` keeps the surface moving after every scroll that moved until the
- * search pauses to settle it, so each read before that misses with `unsettledGesture`: the CI
+ * search pauses to settle it, so each read before that misses with an unsettled outcome: the CI
  * failure shape.
  */
 function list(options: {
@@ -80,6 +82,24 @@ test('a stalled capture retries without scrolling or consuming an attempt', asyn
   });
 
   assert.deepEqual([probes.length, scrolls], [0, []]);
+});
+
+test('a miss after a gesture that moved nothing is a real read, not a moving surface', async () => {
+  const noEffect = {
+    postGestureOutcome: { kind: 'no-effect', gesture: { action: 'scroll', positionals: [] } },
+  };
+  const probes = [result(1, noEffect), result(0)];
+  const scrolls: string[] = [];
+
+  await searchForVisibleElement('id="target"', {
+    probeVisibility: async () => probes.shift() ?? result(1),
+    settle: async () => assert.fail('a no-effect read is settled'),
+    scroll: async (step) => {
+      scrolls.push(step.direction);
+    },
+  });
+
+  assert.deepEqual([probes.length, scrolls], [0, ['down']]);
 });
 
 test('an unsettled miss waits for the surface to settle and re-reads at the same offset', async () => {

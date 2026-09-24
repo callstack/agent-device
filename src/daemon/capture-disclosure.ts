@@ -2,18 +2,19 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import type { DaemonResponse } from './daemon-request.ts';
 
-/** The capture provenance a response must be disclosed against (#2438, #2682, unsettled gestures). */
+/** The capture provenance a response must be disclosed against (#2438, #2682, gesture outcomes). */
 export type CaptureProvenance = Pick<
   SnapshotState,
-  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation' | 'unsettledGesture'
+  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation' | 'postGestureOutcome'
 >;
 
 /**
- * The foreground repair THIS request paid for, filled by the capture path only when the request
- * actually captured a tree (#2682).
+ * The whole-tree facts THIS request's own captures observed, filled by the capture path only when the
+ * request actually captured a tree: the foreground repair it paid for (#2682) and the outcome of the
+ * gesture it read after.
  *
  * Separate from the consumed tree on purpose. A selector read may answer from a cached or stored
  * tree — that tree still describes the surface the response is about, which is what #2438 discloses
@@ -21,23 +22,23 @@ export type CaptureProvenance = Pick<
  * consumed tree would tell a command "you found the session app out of foreground" when it never
  * looked, which is a fabricated observation rather than a disclosure.
  */
-export type RequestActivationProof = {
-  state?: CaptureProvenance;
-};
+export type RequestCaptureProof = Pick<
+  CaptureProvenance,
+  'targetActivation' | 'postGestureOutcome'
+>;
 
 /**
- * Note the repair a capture paid for, and hand that capture back. First fact wins: a later capture in
- * the same request that reports no repair — a sparse recovery's fresh tree, a poll's fact-less read —
- * cannot erase the capture that did (#2682). One rule, because three capture paths owe it and a
- * hand-copied condition drifts from the other two the moment one of them learns something.
+ * Note the facts a capture observed, and hand that capture back. First fact wins: a later capture in
+ * the same request that reports none — a sparse recovery's fresh tree, a poll's fact-less read, a
+ * post-action observation — cannot erase the capture that did (#2682).
  */
-export function recordActivationProof<T extends CaptureProvenance>(
-  proof: RequestActivationProof | undefined,
+export function recordCaptureProof<T extends CaptureProvenance>(
+  proof: RequestCaptureProof | undefined,
   snapshot: T,
 ): T {
-  if (proof !== undefined && proof.state === undefined && snapshot.targetActivation !== undefined) {
-    proof.state = snapshot;
-  }
+  if (proof === undefined) return snapshot;
+  proof.targetActivation ??= snapshot.targetActivation;
+  proof.postGestureOutcome ??= snapshot.postGestureOutcome;
   return snapshot;
 }
 
@@ -59,15 +60,15 @@ export function withSystemSurfaceDisclosure(
 }
 
 /**
- * Disclose a fact about the whole answered tree (#2682 foreground repair, an unsettled gesture). Its
- * sentence is APPENDED, never replacing an earlier warning, and the typed fact lands on either
- * outcome (`data` or `error.details`) even when the sentence was already carried.
+ * Disclose a fact about the whole answered tree. Its sentence is APPENDED, never replacing an earlier
+ * warning, and the typed fact lands on either outcome (`data` or `error.details`) even when the
+ * sentence was already carried.
  */
-function withTreeFactDisclosure<K extends 'targetActivation' | 'unsettledGesture'>(
+function withTreeFactDisclosure<K extends keyof RequestCaptureProof>(
   response: DaemonResponse,
   key: K,
-  fact: CaptureProvenance[K],
-  sentence: (fact: NonNullable<CaptureProvenance[K]>) => string,
+  fact: RequestCaptureProof[K],
+  sentence: (fact: NonNullable<RequestCaptureProof[K]>) => string,
 ): DaemonResponse {
   if (!fact) return response;
   const disclosed = appendDisclosure(response, sentence(fact), 'warnings');
@@ -93,31 +94,32 @@ export function withTargetActivationDisclosure(
 
 /**
  * Every capture-provenance disclosure a response owes, from the two different things a capture can
- * prove: what the answered tree describes (#2438 — cache tiers included, because the surface is
- * still on screen) and what this request's own capture found (#2682 — cache hits excluded, because
- * a request that captured nothing repaired nothing).
+ * prove: what the answered tree describes (#2438 and the post-gesture outcome — cache tiers
+ * included, because the tree still describes the surface) and what this request's own capture found
+ * (#2682 — cache hits excluded, because a request that captured nothing repaired nothing). A route
+ * that aims at the trees its own captures read passes its proof as the consumed tree.
  */
 export function withCaptureDisclosures(params: {
   response: DaemonResponse;
   consumedTree: CaptureProvenance | undefined;
-  activationProof?: RequestActivationProof;
+  captureProof?: RequestCaptureProof;
 }): DaemonResponse {
-  const { response, consumedTree, activationProof } = params;
+  const { response, consumedTree, captureProof } = params;
   return withTargetActivationDisclosure(
     withTreeFactDisclosure(
       withSystemSurfaceDisclosure(response, consumedTree),
-      'unsettledGesture',
-      consumedTree?.unsettledGesture,
-      formatGestureUnsettledWarning,
+      'postGestureOutcome',
+      consumedTree?.postGestureOutcome,
+      formatPostGestureOutcomeWarning,
     ),
-    activationProof?.state,
+    captureProof,
   );
 }
 
 /**
  * Which success-side field a disclosure enters. #2438's surface sentence shipped on the singular
  * `warning`; the repair sentence ships on the `warnings` array beside the typed fact that travels
- * with it. Failure has one carrier for both: `error.details.hint`.
+ * with it. Failure has one carrier for both: `error.hint`, the hint request finalization keeps.
  */
 type DisclosureCarrier = 'warning' | 'warnings';
 
@@ -135,14 +137,9 @@ function appendDisclosure(
 ): DaemonResponse {
   if (carriesDisclosure(response, disclosure)) return response;
   if (!response.ok) {
-    const details = response.error.details ?? {};
-    return {
-      ...response,
-      error: {
-        ...response.error,
-        details: { ...details, hint: appended(details.hint, disclosure) },
-      },
-    };
+    // A route that built its failure from details carries its hint there until finalization.
+    const hint = response.error.hint ?? response.error.details?.hint;
+    return { ...response, error: { ...response.error, hint: appended(hint, disclosure) } };
   }
   if (carrier === 'warnings') {
     return {
@@ -166,7 +163,7 @@ function appendDisclosure(
 function carriesDisclosure(response: DaemonResponse, disclosure: string): boolean {
   const carriers: unknown[] = response.ok
     ? [response.data?.warning, ...responseWarnings(response.data?.warnings)]
-    : [response.error.details?.hint];
+    : [response.error.hint];
   return carriers.some((carrier) => typeof carrier === 'string' && carrier.includes(disclosure));
 }
 

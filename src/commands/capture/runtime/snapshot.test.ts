@@ -13,7 +13,8 @@ import {
   type CommandSessionStore,
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 test('runtime snapshot captures nodes and updates the session baseline', async () => {
   let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
@@ -789,17 +790,20 @@ test('runtime snapshot leaves the keyboard band off when the backend measured no
 });
 
 test('runtime snapshot warns when its tree was read on a surface still moving after a gesture', async () => {
-  const gesture = { action: 'scroll', positionals: ['down'] };
+  const outcome: PostGestureOutcome = {
+    kind: 'unsettled',
+    gesture: { action: 'scroll', positionals: ['down'] },
+  };
   const device = createSnapshotOnlyDevice({
     snapshot: {
       ...makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
         backend: 'xctest',
       }),
-      unsettledGesture: gesture,
+      postGestureOutcome: outcome,
     },
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
 
-  assert.deepEqual(result.warnings, [formatGestureUnsettledWarning(gesture)]);
+  assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
 });

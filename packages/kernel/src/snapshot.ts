@@ -502,12 +502,33 @@ export type SnapshotState = {
    * the foreground instead (#2682). Consumers that surface this tree disclose the repair.
    */
   targetActivation?: IosTargetActivation;
-  /** The gesture whose surface was still changing when stabilization gave up on this capture. */
-  unsettledGesture?: PostGestureAction;
+  /** What post-gesture stabilization proved about the gesture before this capture. */
+  postGestureOutcome?: PostGestureOutcome;
 } & SnapshotStateProvenance;
 
 /** The gesture a post-gesture outcome fact names: the command and its positionals. */
 export type PostGestureAction = { action: string; positionals: string[] };
+
+/**
+ * `unsettled`: the surface was still changing when the stabilization deadline expired.
+ * `no-effect`: the settled surface still matches the pre-gesture tree (#1600).
+ */
+export type PostGestureOutcome = {
+  kind: 'unsettled' | 'no-effect';
+  gesture: PostGestureAction;
+};
+
+/**
+ * A capture taken at once to recover or widen `previous` reads the same moment after the same
+ * gesture, so it carries that capture's outcome.
+ */
+export function inheritPostGestureOutcome<T extends SnapshotState>(
+  previous: SnapshotState,
+  recapture: T,
+): T {
+  recapture.postGestureOutcome ??= previous.postGestureOutcome;
+  return recapture;
+}
 
 export type SnapshotUnchanged = {
   ageMs: number;

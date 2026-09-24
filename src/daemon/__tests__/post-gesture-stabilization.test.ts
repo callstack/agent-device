@@ -176,7 +176,8 @@ test('capturePostGestureStabilizedResult keeps polling past the normal deadline 
   assert.equal(session.postGestureStabilization, undefined);
   // #1600: a stale-accept is the daemon PROVING the gesture moved nothing —
   // that verdict must reach the caller, not only the diagnostics stream.
-  assert.equal(result.gestureNoEffect?.action, 'scroll');
+  assert.equal(result.postGestureOutcome?.kind, 'no-effect');
+  assert.equal(result.postGestureOutcome?.gesture.action, 'scroll');
   // Proves it kept polling well past the OLD 1.5s accept point (2 attempts,
   // ~200ms) instead of trusting the first quiet match.
   assert.ok(captureCount > 8, `expected sustained polling, saw ${captureCount} captures`);
@@ -217,7 +218,7 @@ test('a replaced list under fixed chrome now settles outright, and still claims 
   const { result, staleAccepts } = await resultPromise;
 
   assert.equal(staleAccepts, 0);
-  assert.equal(result.gestureNoEffect, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
 });
 
 test('capturePostGestureStabilizedResult trusts a quiet signature once content genuinely differs from the baseline (iOS)', async () => {
@@ -247,7 +248,7 @@ test('capturePostGestureStabilizedResult trusts a quiet signature once content g
   assert.equal(settled, 1);
   assert.equal(staleAccepts, 0);
   // A genuine settle carries no no-effect claim.
-  assert.equal(result.gestureNoEffect, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
   // Accepted at the first quiet match (initial capture + one poll = 2
   // attempts): no distrust cost for a genuine settle.
   assert.equal(capture.mock.calls.length, 2);
@@ -364,7 +365,7 @@ test('a deadline that expires right after a rebased quiet pair is not reported a
   const { result, rebased, timeouts } = await resultPromise;
 
   assert.deepEqual([rebased, timeouts], [1, 1]);
-  assert.equal(result.unsettledGesture, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
 });
 
 test('capturePostGestureStabilizedResult catches a frozen target even when the baseline came from a broader-scope capture than the post-gesture reads (iOS, live regression)', async () => {

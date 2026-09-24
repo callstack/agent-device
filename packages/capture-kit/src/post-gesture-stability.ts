@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
-import type { PostGestureAction } from '@agent-device/kernel/snapshot';
+import type { PostGestureAction, PostGestureOutcome } from '@agent-device/kernel/snapshot';
 
 /**
  * Pure post-gesture stability mechanics: the quiet-window polling loop and the
@@ -59,41 +59,37 @@ export type PostGestureStabilityHooks<T, S extends readonly unknown[]> = {
 
 export type PostGestureStabilityOutcome<T> = {
   value: T;
-  /** Present when the deadline expired while the last two captures still disagreed. */
-  unsettledGesture?: PostGestureAction;
   /**
-   * Present ONLY when the accept-stale verdict is corroborated by full-surface
-   * evidence (`surfacesIdentical`). The bare verdict is NOT enough — it is
-   * subset-tolerant by design, and a successful scroll that replaced every
-   * list cell under fixed chrome still reads accept-stale (#1601 review P1).
-   * Callers surface this to the agent: a diagnostics-only signal let one
-   * benchmark run burn 40 calls re-issuing scrolls that moved nothing (#1600).
+   * `unsettled` when the deadline expired while the last two captures still disagreed.
+   * `no-effect` ONLY when the accept-stale verdict is corroborated by full-surface evidence
+   * (`surfacesIdentical`): the bare verdict is subset-tolerant by design, and a successful scroll
+   * that replaced every list cell under fixed chrome still reads accept-stale (#1601 review P1).
+   * Callers surface it to the agent: a diagnostics-only signal let one benchmark run burn 40 calls
+   * re-issuing scrolls that moved nothing (#1600).
    */
-  gestureNoEffect?: PostGestureAction;
+  postGestureOutcome?: PostGestureOutcome;
 };
 
-function describePostGestureAction(gesture: PostGestureAction): string {
-  return [gesture.action, ...gesture.positionals].join(' ').trim();
-}
-
 /**
- * The agent-facing wording for a proven no-effect gesture. Names the exact
- * gesture, admits the honest ambiguity (at-edge is a legitimate no-op the
- * platform cannot distinguish), and hands over the one escape hatch that
- * moved a stuck list when synthesized scrolls did not (#1600, element-18:
- * raw `swipe` worked where scroll/fling/pan all silently no-opped).
+ * The agent-facing sentence for a post-gesture outcome, true whether the read that carries it found
+ * its target or not. A no-effect gesture admits the honest ambiguity (at-edge is a legitimate no-op
+ * the platform cannot distinguish) and hands over the escape hatch that moved a stuck list when
+ * synthesized scrolls did not (#1600: raw `swipe` worked where scroll/fling/pan all no-opped).
  */
-export function formatGestureNoEffectWarning(action: string, positionals: string[]): string {
-  return (
-    `${describePostGestureAction({ action, positionals })} produced no visible change: the tree still matches its pre-gesture state. ` +
-    'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
-    'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).'
-  );
+export function formatPostGestureOutcomeWarning({ kind, gesture }: PostGestureOutcome): string {
+  const named = [gesture.action, ...gesture.positionals].join(' ').trim();
+  return kind === 'unsettled'
+    ? `The surface was still changing after ${named} when this tree was read, so it may not match where the surface comes to rest: an element missing from it is not proof of absence.`
+    : `${named} produced no visible change: the tree still matches its pre-gesture state. ` +
+        'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
+        'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).';
 }
 
-/** A miss on a tree read while a gesture's surface was still changing is not proof of absence. */
-export function formatGestureUnsettledWarning(gesture: PostGestureAction): string {
-  return `The surface was still changing after ${describePostGestureAction(gesture)} when this was read, so an element missing from it may still be on screen. Read again before treating it as absent.`;
+function postGestureOutcome(
+  kind: PostGestureOutcome['kind'],
+  pending: PostGestureAction,
+): PostGestureOutcome {
+  return { kind, gesture: { action: pending.action, positionals: pending.positionals } };
 }
 
 /**
@@ -199,10 +195,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
     },
   });
   if (lastPairAgreed) return { value: previous.value };
-  return {
-    value: previous.value,
-    unsettledGesture: { action: pending.action, positionals: pending.positionals },
-  };
+  return { value: previous.value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
 }
 
 type CapturedSurface<T, S> = {
@@ -266,13 +259,7 @@ function buildAcceptedOutcome<T, S extends readonly unknown[]>(
     baselineSignature !== undefined &&
     hooks.surfacesIdentical(baselineSignature, current.signature)
   ) {
-    return {
-      value: current.value,
-      gestureNoEffect: {
-        action: pending.action,
-        positionals: pending.positionals,
-      },
-    };
+    return { value: current.value, postGestureOutcome: postGestureOutcome('no-effect', pending) };
   }
   emitDiagnostic({
     level: 'info',
