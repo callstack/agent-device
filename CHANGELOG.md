@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 – 0.21.13
+
+These releases did not split the changelog per version.
 
 - Fixed (android): snapshot nodes and `get attrs` carry the accessibility `heading` flag and the
   `roleDescription` an app set on a node. React Native puts a header, a tab, a tab list, a link, or a

@@ -42,18 +42,22 @@ const BULLET_HEADER =
   /^- (Breaking|Added|Changed|Deprecated|Removed|Fixed|Security)(?: \([^)]+\))?: \S/;
 const CONTINUATION = /^ {2}\S/;
 
-/** The fragment's basename with `.md` stripped, or the whole name if it carries no extension. */
+/** The fragment's basename with the required `.md` extension stripped. */
 function slug(fragmentName: string): string {
-  return fragmentName.endsWith('.md') ? fragmentName.slice(0, -'.md'.length) : fragmentName;
+  return fragmentName.slice(0, -'.md'.length);
 }
 
 /**
  * Parses one fragment's bullets, in file order. Throws — naming the fragment and the offending
- * line — on a name that fails the slug pattern, a leading non-bullet line, an unknown kind, or a
- * continuation line that is not indented under a bullet. Bullet text keeps its internal newlines
- * (a multi-line bullet's continuation lines) but drops trailing whitespace per line.
+ * line — on a name that is missing the `.md` extension or fails the slug pattern, a leading
+ * non-bullet line, an unknown kind, or a continuation line that is not indented under a bullet.
+ * Bullet text keeps its internal newlines (a multi-line bullet's continuation lines) but drops
+ * trailing whitespace per line.
  */
 export function parseFragment(fragment: ChangelogFragment): Bullet[] {
+  if (!fragment.name.endsWith('.md')) {
+    throw new Error(`${fragment.name}: fragment file name must end in ".md".`);
+  }
   const name = slug(fragment.name);
   if (!SLUG.test(name)) {
     throw new Error(
@@ -148,11 +152,16 @@ export function assembleChangelog(input: {
 const FRAGMENTS_DIR = 'changelog.d';
 const README = 'README.md';
 
-function readFragments(dir: string): ChangelogFragment[] {
+/**
+ * Every `changelog.d` entry other than `README.md`, regardless of extension. The assembler and
+ * `--check` both consume this exact list, so an entry that is not a valid `<slug>.md` fragment
+ * fails `parseFragment` instead of being silently skipped by an extension filter.
+ */
+export function readFragments(dir: string): ChangelogFragment[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter((name) => name !== README && name.endsWith('.md'))
+    .filter((name) => name !== README)
     .sort()
     .map((name) => ({ name, text: fs.readFileSync(path.join(dir, name), 'utf8') }));
 }

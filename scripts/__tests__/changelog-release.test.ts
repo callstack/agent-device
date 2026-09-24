@@ -6,6 +6,7 @@ import { mkdtempForTestSync } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import {
   assembleChangelog,
   parseFragment,
+  readFragments,
   runCli,
   type ChangelogFragment,
 } from '../changelog-release.ts';
@@ -150,13 +151,21 @@ test('CLI --check exits 1 while a fragment remains and 0 once only README.md is 
   assert.equal(runCli({ root, check: true }), 0);
 });
 
-// Repository guard: every fragment actually checked in today (other than README.md) must have a
-// valid name and pass parseFragment, so a malformed fragment is caught before it ships.
+// Repository guard: every fragment `readFragments` would actually consume (other than README.md)
+// must have a valid name and pass parseFragment, so a malformed or wrongly-named fragment is
+// caught before it ships instead of being silently skipped by a stricter enumeration.
 test('every real changelog.d fragment has a valid name and passes parseFragment', () => {
   const repoRoot = path.resolve(import.meta.dirname, '../..');
   const fragmentsDir = path.join(repoRoot, 'changelog.d');
-  const names = fs.readdirSync(fragmentsDir).filter((name) => name !== 'README.md');
-  for (const name of names) {
-    parseFragment({ name, text: fs.readFileSync(path.join(fragmentsDir, name), 'utf8') });
+  for (const fragment of readFragments(fragmentsDir)) {
+    parseFragment(fragment);
   }
+});
+
+// Repository guard: the real CHANGELOG.md carries no "## Unreleased" heading, so the assembler's
+// refusal never fires on the first real release that ships a fragment.
+test('the real CHANGELOG.md has no "## Unreleased" heading', () => {
+  const repoRoot = path.resolve(import.meta.dirname, '../..');
+  const changelog = fs.readFileSync(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
+  assert.equal(changelog.includes('## Unreleased'), false);
 });
