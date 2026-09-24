@@ -1,46 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { test } from 'vitest';
 import { parseAppleTimeProfileSummary } from '../perf-time-profile.ts';
 
-const XCODE27_FIXTURE_FUNCTION_LIMIT = 25;
-const XCODE27_FIXTURE_FUNCTION_COUNT = 15;
-
-test('reads stacks from a real Xcode 27 tagged-backtrace export', () => {
-  const xml = readFileSync(
-    path.join(import.meta.dirname, 'fixtures', 'xcode27-time-profile.xml'),
-    'utf8',
-  );
-  const summary = parseAppleTimeProfileSummary(xml, XCODE27_FIXTURE_FUNCTION_LIMIT);
-
-  // The captured export carries 22 rows: one stack-sentinel row, two rows that name their stack
-  // with a `<tagged-backtrace ref>` to an earlier id, and innermost frames that reuse a
-  // `<frame ref>`. Unresolved stacks would drop the count below 21 or leave `<unknown>` names.
-  assert.equal(summary.sampleCount, 21);
-  assert.equal(summary.totalSampleWeightMs, 21);
-  assert.equal(summary.topFunctions.length, XCODE27_FIXTURE_FUNCTION_COUNT);
-  assert.ok(!summary.topFunctions.some((entry) => entry.symbol === '<unknown>'));
-  // This row names its binary only through `<binary ref>`, so it proves frame-reference
-  // resolution reaches the binary too.
-  assert.ok(
-    summary.topFunctions.some(
-      (entry) => entry.symbol === '_xzm_free_pac' && entry.binary === 'libsystem_malloc.dylib',
-    ),
-    'a referenced binary must resolve to its name',
-  );
-  assert.deepEqual(summary.topFunctions.slice(0, 2), [
-    {
-      symbol: 'clonefileat',
-      binary: 'libsystem_kernel.dylib',
-      selfSampleMs: 5,
-      selfSamplePercent: 23.8,
-    },
-    { symbol: '__open', binary: 'libsystem_kernel.dylib', selfSampleMs: 2, selfSamplePercent: 9.5 },
-  ]);
-});
-
-test('resolves tagged-backtrace and frame references and skips stack sentinels', () => {
+test('reads Xcode 27 tagged-backtrace stacks and skips stack sentinels', () => {
+  // xctrace 27 renamed the `time-profile` stack element to `<tagged-backtrace>` and kept the same
+  // `id`/`ref` reuse over frames and binaries. These row shapes come from a real 27.1 export; the
+  // symbols, binaries, and weights here are synthetic.
   const summary = parseAppleTimeProfileSummary(
     `<trace-query-result><node>
       <row>
@@ -52,23 +17,38 @@ test('resolves tagged-backtrace and frame references and skips stack sentinels',
       </row>
       <row><weight ref="weight-1"/><tagged-backtrace ref="stack-1"/></row>
       <row>
-        <weight>1000000</weight>
-        <tagged-backtrace><frame ref="frame-1"/><frame name="caller"/></tagged-backtrace>
+        <weight ref="weight-1"/>
+        <tagged-backtrace id="stack-2" truncated="YES"><frame ref="frame-1"/></tagged-backtrace>
       </row>
-      <row><weight>1000000</weight><sentinel/></row>
+      <row>
+        <weight ref="weight-1"/>
+        <tagged-backtrace id="stack-3">
+          <frame id="frame-2" name="warm"><binary ref="binary-1"/></frame>
+        </tagged-backtrace>
+      </row>
+      <row><weight ref="weight-1"/><sentinel/></row>
     </node></trace-query-result>`,
-    1,
+    2,
   );
 
+  // `hot` is sampled as a stack definition, through a `<tagged-backtrace ref>`, and through a
+  // truncated stack whose innermost frame is a `<frame ref>`. `warm` reaches its binary only
+  // through `<binary ref>`, and the sentinel row carries a weight with no stack at all.
   assert.deepEqual(summary, {
-    sampleCount: 3,
-    totalSampleWeightMs: 3,
+    sampleCount: 4,
+    totalSampleWeightMs: 4,
     topFunctions: [
       {
         symbol: 'hot',
         binary: 'App',
         selfSampleMs: 3,
-        selfSamplePercent: 100,
+        selfSamplePercent: 75,
+      },
+      {
+        symbol: 'warm',
+        binary: 'App',
+        selfSampleMs: 1,
+        selfSamplePercent: 25,
       },
     ],
   });
@@ -105,25 +85,39 @@ test('aggregates weighted innermost frames and follows xctrace references', () =
   });
 });
 
-test('aggregates rows exported from multiple trace runs through one document-wide id index', () => {
-  // A real multi-run export numbers element ids with one counter across its runs, so a row in a
-  // later run refs a frame an earlier run defined. Scoping the id index per `<node>` would drop
-  // that row's frame instead of attributing it to the earlier run's symbol.
+test('aggregates rows exported from multiple trace runs', () => {
   const summary = parseAppleTimeProfileSummary(
     `<trace-query-result>
-      <node xpath="/trace-toc/run[1]"><row><weight>1000000</weight><backtrace><frame id="frame-1" name="runOne"/></backtrace></row></node>
-      <node xpath="/trace-toc/run[2]">
-        <row><weight>2000000</weight><backtrace><frame name="runTwo"/></backtrace></row>
-        <row><weight>4000000</weight><backtrace id="stack-9"><frame ref="frame-1"/></backtrace></row>
-      </node>
+      <node xpath="/trace-toc/run[1]"><row><weight>1000000</weight><backtrace><frame name="runOne"/></backtrace></row></node>
+      <node xpath="/trace-toc/run[2]"><row><weight>2000000</weight><backtrace><frame name="runTwo"/></backtrace></row></node>
     </trace-query-result>`,
   );
-  assert.equal(summary.sampleCount, 3);
-  assert.equal(summary.totalSampleWeightMs, 7);
-  assert.deepEqual(summary.topFunctions, [
-    { symbol: 'runOne', binary: undefined, selfSampleMs: 5, selfSamplePercent: 71.4 },
-    { symbol: 'runTwo', binary: undefined, selfSampleMs: 2, selfSamplePercent: 28.6 },
-  ]);
+  assert.equal(summary.sampleCount, 2);
+  assert.equal(summary.topFunctions[0]?.symbol, 'runTwo');
+});
+
+test('resolves a frame reference an earlier trace run defined', () => {
+  // A real `xctrace record --append-run` export numbers element ids with one counter across its
+  // runs, so a row of a later run refs a frame an earlier run defined. Scoping the id index per
+  // `<node>` would drop that row's frame instead of attributing it to the earlier symbol.
+  const summary = parseAppleTimeProfileSummary(
+    `<trace-query-result>
+      <node xpath="/trace-toc/run[1]"><row><weight>1000000</weight><tagged-backtrace><frame id="frame-1" name="shared"/></tagged-backtrace></row></node>
+      <node xpath="/trace-toc/run[2]"><row><weight>3000000</weight><tagged-backtrace><frame ref="frame-1"/></tagged-backtrace></row></node>
+    </trace-query-result>`,
+  );
+  assert.deepEqual(summary, {
+    sampleCount: 2,
+    totalSampleWeightMs: 4,
+    topFunctions: [
+      {
+        symbol: 'shared',
+        binary: undefined,
+        selfSampleMs: 4,
+        selfSamplePercent: 100,
+      },
+    ],
+  });
 });
 
 test('skips incomplete rows', () => {
