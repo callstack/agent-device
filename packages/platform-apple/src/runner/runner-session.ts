@@ -286,7 +286,7 @@ async function startRunnerSessionWithLease(
     simulatorSetRedirect = await measureRunnerStartupStep(
       startupTimings,
       'simulator_set_redirect',
-      async () => await acquireXcodebuildSimulatorSetRedirect(device),
+      async () => await acquireXcodebuildSimulatorSetRedirect(device, { signal }),
     );
     if (xctestrunArtifact.buildMs > 0) {
       emitRequestProgress({

@@ -180,6 +180,10 @@ test('direct command cancellation reaches runner launch without a registered req
     (error: unknown) => isRequestCanceledError(error),
   );
 
+  assert.equal(
+    mockAcquireXcodebuildSimulatorSetRedirect.mock.calls.at(-1)?.[1]?.signal,
+    controller.signal,
+  );
   assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 

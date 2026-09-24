@@ -5,7 +5,7 @@ import { beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { defaultRedirectProbeToFakeShims, writeHooklessXcrunShims } from './xcrun-shim-fixtures.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
   resolveXcodebuildSimulatorDeviceSetPath,
@@ -17,7 +17,7 @@ import {
 // not hand back, and a build that succeeded does not get to hide one.
 
 beforeEach(() => {
-  defaultRedirectProbeToFakeShims(writeHooklessXcrunShims(mkdtempForTestSync('device-set-shims-')));
+  appleRunnerTestHost.update({ probeXcrunShimFirstLaunchHooks: async () => [] });
 });
 
 const iosSimulator: DeviceInfo = {
@@ -101,11 +101,11 @@ test('a build that failed outranks the redirect it could not give back', async (
       () =>
         withXcodebuildSimulatorSetRedirect(
           makeScopedSimulator(paths),
+          redirectOptions(paths),
           async () => {
             makeReleaseUnverifiable(paths);
             throw buildFailure;
           },
-          redirectOptions(paths),
         ),
       (error: unknown) => {
         assert.equal(error, buildFailure);
@@ -125,11 +125,11 @@ test('a build that succeeded still reports the redirect it could not give back',
       () =>
         withXcodebuildSimulatorSetRedirect(
           makeScopedSimulator(paths),
+          redirectOptions(paths),
           async () => {
             makeReleaseUnverifiable(paths);
             return 'built';
           },
-          redirectOptions(paths),
         ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);

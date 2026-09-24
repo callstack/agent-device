@@ -5,6 +5,7 @@ import type {
 } from '../runner-error-classification.ts';
 import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-error-classification.ts';
 import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
+import { XCODE_26_2_SIMCTL_SHIM } from '../../core/__tests__/xcrun-shim-fixtures.ts';
 
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).
@@ -353,17 +354,10 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     id: 'xcode-26-2-simctl-shim-first-launch',
     reason: 'xctest_device_set_cleanup_armed',
     site: 'xctest-device-set-redirect',
-    command: 'grep -A4 EXPECTED_VERSION "$(xcrun --find simctl)"',
-    xcodeVersion: 'Xcode 26.2 (17C52)',
+    command: XCODE_26_2_SIMCTL_SHIM.command,
+    xcodeVersion: XCODE_26_2_SIMCTL_SHIM.xcodeVersion,
     provenance: 'captured',
-    output: [
-      'EXPECTED_VERSION="1051.17.7"',
-      'CURRENT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/Resources/Info.plist" 2>&1)"',
-      '',
-      'if [[ "${EXPECTED_VERSION}" != "${CURRENT_VERSION}" ]]; then',
-      '    "${DEVELOPER_DIR}/usr/bin/xcodebuild" -runFirstLaunch >&2',
-      '',
-    ].join('\n'),
+    output: XCODE_26_2_SIMCTL_SHIM.text,
     note: 'The shim text, not tool output: the redirect refuses on what the shim would do, before any xcodebuild runs (#2935). Installed CoreSimulator on that host was 1155.4. The Xcode version was read from its version.plist, not from `xcodebuild -version`.',
   },
 ];

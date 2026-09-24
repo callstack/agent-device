@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   resolveIosSimulatorDeviceSetPath,
@@ -11,6 +11,7 @@ import {
   withProcessLock,
   probeXcrunShimFirstLaunchHooks,
   type ArmedXcrunShimFirstLaunchHook,
+  type XcrunShimArmedBy,
   type XcrunShimProbeOptions,
 } from './host.ts';
 import type { ProcessLockRelease } from '@agent-device/host-kit/file';
@@ -66,8 +67,8 @@ function resolveXcodebuildSimulatorDeviceSetBackupPath(
  */
 export async function withXcodebuildSimulatorSetRedirect<Task>(
   device: DeviceInfo,
+  options: XcodebuildSimulatorSetRedirectOptions,
   task: () => Promise<Task>,
-  options: XcodebuildSimulatorSetRedirectOptions = {},
 ): Promise<Task> {
   const redirect = await acquireXcodebuildSimulatorSetRedirect(device, options);
   if (!redirect) return await task();
@@ -110,7 +111,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 
   const paths = { xctestDeviceSetPath, backupPath };
   let needsRedirect = false;
-  let cleanupArmedRefusal: AppError | null = null;
+  let redirectRefusal: AppError | null = null;
 
   // One try, so the lock cannot be given back and then worked under: the restore of an interrupted
   // build's leftovers runs first because the same-set check follows symlinks, and `XCTestDevices` left
@@ -120,9 +121,9 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     reconcileXcodebuildSimulatorSetRedirect(paths);
     needsRedirect = !sameResolvedPath(requestedSetPath, xctestDeviceSetPath);
     if (needsRedirect) {
-      cleanupArmedRefusal = await xctestDeviceSetCleanupArmedRefusal(options);
+      redirectRefusal = await xctestDeviceSetCleanupArmedRefusal(options);
     }
-    if (needsRedirect && cleanupArmedRefusal === null) {
+    if (needsRedirect && redirectRefusal === null) {
       installDeviceSetRedirect(paths, requestedSetPath);
     }
   } catch (error) {
@@ -132,9 +133,9 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     throw redirectFailure(error, handBack, { requestedSetPath, ...paths });
   }
 
-  if (cleanupArmedRefusal !== null) {
+  if (redirectRefusal !== null) {
     await handBackDeviceSet(paths, lockDirPath, releaseLock);
-    throw cleanupArmedRefusal;
+    throw redirectRefusal;
   }
 
   if (!needsRedirect) {
@@ -170,27 +171,44 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 /**
  * The refusal for a host where an Xcode shim would run `xcodebuild -runFirstLaunch`, which deletes
  * every device in `XCTestDevices` and so, through the redirect, every device in the requested set.
- * Its reason and hint come from {@link classifyRunnerStartupFailure}, keyed on `xcrunShims`.
+ * Its reason and hint come from {@link classifyRunnerStartupFailure}, keyed on `xcrunShims`. A request
+ * canceled during the probe gets the canceled-request error, never a host refusal.
  */
 async function xctestDeviceSetCleanupArmedRefusal(
   options: XcrunShimProbeOptions,
 ): Promise<AppError | null> {
   const xcrunShims = await probeXcrunShimFirstLaunchHooks({
     xcrunShimPaths: options.xcrunShimPaths,
+    signal: options.signal,
   });
+  if (options.signal?.aborted) {
+    return createRequestCanceledError({ phase: 'xctest_device_set_shim_probe' });
+  }
   const armed = xcrunShims.filter(
     (shim): shim is ArmedXcrunShimFirstLaunchHook => shim.hook === 'armed',
   );
   if (armed.length === 0) return null;
-  const message = `Refusing to redirect XCTest device set: ${armed.map(describeArmedShim).join('; ')}`;
+  const described = armed.map((shim) => DESCRIBE_ARMED_SHIM[shim.armedBy](shim));
+  const message = `Refusing to redirect XCTest device set: ${described.join('; ')}`;
   const { reason, hint } = classifyRunnerStartupFailure(
     new AppError('COMMAND_FAILED', message, { xcrunShims }),
   );
   return new AppError('COMMAND_FAILED', message, { reason, hint, xcrunShims });
 }
 
-function describeArmedShim(shim: ArmedXcrunShimFirstLaunchHook): string {
-  if (shim.shimPath === null) return `Xcode's ${shim.tool} could not be located`;
+const DESCRIBE_ARMED_SHIM: Record<
+  XcrunShimArmedBy,
+  (shim: ArmedXcrunShimFirstLaunchHook) => string
+> = {
+  version_mismatch: describeShimVersions,
+  version_unreadable: describeShimVersions,
+  shim_unreadable: (shim) => `Xcode's ${shim.tool} shim at ${shim.shimPath} could not be read`,
+  shim_not_located: (shim) => `Xcode's ${shim.tool} could not be located`,
+  probe_out_of_budget: (shim) => `Xcode's ${shim.tool} shim was not read within the probe budget`,
+  probe_canceled: (shim) => `Xcode's ${shim.tool} shim probe was canceled`,
+};
+
+function describeShimVersions(shim: ArmedXcrunShimFirstLaunchHook): string {
   const framework =
     /([^/]+)\.framework\//.exec(shim.frameworkInfoPlistPath ?? '')?.[1] ?? 'its framework';
   return (

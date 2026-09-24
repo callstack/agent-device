@@ -18,7 +18,10 @@ import {
   redirectRelease,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { withFakeXcrunHost, writeFakeXcrunShims } from './xcrun-shim-fixtures.ts';
+import {
+  withFakeXcrunHost,
+  writeFakeXcrunShims,
+} from '../../core/__tests__/xcrun-shim-fixtures.ts';
 import { acquireXcodebuildSimulatorSetRedirect as acquireRealSimulatorSetRedirect } from '../runner-device-set.ts';
 
 const {
@@ -399,8 +402,6 @@ test('an armed xcrun shim refuses a scoped-set session before the runner launche
   const host = writeFakeXcrunShims(root, {
     simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
     devicectl: { expectedVersion: '506.6', installedVersion: '629.3' },
-    xcdevice: { hook: 'none' },
-    xctrace: { hook: 'none' },
   });
   mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(
     async (device: DeviceInfo) =>

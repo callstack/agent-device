@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import type { ExecResult, ExecOptions } from '@agent-device/host-kit/command';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../runner/apple-runner-platform.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import {
-  createLocalAppleToolProvider,
-  withAppleToolProvider,
-  XCRUN_TOOL_NAMES,
-  type AppleToolCommandExecutor,
-} from '../tool-provider.ts';
-import { probeXcrunShimFirstLaunchHooks } from '../xcrun-shim-first-launch.ts';
+  probeXcrunShimFirstLaunchHooks,
+  XCRUN_SHIM_TOOL_NAMES,
+} from '../xcrun-shim-first-launch.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+import {
+  fakeFrameworkInfoPlistPath,
+  hookedShimText,
+  withFakeXcrunHost,
+  writeFakeXcrunShims,
+} from './xcrun-shim-fixtures.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,152 +24,180 @@ async function tempRoot(): Promise<string> {
   return await mkdtempForTest('xcrun-shim-first-launch-');
 }
 
-function writeFile(root: string, name: string, text: string | Buffer): string {
-  const filePath = path.join(root, name);
-  fs.writeFileSync(filePath, text);
-  return filePath;
-}
+test('only the tools Xcode ships as first-launch shims are probed', async () => {
+  const host = writeFakeXcrunShims(await tempRoot(), {});
 
-function hookedShim(expectedVersion: string, infoPlistPath: string): string {
-  return [
-    '#!/bin/bash',
-    `EXPECTED_VERSION="${expectedVersion}"`,
-    `CURRENT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "${infoPlistPath}" 2>&1)"`,
-    'if [[ "${EXPECTED_VERSION}" != "${CURRENT_VERSION}" ]]; then',
-    '    "${DEVELOPER_DIR}/usr/bin/xcodebuild" -runFirstLaunch >&2',
-    'fi',
-    '',
-  ].join('\n');
-}
+  const shims = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
 
-async function withFakeXcrun<T>(
-  runCommand: AppleToolCommandExecutor,
-  plistVersions: Record<string, string>,
-  task: () => Promise<T>,
-): Promise<T> {
-  const provider = createLocalAppleToolProvider({
-    runCommand,
-    plist: {
-      readJson: async (plistPath) =>
-        plistPath in plistVersions ? { CFBundleVersion: plistVersions[plistPath] } : null,
-    },
-  });
-  return await withAppleToolProvider(provider, task);
-}
-
-function xcrunFind(found: Partial<Record<string, string>>): {
-  runCommand: AppleToolCommandExecutor;
-  calls: Array<[string, string[]]>;
-} {
-  const calls: Array<[string, string[]]> = [];
-  const runCommand: AppleToolCommandExecutor = async (cmd, args): Promise<ExecResult> => {
-    calls.push([cmd, args]);
-    const tool = args[1] ?? '';
-    const shimPath = found[tool];
-    return shimPath
-      ? { exitCode: 0, stdout: `${shimPath}\n`, stderr: '' }
-      : { exitCode: 1, stdout: '', stderr: `xcrun: error: unable to find utility "${tool}"` };
-  };
-  return { runCommand, calls };
-}
-
-test('the probe locates every declared xcrun tool through xcrun --find', async () => {
-  const { runCommand, calls } = xcrunFind({});
-
-  const shims = await withFakeXcrun(runCommand, {}, () => probeXcrunShimFirstLaunchHooks());
-
-  assert.deepEqual(
-    calls.map(([cmd, args]) => [cmd, ...args]),
-    XCRUN_TOOL_NAMES.map((tool) => ['xcrun', '--find', tool]),
-  );
-  assert.deepEqual(
-    shims.map((shim) => shim.tool),
-    [...XCRUN_TOOL_NAMES],
-  );
+  assert.deepEqual(XCRUN_SHIM_TOOL_NAMES, ['simctl', 'devicectl']);
+  assert.deepEqual(host.finds, XCRUN_SHIM_TOOL_NAMES);
   for (const shim of shims) {
-    assert.equal(shim.hook, 'armed', `${shim.tool} was not found, so it cannot be called safe`);
-    assert.equal(shim.shimPath, null);
+    assert.deepEqual(
+      { hook: shim.hook, shimPath: shim.shimPath },
+      { hook: 'armed', shimPath: null },
+      `${shim.tool} was not found, so it cannot be called safe`,
+    );
+    assert.equal(shim.hook === 'armed' && shim.armedBy, 'shim_not_located');
   }
 });
 
 test('a hooked shim found by xcrun --find is read against the plist its own text names', async () => {
   const root = await tempRoot();
   const otherPlist = path.join(root, 'Other.framework', 'Info.plist');
-  const simctl = writeFile(root, 'simctl', hookedShim('1051.17.7', otherPlist));
   const machO = Buffer.concat([
     Buffer.from([0xcf, 0xfa, 0xed, 0xfe]),
     Buffer.from(' -runFirstLaunch'),
   ]);
-  const binary = writeFile(root, 'xctrace', machO);
-  const readJson = vi.fn(async (plistPath: string) =>
-    plistPath === otherPlist ? { CFBundleVersion: '1155.4' } : null,
-  );
-  const { runCommand } = xcrunFind({
-    simctl,
-    devicectl: binary,
-    xcdevice: binary,
-    xctrace: binary,
+  const host = writeFakeXcrunShims(root, {
+    simctl: { text: hookedShimText('1051.17.7', otherPlist) },
+    devicectl: { text: machO },
   });
+  host.installedVersions.set(otherPlist, '1155.4');
 
-  const shims = await withAppleToolProvider(
-    createLocalAppleToolProvider({ runCommand, plist: { readJson } }),
-    () => probeXcrunShimFirstLaunchHooks(),
-  );
+  const [simctl, devicectl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
 
-  assert.deepEqual(
-    readJson.mock.calls.map(([plistPath]) => plistPath),
-    [otherPlist],
-  );
-  assert.deepEqual(shims[0], {
+  assert.deepEqual(host.plistReads, [otherPlist]);
+  assert.deepEqual(simctl, {
     tool: 'simctl',
-    shimPath: simctl,
+    shimPath: host.xcrunShimPaths.simctl,
     hook: 'armed',
+    armedBy: 'version_mismatch',
     expectedVersion: '1051.17.7',
     frameworkInfoPlistPath: otherPlist,
     installedVersion: '1155.4',
   });
-  for (const shim of shims.slice(1)) {
-    assert.deepEqual(shim, { tool: shim.tool, shimPath: binary, hook: 'none' });
-  }
+  assert.deepEqual(devicectl, {
+    tool: 'devicectl',
+    shimPath: host.xcrunShimPaths.devicectl,
+    hook: 'none',
+  });
 });
 
 test('equal versions disarm a hooked shim', async () => {
-  const root = await tempRoot();
-  const plist = path.join(root, 'CoreDevice.framework', 'Info.plist');
-  const devicectl = writeFile(root, 'devicectl', hookedShim('629.3', plist));
-  const shimPaths = Object.fromEntries(XCRUN_TOOL_NAMES.map((tool) => [tool, devicectl]));
+  const host = writeFakeXcrunShims(await tempRoot(), {
+    simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
+    devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
+  });
 
-  const shims = await withFakeXcrun(xcrunFind({}).runCommand, { [plist]: '629.3' }, () =>
-    probeXcrunShimFirstLaunchHooks({ xcrunShimPaths: shimPaths }),
+  const shims = await withFakeXcrunHost(host, () =>
+    probeXcrunShimFirstLaunchHooks({ xcrunShimPaths: host.xcrunShimPaths }),
   );
 
-  for (const shim of shims) {
-    assert.deepEqual(shim, {
-      tool: shim.tool,
-      shimPath: devicectl,
-      hook: 'disarmed',
-      expectedVersion: '629.3',
-      frameworkInfoPlistPath: plist,
-      installedVersion: '629.3',
-    });
-  }
+  assert.deepEqual(
+    shims.map((shim) => [shim.tool, shim.hook]),
+    [
+      ['simctl', 'disarmed'],
+      ['devicectl', 'disarmed'],
+    ],
+  );
 });
 
-test('a probe that outlives its budget reads every unanswered shim as armed', async () => {
-  const budget = new AbortController();
-  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
-  const pending = new Promise<ExecResult>(() => {});
-  let started = 0;
-  const runCommand: AppleToolCommandExecutor = async () => {
-    started += 1;
-    if (started === XCRUN_TOOL_NAMES.length) budget.abort();
-    return await pending;
-  };
+test('a shim xcrun found but that cannot be read counts as armed', async () => {
+  const root = await tempRoot();
+  const host = writeFakeXcrunShims(root, {
+    devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
+  });
+  const missing = path.join(root, 'xcrun-shims', 'simctl-removed');
+  host.xcrunShimPaths.simctl = missing;
 
-  const shims = await withFakeXcrun(runCommand, {}, () => probeXcrunShimFirstLaunchHooks());
+  const [simctl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+
+  assert.deepEqual(simctl, {
+    tool: 'simctl',
+    shimPath: missing,
+    hook: 'armed',
+    armedBy: 'shim_unreadable',
+    expectedVersion: null,
+    frameworkInfoPlistPath: null,
+    installedVersion: null,
+  });
+});
+
+// Each shape breaks one value and keeps the rest readable and equal, so the verdict is that value's.
+const UNREADABLE_VERSION_SHAPES: Record<string, (plistPath: string) => string> = {
+  'no EXPECTED_VERSION': (plistPath) =>
+    hookedShimText('1', plistPath).replace('EXPECTED_VERSION="1"', 'EXPECTED_VERSION='),
+  'no Info.plist path on the CURRENT_VERSION line': (plistPath) =>
+    hookedShimText('1', plistPath).replace(`"${plistPath}"`, '"$PLIST"'),
+  'an unreadable framework Info.plist': (plistPath) => hookedShimText('1', `${plistPath}.missing`),
+};
+
+for (const [shape, text] of Object.entries(UNREADABLE_VERSION_SHAPES)) {
+  test(`a hooked shim with ${shape} fails closed`, async () => {
+    const root = await tempRoot();
+    const plistPath = fakeFrameworkInfoPlistPath(root, 'devicectl');
+    const host = writeFakeXcrunShims(root, { devicectl: { text: text(plistPath) } });
+    host.installedVersions.set(plistPath, '1');
+
+    const [, devicectl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+
+    assert.equal(devicectl?.hook === 'armed' && devicectl.armedBy, 'version_unreadable');
+  });
+}
+
+function hangingXcrun(onStart: (options: ExecOptions | undefined) => void) {
+  return createLocalAppleToolProvider({
+    runCommand: async (_cmd, _args, options): Promise<ExecResult> => {
+      onStart(options);
+      return await new Promise<ExecResult>(() => {});
+    },
+  });
+}
+
+test('the probe spends the cold-toolchain budget on each xcrun --find and reads a timeout as armed', async () => {
+  const budget = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
+  const findTimeoutsMs: Array<number | undefined> = [];
+  const provider = hangingXcrun((options) => {
+    findTimeoutsMs.push(options?.timeoutMs);
+    if (findTimeoutsMs.length === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
+  });
+
+  const shims = await withAppleToolProvider(provider, () => probeXcrunShimFirstLaunchHooks());
+
+  assert.deepEqual(timeout.mock.calls, [[COLD_TOOLCHAIN_PROBE_TIMEOUT_MS]]);
+  assert.deepEqual(
+    findTimeoutsMs,
+    XCRUN_SHIM_TOOL_NAMES.map(() => COLD_TOOLCHAIN_PROBE_TIMEOUT_MS),
+  );
+  assert.deepEqual(
+    shims.map((shim) => [shim.tool, shim.hook, shim.hook === 'armed' && shim.armedBy]),
+    XCRUN_SHIM_TOOL_NAMES.map((tool) => [tool, 'armed', 'probe_out_of_budget']),
+  );
+});
+
+test('a request canceled mid-probe stops every unanswered shim as canceled', async () => {
+  const request = new AbortController();
+  let started = 0;
+  const provider = hangingXcrun((options) => {
+    started += 1;
+    assert.equal(options?.signal?.aborted, false);
+    if (started === XCRUN_SHIM_TOOL_NAMES.length) request.abort();
+  });
+
+  const shims = await withAppleToolProvider(provider, () =>
+    probeXcrunShimFirstLaunchHooks({ signal: request.signal }),
+  );
 
   assert.deepEqual(
-    shims.map((shim) => [shim.tool, shim.hook, shim.shimPath]),
-    XCRUN_TOOL_NAMES.map((tool) => [tool, 'armed', null]),
+    shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
+    XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_canceled'),
+  );
+});
+
+test('an already-canceled request spawns no xcrun at all', async () => {
+  const host = writeFakeXcrunShims(await tempRoot(), {
+    simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
+    devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
+  });
+
+  const shims = await withFakeXcrunHost(host, () =>
+    probeXcrunShimFirstLaunchHooks({ signal: AbortSignal.abort() }),
+  );
+
+  assert.deepEqual(host.finds, []);
+  assert.deepEqual(
+    shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
+    XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_canceled'),
   );
 });

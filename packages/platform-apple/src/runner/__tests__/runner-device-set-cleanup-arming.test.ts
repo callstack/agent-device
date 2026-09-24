@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { XCRUN_TOOL_NAMES, type XcrunToolName } from '../../core/tool-provider.ts';
+import {
+  XCRUN_SHIM_TOOL_NAMES,
+  type ArmedXcrunShimFirstLaunchHook,
+  type XcrunShimToolName,
+} from '../../core/xcrun-shim-first-launch.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { acquireXcodebuildSimulatorSetRedirect } from '../runner-device-set.ts';
 import { RUNNER_ERROR_RULES } from '../runner-error-classification.ts';
@@ -12,12 +16,10 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 import { RUNNER_STARTUP_FAILURE_FIXTURES } from './runner-startup-failure-fixtures.ts';
 import {
   fakeFrameworkInfoPlistPath,
-  hookedShimText,
   withFakeXcrunHost,
   writeFakeXcrunShims,
   type FakeXcrunHost,
-  type FakeXcrunShim,
-} from './xcrun-shim-fixtures.ts';
+} from '../../core/__tests__/xcrun-shim-fixtures.ts';
 
 // #2935: pointing `XCTestDevices` at a user's simulator set while an Xcode shim would run
 // `xcodebuild -runFirstLaunch` lets that cleanup delete every device in the user's set. These cases
@@ -63,40 +65,37 @@ function scopedSimulator(setPath: string): DeviceInfo {
   };
 }
 
-/** simctl and devicectl as given; the two Mach-O tools as Xcode 26.2 ships them, with no hook. */
-function writeShims(
-  layout: Layout,
-  shims: { simctl?: FakeXcrunShim; devicectl?: FakeXcrunShim },
-): FakeXcrunHost {
-  return writeFakeXcrunShims(layout.root, {
-    ...shims,
-    xcdevice: { hook: 'none' },
-    xctrace: { hook: 'none' },
-  });
-}
-
-async function acquire(layout: Layout, host: FakeXcrunHost) {
+async function acquire(layout: Layout, host: FakeXcrunHost, signal?: AbortSignal) {
   return await withFakeXcrunHost(host, () =>
     acquireXcodebuildSimulatorSetRedirect(scopedSimulator(layout.requestedSetPath), {
       xctestDeviceSetPath: layout.xctestDeviceSetPath,
       backupPath: layout.backupPath,
       lockDirPath: layout.lockDirPath,
       xcrunShimPaths: host.xcrunShimPaths,
+      signal,
     }),
   );
 }
 
-async function assertRefused(layout: Layout, host: FakeXcrunHost): Promise<AppError> {
+async function assertRefused(
+  layout: Layout,
+  host: FakeXcrunHost,
+  signal?: AbortSignal,
+): Promise<AppError> {
   let refusal: AppError | undefined;
-  await assert.rejects(acquire(layout, host), (error: unknown) => {
+  await assert.rejects(acquire(layout, host, signal), (error: unknown) => {
     assert.ok(error instanceof AppError);
     refusal = error;
     return true;
   });
   assert.ok(refusal);
   assert.equal(refusal.code, 'COMMAND_FAILED');
-  assert.equal(refusal.details?.reason, REASON);
-  assert.equal(refusal.details?.hint, ROW_HINT);
+  if (signal?.aborted) {
+    assert.equal(isRequestCanceledError(refusal), true);
+  } else {
+    assert.equal(refusal.details?.reason, REASON);
+    assert.equal(refusal.details?.hint, ROW_HINT);
+  }
   assert.equal(fs.lstatSync(layout.xctestDeviceSetPath).isSymbolicLink(), false);
   assert.equal(
     fs.readFileSync(path.join(layout.xctestDeviceSetPath, 'host-device.txt'), 'utf8'),
@@ -127,7 +126,7 @@ function shimsOf(refusal: AppError): Array<Record<string, unknown>> {
   return shims as Array<Record<string, unknown>>;
 }
 
-function shimOf(refusal: AppError, tool: XcrunToolName): Record<string, unknown> | undefined {
+function shimOf(refusal: AppError, tool: XcrunShimToolName): Record<string, unknown> | undefined {
   return shimsOf(refusal).find((shim) => shim.tool === tool);
 }
 
@@ -136,7 +135,7 @@ const DEVICECTL_EQUAL = { expectedVersion: '629.3', installedVersion: '629.3' };
 
 test('an armed simctl shim refuses the redirect', async () => {
   const layout = makeLayout();
-  const host = writeShims(layout, {
+  const host = writeFakeXcrunShims(layout.root, {
     simctl: { expectedVersion: '1051.17.7', installedVersion: '1155.4' },
     devicectl: { hook: 'none' },
   });
@@ -147,6 +146,7 @@ test('an armed simctl shim refuses the redirect', async () => {
     tool: 'simctl',
     shimPath: host.xcrunShimPaths.simctl,
     hook: 'armed',
+    armedBy: 'version_mismatch',
     expectedVersion: '1051.17.7',
     frameworkInfoPlistPath: fakeFrameworkInfoPlistPath(layout.root, 'simctl'),
     installedVersion: '1155.4',
@@ -155,98 +155,48 @@ test('an armed simctl shim refuses the redirect', async () => {
 
 test('an armed devicectl shim refuses the redirect even when simctl matches', async () => {
   const layout = makeLayout();
-  const host = writeShims(layout, {
+  const host = writeFakeXcrunShims(layout.root, {
     simctl: SIMCTL_EQUAL,
     devicectl: { expectedVersion: '506.6', installedVersion: '629.3' },
   });
 
   const refusal = await assertRefused(layout, host);
 
-  assert.equal(shimOf(refusal, 'simctl')?.hook, 'disarmed');
-  assert.equal(shimOf(refusal, 'devicectl')?.hook, 'armed');
   assert.deepEqual(
-    shimsOf(refusal).map((shim) => shim.tool),
-    [...XCRUN_TOOL_NAMES],
+    shimsOf(refusal).map((shim) => [shim.tool, shim.hook]),
+    [
+      ['simctl', 'disarmed'],
+      ['devicectl', 'armed'],
+    ],
   );
+  assert.match(refusal.message, /Xcode's devicectl expects CoreDevice 506\.6; installed 629\.3/);
 });
 
-test('matching versions on both hooked shims let the redirect through', async () => {
+test('an unreadable framework Info.plist fails closed at the gate', async () => {
   const layout = makeLayout();
-  await assertRedirected(
-    layout,
-    writeShims(layout, { simctl: SIMCTL_EQUAL, devicectl: DEVICECTL_EQUAL }),
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: SIMCTL_EQUAL,
+    devicectl: DEVICECTL_EQUAL,
+  });
+  host.installedVersions.delete(fakeFrameworkInfoPlistPath(layout.root, 'devicectl'));
+
+  const refusal = await assertRefused(layout, host);
+
+  assert.equal(shimOf(refusal, 'devicectl')?.armedBy, 'version_unreadable');
+  assert.match(
+    refusal.message,
+    /Xcode's devicectl expects CoreDevice 629\.3; installed \(unreadable\)/,
   );
 });
 
-for (const tool of ['simctl', 'devicectl'] as const) {
-  const other = tool === 'simctl' ? { devicectl: DEVICECTL_EQUAL } : { simctl: SIMCTL_EQUAL };
-
-  test(`a ${tool} shim without -runFirstLaunch has no hook to arm`, async () => {
+test('matching or hookless shims let the redirect through', async () => {
+  for (const shims of [
+    { simctl: SIMCTL_EQUAL, devicectl: DEVICECTL_EQUAL },
+    { simctl: { hook: 'none' }, devicectl: { hook: 'none' } },
+  ] as const) {
     const layout = makeLayout();
-    await assertRedirected(layout, writeShims(layout, { ...other, [tool]: { hook: 'none' } }));
-  });
-
-  // Each shape breaks one value and keeps the rest readable and equal, so the refusal is that value's.
-  const unreadable: Record<
-    string,
-    { text: (plistPath: string) => string; plistReadable: boolean }
-  > = {
-    'no EXPECTED_VERSION': {
-      text: (plistPath) =>
-        hookedShimText('1', plistPath).replace('EXPECTED_VERSION="1"', 'EXPECTED_VERSION='),
-      plistReadable: true,
-    },
-    'no Info.plist path on the CURRENT_VERSION line': {
-      text: (plistPath) => hookedShimText('1', plistPath).replace(`"${plistPath}"`, '"$PLIST"'),
-      plistReadable: true,
-    },
-    'an unreadable framework Info.plist': {
-      text: (plistPath) => hookedShimText('1', plistPath),
-      plistReadable: false,
-    },
-  };
-  for (const [shape, { text, plistReadable }] of Object.entries(unreadable)) {
-    test(`a hooked ${tool} shim with ${shape} fails closed`, async () => {
-      const layout = makeLayout();
-      const plistPath = fakeFrameworkInfoPlistPath(layout.root, tool);
-      const host = writeShims(layout, { ...other, [tool]: { text: text(plistPath) } });
-      if (plistReadable) host.installedVersions.set(plistPath, '1');
-
-      const refusal = await assertRefused(layout, host);
-
-      assert.equal(shimOf(refusal, tool)?.hook, 'armed');
-    });
+    await assertRedirected(layout, writeFakeXcrunShims(layout.root, shims));
   }
-
-  test(`a ${tool} that xcrun cannot locate refuses the redirect`, async () => {
-    const layout = makeLayout();
-    const host = writeShims(layout, other);
-
-    const refusal = await assertRefused(layout, host);
-
-    assert.deepEqual(shimOf(refusal, tool), {
-      tool,
-      shimPath: null,
-      hook: 'armed',
-      expectedVersion: null,
-      frameworkInfoPlistPath: null,
-      installedVersion: null,
-    });
-  });
-}
-
-test('the framework Info.plist is the one the shim text names', async () => {
-  const layout = makeLayout();
-  const otherPlist = path.join(layout.root, 'Other.framework', 'Info.plist');
-  const host = writeShims(layout, {
-    simctl: { text: hookedShimText('1155.4', otherPlist) },
-    devicectl: { hook: 'none' },
-  });
-  host.installedVersions.set(otherPlist, '1155.4');
-
-  await assertRedirected(layout, host);
-
-  assert.deepEqual(host.plistReads, [otherPlist]);
 });
 
 test('the captured Xcode 26.2 simctl shim reads as armed against CoreSimulator 1155.4', async () => {
@@ -255,8 +205,8 @@ test('the captured Xcode 26.2 simctl shim reads as armed against CoreSimulator 1
   );
   assert.ok(captured);
   const layout = makeLayout();
-  const host = writeShims(layout, {
-    simctl: { text: `#!/bin/bash\n${captured.output}fi\n` },
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: { text: captured.output },
     devicectl: DEVICECTL_EQUAL,
   });
   const coreSimulatorPlist =
@@ -271,31 +221,6 @@ test('the captured Xcode 26.2 simctl shim reads as armed against CoreSimulator 1
     /Xcode's simctl expects CoreSimulator 1051\.17\.7; installed 1155\.4/,
   );
   assert.ok(host.plistReads.includes(coreSimulatorPlist));
-});
-
-test('the hint stays the row hint while the message and details carry the versions', async () => {
-  for (const [expectedVersion, installedVersion] of [
-    ['506.6', '629.3'],
-    ['507.1', '700.2'],
-  ] as const) {
-    const layout = makeLayout();
-    const refusal = await assertRefused(
-      layout,
-      writeShims(layout, {
-        simctl: SIMCTL_EQUAL,
-        devicectl: { expectedVersion, installedVersion },
-      }),
-    );
-
-    assert.ok(ROW_HINT);
-    assert.match(
-      refusal.message,
-      new RegExp(
-        `Xcode's devicectl expects CoreDevice ${expectedVersion}; installed ${installedVersion}`,
-      ),
-    );
-    assert.equal(shimOf(refusal, 'devicectl')?.installedVersion, installedVersion);
-  }
 });
 
 test('a simulator that needs no redirect never probes the shims', async () => {
@@ -315,4 +240,47 @@ test('a simulator that needs no redirect never probes the shims', async () => {
   assert.equal(defaultSet, null);
   assert.equal(xctestSet, null);
   assert.equal(probe.mock.calls.length, 0);
+});
+
+test('a request canceled during the probe gives the lock back as a cancellation, not a refusal', async () => {
+  const layout = makeLayout();
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: SIMCTL_EQUAL,
+    devicectl: DEVICECTL_EQUAL,
+  });
+
+  await assertRefused(layout, host, AbortSignal.abort());
+
+  assert.deepEqual(host.plistReads, []);
+});
+
+test('the message tells a shim xcrun could not locate from one the probe ran out of budget on', async () => {
+  const messages: string[] = [];
+  for (const armedBy of ['shim_not_located', 'probe_out_of_budget'] as const) {
+    const layout = makeLayout();
+    const host = writeFakeXcrunShims(layout.root, {});
+    if (armedBy === 'probe_out_of_budget') {
+      appleRunnerTestHost.update({
+        probeXcrunShimFirstLaunchHooks: async () =>
+          XCRUN_SHIM_TOOL_NAMES.map((tool): ArmedXcrunShimFirstLaunchHook => ({
+            tool,
+            shimPath: null,
+            hook: 'armed',
+            armedBy,
+            expectedVersion: null,
+            frameworkInfoPlistPath: null,
+            installedVersion: null,
+          })),
+      });
+    }
+    const refusal = await assertRefused(layout, host);
+    assert.deepEqual(
+      shimsOf(refusal).map((shim) => [shim.tool, shim.armedBy]),
+      XCRUN_SHIM_TOOL_NAMES.map((tool) => [tool, armedBy]),
+    );
+    messages.push(refusal.message);
+  }
+
+  assert.match(messages[0] ?? '', /Xcode's simctl could not be located/);
+  assert.match(messages[1] ?? '', /Xcode's simctl shim was not read within the probe budget/);
 });

@@ -137,10 +137,18 @@ export async function runAppleToolCommand(
   return await resolveAppleToolProvider().runCommand(cmd, args, options);
 }
 
-/** Every Xcode tool agent-device runs through `xcrun`, each of which resolves to a file in the selected Xcode. */
-export const XCRUN_TOOL_NAMES = ['simctl', 'devicectl', 'xcdevice', 'xctrace'] as const;
+/**
+ * Every Xcode tool agent-device runs through `xcrun`. `firstLaunchShim` marks a tool Xcode ships as a
+ * script shim that can run `xcodebuild -runFirstLaunch` before the tool; the others are Mach-O binaries.
+ */
+export const XCRUN_TOOLS = {
+  simctl: { firstLaunchShim: true },
+  devicectl: { firstLaunchShim: true },
+  xcdevice: { firstLaunchShim: false },
+  xctrace: { firstLaunchShim: false },
+} as const satisfies Record<string, { firstLaunchShim: boolean }>;
 
-export type XcrunToolName = (typeof XCRUN_TOOL_NAMES)[number];
+export type XcrunToolName = keyof typeof XCRUN_TOOLS;
 
 /** An xcrun argv for a tool other than simctl; a simctl argv is a ScopedSimctlCommand. */
 type XcrunToolArgs = readonly [Exclude<XcrunToolName, 'simctl'>, ...string[]];

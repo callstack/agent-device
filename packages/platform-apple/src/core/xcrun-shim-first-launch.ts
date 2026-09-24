@@ -1,13 +1,24 @@
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import {
   readApplePlistJson,
   runAppleToolCommand,
-  XCRUN_TOOL_NAMES,
+  XCRUN_TOOLS,
   type XcrunToolName,
 } from './tool-provider.ts';
 
-const XCRUN_SHIM_PROBE_BUDGET_MS = 2_000;
 const FIRST_LAUNCH_FLAG = '-runFirstLaunch';
+
+export type XcrunShimToolName = {
+  [Tool in XcrunToolName]: (typeof XCRUN_TOOLS)[Tool]['firstLaunchShim'] extends true
+    ? Tool
+    : never;
+}[XcrunToolName];
+
+/** The {@link XCRUN_TOOLS} entries Xcode ships as a shim that can carry a first-launch hook. */
+export const XCRUN_SHIM_TOOL_NAMES = (Object.keys(XCRUN_TOOLS) as XcrunToolName[]).filter(
+  (tool): tool is XcrunShimToolName => XCRUN_TOOLS[tool].firstLaunchShim,
+);
 
 /**
  * Whether one Xcode `xcrun` shim runs `xcodebuild -runFirstLaunch` before the tool it wraps. That
@@ -16,9 +27,9 @@ const FIRST_LAUNCH_FLAG = '-runFirstLaunch';
  * not be read is `armed`.
  */
 export type XcrunShimFirstLaunchHook =
-  | { tool: XcrunToolName; shimPath: string; hook: 'none' }
+  | { tool: XcrunShimToolName; shimPath: string; hook: 'none' }
   | {
-      tool: XcrunToolName;
+      tool: XcrunShimToolName;
       shimPath: string;
       hook: 'disarmed';
       expectedVersion: string;
@@ -27,71 +38,98 @@ export type XcrunShimFirstLaunchHook =
     }
   | ArmedXcrunShimFirstLaunchHook;
 
-export type ArmedXcrunShimFirstLaunchHook = {
-  tool: XcrunToolName;
-  /** Null when `xcrun --find` failed or ran out of budget. */
+/** Why a shim reads as armed; every value but `version_mismatch` is a probe that could not decide. */
+export type XcrunShimArmedBy =
+  | 'version_mismatch'
+  | 'version_unreadable'
+  | 'shim_unreadable'
+  | 'shim_not_located'
+  | 'probe_out_of_budget'
+  | 'probe_canceled';
+
+type XcrunShimEvidence = {
+  tool: XcrunShimToolName;
+  /** Null when `xcrun --find` failed or the probe stopped first. */
   shimPath: string | null;
-  hook: 'armed';
   expectedVersion: string | null;
   frameworkInfoPlistPath: string | null;
   installedVersion: string | null;
 };
 
-/** One entry per {@link XCRUN_TOOL_NAMES} tool. */
+export type ArmedXcrunShimFirstLaunchHook = XcrunShimEvidence & {
+  hook: 'armed';
+  armedBy: XcrunShimArmedBy;
+};
+
+/** One entry per {@link XCRUN_SHIM_TOOL_NAMES} tool. */
 export type XctestDeviceSetCleanupArming = readonly XcrunShimFirstLaunchHook[];
 
 export type XcrunShimProbeOptions = {
   /** Replaces `xcrun --find`: a tool absent from the map reads as not found. */
-  xcrunShimPaths?: Readonly<Partial<Record<XcrunToolName, string>>>;
+  xcrunShimPaths?: Readonly<Partial<Record<XcrunShimToolName, string>>>;
+  /** The owning request's cancellation; an unanswered shim then reads as `probe_canceled`. */
+  signal?: AbortSignal;
 };
 
-/** Reads every xcrun shim's first-launch hook within one shared budget; a timeout reads as armed. */
+/** Reads every shim's first-launch hook within one shared budget; an unanswered shim reads as armed. */
 export async function probeXcrunShimFirstLaunchHooks(
   options: XcrunShimProbeOptions = {},
 ): Promise<XctestDeviceSetCleanupArming> {
-  const signal = AbortSignal.timeout(XCRUN_SHIM_PROBE_BUDGET_MS);
+  const budget = AbortSignal.timeout(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([budget, options.signal]) : budget;
+  const stoppedBy = (): XcrunShimArmedBy =>
+    options.signal?.aborted ? 'probe_canceled' : 'probe_out_of_budget';
   return await Promise.all(
-    XCRUN_TOOL_NAMES.map(async (tool) => await probeWithinBudget(tool, options, signal)),
+    XCRUN_SHIM_TOOL_NAMES.map(
+      async (tool) => await probeWithinBudget(tool, options, signal, stoppedBy),
+    ),
   );
 }
 
 async function probeWithinBudget(
-  tool: XcrunToolName,
+  tool: XcrunShimToolName,
   options: XcrunShimProbeOptions,
   signal: AbortSignal,
+  stoppedBy: () => XcrunShimArmedBy,
 ): Promise<XcrunShimFirstLaunchHook> {
-  const evidence: ArmedXcrunShimFirstLaunchHook = {
+  const evidence: XcrunShimEvidence = {
     tool,
     shimPath: null,
-    hook: 'armed',
     expectedVersion: null,
     frameworkInfoPlistPath: null,
     installedVersion: null,
   };
+  if (signal.aborted) return armed(evidence, stoppedBy());
   let onAbort = (): void => {};
-  const expired = new Promise<XcrunShimFirstLaunchHook>((resolve) => {
-    onAbort = () => resolve({ ...evidence });
+  const stopped = new Promise<XcrunShimFirstLaunchHook>((resolve) => {
+    onAbort = () => resolve(armed(evidence, stoppedBy()));
   });
-  if (signal.aborted) onAbort();
   signal.addEventListener('abort', onAbort, { once: true });
   try {
-    return await Promise.race([readShimHook(evidence, options, signal), expired]);
+    return await Promise.race([readShimHook(evidence, options, signal), stopped]);
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
 }
 
+function armed(
+  evidence: XcrunShimEvidence,
+  armedBy: XcrunShimArmedBy,
+): ArmedXcrunShimFirstLaunchHook {
+  return { ...evidence, hook: 'armed', armedBy };
+}
+
 async function readShimHook(
-  evidence: ArmedXcrunShimFirstLaunchHook,
+  evidence: XcrunShimEvidence,
   options: XcrunShimProbeOptions,
   signal: AbortSignal,
 ): Promise<XcrunShimFirstLaunchHook> {
   const { tool } = evidence;
   const shimPath = await locateShim(tool, options, signal);
-  if (shimPath === null) return { ...evidence };
+  if (shimPath === null) return armed(evidence, 'shim_not_located');
   evidence.shimPath = shimPath;
   const text = await readShimText(shimPath, signal);
-  if (text === null) return { ...evidence };
+  if (text === null) return armed(evidence, 'shim_unreadable');
   if (!text.startsWith('#!') || !text.includes(FIRST_LAUNCH_FLAG)) {
     return { tool, shimPath, hook: 'none' };
   }
@@ -100,7 +138,7 @@ async function readShimHook(
 }
 
 async function readShimVersions(
-  evidence: ArmedXcrunShimFirstLaunchHook,
+  evidence: XcrunShimEvidence,
   text: string,
   signal: AbortSignal,
 ): Promise<void> {
@@ -111,15 +149,12 @@ async function readShimVersions(
   }
 }
 
-function settleShimHook(
-  evidence: ArmedXcrunShimFirstLaunchHook,
-  shimPath: string,
-): XcrunShimFirstLaunchHook {
+function settleShimHook(evidence: XcrunShimEvidence, shimPath: string): XcrunShimFirstLaunchHook {
   const { tool, expectedVersion, frameworkInfoPlistPath, installedVersion } = evidence;
   if (expectedVersion === null || frameworkInfoPlistPath === null || installedVersion === null) {
-    return { ...evidence };
+    return armed(evidence, 'version_unreadable');
   }
-  if (expectedVersion !== installedVersion) return { ...evidence };
+  if (expectedVersion !== installedVersion) return armed(evidence, 'version_mismatch');
   return {
     tool,
     shimPath,
@@ -131,7 +166,7 @@ function settleShimHook(
 }
 
 async function locateShim(
-  tool: XcrunToolName,
+  tool: XcrunShimToolName,
   options: XcrunShimProbeOptions,
   signal: AbortSignal,
 ): Promise<string | null> {
@@ -139,7 +174,7 @@ async function locateShim(
   try {
     const result = await runAppleToolCommand('xcrun', ['--find', tool], {
       allowFailure: true,
-      timeoutMs: XCRUN_SHIM_PROBE_BUDGET_MS,
+      timeoutMs: COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
       signal,
     });
     const found = result.stdout.trim();

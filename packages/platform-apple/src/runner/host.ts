@@ -120,6 +120,7 @@ export type {
 
 export type {
   ArmedXcrunShimFirstLaunchHook,
+  XcrunShimArmedBy,
   XcrunShimProbeOptions,
 } from '../core/xcrun-shim-first-launch.ts';
 
