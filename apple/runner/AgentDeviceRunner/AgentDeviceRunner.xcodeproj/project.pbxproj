@@ -21,9 +21,22 @@
 		20EA2EDD2F2CFC7C001CF0EF /* AgentDeviceRunnerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentDeviceRunnerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		20EA2EF02F2CFC7C001CF0EF /* Exceptions for "AgentDeviceRunner" folder in "AgentDeviceRunner" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 20EA2EC52F2CFC7B001CF0EF /* AgentDeviceRunner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		20EA2EC82F2CFC7B001CF0EF /* AgentDeviceRunner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				20EA2EF02F2CFC7C001CF0EF /* Exceptions for "AgentDeviceRunner" folder in "AgentDeviceRunner" target */,
+			);
 			path = AgentDeviceRunner;
 			sourceTree = "<group>";
 		};
@@ -352,6 +365,8 @@
 				DEVELOPMENT_TEAM = 2S799L9W4M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AgentDeviceRunner/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -386,6 +401,8 @@
 				DEVELOPMENT_TEAM = 2S799L9W4M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AgentDeviceRunner/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
