@@ -1,5 +1,5 @@
 {
-  "description": "Golden vector table for the shared `hittable` predicate (#1933), pinned for the input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach (#2891). RULE: a node is actionable when it is enabled, its own rect is positive and finite, and its center falls inside the viewport box, half-open on the right and bottom edges (inclusive on the left and top). Two implementations: isGeometricallyActionable in apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotGeometry.swift (replayed by ActionabilityPolicyTests, and reached on device through SnapshotGeometrySpace.normalized and SnapshotVisibilityFold.fold) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). EVERY ROW declares both `swift` and `typescript`; a row either side skips must carry `asymmetry` naming why, so a divergence is always written down rather than discovered. THE VIEWPORT IS A DECLARED FACT, not a rectangle: `reported` is the platform's box for the app's surface, `derived` is a box the capture inferred for itself out of its own root element, and `missing` carries `not-provided` (nothing was read) or `invalid` (a box arrived that cannot be one). These are the three cases of IosViewportEvidence in packages/contracts/src/ios-snapshot.ts, and the old spelling - CGRect.infinite as the viewport - made every node actionable on the runner while the host published nothing, which is one state resolved in two directions. POLICY FOR AN UNKNOWN VIEWPORT, stated once at the Swift decision site and failing CLOSED: `missing` publishes no actionability, because `hittable` claims a tap at the center lands and a capture with no box cannot support that claim. The bit is published, never filtered: SnapshotVisibilityFoldProjection.shouldInclude and isEligibleForRegularPresentation retain a visible node whatever its bit says, so a retained node carries `hittable: false` and a caller or a `hittable:` selector reads it, while a wrong `true` is a claim nothing contradicts. The host reaches the same direction earlier in its own capture path, where resolveViewportEvidence in packages/capture-kit/src/ios-snapshot-engine/invariants.ts refuses to fold a regular presentation without a positive finite viewport - which is why the TypeScript predicate has no unknown-viewport case, and why this state cannot be compared through the fold differential.",
+  "description": "Golden vector table for the shared `hittable` predicate (#1933, #2891), for input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach. RULE: a node is actionable when it is enabled, its own rect is positive and finite, and its center falls inside the viewport box, half-open on the right and bottom edges. Implementations: SnapshotGeometry.isGeometricallyActionable (Swift, replayed by ActionabilityPolicyTests) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). The viewport is the declared fact `reported`, `derived`, or `missing` (IosViewportEvidence). `hittable: null` is the absent bit: with no viewport box, containment is undecided. Every row declares `swift` and `typescript`; a row one side skips carries `asymmetry`.",
   "cases": [
     {
       "name": "a center strictly inside the reported box is actionable",
@@ -153,24 +153,48 @@
       "nodeRectGuardPasses": true
     },
     {
-      "name": "the same node whose center sits inside a reported box is not actionable once the viewport goes missing: the policy fails closed",
+      "name": "the same node whose center sits inside a reported box has no hittable bit once the viewport goes missing",
       "swift": true,
-      "typescript": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
       "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
+      "hittable": null,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a viewport declared invalid leaves the bit absent the same way",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "invalid" },
+      "hittable": null,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a disabled node is not actionable without a viewport: that half of the rule needs no box",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": false,
       "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
       "viewport": { "kind": "missing", "reason": "not-provided" },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
-      "name": "a viewport declared invalid because a box arrived that cannot be one fails closed the same way",
+      "name": "a zero-area node is not actionable without a viewport: the node guard needs no box",
       "swift": true,
-      "typescript": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
       "enabled": true,
-      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
-      "viewport": { "kind": "missing", "reason": "invalid" },
+      "node": { "x": 100, "y": 100, "width": 0, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
       "hittable": false,
-      "nodeRectGuardPasses": true
+      "nodeRectGuardPasses": false
     },
     {
       "name": "a derived box the capture read from its own root still answers containment",

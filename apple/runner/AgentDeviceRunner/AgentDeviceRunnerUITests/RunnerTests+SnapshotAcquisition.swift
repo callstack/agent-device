@@ -41,18 +41,13 @@ extension RunnerTests {
     // The viewport and the interface orientation are one hop: geometry that arrives in the device's
     // native space can only be placed relative to the app's own frame and rotation, and asking for
     // the pair twice would read them at two different moments of a rotation.
-    let geometry = try runMainThreadWork(
+    let viewport = try runMainThreadWork(
       "snapshot_viewport",
       timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
       timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
     ) {
-      (
-        viewport: self.safeSnapshotViewport(app: app),
-        interfaceOrientation: self.capturedInterfaceOrientation(app: app)
-      )
+      self.safeSnapshotViewport(app: app, readingOrientation: true)
     }
-    let viewport = geometry.viewport
-    let interfaceOrientation = geometry.interfaceOrientation
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
     guard let rootSnapshot = try captureSnapshotRootBounded(app, sliceSeconds: slice) else {
@@ -70,7 +65,6 @@ extension RunnerTests {
       queryRoot: app,
       rootSnapshot: rootSnapshot,
       viewport: viewport,
-      interfaceOrientation: interfaceOrientation,
       keyboardBand: keyboardBand
     )
   }
@@ -140,10 +134,18 @@ extension RunnerTests {
     return nil
   }
 
-  /// The viewport as a declared fact. A read that raises leaves the capture with no box, which is
-  /// `.missing(reason: .notProvided)` and not a box that contains everything (#2891).
-  func safeSnapshotViewport(app: XCUIApplication) -> SnapshotViewport {
-    safely("SNAPSHOT_VIEWPORT", .missing(reason: .notProvided)) { snapshotViewport(app: app) }
+  /// The viewport as a declared fact; a read that raises is `.missing(reason: .notProvided)` (#2891).
+  /// `readingOrientation` reads the interface orientation in the same hop, for tiers whose frames can
+  /// arrive in the device's native space; without it the viewport cannot anchor a rotation.
+  func safeSnapshotViewport(app: XCUIApplication, readingOrientation: Bool) -> SnapshotViewport {
+    safely("SNAPSHOT_VIEWPORT", .missing(reason: .notProvided)) {
+      .reported(
+        box: snapshotAppFrame(app: app),
+        interfaceOrientation: readingOrientation
+          ? capturedInterfaceOrientation(app: app)
+          : RunnerInterfaceOrientation.unknown
+      )
+    }
   }
 
   private func describeSnapshotError(_ error: Error) -> String {
@@ -233,13 +235,12 @@ extension RunnerTests {
     return text.isEmpty ? nil : text
   }
 
-  private func snapshotViewport(app: XCUIApplication) -> SnapshotViewport {
+  private func snapshotAppFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
-    let appFrame = onScreenWindowFrame(app: app)
+    return onScreenWindowFrame(app: app)
 #else
-    let appFrame = app.frame
+    return app.frame
 #endif
-    return .reported(box: appFrame)
   }
 
   static func snapshotTraversalIdentity(

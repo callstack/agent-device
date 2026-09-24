@@ -21,9 +21,8 @@ extension RunnerTests {
   struct SnapshotTraversalContext {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
+    /** Carries which way the app's interface is turned from the device's native space (#2612). */
     let viewport: SnapshotViewport
-    /** Which way the app's interface is turned from the device's native space (#2612). */
-    let interfaceOrientation: Int
     /**
      * The keyboard band this capture measured, published beside the tree so the daemon's tap guard
      * measures against the producer's own reading rather than a band it derives from these rects
@@ -278,8 +277,7 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: context.viewport,
-      interfaceOrientation: context.interfaceOrientation
+      viewport: context.viewport
     )
   }
 
@@ -435,8 +433,7 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: context.viewport,
-      interfaceOrientation: context.interfaceOrientation
+      viewport: context.viewport
     )
   }
 
@@ -455,14 +452,13 @@ extension RunnerTests {
           nodes: nodes,
           truncated: false,
           effectiveDepth: nil,
-          viewport: .missing(reason: .notProvided),
-          interfaceOrientation: RunnerInterfaceOrientation.unknown
+          viewport: .missing(reason: .notProvided)
         ),
         .completed
       )
     }
 
-    let viewport = safeSnapshotViewport(app: app)
+    let viewport = safeSnapshotViewport(app: app, readingOrientation: false)
     var seen = Set<String>()
     var candidates: [RawAXNode] = []
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
@@ -522,8 +518,7 @@ extension RunnerTests {
         nodes: nodes,
         truncated: outcome == .deadlineExhausted,
         effectiveDepth: nil,
-        viewport: viewport,
-        interfaceOrientation: RunnerInterfaceOrientation.unknown
+        viewport: viewport
       ),
       outcome
     )

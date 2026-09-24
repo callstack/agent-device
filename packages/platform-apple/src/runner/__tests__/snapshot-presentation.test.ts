@@ -207,6 +207,33 @@ test('a healthy payload with valid viewport roots still presents', () => {
   );
 });
 
+// A runner capture with no viewport box omits `hittable` on the nodes it could not decide (#2891);
+// the host presents them undecided rather than minting a value.
+test('a runner payload with the hittable bit absent presents without declaring it', () => {
+  const nodes: RawSnapshotNode[] = [
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: false,
+    },
+    { index: 1, parentIndex: 0, type: 'Other', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Not Now',
+      rect: { x: 16, y: 400, width: 80, height: 32 },
+    },
+  ];
+  for (const interactiveOnly of [false, true]) {
+    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes });
+    const button = presented.find((node) => node.label === 'Not Now');
+    assert.ok(button, `interactiveOnly=${interactiveOnly}: the undecided button is presented`);
+    assert.equal('hittable' in button, false);
+  }
+});
+
 // The keyboard band the runner measured for a capture (#2660). The reader is the only place a wire
 // fact becomes a daemon fact, so it owns the whole strictness budget: what cannot be placed is
 // restated as `unmeasurable` with a reason, never as a band and never as silence.

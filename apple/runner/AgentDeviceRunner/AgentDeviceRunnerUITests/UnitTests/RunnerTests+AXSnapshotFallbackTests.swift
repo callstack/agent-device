@@ -464,8 +464,7 @@ extension RunnerTests {
       interactiveOnly: true, customActions: false)
     let acquired = SnapshotGeometrySpace.normalized(
       nodes: privateAXAcquisition(rawRoot: tree, hint: hint),
-      viewport: .reported(box: viewport),
-      interfaceOrientation: RunnerInterfaceOrientation.portrait
+      viewport: .reported(box: viewport, interfaceOrientation: RunnerInterfaceOrientation.portrait)
     )
     // Acquisition serializes the drawer too; the shared fold is what hides it (#1797).
     XCTAssertTrue(acquired.compactMap(\.label).contains("Admin settings"))

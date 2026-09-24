@@ -38,7 +38,8 @@ public struct RawAXNode: Equatable {
   public let enabled: Bool
   public let focused: Bool?
   public let selected: Bool?
-  public var hittable: Bool
+  /// Geometric actionability; `nil` when the capture has no viewport box to decide it against.
+  public var hittable: Bool?
   public let depth: Int
   public let parentIndex: Int?
   public let hiddenContentAbove: Bool?
@@ -55,7 +56,7 @@ public struct RawAXNode: Equatable {
     enabled: Bool,
     focused: Bool?,
     selected: Bool?,
-    hittable: Bool,
+    hittable: Bool?,
     depth: Int,
     parentIndex: Int?,
     hiddenContentAbove: Bool?,
@@ -79,7 +80,7 @@ public struct RawAXNode: Equatable {
     self.actions = actions
   }
 
-  func replacing(rect: SnapshotRect, hittable: Bool) -> RawAXNode {
+  func replacing(rect: SnapshotRect, hittable: Bool?) -> RawAXNode {
     var updated = self
     updated.rect = rect
     updated.hittable = hittable
@@ -153,15 +154,10 @@ public struct PresentationOptions: Equatable {
   }
 }
 
-/// What a capture knows about the viewport hosting its tree, as the three-case fact the host's
-/// `IosViewportEvidence` already uses (#2891). A rectangle is never allowed to stand for "unknown":
-/// `CGRect.infinite` crossing this boundary read as "everything is actionable" on the runner and as
-/// "publish nothing" on the host, which is the same state resolved in two directions.
+/// What a capture knows about the viewport hosting its tree: the three cases of the host's
+/// `IosViewportEvidence` (#2891). No rectangle stands for "unknown".
 public enum SnapshotViewport: Equatable {
-  /// A box that `SnapshotGeometry.isPositiveFinite` has already accepted. The initialiser is internal,
-  /// which is what keeps this an enumerated fact instead of a checked suggestion: outside this package
-  /// the only way to put a box inside a viewport fact is `reported(box:)` or `derived(box:)` below, so
-  /// no caller can name a case around them and hand over the sentinel again (#2891).
+  /// A box `SnapshotGeometry.isPositiveFinite` accepted. Only the factories below construct one.
   public struct Box: Equatable {
     public let rect: CGRect
 
@@ -170,45 +166,43 @@ public enum SnapshotViewport: Equatable {
     }
   }
 
-  /// The platform's own box for the app's surface.
-  case reported(Box)
-  /// A box the capture inferred for itself out of its own root element instead of a screen read. It
-  /// clips and contains like a reported box, and it never anchors a rotation: the tier that produces
-  /// it reports no interface orientation beside it (#2612).
+  /// The platform's box for the app's surface, with the interface orientation read in the same hop.
+  /// Only this case can anchor a rotation (#2612).
+  case reported(Box, interfaceOrientation: Int)
+  /// A box the capture inferred from its own root element. It clips and contains, and carries no
+  /// orientation, so it cannot anchor a rotation.
   case derived(Box)
-  /// No box. See `SnapshotGeometry.isGeometricallyActionable` for the one policy this answers.
   case missing(reason: MissingReason)
 
   public enum MissingReason: Equatable {
-    /// Nothing was read: the read was skipped, or it raised.
+    /// The read was skipped or raised.
     case notProvided
-    /// A box arrived that cannot be a viewport: null, empty, inverted, or non-finite, which is what
-    /// `SnapshotGeometry.isPositiveFinite` refuses.
+    /// The box read is one `SnapshotGeometry.isPositiveFinite` refuses.
     case invalid
   }
 
-  /// The box to compare geometry against, or `nil` when the capture has none. Nothing that needs a
-  /// box may substitute an unbounded one for the absence of one.
   public var rect: CGRect? {
     switch self {
-    case .reported(let box), .derived(let box):
+    case .reported(let box, _), .derived(let box):
       return box.rect
     case .missing:
       return nil
     }
   }
 
-  /// Declares the box the platform reported for the app's surface. A box that cannot be a viewport
-  /// becomes `.missing(reason: .invalid)` here, at the one place a box becomes a viewport, so no
-  /// consumer has to re-check what it was handed.
-  public static func reported(box: CGRect) -> SnapshotViewport {
-    SnapshotGeometry.isPositiveFinite(box) ? .reported(Box(positiveFinite: box)) : .missing(reason: .invalid)
+  public static func reported(
+    box: CGRect,
+    interfaceOrientation: Int = RunnerInterfaceOrientation.unknown
+  ) -> SnapshotViewport {
+    SnapshotGeometry.isPositiveFinite(box)
+      ? .reported(Box(positiveFinite: box), interfaceOrientation: interfaceOrientation)
+      : .missing(reason: .invalid)
   }
 
-  /// Declares the capture's own root box as its viewport. Same refusal as `reported(box:)`: an
-  /// unusable root box is no box at all.
   public static func derived(box: CGRect) -> SnapshotViewport {
-    SnapshotGeometry.isPositiveFinite(box) ? .derived(Box(positiveFinite: box)) : .missing(reason: .invalid)
+    SnapshotGeometry.isPositiveFinite(box)
+      ? .derived(Box(positiveFinite: box))
+      : .missing(reason: .invalid)
   }
 }
 
@@ -219,8 +213,6 @@ public struct SnapshotAcquisition {
   public let effectiveDepth: Int?
   public var customActions: SnapshotCustomActionCoverage?
   public let viewport: SnapshotViewport
-  /// The app's interface orientation, consumed by the one `normalized` pass; `unknown` turns nothing.
-  public let interfaceOrientation: Int
 
   public init(
     hint: CaptureHint,
@@ -228,8 +220,7 @@ public struct SnapshotAcquisition {
     truncated: Bool,
     effectiveDepth: Int?,
     customActions: SnapshotCustomActionCoverage? = nil,
-    viewport: SnapshotViewport,
-    interfaceOrientation: Int = 0
+    viewport: SnapshotViewport
   ) {
     self.hint = hint
     self.nodes = nodes
@@ -237,7 +228,6 @@ public struct SnapshotAcquisition {
     self.effectiveDepth = effectiveDepth
     self.customActions = customActions
     self.viewport = viewport
-    self.interfaceOrientation = interfaceOrientation
   }
 
   public func replacingNodes(_ nodes: [RawAXNode]) -> SnapshotAcquisition {
@@ -285,7 +275,7 @@ public struct PresentedNode: Codable, Equatable {
   public let enabled: Bool
   public let focused: Bool?
   public let selected: Bool?
-  public let hittable: Bool
+  public let hittable: Bool?
   public let depth: Int
   public let parentIndex: Int?
   public let hiddenContentAbove: Bool?

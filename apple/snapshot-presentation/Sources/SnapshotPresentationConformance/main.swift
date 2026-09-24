@@ -75,10 +75,7 @@ private func acquisition(for input: ConformanceInput) -> SnapshotAcquisition {
     },
     truncated: false,
     effectiveDepth: nil,
-    // The differential always reports a viewport. Without one the host engine's regular presentation
-    // throws `missing-viewport` before folding (`invariants.ts`), so an unknown viewport has no
-    // TypeScript outcome to compare a fold against; the predicate's unknown-viewport rows belong to
-    // contracts/fixtures/snapshot-actionability-policy.json instead (#2891).
+    // The host engine refuses to fold without a viewport, so the differential always reports one.
     viewport: .reported(box: input.viewport.cgRect)
   )
 }

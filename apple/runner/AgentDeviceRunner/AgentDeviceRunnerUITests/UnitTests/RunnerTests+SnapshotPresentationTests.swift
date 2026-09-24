@@ -598,8 +598,10 @@ extension RunnerTests {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: .reported(box: viewport),
-      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      viewport: .reported(
+        box: viewport,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      )
     )
     let options = PresentationOptions(interactiveOnly: false, depth: 3, scope: nil, raw: false)
     let hint = SnapshotPresentation.captureHint(for: options)

@@ -217,12 +217,11 @@ extension RunnerTests {
       }
 
       let rootFrame = privateAXRect(root["frame"])
-      let geometry = privateAXSnapshotGeometry(
+      let viewport = privateAXSnapshotViewport(
         app: app,
         bundleId: target.bundleId,
         rootFrame: rootFrame
       )
-      let viewport = geometry.viewport
       let nodes = privateAXAcquisition(
         rawRoot: root,
         hint: hint
@@ -259,8 +258,7 @@ extension RunnerTests {
         customActions: Self.privateAXCustomActionCoverage(
           response[RunnerAXSnapshotCustomActionsKey]
         ),
-        viewport: viewport,
-        interfaceOrientation: geometry.interfaceOrientation
+        viewport: viewport
       )
     #else
       return nil
@@ -275,38 +273,32 @@ extension RunnerTests {
     !hasAbandonedMainThreadWork() && !isSnapshotXCTestChannelPenalized(bundleId: bundleId)
   }
 
-  /// The geometry this tier may anchor a rotation on. The bridge's own root frame is declared
-  /// `.derived` rather than reported — it is a box this capture inferred for itself, not the app's
-  /// frame — so a capture anchored on it reports no interface orientation and normalizes nothing:
-  /// rotated system surfaces then stay as reported, which the consumers already treat as geometry
-  /// they cannot measure (#2612).
-  private func privateAXSnapshotGeometry(
+  /// The app's reported viewport when XCTest can read it, else the bridge's own root frame declared
+  /// `.derived`, which cannot anchor a rotation: rotated system surfaces then stay as reported (#2612).
+  private func privateAXSnapshotViewport(
     app: XCUIApplication,
     bundleId: String?,
     rootFrame: CGRect
-  ) -> (viewport: SnapshotViewport, interfaceOrientation: Int) {
+  ) -> SnapshotViewport {
     let fallback = SnapshotViewport.derived(box: rootFrame)
     guard shouldReadPrivateAXViewportViaXCTest(bundleId: bundleId) else {
-      return (fallback, RunnerInterfaceOrientation.unknown)
+      return fallback
     }
     do {
-      let anchor = try runMainThreadWork(
+      let reported = try runMainThreadWork(
         "private_ax_viewport",
         timeout: 1,
         timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
       ) {
-        (
-          viewport: self.safeSnapshotViewport(app: app),
-          interfaceOrientation: self.capturedInterfaceOrientation(app: app)
-        )
+        self.safeSnapshotViewport(app: app, readingOrientation: true)
       }
-      if anchor.viewport.rect == nil {
-        return (fallback, RunnerInterfaceOrientation.unknown)
+      if case .missing = reported {
+        return fallback
       }
-      return (anchor.viewport, anchor.interfaceOrientation)
+      return reported
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_VIEWPORT_FALLBACK=%@", String(describing: error))
-      return (fallback, RunnerInterfaceOrientation.unknown)
+      return fallback
     }
   }
 

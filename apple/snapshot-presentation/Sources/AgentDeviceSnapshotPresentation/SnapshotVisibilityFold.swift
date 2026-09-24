@@ -203,12 +203,17 @@ public enum SnapshotVisibilityFold {
               enabled: node.enabled,
               focused: node.focused,
               selected: node.selected,
-              hittable: node.parentIndex != nil && node.hittable
-                && SnapshotGeometry.isGeometricallyActionable(
-                  enabled: node.enabled,
-                  frame: decision.effectiveFrame,
-                  viewport: viewport
-                ),
+              hittable: node.parentIndex == nil
+                ? false
+                : node.hittable.flatMap { sourceHittable in
+                  sourceHittable
+                    ? SnapshotGeometry.isGeometricallyActionable(
+                      enabled: node.enabled,
+                      frame: decision.effectiveFrame,
+                      viewport: viewport
+                    )
+                    : false
+                },
               depth: outDepth,
               parentIndex: keptIndex,
               hiddenContentAbove: node.hiddenContentAbove,

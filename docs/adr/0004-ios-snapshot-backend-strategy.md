@@ -304,21 +304,15 @@ a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `prese
 snapshot-quality reason, preserved through recovery and the existing TypeScript verdict/warning
 contract.
 
-Inside the runner the viewport is a declared fact and not a rectangle: `SnapshotViewport` carries
-`reported`, `derived`, or `missing { reason }`, the three cases `IosViewportEvidence` already uses on
-the host. The runner previously spelled "unknown" as `CGRect.infinite`, and that one state resolved in
-opposite directions — every node actionable on the runner, none published by the host's own derived
-hittability (#2891). One policy, stated at the Swift decision site, fails CLOSED: with no viewport box
-no node is actionable, while the clip skips and the cumulative-clip invariant is left with no root
-clip to violate rather than an unbounded one. The fact decides only what the runner publishes: a
-capture crosses into the host as nodes alone (`makeSnapshotBackendCapture`), and there the host forms
-its own evidence from the capture's root node (`viewportFromRoot`), which is `reported` whenever that
-root box is positive and finite. In the host's own capture path the same direction is reached earlier
-and harder, because `resolveViewportEvidence` refuses to fold a regular presentation at all — which is
-why the TypeScript predicate has no unknown-viewport case and why this state cannot be compared
-through the fold differential. `contracts/fixtures/snapshot-actionability-policy.json` pins the
-predicate for the shapes the fixed 320x240 fold fixture cannot reach: the half-open right and bottom
-edges, a node rect neither language's null/empty check refuses, and an unknown viewport.
+Inside the runner the viewport is a declared fact, not a rectangle: `SnapshotViewport` is
+`reported(box, interfaceOrientation)`, `derived(box)`, or `missing(reason)`, the cases of the host's
+`IosViewportEvidence` (#2891). Only `reported` carries an orientation, so only it can anchor a
+rotation in `SnapshotGeometrySpace`. With no box the clip skips, the cumulative-clip invariant has no
+root clip to violate, and a node whose actionability depends on containment has no `hittable` on the
+wire, as on the host bridge; disabled or degenerate nodes stay declared `false`. The runner route's
+host evidence comes from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in
+`packages/capture-kit/src/ios-snapshot-acquisition.ts`). `contracts/fixtures/snapshot-actionability-policy.json`
+pins the predicate for shapes the 320x240 fold fixture cannot reach.
 
 A regular `--depth` request is a presentation cut, not an acquisition bound. `CaptureHint` keeps raw
 traversal depth (`--raw --depth`) separate from regular presented depth, but the recursive tree walk

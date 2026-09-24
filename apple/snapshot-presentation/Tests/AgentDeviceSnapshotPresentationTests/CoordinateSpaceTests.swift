@@ -7,30 +7,7 @@ import XCTest
 /// without a simulator, and the runner's walkers are tested separately for threading it through.
 final class CoordinateSpaceTests: XCTestCase {
   private struct WindowCoordinateSpaceFixture: Decodable {
-    /// A frame as JSON can carry one. Infinity has no JSON spelling, so the unusable box a platform
-    /// hands back is named `{"infinite": true}`: `CGRect.infinite` here, and an infinite rect in the
-    /// vitest twin.
-    struct Frame: Decodable {
-      private enum CodingKeys: String, CodingKey {
-        case x, y, width, height, infinite
-      }
-
-      let cgRect: CGRect
-
-      init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        guard try container.decodeIfPresent(Bool.self, forKey: .infinite) != true else {
-          self.cgRect = .infinite
-          return
-        }
-        self.cgRect = CGRect(
-          x: try container.decode(Double.self, forKey: .x),
-          y: try container.decode(Double.self, forKey: .y),
-          width: try container.decode(Double.self, forKey: .width),
-          height: try container.decode(Double.self, forKey: .height)
-        )
-      }
-    }
+    typealias Frame = FixtureRect
 
     struct Constants: Decodable {
       let quarterTurnTolerance: Double
@@ -161,10 +138,9 @@ final class CoordinateSpaceTests: XCTestCase {
       reportedBySurfaceHost: true,
       reportedFrame: CGRect(x: 0, y: 0, width: 402, height: 874),
       inheritedFrom: .appOrientation,
-      appFrame: appFrame,
-      interfaceOrientation: landscape
+      viewport: .reported(box: appFrame, interfaceOrientation: landscape)
     )
-    XCTAssertEqual(space, .deviceNative(appFrame: appFrame, interfaceOrientation: landscape))
+    XCTAssertEqual(space, deviceNative(appFrame, landscape))
 
     // Reported on iPhone 17 Pro (iOS 26.2), landscape, system keyboard over the fixture's form.
     XCTAssertEqual(
@@ -198,8 +174,10 @@ final class CoordinateSpaceTests: XCTestCase {
       reportedBySurfaceHost: true,
       reportedFrame: rotated,
       inheritedFrom: .appOrientation,
-      appFrame: appFrame,
-      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      viewport: .reported(
+        box: appFrame,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      )
     )
 
     // The app's own window reports the app's box, and so does a hosted surface that already
@@ -209,8 +187,10 @@ final class CoordinateSpaceTests: XCTestCase {
         reportedBySurfaceHost: true,
         reportedFrame: appFrame,
         inheritedFrom: nativeSpace,
-        appFrame: appFrame,
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        viewport: .reported(
+          box: appFrame,
+          interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        )
       ),
       .appOrientation
     )
@@ -223,8 +203,10 @@ final class CoordinateSpaceTests: XCTestCase {
         ),
         reportedFrame: CGRect(x: 154, y: 77, width: 45, height: 72),
         inheritedFrom: nativeSpace,
-        appFrame: appFrame,
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        viewport: .reported(
+          box: appFrame,
+          interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        )
       ),
       nativeSpace
     )
@@ -234,8 +216,7 @@ final class CoordinateSpaceTests: XCTestCase {
       reportedBySurfaceHost: true,
       reportedFrame: rotated,
       inheritedFrom: .appOrientation,
-      appFrame: appFrame,
-      interfaceOrientation: RunnerInterfaceOrientation.unknown
+      viewport: .reported(box: appFrame, interfaceOrientation: RunnerInterfaceOrientation.unknown)
     )
     XCTAssertEqual(unnamed, .appOrientation)
     XCTAssertEqual(
@@ -248,23 +229,26 @@ final class CoordinateSpaceTests: XCTestCase {
         reportedBySurfaceHost: true,
         reportedFrame: rotated,
         inheritedFrom: .appOrientation,
-        appFrame: CGRect(x: 16, y: 24, width: 874, height: 402),
-        interfaceOrientation: RunnerInterfaceOrientation.portrait
+        viewport: .reported(
+          box: CGRect(x: 16, y: 24, width: 874, height: 402),
+          interfaceOrientation: RunnerInterfaceOrientation.portrait
+        )
       ),
       .appOrientation
     )
-    // An app frame the capture could not resolve cannot anchor a rotation. `.null` is what the one
-    // normalization pass hands over for a capture whose viewport fact is `missing` (#2891).
-    XCTAssertEqual(
-      SnapshotGeometrySpace.space(
-        reportedBySurfaceHost: true,
-        reportedFrame: rotated,
-        inheritedFrom: .appOrientation,
-        appFrame: .null,
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
-      ),
-      .appOrientation
-    )
+    // Only a reported viewport carries an orientation: no box, or a box the capture derived from
+    // its own root, cannot anchor a rotation (#2891).
+    for viewport in [SnapshotViewport.missing(reason: .notProvided), .derived(box: appFrame)] {
+      XCTAssertEqual(
+        SnapshotGeometrySpace.space(
+          reportedBySurfaceHost: true,
+          reportedFrame: rotated,
+          inheritedFrom: .appOrientation,
+          viewport: viewport
+        ),
+        .appOrientation
+      )
+    }
     // A square app cannot be told from its own quarter turn, so its geometry is left alone.
     let square = CGRect(x: 0, y: 0, width: 800, height: 800)
     XCTAssertEqual(
@@ -272,8 +256,10 @@ final class CoordinateSpaceTests: XCTestCase {
         reportedBySurfaceHost: true,
         reportedFrame: square,
         inheritedFrom: .appOrientation,
-        appFrame: square,
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        viewport: .reported(
+          box: square,
+          interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        )
       ),
       .appOrientation
     )
@@ -294,18 +280,16 @@ final class CoordinateSpaceTests: XCTestCase {
       reportedBySurfaceHost: true,
       reportedFrame: appFrame,
       inheritedFrom: .appOrientation,
-      appFrame: appFrame,
-      interfaceOrientation: landscape
+      viewport: .reported(box: appFrame, interfaceOrientation: landscape)
     )
     XCTAssertEqual(windowSpace, .appOrientation)
     let surfaceSpace = SnapshotGeometrySpace.space(
       reportedBySurfaceHost: true,
       reportedFrame: turned,
       inheritedFrom: windowSpace,
-      appFrame: appFrame,
-      interfaceOrientation: landscape
+      viewport: .reported(box: appFrame, interfaceOrientation: landscape)
     )
-    XCTAssertEqual(surfaceSpace, .deviceNative(appFrame: appFrame, interfaceOrientation: landscape))
+    XCTAssertEqual(surfaceSpace, deviceNative(appFrame, landscape))
     // Deep in the tree a turned box is content reporting large bounds, not a hosted surface: it keeps
     // the space it inherited rather than rewriting the space below it.
     XCTAssertEqual(
@@ -313,8 +297,7 @@ final class CoordinateSpaceTests: XCTestCase {
         reportedBySurfaceHost: false,
         reportedFrame: turned,
         inheritedFrom: windowSpace,
-        appFrame: appFrame,
-        interfaceOrientation: landscape
+        viewport: .reported(box: appFrame, interfaceOrientation: landscape)
       ),
       .appOrientation
     )
@@ -341,15 +324,14 @@ final class CoordinateSpaceTests: XCTestCase {
         RunnerInterfaceOrientation.landscapeRight, RunnerInterfaceOrientation.landscapeLeft
       ] {
         let expected: SnapshotGeometrySpace = testCase.quarterTurned
-          ? .deviceNative(appFrame: appFrame, interfaceOrientation: interfaceOrientation)
+          ? deviceNative(appFrame, interfaceOrientation)
           : .appOrientation
         XCTAssertEqual(
           SnapshotGeometrySpace.space(
             reportedBySurfaceHost: true,
             reportedFrame: testCase.window.cgRect,
             inheritedFrom: .appOrientation,
-            appFrame: appFrame,
-            interfaceOrientation: interfaceOrientation
+            viewport: .reported(box: appFrame, interfaceOrientation: interfaceOrientation)
           ),
           expected,
           "\(testCase.name) (interfaceOrientation \(interfaceOrientation))"
@@ -369,16 +351,15 @@ final class CoordinateSpaceTests: XCTestCase {
     }
   }
 
+  private func deviceNative(_ appFrame: CGRect, _ interfaceOrientation: Int) -> SnapshotGeometrySpace {
+    guard case .reported(let box, _) = SnapshotViewport.reported(box: appFrame) else {
+      preconditionFailure("\(appFrame) is not a viewport box")
+    }
+    return .deviceNative(appFrame: box, interfaceOrientation: interfaceOrientation)
+  }
+
   private func loadWindowCoordinateSpaceFixture() throws -> WindowCoordinateSpaceFixture {
-    let fixtureURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent() // AgentDeviceSnapshotPresentationTests
-      .deletingLastPathComponent() // Tests
-      .deletingLastPathComponent() // snapshot-presentation
-      .deletingLastPathComponent() // apple
-      .deletingLastPathComponent() // repo root
-      .appendingPathComponent("contracts")
-      .appendingPathComponent("fixtures")
-      .appendingPathComponent("window-coordinate-space.json")
+    let fixtureURL = contractsFixtureURL("window-coordinate-space.json")
     return try JSONDecoder().decode(
       WindowCoordinateSpaceFixture.self,
       from: Data(contentsOf: fixtureURL)
@@ -422,8 +403,7 @@ final class CoordinateSpaceTests: XCTestCase {
       let expected = (namesQuarterTurn && !squareApp) ? testCase.oriented : testCase.native
       let normalized = SnapshotGeometrySpace.normalized(
         nodes: turnedSubtree(app: app, reportedLeaf: testCase.native.cgRect),
-        viewport: .reported(box: app),
-        interfaceOrientation: testCase.interfaceOrientation
+        viewport: .reported(box: app, interfaceOrientation: testCase.interfaceOrientation)
       )
       XCTAssertEqual(normalized.count, 4)
       XCTAssertEqual(normalized[3].rect.cgRect, expected.cgRect, testCase.name)
@@ -444,8 +424,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: .reported(box: app),
-      interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      viewport: .reported(box: app, interfaceOrientation: RunnerInterfaceOrientation.landscapeRight)
     )
     XCTAssertEqual(
       normalized.first { $0.label == "planeBand" }?.rect,
@@ -471,8 +450,7 @@ final class CoordinateSpaceTests: XCTestCase {
     ]
     let normalized = SnapshotGeometrySpace.normalized(
       nodes: acquired,
-      viewport: .reported(box: app),
-      interfaceOrientation: RunnerInterfaceOrientation.unknown
+      viewport: .reported(box: app, interfaceOrientation: RunnerInterfaceOrientation.unknown)
     )
     XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
     XCTAssertEqual(normalized[1].hittable, true)
@@ -480,12 +458,42 @@ final class CoordinateSpaceTests: XCTestCase {
     XCTAssertEqual(normalized[0].hittable, false)
   }
 
+  /// Without a viewport box the pass turns nothing and cannot decide containment, so a child's
+  /// `hittable` is absent rather than declared; a disabled child is still declared `false` (#2891).
+  func testNormalizedWithoutAViewportLeavesContainmentUndecided() {
+    let app = CGRect(x: 0, y: 0, width: 874, height: 402)
+    let acquired = turnedSubtree(app: app, reportedLeaf: CGRect(x: 100, y: 100, width: 40, height: 20))
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .missing(reason: .notProvided)
+    )
+    XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
+    XCTAssertEqual(normalized[0].hittable, false)
+    XCTAssertNil(normalized[3].hittable)
+
+    let disabled = RawAXNode(
+      index: 1, type: "Button", label: nil, identifier: nil, value: nil,
+      rect: SnapshotRect(x: 100, y: 100, width: 40, height: 20),
+      enabled: false, focused: nil, selected: nil, hittable: true,
+      depth: 1, parentIndex: 0, hiddenContentAbove: nil, hiddenContentBelow: nil
+    )
+    XCTAssertEqual(
+      SnapshotGeometrySpace.normalized(
+        nodes: [acquired[0], disabled],
+        viewport: .missing(reason: .notProvided)
+      )[1].hittable,
+      false
+    )
+  }
+
   func testNormalizedOfAnEmptyArrayIsEmpty() {
     XCTAssertEqual(
       SnapshotGeometrySpace.normalized(
         nodes: [],
-        viewport: .reported(box: CGRect(x: 0, y: 0, width: 874, height: 402)),
-        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        viewport: .reported(
+          box: CGRect(x: 0, y: 0, width: 874, height: 402),
+          interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+        )
       ),
       []
     )

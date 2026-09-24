@@ -1,3 +1,4 @@
+import AgentDeviceSnapshotPresentation
 import XCTest
 
 extension RunnerTests {
@@ -120,16 +121,9 @@ extension RunnerTests {
     return navigationBackKeywords.firstIndex { text.contains($0) }
   }
 
-  // isFinite/>0 alone don't reject CGRect.infinite — its origin (~-9e307) is finite.
-  static func isUsableNavigationFrame(_ frame: CGRect) -> Bool {
-    guard frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0 else {
-      return false
-    }
-    return !frame.isInfinite
-  }
-
   static func isTopNavigationControlFrame(_ candidate: CGRect, in window: CGRect) -> Bool {
-    guard isUsableNavigationFrame(candidate), isUsableNavigationFrame(window) else {
+    guard SnapshotGeometry.isPositiveFinite(candidate), SnapshotGeometry.isPositiveFinite(window)
+    else {
       return false
     }
     // Accept the compact navigation/search header band without matching deep content controls.
@@ -138,7 +132,7 @@ extension RunnerTests {
   }
 
   static func topLeadingNavigationFallbackPoint(in frame: CGRect) -> CGPoint? {
-    guard isUsableNavigationFrame(frame) else {
+    guard SnapshotGeometry.isPositiveFinite(frame) else {
       return nil
     }
     // Aim at the standard leading navigation slot, bounded for compact and tablet widths.

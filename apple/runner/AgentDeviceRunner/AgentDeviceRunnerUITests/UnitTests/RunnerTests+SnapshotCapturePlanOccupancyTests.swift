@@ -94,8 +94,7 @@ extension RunnerTests {
     XCTAssertFalse(app.frame.isEmpty)
     // The traversal context reads the viewport under a 1 s cap; a cold first read can overrun it
     // and abandon the wrong block, so pay it here, uncapped.
-    _ = safeSnapshotViewport(app: app)
-    _ = capturedInterfaceOrientation(app: app)
+    _ = safeSnapshotViewport(app: app, readingOrientation: true)
     currentApp = app
     currentBundleId = "com.callstack.agentdevice.runner.tree-capture-test"
     snapshotXCTestPenaltyWarmupExemption.isPending = true

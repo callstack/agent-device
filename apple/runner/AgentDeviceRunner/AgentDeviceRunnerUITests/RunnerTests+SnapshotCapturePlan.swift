@@ -513,8 +513,7 @@ extension RunnerTests {
     let normalizedAcquisition = acquisition.replacingNodes(
       SnapshotGeometrySpace.normalized(
         nodes: acquisition.nodes,
-        viewport: acquisition.viewport,
-        interfaceOrientation: acquisition.interfaceOrientation
+        viewport: acquisition.viewport
       )
     )
 
@@ -641,7 +640,7 @@ extension RunnerTests {
       guard Self.structuralOnlyNodeTypes.contains(node.type) else { return false }
       guard !isRootContainer else { return true }
 
-      let isFullScreenContainer = !node.hittable && rootRects.contains { rootRect in
+      let isFullScreenContainer = node.hittable != true && rootRects.contains { rootRect in
         rootRect.x == node.rect.x && rootRect.y == node.rect.y
           && rootRect.width == node.rect.width && rootRect.height == node.rect.height
       }

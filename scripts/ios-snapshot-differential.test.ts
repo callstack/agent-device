@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import fc from 'fast-check';
-import type { IosViewportEvidence } from '@agent-device/contracts/ios-snapshot';
 import { isGeometricallyActionable, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { resolveViewportEvidence } from '../packages/capture-kit/src/ios-snapshot-engine/invariants.ts';
 import {
   compareDifferentialCases,
   swiftToolchainAvailable,
@@ -144,7 +142,8 @@ type ActionabilityVector = Readonly<{
   enabled: boolean;
   node: ActionabilityRect | ActionabilityUnusableRect;
   viewport: ActionabilityViewport;
-  hittable: boolean;
+  /** `null` is the absent bit. */
+  hittable: boolean | null;
   nodeRectGuardPasses: boolean;
 }>;
 
@@ -164,10 +163,6 @@ const NON_FINITE_RECT: Rect = {
   height: Number.POSITIVE_INFINITY,
 };
 
-/**
- * A row one language skips is a written-down divergence, and a divergence without a reason is how two
- * implementations start disagreeing quietly again: a shared row carries no reason, a skipped row one.
- */
 function declaresItsAsymmetry(vector: ActionabilityVector): boolean {
   const hasReason = typeof vector.asymmetry === 'string' && vector.asymmetry.length > 0;
   return (vector.swift && vector.typescript) !== hasReason;
@@ -209,15 +204,8 @@ function toRect(node: ActionabilityVector['node']): Rect {
   return node;
 }
 
-function missingViewportReason(reason: 'not-provided' | 'invalid'): string {
-  return reason === 'invalid' ? 'invalid-viewport' : 'missing-viewport';
-}
-
-// The Swift twin of these same rows is ActionabilityPolicyTests in
-// apple/snapshot-presentation/Tests, run by `swift test --package-path apple/snapshot-presentation`
-// in this very command. The fold differential above cannot carry them: the host engine refuses to
-// fold a regular presentation at all without a positive finite viewport (`resolveViewportEvidence`),
-// so an unknown viewport has no TypeScript fold outcome to compare a runner outcome against.
+// The Swift twin of these rows is ActionabilityPolicyTests, run by `swift test --package-path
+// apple/snapshot-presentation` in this same command.
 test('the shared hittable predicate agrees with every golden actionability vector', () => {
   for (const vector of readActionabilityVectors().filter((row) => row.typescript)) {
     const node = toRect(vector.node);
@@ -227,15 +215,7 @@ test('the shared hittable predicate agrees with every golden actionability vecto
       `${vector.name}: node-rect guard`,
     );
     if (vector.viewport.kind === 'missing') {
-      const evidence: IosViewportEvidence = vector.viewport;
-      const expectedReason = missingViewportReason(vector.viewport.reason);
-      assert.throws(
-        () => resolveViewportEvidence(evidence),
-        (error: unknown) => (error as { reason?: string }).reason === expectedReason,
-        `${vector.name}: the host declines the capture rather than answer the predicate`,
-      );
-      assert.equal(vector.hittable, false, `${vector.name}: the unknown viewport fails closed`);
-      continue;
+      throw new Error(`${vector.name}: the TypeScript predicate takes a box`);
     }
     assert.equal(
       isGeometricallyActionable(vector.enabled, node, vector.viewport.rect),
@@ -245,19 +225,10 @@ test('the shared hittable predicate agrees with every golden actionability vecto
   }
 });
 
-test('the actionability table covers every viewport kind without a vacuous missing row', () => {
+test('the TypeScript rows cover every viewport kind that carries a box', () => {
   const vectors = readActionabilityVectors().filter((row) => row.typescript);
   assert.deepEqual([...new Set(vectors.map((vector) => vector.viewport.kind))].sort(), [
     'derived',
-    'missing',
     'reported',
   ]);
-  for (const vector of vectors) {
-    if (vector.viewport.kind !== 'missing') continue;
-    assert.equal(
-      vector.nodeRectGuardPasses,
-      true,
-      `${vector.name}: a missing-viewport row needs a node the guard accepts`,
-    );
-  }
 });
