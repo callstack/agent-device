@@ -217,10 +217,34 @@ test('a cancelled caller leaves discovery running for the next capture', async (
   await withAppleToolProvider(fixture.provider, async () => {
     const controller = new AbortController();
     const cancelled = fixture.resolve(ios, app, controller.signal);
-    controller.abort(new Error('request-ended'));
-    await expect(cancelled).rejects.toThrow('request-ended');
+    const reason = new Error('request-ended');
+    controller.abort(reason);
+    // The caller spent its time waiting on discovery, so its cancellation names that readiness
+    // work (#2343) and keeps the caller's own reason as the cause.
+    await expect(cancelled).rejects.toMatchObject({
+      details: { reason: 'request_canceled', readinessPhase: 'target-discovery' },
+      cause: reason,
+    });
 
     release();
+    expect(await fixture.resolve(ios, app, signal())).toMatchObject({ pid: 42 });
+    expect(fixture.discoveryCount()).toBe(1);
+  });
+});
+
+test('a cancelled re-check of a known target keeps it and names no readiness work', async () => {
+  const fixture = targetFixture();
+  await withAppleToolProvider(fixture.provider, async () => {
+    await fixture.resolve(ios, app, signal());
+    const controller = new AbortController();
+    const reason = new Error('wait-deadline');
+    fixture.runCommand.mockImplementationOnce(async () => {
+      controller.abort(reason);
+      return { stdout: '', stderr: '', exitCode: 1 };
+    });
+
+    await expect(fixture.resolve(ios, app, controller.signal)).rejects.toBe(reason);
+
     expect(await fixture.resolve(ios, app, signal())).toMatchObject({ pid: 42 });
     expect(fixture.discoveryCount()).toBe(1);
   });
