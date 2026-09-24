@@ -1,52 +1,37 @@
-import { expect, test, vi } from 'vitest';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { expect, test } from 'vitest';
+import './__tests__/test-utils/android-host-test-setup.ts';
 import type { Interactor, SnapshotOptions } from '@agent-device/contracts/interactor-types';
-import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import {
-  ANDROID_LAUNCH_OBSERVATION_WINDOW_MS,
-  createAndroidLaunchObservationProbe,
-} from './launch-observation.ts';
+import { mkdtempForTest } from './__tests__/test-utils/tmp-dir.ts';
+import { ANDROID_LAUNCH_SETTLE_WINDOW_MS, observeAndroidLaunch } from './launch-observation.ts';
 import { androidHelperContentUnavailableError } from './snapshot.ts';
+import {
+  ensureAndroidSnapshotHelper,
+  resetAndroidSnapshotHelperInstallCache,
+} from './snapshot-helper-install.ts';
 
-type ProbeFixture = Readonly<{
+type ObserveFixture = Readonly<{
   snapshotOptions: SnapshotOptions[];
-  sleeps: number[];
-  /** Ends every pending clock sleep, as elapsed time would. */
-  elapse: () => void;
-  observe: (
-    signal?: AbortSignal,
-  ) => ReturnType<ReturnType<typeof createAndroidLaunchObservationProbe>['awaitObservable']>;
+  observe: (signal?: AbortSignal) => ReturnType<typeof observeAndroidLaunch>;
 }>;
 
-function createProbe(snapshot: (options: SnapshotOptions) => Promise<unknown>): ProbeFixture {
+function createObservation(
+  snapshot: (options: SnapshotOptions) => Promise<unknown>,
+): ObserveFixture {
   const snapshotOptions: SnapshotOptions[] = [];
-  const sleeps: number[] = [];
-  const pendingSleeps: Array<() => void> = [];
-  const clock = {
-    now: () => Date.now(),
-    sleep: async (ms: number, signal?: AbortSignal) => {
-      sleeps.push(ms);
-      await new Promise<void>((resolve, reject) => {
-        pendingSleeps.push(resolve);
-        signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
-    },
-  } as unknown as PlatformRuntimeHost['clock'];
   const interactor = {
     snapshot: async (options: SnapshotOptions) => {
       snapshotOptions.push(options);
       return await snapshot(options);
     },
   } as unknown as Pick<Interactor, 'snapshot'>;
-  const probe = createAndroidLaunchObservationProbe({ clock });
   return {
     snapshotOptions,
-    sleeps,
-    elapse: () => {
-      for (const resolve of pendingSleeps.splice(0)) resolve();
-    },
     observe: async (signal = new AbortController().signal) =>
-      await probe.awaitObservable(interactor, 'com.example.app', signal),
+      await observeAndroidLaunch(interactor, 'com.example.app', signal),
   };
 }
 
@@ -72,89 +57,111 @@ function contentVerdict(): AppError {
   );
 }
 
-/** A capture that ends only when its signal aborts, as a stuck helper call does. */
-async function captureUntilAborted(options: SnapshotOptions): Promise<never> {
-  return await new Promise<never>((_resolve, reject) => {
-    if (options.signal?.aborted) reject(options.signal.reason);
-    options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-      once: true,
+/** What a transient capture's install step throws on a device without the current helper. */
+async function helperNotCurrentError(): Promise<unknown> {
+  resetAndroidSnapshotHelperInstallCache();
+  const apkPath = path.join(await mkdtempForTest('launch-observation-helper-'), 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  const sha256 = crypto.createHash('sha256').update('helper-apk').digest('hex');
+  try {
+    await ensureAndroidSnapshotHelper({
+      adb: async () => ({ exitCode: 1, stdout: '', stderr: 'not found' }),
+      artifact: {
+        apkPath,
+        manifest: {
+          name: 'android-snapshot-helper',
+          version: '0.13.3',
+          apkUrl: null,
+          sha256,
+          packageName: 'com.callstack.agentdevice.snapshothelper',
+          versionCode: 13003,
+          instrumentationRunner:
+            'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
+          minSdk: 23,
+          targetSdk: 36,
+          outputFormat: 'uiautomator-xml',
+          statusProtocol: 'android-snapshot-helper-v1',
+        },
+      },
+      deviceKey: 'android:emulator-5554',
+      installPolicy: 'current-only',
     });
-  });
+  } catch (error) {
+    return error;
+  }
+  throw new Error('a current-only check on a device without the helper must reject');
 }
 
 test('a readable launched app is observable through one transient capture', async () => {
-  const probe = createProbe(async () => ({ nodes: [] }));
+  const observation = createObservation(async () => ({ nodes: [] }));
+  const startedAt = Date.now();
 
-  await expect(probe.observe()).resolves.toEqual({ observation: 'observable' });
-  expect(probe.snapshotOptions).toHaveLength(1);
-  expect(probe.snapshotOptions[0]).toMatchObject({
-    appBundleId: 'com.example.app',
-    transient: true,
-  });
+  await expect(observation.observe()).resolves.toEqual({ observation: 'observable' });
+  expect(observation.snapshotOptions).toHaveLength(1);
+  const settleBy = observation.snapshotOptions[0]?.transient?.settleBy ?? 0;
+  expect(settleBy - startedAt).toBeGreaterThanOrEqual(ANDROID_LAUNCH_SETTLE_WINDOW_MS);
+  expect(settleBy - Date.now()).toBeLessThanOrEqual(ANDROID_LAUNCH_SETTLE_WINDOW_MS);
+});
+
+test('the capture runs under the caller signal alone, so the window never cancels it', async () => {
+  const observation = createObservation(async () => ({ nodes: [] }));
+  const signal = new AbortController().signal;
+
+  await observation.observe(signal);
+
+  expect(observation.snapshotOptions[0]?.signal).toBe(signal);
 });
 
 test('a content verdict after the capture re-captures is unobservable', async () => {
-  const probe = createProbe(async () => {
+  const observation = createObservation(async () => {
     throw contentVerdict();
   });
 
-  await expect(probe.observe()).resolves.toEqual({ observation: 'unobservable' });
+  await expect(observation.observe()).resolves.toEqual({ observation: 'unobservable' });
 });
 
 test('a system surface covering the launched app is unobservable', async () => {
-  const probe = createProbe(async () => ({
+  const observation = createObservation(async () => ({
     nodes: [],
     androidSnapshot: { backend: 'android-helper', systemSurfaceOnly: true },
   }));
 
-  await expect(probe.observe()).resolves.toEqual({ observation: 'unobservable' });
+  await expect(observation.observe()).resolves.toEqual({ observation: 'unobservable' });
 });
 
 test('a capture mechanism failure is a failed probe with its typed reason', async () => {
-  const probe = createProbe(async () => {
+  const observation = createObservation(async () => {
     throw new AppError('COMMAND_FAILED', 'Android snapshot helper failed: accessibility timeout', {
       androidSnapshotHelperFailureReason: 'Android snapshot helper failed: accessibility timeout',
       androidCaptureFailureReason: 'accessibility-timeout',
     });
   });
 
-  await expect(probe.observe()).resolves.toEqual({
+  await expect(observation.observe()).resolves.toEqual({
     observation: 'probe-failed',
     failure: { code: 'COMMAND_FAILED', reason: 'accessibility-timeout' },
   });
 });
 
-test('a helper that is not installed at the current version is a failed probe', async () => {
-  const probe = createProbe(async () => {
-    throw new AppError('COMMAND_FAILED', 'Android snapshot helper is not installed', {
-      reason: 'android-snapshot-helper-not-current',
-    });
+test('a device without the current helper is a failed probe', async () => {
+  const notCurrent = await helperNotCurrentError();
+  const observation = createObservation(async () => {
+    throw notCurrent;
   });
 
-  await expect(probe.observe()).resolves.toEqual({
+  await expect(observation.observe()).resolves.toEqual({
     observation: 'probe-failed',
     failure: { code: 'COMMAND_FAILED', reason: 'android-snapshot-helper-not-current' },
   });
 });
 
-test('a capture that outlasts the fixed window is abandoned as unobservable', async () => {
-  const probe = createProbe(captureUntilAborted);
-
-  const observing = probe.observe();
-  await vi.waitFor(() => expect(probe.sleeps).toEqual([ANDROID_LAUNCH_OBSERVATION_WINDOW_MS]));
-  probe.elapse();
-
-  await expect(observing).resolves.toEqual({ observation: 'unobservable' });
-  expect(probe.snapshotOptions[0]?.signal?.aborted).toBe(true);
-});
-
 test('a cancelled open rejects with its cancellation, not an observation', async () => {
   const controller = new AbortController();
   const canceled = createRequestCanceledError();
-  const probe = createProbe(async (options) => {
+  const observation = createObservation(async () => {
     controller.abort(canceled);
-    return await captureUntilAborted(options);
+    throw canceled;
   });
 
-  await expect(probe.observe(controller.signal)).rejects.toBe(canceled);
+  await expect(observation.observe(controller.signal)).rejects.toBe(canceled);
 });

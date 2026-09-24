@@ -95,20 +95,19 @@ test('a device-only session releases the helper after fill and scroll', async ()
   });
 });
 
-test('a transient snapshot borrows the helper and installs none', async () => {
+test('a transient snapshot reaches the Android capture with its settle deadline', async () => {
   snapshotAndroidMock.mockResolvedValue(makeAndroidSnapshotCapture([]));
 
   await createAndroidInteractor(device).snapshot({
     appBundleId: 'com.example.app',
-    transient: true,
+    transient: { settleBy: 1_000 },
   });
 
   expect(snapshotAndroidMock).toHaveBeenCalledWith(
     device,
     expect.objectContaining({
       appBundleId: 'com.example.app',
-      helperSessionScope: 'borrow',
-      helperInstallPolicy: 'current-only',
+      transient: { settleBy: 1_000 },
     }),
   );
 });

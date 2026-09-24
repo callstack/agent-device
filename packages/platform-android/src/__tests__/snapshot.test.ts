@@ -538,7 +538,7 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
   );
 });
 
-test('a borrowed capture releases a helper session it had to start', async () => {
+test('a transient capture releases a helper session it had to start', async () => {
   const adbCalls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
@@ -551,7 +551,7 @@ test('a borrowed capture releases a helper session it had to start', async () =>
   await snapshotAndroid(device, {
     helperAdb: provider,
     helperArtifact,
-    helperSessionScope: 'borrow',
+    transient: openSettleWindow(),
   });
 
   assert.equal(spawnArgs.length, 1);
@@ -562,7 +562,7 @@ test('a borrowed capture releases a helper session it had to start', async () =>
   );
 });
 
-test('a borrowed capture leaves a warm daemon-session helper running', async () => {
+test('a transient capture leaves a warm daemon-session helper running', async () => {
   const adbCalls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
@@ -580,7 +580,7 @@ test('a borrowed capture leaves a warm daemon-session helper running', async () 
   const borrowed = await snapshotAndroid(device, {
     helperAdb: provider,
     helperArtifact,
-    helperSessionScope: 'borrow',
+    transient: openSettleWindow(),
   });
 
   assert.equal(borrowed.androidSnapshot.helperSessionReused, true);
@@ -662,7 +662,7 @@ test('snapshotAndroid retires content-invalid daemon helper before the next requ
   );
 });
 
-test('a borrowed capture reports its content verdict without retiring the warm helper', async () => {
+test('a transient capture reports its content verdict without retiring the warm helper', async () => {
   const adbCalls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
@@ -682,13 +682,97 @@ test('a borrowed capture reports its content verdict without retiring the warm h
   });
 
   await assert.rejects(
-    snapshotAndroid(device, { helperAdb: provider, helperArtifact, helperSessionScope: 'borrow' }),
+    snapshotAndroid(device, { helperAdb: provider, helperArtifact, transient: openSettleWindow() }),
     (error: unknown) => isUnreadableCaptureContentError(error),
   );
 
   assert.equal(processes[0]?.exitCode, null, 'the session helper is still running');
   assert.equal(adbCalls.some(isHelperRuntimeReset), false);
   assert.equal(spawnArgs.length, 1);
+});
+
+test('a settle window that passes during the helper start never cancels the start', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionXml: () => androidSystemWindowOnlyXml(),
+    sessionReadyDelayMs: 150,
+  });
+
+  await assert.rejects(
+    snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact,
+      transient: { settleBy: Date.now() + 30 },
+    }),
+    (error: unknown) =>
+      isUnreadableCaptureContentError(error) && (error as AppError).details?.attempts === 1,
+  );
+
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(processes[0]?.killed, false, 'the started helper was not signalled');
+  assert.equal(processes[0]?.exitCode, 0, 'the started helper quit on its own');
+  assert.equal(adbCalls.some(isHelperRuntimeReset), false);
+});
+
+test('a settle window that passes during a warm session capture leaves the session running', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionXml: (_sessionIndex, snapshotCount) =>
+      snapshotCount === 1
+        ? '<hierarchy><node text="warm helper" bounds="[0,0][10,10]" /></hierarchy>'
+        : androidSystemWindowOnlyXml(),
+    captureResponseDelayMs: (snapshotCount) => (snapshotCount === 1 ? 0 : 150),
+  });
+  await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+
+  await assert.rejects(
+    snapshotAndroid(device, {
+      helperAdb: provider,
+      helperArtifact,
+      transient: { settleBy: Date.now() + 30 },
+    }),
+    (error: unknown) =>
+      isUnreadableCaptureContentError(error) && (error as AppError).details?.attempts === 1,
+  );
+
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(processes[0]?.killed, false);
+  assert.equal(processes[0]?.exitCode, null, 'the session helper is still running');
+  assert.equal(adbCalls.some(isHelperRuntimeReset), false);
+});
+
+test('a transient capture on a device without the current helper installs nothing', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const helperAdb: AndroidAdbExecutor = async (args) => {
+    adbCalls.push(args);
+    if (isHelperVersionProbe(args)) return { exitCode: 1, stdout: '', stderr: 'not found' };
+    return { exitCode: 0, stdout: '', stderr: '' };
+  };
+
+  await assert.rejects(
+    snapshotAndroid(device, { helperAdb, helperArtifact, transient: openSettleWindow() }),
+    (error: unknown) =>
+      (error as AppError).details?.reason === 'android-snapshot-helper-not-current',
+  );
+
+  assert.equal(
+    adbCalls.some((args) => args.includes('install') || args.includes('instrument')),
+    false,
+  );
 });
 
 test('content-invalid daemon helper retirement force-stops the helper runtime', async () => {
@@ -1514,3 +1598,7 @@ test('buildUiHierarchySnapshot derives hidden content hints from can-scroll-* on
   assert.equal(scrollArea.hiddenContentAbove, true);
   assert.equal(scrollArea.hiddenContentBelow, true);
 });
+
+function openSettleWindow(): { settleBy: number } {
+  return { settleBy: Date.now() + 60_000 };
+}

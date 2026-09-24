@@ -13,7 +13,7 @@ import {
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import type { AndroidLaunchObservationPort } from './launch-observation.ts';
+import { observeAndroidLaunch } from './launch-observation.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -38,14 +38,13 @@ type AndroidLifecycleParams = Readonly<{
   host: AndroidLifecycleHost;
   device: DeviceInfo;
   signal: AbortSignal;
-  launchObservation: AndroidLaunchObservationPort;
 }>;
 
 /** Android owns lifecycle sequencing, including local adb-backed hints and durable test-IME state. */
 export function bindAndroidApplicationLifecycle(
   params: AndroidLifecycleParams,
 ): ApplicationLifecycleRuntimeOperations {
-  const { host, device, signal, launchObservation } = params;
+  const { host, device, signal } = params;
   const binding = bindLocalApplicationLifecycleInteractor({
     device,
     signal,
@@ -58,8 +57,7 @@ export function bindAndroidApplicationLifecycle(
       await ensureAndroidReady(host, device, { headless: false }, signal);
       void input;
     },
-    openApplication: async (input) =>
-      await openAndroidApplication(host, binding, launchObservation, input),
+    openApplication: async (input) => await openAndroidApplication(host, binding, input),
     applyRuntimeHints: async (input) =>
       await host.androidApplications.applyRuntimeHints(device, input),
     clearRuntimeHints: async (input) =>
@@ -92,7 +90,6 @@ export function bindAndroidApplicationLifecycle(
 async function openAndroidApplication(
   host: AndroidLifecycleHost,
   binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
-  launchObservation: AndroidLaunchObservationPort,
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
@@ -171,7 +168,7 @@ async function openAndroidApplication(
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);
   }
   const settleStartedAtMs = Date.now();
-  Object.assign(timing, await observeOpenedApp(binding, launchObservation, input, appBundleId));
+  Object.assign(timing, await observeOpenedApp(binding, input, appBundleId));
   timing.postOpenSettleDurationMs = elapsed(settleStartedAtMs);
   return { appBundleId, timing };
 }
@@ -179,13 +176,12 @@ async function openAndroidApplication(
 /** A URL or deep-link open has no launched app of its own to observe, so it reports nothing. */
 async function observeOpenedApp(
   binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
-  launchObservation: AndroidLaunchObservationPort,
   input: OpenApplicationInput,
   appBundleId: string | undefined,
 ): Promise<Pick<OpenApplicationTiming, 'postOpenObservation' | 'postOpenObservationFailure'>> {
   if (!input.target || isDeepLinkTarget(input.target)) return {};
   if (!appBundleId) return { postOpenObservation: 'app-unidentified' };
-  const launch = await launchObservation.awaitObservable(
+  const launch = await observeAndroidLaunch(
     await binding.resolveInteractor(input.execution, appBundleId),
     appBundleId,
     binding.signal,

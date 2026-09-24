@@ -55,7 +55,6 @@ import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import { readAndroidAppStateWithExecutor } from './app-state.ts';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
-import { createAndroidLaunchObservationProbe } from './launch-observation.ts';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import {
   androidAppDeploymentFacts,
@@ -527,7 +526,6 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
               host,
               device: request.device,
               signal: request.scope.signal,
-              launchObservation: createAndroidLaunchObservationProbe({ clock: host.clock }),
             }),
             facts.operations,
           ),

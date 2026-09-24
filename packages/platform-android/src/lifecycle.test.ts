@@ -4,13 +4,9 @@ import type {
   OpenApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { Interactor, SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createRequestCanceledError } from '@agent-device/kernel/errors';
-import type {
-  AndroidLaunchObservation,
-  AndroidLaunchObservationPort,
-} from './launch-observation.ts';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
 
 const device: DeviceInfo = {
@@ -33,7 +29,7 @@ type LifecycleFixture = Readonly<{
 
 function createLifecycle(
   params: Readonly<{
-    observe?: (appBundleId: string, signal: AbortSignal) => Promise<AndroidLaunchObservation>;
+    snapshot?: (options: SnapshotOptions) => Promise<unknown>;
     openedAppBundleId?: string;
     signal?: AbortSignal;
   }> = {},
@@ -48,14 +44,11 @@ function createLifecycle(
         openDevice: async () => {},
         close: async () => {},
         setSetting: async () => {},
+        snapshot: async (options: SnapshotOptions) => {
+          calls.push(`observe:${options.appBundleId}`);
+          return await (params.snapshot?.(options) ?? Promise.resolve({ nodes: [] }));
+        },
       }) as unknown as Interactor,
-  };
-  const launchObservation: AndroidLaunchObservationPort = {
-    awaitObservable: async (_interactor, appBundleId, signal) => {
-      calls.push(`observe:${appBundleId}`);
-      return await (params.observe?.(appBundleId, signal) ??
-        Promise.resolve({ observation: 'observable' as const }));
-    },
   };
   const host = {
     localInteractors,
@@ -91,7 +84,6 @@ function createLifecycle(
     host,
     device,
     signal: params.signal ?? new AbortController().signal,
-    launchObservation,
   });
   return { calls, lifecycle };
 }
@@ -133,13 +125,15 @@ test('preserves a runtime launch URL duration after the admitted Android follow-
 });
 
 test('an Android app open returns only after the launched app observation settles', async () => {
-  let settleObservation: (observation: AndroidLaunchObservation) => void = () => {};
+  let finishCapture: () => void = () => {};
   const { calls, lifecycle } = createLifecycle({
     openedAppBundleId: 'com.example.opened',
-    observe: async () =>
-      await new Promise<AndroidLaunchObservation>((resolve) => {
-        settleObservation = resolve;
-      }),
+    snapshot: async () => {
+      await new Promise<void>((resolve) => {
+        finishCapture = resolve;
+      });
+      return { nodes: [], androidSnapshot: { backend: 'android-helper', systemSurfaceOnly: true } };
+    },
   });
 
   let settled = false;
@@ -150,7 +144,7 @@ test('an Android app open returns only after the launched app observation settle
   await vi.waitFor(() => expect(calls).toContain('observe:com.example.opened'));
   await Promise.resolve();
   expect(settled).toBe(false);
-  settleObservation({ observation: 'unobservable' });
+  finishCapture();
   const outcome = await opening;
 
   expect(calls).toEqual(['open:com.example.app', 'observe:com.example.opened']);
@@ -162,10 +156,11 @@ test('an Android app open returns only after the launched app observation settle
 
 test('a failed launch probe reports its typed failure and the open still succeeds', async () => {
   const { lifecycle } = createLifecycle({
-    observe: async () => ({
-      observation: 'probe-failed',
-      failure: { code: 'COMMAND_FAILED', reason: 'accessibility-timeout' },
-    }),
+    snapshot: async () => {
+      throw new AppError('COMMAND_FAILED', 'Android snapshot helper failed', {
+        androidCaptureFailureReason: 'accessibility-timeout',
+      });
+    },
   });
 
   const outcome = await lifecycle.openApplication(openInput({ relaunch: true }));
@@ -177,13 +172,14 @@ test('a failed launch probe reports its typed failure and the open still succeed
   });
 });
 
-test('a cancelled open rejects with the cancellation the observation raised', async () => {
+test('a cancelled open rejects with its cancellation', async () => {
   const controller = new AbortController();
   const canceled = createRequestCanceledError();
   const { lifecycle } = createLifecycle({
     signal: controller.signal,
-    observe: async (_appBundleId, signal) => {
-      expect(signal).toBe(controller.signal);
+    snapshot: async (options) => {
+      expect(options.signal).toBe(controller.signal);
+      controller.abort(canceled);
       throw canceled;
     },
   });

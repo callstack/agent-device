@@ -62,6 +62,10 @@ export type PersistentSnapshotHelperProviderOptions = {
   oneShotXml?: string;
   /** Make the device-side stop fail the way an unhealthy transport answers. */
   runtimeStopFailure?: boolean;
+  /** How long a started session takes to report ready. */
+  sessionReadyDelayMs?: number;
+  /** How long a session takes to answer its `snapshotCount`th capture. */
+  captureResponseDelayMs?: (snapshotCount: number) => number;
 };
 
 export function createPersistentSnapshotHelperProvider(
@@ -104,36 +108,40 @@ export function createPersistentSnapshotHelperProvider(
           const body = options.sessionXml
             ? options.sessionXml(sessionIndex, snapshotCount)
             : `<hierarchy><node text="persistent helper snapshot ${snapshotCount}" bounds="[0,0][10,10]" /></hierarchy>`;
-          socket.end(
-            sessionResponse({
-              requestId,
-              body,
-              metadata: {
-                waitForIdleTimeoutMs: '500',
-                waitForIdleQuietMs: '100',
-                timeoutMs: '5000',
-                maxDepth: '128',
-                maxNodes: '5000',
-                rootPresent: 'true',
-                captureMode: 'interactive-windows',
-                windowCount: '1',
-                nodeCount: '1',
-                truncated: 'false',
-                elapsedMs: '8',
-              },
-            }),
-          );
+          const answer = () =>
+            socket.end(
+              sessionResponse({
+                requestId,
+                body,
+                metadata: {
+                  waitForIdleTimeoutMs: '500',
+                  waitForIdleQuietMs: '100',
+                  timeoutMs: '5000',
+                  maxDepth: '128',
+                  maxNodes: '5000',
+                  rootPresent: 'true',
+                  captureMode: 'interactive-windows',
+                  windowCount: '1',
+                  nodeCount: '1',
+                  truncated: 'false',
+                  elapsedMs: '8',
+                },
+              }),
+            );
+          setTimeout(answer, options.captureResponseDelayMs?.(snapshotCount) ?? 0);
         });
       });
       server.listen(port, '127.0.0.1', () => {
-        process.stdout.write(
-          [
-            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-            'INSTRUMENTATION_STATUS: sessionReady=true',
-            'INSTRUMENTATION_STATUS_CODE: 2',
-            '',
-          ].join('\n'),
-        );
+        setTimeout(() => {
+          process.stdout.write(
+            [
+              'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+              'INSTRUMENTATION_STATUS: sessionReady=true',
+              'INSTRUMENTATION_STATUS_CODE: 2',
+              '',
+            ].join('\n'),
+          );
+        }, options.sessionReadyDelayMs ?? 0);
       });
       process.onKill = () => {
         server.close(() => process.emitExit(0, null));
