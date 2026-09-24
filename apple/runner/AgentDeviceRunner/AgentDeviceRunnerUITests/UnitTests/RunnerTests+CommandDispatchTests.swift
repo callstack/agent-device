@@ -88,10 +88,11 @@ extension RunnerTests {
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
   }
 
-  /// A command hosted by the surface that already has focus is the activation bypass itself: it
-  /// resolves its target as it stands, leaves a stopped app stopped, and binds nothing, so the next
-  /// read of that app is refused instead of answered by a bare launch (#2890).
-  func testFocusedSurfaceCommandLeavesAStoppedAppStoppedAndUnbound() throws {
+  /// A `.presentedSurface` command is the activation bypass itself: it resolves its target as it
+  /// stands, leaves a stopped app stopped, and binds nothing, so the next read of that app is refused
+  /// instead of answered by a bare launch (#2890). This is where the table's launch policy is proved
+  /// on the platform that serves surfaces in place.
+  func testPresentedSurfaceCommandLeavesAStoppedAppStoppedAndUnbound() throws {
     let unstarted = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
     defer { invalidateCachedTarget(reason: "unit_test_cleanup") }
     for request in [
@@ -502,7 +503,7 @@ extension RunnerTests {
       drainedCalls += 1
       return recovered
     }
-    XCTAssertEqual(drainedCalls, 2, "with the channel free the read-only retry runs once")
+    XCTAssertEqual(drainedCalls, 2, "with the channel free the session-loss retry runs once")
   }
 
   private func setAbandonedMainThreadWork(_ count: Int) {
