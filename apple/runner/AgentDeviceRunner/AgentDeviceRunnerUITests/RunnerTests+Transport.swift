@@ -45,9 +45,9 @@ extension RunnerTests {
     _ result: (data: Data, shouldFinish: Bool),
     over connection: NWConnection
   ) {
-    sendResponse(result.data, over: connection) {
+    sendResponse(result.data, over: connection) { [weak self] in
       if result.shouldFinish {
-        self.finish()
+        self?.finish()
       }
     }
   }
