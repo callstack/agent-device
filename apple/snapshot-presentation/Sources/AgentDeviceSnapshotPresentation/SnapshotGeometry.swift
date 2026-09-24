@@ -2,12 +2,15 @@ import Foundation
 import CoreGraphics
 
 public enum SnapshotGeometry {
-  /// Twin of `isPositiveFiniteRect` in `packages/kernel/src/rect.ts`. `CGRect.infinite` is built
-  /// from finite components, so it is refused by identity.
+  /// Twin of `isPositiveFiniteRect` in `packages/kernel/src/rect.ts`, and the one place the
+  /// `hittable` rule asks whether a box may be plotted or measured (#2891). Three refusals, each
+  /// reachable by a different input: a non-finite component, a finite box wide enough to overflow
+  /// its own right or bottom edge, and `CGRect.infinite`, which is built of finite components and
+  /// finite extents and so is refused by identity alone.
   public static func isPositiveFinite(_ rect: CGRect) -> Bool {
     !rect.isInfinite
-      && rect.origin.x.isFinite && rect.origin.y.isFinite
-      && rect.size.width.isFinite && rect.size.height.isFinite
+      && rect.minX.isFinite && rect.minY.isFinite
+      && rect.maxX.isFinite && rect.maxY.isFinite
       && rect.size.width > 0 && rect.size.height > 0
   }
 

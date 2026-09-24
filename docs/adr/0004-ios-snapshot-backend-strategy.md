@@ -309,7 +309,10 @@ Inside the runner the viewport is a declared fact, not a rectangle: `SnapshotVie
 `IosViewportEvidence` (#2891). Only `reported` carries an orientation, so only it can anchor a
 rotation in `SnapshotGeometrySpace`. With no box the clip skips, the cumulative-clip invariant has no
 root clip to violate, and a node whose actionability depends on containment has no `hittable` on the
-wire, as on the host bridge; disabled or degenerate nodes stay declared `false`. The runner route's
+wire, as on the host bridge; disabled or degenerate nodes stay declared `false`. A rectangle becomes a
+`Box` only through the initializer that checks it, and the shared guard refuses `CGRect.infinite` by
+identity — its components and its extents are all finite, so no comparison would have caught the
+value a failed read leaves behind. The runner route's
 host evidence comes from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in
 `packages/capture-kit/src/ios-snapshot-acquisition.ts`). `contracts/fixtures/snapshot-actionability-policy.json`
 pins the predicate for shapes the 320x240 fold fixture cannot reach.

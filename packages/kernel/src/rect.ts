@@ -1,13 +1,43 @@
 import type { Rect } from './snapshot.ts';
 
-/** Twin of `SnapshotGeometry.isPositiveFinite` on the runner (#2891). */
-export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
-  return Boolean(
-    rect &&
-    [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
-    rect.width > 0 &&
-    rect.height > 0,
+/**
+ * CoreGraphics' `CGRectInfinite`, spelled in the four doubles Apple builds it from. This is what a
+ * failed viewport or frame read looks like once it has crossed a JSON wire: every component of it
+ * is finite, and so is every extent, and its center is `(0, 0)` (#2891).
+ */
+const CG_RECT_INFINITE: Rect = {
+  x: -Number.MAX_VALUE / 2,
+  y: -Number.MAX_VALUE / 2,
+  width: Number.MAX_VALUE,
+  height: Number.MAX_VALUE,
+};
+
+function isCGRectInfinite(rect: Rect): boolean {
+  return (
+    rect.x === CG_RECT_INFINITE.x &&
+    rect.y === CG_RECT_INFINITE.y &&
+    rect.width === CG_RECT_INFINITE.width &&
+    rect.height === CG_RECT_INFINITE.height
   );
+}
+
+/**
+ * Twin of `SnapshotGeometry.isPositiveFinite` on the runner, and the one place a box becomes a fact
+ * this rule may plot or measure (#2891). Three refusals, each reachable by a different input: a
+ * non-finite component; a box whose finite components still overflow its own right or bottom edge;
+ * and `CGRect.infinite`, which the two numeric checks let through and which the Swift twin refuses
+ * with `!rect.isInfinite`. The sentinel is refused by value here rather than in one producer's
+ * parser because every TypeScript producer — the simulator AX bridge, the runner wire, a remote
+ * provider's tree — feeds this one guard, and a viewport box that survives it makes every node
+ * center on the screen land inside it.
+ */
+export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
+  if (!rect) return false;
+  const { x, y, width, height } = rect;
+  if (![x, y, width, height].every(Number.isFinite)) return false;
+  if (!Number.isFinite(x + width) || !Number.isFinite(y + height)) return false;
+  if (width <= 0 || height <= 0) return false;
+  return !isCGRectInfinite(rect);
 }
 
 export function rectContains(container: Rect, nested: Rect): boolean {
