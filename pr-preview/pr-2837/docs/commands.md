@@ -831,6 +831,15 @@ state the session app was found in and why the runner activated it:
   distinction matters, spend a `snapshot -i` and read its disclosure.
 - The warning is appended; staleness, snapshot-quality, and occluding-system-surface warnings that
   came before it are never replaced.
+- **No read launches a stopped app.** A command that only observes the app (`snapshot`, `wait`,
+  `is`, `get`, a reading `find`) repairs a backgrounded session app, but never launches one that is
+  not running — and neither does an interaction's leading read: the viewport read a `gesture` starts
+  with, or the capture that resolves a selector `click`/`fill`. A bare launch would start the app
+  without the URL of a launch that SpringBoard is still holding behind an "Open in …?" confirmation.
+  A refused command answers `COMMAND_FAILED`, `details.runnerErrorCode: "APP_NOT_RUNNING"` and
+  `retriable: true`, and `wait` keeps polling through it. Answer the prompt with `alert accept`, or
+  relaunch with `open`. Only an interaction that mutates without a leading read — `press`, a
+  coordinate `fill`, `swipe`, `scroll`, a hardware key — still brings a stopped app up.
 
 ## Clipboard
 
