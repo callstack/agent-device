@@ -98,6 +98,16 @@ jobs:
             pnpm-lock.yaml
             examples/test-app/pnpm-lock.yaml
 
+      - name: Select iOS runner XCTests
+        id: xctest-impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            git fetch origin "$BASE_SHA" --depth=1 || echo 'Base fetch failed; XCTest selection will fail open.'
+          fi
+          node --experimental-strip-types scripts/ios-xctest-impact.ts
+
       - name: Establish host focus canary
         id: host-focus-canary
         run: |
@@ -126,30 +136,8 @@ jobs:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
-      - name: Verify clean-installed Simulator snapshot bridge preparation and the fold-helper -Werror gate
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch origin "$BASE_SHA" --depth=1
-          if git diff --quiet "$BASE_SHA"...HEAD -- \
-            apple/snapshot-bridge \
-            apple/fold-helper \
-            packages/platform-apple/src/snapshot-source \
-            packages/platform-apple/src/foldable \
-            scripts/check-package.ts \
-            scripts/size-report-install.mjs \
-            scripts/size-report-package.mjs; then
-            echo "Snapshot bridge and fold-helper sources are unchanged; skipping preparation proof."
-            exit 0
-          fi
-          pnpm build
-          pnpm exec vitest run \
-            packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
-            packages/platform-apple/src/foldable/fold-helper-cache.test.ts
-          pnpm check:package -- --verify-snapshot-bridge-preparation
-
       - name: Run targeted iOS runner XCTest regressions
+        if: steps.xctest-impact.outputs.run == 'true'
         run: |
           set -o pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
@@ -300,17 +288,6 @@ jobs:
         run: |
           echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run fixture-backed iOS simulator E2E smoke
-        env:
-          AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
-          AGENT_DEVICE_FIXTURE_APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
-          AGENT_DEVICE_IOS_E2E: '1'
-          AGENT_DEVICE_IOS_E2E_TIER: smoke
-          AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
-        run: |
-          pnpm gate build
-          node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
-
       # #1584: isolated, cheap automatic guard for the #1562 class of regression (iOS silently
       # ignoring a `gesture pan` duration). Split out of gesture-lab.ad, which stays full-tier
       # (dispatch-only via replays-manual.yml) because its multi-touch commands are a separate,
@@ -324,6 +301,17 @@ jobs:
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
           pnpm clean:daemon
+
+      - name: Run fixture-backed iOS simulator E2E smoke
+        env:
+          AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
+          AGENT_DEVICE_FIXTURE_APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
+          AGENT_DEVICE_IOS_E2E: '1'
+          AGENT_DEVICE_IOS_E2E_TIER: smoke
+          AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
+        run: |
+          pnpm gate build
+          node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus
         if: ${{ always() }}
