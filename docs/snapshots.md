@@ -113,6 +113,13 @@ the strategy owns which tiers it may use.
 
 ## Android node metadata
 
+Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
+`press`, `fill`, and the gesture commands take. `androidSnapshot.pixelDensity` on a helper capture
+is the display's physical pixels per density-independent pixel, as the helper's `DisplayMetrics`
+report it (a 420 dpi phone reports `2.625`, a `wm density` override included); a consumer that works
+in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
+already, so it carries no such factor.
+
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
 `selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,
 `placeholder`, `selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports

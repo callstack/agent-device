@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.6e18c2ccc4.js"></script>
+<script defer src="/agent-device/static/js/index.90163db212.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -156,6 +156,12 @@ an empty tree.</li>
 have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.</li>
 </ul>
 <h2 class="rp-toc-include" id="android-node-metadata"><a href="#android-node-metadata" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Android node metadata</h2>
+<p>Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
+<code>press</code>, <code>fill</code>, and the gesture commands take. <code>androidSnapshot.pixelDensity</code> on a helper capture
+is the display&#x27;s physical pixels per density-independent pixel, as the helper&#x27;s <code>DisplayMetrics</code>
+report it (a 420 dpi phone reports <code>2.625</code>, a <code>wm density</code> override included); a consumer that works
+in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
+already, so it carries no such factor.</p>
 <p>Android snapshot nodes and <code>get attrs</code> (including the digest response) carry the native
 <code>selected</code>, <code>checked</code>, <code>heading</code>, <code>roleDescription</code>, <code>editable</code>, <code>password</code>, <code>hintShowing</code>,
 <code>placeholder</code>, <code>selectionStart</code>, and <code>selectionEnd</code> facts whenever the accessibility tree reports
