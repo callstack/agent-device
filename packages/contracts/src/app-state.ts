@@ -1,3 +1,4 @@
+import type { AppleApplicationState } from './app-state-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
 
 /**
@@ -16,7 +17,13 @@ export type AppStateCommandResult =
       platform: 'ios' | 'macos';
       appName: string;
       appBundleId?: string;
-      source: 'session';
+      /** `runner` when the runner read the session app's state; `session` when only the record answered. */
+      source: 'session' | 'runner';
+      /**
+       * How the session app is running, as the runner reads it; absent with `source: 'session'`.
+       * `runningBackground` after `home` says the app left the foreground, not what took it.
+       */
+      state?: AppleApplicationState;
       surface: SessionSurface;
       /** iOS only — the session device's UDID. */
       device_udid?: string;

@@ -52,6 +52,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
   },
   doubleTap: { invoke: (i) => i.doubleTap!(10, 20), runnerCommand: 'sequence' },
   longPress: { invoke: (i) => i.longPress(10, 20, 600), runnerCommand: 'longPress' },
+  appState: { invoke: (i) => i.appState!(), runnerCommand: 'appState' },
   focus: { invoke: (i) => i.focus(10, 20), runnerCommand: 'tap' },
   type: { invoke: (i) => i.type('hi'), runnerCommand: 'type' },
   fill: { invoke: (i) => i.fill(10, 20, 'hi'), runnerCommand: 'type' },

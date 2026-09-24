@@ -1,4 +1,4 @@
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
@@ -15,6 +15,8 @@ import {
 } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { AppleApplicationState } from '@agent-device/contracts/app-state-runtime';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   hasExplicitSessionFlag,
@@ -85,6 +87,39 @@ function hasAndroidAvdIdentity(
   );
 }
 
+/**
+ * The session app's state as a live runner reads it, when this device's owner admits the read;
+ * nothing otherwise, so the session record alone answers and no state is invented. The owner never
+ * starts a runner for it. A runner that cannot answer right now (busy, mid-restart) leaves the
+ * session answer as it was and says so in the log; a cancelled request stays cancelled.
+ */
+async function readAppleSessionAppState(
+  params: RuntimeCommandHandlerParams,
+  session: Readonly<{ device: DeviceInfo; appBundleId?: string }>,
+): Promise<AppleApplicationState | undefined> {
+  if (!session.appBundleId) return undefined;
+  const admitted = await admitRuntimeUse({
+    command: 'appstate',
+    device: session.device,
+    use: appStateUse,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (admitted.type === 'response') return undefined;
+  try {
+    const read = await admitted.runtime.operations.appState({ appBundleId: session.appBundleId });
+    return read.applicationState;
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'apple_appstate_runner_read_failed',
+      data: { code: asAppError(error).code, message: asAppError(error).message },
+    });
+    return undefined;
+  }
+}
+
 async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
@@ -142,13 +177,15 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
       );
     }
 
+    const state = await readAppleSessionAppState(params, session);
     return {
       ok: true,
       data: {
         platform: publicPlatformString(session.device),
         appName: appName ?? 'unknown',
         appBundleId: session.appBundleId,
-        source: 'session',
+        source: state ? 'runner' : 'session',
+        ...(state ? { state } : {}),
         surface: session.surface ?? 'app',
         ...(isIosFamily(session.device)
           ? {

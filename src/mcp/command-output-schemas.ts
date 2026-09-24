@@ -12,6 +12,7 @@ import {
 } from '../commands/command-input.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
+import { APPLE_APPLICATION_STATES } from '@agent-device/kernel/snapshot';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
 import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
@@ -695,7 +696,14 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
           platform: enumSchema(['ios', 'macos']),
           appName: stringSchema(),
           appBundleId: stringSchema(),
-          source: constSchema('session'),
+          source: enumSchema(
+            ['session', 'runner'],
+            'runner when a live runner read the session app state; session when the record alone answered.',
+          ),
+          state: enumSchema(
+            APPLE_APPLICATION_STATES,
+            'The session app XCUIApplication state as a live runner reads it; absent with source session.',
+          ),
           surface: enumSchema(SESSION_SURFACES),
           device_udid: stringSchema('iOS only — the session device UDID.'),
           ios_simulator_device_set: {

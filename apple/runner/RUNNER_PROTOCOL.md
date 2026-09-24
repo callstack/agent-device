@@ -63,6 +63,15 @@ than silently applied:
 { "command": "rotate", "orientation": "landscape-left" }
 ```
 
+```json
+{ "command": "appState", "appBundleId": "com.example.app" }
+```
+
+`appState` answers `data.applicationState` with the named app's `XCUIApplication.State` by name
+(`runningForeground`, `runningBackground`, `runningBackgroundSuspended`, `notRunning`, `unknown`).
+It is a lifecycle read, so the activation preflight is skipped and the state reported is the one
+the app is in, not the one a repair would leave.
+
 The current command names and per-command traits are defined in:
 
 - `RunnerCommand` in [`../../packages/platform-apple/src/runner/runner-contract.ts`](../../packages/platform-apple/src/runner/runner-contract.ts)

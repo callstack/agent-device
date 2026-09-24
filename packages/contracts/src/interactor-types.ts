@@ -1,3 +1,4 @@
+import type { AppStateRuntimeResult } from './app-state-runtime.ts';
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 import type { DeviceRotation } from './device-rotation.ts';
@@ -309,6 +310,11 @@ export type Interactor = {
    */
   doubleTap?(x: number, y: number): Promise<Record<string, unknown> | void>;
   longPress(x: number, y: number, durationMs?: number): Promise<Record<string, unknown> | void>;
+  /**
+   * How the app the runner context names is running, as the platform reports it. The Apple runner
+   * reads `XCUIApplication.state`; owners that read the foreground elsewhere leave it undefined.
+   */
+  appState?(): Promise<AppStateRuntimeResult>;
   /**
    * Move the pointer to a point without pressing. Only pointer-driven
    * platforms (web today) implement it; touch platforms have no hover state

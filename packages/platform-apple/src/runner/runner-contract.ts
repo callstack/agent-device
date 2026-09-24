@@ -76,6 +76,9 @@ export type RunnerCommand = {
     | 'recordStop'
     | 'status'
     | 'uptime'
+    // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
+    // preflight, so it reports the state the app is in rather than the one a repair leaves.
+    | 'appState'
     | 'activate'
     | 'terminate'
     | 'targetReset'

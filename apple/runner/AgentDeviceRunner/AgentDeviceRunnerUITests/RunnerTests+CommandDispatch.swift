@@ -48,6 +48,38 @@ extension RunnerTests {
     )
   }
 
+  /// The session app's `XCUIApplication.State` by name. A lifecycle read: the activation preflight
+  /// is skipped, so `runningBackground` after `home` is reported rather than repaired away.
+  func executeAppState(command: Command) -> Response {
+    guard let bundleId = command.appBundleId?.trimmedNonEmpty else {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "INVALID_ARGS",
+          message: "appState requires appBundleId",
+          hint: "Set appBundleId to the session app's bundle identifier."
+        )
+      )
+    }
+    let state = XCUIApplication(bundleIdentifier: bundleId).state
+    return Response(ok: true, data: DataPayload(applicationState: Self.applicationStateName(state)))
+  }
+
+  /// `XCUIApplication.State` by the names the TypeScript `AppleApplicationState` type declares, the
+  /// same names the activation disclosure gives its prior state.
+  static func applicationStateName(_ state: XCUIApplication.State) -> String {
+    switch state {
+    case .unknown: return "unknown"
+    case .notRunning: return "notRunning"
+    case .runningBackground: return "runningBackground"
+    case .runningForeground: return "runningForeground"
+#if !os(macOS)
+    case .runningBackgroundSuspended: return "runningBackgroundSuspended"
+#endif
+    @unknown default: return "unknown"
+    }
+  }
+
   struct ActiveCommandContext {
     let app: XCUIApplication
     /// Set when `app` is a system surface served in place over the still-bound session app (#2438).
@@ -386,6 +418,8 @@ extension RunnerTests {
       }
     case .uptime:
       return executeUptime()
+    case .appState:
+      return executeAppState(command: command)
     case .activate:
       guard
         let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),

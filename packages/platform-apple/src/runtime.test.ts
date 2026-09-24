@@ -69,6 +69,27 @@ test('tvOS audio capture availability follows the exact host-owned runtime fact'
   );
 });
 
+/**
+ * The runner reads the session app's state wherever it runs: every iOS-family leaf but the watchOS
+ * sentinel. macOS and watchOS keep the refusal that names the missing foreground probe.
+ */
+function expectAppStateFact(
+  device: DeviceInfo,
+  binding: Awaited<ReturnType<ReturnType<typeof createApplePlatformRuntime>['bind']>>,
+): void {
+  if (device.appleOs === 'macos' || device.appleOs === 'watchos') {
+    expect(binding.facts.operations.appState).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('no sessionless foreground probe'),
+    });
+    expect(binding.operations.appState).toBeUndefined();
+    return;
+  }
+  expect(binding.facts.operations.appState).toEqual({ available: true });
+  expect(binding.operations.appState).toBeTypeOf('function');
+}
+
 test.each([
   ['iOS simulator', leaves.ios, true, undefined],
   [
@@ -100,12 +121,7 @@ test.each([
   });
   const { facts } = binding;
   expect(facts.device.providerMode).toBe('local');
-  expect(facts.operations.appState).toEqual({
-    available: false,
-    reason: 'unsupported-platform-leaf',
-    hint: expect.stringContaining('no sessionless foreground probe'),
-  });
-  expect(binding.operations.appState).toBeUndefined();
+  expectAppStateFact(device, binding);
   expect(facts.operations.networkDump).toEqual({ available: true });
   expect(facts.operations.listApps.available).toBe(
     device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',

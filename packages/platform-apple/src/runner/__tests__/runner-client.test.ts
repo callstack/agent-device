@@ -113,6 +113,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   findText: { command: 'findText', text: 'Settings' },
   querySelector: { command: 'querySelector', selectorKey: 'id', selectorValue: 'submit' },
   readText: { command: 'readText' },
+  appState: { command: 'appState', appBundleId: 'com.demo.app' },
   snapshot: {
     command: 'snapshot',
     interactiveOnly: true,
@@ -153,7 +154,6 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   targetReset: { command: 'targetReset' },
   shutdown: { command: 'shutdown' },
 };
-
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 async function makeTmpDir(): Promise<string> {

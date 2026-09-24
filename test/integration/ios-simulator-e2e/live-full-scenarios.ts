@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import {
   assertElementText,
   assertElementTextAfterScrolling,
@@ -24,7 +25,12 @@ const C = PUBLIC_COMMANDS;
 export async function assertLifecycleAndSystem(context: LiveContext): Promise<void> {
   const appState = await runStep(context, 'read fixture app state', ['appstate']);
   assert.equal(appState.json?.data?.appBundleId, context.appId, JSON.stringify(appState.json));
-  assert.equal(appState.json?.data?.source, 'session', JSON.stringify(appState.json));
+  // A live runner answers with the session app's state; without one the record alone answers.
+  const source = appState.json?.data?.source;
+  assert.ok(source === 'runner' || source === 'session', JSON.stringify(appState.json));
+  if (source === 'runner') {
+    assert.ok(isAppleApplicationState(appState.json?.data?.state), JSON.stringify(appState.json));
+  }
   assert.equal(appState.json?.data?.device_udid, context.udid, JSON.stringify(appState.json));
   verifyCommand(context, C.appState, 'typed appstate retains active session and fixture identity');
 

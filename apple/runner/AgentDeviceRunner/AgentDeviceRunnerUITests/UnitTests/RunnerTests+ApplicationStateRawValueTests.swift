@@ -24,6 +24,17 @@ extension RunnerTests {
     assertDecoderPins(.runningForeground, name: "runningForeground", raw: 4)
   }
 
+  /// The `appState` command names each state for the TypeScript `AppleApplicationState` type.
+  func testApplicationStateNamesMatchTheAppStateContract() {
+    XCTAssertEqual(Self.applicationStateName(.unknown), "unknown")
+    XCTAssertEqual(Self.applicationStateName(.notRunning), "notRunning")
+#if !os(macOS)
+    XCTAssertEqual(Self.applicationStateName(.runningBackgroundSuspended), "runningBackgroundSuspended")
+#endif
+    XCTAssertEqual(Self.applicationStateName(.runningBackground), "runningBackground")
+    XCTAssertEqual(Self.applicationStateName(.runningForeground), "runningForeground")
+  }
+
   private func assertDecoderPins(_ state: XCUIApplication.State, name: String, raw: Int) {
     XCTAssertEqual(
       Int(state.rawValue),

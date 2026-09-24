@@ -6,6 +6,8 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { bindSimulatorReadiness } from './runtime-simulator-readiness.ts';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type { AppStateRuntimeOperations } from '@agent-device/contracts/app-state-runtime';
+import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -104,8 +106,19 @@ const focusKindUnavailable = Object.freeze({
 const appStateUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'Apple appstate is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).',
+  hint: "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
 } as const);
+
+/**
+ * A live runner reads the session app's `XCUIApplication.state` on the kinds it drives; the read
+ * never starts one (see `bindAppleAppStateRuntime`). That is a fact about the session app, never a
+ * guess about the foreground (#2682): after `home` the app reports a background state, and which
+ * app took the screen stays nobody's to tell.
+ */
+function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
+  return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
+}
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -285,7 +298,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       operations: {
         ...logs.operations,
         ...deployment,
-        appState: appStateUnavailable,
+        appState: appleAppStateFact(device),
         networkDump: available,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
@@ -334,7 +347,18 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       const logs = await appLogs.bind(request);
       const facts = await inspectFacts(request.device);
       const recordingFacts = facts.operations.screenRecordingStart;
+      // Typed on its own so the operations literal below stays within what tsc can represent.
+      const appStateOperations: Partial<AppStateRuntimeOperations> = whenAdmitted(
+        facts.operations.appState,
+        () =>
+          bindAppleAppStateRuntime(host, {
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
+        ...appStateOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,

@@ -7,9 +7,27 @@ import {
   makeSession,
   noopInvoke,
 } from './session-test-harness.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionState } from '../../session-state.ts';
-import { handleSessionCommands } from './session-command-harness.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import type {
+  AppStateRuntimeInput,
+  AppStateRuntimeResult,
+} from '@agent-device/contracts/app-state-runtime';
+import {
+  appStateUse,
+  type PlatformRuntimeOperations,
+} from '@agent-device/contracts/platform-runtime-operations';
+import {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceBinding,
+  type RuntimeFacts,
+} from '@agent-device/contracts/platform-runtime';
+import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 
 test('appstate on iOS requires active session on selected device', async () => {
   const sessionStore = makeSessionStore();
@@ -270,5 +288,145 @@ test('clipboard rejects unsupported iOS physical devices', async () => {
   if (response && !response.ok) {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
     expect(response.error.message).toMatch(/clipboard is not supported on this device/i);
+  }
+});
+
+const IOS_SESSION_DEVICE: SessionState['device'] = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: 'sim-1',
+  name: 'iPhone 17 Pro',
+  kind: 'simulator',
+  booted: true,
+};
+
+/** An Apple owner that admits the appstate read and answers it with `read`. */
+function appleAppStateRuntime(
+  read: (input: AppStateRuntimeInput | undefined) => Promise<AppStateRuntimeResult>,
+): {
+  inspectFacts: (device: DeviceInfo) => Promise<RuntimeFacts<PlatformRuntimeOperations>>;
+  bindDevice: BindDeviceRuntime;
+} {
+  const factsFor = async (device: DeviceInfo): Promise<RuntimeFacts<PlatformRuntimeOperations>> => {
+    const base = await mockInspectDeviceRuntimeFacts(device);
+    return { ...base, operations: { ...base.operations, appState: { available: true } } };
+  };
+  return {
+    inspectFacts: factsFor,
+    bindDevice: async (selected, use) => {
+      const binding: DeviceBinding<PlatformRuntimeOperations> = {
+        device: selected,
+        owner: localRuntimeOwner('apple'),
+        facts: await factsFor(selected),
+        operations: {
+          ensureReady: async () => selected,
+          appState: read,
+        },
+        [Symbol.asyncDispose]: async () => undefined,
+      };
+      return narrowDeviceBinding(binding, use);
+    },
+  };
+}
+
+function iosSessionRequest(sessionName: string): DaemonRequest {
+  return {
+    token: 't',
+    session: sessionName,
+    command: 'appstate',
+    positionals: [],
+    flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+  };
+}
+
+test('appstate on iOS reads the session app state from the runner when its owner admits it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'sim';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, IOS_SESSION_DEVICE),
+    appBundleId: 'dev.e2e.benchmark',
+    appName: 'Benchmark',
+  });
+  mockResolveTargetDevice.mockResolvedValue(IOS_SESSION_DEVICE);
+  const asked: Array<AppStateRuntimeInput | undefined> = [];
+  const runtime = appleAppStateRuntime(async (input) => {
+    asked.push(input);
+    return { applicationState: 'runningBackground' };
+  });
+
+  const response = await handleSessionCommands({
+    req: iosSessionRequest(sessionName),
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+    ...runtime,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response && response.ok) {
+    expect(response.data?.appBundleId).toBe('dev.e2e.benchmark');
+    expect(response.data?.state).toBe('runningBackground');
+    expect(response.data?.source).toBe('runner');
+  }
+  // The read is about the session app, and the use it went through is the appstate use.
+  expect(asked).toEqual([{ appBundleId: 'dev.e2e.benchmark' }]);
+  expect(appStateUse.required).toEqual(['ensureReady', 'appState']);
+});
+
+test('appstate on iOS keeps the session answer, with no state, when no runner is live to ask', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'sim';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, IOS_SESSION_DEVICE),
+    appBundleId: 'dev.e2e.benchmark',
+    appName: 'Benchmark',
+  });
+  mockResolveTargetDevice.mockResolvedValue(IOS_SESSION_DEVICE);
+  const runtime = appleAppStateRuntime(async () => ({}));
+
+  const response = await handleSessionCommands({
+    req: iosSessionRequest(sessionName),
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+    ...runtime,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response && response.ok) {
+    expect(response.data?.source).toBe('session');
+    expect(response.data).not.toHaveProperty('state');
+  }
+});
+
+test('appstate on iOS keeps the session answer, with no state, when the runner cannot read one', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'sim';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, IOS_SESSION_DEVICE),
+    appBundleId: 'dev.e2e.benchmark',
+    appName: 'Benchmark',
+  });
+  mockResolveTargetDevice.mockResolvedValue(IOS_SESSION_DEVICE);
+  const runtime = appleAppStateRuntime(async () => {
+    throw new AppError('COMMAND_FAILED', 'runner is busy');
+  });
+
+  const response = await handleSessionCommands({
+    req: iosSessionRequest(sessionName),
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+    ...runtime,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response && response.ok) {
+    expect(response.data?.appName).toBe('Benchmark');
+    expect(response.data?.source).toBe('session');
+    expect(response.data).not.toHaveProperty('state');
   }
 });

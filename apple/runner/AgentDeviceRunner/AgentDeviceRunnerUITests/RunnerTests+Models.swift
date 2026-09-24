@@ -33,6 +33,7 @@ enum CommandType: String, Codable, CaseIterable {
   case recordStop
   case status
   case uptime
+  case appState
   case activate
   case terminate
   case targetReset
@@ -221,7 +222,9 @@ extension Command {
     case .findText, .readText, .snapshot, .gestureViewport:
       return .appRead
 
-    case .screenshot, .status:
+    // appState reads the session app's XCUIApplication.state; bringing no app forward is what makes
+    // its answer the state the app is in, not the one a repair leaves.
+    case .screenshot, .status, .appState:
       return .runnerCaptureRead
 
     case .alert:
@@ -391,6 +394,7 @@ struct DataPayload: Codable {
   var referenceWidth: Double?
   var referenceHeight: Double?
   var currentUptimeMs: Double?
+  var applicationState: String?
   var commandId: String?
   var lifecycleState: String?
   var lifecycleCommand: String?

@@ -17,7 +17,7 @@ extension RunnerTests {
     }
     switch command.command {
     case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
-      .snapshot:
+      .appState, .snapshot:
       return Response(
         ok: false,
         error: ErrorPayload(

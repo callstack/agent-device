@@ -236,6 +236,7 @@ extension RunnerTests {
       (.recordStop, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
       (.status, expectation(interaction: false, retry: true, launch: .noApp, converts: false)),
       (.uptime, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
+      (.appState, expectation(interaction: false, retry: true, launch: .noApp, converts: false)),
       (.activate, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true)),
       (.terminate, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
       (.targetReset, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),

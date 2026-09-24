@@ -1,3 +1,4 @@
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
@@ -26,6 +27,7 @@ import {
   runnerSynthesizesTap,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';
 import {
@@ -55,6 +57,7 @@ type IosRunnerOverrides = Pick<
   | 'tapElementSelector'
   | 'doubleTap'
   | 'longPress'
+  | 'appState'
   | 'focus'
   | 'type'
   | 'fill'
@@ -122,6 +125,14 @@ export function iosRunnerOverrides(
         parseRunnerSequenceResult(runnerResult);
         return runnerResult;
       },
+      appState: async () =>
+        readAppStateResult(
+          await runAppleRunnerCommand(
+            device,
+            { command: 'appState', appBundleId: ctx.appBundleId },
+            runnerOpts,
+          ),
+        ),
       longPress: async (x, y, durationMs) => {
         return await runAppleRunnerCommand(
           device,
@@ -310,6 +321,12 @@ async function runSingleApplePress(
 function readTypeTextBackendResult(result: Record<string, unknown>): TypeTextBackendResult {
   const route = result.textEntryRoute;
   return isTextEntryRoute(route) ? { textEntryRoute: route } : {};
+}
+
+/** The runner's `appState` payload is untrusted JSON; only a declared state name passes. */
+function readAppStateResult(result: Record<string, unknown>): AppStateRuntimeResult {
+  const state = result.applicationState;
+  return isAppleApplicationState(state) ? { applicationState: state } : {};
 }
 
 function isTextEntryRoute(value: unknown): value is TextEntryRoute {

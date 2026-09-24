@@ -487,6 +487,24 @@ export const IOS_TARGET_ACTIVATION_PRIOR_STATES = [
 export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_STATES)[number];
 
 /**
+ * How XCTest reports an app running (`XCUIApplication.State`): the prior states above plus the
+ * foreground state the activation disclosure never carries. The `appState` runner command names
+ * the session app's state with these words.
+ */
+export const APPLE_APPLICATION_STATES = [
+  ...IOS_TARGET_ACTIVATION_PRIOR_STATES,
+  'runningForeground',
+] as const;
+
+export type AppleApplicationState = (typeof APPLE_APPLICATION_STATES)[number];
+
+export function isAppleApplicationState(value: unknown): value is AppleApplicationState {
+  return (
+    typeof value === 'string' && (APPLE_APPLICATION_STATES as readonly string[]).includes(value)
+  );
+}
+
+/**
  * Foreground repair the Apple runner performed while serving one command (#2682). `priorState` is
  * the session app's state BEFORE the runner activated it, so the fact describes what was repaired
  * rather than what the repair produced. `otherActiveApplicationPid` is present only when exactly one
