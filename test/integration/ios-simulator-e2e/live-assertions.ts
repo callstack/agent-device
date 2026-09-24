@@ -40,33 +40,53 @@ export function snapshotNodes(result: { json?: any }): LiveSnapshotNode[] {
   return nodes as LiveSnapshotNode[];
 }
 
-const SCROLL_SEARCH_ATTEMPTS = 4;
+/**
+ * Three forward scrolls reach 2.25 viewports of finger travel. The reverse steps are shorter: a
+ * controlled iOS scroll can still carry post-release inertia under host load (ADR 0013), so a
+ * forward step can carry a short target past the viewport, and a reverse step plus that inertia
+ * must stay inside one viewport so the reverse sweep cannot skip it again.
+ */
+const FORWARD = { direction: 'down', amount: '0.75' } as const;
+const REVERSE = { direction: 'up', amount: '0.5' } as const;
+const SCROLL_SEARCH_PLAN = [FORWARD, FORWARD, FORWARD, REVERSE, REVERSE, REVERSE];
 // A stalled capture, or one taken while the last scroll was still moving, says nothing about where
 // the element is, so re-reading it must not consume a scroll. A couple of re-reads per scroll absorb
 // a slow runner without masking a real absence.
 const SCROLL_SEARCH_REREADS = 2;
+const SETTLE_MS = '1000';
+
+export type ScrollSearchStep = (typeof SCROLL_SEARCH_PLAN)[number];
+
+export type ScrollSearchDevice = {
+  probeVisibility: (probe: number) => Promise<CliJsonResult>;
+  /** Gives a surface that was still moving a bounded pause before the next read. */
+  settle: () => Promise<void>;
+  scroll: (step: ScrollSearchStep, index: number) => Promise<unknown>;
+};
 
 export async function assertElementTextAfterScrolling(
   context: LiveContext,
   selector: string,
   expected: string,
 ): Promise<void> {
-  await searchForVisibleElement(
-    selector,
-    (attempt) =>
+  await searchForVisibleElement(selector, {
+    probeVisibility: (probe) =>
       runStep(
         context,
-        `check ${selector} visibility after scroll (attempt ${attempt})`,
+        `check ${selector} visibility (probe ${probe})`,
         ['is', 'visible', selector],
         { allowFailure: true },
       ),
-    (attempt) =>
-      runStep(context, `scroll toward ${selector} after attempt ${attempt}`, [
+    settle: async () => {
+      await runStep(context, `settle before re-reading ${selector}`, ['wait', SETTLE_MS]);
+    },
+    scroll: (step, index) =>
+      runStep(context, `scroll ${step.direction} toward ${selector} (scroll ${index})`, [
         'scroll',
-        'down',
-        '0.75',
+        step.direction,
+        step.amount,
       ]).then((result) => result.json?.data),
-  );
+  });
   await assertElementText(context, selector, expected);
 }
 
@@ -78,32 +98,39 @@ export async function assertElementTextAfterScrolling(
  */
 export async function searchForVisibleElement(
   selector: string,
-  probeVisibility: (attempt: number) => Promise<CliJsonResult>,
-  scrollAfterAttempt: (attempt: number) => Promise<unknown>,
+  device: ScrollSearchDevice,
 ): Promise<void> {
-  let rereadsLeft = SCROLL_SEARCH_REREADS;
   const history: string[] = [];
-
-  for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS;) {
-    const probe = await probeVisibility(attempt);
-    history.push(`probe ${attempt}: ${JSON.stringify(probe.json ?? { status: probe.status })}`);
-    if (probe.status === 0) return;
-
-    const details = probe.json?.error?.details;
-    const readNothing = details?.captureStalled === true || details?.unsettledGesture !== undefined;
-    if (readNothing && rereadsLeft > 0) {
-      rereadsLeft -= 1;
-      continue;
+  let probes = 0;
+  const readWindow = async (): Promise<boolean> => {
+    for (let rereads = 0; ; rereads += 1) {
+      probes += 1;
+      const result = await device.probeVisibility(probes);
+      history.push(`probe ${probes}: ${JSON.stringify(result.json ?? { status: result.status })}`);
+      if (result.status === 0) return true;
+      const unread = unreadSurface(result);
+      if (unread === undefined || rereads === SCROLL_SEARCH_REREADS) return false;
+      if (unread === 'moving') {
+        await device.settle();
+        history.push(`settled for ${SETTLE_MS} ms`);
+      }
     }
+  };
 
-    attempt += 1;
-    if (attempt <= SCROLL_SEARCH_ATTEMPTS) {
-      const scrolled = await scrollAfterAttempt(attempt - 1);
-      history.push(`scroll after attempt ${attempt - 1}: ${JSON.stringify(scrolled ?? null)}`);
-      rereadsLeft = SCROLL_SEARCH_REREADS;
-    }
+  for (const [index, step] of SCROLL_SEARCH_PLAN.entries()) {
+    if (await readWindow()) return;
+    const scrolled = await device.scroll(step, index + 1);
+    history.push(`scroll ${step.direction} ${index + 1}: ${JSON.stringify(scrolled ?? null)}`);
   }
+  if (await readWindow()) return;
   assert.fail(`${selector} did not become visible after scrolling\n${history.join('\n')}`);
+}
+
+/** Why a missed probe says nothing about where the element is, if it says nothing. */
+function unreadSurface(result: CliJsonResult): 'moving' | 'stalled' | undefined {
+  const details = result.json?.error?.details;
+  if (details?.unsettledGesture !== undefined) return 'moving';
+  return details?.captureStalled === true ? 'stalled' : undefined;
 }
 
 function requireNode(
