@@ -200,6 +200,9 @@ jobs:
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertHittableProbeCompletingAfterDeadlineLeavesTheOriginalUntouched \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertActivationDoesNotWaitOutANotificationBanner \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionWithoutAnAlertDoesNotReadEveryElementOfTheScreen \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionFindsADismissPopupMarkerOnACrowdedScreen \
+            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionFindsAWindowThatIsItselfTheDismissPopupMarker \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSystemModalProbeSliceSharesAndClampsToPlanDeadline \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied \
             -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain \
