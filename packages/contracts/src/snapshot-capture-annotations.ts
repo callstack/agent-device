@@ -58,7 +58,7 @@ export type PublicSnapshotCaptureAnnotations = Pick<
 export function snapshotCaptureAnnotationsFrom(
   source: Partial<Omit<SnapshotCaptureAnnotations, 'quality'>> & { quality?: unknown },
 ): SnapshotCaptureAnnotations {
-  const quality = readSnapshotQualityVerdict(source.quality);
+  const quality = readPublishedSnapshotQualityVerdict(source.quality);
   return {
     ...(source.analysis ? { analysis: source.analysis } : {}),
     ...(source.androidSnapshot ? { androidSnapshot: source.androidSnapshot } : {}),
@@ -92,7 +92,7 @@ export function readSerializedSnapshotCaptureAnnotations(
   const warnings = Array.isArray(data.warnings)
     ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
     : undefined;
-  const quality = readSnapshotQualityVerdict(data.snapshotQuality);
+  const quality = readPublishedSnapshotQualityVerdict(data.snapshotQuality);
   const targetActivation = readTargetActivation(data.targetActivation);
   return publicSnapshotCaptureAnnotations({
     ...(androidSnapshot
@@ -115,15 +115,16 @@ function readTargetActivation(value: unknown): IosTargetActivation | undefined {
 
 /**
  * Re-read of a fact this module published, in the shape `readTargetActivation` above also uses: the
- * two names that decide presentation are checked, and the verdict is forwarded as published. Reading
- * an untrusted runner payload is capture-kit's `readSnapshotQualityVerdict`, which normalizes every
- * field; this one cannot share that code (the eager-closure gate freezes both readers' module
- * closures, and the duplication gate refuses a second normalization), so the pair is pinned together
- * by `snapshot-quality-verdict.test.ts`. What stays guaranteed here is the part only this boundary
- * can check: a name this version cannot speak reads as verdict-absent, so a version-skewed runner
- * cannot hand the host a degradation it would present under a state or strategy nobody declared.
+ * two names that decide presentation are checked, and the verdict is forwarded as published. Named
+ * apart from capture-kit's stricter `readSnapshotQualityVerdict`, which normalizes an untrusted
+ * runner payload and reads every field. Reading
+ * This one cannot share that code — the eager-closure gate freezes both readers' module closures and
+ * the duplication gate refuses a second normalization — so the pair is pinned together by
+ * `snapshot-quality-verdict.test.ts`. What stays guaranteed here is the part only this boundary can
+ * check: a name this version cannot speak reads as verdict-absent, so a version-skewed runner cannot
+ * hand the host a degradation it would present under a state or strategy nobody declared.
  */
-function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
+function readPublishedSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdict | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   if (!isDeclared(DECLARED_STATES, raw.state) || !isDeclared(DECLARED_BACKENDS, raw.backend)) {
