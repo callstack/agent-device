@@ -21,6 +21,12 @@ const LAUNCH_PENDING = result(1, {
 const WRONG_ROUTE = result(1, {
   error: { code: 'COMMAND_FAILED', details: { reason: 'wait_target_absent' } },
 });
+const READABLE_TIMEOUT = result(1, {
+  error: {
+    code: 'COMMAND_FAILED',
+    details: { reason: 'wait_deadline_exceeded', readableCaptures: 5, captureTruncated: true },
+  },
+});
 const OPEN_PROMPT = result(0, {
   data: { message: 'Open in “Agent Device Tester”?', items: ['Cancel', 'Open'] },
 });
@@ -56,7 +62,47 @@ test('a destination that arrives never probes for the confirmation', async () =>
 
   await answerDeepLinkConfirmation(device);
 
-  assert.deepEqual(log, ['wait for the deep-link destination (1/4)']);
+  assert.deepEqual(log, ['wait for the deep-link destination (1/5)']);
+});
+
+test('a readable destination timeout still answers a real Open confirmation', async () => {
+  const { device, log } = simulator([READABLE_TIMEOUT, LANDED]);
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.deepEqual(log, [
+    'wait for the deep-link destination (1/5)',
+    'alert get',
+    'alert accept',
+    'wait for the deep-link destination (2/5)',
+  ]);
+});
+
+test('a readable no-match that answers Open waits for the released launch', async () => {
+  const { device, log } = simulator([WRONG_ROUTE, LAUNCH_PENDING, LANDED]);
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.deepEqual(log, [
+    'wait for the deep-link destination (1/5)',
+    'alert get',
+    'alert accept',
+    'wait for the deep-link destination (2/5)',
+    'wait for the deep-link destination (3/5)',
+  ]);
+});
+
+test('a truncated capture retries for four bounded waits without accepting a missing alert', async () => {
+  const { device, log } = simulator(
+    [READABLE_TIMEOUT, READABLE_TIMEOUT, READABLE_TIMEOUT, READABLE_TIMEOUT, LANDED],
+    [NO_ALERT, NO_ALERT, NO_ALERT, NO_ALERT],
+  );
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.equal(waits(log), 5);
+  assert.equal(log.filter((step) => step === 'alert get').length, 4);
+  assert.equal(log.includes('alert accept'), false);
 });
 
 test('the launch an accepted confirmation releases is waited for until it lands', async () => {
@@ -66,29 +112,29 @@ test('the launch an accepted confirmation releases is waited for until it lands'
   await answerDeepLinkConfirmation(device);
 
   assert.deepEqual(log, [
-    'wait for the deep-link destination (1/4)',
+    'wait for the deep-link destination (1/5)',
     'alert get',
     'alert accept',
-    'wait for the deep-link destination (2/4)',
-    'wait for the deep-link destination (3/4)',
-    'wait for the deep-link destination (4/4)',
+    'wait for the deep-link destination (2/5)',
+    'wait for the deep-link destination (3/5)',
+    'wait for the deep-link destination (4/5)',
   ]);
 });
 
-test('a miss that is not a pending launch neither probes nor waits again', async () => {
-  const { device, log } = simulator([WRONG_ROUTE]);
+test('a readable miss probes once and leaves a wrong route to the caller', async () => {
+  const { device, log } = simulator([WRONG_ROUTE], [NO_ALERT]);
 
   await answerDeepLinkConfirmation(device);
 
-  assert.deepEqual(log, ['wait for the deep-link destination (1/4)']);
+  assert.deepEqual(log, ['wait for the deep-link destination (1/5)', 'alert get']);
 });
 
-test('after the accept, a miss that is not a pending launch earns no further wait', async () => {
-  const { device, log } = simulator([LAUNCH_PENDING, WRONG_ROUTE]);
+test('after the accept, a readable no-match still gets a bounded launch wait', async () => {
+  const { device, log } = simulator([LAUNCH_PENDING, WRONG_ROUTE, LANDED]);
 
   await answerDeepLinkConfirmation(device);
 
-  assert.equal(waits(log), 2);
+  assert.equal(waits(log), 3);
 });
 
 test('a confirmation that appears late is still answered once', async () => {
@@ -110,7 +156,7 @@ test('the wait budget is bounded when the app never starts', async () => {
 
   await answerDeepLinkConfirmation(device);
 
-  assert.equal(waits(log), 4);
+  assert.equal(waits(log), 5);
 });
 
 test('a prompt that is not the deep-link confirmation is never accepted', async () => {
