@@ -2,19 +2,26 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import {
+  formatGestureNoEffectWarning,
+  formatGestureUnsettledWarning,
+} from '@agent-device/capture-kit/post-gesture-stability';
 import type { DaemonResponse } from './daemon-request.ts';
 
-/** The capture provenance a response must be disclosed against (#2438, #2682, unsettled gestures). */
+/** The capture provenance a response must be disclosed against (#2438, #2682, gesture outcomes). */
 export type CaptureProvenance = Pick<
   SnapshotState,
-  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId' | 'targetActivation' | 'unsettledGesture'
->;
+  'systemSurfaceOnly' | 'iosSystemSurfaceBundleId'
+> &
+  TreeFacts;
+
+/** Facts about a whole captured tree, each disclosed as a typed field plus its sentence. */
+type TreeFacts = Pick<SnapshotState, 'targetActivation' | 'unsettledGesture' | 'gestureNoEffect'>;
 
 /**
  * The whole-tree facts THIS request's own captures observed, filled by the capture path only when the
- * request actually captured a tree: the foreground repair it paid for (#2682) and the gesture whose
- * surface it read before that surface settled.
+ * request actually captured a tree: the foreground repair it paid for (#2682) and the outcome of the
+ * gesture it read after: a surface that never settled, or a proven no-effect gesture (#1600).
  *
  * Separate from the consumed tree on purpose. A selector read may answer from a cached or stored
  * tree — that tree still describes the surface the response is about, which is what #2438 discloses
@@ -22,13 +29,13 @@ export type CaptureProvenance = Pick<
  * consumed tree would tell a command "you found the session app out of foreground" when it never
  * looked, which is a fabricated observation rather than a disclosure.
  */
-export type RequestCaptureProof = Pick<CaptureProvenance, 'targetActivation' | 'unsettledGesture'>;
+export type RequestCaptureProof = TreeFacts;
 
 /**
  * Note the facts a capture observed, and hand that capture back. First fact wins: a later capture in
  * the same request that reports neither — a sparse recovery's fresh tree, a poll's fact-less read, an
  * interaction's full-tree retry — cannot erase the capture that did. Only the first capture after a
- * gesture is compared for settling, so a later one proves nothing about the surface having stopped.
+ * gesture is compared against it, so a later one proves nothing about that gesture.
  */
 export function recordCaptureProof<T extends CaptureProvenance>(
   proof: RequestCaptureProof | undefined,
@@ -37,6 +44,7 @@ export function recordCaptureProof<T extends CaptureProvenance>(
   if (proof === undefined) return snapshot;
   if (snapshot.targetActivation) proof.targetActivation ??= snapshot.targetActivation;
   if (snapshot.unsettledGesture) proof.unsettledGesture ??= snapshot.unsettledGesture;
+  if (snapshot.gestureNoEffect) proof.gestureNoEffect ??= snapshot.gestureNoEffect;
   return snapshot;
 }
 
@@ -58,15 +66,15 @@ export function withSystemSurfaceDisclosure(
 }
 
 /**
- * Disclose a fact about the whole answered tree (#2682 foreground repair, an unsettled gesture). Its
- * sentence is APPENDED, never replacing an earlier warning, and the typed fact lands on either
- * outcome (`data` or `error.details`) even when the sentence was already carried.
+ * Disclose a fact about the whole answered tree. Its sentence is APPENDED, never replacing an earlier
+ * warning, and the typed fact lands on either outcome (`data` or `error.details`) even when the
+ * sentence was already carried.
  */
-function withTreeFactDisclosure<K extends 'targetActivation' | 'unsettledGesture'>(
+function withTreeFactDisclosure<K extends keyof TreeFacts>(
   response: DaemonResponse,
   key: K,
-  fact: CaptureProvenance[K],
-  sentence: (fact: NonNullable<CaptureProvenance[K]>) => string,
+  fact: TreeFacts[K],
+  sentence: (fact: NonNullable<TreeFacts[K]>) => string,
 ): DaemonResponse {
   if (!fact) return response;
   const disclosed = appendDisclosure(response, sentence(fact), 'warnings');
@@ -90,10 +98,28 @@ export function withTargetActivationDisclosure(
   );
 }
 
+/** The outcome of the gesture a post-gesture capture read: it never settled, or it moved nothing. */
+function withGestureOutcomeDisclosure(
+  response: DaemonResponse,
+  facts: TreeFacts | undefined,
+): DaemonResponse {
+  return withTreeFactDisclosure(
+    withTreeFactDisclosure(
+      response,
+      'unsettledGesture',
+      facts?.unsettledGesture,
+      formatGestureUnsettledWarning,
+    ),
+    'gestureNoEffect',
+    facts?.gestureNoEffect,
+    formatGestureNoEffectWarning,
+  );
+}
+
 /**
  * Every capture-provenance disclosure a response owes, from the two different things a capture can
  * prove: what the answered tree describes (#2438 — cache tiers included, because the surface is
- * still on screen; an unsettled gesture — a poll that later answered from a settled tree owes none)
+ * still on screen; a gesture outcome — a poll that later answered from another tree owes none)
  * and what this request's own capture found (#2682 — cache hits excluded, because a request that
  * captured nothing repaired nothing).
  */
@@ -104,31 +130,21 @@ export function withCaptureDisclosures(params: {
 }): DaemonResponse {
   const { response, consumedTree, captureProof } = params;
   return withTargetActivationDisclosure(
-    withTreeFactDisclosure(
-      withSystemSurfaceDisclosure(response, consumedTree),
-      'unsettledGesture',
-      consumedTree?.unsettledGesture,
-      formatGestureUnsettledWarning,
-    ),
+    withGestureOutcomeDisclosure(withSystemSurfaceDisclosure(response, consumedTree), consumedTree),
     captureProof,
   );
 }
 
 /**
  * Every fact an interaction's own captures observed. The gesture aims at the trees this request
- * captured, so an unsettled read anywhere in it is disclosed on success and failure alike.
+ * captured, so a gesture outcome read anywhere in it is disclosed on success and failure alike.
  */
 export function withRequestCaptureDisclosures(
   response: DaemonResponse,
   captureProof: RequestCaptureProof,
 ): DaemonResponse {
   return withTargetActivationDisclosure(
-    withTreeFactDisclosure(
-      response,
-      'unsettledGesture',
-      captureProof.unsettledGesture,
-      formatGestureUnsettledWarning,
-    ),
+    withGestureOutcomeDisclosure(response, captureProof),
     captureProof,
   );
 }

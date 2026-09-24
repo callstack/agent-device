@@ -362,19 +362,28 @@ test('summarizeDiscriminatingSurfaceDivergence counts one-sided keys and moved r
 test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {
   // Positionals echo verbatim: the warning names the gesture the agent issued,
   // and `scroll down 1` is what they issued.
-  const scrollWarning = formatGestureNoEffectWarning('scroll', ['down', '1']);
+  const scrollWarning = formatGestureNoEffectWarning({
+    action: 'scroll',
+    positionals: ['down', '1'],
+  });
   assert.match(scrollWarning, /scroll down 1 produced no visible change/);
   assert.match(scrollWarning, /swipe x1 y1 x2 y2/);
   assert.match(scrollWarning, /already at its edge/);
 
-  const gestureWarning = formatGestureNoEffectWarning('gesture', ['swipe', 'left']);
+  const gestureWarning = formatGestureNoEffectWarning({
+    action: 'gesture',
+    positionals: ['swipe', 'left'],
+  });
   assert.match(gestureWarning, /gesture swipe left produced no visible change/);
 
-  const bareWarning = formatGestureNoEffectWarning('swipe', []);
+  const bareWarning = formatGestureNoEffectWarning({ action: 'swipe', positionals: [] });
   assert.match(bareWarning, /swipe produced no visible change/);
 
   // The regression the deleted heuristic caused: every positional of a swipe is
   // a coordinate, so "drop anything numeric-looking" left a contentless "swipe".
-  const swipeWarning = formatGestureNoEffectWarning('swipe', ['10', '20', '30', '40']);
+  const swipeWarning = formatGestureNoEffectWarning({
+    action: 'swipe',
+    positionals: ['10', '20', '30', '40'],
+  });
   assert.match(swipeWarning, /^swipe 10 20 30 40 produced no visible change/);
 });

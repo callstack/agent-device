@@ -26,7 +26,10 @@ import {
   renderSnapshotQualityWarnings,
   truncatedCaptureWarning,
 } from '@agent-device/capture-kit/quality-warnings';
-import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import {
+  formatGestureNoEffectWarning,
+  formatGestureUnsettledWarning,
+} from '@agent-device/capture-kit/post-gesture-stability';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
@@ -263,6 +266,9 @@ function buildSnapshotWarnings(params: {
   warnings.push(...truncatedCaptureWarning(snapshotTruncationForResult(params.snapshot)));
   if (params.snapshot.unsettledGesture) {
     warnings.push(formatGestureUnsettledWarning(params.snapshot.unsettledGesture));
+  }
+  if (params.snapshot.gestureNoEffect) {
+    warnings.push(formatGestureNoEffectWarning(params.snapshot.gestureNoEffect));
   }
   warnings.push(...buildEmptyAndroidInteractiveWarnings(params));
   if (!params.annotations.quality) {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed (mobile): the warning for a `scroll`, `swipe`, or `gesture swipe` that had no visible effect
+  now reaches `is`, `get`, `find`, `wait`, and interactions, not only `snapshot`. The capture it
+  was proven on carries `gestureNoEffect` (`{ action, positionals }`), and those commands report it
+  in `data` or `error.details` with the appended warning.
 - Fixed (mobile): a read taken right after a `scroll`, `swipe`, or `gesture swipe` no longer reports
   a definite miss when the surface never settled. When post-gesture stabilization ran out of budget
   on a surface still moving, `is visible` answered a plain `selector_not_found` and `is absent`

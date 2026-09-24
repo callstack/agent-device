@@ -280,7 +280,7 @@ test('a pending stabilization resolves through the quiet-window loop and clears 
   assert.equal(result?.warnings, undefined);
 });
 
-test('a proven no-effect gesture surfaces its warning on the resolved capture (iOS accept-stale)', async () => {
+test('a proven no-effect gesture is stamped on the resolved capture tree (iOS accept-stale)', async () => {
   vi.useFakeTimers();
   const session = makeSession('ios');
   session.snapshot = pickupSnapshot();
@@ -299,8 +299,7 @@ test('a proven no-effect gesture surfaces its warning on the resolved capture (i
   }
   const result = await pendingResult;
 
-  assert.equal(result?.warnings?.length, 1);
-  assert.match(result?.warnings?.[0] ?? '', /produced no visible change/);
+  assert.deepEqual(result?.snapshot.gestureNoEffect, { action: 'scroll', positionals: ['down'] });
   assert.equal(isPostGestureStabilizationPending(session), false);
 });
 

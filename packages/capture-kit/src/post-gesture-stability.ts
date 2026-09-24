@@ -83,9 +83,9 @@ function describePostGestureAction(gesture: PostGestureAction): string {
  * moved a stuck list when synthesized scrolls did not (#1600, element-18:
  * raw `swipe` worked where scroll/fling/pan all silently no-opped).
  */
-export function formatGestureNoEffectWarning(action: string, positionals: string[]): string {
+export function formatGestureNoEffectWarning(gesture: PostGestureAction): string {
   return (
-    `${describePostGestureAction({ action, positionals })} produced no visible change: the tree still matches its pre-gesture state. ` +
+    `${describePostGestureAction(gesture)} produced no visible change: the tree still matches its pre-gesture state. ` +
     'Either the container is already at its edge, or it ignores synthesized scrolls — ' +
     'a raw drag moves such lists: swipe x1 y1 x2 y2 (start inside the list).'
   );

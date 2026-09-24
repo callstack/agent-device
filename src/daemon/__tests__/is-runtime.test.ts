@@ -13,7 +13,10 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
-import { formatGestureUnsettledWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import {
+  formatGestureNoEffectWarning,
+  formatGestureUnsettledWarning,
+} from '@agent-device/capture-kit/post-gesture-stability';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
@@ -467,4 +470,37 @@ test('a miss on a surface that never settled carries the unsettled fact, and the
   const reread = await isVisible();
   expect(fixture.captures.length).toBe(captures + 1);
   expect(reread?.ok === false && reread.error.details?.unsettledGesture).toBeUndefined();
+});
+
+test('a read after a scroll that moved nothing carries the no-effect fact', async () => {
+  vi.useFakeTimers();
+  const row = {
+    index: 0,
+    type: 'Cell',
+    identifier: 'row',
+    rect: { x: 0, y: 200, width: 390, height: 60 },
+  };
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({ nodes: [row], backend: 'xctest', producer: 'apple-runner' }),
+  });
+  const sessionStore = makeSessionStore();
+  const session = makeIosAppSession('is-no-effect', { snapshot: makeSnapshotState([row]) });
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['down'], flags: {} });
+  sessionStore.set('is-no-effect', session);
+  const pending = dispatchIsViaRuntime({
+    req: isRequest('is-no-effect', ['visible', 'id=row']),
+    sessionName: 'is-no-effect',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+  // A tree that still matches its pre-gesture baseline is distrusted up to the 3.5s cap.
+  await vi.advanceTimersByTimeAsync(3_700);
+  const gesture = { action: 'scroll', positionals: ['down'] };
+
+  const response = await pending;
+  expect(response?.ok && response.data).toMatchObject({
+    gestureNoEffect: gesture,
+    warnings: [formatGestureNoEffectWarning(gesture)],
+  });
 });

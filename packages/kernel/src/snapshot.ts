@@ -502,6 +502,8 @@ export type SnapshotState = {
   targetActivation?: IosTargetActivation;
   /** The gesture whose surface was still changing when stabilization gave up on this capture. */
   unsettledGesture?: PostGestureAction;
+  /** The gesture this capture proved had no visible effect (#1600). */
+  gestureNoEffect?: PostGestureAction;
 } & SnapshotStateProvenance;
 
 /** The gesture a post-gesture outcome fact names: the command and its positionals. */
