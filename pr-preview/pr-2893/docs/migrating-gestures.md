@@ -163,8 +163,8 @@ flow runs at the speed the `.ad` script ran, rather than picking up Maestro's ow
 This is the process a public gesture input follows on its way out, and the bar the next removal has
 to clear:
 
-1. **Announce.** The input is documented as deprecated and recorded in `CHANGELOG.md` under
-   `Unreleased`, together with the replacement.
+1. **Announce.** The input is documented as deprecated, and the release notes name the
+   replacement.
 2. **Warn for one minor release.** The input keeps working and normalizes to the replacement, with a
    `deprecations` entry in the response so an agent sees the migration while the call still
    succeeds.
