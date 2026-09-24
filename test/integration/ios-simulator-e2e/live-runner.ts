@@ -94,9 +94,15 @@ export async function runIosSimulatorE2E(): Promise<void> {
 }
 
 async function executeLiveScenarios(context: LiveContext): Promise<void> {
+  let assertionCaptureVerified = false;
   for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
     await runScenario(context, scenario);
+    if (!assertionCaptureVerified && context.sessionOpen) {
+      await assertLiveAssertionCapture(context);
+      assertionCaptureVerified = true;
+    }
   }
+  assert.ok(assertionCaptureVerified, 'iOS smoke did not open a session for assertion capture');
   if (context.tier === 'full') {
     await runStep(context, 'reopen fixture for full tier', ['open', context.appId, '--relaunch']);
     for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'full')) {
@@ -104,6 +110,33 @@ async function executeLiveScenarios(context: LiveContext): Promise<void> {
     }
   }
   assertCoverageComplete(context);
+}
+
+async function assertLiveAssertionCapture(context: LiveContext): Promise<void> {
+  const startedAt = Date.now();
+  const stem = `failed-step-${context.stepHistory.length}`;
+  const failure = new assert.AssertionError({ message: 'deliberate live assertion capture' });
+  await assert.rejects(
+    runScenario(context, {
+      id: 'smoke:failure-evidence-canary',
+      run: async () => {
+        throw failure;
+      },
+    }),
+    (error: unknown) => error === failure,
+  );
+
+  const screenshotPath = path.join(context.artifactDir, `${stem}.png`);
+  const snapshotPath = path.join(context.artifactDir, `${stem}-snapshot.json`);
+  const reportPath = path.join(context.artifactDir, 'failed-step.txt');
+  assertPngFile(screenshotPath);
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as { success?: unknown };
+  assert.equal(snapshot.success, true);
+  const report = fs.readFileSync(reportPath, 'utf8');
+  assert.match(report, /deliberate live assertion capture/);
+  assert.ok(report.includes(screenshotPath));
+  assert.ok(report.includes(snapshotPath));
+  console.log(`iOS live assertion capture: ${Date.now() - startedAt}ms; ${context.artifactDir}`);
 }
 
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
