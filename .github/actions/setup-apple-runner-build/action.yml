@@ -44,7 +44,7 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/swift-toolchain-tmpdir.ts', 'scripts/write-xcuitest-cache-metadata.mjs', '.github/actions/setup-apple-runner-build/action.yml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/runner-isolation-diagnostics.ts', 'scripts/swift-toolchain-tmpdir.ts', 'scripts/write-xcuitest-cache-metadata.mjs', '.github/actions/setup-apple-runner-build/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner build variant
