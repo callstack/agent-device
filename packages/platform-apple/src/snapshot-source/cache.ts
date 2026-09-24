@@ -1,5 +1,4 @@
 import path from 'node:path';
-import type { ExecResult } from '@agent-device/host-kit/command';
 import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceDeadline } from './deadline.ts';
 import {
@@ -9,11 +8,9 @@ import {
   type SnapshotSourceToolchainIdentity,
 } from './cache-identity.ts';
 import {
+  ensureNativeBuildCacheEntry,
   execNativeBuildClang,
   fingerprintNativeBuildSource,
-  nativeBuildCacheKey,
-  nativeBuildManifestFieldsMatch,
-  ensureNativeBuildCacheEntry,
 } from './native-build-cache.ts';
 import { SNAPSHOT_SOURCE_PROTOCOL_VERSION, SNAPSHOT_SOURCE_VERSION } from './protocol.ts';
 import type {
@@ -25,39 +22,6 @@ import type {
 const CACHE_SCHEMA_VERSION = 1 as const;
 const BRIDGE_FILENAME = 'snapshot-bridge';
 const BRIDGE_LOCK_DESCRIPTION = 'iOS Simulator snapshot bridge cache';
-const MANIFEST_FIELDS = [
-  'schemaVersion',
-  'protocolVersion',
-  'sourceVersion',
-  'sourceHash',
-  'cacheKey',
-  'toolchain',
-  'compileArgv',
-] as const;
-
-/**
- * The bridge cache key, folding in the compile argv (built with placeholder `sourceRoot` and
- * `outputPath` values, which vary by install and by build and would otherwise make the key
- * unstable) alongside `sourceHash` and `toolchain`, so a change to a compiler flag or framework
- * list — covered by neither — cannot serve a binary built from a different command line (#2796
- * follow-up).
- */
-export function snapshotBridgeCacheKey(
-  input: Readonly<{
-    sourceHash: string;
-    toolchain: SnapshotSourceToolchainIdentity;
-    compileArgv: readonly string[];
-  }>,
-): string {
-  return nativeBuildCacheKey({
-    schemaVersion: CACHE_SCHEMA_VERSION,
-    protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-    sourceVersion: SNAPSHOT_SOURCE_VERSION,
-    sourceHash: input.sourceHash,
-    toolchain: input.toolchain,
-    compileArgv: input.compileArgv,
-  });
-}
 
 /**
  * @internal Upper bound on a single snapshot-bridge clang invocation, exposed for the host bridge
@@ -85,41 +49,39 @@ export async function ensureSnapshotBridgeBinary(
     deadline,
   );
   const toolchain = await readSnapshotSourceToolchain(input.host, input.runtime, deadline);
-  const compileArgv = buildSnapshotBridgeCompileArgv({
-    architecture: toolchain.architecture,
-    sourceRoot: '',
-    outputPath: '',
-  });
-  const cacheKey = snapshotBridgeCacheKey({ sourceHash, toolchain, compileArgv });
   const cacheRoot =
     input.cacheRoot ?? path.join(input.host.homeDirectory(), '.agent-device', 'snapshot-source');
-  const manifest = {
-    schemaVersion: CACHE_SCHEMA_VERSION,
-    protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
-    sourceVersion: SNAPSHOT_SOURCE_VERSION,
-    sourceHash,
-    cacheKey,
-    toolchain,
-    compileArgv,
-  };
   const entry = await ensureNativeBuildCacheEntry({
     host: input.host,
     deadline,
     cacheRoot,
-    cacheKey,
     binaryFilename: BRIDGE_FILENAME,
     lockDescription: BRIDGE_LOCK_DESCRIPTION,
-    manifest,
-    manifestMatches: (candidate) =>
-      nativeBuildManifestFieldsMatch(candidate, manifest, MANIFEST_FIELDS),
+    keyInputs: {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
+      sourceVersion: SNAPSHOT_SOURCE_VERSION,
+      sourceHash,
+      toolchain,
+      // Placeholder paths keep the key independent of the install location and build directory.
+      compileArgv: buildSnapshotBridgeCompileArgv({
+        architecture: toolchain.architecture,
+        sourceRoot: '',
+        outputPath: '',
+      }),
+    },
     build: async (outputPath) => {
-      const result = await compileSnapshotBridge(
-        input.host,
+      const result = await execNativeBuildClang({
+        host: input.host,
         deadline,
-        toolchain.architecture,
-        sourceRoot,
-        outputPath,
-      );
+        argv: buildSnapshotBridgeCompileArgv({
+          architecture: toolchain.architecture,
+          sourceRoot,
+          outputPath,
+        }),
+        budgetMs: BUILD_TIMEOUT_MS,
+        label: 'bridge',
+      });
       if (result.exitCode !== 0 || !input.host.exists(outputPath)) {
         throw snapshotSourceError('unsupported', 'native-build-failed', {
           exitCode: result.exitCode,
@@ -131,7 +93,7 @@ export async function ensureSnapshotBridgeBinary(
   return {
     path: entry.path,
     sourceHash,
-    cacheKey,
+    cacheKey: entry.cacheKey,
     protocolVersion: SNAPSHOT_SOURCE_PROTOCOL_VERSION,
     sourceVersion: SNAPSHOT_SOURCE_VERSION,
   };
@@ -169,23 +131,6 @@ export function buildSnapshotBridgeCompileArgv(
     '-o',
     input.outputPath,
   ];
-}
-
-async function compileSnapshotBridge(
-  host: SnapshotSourceHost,
-  deadline: SnapshotSourceDeadline,
-  architecture: SnapshotSourceToolchainIdentity['architecture'],
-  sourceRoot: string,
-  outputPath: string,
-): Promise<ExecResult> {
-  return execNativeBuildClang({
-    host,
-    deadline,
-    argv: buildSnapshotBridgeCompileArgv({ architecture, sourceRoot, outputPath }),
-    budgetMs: BUILD_TIMEOUT_MS,
-    deadlineReason: 'native-build-deadline',
-    label: 'bridge',
-  });
 }
 
 function resolveSnapshotBridgeSourceRoot(host: SnapshotSourceHost): string {

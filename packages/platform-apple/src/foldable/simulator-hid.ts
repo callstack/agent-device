@@ -10,10 +10,9 @@ export async function sendSimulatorFoldPose(
   device: DeviceInfo,
   pose: FoldPose | readonly FoldKeyframe[],
   signal?: AbortSignal,
-  options: Readonly<{ cacheRoot?: string }> = {},
 ): Promise<void> {
   signal?.throwIfAborted();
-  const binary = await ensureFoldHelperBinary({ signal, cacheRoot: options.cacheRoot });
+  const binary = await ensureFoldHelperBinary({ signal });
   signal?.throwIfAborted();
   const durationMs = typeof pose === 'string' ? 0 : pose.at(-1)!.atMs;
   const payload = typeof pose === 'string' ? pose : JSON.stringify(pose);

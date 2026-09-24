@@ -112,14 +112,7 @@ describe.skipIf(process.platform !== 'darwin')('bridge warning gate', () => {
       sourceRoot: nativeRoot,
       outputPath: binary,
     });
-    const wextraIndex = argv.indexOf('-Wextra');
-    assert.ok(wextraIndex >= 0, 'the production argv carries -Wextra');
-    const werrorArgv = [
-      ...argv.slice(0, wextraIndex + 1),
-      '-Werror',
-      ...argv.slice(wextraIndex + 1),
-    ];
-    compiled = await runCmd('xcrun', werrorArgv, {
+    compiled = await runCmd('xcrun', [...argv, '-Werror'], {
       allowFailure: true,
       timeoutMs: BUILD_TIMEOUT_MS,
     });

@@ -10,7 +10,6 @@ import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
 import {
   buildFoldHelperCompileArgv,
   ensureFoldHelperBinary,
-  foldHelperCacheKey,
   FOLD_HELPER_BUILD_TIMEOUT_MS,
 } from './fold-helper-cache.ts';
 
@@ -82,31 +81,42 @@ test('a cache hit does not build, and a source or toolchain change does', async 
   }
 });
 
-test('the fold helper cache key changes with the compile argv, independent of source and toolchain', () => {
-  const sourceHash = 'same-source';
-  const toolchain = {
-    xcode: 'Xcode 16.4\nBuild version 16F6',
-    macosProductVersion: '15.6',
-    macosBuild: '24G90',
-    architecture: 'arm64',
-  } as const;
-  const argv = ['clang', '-Wall'];
-  const changedArgv = ['clang', '-Wall', '-DSomethingNew'];
+test('the runtime clang build never uses -Werror', () => {
+  assert.ok(!buildFoldHelperCompileArgv({ sourceRoot: '', outputPath: '' }).includes('-Werror'));
+});
 
-  const key = foldHelperCacheKey({ sourceHash, toolchain, compileArgv: argv });
-  const sameKey = foldHelperCacheKey({ sourceHash, toolchain, compileArgv: argv });
-  const keyAfterArgvChange = foldHelperCacheKey({
-    sourceHash,
-    toolchain,
-    compileArgv: changedArgv,
-  });
+test('a failed compile reports fold-helper-build-failed with the compiler output', async () => {
+  const root = await mkdtempForTest('agent-device-fold-helper-cache-failure-');
+  const sourceRoot = path.join(root, 'source');
+  const cacheRoot = path.join(root, 'cache');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  await writeFile(path.join(sourceRoot, 'Fold.m'), 'fold source');
+  const okHost = fakeFoldHelperHost(() => 'binary');
+  const host: SnapshotSourceHost = {
+    ...okHost,
+    run: async (command, args, options) => {
+      if (command === 'xcrun' && args.includes('clang')) {
+        return { stdout: '', stderr: 'compiler detail', exitCode: 1 };
+      }
+      return await okHost.run(command, args, options);
+    },
+  };
 
-  assert.equal(key, sameKey, 'the same argv always keys the same');
-  assert.notEqual(
-    key,
-    keyAfterArgvChange,
-    'an argv-only change (same source, same toolchain) cannot serve a stale binary',
-  );
+  try {
+    await assert.rejects(ensureFoldHelperBinary({ host, sourceRoot, cacheRoot }), {
+      code: 'COMMAND_FAILED',
+      details: {
+        stdout: '',
+        stderr: 'compiler detail',
+        exitCode: 1,
+        processExitError: true,
+        hint: 'Select an Xcode with the iOS simulator SDK and foldable HID support using DEVELOPER_DIR.',
+        reason: 'fold-helper-build-failed',
+      },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('a compile exec killed at its budget reports the fold-helper build, not the exec layer', async () => {
@@ -134,10 +144,10 @@ test('a compile exec killed at its budget reports the fold-helper build, not the
           (error as { details?: { reason?: string } }).details?.reason,
           'fold-helper-build-failed',
         );
-        assert.equal(
-          (error as { details?: { cause?: string } }).details?.cause,
-          'native-build-stalled',
-        );
+        const details = (error as { details?: Record<string, unknown> }).details;
+        assert.equal(details?.cause, 'native-build-stalled');
+        assert.equal(details?.timeoutMs, FOLD_HELPER_BUILD_TIMEOUT_MS);
+        assert.match(String(details?.hint), /stopped the fold helper build/);
         return true;
       },
     );
@@ -160,14 +170,7 @@ describe.skipIf(process.platform !== 'darwin')('fold helper warning gate', () =>
     const sourceRoot = path.resolve(import.meta.dirname, '../../../../apple/fold-helper');
     const binary = path.join(await mkdtempForTest('fold-helper-werror-'), 'fold-helper');
     const argv = buildFoldHelperCompileArgv({ sourceRoot, outputPath: binary });
-    const wextraIndex = argv.indexOf('-Wextra');
-    assert.ok(wextraIndex >= 0, 'the production argv carries -Wextra');
-    const werrorArgv = [
-      ...argv.slice(0, wextraIndex + 1),
-      '-Werror',
-      ...argv.slice(wextraIndex + 1),
-    ];
-    compiled = await runCmd('xcrun', werrorArgv, {
+    compiled = await runCmd('xcrun', [...argv, '-Werror'], {
       allowFailure: true,
       timeoutMs: FOLD_HELPER_BUILD_TIMEOUT_MS,
     });

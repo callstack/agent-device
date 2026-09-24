@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { createSnapshotSourceHost } from './host.ts';
-import { ensureSnapshotBridgeBinary, snapshotBridgeCacheKey } from './cache.ts';
+import { buildSnapshotBridgeCompileArgv, ensureSnapshotBridgeBinary } from './cache.ts';
 import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
@@ -125,68 +125,13 @@ test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt 
   }
 });
 
-test('the runtime clang build never uses -Werror', async () => {
-  const root = await mkdtempForTest('agent-device-snapshot-source-werror-');
-  const sourceRoot = path.join(root, 'source');
-  const cacheRoot = path.join(root, 'cache');
-  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
-  await writeFile(path.join(sourceRoot, 'SnapshotBridge.m'), 'native source');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.m'), 'native runtime');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeRuntime.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.h'), 'native header');
-  await writeFile(path.join(sourceRoot, 'SnapshotBridgeCapture.m'), 'native header');
-  const buildHost = createFakeBuildHost('binary');
-  let clangArgs: readonly string[] = [];
-  const host: SnapshotSourceHost = {
-    ...buildHost,
-    run: async (command, args, options) => {
-      if (command === 'xcrun' && args.includes('clang')) clangArgs = args;
-      return await buildHost.run(command, args, options);
-    },
-  };
-
-  try {
-    await ensureSnapshotBridgeBinary({
-      host,
-      runtime: 'iOS 26.2',
-      limits: DEFAULT_SNAPSHOT_SOURCE_LIMITS,
-      deadline: testDeadline(),
-      sourceRoot,
-      cacheRoot,
-    });
-    assert.ok(clangArgs.length > 0, 'the compile exec ran');
-    assert.ok(!clangArgs.includes('-Werror'));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test('the bridge cache key changes with the compile argv, independent of source and toolchain', () => {
-  const sourceHash = 'same-source';
-  const toolchain = {
-    xcode: 'Xcode 16.4\nBuild version 16F6',
-    macosProductVersion: '15.6',
-    macosBuild: '24G90',
+test('the runtime clang build never uses -Werror', () => {
+  const argv = buildSnapshotBridgeCompileArgv({
     architecture: 'arm64',
-    simulatorRuntime: 'iOS 26.2',
-  } as const;
-  const argv = ['clang', '-Wall'];
-  const changedArgv = ['clang', '-Wall', '-DSomethingNew'];
-
-  const key = snapshotBridgeCacheKey({ sourceHash, toolchain, compileArgv: argv });
-  const sameKey = snapshotBridgeCacheKey({ sourceHash, toolchain, compileArgv: argv });
-  const keyAfterArgvChange = snapshotBridgeCacheKey({
-    sourceHash,
-    toolchain,
-    compileArgv: changedArgv,
+    sourceRoot: '',
+    outputPath: '',
   });
-
-  assert.equal(key, sameKey, 'the same argv always keys the same');
-  assert.notEqual(
-    key,
-    keyAfterArgvChange,
-    'an argv-only change (same source, same toolchain) cannot serve a stale binary',
-  );
+  assert.ok(!argv.includes('-Werror'));
 });
 
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {

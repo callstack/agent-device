@@ -8,33 +8,34 @@ import type { SnapshotSourceHost } from './types.ts';
 
 const MANIFEST_FILENAME = 'manifest.json';
 
-export type NativeBuildCacheEntry = Readonly<{ path: string }>;
+export type NativeBuildCacheEntry = Readonly<{ path: string; cacheKey: string }>;
 
 /**
- * One locked, content+toolchain-keyed cache entry: a candidate hit is verified against its own
- * manifest and binary hash, a miss builds into a temp directory and publishes it with an atomic
- * rename, and a build that fails leaves no partial entry behind. Every runtime clang build in this
- * package shares this mechanism so a stale entry, a corrupt cache, or a `DEVELOPER_DIR` switch is
- * handled once (#2796).
+ * One locked cache entry keyed on everything its build depends on: a candidate hit is verified
+ * against its manifest's key and binary hash, a miss builds into a temp directory and publishes it
+ * with an atomic rename, and a build that fails leaves no partial entry behind. Every runtime clang
+ * build in this package shares this mechanism so a stale entry, a corrupt cache, or a
+ * `DEVELOPER_DIR` switch is handled once (#2796).
  */
 export async function ensureNativeBuildCacheEntry(
   input: Readonly<{
     host: SnapshotSourceHost;
     deadline: SnapshotSourceDeadline;
     cacheRoot: string;
-    cacheKey: string;
     binaryFilename: string;
     /** Names the contended resource in a lock-stall diagnostic; every caller states its own. */
     lockDescription: string;
-    /** Written alongside `cacheKey` and the built binary's sha256 once a build publishes. */
-    manifest: Readonly<Record<string, unknown>>;
-    /** Whether a candidate manifest still describes `manifest`; the binary hash is checked separately. */
-    manifestMatches: (candidate: Readonly<Record<string, unknown>>) => boolean;
+    /** Everything the built binary depends on: hashed into the cache key and recorded in the manifest. */
+    keyInputs: Readonly<Record<string, unknown>>;
     /** Builds `outputPath` and throws its own typed error on failure. */
     build: (outputPath: string) => Promise<void>;
   }>,
 ): Promise<NativeBuildCacheEntry> {
-  const { host, deadline, cacheRoot, cacheKey, binaryFilename } = input;
+  const { host, deadline, cacheRoot, binaryFilename } = input;
+  const cacheKey = createHash('sha256')
+    .update(JSON.stringify(input.keyInputs))
+    .digest('hex')
+    .slice(0, 32);
   const entryPath = path.join(cacheRoot, cacheKey);
   return await withProcessLock({
     acquire: () =>
@@ -43,14 +44,8 @@ export async function ensureNativeBuildCacheEntry(
         description: input.lockDescription,
       }),
     task: async () => {
-      const cached = await readValidCacheEntry(
-        host,
-        entryPath,
-        binaryFilename,
-        input.manifestMatches,
-        deadline,
-      );
-      if (cached) return { path: cached };
+      const cached = await readValidCacheEntry(host, entryPath, binaryFilename, cacheKey, deadline);
+      if (cached) return { path: cached, cacheKey };
       remainingSnapshotSourceMs(deadline, 'native-build-deadline');
       if (host.exists(entryPath)) await host.remove(entryPath);
       remainingSnapshotSourceMs(deadline, 'native-build-deadline');
@@ -66,14 +61,14 @@ export async function ensureNativeBuildCacheEntry(
         remainingSnapshotSourceMs(deadline, 'native-build-deadline');
         await host.chmod(outputPath, 0o755);
         const binarySha256 = await sha256File(host, outputPath);
-        const manifest = { ...input.manifest, cacheKey, binarySha256 };
+        const manifest = { ...input.keyInputs, cacheKey, binarySha256 };
         await host.writeText(
           path.join(temporaryPath, MANIFEST_FILENAME),
           `${JSON.stringify(manifest, null, 2)}\n`,
         );
         remainingSnapshotSourceMs(deadline, 'native-build-deadline');
         await host.rename(temporaryPath, entryPath);
-        return { path: path.join(entryPath, binaryFilename) };
+        return { path: path.join(entryPath, binaryFilename), cacheKey };
       } catch (error) {
         await host.remove(temporaryPath);
         throw error;
@@ -82,22 +77,11 @@ export async function ensureNativeBuildCacheEntry(
   });
 }
 
-/** Every field named here matches `expected`'s value exactly, compared as JSON. */
-export function nativeBuildManifestFieldsMatch(
-  candidate: Readonly<Record<string, unknown>>,
-  expected: Readonly<Record<string, unknown>>,
-  fields: readonly string[],
-): boolean {
-  return fields.every(
-    (field) => JSON.stringify(candidate[field]) === JSON.stringify(expected[field]),
-  );
-}
-
 async function readValidCacheEntry(
   host: SnapshotSourceHost,
   entryPath: string,
   binaryFilename: string,
-  manifestMatches: (candidate: Readonly<Record<string, unknown>>) => boolean,
+  cacheKey: string,
   deadline: SnapshotSourceDeadline,
 ): Promise<string | undefined> {
   const binaryPath = path.join(entryPath, binaryFilename);
@@ -105,7 +89,9 @@ async function readValidCacheEntry(
   if (!host.exists(binaryPath) || !host.exists(manifestPath)) return undefined;
   try {
     const manifest = JSON.parse(await host.readText(manifestPath)) as Record<string, unknown>;
-    if (!describesReusableEntry(manifest, manifestMatches)) return undefined;
+    if (manifest.cacheKey !== cacheKey || typeof manifest.binarySha256 !== 'string') {
+      return undefined;
+    }
     remainingSnapshotSourceMs(deadline, 'native-cache-hash-deadline');
     const matchesBinary = (await sha256File(host, binaryPath)) === manifest.binarySha256;
     return matchesBinary ? binaryPath : undefined;
@@ -113,14 +99,6 @@ async function readValidCacheEntry(
     if (isCacheReadCancellationOrTimeout(error)) throw error;
     return undefined;
   }
-}
-
-/** A parsed manifest is reusable when it carries a binary hash and still describes `manifestMatches`. */
-function describesReusableEntry(
-  manifest: Readonly<Record<string, unknown>>,
-  manifestMatches: (candidate: Readonly<Record<string, unknown>>) => boolean,
-): boolean {
-  return typeof manifest.binarySha256 === 'string' && manifestMatches(manifest);
 }
 
 /** Distinguishes a real cache-read failure (corrupt entry, stale manifest) from a caller cancellation or deadline. */
@@ -135,11 +113,6 @@ async function sha256File(host: SnapshotSourceHost, filePath: string): Promise<s
   return createHash('sha256')
     .update(await host.readBinary(filePath))
     .digest('hex');
-}
-
-/** Canonicalized-JSON content hash for a build's cache key, shared so every cache key is derived the same way. */
-export function nativeBuildCacheKey(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32);
 }
 
 /**
@@ -179,14 +152,13 @@ export async function execNativeBuildClang(
     deadline: SnapshotSourceDeadline;
     argv: readonly string[];
     budgetMs: number;
-    deadlineReason: string;
     /** Names the build in the stall hint, e.g. "bridge" or "fold helper". */
     label: string;
   }>,
 ): Promise<ExecResult> {
   const timeoutMs = Math.min(
     input.budgetMs,
-    remainingSnapshotSourceMs(input.deadline, input.deadlineReason),
+    remainingSnapshotSourceMs(input.deadline, 'native-build-deadline'),
   );
   try {
     return await input.host.run('xcrun', [...input.argv], {
