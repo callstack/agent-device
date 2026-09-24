@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -221,4 +222,61 @@ test('the real CHANGELOG.md has no "## Unreleased" heading', () => {
   const repoRoot = path.resolve(import.meta.dirname, '../..');
   const changelog = fs.readFileSync(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
   assert.equal(changelog.includes('## Unreleased'), false);
+});
+
+const MIGRATED_HEADING = '## 0.15.1 – 0.21.13';
+const MIGRATED_TAG = 'v0.21.13';
+
+/**
+ * The bullets under `heading`: every line from the first line starting with `- ` up to (not
+ * including) the next `## ` heading, with trailing blank lines trimmed. Skips any prose between
+ * the heading and its first bullet (for example the migrated section's one-line note), so the
+ * comparison is bullet content only, not the surrounding heading text.
+ */
+function sectionBullets(changelog: string, heading: string): string[] {
+  const lines = changelog.split('\n');
+  const headingIndex = lines.indexOf(heading);
+  assert.notEqual(headingIndex, -1, `expected to find a "${heading}" heading`);
+  let start = headingIndex + 1;
+  while (start < lines.length && !lines[start].startsWith('- ')) start++;
+  let end = start;
+  while (end < lines.length && !lines[end].startsWith('## ')) end++;
+  while (end > start && lines[end - 1] === '') end--;
+  return lines.slice(start, end);
+}
+
+// Repository guard: a rebase onto a newer base can replay the "## Unreleased" -> historical-range
+// heading rename over a CHANGELOG.md that has grown new bullets since the tag, silently folding
+// them into a released section they never shipped in (the "no Unreleased heading" guard above
+// passes either way, since the heading is gone in both the correct and the stale case). Pin the
+// migrated section's bullets to be byte-identical to the tag's own "## Unreleased" bullets, so a
+// stale-base migration -- one that carries bullets the tag never had -- fails loudly instead of
+// merging clean.
+test(`the "${MIGRATED_HEADING}" section is byte-identical to ${MIGRATED_TAG}'s Unreleased block`, () => {
+  const repoRoot = path.resolve(import.meta.dirname, '../..');
+  const changelog = fs.readFileSync(path.join(repoRoot, 'CHANGELOG.md'), 'utf8');
+  if (!changelog.includes(`${MIGRATED_HEADING}\n`)) {
+    // A later migration renamed or removed this section; nothing left here to pin against the tag.
+    return;
+  }
+
+  let tagChangelog: string;
+  try {
+    tagChangelog = execFileSync('git', ['show', `${MIGRATED_TAG}:CHANGELOG.md`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr ?? '';
+    throw new Error(
+      `This guard needs the "${MIGRATED_TAG}" tag (git show ${MIGRATED_TAG}:CHANGELOG.md failed: ` +
+        `${stderr}). Fetch tags from origin; the gate does not skip.`,
+      { cause: error },
+    );
+  }
+
+  assert.deepEqual(
+    sectionBullets(changelog, MIGRATED_HEADING),
+    sectionBullets(tagChangelog, '## Unreleased'),
+  );
 });

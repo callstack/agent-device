@@ -4,25 +4,6 @@
 
 These releases did not split the changelog per version.
 
-- Fixed (android): snapshot nodes and `get attrs` carry the accessibility `heading` flag and the
-  `roleDescription` an app set on a node. React Native puts a header, a tab, a tab list, a link, or a
-  menu on a plain `android.view.View` and tells the accessibility tree what it is through these two
-  facts; the helper never serialized either, so every one of them was a nameless `View` to an agent.
-  The helper now writes `heading` when the node reports it (API 28 or later) and `role-description`
-  when the app set one, and the parser, the Android hierarchy node, and the published snapshot node
-  carry them to `get attrs` and the selector digest. The class stays the `type`.
-- Fixed (ios): `perf cpu profile report --kind xctrace` on Xcode 27 no longer fails with
-  `Apple xctrace CPU report contained no samples` on a trace that holds thousands of samples. Xcode
-  27 exports each `time-profile` sample stack as `<tagged-backtrace>` instead of `<backtrace>`, and
-  the parser read only the old element, so every row resolved no stack at all. Both spellings now
-  parse through the same `id`/`ref` resolution, so a profile recorded with an older Xcode reports
-  what it did before. (#2860)
-- Fixed (ios): `alert get`, `accept`, or `dismiss` with no alert on screen no longer reads every
-  element of the app to look for a popover's dismiss region. That walk cost one XCTest round trip
-  per element, plus XCTest's retry cycle for each element that vanished mid-walk. On a loading
-  WebView it outran the 10 s alert budget and kept the runner's main thread busy for more than 30 s
-  after the command failed, so later commands failed with `RUNNER_BUSY`. The dismiss region is now
-  found with one predicate query per window set. (#2491)
 - Changed (apple): a read-only runner command is resent inside the same request only when the
   runner refused it as `RUNNER_BUSY`. Before, any `COMMAND_FAILED` carrying `details.retriable:
   true` was sent up to three times. That flag tells a caller's own poll, such as `wait`, to try
@@ -41,25 +22,11 @@ These releases did not split the changelog per version.
 - Fixed (mobile): a read taken right after a `scroll`, `swipe`, or `gesture swipe` no longer reports
   a definite miss when the surface never settled. When post-gesture stabilization ran out of budget
   on a surface still moving, `is visible` answered a plain `selector_not_found` and `is absent`
-  passed. The capture now carries `postGestureOutcome` (`{ kind, gesture: { action, positionals } }`)
-  with `kind: "unsettled"`, and so does a re-capture taken at once to recover or widen it. A proven
-  no-effect gesture rides the same field with `kind: "no-effect"`; before, its warning reached only
-  `snapshot`. `is`, `get`, `find`, `wait`, and every interaction that captured it (`click`, `press`,
-  `fill`, and the other touch and gesture commands) report the field in `data` or `error.details`
-  with an appended warning; `snapshot` appends the warning. `is absent` refuses an unsettled capture
-  with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures afresh.
-  A failed read also carries `targetActivation` in `error.details`, and a failed interaction now
-  keeps the disclosure sentences in its hint.
   passed. That capture now carries `unsettledGesture`: `is`, `get`, `find`, and `wait` report it (in
   `error.details` or `data`) with an appended warning, `snapshot` appends the warning, `is absent`
   refuses with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures
   afresh. Click, press, and fill by selector do not disclose it yet. A failed read now also carries
   `targetActivation` in `error.details`, the same place as `unsettledGesture`.
-- Fixed (ios): a synthesized tap step inside a runner `sequence` (for example `press x y --count N`)
-  now follows the standalone tap's policy instead of its own. When accessibility is unavailable or no
-  app window resolves, the step now falls back to an XCTest coordinate tap instead of failing the
-  step with `UNSUPPORTED_OPERATION`. One helper now owns the synthesize-then-fallback decision at
-  every synthesized tap site (#2788).
 - Fixed (ios): `open` on a local Simulator now waits for the launched app's discovery before it
   decides whether the app is observable. On a loaded host `simctl spawn launchctl list` outlasts one
   1.5 s discovery wait slice, and the launch observation read that slice as an unobservable app, so
@@ -115,14 +82,6 @@ These releases did not split the changelog per version.
   report no UIKit class names — the XCTest runner, whose own queries answered 76 nodes for that same
   state, plus `appium-source` and `limrun-ios-tree` — never trigger the cut. All 39 flows of React Navigation's Maestro suite pass on an iPhone 17 Simulator running
   iOS 26.2 with this change, including two that never passed on the bridge.
-- Fixed (ios): runtime clang builds no longer compile with `-Werror`, so a new warning from a future
-  Xcode SDK cannot break the AX bridge or fold on a user's machine that this repository cannot fix
-  for them. The fold helper is now built through the same content- and toolchain-keyed build cache
-  as the AX bridge, so a fold call after the first serves a cached binary instead of recompiling
-  `Fold.m` on every call, and switching `DEVELOPER_DIR` busts the cache instead of serving a binary
-  built against a different SDK. A darwin-only CI step (`.github/workflows/ios.yml`) compiles each
-  build's production argv with `-Werror` appended whenever its sources change, so a new warning still
-  fails CI (#2796).
 - Fixed (ios): a local Simulator snapshot taken through the host AX bridge once again publishes the
   geometric `hittable` fact, so `is hittable` and a `hittable:` selector resolve the same controls on
   the bridge and the XCTest runner. The snapshot capability table has declared `hittable =
