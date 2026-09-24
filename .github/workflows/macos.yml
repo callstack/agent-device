@@ -161,13 +161,15 @@ jobs:
           git fetch origin "$BASE_SHA" --depth=1 || echo 'Base fetch failed; bridge proof selection will fail open.'
           node --experimental-strip-types scripts/apple-ci-impact.ts bridge
 
-      - name: Verify clean-installed Simulator snapshot bridge preparation and the fold-helper -Werror gate
+      - name: Verify the darwin-only native source proofs (snapshot bridge, fold-helper -Werror, recording scripts)
         if: github.event_name == 'pull_request' && steps.bridge-impact.outputs.run != 'false'
         run: |
           pnpm build
           pnpm exec vitest run \
             packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
-            packages/platform-apple/src/foldable/fold-helper-cache.test.ts
+            packages/platform-apple/src/foldable/fold-helper-cache.test.ts \
+            packages/platform-apple/src/foldable/simulator-hid-native.test.ts \
+            packages/capture-kit/src/recording/__tests__/recording-scripts.test.ts
           pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Upload macOS artifacts
