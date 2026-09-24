@@ -21,15 +21,17 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--relaunch',
     '--launch-url',
     VISIBLE_DEPTH_DEEP_LINK,
+    '--debug',
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context, [`id="${CHILD_ID}"`]);
+  await acceptDeepLinkConfirmationIfPresent(context, [`id="${CHILD_ID}"`], { debug: true });
   // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
-  await assertWaitSelector(context, `id="${CHILD_ID}"`);
+  await assertWaitSelector(context, `id="${CHILD_ID}"`, { debug: true });
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',
     '--depth',
     '1',
+    '--debug',
   ]);
   assertSimulatorBridgeSnapshot(regular, 'regular depth-1 snapshot');
   const regularNodes = snapshotNodes(regular);

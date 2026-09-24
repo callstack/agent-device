@@ -24,12 +24,13 @@ const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
 async function observeFixtureHome(context: LiveContext) {
-  await assertWaitText(context, FIXTURE_HOME_TITLE);
+  await assertWaitText(context, FIXTURE_HOME_TITLE, { debug: true });
   const snapshot = await runStep(context, 'capture fixture home', [
     'snapshot',
     '-i',
     '-s',
     FIXTURE_HOME_TITLE,
+    '--debug',
   ]);
   const nodes = Array.isArray(snapshot.json?.data?.nodes) ? snapshot.json.data.nodes : [];
   assert.ok(
@@ -60,6 +61,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     'open',
     context.appId,
     '--relaunch',
+    '--debug',
   ]);
   assertJsonContains(opened, context.appId, 'open response should retain fixture identity');
   const runnerLogPath = opened.json?.data?.runnerLogPath;

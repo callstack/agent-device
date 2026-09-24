@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 
@@ -11,6 +14,7 @@ vi.mock('./system-surface-presence.ts', () => ({
 import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { simulatorAddressFor } from './core/simctl.ts';
+import { mkdtempForTest } from './__tests__/tmp-dir.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
@@ -285,8 +289,28 @@ test('typed bridge failure falls back once and disables retries for that app gen
     resolveTarget: vi.fn(async () => target),
   });
 
-  const first = await route.capture(ios, input, signal(), fallback);
-  const second = await route.capture(ios, input, signal(), fallback);
+  const logPath = path.join(await mkdtempForTest('ios-route-'), 'request.ndjson');
+  const [first, second] = await withDiagnosticsScope(
+    { command: 'snapshot', debug: true, logPath },
+    async () => {
+      const first = await route.capture(ios, input, signal(), fallback);
+      const second = await route.capture(ios, input, signal(), fallback);
+      return [first, second] as const;
+    },
+  );
+
+  expect(
+    fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.phase === 'ios_snapshot_route_fallback')
+      .map((event) => event.data),
+  ).toEqual([
+    { reason: 'bridge-disconnected', deviceId: ios.id, generation: target.generation },
+    { reason: 'circuit-disabled', deviceId: ios.id, generation: target.generation },
+  ]);
 
   expect(source.acquire).toHaveBeenCalledOnce();
   expect(fallback).toHaveBeenCalledTimes(2);

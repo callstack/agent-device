@@ -256,7 +256,11 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     'seeded email should survive keyboard dismiss, before any refocus or further typing',
   );
 
-  const formSnapshot = await runStep(context, 'locate email coordinates', ['snapshot', '-i']);
+  const formSnapshot = await runStep(context, 'locate email coordinates', [
+    'snapshot',
+    '-i',
+    '--debug',
+  ]);
   const emailRect = requireNodeRect(formSnapshot, 'field-email');
   await runStep(context, 'focus email by snapshot-derived coordinates', [
     'focus',

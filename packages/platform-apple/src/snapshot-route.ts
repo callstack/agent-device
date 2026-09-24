@@ -153,6 +153,7 @@ export function createAppleSnapshotRoute(
         );
       }
       if (isBridgeDisabled(target)) {
+        emitRouteDiagnostic('circuit-disabled', device, target.generation);
         return await runFallback(
           device.id,
           input,

@@ -21,19 +21,33 @@ export function createLiveDeviceAssertions<
   verifyCommand: (context: Context, command: string, evidence: string) => void,
   waitCommand: string,
 ) {
-  async function assertWaitText(context: Context, expected: string): Promise<void> {
+  async function assertWaitText(
+    context: Context,
+    expected: string,
+    options: { debug?: boolean } = {},
+  ): Promise<void> {
     const result = await runStep(context, `wait for ${expected}`, [
       'wait',
       'text',
       expected,
       '10000',
+      ...(options.debug ? ['--debug'] : []),
     ]);
     assertJsonContains(result, expected, `wait should observe ${expected}`);
     verifyCommand(context, waitCommand, `wait observes durable text: ${expected}`);
   }
 
-  async function assertWaitSelector(context: Context, selector: string): Promise<void> {
-    await runStep(context, `wait for ${selector}`, ['wait', selector, '10000']);
+  async function assertWaitSelector(
+    context: Context,
+    selector: string,
+    options: { debug?: boolean } = {},
+  ): Promise<void> {
+    await runStep(context, `wait for ${selector}`, [
+      'wait',
+      selector,
+      '10000',
+      ...(options.debug ? ['--debug'] : []),
+    ]);
     verifyCommand(context, waitCommand, `wait observes durable selector: ${selector}`);
   }
 

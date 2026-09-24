@@ -29,12 +29,21 @@ export type DeepLinkConfirmationDevice = {
 export function acceptDeepLinkConfirmationIfPresent(
   context: LiveContext,
   destination: readonly string[],
+  options: { debug?: boolean } = {},
 ): Promise<void> {
   return answerDeepLinkConfirmation({
     waitForDestination: (step) =>
-      runStep(context, step, ['wait', ...destination, DEEP_LINK_DESTINATION_WAIT_MS], {
-        allowFailure: true,
-      }),
+      runStep(
+        context,
+        step,
+        [
+          'wait',
+          ...destination,
+          DEEP_LINK_DESTINATION_WAIT_MS,
+          ...(options.debug ? ['--debug'] : []),
+        ],
+        { allowFailure: true },
+      ),
     inspectAlert: () =>
       runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get'], {
         allowFailure: true,
