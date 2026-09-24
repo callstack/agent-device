@@ -805,6 +805,38 @@ test('strict wait absent reports readiness exhaustion over an earlier present ca
   });
 });
 
+test('an earlier retriable refusal outranks readiness work on the final poll', async () => {
+  // Live on iOS: the runner answered APP_NOT_RUNNING, then the next poll's app discovery was cut by
+  // the deadline. The refusal is the actionable answer; readiness stays in the evidence.
+  const notRunning = new AppError('COMMAND_FAILED', "app 'com.example.app' is not running", {
+    runnerErrorCode: 'APP_NOT_RUNNING',
+    retriable: true,
+  });
+  let poll = 0;
+  const readiness = cancelledCapture('target-discovery');
+  const captureSnapshot = vi.fn(async (input: CaptureSnapshotInput) => {
+    if (poll++ === 0) throw notRunning;
+    return await readiness(input);
+  });
+  const harness = waitRuntimeHarness({ captureSnapshot });
+
+  const { response } = await runWait(['text', 'Ready', '800'], harness);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.message).toContain('is not running');
+  expect(response.error.details).toMatchObject({
+    reason: WAIT_REASONS.captureStalled,
+    runnerErrorCode: 'APP_NOT_RUNNING',
+    readinessPhase: 'target-discovery',
+    readableCaptures: 0,
+  });
+  expect(response.error.details?.polls).toMatchObject([
+    { outcome: 'retriable' },
+    { outcome: 'readiness' },
+  ]);
+});
+
 test('strict wait absent keeps its present evidence when a steady-state capture is cancelled', async () => {
   const captureSnapshot = cancelledCapture(undefined, [
     {

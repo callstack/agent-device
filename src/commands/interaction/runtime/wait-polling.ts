@@ -320,6 +320,9 @@ export function waitTimeoutError(
     case 'runner-restart-exhausted':
       return waitRunnerRestartExhaustedError(message, evidence);
     case 'readiness-exhausted':
+      // A refusal an earlier poll hit (the app is not running, say) is an answer the readiness
+      // work on the final poll does not replace.
+      rethrowNeverReadableCause(polling, evidence, false);
       return waitReadinessExhaustedError(message, evidence);
     case 'capture-stalled':
       // Whether a content verdict outranks the stall verdict is the caller's policy; a refusal is
