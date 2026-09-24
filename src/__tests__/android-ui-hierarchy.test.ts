@@ -236,6 +236,42 @@ test('a published Android snapshot answers a selected-qualified read (#2462)', a
   );
 });
 
+// A React Native screen: the header role is a View flagged as a heading, the tab bar and its tabs
+// are Views with the role description the app set, and the helper writes neither on a plain label.
+const ANDROID_ROLE_FACTS_XML = `<hierarchy>
+  <node class="android.widget.FrameLayout" resource-id="com.example.app:id/root" bounds="[0,0][390,300]" enabled="true" visible-to-user="true">
+    <node class="android.view.View" resource-id="com.example.app:id/header" text="Inventory" heading="true" bounds="[0,0][390,60]" enabled="true" visible-to-user="true"/>
+    <node class="android.view.View" resource-id="com.example.app:id/tabs" role-description="tab list" bounds="[0,60][390,120]" enabled="true" visible-to-user="true">
+      <node class="android.view.View" resource-id="com.example.app:id/tab-fields" text="Fields" role-description="tab" bounds="[0,60][195,120]" clickable="true" enabled="true" visible-to-user="true"/>
+    </node>
+    <node class="android.widget.TextView" resource-id="com.example.app:id/label" text="Wi-Fi" bounds="[0,120][390,180]" enabled="true" visible-to-user="true"/>
+  </node>
+</hierarchy>`;
+
+test('a published Android snapshot carries the heading flag and the role description', () => {
+  const nodes = publishUiHierarchy(ANDROID_ROLE_FACTS_XML).nodes;
+  const byId = (identifier: string) => nodes.find((node) => node.identifier === identifier)!;
+
+  assert.equal(byId('com.example.app:id/header').heading, true);
+  assert.equal(byId('com.example.app:id/tabs').roleDescription, 'tab list');
+  assert.equal(byId('com.example.app:id/tab-fields').roleDescription, 'tab');
+  assert.equal(byId('com.example.app:id/label').heading, undefined);
+  assert.equal(byId('com.example.app:id/label').roleDescription, undefined);
+  assert.deepEqual(
+    Array.from(androidUiNodes(ANDROID_ROLE_FACTS_XML)).map((node) => [
+      node.heading,
+      node.roleDescription,
+    ]),
+    [
+      [undefined, undefined],
+      [true, undefined],
+      [undefined, 'tab list'],
+      [undefined, 'tab'],
+      [undefined, undefined],
+    ],
+  );
+});
+
 test('parseUiHierarchy discards stale inactive Android application windows', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" package="com.example.app" bounds="[0,0][390,844]" window-index="0" window-type="1" window-layer="10" window-active="true" window-focused="true" window-bounds="[0,0][390,844]">

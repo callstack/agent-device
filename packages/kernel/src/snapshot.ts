@@ -238,6 +238,10 @@ export type RawSnapshotNode = {
   enabled?: boolean;
   selected?: boolean;
   focused?: boolean;
+  /** Accessibility heading flag an app set on the node; absent means not a heading or unavailable. */
+  heading?: boolean;
+  /** Localized role description an app set beside the native class, verbatim (`Tab`, `Tab List`, `Link`). */
+  roleDescription?: string;
   /** Native accessibility facts; absent means unavailable, not false. */
   editable?: boolean;
   password?: boolean;

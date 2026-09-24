@@ -53,6 +53,8 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "class", node.getClassName());
     appendNonEmptyAttribute(xml, "package", node.getPackageName());
     appendNonEmptyAttribute(xml, "content-desc", node.getContentDescription());
+    appendNonEmptyAttribute(xml, "role-description", roleDescription(node));
+    appendTrueAttribute(xml, "heading", isHeading(node));
     appendAttribute(xml, "visible-to-user", Boolean.toString(node.isVisibleToUser()));
     appendDrawingOrderAttribute(xml, node);
     appendTrueAttribute(xml, "clickable", node.isClickable());
@@ -144,6 +146,19 @@ final class AccessibilityTreeXml {
     if (value) {
       appendAttribute(xml, name, "true");
     }
+  }
+
+  // The platform node has no role description getter: androidx writes the value an app set
+  // (AccessibilityNodeInfoCompat.setRoleDescription) into the node extras under this key, and
+  // TalkBack reads it from there.
+  private static CharSequence roleDescription(AccessibilityNodeInfo node) {
+    return node.getExtras().getCharSequence("AccessibilityNodeInfo.roleDescription");
+  }
+
+  // isHeading() arrived in API 28. Older releases keep the compat flag in an extras bit this
+  // helper does not read, so a heading on API 23-27 reports nothing.
+  private static boolean isHeading(AccessibilityNodeInfo node) {
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && node.isHeading();
   }
 
   // Declared residue (agent-device #1832): checked / checkable / long-clickable are not serialized,

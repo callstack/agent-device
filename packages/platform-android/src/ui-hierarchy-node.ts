@@ -17,6 +17,8 @@ export type AndroidUiHierarchy = {
   visibleToUser?: boolean;
   focused?: boolean;
   selected?: boolean;
+  heading?: boolean;
+  roleDescription?: string;
   editable?: boolean;
   password?: boolean;
   hintShowing?: boolean;

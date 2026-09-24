@@ -35,6 +35,10 @@ export type AndroidUiNodeMetadata = {
   focusable?: boolean;
   focused?: boolean;
   selected?: boolean;
+  /** Helper-only: the accessibility heading flag an app set on the node (API 28 or later). */
+  heading?: boolean;
+  /** Helper-only: the localized role description an app set beside the class, verbatim. */
+  roleDescription?: string;
   password?: boolean;
   editable?: boolean;
   selectionStart?: number;
@@ -132,6 +136,15 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     const value = parseBounds(getAttr(name));
     return value === undefined ? {} : ({ [key]: value } as Pick<AndroidUiNodeMetadata, Key>);
   };
+  const optionalStringAttr = <Key extends keyof AndroidUiNodeMetadata>(
+    key: Key,
+    name: string,
+  ): Partial<Pick<AndroidUiNodeMetadata, Key>> => {
+    const value = getAttr(name);
+    return value === null || value === ''
+      ? {}
+      : ({ [key]: value } as Pick<AndroidUiNodeMetadata, Key>);
+  };
   const optionalBoolAttr = <Key extends keyof AndroidUiNodeMetadata>(
     key: Key,
     name: string,
@@ -157,6 +170,8 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalBoolAttr('hintShowing', 'hint-showing'),
     ...optionalBoolAttr('visibleToUser', 'visible-to-user'),
     ...optionalBoolAttr('selected', 'selected'),
+    ...optionalBoolAttr('heading', 'heading'),
+    ...optionalStringAttr('roleDescription', 'role-description'),
     ...optionalNumberAttr('drawingOrder', 'drawing-order'),
     ...optionalBoolAttr('scrollable', 'scrollable'),
     ...optionalBoolAttr('canScrollForward', 'can-scroll-forward'),
@@ -311,6 +326,8 @@ function normalizeAndroidUiHierarchyNode(
       enabled: attrs.enabled,
       focused: attrs.focused,
       selected: attrs.selected,
+      heading: attrs.heading,
+      roleDescription: attrs.roleDescription,
       editable: attrs.editable,
       password: attrs.password,
       hintShowing: attrs.hintShowing,

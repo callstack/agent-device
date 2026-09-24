@@ -115,6 +115,8 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'enabled',
   'selected',
   'focused',
+  'heading',
+  'roleDescription',
   'editable',
   'password',
   'hintShowing',
