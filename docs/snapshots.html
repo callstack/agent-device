@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.e328c2bb91.js"></script>
+<script defer src="/agent-device/static/js/index.eac6edaf69.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -157,10 +157,10 @@ have no equivalent independent semantic backend; they bound the XCTest work with
 </ul>
 <h2 class="rp-toc-include" id="android-node-metadata"><a href="#android-node-metadata" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Android node metadata</h2>
 <p>Android snapshot nodes and <code>get attrs</code> (including the digest response) carry the native
-<code>selected</code>, <code>heading</code>, <code>roleDescription</code>, <code>editable</code>, <code>password</code>, <code>hintShowing</code>, <code>selectionStart</code>,
-and <code>selectionEnd</code> facts whenever the accessibility tree reports them. Explicit <code>false</code> and <code>0</code> are
-kept; an absent field means the fact was unavailable, not false. <code>hintShowing</code> needs Android API 26
-or later, <code>heading</code> API 28 or later.</p>
+<code>selected</code>, <code>heading</code>, <code>roleDescription</code>, <code>editable</code>, <code>password</code>, <code>hintShowing</code>, <code>placeholder</code>,
+<code>selectionStart</code>, and <code>selectionEnd</code> facts whenever the accessibility tree reports them. Explicit
+<code>false</code> and <code>0</code> are kept; an absent field means the fact was unavailable, not false. <code>hintShowing</code>
+and <code>placeholder</code> need Android API 26 or later, <code>heading</code> API 28 or later.</p>
 <ul>
 <li><code>selected</code> is the accessibility selected state an app sets on a control — the active bottom-tab or
 segmented-control item, or the chosen row of a list. Android reports it explicitly as <code>true</code> or
@@ -175,6 +175,9 @@ not say what the control is. The <code>type</code> stays the class; a consumer m
 <li><code>value: &quot;&quot;</code> is an explicitly empty accessibility text; a missing <code>value</code> means no text was
 reported. The text of an empty field is its hint on modern Android, so check <code>hintShowing</code>
 before reading <code>value</code> as the entered contents.</li>
+<li><code>placeholder</code> is the field&#x27;s hint text itself, present whether the field is empty or filled: an
+empty field shows it (<code>hintShowing: true</code>, and <code>value</code> repeats it), a filled field no longer does.
+A field without a hint omits it.</li>
 <li><code>selectionStart</code>/<code>selectionEnd</code> are accessibility selection offsets. They are independent of
 <code>editable</code> (read-only selectable text exposes them too), they are not a character count, and
 they do not prove that a masked or secure value equals expected text.</li>
