@@ -181,31 +181,59 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
-  func testRunMainThreadWorkIfIdleDeclinesOnlyForInFlightWork() {
-    // Production marks work abandoned only while its block is still running on main, so the mark
-    // never stands alone. The gate therefore reads in-flight dispatches and nothing else: a mark
-    // with an idle main thread names no work to wait for and must not starve the recorder.
+  func testRunMainThreadWorkIfIdleDeclinesAbandonedWorkUntilItDrains() {
     final class Outcome {
-      var value: Bool?
-      var offered = false
+      var abandonedCount = 0
+      var inFlightCount = 0
+      var offeredWhileAbandoned = false
+      var whileAbandoned: Bool?
+      var ranWhileAbandoned = false
+      var afterDrain: Bool?
       var error: Error?
     }
     let outcome = Outcome()
-    let finished = expectation(description: "optional work was offered with main free")
-    abandonedMainThreadWorkCount = 1
-    defer { abandonedMainThreadWorkCount = 0 }
+    let releaseWork = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "optional work was offered while abandoned and after drain")
 
-    DispatchQueue(label: "agent-device.runner.tests.stale-abandoned-mark").async {
+    DispatchQueue(label: "agent-device.runner.tests.abandoned-then-drained").async {
       defer { finished.fulfill() }
+      _ = try? self.runMainThreadWork(
+        "command_execution",
+        timeout: 0,
+        timeoutError: self.mainThreadExecutionTimeoutError
+      ) {
+        _ = releaseWork.wait(timeout: .now() + 3)
+      }
+      self.mainThreadWorkLock.lock()
+      outcome.abandonedCount = self.abandonedMainThreadWorkCount
+      outcome.inFlightCount = self.mainThreadWorkInFlightCount
+      self.mainThreadWorkLock.unlock()
       do {
-        outcome.value = try self.runMainThreadWorkIfIdle(
+        outcome.whileAbandoned = try self.runMainThreadWorkIfIdle(
+          "recording_frame",
+          timeout: 5,
+          timeoutError: self.mainThreadExecutionTimeoutError
+        ) { () -> Bool in
+          outcome.ranWhileAbandoned = true
+          return true
+        }
+        outcome.offeredWhileAbandoned = true
+      } catch {
+        outcome.error = error
+      }
+      releaseWork.signal()
+      let drainDeadline = Date().addingTimeInterval(3)
+      while self.hasAbandonedMainThreadWork(), Date() < drainDeadline {
+        usleep(2_000)
+      }
+      do {
+        outcome.afterDrain = try self.runMainThreadWorkIfIdle(
           "recording_frame",
           timeout: 5,
           timeoutError: self.mainThreadExecutionTimeoutError
         ) {
           Thread.isMainThread
         }
-        outcome.offered = true
       } catch {
         outcome.error = error
       }
@@ -213,12 +241,13 @@ extension RunnerTests {
 
     wait(for: [finished], timeout: 10)
     XCTAssertNil(outcome.error)
-    XCTAssertTrue(outcome.offered)
-    XCTAssertEqual(
-      outcome.value,
-      true,
-      "an abandoned mark over an idle main thread is no reason to decline a frame"
-    )
+    XCTAssertEqual(outcome.abandonedCount, 1)
+    XCTAssertEqual(outcome.inFlightCount, 1, "abandoned work stays counted in flight until it returns")
+    XCTAssertTrue(outcome.offeredWhileAbandoned)
+    XCTAssertNil(outcome.whileAbandoned, "optional work declines while abandoned work holds main")
+    XCTAssertFalse(outcome.ranWhileAbandoned, "declined work is never dispatched")
+    XCTAssertEqual(outcome.afterDrain, true, "optional work runs on main once abandoned work drained")
+    XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
   private final class BoundaryOutcome {
