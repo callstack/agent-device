@@ -1,18 +1,18 @@
 [
-  { "name": "default query", "command": { "command": "alert" }, "readOnly": true },
+  { "name": "default query", "command": { "command": "alert" }, "query": true },
   {
     "name": "explicit query",
     "command": { "command": "alert", "action": "get" },
-    "readOnly": true
+    "query": true
   },
   {
     "name": "accept mutates",
     "command": { "command": "alert", "action": "accept" },
-    "readOnly": false
+    "query": false
   },
   {
     "name": "dismiss mutates",
     "command": { "command": "alert", "action": "dismiss" },
-    "readOnly": false
+    "query": false
   }
 ]
