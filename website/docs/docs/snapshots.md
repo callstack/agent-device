@@ -117,10 +117,10 @@ the strategy owns which tiers it may use.
 ## Android node metadata
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
-`selected`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`, `selectionStart`,
-and `selectionEnd` facts whenever the accessibility tree reports them. Explicit `false` and `0` are
-kept; an absent field means the fact was unavailable, not false. `hintShowing` needs Android API 26
-or later, `heading` API 28 or later.
+`selected`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`, `placeholder`,
+`selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports them. Explicit
+`false` and `0` are kept; an absent field means the fact was unavailable, not false. `hintShowing`
+and `placeholder` need Android API 26 or later, `heading` API 28 or later.
 
 - `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
   segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
@@ -135,6 +135,9 @@ or later, `heading` API 28 or later.
 - `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
   reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
   before reading `value` as the entered contents.
+- `placeholder` is the field's hint text itself, present whether the field is empty or filled: an
+  empty field shows it (`hintShowing: true`, and `value` repeats it), a filled field no longer does.
+  A field without a hint omits it.
 - `selectionStart`/`selectionEnd` are accessibility selection offsets. They are independent of
   `editable` (read-only selectable text exposes them too), they are not a character count, and
   they do not prove that a masked or secure value equals expected text.

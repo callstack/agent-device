@@ -246,6 +246,11 @@ export type RawSnapshotNode = {
   editable?: boolean;
   password?: boolean;
   hintShowing?: boolean;
+  /**
+   * Placeholder text of a text field (the Android hint), whether or not the field is showing it.
+   * Absent when the field has none or the producer did not read it.
+   */
+  placeholder?: string;
   /** Accessibility selection offsets, never a character count or proof of value equality. */
   selectionStart?: number;
   selectionEnd?: number;

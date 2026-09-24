@@ -43,6 +43,9 @@ final class AccessibilityTreeXml {
     // (#2063 empty-fill verification).
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       appendAttribute(xml, "hint-showing", Boolean.toString(node.isShowingHintText()));
+      // The hint itself, whether or not the field is showing it: `text` holds the hint only while
+      // the field is empty, so a filled field's placeholder is readable nowhere else.
+      appendNonEmptyAttribute(xml, "hint", node.getHintText());
     }
     appendAttribute(xml, "editable", Boolean.toString(node.isEditable()));
     // Accessibility selection offsets, not a measurement of the value's length. Read-only

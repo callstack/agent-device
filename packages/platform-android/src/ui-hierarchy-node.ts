@@ -22,6 +22,7 @@ export type AndroidUiHierarchy = {
   editable?: boolean;
   password?: boolean;
   hintShowing?: boolean;
+  placeholder?: string;
   selectionStart?: number;
   selectionEnd?: number;
   // Two independent facts, never collapsed, and never undefined: the helper omits false attributes

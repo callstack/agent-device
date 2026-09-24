@@ -114,6 +114,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   focused: true,
   heading: true,
   roleDescription: true,
+  placeholder: true,
   hittable: true,
   bundleId: true,
   appName: true,

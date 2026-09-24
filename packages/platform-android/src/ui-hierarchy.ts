@@ -48,6 +48,8 @@ export type AndroidUiNodeMetadata = {
    * `getText()` returns the hint on modern Android). Absent in raw uiautomator dumps.
    */
   hintShowing?: boolean;
+  /** Helper-only: the field's hint text (API 26 or later), whether or not it is showing. */
+  hint?: string;
   scrollable?: boolean;
   canScrollForward?: boolean;
   canScrollBackward?: boolean;
@@ -168,6 +170,7 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalNumberAttr('selectionStart', 'selection-start'),
     ...optionalNumberAttr('selectionEnd', 'selection-end'),
     ...optionalBoolAttr('hintShowing', 'hint-showing'),
+    ...optionalStringAttr('hint', 'hint'),
     ...optionalBoolAttr('visibleToUser', 'visible-to-user'),
     ...optionalBoolAttr('selected', 'selected'),
     ...optionalBoolAttr('heading', 'heading'),
@@ -331,6 +334,7 @@ function normalizeAndroidUiHierarchyNode(
       editable: attrs.editable,
       password: attrs.password,
       hintShowing: attrs.hintShowing,
+      placeholder: attrs.hint,
       selectionStart: attrs.selectionStart,
       selectionEnd: attrs.selectionEnd,
       visibleToUser: attrs.visibleToUser,

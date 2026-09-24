@@ -120,6 +120,7 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'editable',
   'password',
   'hintShowing',
+  'placeholder',
   'selectionStart',
   'selectionEnd',
   'hittable',

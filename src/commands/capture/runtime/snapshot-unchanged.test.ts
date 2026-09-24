@@ -73,6 +73,7 @@ test.each<Partial<SnapshotNode>>([
   { enabled: false },
   { selected: true },
   { focused: true },
+  { placeholder: 'Key echo' },
   { hittable: false },
   { bundleId: 'com.example.app' },
   { appName: 'Example' },
