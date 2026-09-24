@@ -1,5 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
@@ -390,4 +391,56 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
     expect(response.error.message).toContain('covered by another visible element');
   }
   expect(readPressPoint(mockTapPoint)).toBeUndefined();
+});
+
+test('a read right after a press captures the post-tap screen instead of reusing the pre-tap tree', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'read-after-press';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const screen = (step: string) => ({
+    backend: 'xctest' as const,
+    producer: 'apple-runner' as const,
+    nodes: [
+      { index: 0, depth: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Next',
+        rect: { x: 24, y: 120, width: 120, height: 44 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 2,
+        depth: 1,
+        parentIndex: 0,
+        type: 'StaticText',
+        label: step,
+        identifier: 'step',
+        rect: { x: 24, y: 220, width: 320, height: 24 },
+      },
+    ],
+  });
+  mockCaptureSnapshotForSession
+    .mockResolvedValueOnce(screen('Step 1'))
+    .mockResolvedValue(screen('Step 2'));
+  const run = async (command: string, positionals: string[]) =>
+    await handleInteractionCommands({
+      req: { token: 't', session: sessionName, command, positionals, flags: {} },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+      ...getRuntimeBindings(),
+    });
+
+  expect(await run('is', ['visible', 'label=Next'])).toMatchObject({ ok: true });
+  expect(await run('press', ['84', '142'])).toMatchObject({ ok: true });
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+
+  const read = await run('get', ['text', 'id="step"']);
+
+  expect(read).toMatchObject({ ok: true, data: { text: 'Step 2' } });
+  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(2);
 });

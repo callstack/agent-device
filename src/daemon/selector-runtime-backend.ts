@@ -12,6 +12,7 @@ import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
 import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
+import { markSessionSnapshotOutdated } from './ref-frame.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
@@ -220,16 +221,16 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     // reports `found: false` and the poll consults the canonical tree.
     ...(boundFindText
       ? {
-          findText: async (context: BackendCommandContext, text: string) => ({
-            found: (
-              await boundFindText({
-                text,
-                options: { appBundleId: session?.appBundleId, surface: session?.surface },
-                execution: runnerExecution,
-                ...(context.signal ? { signal: context.signal } : {}),
-              })
-            ).found,
-          }),
+          findText: async (context: BackendCommandContext, text: string) => {
+            const { found } = await boundFindText({
+              text,
+              options: { appBundleId: session?.appBundleId, surface: session?.surface },
+              execution: runnerExecution,
+              ...(context.signal ? { signal: context.signal } : {}),
+            });
+            if (session) markSessionSnapshotOutdated(session);
+            return { found };
+          },
         }
       : {}),
   };

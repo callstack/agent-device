@@ -26,6 +26,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
+import { dispatchGetViaRuntime } from '../selector-runtime.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 
 const webDevice = {
@@ -387,6 +388,53 @@ test('a text wait is satisfied by the owner native reading when the tree never c
   // arm from `observeText` and this times out with `wait_target_absent` after burning the whole
   // budget on readable captures — the exact shape iOS Smoke reported.
   expect(harness.captureSnapshot).toHaveBeenCalled();
+});
+
+test('a read after a natively satisfied text wait captures instead of reusing the older tree', async () => {
+  // Poll 1: the native reading misses and the capture still shows the previous screen, which it
+  // publishes to the session. The app then navigates, and poll 2's native reading sees the
+  // destination, so the stored tree is older than the observation that satisfied the wait.
+  let nativeReads = 0;
+  const harness = waitRuntimeHarness({
+    findText: available,
+    findTextAnswers: () => {
+      nativeReads += 1;
+      return nativeReads > 1;
+    },
+    nodesPerPoll: [
+      [{ index: 0, depth: 0, type: 'StaticText', label: 'Home' }],
+      [
+        { index: 0, depth: 0, type: 'StaticText', label: 'Automation lab' },
+        { index: 1, depth: 0, type: 'StaticText', label: 'cold.start' },
+      ],
+    ],
+  });
+  const {
+    response: waited,
+    session,
+    sessionStore,
+  } = await runWait(['text', 'Automation lab', '2000'], harness);
+  expect(waited).toMatchObject({ ok: true, data: { text: 'Automation lab' } });
+  expect(harness.captureSnapshot).toHaveBeenCalledOnce();
+
+  const read = await dispatchGetViaRuntime({
+    req: {
+      command: 'get',
+      positionals: ['text', 'label="cold.start"'],
+      token: 't',
+      session: session.name,
+      flags: {},
+      meta: { requestId: 'wait-runtime-get' },
+    } as unknown as DaemonRequest,
+    sessionName: session.name,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(read).toMatchObject({ ok: true, data: { text: 'cold.start' } });
+  expect(harness.captureSnapshot).toHaveBeenCalledTimes(2);
 });
 
 test('a satisfied native reading short-circuits the poll without capturing', async () => {

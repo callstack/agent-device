@@ -9,7 +9,9 @@ These are cross-route behavior requirements; their rationale and owning decision
   resolution; ambiguity and other runner failures remain failures.
 - Regular selector reads are capture-backed. `@ref` resolves against its authorized ref frame,
   while `get`, `is`, `find`, and `wait` selectors capture through the backend. Polling bypasses the
-  snapshot cache, as do active freshness recovery and stabilization.
+  snapshot cache, as do active freshness recovery and stabilization. The cache serves a stored tree
+  only while it is the newest observation: a side-effect seam or a native read such as `wait
+  text`'s owner text reading retires it.
 - Sparse capture verdicts are observable failures and never replace the session snapshot. Only a
   user-facing snapshot may publish a fallback screenshot; internal polling must not create one
   artifact per attempt.

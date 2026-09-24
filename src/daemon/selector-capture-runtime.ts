@@ -15,6 +15,7 @@ import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
+import { isOutdatedObservation } from './ref-frame.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import { isLegacySparseIosInteractiveSnapshot } from '@agent-device/selectors/absence-observation';
@@ -258,7 +259,7 @@ function reusableSessionSnapshot(params: {
 }): SnapshotState | undefined {
   const { session, timestamp, request } = params;
   const snapshot = session?.snapshot;
-  if (!snapshot) return undefined;
+  if (!snapshot || isOutdatedObservation(snapshot)) return undefined;
   if (!canUseSessionSnapshotCache(session, request)) return undefined;
   if (!isFreshSelectorSnapshot(snapshot, timestamp)) return undefined;
   if (snapshot.presentationKey !== presentationKeyFor(request)) return undefined;

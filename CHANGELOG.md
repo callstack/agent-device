@@ -10,6 +10,13 @@
   (`apple_toolchain_probe_unavailable`) now fails once, not three times with a fresh startup budget
   each time. A `retriable` failure from an external Apple runner provider is also no longer resent.
   The error keeps `retriable: true`, so the caller's next request still tries again. (#2862)
+- Fixed (mobile): a `get`, `is`, `find`, or `wait` selector read no longer answers from a tree that
+  a later command outdated. Selector reads reuse the session's stored tree for 750 ms after its
+  capture. Two cases outdated that tree without replacing it: a `wait text` satisfied by the
+  owner's native text reading after an earlier miss capture, and a mutation that captured nothing
+  (for example a coordinate `press`). The next read then reused the pre-change tree and could
+  report `Selector did not match` for an element that was on screen. A side effect or a native read
+  now retires the stored tree, and the next read captures again.
 - Fixed (mobile): a read taken right after a `scroll`, `swipe`, or `gesture swipe` no longer reports
   a definite miss when the surface never settled. When post-gesture stabilization ran out of budget
   on a surface still moving, `is visible` answered a plain `selector_not_found` and `is absent`

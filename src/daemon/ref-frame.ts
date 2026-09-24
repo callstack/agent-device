@@ -10,6 +10,7 @@ import {
 import type { SessionState } from './session-state.ts';
 
 const runtimeRevisions = new WeakMap<SessionState, number>();
+const outdatedObservations = new WeakSet<SnapshotState>();
 
 /**
  * ADR 0014 session ref-frame lifetime — the authorization model for mutation
@@ -89,8 +90,23 @@ export function refFrameTree(session: SessionState): SnapshotState | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
+  markSessionSnapshotOutdated(session);
   session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
+}
+
+/**
+ * Record that the device was observed or changed after the session's stored tree was
+ * captured: a side-effect seam above, or a native read that produces no tree (such as `wait
+ * text`'s owner text reading). An outdated tree stays the session's latest stored observation,
+ * but a selector read never reuses it in place of a capture.
+ */
+export function markSessionSnapshotOutdated(session: SessionState): void {
+  if (session.snapshot) outdatedObservations.add(session.snapshot);
+}
+
+export function isOutdatedObservation(snapshot: SnapshotState): boolean {
+  return outdatedObservations.has(snapshot);
 }
 
 /**
