@@ -236,7 +236,7 @@ extension RunnerTests {
     }
   }
 
-  /// The dispatched snapshot recovery loop: read-only retry + XCTest-recorded-failure invalidation,
+  /// The dispatched snapshot recovery loop: session-loss retry + XCTest-recorded-failure invalidation,
   /// matching what `executeOnMainSafely` gives the generic path. `perform` runs the capture and its
   /// own bounded main-thread work.
   func executeDispatchedWithRecovery(
@@ -418,93 +418,121 @@ extension RunnerTests {
     )
   }
 
+  /// The target this command runs against, decided by its `launchPolicy` (#2890). Exhaustive over the
+  /// policy so a new case is a compile error here rather than a fall-through that quietly launches or
+  /// quietly refuses.
   func prepareActiveCommandContext(
     command: Command,
     routeToSpringboard: Bool = false
   ) -> ActiveCommandPreparation {
-    var activeApp = currentApp ?? app
-    var systemSurface: SystemSurfaceHost? = nil
     if routeToSpringboard {
-      activeApp = springboard
-    } else if command.traits.launchPolicy == .noApp || shouldSkipAppActivationPreflight(command) {
-      // A command that answers from an in-place surface or from state the runner already holds, or a
-      // synthesized coordinate tap whose cached target is already foreground: none of them may bring
-      // anything forward, so the target is resolved as it stands.
-      activeApp = resolveAppWithoutActivation(command: command)
-    } else if let presented = presentedSystemSurfaceHost() {
+      return .context(ActiveCommandContext(app: springboard))
+    }
+    switch command.traits.launchPolicy {
+    case .noApp:
+      // Answers from the runner's own capture and state, so the target is resolved exactly as it
+      // stands.
+      return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+    case .presentedSurface:
+      // The command is about the surface that already has focus; activating an app under it would
+      // cancel exactly what the command is about.
+#if os(iOS)
+      return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+#else
+      // The platform exception, written once: `SystemSurfaceHostRegistry` registers no hosts off iOS,
+      // so nothing is ever served in place there and such a command keeps the activation route this
+      // axis found it on.
+      return prepareActivatedTarget(command: command)
+#endif
+    case .existingApp, .mayLaunch:
+      // Asked only where activation is on the table: the bypass decides by querying the cached
+      // target's state, and a command that may bring nothing forward has nothing for it to settle.
+      if shouldSkipAppActivationPreflight(command) {
+        // The one request-dependent bypass: a coordinate-only synthesized tap whose cached target is
+        // already foreground needs nothing brought forward.
+        return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+      }
+      return prepareActivatedTarget(command: command)
+    }
+  }
+
+  /// The route that may bring something forward: a system surface genuinely on screen is served in
+  /// place, and otherwise the requested session app is resolved and activated. What happens to a
+  /// stopped app is the caller's `launchPolicy`; the `.existingApp` refusal belongs to
+  /// `notRunningRefusal` because it is only meaningful once nothing is presented (#2890).
+  private func prepareActivatedTarget(command: Command) -> ActiveCommandPreparation {
+    if let presented = presentedSystemSurfaceHost() {
       // Serve and drive the presented surface IN PLACE: never activate it (that cancels what it
       // presents) and never adopt it as the cached session target, so once it is gone the next
       // command resolves back to the still-bound session app (#2438).
-      activeApp = presented.app
-      systemSurface = presented.host
       if command.traits.isInteraction {
         applyInteractionStabilizationIfNeeded()
       }
-    } else {
-      // The launch policy decides what happens to a stopped app here: `.existingApp` was refused
-      // above, and `.mayLaunch` brings the app up through the activation below.
-      let normalizedBundleId = command.appBundleId?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
-      if let bundleId = requestedBundleId,
-        let notRunning = notRunningRefusal(command: command, bundleId: bundleId)
-      {
-        return .response(notRunning)
+      return .context(ActiveCommandContext(app: presented.app, systemSurface: presented.host))
+    }
+
+    let normalizedBundleId = command.appBundleId?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
+    if let bundleId = requestedBundleId,
+      let notRunning = notRunningRefusal(command: command, bundleId: bundleId)
+    {
+      return .response(notRunning)
+    }
+    if let bundleId = requestedBundleId {
+      if currentBundleId != bundleId || currentApp == nil {
+        _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
+      } else {
+        refreshCachedTargetIfProcessChanged(bundleId: bundleId)
       }
+    } else {
+      // Do not reuse stale bundle targets when the caller does not explicitly request one.
+      invalidateCachedTarget(reason: "missing_app_bundle")
+    }
+
+    // Read back after the bundle resolution above, which is what may have just bound a target.
+    var activeApp = currentApp ?? app
+    if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
+      activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
+    } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
+      ensureRunnerHostAppActive(reason: "missing_app_bundle")
+      activeApp = app
+    }
+
+    let skipExistenceWait = canUseFastForegroundAppGuard(
+      activeApp: activeApp,
+      requestedBundleId: requestedBundleId
+    )
+    if !skipExistenceWait && !activeApp.waitForExistence(timeout: appExistenceTimeout) {
       if let bundleId = requestedBundleId {
-        if currentBundleId != bundleId || currentApp == nil {
-          _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
-        } else {
-          refreshCachedTargetIfProcessChanged(bundleId: bundleId)
+        activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
+        guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
+          return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: bundleId)))
         }
       } else {
-        // Do not reuse stale bundle targets when the caller does not explicitly request one.
-        invalidateCachedTarget(reason: "missing_app_bundle")
+        return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: nil)))
       }
+    }
 
-      activeApp = currentApp ?? app
-      if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
-        activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
-      } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
-        ensureRunnerHostAppActive(reason: "missing_app_bundle")
+    if command.traits.isInteraction {
+      if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
+        activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
+      } else if requestedBundleId == nil, activeApp.state != .runningForeground {
+        ensureRunnerHostAppActive(reason: "interaction_missing_app_bundle")
         activeApp = app
       }
-
-      let skipExistenceWait = canUseFastForegroundAppGuard(
+      let skipInteractionExistenceWait = canUseFastForegroundAppGuard(
         activeApp: activeApp,
         requestedBundleId: requestedBundleId
       )
-      if !skipExistenceWait && !activeApp.waitForExistence(timeout: appExistenceTimeout) {
-        if let bundleId = requestedBundleId {
-          activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
-          guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
-            return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: bundleId)))
-          }
-        } else {
-          return .response(Response(ok: false, error: .targetAppUnavailable(bundleId: nil)))
-        }
-      }
-
-      if command.traits.isInteraction {
-        if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
-          activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
-        } else if requestedBundleId == nil, activeApp.state != .runningForeground {
-          ensureRunnerHostAppActive(reason: "interaction_missing_app_bundle")
-          activeApp = app
-        }
-        let skipInteractionExistenceWait = canUseFastForegroundAppGuard(
-          activeApp: activeApp,
-          requestedBundleId: requestedBundleId
+      if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
+        return .response(
+          Response(ok: false, error: .targetAppUnavailable(bundleId: requestedBundleId))
         )
-        if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
-          return .response(
-            Response(ok: false, error: .targetAppUnavailable(bundleId: requestedBundleId))
-          )
-        }
-        applyInteractionStabilizationIfNeeded()
       }
+      applyInteractionStabilizationIfNeeded()
     }
-    return .context(ActiveCommandContext(app: activeApp, systemSurface: systemSurface))
+    return .context(ActiveCommandContext(app: activeApp))
   }
 
   /// A registered system surface host that is genuinely on screen, or nil. Presence is foreground
