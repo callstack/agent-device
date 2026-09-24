@@ -1072,6 +1072,8 @@ agent-device record stop                # Stop active recording
 
 - On iOS simulators, a busy CoreSimulator host recording slot makes `record start` return non-retriable `DEVICE_IN_USE` with `details.reason: apple_simulator_recording_busy`. Use `record stop` in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.
 
+- When the Apple runner records (`--fps` sets its frame rate), it captures a frame only while no command is using the runner's main thread; a frame that falls during that work is skipped instead of queued behind it. A capture slower than the frame interval lowers the frame rate, and a capture still running after one second is dropped. A busy app or a long command can therefore yield fewer frames than `--fps` requests.
+
 - Android uses `adb shell screenrecord`, which has a 180s platform limit. `record start` publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, `record stop` recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.
 
 - Android `screenrecord` encodes a frame only when the screen changes, so a clip ends at the last frame the recorder encoded instead of at `record stop`: a window that ends on an unchanged screen yields a shorter video, while every on-screen change inside the window stays at its real offset in it. `record stop` reports `durationMs` as host wall clock from `record start` until the export finished, and when the video can be measured it also reports `capturedDurationMs` and warns with how much of the window that video covers.

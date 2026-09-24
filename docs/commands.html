@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.4a3222994f.js"></script>
+<script defer src="/agent-device/static/js/index.702ebc1436.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -979,6 +979,9 @@ coordinate <code>fill</code>, <code>swipe</code>, <code>scroll</code>, a hardwar
 </li>
 <li>
 <p>On iOS simulators, a busy CoreSimulator host recording slot makes <code>record start</code> return non-retriable <code>DEVICE_IN_USE</code> with <code>details.reason: apple_simulator_recording_busy</code>. Use <code>record stop</code> in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.</p>
+</li>
+<li>
+<p>When the Apple runner records (<code>--fps</code> sets its frame rate), it captures a frame only while no command is using the runner&#x27;s main thread; a frame that falls during that work is skipped instead of queued behind it. A capture slower than the frame interval lowers the frame rate, and a capture still running after one second is dropped. A busy app or a long command can therefore yield fewer frames than <code>--fps</code> requests.</p>
 </li>
 <li>
 <p>Android uses <code>adb shell screenrecord</code>, which has a 180s platform limit. <code>record start</code> publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, <code>record stop</code> recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.</p>
