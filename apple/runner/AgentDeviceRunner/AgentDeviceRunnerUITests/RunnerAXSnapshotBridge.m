@@ -369,6 +369,9 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     @"enabled",
     @"selected",
     @"hasFocus",
+    // The AX server has no keyboard-focus attribute (XCTAutomationSupport declares HasNativeFocus
+    // and FocusedApplications only), so the mapper drops this keypath today and this backend reports
+    // the focus engine's focus alone; the keypath stays so a mapper that learns it needs no change.
     @"hasKeyboardFocus",
     @"children",
   ];

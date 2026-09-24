@@ -378,9 +378,10 @@ extension RunnerTests {
     return observation
   }
 
-  /// The bridge asks the AX server for `hasKeyboardFocus` beside `hasFocus` and reports either as
-  /// `focused`: the field a software keyboard is typing into holds keyboard focus only, and a
-  /// capture that read `hasFocus` alone left it unfocused.
+  /// The bridge reports keyboard focus as `focused` when the snapshot carries it, beside the focus
+  /// engine's focus it asks the AX server for. The server exposes no keyboard-focus attribute, so
+  /// the request names the native focus only; a snapshot that arrives with keyboard focus set (the
+  /// XCTest producers' case) still reads as focused through the shared OR.
   func testPrivateAXBridgeReportsKeyboardFocusAsFocused() throws {
     let rootNode = AXFixtureNode.build(AXRecoveryFixture.Tree(chain: 2, fan: nil))
     let client = AXFixtureClient(rejectLevelsAbove: nil, vanishAtFrontier: false, keyboardFocusIdentity: "1")
@@ -398,15 +399,11 @@ extension RunnerTests {
     XCTAssertEqual(root["focused"] as? Bool, false, "no focus of either kind is not focused")
     XCTAssertEqual(field["label"] as? String, "1")
     XCTAssertEqual(field["focused"] as? Bool, true, "keyboard focus alone is focused")
-    // The AX server answers only what it was asked for: the request must name keyboard focus, as
-    // the snapshot keypath or as the AX attribute XCElementSnapshot maps it to, or a real capture
-    // would come back without it and read false above.
+    // The AX server answers only what it was asked for, so the request must still name the focus
+    // engine's focus: the raw keypath when the mapper is absent, `HasNativeFocus` when it maps.
     XCTAssertTrue(
-      client.requestedAttributes.contains { $0.range(of: "keyboardfocus", options: .caseInsensitive) != nil },
-      "requested attributes name keyboard focus: \(client.requestedAttributes)")
-    XCTAssertTrue(
-      client.requestedAttributes.contains { $0.range(of: "hasfocus", options: .caseInsensitive) != nil },
-      "requested attributes still name the focus engine's focus: \(client.requestedAttributes)")
+      client.requestedAttributes.contains { $0.range(of: "focus", options: .caseInsensitive) != nil },
+      "requested attributes name the focus engine's focus: \(client.requestedAttributes)")
   }
 
   /// Every recovery case of the shared fixture, replayed through the real ladder, bridge
