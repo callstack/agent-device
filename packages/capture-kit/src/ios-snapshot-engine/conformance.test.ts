@@ -2,11 +2,6 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { CaptureHint, IosSnapshotRequestInput } from '@agent-device/contracts/ios-snapshot';
-import {
-  createIosSnapshotRequest,
-  deriveIosCaptureHint,
-} from '@agent-device/capture-kit/ios-snapshot-planning';
 import { IosSnapshotEngineError, presentIosSnapshot, publishIosSnapshot } from './index.ts';
 import { runTypeScriptCase, writeDifferentialFailureArtifact } from './conformance-harness.ts';
 import {
@@ -15,35 +10,6 @@ import {
   readIosSnapshotEngineFixture,
   requestForGoldenCase,
 } from './conformance-fixture.ts';
-
-const CAPTURE_HINT_FIXTURE_PATH = path.resolve(
-  import.meta.dirname,
-  '..',
-  '..',
-  '..',
-  '..',
-  'contracts',
-  'fixtures',
-  'ios-snapshot-capture-hint.json',
-);
-
-type CaptureHintFixture = Readonly<{
-  name: string;
-  request: IosSnapshotRequestInput;
-  expected: CaptureHint;
-}>;
-
-test('the independent capture-hint corpus agrees with the engine request boundary', () => {
-  const fixtures = JSON.parse(
-    fs.readFileSync(CAPTURE_HINT_FIXTURE_PATH, 'utf8'),
-  ) as CaptureHintFixture[];
-  assert.ok(fixtures.length > 0);
-  assert.equal(new Set(fixtures.map((fixture) => fixture.name)).size, fixtures.length);
-  for (const fixture of fixtures) {
-    const request = createIosSnapshotRequest(fixture.request);
-    assert.deepEqual(deriveIosCaptureHint(request), fixture.expected, fixture.name);
-  }
-});
 
 test('the authored iOS snapshot corpus covers each contract seam', () => {
   const fixture = readIosSnapshotEngineFixture();

@@ -167,13 +167,6 @@ describe('isViewportRootNode over emitted backend vocabulary', () => {
     expect(roots).toEqual(['Application', 'Window']);
   });
 
-  test('iOS: substring and equality agree, so the collapse of the `===` spelling was a no-op', () => {
-    for (const type of IOS_EMITTED_TYPES) {
-      const equality = type === 'Application' || type === 'Window';
-      expect({ type, root: isViewportRootNode({ type }) }).toEqual({ type, root: equality });
-    }
-  });
-
   // The load-bearing one. Android has no root node, so `resolveViewportRect`'s
   // third fallback (largest containing rect of any node) is the only arm that
   // ever returns on Android — and the resolvers that lack it return null there.

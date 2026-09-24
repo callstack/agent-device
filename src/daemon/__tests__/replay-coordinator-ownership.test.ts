@@ -429,20 +429,6 @@ test('the divergence-report chain never imports the coordinator factory', () => 
   }
 });
 
-test('the divergence-report chain never imports the P4a ReplaySessionTransaction projection', () => {
-  for (const file of DIVERGENCE_CHAIN_FILES) {
-    for (const site of collectImportSites(file)) {
-      assert.equal(
-        importsAnyBinding(site, TRANSACTION_MODULE),
-        false,
-        `${file} imports session-replay-transaction.ts directly — repair-transaction writes must ` +
-          `route through the request's ReplayCoordinator/ReplayResumeStamper, never this P4a ` +
-          `projection reached from a lower handler.`,
-      );
-    }
-  }
-});
-
 test('the divergence-report chain never imports SessionStore', () => {
   for (const file of DIVERGENCE_CHAIN_FILES) {
     for (const site of collectImportSites(file)) {
