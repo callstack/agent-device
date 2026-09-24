@@ -26,7 +26,7 @@ import { mkdtempForTest } from './tmp-dir.ts';
 
 // Every Apple runner request site outside `runner/`, driven through its production entry point and
 // pinned to contracts/fixtures/runner-requests.json. The drives never write a request themselves;
-// runner/__tests__/runner-contract.test.ts reads this source to keep it that way.
+// runner/__tests__/runner-requests.test.ts reads this source to keep it that way.
 
 const APP = 'com.example.app';
 const XCTEST_DEVICE: DeviceInfo = { ...IOS_DEVICE, iosPhysicalDeviceBackend: 'xctest' };

@@ -1,5 +1,4 @@
 import { expect, test, vi } from 'vitest';
-import { assertProducedRunnerRequests } from '@agent-device/platform-apple/runner/requests-fixtures';
 import {
   captureAppleClockAnchor,
   runAppleRecordingRunner,
@@ -54,13 +53,4 @@ test('focused simulator-only transport never warms a local Apple runner', async 
     },
   );
   expect(runnerClient.run).not.toHaveBeenCalled();
-});
-
-test('the clock anchor request matches its runner-requests.json entry', async () => {
-  runnerClient.run.mockReset();
-  runnerClient.run.mockResolvedValue({ currentUptimeMs: 1_000 });
-  await captureAppleClockAnchor(simulator, 'com.example.app');
-  assertProducedRunnerRequests(import.meta.filename, [
-    ['ios-simulator.recording-clock-anchor.snapshot', runnerClient.run.mock.calls[0]?.[1]],
-  ]);
 });

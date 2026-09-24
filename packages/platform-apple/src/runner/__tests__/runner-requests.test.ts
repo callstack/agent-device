@@ -12,7 +12,6 @@ import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import {
   assertProducedRunnerRequests,
-  compareRunnerRequestNames,
   readRunnerRequestFixture,
   REPO_ROOT,
 } from '../runner-requests.fixtures.ts';
@@ -134,10 +133,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
 test('runner-requests.json has a production request for every runner command', () => {
   const entries = readRunnerRequestFixture();
   const names = entries.map((entry) => entry.name);
-  assert.deepEqual(
-    names,
-    [...new Set(names)].sort((a, b) => compareRunnerRequestNames({ name: a }, { name: b })),
-  );
+  assert.deepEqual(names, [...new Set(names)].sort());
   const produced = new Set(entries.map((entry) => entry.request.command));
   assert.deepEqual(
     Object.keys(RUNNER_COMMAND_TRAITS).filter((name) => !produced.has(name)),
@@ -146,7 +142,11 @@ test('runner-requests.json has a production request for every runner command', (
   );
   for (const producer of new Set(entries.map((entry) => entry.producer))) {
     const source = fs.readFileSync(path.join(REPO_ROOT, producer), 'utf8');
-    assert.ok(producer.endsWith('.test.ts') && source.includes('runner-requests.json'), producer);
+    assert.ok(
+      producer.endsWith('runner-requests.test.ts') &&
+        source.includes('assertProducedRunnerRequests(import.meta.filename'),
+      `${producer} must be a dedicated *runner-requests.test.ts drive that checks its own entries`,
+    );
   }
 });
 

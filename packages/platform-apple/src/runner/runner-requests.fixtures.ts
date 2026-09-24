@@ -28,14 +28,6 @@ function wireRunnerRequest(sent: unknown): Record<string, unknown> {
   return request;
 }
 
-export function compareRunnerRequestNames(
-  left: Pick<RunnerRequestEntry, 'name'>,
-  right: Pick<RunnerRequestEntry, 'name'>,
-): number {
-  if (left.name === right.name) return 0;
-  return left.name < right.name ? -1 : 1;
-}
-
 /**
  * Pins the requests one producer test captured, by site name, to that producer's fixture entries.
  * On a mismatch the diff shows the entries to paste into the fixture.
@@ -47,7 +39,7 @@ export function assertProducedRunnerRequests(
   const producer = path.relative(REPO_ROOT, producerFile);
   const produced = captured
     .map(([name, sent]) => ({ name, producer, request: wireRunnerRequest(sent) }))
-    .sort(compareRunnerRequestNames);
+    .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
   assert.deepEqual(
     produced,
     readRunnerRequestFixture().filter((entry) => entry.producer === producer),
