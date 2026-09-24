@@ -61,10 +61,37 @@ test('digest for an empty node array is stable and reports zero nodes', () => {
   expect(result.digest).toBe(computeAxDigest([]).digest);
 });
 
-test('digest is prefixed for forward-compatible versioning', () => {
-  const result = computeAxDigest([{ type: 'button', label: 'Continue' }]);
+test('digest separates the tuple fields so text shifted across them cannot collide', () => {
+  // `hashNode` joins (type, label, identifier) through NUL separators. Drop them and
+  // ('ab', '', '') hashes the same bytes as ('a', 'b', '') — two different trees that
+  // would report identical evidence.
+  const labelShifted = computeAxDigest([{ type: 'ab', label: '' }]);
+  const labelSplit = computeAxDigest([{ type: 'a', label: 'b' }]);
+  const identifierSplit = computeAxDigest([{ type: 'a', label: '', identifier: 'b' }]);
 
-  expect(result.digest.startsWith('ax1:')).toBe(true);
+  expect(labelShifted.digest).not.toBe(labelSplit.digest);
+  expect(labelShifted.digest).not.toBe(identifierSplit.digest);
+});
+
+test('digest is a versioned fixed-width hex string', () => {
+  const { digest } = computeAxDigest([{ type: 'button', label: 'Continue' }]);
+
+  expect(digest).toMatch(/^ax1:[0-9a-f]{16}$/);
+});
+
+test('golden: the ax1 wire format is pinned to these bytes', () => {
+  // A digest is persisted as post-action evidence and compared across daemon restarts
+  // (#1047), so the XOR width, separators, and count folding are all wire contract.
+  const nodes = [
+    { type: 'button', label: 'Continue', identifier: 'continue-btn' },
+    { type: 'text', label: 'Welcome' },
+    { type: 'image', label: 'Logo' },
+  ];
+
+  expect(computeAxDigest(nodes)).toEqual({
+    digest: 'ax1:0a88b2cbf989ae22',
+    nodeCount: 3,
+  });
 });
 
 test('digest ignores volatile fields such as rects that are not part of the tuple', () => {
