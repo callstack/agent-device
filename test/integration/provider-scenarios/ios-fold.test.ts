@@ -3,6 +3,7 @@ import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/regi
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import { MAX_FOLD_DURATION_MS } from '@agent-device/contracts/device';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import { recordActionEntry } from '../../../src/daemon/session-action-recorder.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { makeIosAppSession } from '../../../src/__tests__/test-utils/session-factories.ts';
@@ -34,6 +35,38 @@ afterEach(() => {
   fs.rmSync(isolatedHome, { recursive: true, force: true });
 });
 
+/** Writes the `devicectl … displays --json-output <path>` result both fold fakes below answer. */
+function writeDisplayInventoryFixture(jsonOutputPath: string): void {
+  const displays = [0, 1].map((displayId) => ({
+    name: `LCD-${displayId}`,
+    displayId,
+    nativeSize: [2007, 2853],
+    pointScale: 3,
+    type: { integrated: {} },
+    active: displayId === 1,
+  }));
+  fs.writeFileSync(jsonOutputPath, JSON.stringify({ result: { displays } }));
+}
+
+/**
+ * Answers the host-toolchain probe (`xcodebuild -version`, `sw_vers`, `uname -m`) the fold-helper
+ * build cache (`fold-helper-cache.ts`) reads before it builds or reuses a cached binary. Both fold
+ * fakes below route these calls through the same `runCommand`.
+ */
+function toolchainProbeAnswer(cmd: string, args: readonly string[]): ExecResult | undefined {
+  if (cmd === 'xcodebuild')
+    return { stdout: 'Xcode 16.4\nBuild version 16F6', stderr: '', exitCode: 0 };
+  if (cmd === 'sw_vers') {
+    return {
+      stdout: args.includes('-buildVersion') ? '24G90' : '15.6',
+      stderr: '',
+      exitCode: 0,
+    };
+  }
+  if (cmd === 'uname') return { stdout: 'arm64', stderr: '', exitCode: 0 };
+  return undefined;
+}
+
 test('timed fold keyframes reach simulator HID through the public client and daemon', async () => {
   const trajectory = [
     { atMs: 0, angle: 0 },
@@ -53,18 +86,7 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     devicectl: async (args) => {
       if (args.includes('hinge-angle')) return { ...ok, stdout: `Angle: ${angle}°`, exitCode: 1 };
       assert.ok(args.includes('displays'));
-      const displays = [0, 1].map((displayId) => ({
-        name: `LCD-${displayId}`,
-        displayId,
-        nativeSize: [2007, 2853],
-        pointScale: 3,
-        type: { integrated: {} },
-        active: displayId === 1,
-      }));
-      fs.writeFileSync(
-        args[args.indexOf('--json-output') + 1]!,
-        JSON.stringify({ result: { displays } }),
-      );
+      writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
       return ok;
     },
   });
@@ -74,17 +96,8 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     appleToolProvider: () => ({
       ...tool.provider,
       runCommand: async (command, args) => {
-        if (command === 'xcodebuild') {
-          return { stdout: 'Xcode 16.4\nBuild version 16F6', stderr: '', exitCode: 0 };
-        }
-        if (command === 'sw_vers') {
-          return {
-            stdout: args.includes('-buildVersion') ? '24G90' : '15.6',
-            stderr: '',
-            exitCode: 0,
-          };
-        }
-        if (command === 'uname') return { stdout: 'arm64', stderr: '', exitCode: 0 };
+        const probeAnswer = toolchainProbeAnswer(command, args);
+        if (probeAnswer) return probeAnswer;
         assert.equal(command, 'xcrun');
         assert.ok(args.includes('clang'));
         builds++;
@@ -155,59 +168,79 @@ function createFoldLedgerAppleToolProvider(params: {
   const ledger: FoldLedgerCall[] = [];
   let hingeReads = 0;
   const ok = { stdout: '', stderr: '', exitCode: 0 };
+  // Every real call on the fold route (packages/platform-apple/src/foldable/simulator-hid.ts,
+  // core/tool-provider.ts, core/simctl.ts) carries a bounded timeoutMs. A call reaching this fake
+  // with none is not a worst case the envelope assertion below can see, so it must fail the test
+  // rather than cost 0 virtual ms.
   const record = (
     tool: FoldLedgerCall['tool'],
     args: readonly string[],
     options?: { timeoutMs?: number; kill?: { graceMs: number } },
   ): void => {
+    assert.ok(
+      Number.isFinite(options?.timeoutMs) && options!.timeoutMs! > 0,
+      `fold ledger call has no bounded timeoutMs: ${tool} ${args.join(' ')}`,
+    );
     const call: FoldLedgerCall = {
       tool,
       args,
-      timeoutMs: options?.timeoutMs ?? 0,
+      timeoutMs: options!.timeoutMs!,
       ...(options?.kill ? { graceMs: options.kill.graceMs } : {}),
     };
     ledger.push(call);
     params.onCall(call);
   };
-  const provider: AppleToolProvider = {
-    whichCommand: async () => true,
-    runCommand: async (cmd, args, options) => {
-      if (cmd === 'open' && args.join(' ') === '-a Simulator') return ok;
-      record('runCommand', [cmd, ...args], options);
+  // Built on the shared recording provider so any call this route does not script (macosHelper,
+  // macosHost, plist, or an unexpected runCommand) throws instead of being silently answered.
+  const recording = createRecordingAppleToolProvider({
+    simctl: async (args, options) => {
+      record('simctl', args, options);
       return ok;
     },
-    simctl: {
-      run: async (args, options) => {
-        record('simctl', args, options);
-        return ok;
-      },
+    devicectl: async (args, options) => {
+      record('devicectl', args, options);
+      if (args.includes('hinge-angle')) {
+        const angle = params.hingeAngleAt(hingeReads);
+        hingeReads += 1;
+        return { ...ok, stdout: `Angle: ${angle}°`, exitCode: 1 };
+      }
+      assert.ok(args.includes('displays'), `unexpected devicectl call: ${args.join(' ')}`);
+      writeDisplayInventoryFixture(args[args.indexOf('--json-output') + 1]!);
+      return ok;
     },
-    devicectl: {
-      run: async (args, options) => {
-        record('devicectl', args, options);
-        if (args.includes('hinge-angle')) {
-          const angle = params.hingeAngleAt(hingeReads);
-          hingeReads += 1;
-          return { ...ok, stdout: `Angle: ${angle}°`, exitCode: 1 };
-        }
-        assert.ok(args.includes('displays'), `unexpected devicectl call: ${args.join(' ')}`);
-        const displays = [0, 1].map((displayId) => ({
-          name: `LCD-${displayId}`,
-          displayId,
-          nativeSize: [2007, 2853],
-          pointScale: 3,
-          type: { integrated: {} },
-          active: displayId === 1,
-        }));
-        fs.writeFileSync(
-          args[args.indexOf('--json-output') + 1]!,
-          JSON.stringify({ result: { displays } }),
-        );
-        return ok;
-      },
+  });
+  const provider: AppleToolProvider = {
+    ...recording.provider,
+    runCommand: async (cmd, args, options) => {
+      record('runCommand', [cmd, ...args], options);
+      const probeAnswer = toolchainProbeAnswer(cmd, args);
+      if (probeAnswer) return probeAnswer;
+      assert.equal(cmd, 'xcrun', `unexpected runCommand call: ${cmd} ${args.join(' ')}`);
+      assert.ok(args.includes('clang'), `unexpected xcrun call: ${args.join(' ')}`);
+      fs.writeFileSync(args.at(-1)!, 'fold-helper-binary');
+      return ok;
     },
   };
   return { provider, ledger, hingeReadCount: () => hingeReads };
+}
+
+/**
+ * Runs `fn` under its own throwaway `HOME`, so the fold-helper build cache under it
+ * (`~/.agent-device/fold-helper`) starts empty: the calibration and measured ledger runs each
+ * need a cold cache, not the outer per-test `HOME` the file's `beforeEach` already scoped, because
+ * a warm cache would skip the build phase and shrink the measured ledger.
+ */
+async function withColdFoldHelperCache<T>(fn: () => Promise<T>): Promise<T> {
+  const outerHome = process.env.HOME;
+  const runHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-fold-run-home-'));
+  process.env.HOME = runHome;
+  try {
+    return await fn();
+  } finally {
+    if (outerHome === undefined) delete process.env.HOME;
+    else process.env.HOME = outerHome;
+    fs.rmSync(runHome, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -226,40 +259,42 @@ async function runFoldLedgerScenario(params: {
   hingeReadCount: number;
   virtualElapsedMs: number;
 }> {
-  const trajectory = [
-    { atMs: 0, angle: 0 },
-    { atMs: MAX_FOLD_DURATION_MS, angle: 100 },
-  ];
-  let virtualElapsedMs = 0;
-  const originNowMs = Date.now();
-  const dateSpy = params.withVirtualClock
-    ? vi.spyOn(Date, 'now').mockImplementation(() => originNowMs + virtualElapsedMs)
-    : undefined;
-  const { provider, ledger, hingeReadCount } = createFoldLedgerAppleToolProvider({
-    hingeAngleAt: params.hingeAngleAt,
-    onCall: (call) => {
-      virtualElapsedMs += Math.max(0, call.timeoutMs - 1) + (call.graceMs ?? 0);
-    },
-  });
-  const daemon = await createProviderScenarioHarness({
-    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
-    appleToolProvider: () => provider,
-  });
-  daemon.setSession(
-    'default',
-    makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
-  );
-  try {
-    const response = await daemon.callCommand('fold', [], {
-      platform: 'ios',
-      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      keyframes: JSON.stringify(trajectory),
+  return withColdFoldHelperCache(async () => {
+    const trajectory = [
+      { atMs: 0, angle: 0 },
+      { atMs: MAX_FOLD_DURATION_MS, angle: 100 },
+    ];
+    let virtualElapsedMs = 0;
+    const originNowMs = Date.now();
+    const dateSpy = params.withVirtualClock
+      ? vi.spyOn(Date, 'now').mockImplementation(() => originNowMs + virtualElapsedMs)
+      : undefined;
+    const { provider, ledger, hingeReadCount } = createFoldLedgerAppleToolProvider({
+      hingeAngleAt: params.hingeAngleAt,
+      onCall: (call) => {
+        virtualElapsedMs += Math.max(0, call.timeoutMs - 1) + (call.graceMs ?? 0);
+      },
     });
-    return { response, ledger, hingeReadCount: hingeReadCount(), virtualElapsedMs };
-  } finally {
-    dateSpy?.mockRestore();
-    await daemon.close();
-  }
+    const daemon = await createProviderScenarioHarness({
+      deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+      appleToolProvider: () => provider,
+    });
+    daemon.setSession(
+      'default',
+      makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
+    );
+    try {
+      const response = await daemon.callCommand('fold', [], {
+        platform: 'ios',
+        udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+        keyframes: JSON.stringify(trajectory),
+      });
+      return { response, ledger, hingeReadCount: hingeReadCount(), virtualElapsedMs };
+    } finally {
+      dateSpy?.mockRestore();
+      await daemon.close();
+    }
+  });
 }
 
 function assertFoldLedgerPhaseCoverage(ledger: readonly FoldLedgerCall[]): void {
