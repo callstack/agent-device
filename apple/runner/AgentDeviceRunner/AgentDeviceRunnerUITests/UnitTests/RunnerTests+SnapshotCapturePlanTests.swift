@@ -76,6 +76,37 @@ extension RunnerTests {
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [], truncated: false)))
   }
 
+  /// A sweep the slice cut short is rejected as a tier timeout even when what it collected clears
+  /// every bar the quality classifier has, while the identical payload from a sweep that ran all its
+  /// queries is accepted. The pair is the point: node count cannot see the deadline (#2781).
+  func testDeadlineExhaustedTierIsRejectedWhileItsIdenticalCompletedPayloadIsAccepted() {
+    let root = planTestNode(index: 0, type: "Application", label: "Example App", hittable: true)
+    let nodes: [PresentedNode] = [root] + (1..<13).map { index in
+      planTestNode(index: index, type: "Button", label: "Row \(index)", hittable: true, parentIndex: 0)
+    }
+    let payload = DataPayload(nodes: nodes, truncated: true)
+    XCTAssertNil(
+      Self.sparsePayloadReason(payload),
+      "this payload clears the classifier on its own, so only the tier outcome can reject it"
+    )
+    XCTAssertEqual(
+      Self.snapshotTierRejectionReason(
+        outcome: .deadlineExhausted,
+        kind: .querySweep,
+        payload: payload
+      )?.code,
+      "budget",
+      "a tier that spent its capture slice is a timeout whatever it collected"
+    )
+    XCTAssertNil(
+      Self.snapshotTierRejectionReason(
+        outcome: .completed,
+        kind: .querySweep,
+        payload: payload
+      )
+    )
+  }
+
   func testCollapsedLeafIndexesFlagsMergedContainersOnly() {
     let root = planTestNode(index: 0, type: "Application", label: "App")
     let merged = planTestNode(
@@ -460,7 +491,7 @@ extension RunnerTests {
     func capture(depth: Int?) throws -> DataPayload {
       try runSnapshotCapturePlan(
         Self.regularVisiblePlan,
-        app: app,
+        target: takeSnapshotCaptureTarget(app: app),
         options: PresentationOptions(
           interactiveOnly: false,
           depth: depth,

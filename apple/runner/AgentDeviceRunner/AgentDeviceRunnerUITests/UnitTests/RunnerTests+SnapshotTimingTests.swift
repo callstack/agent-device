@@ -60,6 +60,51 @@ extension RunnerTests {
     )
   }
 
+  /// A tier that stopped starting work at its own deadline is a timeout for the breaker even when it
+  /// answered fast and with a payload: the partial sweep must arm the penalty exactly as a slow tier
+  /// does, and a tier that finished fast must not (#2781).
+  func testDeadlineExhaustedTierAttemptArmsTheChannelPenaltyWithoutBeingSlow() {
+    let capture = SnapshotBackendCapture(
+      payload: DataPayload(nodes: [], truncated: true),
+      effectiveDepth: nil
+    )
+    let exhausted = SnapshotBackendAttempt(
+      outcome: .captured(capture),
+      timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
+      tierOutcome: .deadlineExhausted
+    )
+    XCTAssertEqual(
+      Self.snapshotXCTestPenaltyReason(
+        kind: .querySweep,
+        attempt: exhausted,
+        slowThresholdMs: 3_000
+      ),
+      "queries_backend_timeout"
+    )
+
+    let completed = SnapshotBackendAttempt(
+      outcome: .captured(capture),
+      timing: SnapshotCaptureTiming(acquisitionMs: 1_000, presentationMs: 10),
+      tierOutcome: .completed
+    )
+    XCTAssertNil(
+      Self.snapshotXCTestPenaltyReason(
+        kind: .querySweep,
+        attempt: completed,
+        slowThresholdMs: 3_000
+      )
+    )
+
+    XCTAssertNil(
+      Self.snapshotXCTestPenaltyReason(
+        kind: .privateAX,
+        attempt: exhausted,
+        slowThresholdMs: 3_000
+      ),
+      "a tier that owes nothing to the XCTest channel cannot penalize it"
+    )
+  }
+
   func testSnapshotPhaseTimerReportsAcquisitionAndPresentationSeparately() {
     var now = Date(timeIntervalSinceReferenceDate: 100)
     var timer = SnapshotPhaseTimer(now: { now })

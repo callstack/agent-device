@@ -61,6 +61,159 @@ extension RunnerTests {
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
   }
 
+  func testSnapshotAccessibilityUnavailableQueuesInvalidationBehindAbandonedMainThreadWork() {
+    currentBundleId = "com.example.stale-target"
+    runnerAccessibilityHealth = .healthy
+    defer {
+      currentBundleId = nil
+      runnerAccessibilityHealth = .unknown
+    }
+
+    final class ResultBox {
+      var elapsed: TimeInterval?
+      var payload: DataPayload?
+      var bundleStillCachedWhileBlocked: Bool?
+      var healthWhileBlocked: RunnerAccessibilityHealth?
+      var abandonedWhileBlocked: Int?
+    }
+    let box = ResultBox()
+    let mainBlocked = DispatchSemaphore(value: 0)
+    let releaseMain = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "fail-closed capture returned while main was blocked")
+
+    DispatchQueue(label: "agent-device.runner.tests.ax-unavailable-invalidation").async {
+      _ = try? self.runMainThreadWork(
+        "command_execution",
+        timeout: 0,
+        timeoutError: self.mainThreadExecutionTimeoutError
+      ) {
+        mainBlocked.signal()
+        _ = releaseMain.wait(timeout: .now() + 5)
+        return true
+      }
+      _ = mainBlocked.wait(timeout: .now() + 2)
+      let startedAt = Date()
+      box.payload = self.snapshotAccessibilityUnavailable(
+        failure: SnapshotCaptureFailure(
+          code: Self.axSnapshotErrorCode,
+          message: Self.axSnapshotFailureMessage,
+          hint: Self.axSnapshotHint
+        )
+      )
+      box.elapsed = Date().timeIntervalSince(startedAt)
+      box.bundleStillCachedWhileBlocked = self.currentBundleId != nil
+      box.healthWhileBlocked = self.runnerAccessibilityHealth
+      self.mainThreadWorkLock.lock()
+      box.abandonedWhileBlocked = self.abandonedMainThreadWorkCount
+      self.mainThreadWorkLock.unlock()
+      releaseMain.signal()
+      finished.fulfill()
+    }
+
+    wait(for: [finished], timeout: 8)
+    let drainDeadline = Date().addingTimeInterval(2)
+    while hasAbandonedMainThreadWork() || currentBundleId != nil, Date() < drainDeadline {
+      sleepFor(0.005)
+    }
+
+    XCTAssertEqual(box.payload?.runnerFatal, true)
+    XCTAssertLessThan(
+      box.elapsed ?? .infinity,
+      0.5,
+      "the fail-closed capture must not wait behind abandoned main-thread work"
+    )
+    XCTAssertEqual(
+      box.bundleStillCachedWhileBlocked,
+      true,
+      "the invalidation must queue behind the blocked main thread, not run on the command queue"
+    )
+    XCTAssertEqual(
+      box.healthWhileBlocked,
+      .healthy,
+      "the health write must queue behind the blocked main thread, not run on the command queue"
+    )
+    XCTAssertEqual(box.abandonedWhileBlocked, 1, "the deferred write must not add an abandoned unit")
+    XCTAssertFalse(hasAbandonedMainThreadWork())
+    XCTAssertNil(currentBundleId, "the invalidation must run once the main thread frees")
+    XCTAssertEqual(runnerAccessibilityHealth, .unavailable)
+  }
+
+  func testQuerySweepSliceDeadlineIsTheTierSliceNotThePlanDeadline() {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+    let slice = startedAt.addingTimeInterval(Self.flatInteractiveFallbackBudget)
+
+    XCTAssertEqual(
+      Self.querySweepSliceDeadline(
+        startedAt: startedAt,
+        planDeadline: startedAt.addingTimeInterval(Self.snapshotPlanBudget)
+      ),
+      slice
+    )
+    let nearPlanDeadline = startedAt.addingTimeInterval(Self.flatInteractiveFallbackBudget / 2)
+    XCTAssertEqual(
+      Self.querySweepSliceDeadline(startedAt: startedAt, planDeadline: nearPlanDeadline),
+      nearPlanDeadline
+    )
+  }
+
+  func testQuerySweepStopsAtTheSliceDeadlineBeforeAQueryThatCannotFinish() {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+    let sliceDeadline = Self.querySweepSliceDeadline(
+      startedAt: startedAt,
+      planDeadline: startedAt.addingTimeInterval(Self.snapshotPlanBudget)
+    )
+    var clock = startedAt
+    var startedQueries: [Int] = []
+
+    let sweep = Self.runFlatInteractiveQueries(
+      Array(0..<19),
+      deadline: sliceDeadline,
+      now: { clock }
+    ) { query -> (elements: [Int], axUnavailable: Bool) in
+      startedQueries.append(query)
+      clock = clock.addingTimeInterval(0.475)
+      return ([query], false)
+    }
+
+    XCTAssertEqual(startedQueries, [0, 1], "a query must not start with less than one query budget left")
+    XCTAssertEqual(sweep.elements, [0, 1])
+    XCTAssertEqual(sweep.outcome, .deadlineExhausted)
+    XCTAssertLessThanOrEqual(clock, sliceDeadline, "no started query may outlive the tier slice")
+
+    XCTAssertTrue(
+      Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.2))
+    )
+    XCTAssertFalse(
+      Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.05))
+    )
+    XCTAssertFalse(Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline))
+  }
+
+  func testQuerySweepRunsEveryQueryThatFitsAndStopsOnAXUnavailable() {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 1_000)
+    let deadline = startedAt.addingTimeInterval(Self.flatInteractiveFallbackBudget)
+
+    let complete = Self.runFlatInteractiveQueries(
+      [0, 1, 2],
+      deadline: deadline,
+      now: { startedAt }
+    ) { query -> (elements: [Int], axUnavailable: Bool) in ([query], false) }
+    XCTAssertEqual(complete.elements, [0, 1, 2])
+    XCTAssertEqual(complete.outcome, .completed)
+
+    let rejected = Self.runFlatInteractiveQueries(
+      [0, 1, 2],
+      deadline: deadline,
+      now: { startedAt }
+    ) { query -> (elements: [Int], axUnavailable: Bool) in ([query], query == 1) }
+    XCTAssertEqual(rejected.elements, [0, 1])
+    XCTAssertEqual(
+      rejected.outcome,
+      .completed,
+      "an AX refusal ends the sweep on its own terms, not on the deadline"
+    )
+  }
+
   // Simulator-only: the bounded probe body returns nil on macOS (no SpringBoard host), so the
   // timeout/penalty/drain machinery below only exists on the iOS branch.
 #if os(iOS)
@@ -83,13 +236,14 @@ extension RunnerTests {
   /// assertion instead of racing a fixed-timing guess.
   private func assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(
     entryPointName: String,
-    callEntryPoint: @escaping (XCUIApplication, PresentationOptions) throws -> DataPayload
+    callEntryPoint: @escaping (SnapshotCaptureTarget, PresentationOptions) throws -> DataPayload
   ) {
     let targetBundleId = "com.callstack.agentdevice.runner.missing.snapshot-timeout-test"
     let snapshotTarget = XCUIApplication(bundleIdentifier: targetBundleId)
     let probeReleaseGate = DispatchSemaphore(value: 0)
     currentApp = snapshotTarget
     currentBundleId = targetBundleId
+    let captureTarget = takeSnapshotCaptureTarget(app: snapshotTarget)
     defer {
       probeReleaseGate.signal()
       currentApp = nil
@@ -120,7 +274,7 @@ extension RunnerTests {
     let drained = expectation(description: "\(entryPointName) modal probe drained")
     DispatchQueue(label: "agent-device.runner.tests.modal-probe-timeout").async {
       box.payload = try? callEntryPoint(
-        snapshotTarget,
+        captureTarget,
         PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
       )
 
@@ -130,7 +284,7 @@ extension RunnerTests {
         box.wasBusyBeforeDrain = true
       }
       box.hadAbandonedCaptureBeforeDrain = self.hasAbandonedMainThreadWork()
-      box.wasPenalizedBeforeDrain = self.isSnapshotXCTestChannelPenalized(bundleId: self.currentBundleId)
+      box.wasPenalizedBeforeDrain = self.isSnapshotXCTestChannelPenalized(bundleId: targetBundleId)
 
       // 2) `box.payload` above was already produced -- through the capture plan's recovery
       // tiers -- while the probe is still blocked on `probeReleaseGate`, i.e. recovered before
@@ -185,14 +339,14 @@ extension RunnerTests {
   func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain() {
     assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotFast") {
       target, options in
-      try self.snapshotFast(app: target, options: options)
+      try self.snapshotFast(target: target, options: options)
     }
   }
 
   func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw() {
     assertBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain(entryPointName: "snapshotRaw") {
       target, options in
-      try self.snapshotRaw(app: target, options: options)
+      try self.snapshotRaw(target: target, options: options)
     }
   }
 #endif
