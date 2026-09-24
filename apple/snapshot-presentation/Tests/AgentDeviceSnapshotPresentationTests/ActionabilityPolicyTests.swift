@@ -14,11 +14,13 @@ final class ActionabilityPolicyTests: XCTestCase {
     let cases: [PolicyCase]
   }
 
-  /// A rect as JSON can carry one. Infinity has no JSON spelling, so the unusable box a platform
-  /// hands back is named `{"infinite": true}` (`window-coordinate-space.json` spells it the same).
+  /// A rect as JSON can carry one. Infinity has no JSON spelling, so the two unusable boxes a platform
+  /// can hand back are named: `{"infinite": true}` is `CGRect.infinite`, the box Apple returns for
+  /// "resolved none" (`window-coordinate-space.json` spells it the same), and `{"nonFinite": true}` is
+  /// a box with actual infinite components, which is what the host's frame decoder refuses.
   private struct RectBox: Decodable {
     private enum CodingKeys: String, CodingKey {
-      case x, y, width, height, infinite
+      case x, y, width, height, infinite, nonFinite
     }
 
     let cgRect: CGRect
@@ -27,6 +29,15 @@ final class ActionabilityPolicyTests: XCTestCase {
       let container = try decoder.container(keyedBy: CodingKeys.self)
       guard try container.decodeIfPresent(Bool.self, forKey: .infinite) != true else {
         self.cgRect = .infinite
+        return
+      }
+      guard try container.decodeIfPresent(Bool.self, forKey: .nonFinite) != true else {
+        self.cgRect = CGRect(
+          x: -.infinity,
+          y: -.infinity,
+          width: .infinity,
+          height: .infinity
+        )
         return
       }
       self.cgRect = CGRect(
@@ -93,12 +104,26 @@ final class ActionabilityPolicyTests: XCTestCase {
   }
 
   private struct PolicyCase: Decodable {
+    private enum CodingKeys: String, CodingKey {
+      case name, swift, typescript, asymmetry, enabled, node, viewport, hittable, nodeRectGuardPasses
+    }
+
     let name: String
+    let swift: Bool
+    let typescript: Bool
+    let asymmetry: String?
     let enabled: Bool
     let node: RectBox
     let viewport: ViewportFact
     let hittable: Bool
     let nodeRectGuardPasses: Bool
+
+    /// A row one language skips is a written-down divergence, and a divergence without a reason is how
+    /// two implementations start disagreeing quietly again: a shared row carries no reason and a skipped
+    /// row carries exactly one.
+    var declaresItsAsymmetry: Bool {
+      (swift && typescript) != (asymmetry?.isEmpty == false)
+    }
   }
 
   func testActionabilityPolicyAgreesWithEveryGoldenVector() throws {
@@ -110,6 +135,11 @@ final class ActionabilityPolicyTests: XCTestCase {
       "vector names must be unique"
     )
     for testCase in table.cases {
+      XCTAssertTrue(
+        testCase.declaresItsAsymmetry,
+        "\(testCase.name): a row both languages do not share must name the asymmetry"
+      )
+      guard testCase.swift else { continue }
       XCTAssertTrue(
         testCase.viewport.matchesDeclaredKind,
         "\(testCase.name): declared \(testCase.viewport.declaredKind) must survive declaration"
@@ -135,7 +165,7 @@ final class ActionabilityPolicyTests: XCTestCase {
   /// every declared kind has to be present, and no `missing` row may rest on a node rect that the
   /// guard already refuses — that would make the row's `false` say nothing about the policy.
   func testActionabilityPolicyCoversEveryViewportKindWithoutAVacuousMissingRow() throws {
-    let cases = try loadActionabilityPolicyTable().cases
+    let cases = try loadActionabilityPolicyTable().cases.filter(\.swift)
     XCTAssertEqual(Set(cases.map(\.viewport.declaredKind)), ["reported", "derived", "missing"])
     for testCase in cases where testCase.viewport.declaredKind == "missing" {
       XCTAssertTrue(

@@ -1,368 +1,194 @@
 {
-  "description": "Golden vector table for the shared `hittable` predicate (#1933), pinned for the input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach (#2891). RULE: a node is actionable when it is enabled, its own rect is positive and finite, and its center falls inside the viewport box, half-open on the right and bottom edges (inclusive on the left and top). Two implementations: isGeometricallyActionable in apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotGeometry.swift (replayed by ActionabilityPolicyTests, and reached on device through SnapshotGeometrySpace.normalized and SnapshotVisibilityFold.fold) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). THE VIEWPORT IS A DECLARED FACT, not a rectangle: `reported` is the platform's box for the app's surface, `derived` is a box the capture inferred for itself out of its own root element, and `missing` carries `not-provided` (nothing was read) or `invalid` (a box arrived that cannot be one). These are the three cases of IosViewportEvidence in packages/contracts/src/ios-snapshot.ts, and the old spelling \u2014 CGRect.infinite as the viewport \u2014 made every node actionable on the runner while the host published nothing, which is one state resolved in two directions. POLICY FOR AN UNKNOWN VIEWPORT, stated once at the Swift decision site and failing CLOSED: `missing` publishes no actionability, because `hittable` claims a tap at the center lands and a capture with no box cannot support that; `hittable: false` is visible to the caller as an empty interactive result, an unsupported `true` is silent. The host reaches the same direction with a stronger instrument: resolveViewportEvidence in packages/capture-kit/src/ios-snapshot-engine/invariants.ts throws `missing-viewport`/`invalid-viewport` and refuses to fold a regular presentation at all, so the TypeScript predicate has no case for the state \u2014 its viewport parameter is total by construction. That is why `missing` rows are asserted differently per language: Swift asserts the predicate answers false, TypeScript asserts the capture-level refusal fires and the node-rect guard claim holds. `derived` keeps answering containment on both sides: it is a screen box the capture read out of its own root element (the runner's private AX tier falls back to it, and a host provider adapter reaches the same shape from an element tree), and the host's decline for that kind is a source-stage decision about who may claim the bit \u2014 `publishDerivedHittability` in packages/platform-apple/src/snapshot-source/tree.ts runs only for a `reported` viewport \u2014 not a second answer from the predicate. Widening the fail-closed case to `derived` was rejected because `hittable` is load-bearing downstream: the #2638 wrapper verdict reads a declared false as evidence a wrapper is inert, so the case that stops claiming actionability stays exactly the case with no box at all. WHY SOME ROWS COME IN PAIRS: several rows state an expectation both sides already agreed on before #2891, so a bare false would be vacuous. Each such row has a sibling reaching the SAME center through a box that passes the guard and answering true, which shows the guard, not containment, is what decides. Two of them were genuine divergences: `CGRect.infinite` is built of finite Doubles (\u00b1DBL_MAX/2, DBL_MAX) so its center is (0,0) and the Swift side called it actionable inside any viewport, and a negative width passes a null/empty check while its center lands inside, which the private AX bridge's JSON frame parser can hand over. Infinity has no JSON spelling, so the unusable box is named {\"infinite\": true} and decodes to CGRect.infinite on the Swift side and to an infinite rect on the TypeScript side, as in window-coordinate-space.json. Each row also carries `nodeRectGuardPasses`: whether `node` satisfies that positive-finite precondition, asserted in both languages so a drift in either guard names itself.",
+  "description": "Golden vector table for the shared `hittable` predicate (#1933), pinned for the input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach (#2891). RULE: a node is actionable when it is enabled, its own rect is positive and finite, and its center falls inside the viewport box, half-open on the right and bottom edges (inclusive on the left and top). Two implementations: isGeometricallyActionable in apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotGeometry.swift (replayed by ActionabilityPolicyTests, and reached on device through SnapshotGeometrySpace.normalized and SnapshotVisibilityFold.fold) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). EVERY ROW declares both `swift` and `typescript`; a row either side skips must carry `asymmetry` naming why, so a divergence is always written down rather than discovered. THE VIEWPORT IS A DECLARED FACT, not a rectangle: `reported` is the platform's box for the app's surface, `derived` is a box the capture inferred for itself out of its own root element, and `missing` carries `not-provided` (nothing was read) or `invalid` (a box arrived that cannot be one). These are the three cases of IosViewportEvidence in packages/contracts/src/ios-snapshot.ts, and the old spelling - CGRect.infinite as the viewport - made every node actionable on the runner while the host published nothing, which is one state resolved in two directions. POLICY FOR AN UNKNOWN VIEWPORT, stated once at the Swift decision site and failing CLOSED: `missing` publishes no actionability, because `hittable` claims a tap at the center lands and a capture with no box cannot support that claim. The bit is published, never filtered: SnapshotVisibilityFoldProjection.shouldInclude and isEligibleForRegularPresentation retain a visible node whatever its bit says, so a retained node carries `hittable: false` and a caller or a `hittable:` selector reads it, while a wrong `true` is a claim nothing contradicts. The host reaches the same direction earlier in its own capture path, where resolveViewportEvidence in packages/capture-kit/src/ios-snapshot-engine/invariants.ts refuses to fold a regular presentation without a positive finite viewport - which is why the TypeScript predicate has no unknown-viewport case, and why this state cannot be compared through the fold differential.",
   "cases": [
     {
       "name": "a center strictly inside the reported box is actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center one point short of the right edge is actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 239,
-        "y": 110,
-        "width": 160,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 239, "y": 110, "width": 160, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center landing exactly on the right edge is not actionable: the edge is half-open",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 240,
-        "y": 110,
-        "width": 160,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 240, "y": 110, "width": 160, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center one point short of the bottom edge is actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 159,
-        "width": 40,
-        "height": 160
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 159, "width": 40, "height": 160 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center landing exactly on the bottom edge is not actionable: the edge is half-open",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 160,
-        "width": 40,
-        "height": 160
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 160, "width": 40, "height": 160 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center landing exactly on the left edge is actionable: that edge is inclusive",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": -20,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": -20, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center landing exactly on the top edge is actionable: that edge is inclusive",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": -10,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": -10, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a disabled node is not actionable even with its center inside the box",
+      "swift": true,
+      "typescript": true,
       "enabled": false,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a center inside the box reached through a canonical box is actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 80,
-        "y": 100,
-        "width": 20,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 80, "y": 100, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "the same center reached through a negative width is not actionable: the node guard decides, and Swift used to answer actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": -20,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 100, "width": -20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": false
     },
     {
       "name": "a center inside the box reached through a zero width is not actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 110,
-        "width": 0,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 110, "width": 0, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": false
     },
     {
       "name": "that zero-area box's center reached through a canonical box is actionable",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 90,
-        "y": 110,
-        "width": 20,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 90, "y": 110, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
-      "name": "a center inside the box reached through a box spelled infinite is not actionable, and Swift used to answer actionable because its center is (0,0)",
+      "name": "Apple's no-box sentinel is not actionable: CGRect.infinite is made of finite Doubles whose center is (0,0), so only the platform that owns that value can refuse it by identity",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "Swift decodes {\"infinite\": true} as CGRect.infinite; TypeScript has no such value, and frameFromGuest in packages/platform-apple/src/snapshot-source/tree.ts refuses a frame whose components are not Number.isFinite before the predicate ever sees it, which is the row below. The sentinel's components are finite, so TypeScript would call them actionable: the refusal belongs to the producer that parses an Apple frame, not to a magic value inside the shared rule.",
       "enabled": true,
-      "node": {
-        "infinite": true
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "infinite": true },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "a node rect whose components are not finite is not actionable on either producer, and the component checks refuse it before any center is computed",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "nonFinite": true },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": false
     },
     {
       "name": "the center a box spelled infinite lands on is actionable when a real box reaches it",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": -10,
-        "y": -10,
-        "width": 20,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "reported",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": -10, "y": -10, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "the same node whose center sits inside a reported box is not actionable once the viewport goes missing: the policy fails closed",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "missing",
-        "reason": "not-provided"
-      },
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a viewport declared invalid because a box arrived that cannot be one fails closed the same way",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "missing",
-        "reason": "invalid"
-      },
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "invalid" },
       "hittable": false,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a derived box the capture read from its own root still answers containment",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 100,
-        "y": 100,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "derived",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "derived", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": true,
       "nodeRectGuardPasses": true
     },
     {
       "name": "a derived box still refuses a node whose center is off that box",
+      "swift": true,
+      "typescript": true,
       "enabled": true,
-      "node": {
-        "x": 900,
-        "y": 10,
-        "width": 40,
-        "height": 20
-      },
-      "viewport": {
-        "kind": "derived",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 320,
-          "height": 240
-        }
-      },
+      "node": { "x": 900, "y": 10, "width": 40, "height": 20 },
+      "viewport": { "kind": "derived", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
       "hittable": false,
       "nodeRectGuardPasses": true
     }
