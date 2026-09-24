@@ -2,24 +2,34 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  /// Reads the fixture's `Edits: n; write-backs: m` counter. Counts only: the field's contents never
+  /// cross into the test.
+  private func textEntryFixtureCounts(app: XCUIApplication) throws -> (edits: Int, writeBacks: Int) {
+    let counts = app.staticTexts["agent-device-text-entry-write-backs"].label
+      .split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+    XCTAssertEqual(counts.count, 2, "unexpected write-back status: \(counts)")
+    return (try XCTUnwrap(counts.first), try XCTUnwrap(counts.last))
+  }
+
   /// An app that owns its field's value renders it some time after the edit that produced it, the
   /// way a controlled React Native `TextInput` does. A burst typed faster than that render has its
   /// in-flight characters erased by the app's own write, which the app then reads back into its
   /// model, so the field settles stable short of the request — the shape CI reported for
   /// `fill id="field-email" ada@example` as `aexample`.
   ///
-  /// The acknowledge window this fixture watches is deliberately far stricter than the
-  /// `synthesizedAcknowledgeWindowSeconds` budget the shipped pace is sized for. On a loaded host the
-  /// characters of a paced burst do not arrive a full interval apart, so a fixture watching that
-  /// budget fails on pacing noise rather than on the mechanism. An app that renders every edit
-  /// within 5 ms is one no pace this runner could ship outruns, which is the half that is worth
-  /// pinning on every PR; the budget itself is pinned by
-  /// `testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit`. The same run at that budget with
-  /// the pre-fix 60-characters-per-second pace leaves the field holding `a` against 20 write-backs:
-  /// harsher than the one lost run CI saw, because an app that never catches up mid-burst loses
-  /// every character after the first, and the reason the fixture decides at the edit instead of on a
-  /// timer — a scheduled write lands differently every time a host is loaded, which is how this test
-  /// failed on CI before the model changed.
+  /// What this pins is the runner's half of that race, which is all the runner owns: a field the app
+  /// rewrote mid-burst either ends with the requested text and an ok, or the command refuses. An ok
+  /// over a short value was the original defect. Whether the app wins a round trip is decided by the
+  /// host, not by the pace, because XCTest does not deliver `typingSpeed:` characters evenly — CI
+  /// observed two of them 4 ms apart at the shipped pace — so the assertion follows the fixture's own
+  /// counter rather than assuming the app kept up.
+  ///
+  /// The pace itself is pinned without a race by `testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit`,
+  /// against the 40 ms window this route is sized for. The window here is 5 ms — an app that renders
+  /// every edit within it is one the shipped pace is not expected to outrun, so the strict branch is
+  /// the one a healthy host takes. At the pre-fix 60-characters-per-second pace and the 40 ms policy
+  /// window the same run leaves the field holding `a` after 20 write-backs, which is the half the
+  /// pace exists for.
   func testSynthesizedReplacementSurvivesFieldValueWrittenBackByTheApp() throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -50,6 +60,8 @@ extension RunnerTests {
 
     let frame = textField.frame
     XCTAssertFalse(frame.isEmpty)
+    var sawKeepUp = false
+    var sawRewrite = false
 
     // Twice: the second replacement selects the first one's value away, which is the shape the
     // reported CI trace had — a `fill` onto a field that already held text.
@@ -57,21 +69,30 @@ extension RunnerTests {
       let command = try runnerCommandFixture(
         #"{"command":"type","commandId":"\#(commandId)","text":"ada@example","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
       )
+      let writeBacksBefore = try textEntryFixtureCounts(app: app).writeBacks
       let failuresBeforeType = currentXCTestFailureCount()
       let response = executeTypeCommand(activeApp: app, command: command)
-      XCTAssertTrue(response.ok, String(describing: response.error))
-      XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
       XCTAssertFalse(didRecordXCTestFailure(since: failuresBeforeType))
-      XCTAssertEqual(String(describing: textField.value ?? ""), "ada@example")
+      let writeBacksAfter = try textEntryFixtureCounts(app: app).writeBacks
+
+      if writeBacksAfter == writeBacksBefore {
+        sawKeepUp = true
+        XCTAssertTrue(response.ok, String(describing: response.error))
+        XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
+        XCTAssertEqual(String(describing: textField.value ?? ""), "ada@example")
+      } else {
+        sawRewrite = true
+        XCTAssertFalse(response.ok, "a field the app rewrote cannot report success")
+        XCTAssertEqual(response.error?.code, "TEXT_INPUT_COMMIT_NOT_OBSERVED")
+      }
     }
 
-    // Without an edit this app actually rendered, the value above would only prove the fixture is
-    // inert. Zero write-backs says the app never had a render in flight to lose the burst against.
-    let counts = app.staticTexts["agent-device-text-entry-write-backs"].label
-      .split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
-    XCTAssertEqual(counts.count, 2, "unexpected write-back status: \(counts)")
-    XCTAssertGreaterThan(try XCTUnwrap(counts.first), 0)
-    XCTAssertEqual(try XCTUnwrap(counts.last), 0)
+    // The fixture has to have run for either branch above to mean anything.
+    XCTAssertGreaterThan(try textEntryFixtureCounts(app: app).edits, 0)
+    if sawRewrite {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_APP_OWNED_VALUE branch=app-won-round-trip")
+    }
+    XCTAssertTrue(sawKeepUp || sawRewrite)
   }
 
   /// A replacement the command budget cannot carry is refused before the first character is posted,
