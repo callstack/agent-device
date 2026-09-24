@@ -145,19 +145,15 @@ public enum SnapshotGeometrySpace: Equatable {
   }
 
   private static func isQuarterTurned(_ frame: CGRect, relativeTo appFrame: CGRect) -> Bool {
-    guard isPlottable(frame), isPlottable(appFrame),
+    // The quarter-turn test asks the same question the `hittable` predicate asks before it computes a
+    // center: is this a box that can be plotted at all. It is one predicate, not two that can drift.
+    guard SnapshotGeometry.isPositiveFinite(frame), SnapshotGeometry.isPositiveFinite(appFrame),
       abs(appFrame.width - appFrame.height) > quarterTurnTolerance
     else {
       return false
     }
     return abs(frame.width - appFrame.height) <= quarterTurnTolerance
       && abs(frame.height - appFrame.width) <= quarterTurnTolerance
-  }
-
-  private static func isPlottable(_ frame: CGRect) -> Bool {
-    frame.origin.x.isFinite && frame.origin.y.isFinite
-      && frame.width.isFinite && frame.height.isFinite
-      && frame.width > 0 && frame.height > 0
   }
 }
 
@@ -169,8 +165,8 @@ extension SnapshotGeometrySpace {
   ) -> [RawAXNode] {
     let carriers = SnapshotVisibilityFold.visibilityExemptCarrierTypes
     // No viewport box means no app frame to be quarter-turned relative to either. `.null` is the box
-    // `isPlottable` refuses, so this pass turns nothing — the outcome `CGRect.infinite` produced
-    // before the fact carried the absence.
+    // `SnapshotGeometry.isPositiveFinite` refuses, so this pass turns nothing — the outcome
+    // `CGRect.infinite` produced before the fact carried the absence.
     let appFrame = viewport.rect ?? .null
     var spaces = [SnapshotGeometrySpace](repeating: .appOrientation, count: nodes.count)
     var result: [RawAXNode] = []
