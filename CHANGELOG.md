@@ -35,6 +35,16 @@
   with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures afresh.
   A failed read also carries `targetActivation` in `error.details`, and a failed interaction now
   keeps the disclosure sentences in its hint.
+  passed. That capture now carries `unsettledGesture`: `is`, `get`, `find`, and `wait` report it (in
+  `error.details` or `data`) with an appended warning, `snapshot` appends the warning, `is absent`
+  refuses with `observation: "unsettled"`, `wait absent` keeps polling, and the next read captures
+  afresh. Click, press, and fill by selector do not disclose it yet. A failed read now also carries
+  `targetActivation` in `error.details`, the same place as `unsettledGesture`.
+- Fixed (ios): a synthesized tap step inside a runner `sequence` (for example `press x y --count N`)
+  now follows the standalone tap's policy instead of its own. When accessibility is unavailable or no
+  app window resolves, the step now falls back to an XCTest coordinate tap instead of failing the
+  step with `UNSUPPORTED_OPERATION`. One helper now owns the synthesize-then-fallback decision at
+  every synthesized tap site (#2788).
 - Fixed (ios): `open` on a local Simulator now waits for the launched app's discovery before it
   decides whether the app is observable. On a loaded host `simctl spawn launchctl list` outlasts one
   1.5 s discovery wait slice, and the launch observation read that slice as an unobservable app, so
