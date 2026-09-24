@@ -12,8 +12,9 @@ export type CaptureProvenance = Pick<
 >;
 
 /**
- * The foreground repair THIS request paid for, filled by the capture path only when the request
- * actually captured a tree (#2682).
+ * The whole-tree facts THIS request's own captures observed, filled by the capture path only when the
+ * request actually captured a tree: the foreground repair it paid for (#2682) and the gesture whose
+ * surface it read before that surface settled.
  *
  * Separate from the consumed tree on purpose. A selector read may answer from a cached or stored
  * tree — that tree still describes the surface the response is about, which is what #2438 discloses
@@ -21,23 +22,21 @@ export type CaptureProvenance = Pick<
  * consumed tree would tell a command "you found the session app out of foreground" when it never
  * looked, which is a fabricated observation rather than a disclosure.
  */
-export type RequestActivationProof = {
-  state?: CaptureProvenance;
-};
+export type RequestCaptureProof = Pick<CaptureProvenance, 'targetActivation' | 'unsettledGesture'>;
 
 /**
- * Note the repair a capture paid for, and hand that capture back. First fact wins: a later capture in
- * the same request that reports no repair — a sparse recovery's fresh tree, a poll's fact-less read —
- * cannot erase the capture that did (#2682). One rule, because three capture paths owe it and a
- * hand-copied condition drifts from the other two the moment one of them learns something.
+ * Note the facts a capture observed, and hand that capture back. First fact wins: a later capture in
+ * the same request that reports neither — a sparse recovery's fresh tree, a poll's fact-less read, an
+ * interaction's full-tree retry — cannot erase the capture that did. Only the first capture after a
+ * gesture is compared for settling, so a later one proves nothing about the surface having stopped.
  */
-export function recordActivationProof<T extends CaptureProvenance>(
-  proof: RequestActivationProof | undefined,
+export function recordCaptureProof<T extends CaptureProvenance>(
+  proof: RequestCaptureProof | undefined,
   snapshot: T,
 ): T {
-  if (proof !== undefined && proof.state === undefined && snapshot.targetActivation !== undefined) {
-    proof.state = snapshot;
-  }
+  if (proof === undefined) return snapshot;
+  if (snapshot.targetActivation) proof.targetActivation ??= snapshot.targetActivation;
+  if (snapshot.unsettledGesture) proof.unsettledGesture ??= snapshot.unsettledGesture;
   return snapshot;
 }
 
@@ -94,15 +93,16 @@ export function withTargetActivationDisclosure(
 /**
  * Every capture-provenance disclosure a response owes, from the two different things a capture can
  * prove: what the answered tree describes (#2438 — cache tiers included, because the surface is
- * still on screen) and what this request's own capture found (#2682 — cache hits excluded, because
- * a request that captured nothing repaired nothing).
+ * still on screen; an unsettled gesture — a poll that later answered from a settled tree owes none)
+ * and what this request's own capture found (#2682 — cache hits excluded, because a request that
+ * captured nothing repaired nothing).
  */
 export function withCaptureDisclosures(params: {
   response: DaemonResponse;
   consumedTree: CaptureProvenance | undefined;
-  activationProof?: RequestActivationProof;
+  captureProof?: RequestCaptureProof;
 }): DaemonResponse {
-  const { response, consumedTree, activationProof } = params;
+  const { response, consumedTree, captureProof } = params;
   return withTargetActivationDisclosure(
     withTreeFactDisclosure(
       withSystemSurfaceDisclosure(response, consumedTree),
@@ -110,14 +110,34 @@ export function withCaptureDisclosures(params: {
       consumedTree?.unsettledGesture,
       formatGestureUnsettledWarning,
     ),
-    activationProof?.state,
+    captureProof,
+  );
+}
+
+/**
+ * Every fact an interaction's own captures observed. The gesture aims at the trees this request
+ * captured, so an unsettled read anywhere in it is disclosed on success and failure alike.
+ */
+export function withRequestCaptureDisclosures(
+  response: DaemonResponse,
+  captureProof: RequestCaptureProof,
+): DaemonResponse {
+  return withTargetActivationDisclosure(
+    withTreeFactDisclosure(
+      response,
+      'unsettledGesture',
+      captureProof.unsettledGesture,
+      formatGestureUnsettledWarning,
+    ),
+    captureProof,
   );
 }
 
 /**
  * Which success-side field a disclosure enters. #2438's surface sentence shipped on the singular
  * `warning`; the repair sentence ships on the `warnings` array beside the typed fact that travels
- * with it. Failure has one carrier for both: `error.details.hint`.
+ * with it. Failure has one carrier for both: the hint request finalization keeps, which is
+ * `error.hint` when the route set one and `error.details.hint` otherwise.
  */
 type DisclosureCarrier = 'warning' | 'warnings';
 
@@ -135,13 +155,16 @@ function appendDisclosure(
 ): DaemonResponse {
   if (carriesDisclosure(response, disclosure)) return response;
   if (!response.ok) {
-    const details = response.error.details ?? {};
+    const { hint, details = {} } = response.error;
     return {
       ...response,
-      error: {
-        ...response.error,
-        details: { ...details, hint: appended(details.hint, disclosure) },
-      },
+      error:
+        typeof hint === 'string'
+          ? { ...response.error, hint: appended(hint, disclosure) }
+          : {
+              ...response.error,
+              details: { ...details, hint: appended(details.hint, disclosure) },
+            },
     };
   }
   if (carrier === 'warnings') {
@@ -166,7 +189,7 @@ function appendDisclosure(
 function carriesDisclosure(response: DaemonResponse, disclosure: string): boolean {
   const carriers: unknown[] = response.ok
     ? [response.data?.warning, ...responseWarnings(response.data?.warnings)]
-    : [response.error.details?.hint];
+    : [response.error.hint, response.error.details?.hint];
   return carriers.some((carrier) => typeof carrier === 'string' && carrier.includes(disclosure));
 }
 

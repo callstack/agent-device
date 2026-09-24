@@ -18,7 +18,7 @@ import type { SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
-import type { RequestActivationProof } from '../../capture-disclosure.ts';
+import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import { withCaptureDisclosures } from '../../capture-disclosure.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
 import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
@@ -129,7 +129,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   // One proof for the whole request: whichever capture of find's (first pass or a sparse re-capture)
   // activated the session app owns the disclosure, including when the re-capture's tree is the one
   // that survives and gets answered from (#2682).
-  const activationProof: RequestActivationProof = {};
+  const captureProof: RequestCaptureProof = {};
   const readTargetTree = createFindTargetCapture({
     device,
     session,
@@ -140,7 +140,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     sessionStore,
     sessionName,
     capture: boundSelector.capture,
-    activationProof,
+    captureProof,
   });
 
   const ctx: FindContext = {
@@ -166,7 +166,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     return withCaptureDisclosures({
       response: sparseFindSnapshotResponse(snapshotResult.snapshotQuality),
       consumedTree: snapshotResult,
-      activationProof,
+      captureProof,
     });
   }
   const { nodes } = snapshotResult;
@@ -186,7 +186,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     return withCaptureDisclosures({
       response: matchResult.response,
       consumedTree: snapshotResult,
-      activationProof,
+      captureProof,
     });
   }
   const node = matchResult.node;
@@ -213,7 +213,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     ? withCaptureDisclosures({
         response,
         consumedTree: snapshotResult,
-        activationProof,
+        captureProof,
       })
     : response;
 }

@@ -1,7 +1,7 @@
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { recordActivationProof } from './capture-disclosure.ts';
-import type { RequestActivationProof } from './capture-disclosure.ts';
+import { recordCaptureProof } from './capture-disclosure.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
@@ -25,7 +25,7 @@ type WaitCurrentSurfaceParams = {
    * A timed-out wait still consumed that capture to describe its surface, so the repair it paid for
    * belongs to the response this module decorates.
    */
-  activationProof?: RequestActivationProof;
+  captureProof?: RequestCaptureProof;
 };
 
 type CurrentSurfaceDetails = {
@@ -89,7 +89,7 @@ async function inspectCurrentSurface(
         }),
       ),
   });
-  recordActivationProof(params.activationProof, capture.snapshot);
+  recordCaptureProof(params.captureProof, capture.snapshot);
   const orderedNodes = [...capture.snapshot.nodes].sort(compareSurfacePriority);
   const labels = topSurfaceTexts(orderedNodes, 6, { includeIdentifiers: true });
   if (labels.length === 0) return null;

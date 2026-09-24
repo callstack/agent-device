@@ -1,7 +1,7 @@
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { CaptureProvenance, RequestActivationProof } from '../../capture-disclosure.ts';
+import type { CaptureProvenance, RequestCaptureProof } from '../../capture-disclosure.ts';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
@@ -32,7 +32,7 @@ export function createFindTargetCapture(
      * Filled by whichever capture this find actually took, including a re-capture that replaced a
      * sparse first tree — find's response is owed the repair its own first capture paid for.
      */
-    activationProof: RequestActivationProof;
+    captureProof: RequestCaptureProof;
   }>,
 ): () => Promise<FindTargetTree> {
   const { device, session, req, logPath, locator, query, sessionStore, sessionName } = params;
@@ -44,7 +44,7 @@ export function createFindTargetCapture(
     req,
     logPath,
     capture: params.capture,
-    activationProof: params.activationProof,
+    captureProof: params.captureProof,
   });
   return async () => {
     // Interaction targets need the full interactive tree so duplicate labels can

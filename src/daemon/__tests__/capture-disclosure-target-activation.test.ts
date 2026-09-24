@@ -77,7 +77,7 @@ test('a failure does not borrow a repair the stored snapshot happens to carry', 
   const response = withCaptureDisclosures({
     response: failed,
     consumedTree: { targetActivation: FACT },
-    activationProof: {},
+    captureProof: {},
   });
 
   assert.equal(response, failed);
@@ -95,7 +95,7 @@ test('surface and foreground disclosures ride one response together', () => {
       iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
       targetActivation: FACT,
     },
-    activationProof: { state: { targetActivation: FACT } },
+    captureProof: { targetActivation: FACT },
   });
   const data = dataOf(response);
   assert.match(String(data.warning), /system web sign-in sheet/);
@@ -117,17 +117,17 @@ test('a repair that passes through two wrappers is named once in the failure hin
       details: { hint: 'Use snapshot to see the current tree.' },
     },
   };
-  const proof = { state: { targetActivation: FACT } };
+  const proof = { targetActivation: FACT };
 
   const once = withCaptureDisclosures({
     response: missed,
     consumedTree: { targetActivation: FACT },
-    activationProof: proof,
+    captureProof: proof,
   });
   const twice = withCaptureDisclosures({
     response: once,
     consumedTree: { targetActivation: FACT },
-    activationProof: proof,
+    captureProof: proof,
   });
 
   assert.equal(twice.ok, false);
