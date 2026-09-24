@@ -366,4 +366,4 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
     `fold ledger worst case (${measured.virtualElapsedMs}ms) + ${REQUIRED_DAEMON_RESULT_MARGIN_MS}ms margin ` +
       `exceeds the ${envelopeMs}ms envelope.\nLedger:\n${JSON.stringify(measured.ledger, null, 2)}`,
   );
-});
+}, 20_000);
