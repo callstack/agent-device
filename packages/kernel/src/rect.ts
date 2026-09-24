@@ -1,5 +1,15 @@
 import type { Rect } from './snapshot.ts';
 
+/**
+ * The rect precondition shared by every iOS snapshot producer's `hittable` claim, and the twin of
+ * `SnapshotGeometry.isPositiveFinite` on the runner.
+ *
+ * It is a rule about numbers, not about values one platform invents. Apple's "resolved none" box,
+ * `CGRect.infinite`, is built out of finite `Double`s, so no arithmetic here can recognise it; the
+ * Swift side refuses it by identity because that side can name it. A frame with components that are
+ * genuinely not finite is refused further upstream, by `frameFromGuest` in
+ * `packages/platform-apple/src/snapshot-source/tree.ts`, before any predicate is asked (#2891).
+ */
 export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
   return Boolean(
     rect &&
@@ -33,14 +43,18 @@ export function containsPoint(rect: Rect, x: number, y: number): boolean {
  * the runner's Swift `SnapshotGeometry.isGeometricallyActionable`, including `CGRect.contains`'s
  * half-open right/bottom edges — a center landing exactly on the viewport's right or bottom edge is
  * not hittable on either producer — and including the node-rect precondition, which Swift used to
- * spell null/empty and therefore called a negative-width or infinite box actionable here and not
- * there (#2891). `contracts/fixtures/snapshot-actionability-policy.json` pins both sides.
+ * spell null/empty and so called a negative-width box, or one whose components are not finite,
+ * actionable there and not here (#2891). `contracts/fixtures/snapshot-actionability-policy.json`
+ * pins both sides.
  *
- * `viewport` is total by construction: a caller only reaches this once `resolveViewportEvidence` in
- * `packages/capture-kit/src/ios-snapshot-engine/invariants.ts` has a positive finite rect to hand
- * over, and it throws `missing-viewport`/`invalid-viewport` otherwise. That refusal is this
- * predicate's own unknown-viewport case, and it fails in the same direction as the runner's, which
- * declares the state as `SnapshotViewport.missing` and publishes no actionability (#2891).
+ * `viewport` has no unknown case to handle: every caller hands over a box its own producer declared
+ * positive and finite — `viewportFromRoot` in `packages/platform-apple/src/snapshot-source/tree.ts`
+ * before that path publishes the bit at all, and `resolveViewportEvidence` in
+ * `packages/capture-kit/src/ios-snapshot-engine/invariants.ts`, which throws
+ * `missing-viewport`/`invalid-viewport`, before the engine folds a regular presentation. Those
+ * refusals are this predicate's unknown-viewport case, and they fail in the same direction as the
+ * runner's, which carries the state as `SnapshotViewport.missing` and publishes no actionability
+ * (#2891).
  *
  * The host AX bridge derives the source bit from the node's own frame and the fold intersects it
  * with the clipped frame, so a `hittable:` selector cannot tell the two producers apart. Kept here

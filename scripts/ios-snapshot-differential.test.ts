@@ -132,13 +132,17 @@ function assertWithinKillCriterion(startedAt: number, seed: number): void {
 }
 
 type ActionabilityRect = Readonly<{ x: number; y: number; width: number; height: number }>;
+type ActionabilityUnusableRect = Readonly<{ infinite: true }> | Readonly<{ nonFinite: true }>;
 type ActionabilityViewport =
   | Readonly<{ kind: 'reported' | 'derived'; rect: ActionabilityRect }>
   | Readonly<{ kind: 'missing'; reason: 'not-provided' | 'invalid' }>;
 type ActionabilityVector = Readonly<{
   name: string;
+  swift: boolean;
+  typescript: boolean;
+  asymmetry?: string;
   enabled: boolean;
-  node: ActionabilityRect | Readonly<{ infinite: true }>;
+  node: ActionabilityRect | ActionabilityUnusableRect;
   viewport: ActionabilityViewport;
   hittable: boolean;
   nodeRectGuardPasses: boolean;
@@ -152,13 +156,22 @@ const ACTIONABILITY_POLICY_PATH = path.resolve(
   'snapshot-actionability-policy.json',
 );
 
-/** The box a platform hands back when it resolved none — JSON has no literal for infinity. */
-const INFINITE_RECT: Rect = {
+/** A box whose components are not numbers anything may plot. JSON has no literal for infinity. */
+const NON_FINITE_RECT: Rect = {
   x: Number.NEGATIVE_INFINITY,
   y: Number.NEGATIVE_INFINITY,
   width: Number.POSITIVE_INFINITY,
   height: Number.POSITIVE_INFINITY,
 };
+
+/**
+ * A row one language skips is a written-down divergence, and a divergence without a reason is how two
+ * implementations start disagreeing quietly again: a shared row carries no reason, a skipped row one.
+ */
+function declaresItsAsymmetry(vector: ActionabilityVector): boolean {
+  const hasReason = typeof vector.asymmetry === 'string' && vector.asymmetry.length > 0;
+  return (vector.swift && vector.typescript) !== hasReason;
+}
 
 function readActionabilityVectors(): readonly ActionabilityVector[] {
   const table = JSON.parse(fs.readFileSync(ACTIONABILITY_POLICY_PATH, 'utf8')) as {
@@ -170,11 +183,30 @@ function readActionabilityVectors(): readonly ActionabilityVector[] {
     table.cases.length,
     'actionability vector names must be unique',
   );
+  for (const vector of table.cases) {
+    assert.equal(typeof vector.swift, 'boolean', `${vector.name}: row must declare the Swift side`);
+    assert.equal(
+      typeof vector.typescript,
+      'boolean',
+      `${vector.name}: row must declare the TypeScript side`,
+    );
+    assert.ok(
+      declaresItsAsymmetry(vector),
+      `${vector.name}: a row both languages do not share must name the asymmetry`,
+    );
+  }
   return table.cases;
 }
 
 function toRect(node: ActionabilityVector['node']): Rect {
-  return 'infinite' in node ? INFINITE_RECT : node;
+  if ('nonFinite' in node) return NON_FINITE_RECT;
+  if ('infinite' in node) {
+    throw new Error(
+      "CGRect.infinite is Apple's value and no row reaching TypeScript may stand for it: " +
+        'that row belongs to the Swift side alone',
+    );
+  }
+  return node;
 }
 
 function missingViewportReason(reason: 'not-provided' | 'invalid'): string {
@@ -187,7 +219,7 @@ function missingViewportReason(reason: 'not-provided' | 'invalid'): string {
 // fold a regular presentation at all without a positive finite viewport (`resolveViewportEvidence`),
 // so an unknown viewport has no TypeScript fold outcome to compare a runner outcome against.
 test('the shared hittable predicate agrees with every golden actionability vector', () => {
-  for (const vector of readActionabilityVectors()) {
+  for (const vector of readActionabilityVectors().filter((row) => row.typescript)) {
     const node = toRect(vector.node);
     assert.equal(
       isPositiveFiniteRect(node),
@@ -214,7 +246,7 @@ test('the shared hittable predicate agrees with every golden actionability vecto
 });
 
 test('the actionability table covers every viewport kind without a vacuous missing row', () => {
-  const vectors = readActionabilityVectors();
+  const vectors = readActionabilityVectors().filter((row) => row.typescript);
   assert.deepEqual([...new Set(vectors.map((vector) => vector.viewport.kind))].sort(), [
     'derived',
     'missing',
