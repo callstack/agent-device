@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.b5a18d4757.js"></script>
+<script defer src="/agent-device/static/js/index.84d1e84909.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -498,7 +498,12 @@ Two-finger <code>gesture pan</code> and <code>gesture transform</code> are suppo
 <li><code>is visible</code> checks whether the resolved element is present in the current visible snapshot viewport. A node without its own rect still passes when a visible ancestor within the viewport provides the on-screen geometry.</li>
 <li><code>is exists</code> only checks whether the selector matches in the current snapshot.</li>
 <li><code>is absent</code> passes only when the selector has zero matches in one readable, complete, settled, unscoped, full-depth accessibility capture. It does not mean hidden; <code>--scope</code> and <code>--depth</code> are rejected, and sparse, unreadable, truncated, or unsettled captures fail closed.</li>
-<li>A read that answers from the first capture after a <code>scroll</code>, <code>swipe</code>, or <code>gesture swipe</code> waits for two consecutive captures to agree. When the surface is still changing when that budget runs out, <code>is</code>, <code>get</code>, <code>find</code>, and <code>wait</code> carry <code>unsettledGesture</code> (<code>{ &quot;action&quot;, &quot;positionals&quot; }</code>) in <code>error.details</code> or <code>data</code> and append a warning, and <code>snapshot</code> appends the warning. A miss on that capture is not proof of absence: read again. <code>is absent</code> refuses it with <code>observation: &quot;unsettled&quot;</code>, and <code>wait absent</code> keeps polling.</li>
+<li>A read that answers from the first capture after a <code>scroll</code>, <code>swipe</code>, or <code>gesture swipe</code> waits for two consecutive captures to agree. That capture, and a re-capture taken at once to recover or widen it, carry <code>postGestureOutcome</code> (<code>{ &quot;kind&quot;, &quot;gesture&quot;: { &quot;action&quot;, &quot;positionals&quot; } }</code>) when stabilization proved something about the gesture. <code>is</code>, <code>get</code>, <code>find</code>, <code>wait</code>, and an interaction that captured it (such as <code>click</code>, <code>press</code>, or <code>fill</code>) report it in <code>error.details</code> or <code>data</code> and append a warning, and <code>snapshot</code> appends the warning.
+<ul>
+<li><code>kind: &quot;unsettled&quot;</code>: the surface was still changing when the budget ran out. A miss on that capture is not proof of absence: read again. <code>is absent</code> refuses it with <code>observation: &quot;unsettled&quot;</code>, and <code>wait absent</code> keeps polling.</li>
+<li><code>kind: &quot;no-effect&quot;</code>: the settled tree still matches the tree from before the gesture. The container may be at its edge or may ignore synthesized scrolls; a raw <code>swipe x1 y1 x2 y2</code> inside the list moves such lists.</li>
+</ul>
+</li>
 <li><code>wait text</code> is a text-presence wait, not a hittability assertion.</li>
 <li>Strict <code>wait absent</code> is not exported to Maestro&#x27;s lenient <code>notVisible</code> condition; Maestro export reports it as unsupported unless an exact zero-candidate primitive becomes available.</li>
 <li><code>is text &lt;selector&gt; &lt;value&gt;</code> compares the resolved element text against the expected value.</li>
