@@ -86,6 +86,31 @@ test('an exec-shaped helper install timeout names the dialog, not a wedged adb s
   );
 });
 
+test('a current-only helper check refuses a missing helper without installing it', async () => {
+  const apkPath = await writeHelperApk('snapshot-helper-current-only-');
+  let installs = 0;
+  const adbProvider = missingPackageProvider(async () => {
+    installs += 1;
+    return { exitCode: 0, stdout: 'Success', stderr: '' };
+  });
+
+  await assert.rejects(
+    () =>
+      ensureAndroidSnapshotHelper({
+        adb: adbProvider.exec,
+        adbProvider,
+        artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
+        deviceKey: 'android:emulator-5554',
+        installPolicy: 'current-only',
+      }),
+    (error) => {
+      assert.equal((error as AppError).details?.reason, 'android-snapshot-helper-not-current');
+      return true;
+    },
+  );
+  assert.equal(installs, 0);
+});
+
 function adbInstallTimeout(): AppError {
   // An unattended first install on ColorOS: adb blocks on the system install-confirmation dialog
   // and the exec layer kills the command, so stdout/stderr stay empty.

@@ -104,7 +104,9 @@ export function createAndroidInteractor(
             scope: snapshotOptions.scope,
             raw: snapshotOptions.raw,
             includeHiddenContentHints: snapshotOptions.includeHiddenContentHints,
-            helperSessionScope: androidHelperSessionScope(snapshotOptions.appBundleId),
+            ...(snapshotOptions.transient
+              ? { helperSessionScope: 'borrow', helperInstallPolicy: 'current-only' }
+              : { helperSessionScope: androidHelperSessionScope(snapshotOptions.appBundleId) }),
           }),
         { backend: 'android' },
       );

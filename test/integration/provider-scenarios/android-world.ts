@@ -15,6 +15,7 @@ import {
   androidSnapshotHelperOutput,
 } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
+import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-android/mechanics';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
@@ -65,6 +66,9 @@ export async function createAndroidSettingsWorld(options?: {
   dumpsysWindow?: () => string;
   onAdbExec?: (args: readonly string[]) => void;
 }): Promise<AndroidSettingsWorld> {
+  // The world's helper version probe always reports no helper, so no install may be remembered
+  // from an earlier world on the same serial.
+  resetAndroidSnapshotHelperInstallCache();
   const hostAdbGuard = installFakeHostAdbGuard();
   const adbCalls: string[][] = [];
   const textInjectionCalls: AndroidSettingsWorld['textInjectionCalls'] = [];

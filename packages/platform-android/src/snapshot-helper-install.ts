@@ -1,4 +1,4 @@
-import { asAppError, type AppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   inspectInstalledAndroidHelper,
   installAndroidHelperPackage,
@@ -141,6 +141,18 @@ export async function ensureAndroidSnapshotHelper(options: {
       installed: false,
       reason,
     };
+  }
+  if (installPolicy === 'current-only') {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android snapshot helper is not installed at the current version',
+      {
+        reason: 'android-snapshot-helper-not-current',
+        packageName,
+        versionCode,
+        installedVersionCode,
+      },
+    );
   }
 
   let result: Awaited<ReturnType<AndroidAdbExecutor>>;

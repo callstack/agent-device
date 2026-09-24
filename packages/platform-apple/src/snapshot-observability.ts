@@ -3,6 +3,7 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SimulatorSnapshotSource } from './snapshot-source-facade.ts';
@@ -12,14 +13,11 @@ import {
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
 
-/**
- * What an `open` learned about the app it just launched on a local Simulator: `observable` means
- * the host AX bridge published its tree, so the first observation will not pay a launch
- * transition; `unobservable` means the bridge reported a state that will not clear within its
- * grace (a system dialog, a lost AX server) or the grace ran out; `not-eligible` means the device
- * has no bridge to ask.
- */
-export type LaunchObservation = 'observable' | 'unobservable' | 'not-eligible';
+/** The observations a local Simulator's host AX bridge can report for a launched app. */
+export type LaunchObservation = Extract<
+  PostOpenObservation,
+  'observable' | 'unobservable' | 'not-eligible'
+>;
 
 export type LaunchObservationPort = Readonly<{
   awaitObservable(

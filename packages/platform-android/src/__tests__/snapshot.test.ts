@@ -37,6 +37,7 @@ import {
   type FakeAndroidProcess,
 } from './snapshot-helper-session.fixtures.ts';
 import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
+import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -537,6 +538,60 @@ test('snapshotAndroid keeps daemon-session helper alive for reuse until session 
   );
 });
 
+test('a borrowed capture releases a helper session it had to start', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+  });
+
+  await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'borrow',
+  });
+
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(processes[0]?.exitCode, 0);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
+});
+
+test('a borrowed capture leaves a warm daemon-session helper running', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+  });
+
+  await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+  const borrowed = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'borrow',
+  });
+
+  assert.equal(borrowed.androidSnapshot.helperSessionReused, true);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(processes[0]?.exitCode, null);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    false,
+  );
+});
+
 test('a daemon-session viewport read warms the session the next snapshot reuses', async () => {
   // The gesture viewport and snapshot capture are different helper commands on the same device.
   // They may only share the live session if both derive the same session identity, which is why
@@ -605,6 +660,35 @@ test('snapshotAndroid retires content-invalid daemon helper before the next requ
     adbCalls.filter((args) => args[0] === 'forward' && args[1] === '--remove').length,
     1,
   );
+});
+
+test('a borrowed capture reports its content verdict without retiring the warm helper', async () => {
+  const adbCalls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    processes,
+    sessionXml: (_sessionIndex, snapshotCount) =>
+      snapshotCount === 1
+        ? '<hierarchy><node text="warm helper" bounds="[0,0][10,10]" /></hierarchy>'
+        : androidSystemWindowOnlyXml(),
+  });
+  await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+
+  await assert.rejects(
+    snapshotAndroid(device, { helperAdb: provider, helperArtifact, helperSessionScope: 'borrow' }),
+    (error: unknown) => isUnreadableCaptureContentError(error),
+  );
+
+  assert.equal(processes[0]?.exitCode, null, 'the session helper is still running');
+  assert.equal(adbCalls.some(isHelperRuntimeReset), false);
+  assert.equal(spawnArgs.length, 1);
 });
 
 test('content-invalid daemon helper retirement force-stops the helper runtime', async () => {

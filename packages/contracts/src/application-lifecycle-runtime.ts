@@ -124,11 +124,39 @@ export type OpenApplicationTiming = Readonly<{
   openDispatchDurationMs?: number;
   launchUrlDurationMs?: number;
   postOpenSettleDurationMs?: number;
-  /**
-   * What the open learned about the launched app's readability before returning, set by a local
-   * iOS Simulator and by Android (see each platform owner).
-   */
-  postOpenObservation?: 'observable' | 'unobservable' | 'not-eligible';
+  /** Unset when the open had no launched app to observe, such as a URL or deep-link target. */
+  postOpenObservation?: PostOpenObservation;
+  /** Why the observation could not run; present exactly when it is `probe-failed`. */
+  postOpenObservationFailure?: PostOpenObservationFailure;
+}>;
+
+/**
+ * What an app open learned about the launched app before it returned. A local iOS Simulator asks
+ * its host AX bridge; a local Android device captures the app through the snapshot helper. Each
+ * owner bounds the observation, and the open succeeds whatever the value is.
+ *
+ * - `observable`: the launched app's tree was readable.
+ * - `unobservable`: the app stayed unreadable within the owner's bounded window: a launch transition
+ *   or AX-server state that did not clear, a system surface over the app, a content verdict after
+ *   the capture's own re-captures, or the window ran out.
+ * - `probe-failed`: the observation could not run (Android: the helper is not installed at the
+ *   current version, or adb or the accessibility service failed). `postOpenObservationFailure`
+ *   carries the typed failure.
+ * - `app-unidentified`: the open targeted an app, but the owner could not read which package it
+ *   launched, so nothing was observed.
+ * - `not-eligible`: the device has no observation path.
+ */
+export type PostOpenObservation =
+  | 'observable'
+  | 'unobservable'
+  | 'probe-failed'
+  | 'app-unidentified'
+  | 'not-eligible';
+
+/** The typed failure of a `probe-failed` observation: the error code and its typed reason. */
+export type PostOpenObservationFailure = Readonly<{
+  code: string;
+  reason?: string;
 }>;
 
 export type OpenApplicationOutcome = Readonly<{

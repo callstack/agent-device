@@ -31,9 +31,11 @@ export const ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS = 30_000;
  * `am instrument` start plus the UiAutomation connect wait. `daemon-session` hands that release to
  * session teardown (`stopSessionAndroidSnapshotHelper`), which every Android session runs, so
  * consecutive commands in one session share one warm helper. Device-scoped work stays `command` so
- * nothing squats UiAutomation once the command returns.
+ * nothing squats UiAutomation once the command returns. `borrow` uses a session that is already
+ * running and leaves it running, but releases a session it had to start, so a one-off read never
+ * leaves the helper holding UiAutomation for a session that may not observe again.
  */
-export type AndroidHelperSessionScope = 'command' | 'daemon-session';
+export type AndroidHelperSessionScope = 'command' | 'daemon-session' | 'borrow';
 
 /** Threaded by every helper-backed read a session command performs (capture, viewport). */
 export type AndroidHelperSessionOptions = { helperSessionScope?: AndroidHelperSessionScope };
@@ -45,7 +47,12 @@ export type {
   AndroidSnapshotHelperManifest,
 } from './helper-artifacts.ts';
 
-export type AndroidSnapshotHelperInstallPolicy = 'missing-or-outdated' | 'always' | 'never';
+/** `current-only` uses an installed helper at the artifact's version and refuses to install one. */
+export type AndroidSnapshotHelperInstallPolicy =
+  | 'missing-or-outdated'
+  | 'always'
+  | 'never'
+  | 'current-only';
 
 export type AndroidSnapshotHelperInstallResult = {
   packageName: string;

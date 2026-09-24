@@ -2,6 +2,7 @@ import {
   type ApplicationLifecycleRuntimeOperations,
   type OpenApplicationInput,
   type OpenApplicationOutcome,
+  type OpenApplicationTiming,
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -11,6 +12,8 @@ import {
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import type { AndroidLaunchObservationPort } from './launch-observation.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -35,13 +38,14 @@ type AndroidLifecycleParams = Readonly<{
   host: AndroidLifecycleHost;
   device: DeviceInfo;
   signal: AbortSignal;
+  launchObservation: AndroidLaunchObservationPort;
 }>;
 
 /** Android owns lifecycle sequencing, including local adb-backed hints and durable test-IME state. */
 export function bindAndroidApplicationLifecycle(
   params: AndroidLifecycleParams,
 ): ApplicationLifecycleRuntimeOperations {
-  const { host, device, signal } = params;
+  const { host, device, signal, launchObservation } = params;
   const binding = bindLocalApplicationLifecycleInteractor({
     device,
     signal,
@@ -54,7 +58,8 @@ export function bindAndroidApplicationLifecycle(
       await ensureAndroidReady(host, device, { headless: false }, signal);
       void input;
     },
-    openApplication: async (input) => await openAndroidApplication(host, binding, input),
+    openApplication: async (input) =>
+      await openAndroidApplication(host, binding, launchObservation, input),
     applyRuntimeHints: async (input) =>
       await host.androidApplications.applyRuntimeHints(device, input),
     clearRuntimeHints: async (input) =>
@@ -87,6 +92,7 @@ export function bindAndroidApplicationLifecycle(
 async function openAndroidApplication(
   host: AndroidLifecycleHost,
   binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
+  launchObservation: AndroidLaunchObservationPort,
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
@@ -165,32 +171,28 @@ async function openAndroidApplication(
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);
   }
   const settleStartedAtMs = Date.now();
-  timing.postOpenObservation = await observeAndroidLaunch(binding, input, appBundleId);
+  Object.assign(timing, await observeOpenedApp(binding, launchObservation, input, appBundleId));
   timing.postOpenSettleDurationMs = elapsed(settleStartedAtMs);
   return { appBundleId, timing };
 }
 
-/**
- * `am start -W` returns once the activity draws its first frame, which can be a splash or an empty
- * root while the app still mounts its views, so the open itself captures the launched app. The
- * capture's content verdict and its bounded re-capture decide readiness. The open still succeeds
- * when the app stays unreadable or the capture fails: the capture reports why in its own
- * diagnostics, and the next observation meets the same state.
- */
-async function observeAndroidLaunch(
+/** A URL or deep-link open has no launched app of its own to observe, so it reports nothing. */
+async function observeOpenedApp(
   binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
+  launchObservation: AndroidLaunchObservationPort,
   input: OpenApplicationInput,
   appBundleId: string | undefined,
-): Promise<NonNullable<OpenApplicationOutcome['timing']['postOpenObservation']>> {
-  if (!appBundleId) return 'not-eligible';
-  const interactor = await binding.resolveInteractor(input.execution, appBundleId);
-  try {
-    await interactor.snapshot({ appBundleId, signal: binding.signal });
-    return 'observable';
-  } catch {
-    binding.signal.throwIfAborted();
-    return 'unobservable';
-  }
+): Promise<Pick<OpenApplicationTiming, 'postOpenObservation' | 'postOpenObservationFailure'>> {
+  if (!input.target || isDeepLinkTarget(input.target)) return {};
+  if (!appBundleId) return { postOpenObservation: 'app-unidentified' };
+  const launch = await launchObservation.awaitObservable(
+    await binding.resolveInteractor(input.execution, appBundleId),
+    appBundleId,
+    binding.signal,
+  );
+  return launch.observation === 'probe-failed'
+    ? { postOpenObservation: 'probe-failed', postOpenObservationFailure: launch.failure }
+    : { postOpenObservation: launch.observation };
 }
 
 function elapsed(startedAtMs: number): number {

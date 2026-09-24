@@ -81,13 +81,21 @@ test(
   'Provider-backed integration Android Maestro refreshes action geometry and preserves authored swipe points',
   async () => {
     let snapshots = 0;
+    let capturesSinceLaunch = 0;
     await withProviderScenarioResource(
       async () =>
         await createAndroidSettingsWorld({
+          onAdbExec: (args) => {
+            if (args.slice(0, 3).join(' ') === 'shell am start') capturesSinceLaunch = 0;
+          },
+          // The helper is not installed yet when the flow opens the app, so the open's launch
+          // probe fails before it captures. The flow's assertion reads the first capture after
+          // `am start`, which carries the geometry the tap must not reuse.
           snapshotXml: () => {
             snapshots += 1;
+            capturesSinceLaunch += 1;
             return androidMaestroReplayXml(
-              snapshots === 1 ? '[16,24][374,80]' : '[100,300][260,360]',
+              capturesSinceLaunch === 1 ? '[16,24][374,80]' : '[100,300][260,360]',
             );
           },
         }),
@@ -135,7 +143,8 @@ test(
         assert.deepEqual(swipePlan.pointers[0]?.samples[0]?.point, { x: 351, y: 300 });
         assert.deepEqual(swipePlan.pointers[0]?.samples.at(-1)?.point, { x: 39, y: 300 });
         assert.equal(world.gestureViewportCalls, 1);
-        // Assertion, launch/tap stability comparisons, and fresh tap geometry share retained baselines.
+        // Assertion, launch/tap stability comparisons, and fresh tap geometry share retained
+        // baselines; the open's launch probe adds no capture here.
         assert.equal(snapshots, 4);
       },
     );
@@ -187,12 +196,14 @@ test(
           ['shell', 'input', 'tap', '180', '330'],
         );
         assert.equal(
-          world.adbCalls.filter((call) => call.slice(0, 3).join(' ') === 'shell am force-stop')
-            .length,
+          world.adbCalls.filter(
+            (call) => call.join(' ') === 'shell am force-stop com.android.settings',
+          ).length,
           2,
         );
-        // Each launchApp open captures the launched app once before it returns.
-        assertSnapshotCountInRange(snapshots, 4, 5);
+        // The second flow's open finds the helper the first flow installed, so its launch probe
+        // adds one capture.
+        assertSnapshotCountInRange(snapshots, 3, 4);
       },
     );
   },
