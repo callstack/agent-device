@@ -22,8 +22,8 @@ typedef NS_ENUM(NSInteger, RunnerSynthesizedTextEntryStatus) {
 + (RunnerSynthesizedTextEntryResult *)synthesizeTextWithApplication:(id)application
                                                                text:(NSString *)text;
 
-// Replaces the current first responder's contents using one synthesized
-// Command-A, Delete, and text-input event sequence.
+// Replaces the current first responder's contents with one synthesized Command-A record
+// followed by a text-input record, typed at the bounded pace declared in the implementation.
 + (RunnerSynthesizedTextEntryResult *)replaceTextWithApplication:(id)application
                                                            text:(NSString *)text;
 

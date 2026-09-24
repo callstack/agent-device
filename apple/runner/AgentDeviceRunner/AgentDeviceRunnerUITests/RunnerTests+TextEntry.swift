@@ -51,7 +51,9 @@ extension RunnerTests {
     static let synthesizedCommitStallTimeout: TimeInterval = 3.0
     /// The commit wait's absolute bound, however long characters keep arriving. Sits well inside
     /// the daemon's per-command budget (`RUNNER_COMMAND_TIMEOUT_MS`, 45s), which also has to cover
-    /// focus, clear and verification around this wait.
+    /// focus, clear and verification around this wait. Synthesized delivery happens before this
+    /// wait starts, so long text spends its character intervals upstream of it: a 240-character
+    /// `fill` measures ~21s end to end at the bounded pace, and the budget runs out near 500.
     static let synthesizedCommitCeiling: TimeInterval = 10.0
     static let synthesizedCommitPollInterval: TimeInterval = 0.2
   }

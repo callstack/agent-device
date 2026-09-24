@@ -65,6 +65,9 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
+@property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
+@property(nonatomic, assign) NSUInteger textEntryWriteBackAttempts;
+@property(nonatomic, assign) NSUInteger textEntryWriteBackApplies;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -175,6 +178,12 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
                                                          (unsigned long)self.replacementAlertActions];
 }
 
+- (void)updateTextEntryWriteBackStatus {
+  self.textEntryWriteBackStatus.text = [NSString stringWithFormat:@"Write-backs: %lu attempted, %lu applied",
+                                               (unsigned long)self.textEntryWriteBackAttempts,
+                                               (unsigned long)self.textEntryWriteBackApplies];
+}
+
 - (void)presentAlertFixtureReplacement:(BOOL)replacement {
   NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
   BOOL sameTitle = [arguments containsObject:@"--agent-device-alert-same-title"];
@@ -232,7 +241,35 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 }
 #endif
 
+// How long after an edit this fixture writes the value it observed back into the field. The write
+// has to land after the next character of a fast burst has arrived for it to erase anything, and
+// the lane test needs it to land before the next character of a paced burst does, so the window is
+// one character interval at the old 60 characters/second (16.7ms) to one at the pace synthesized
+// text entry now types at (~83ms). 25ms sits near the fast end, which keeps the slow side
+// comfortable on a loaded host at the cost of a thin margin on the fast side.
+static const NSTimeInterval AgentDeviceTextEntryAsyncWriteDelaySeconds = 0.025;
+
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
+  // A field whose app owns its value: like a controlled React Native `TextInput`, this fixture
+  // re-applies the value it observed a moment after the edit that produced it. A replacement burst
+  // typed faster than that write lands loses whatever it typed while the write was in flight, and
+  // the field settles stable short of the requested text.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-async-value-write"]) {
+    NSString *observedText = [textField.text copy];
+    __weak UITextField *weakTextField = textField;
+    dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(AgentDeviceTextEntryAsyncWriteDelaySeconds * NSEC_PER_SEC)),
+      dispatch_get_main_queue(),
+      ^{
+        self.textEntryWriteBackAttempts += 1;
+        UITextField *field = weakTextField;
+        if (field != nil && field.window != nil && ![field.text isEqualToString:observedText]) {
+          field.text = observedText;
+          self.textEntryWriteBackApplies += 1;
+        }
+        [self updateTextEntryWriteBackStatus];
+      });
+  }
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
       textField.text.length > 0) {
     [textField removeFromSuperview];
@@ -293,6 +330,20 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:44],
     ]];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-async-value-write"]) {
+      // Reports how many write-backs this fixture ran and how many of them changed the field, so a
+      // lane test can tell a burst that survived the race from an inert fixture. Counts only: no
+      // field content crosses into the test.
+      self.textEntryWriteBackStatus = [[UILabel alloc] init];
+      self.textEntryWriteBackStatus.accessibilityIdentifier = @"agent-device-text-entry-write-backs";
+      self.textEntryWriteBackStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.textEntryWriteBackStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.textEntryWriteBackStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.textEntryWriteBackStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+      [self updateTextEntryWriteBackStatus];
+    }
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {

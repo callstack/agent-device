@@ -5,6 +5,17 @@
 
 static NSString *const RunnerTextSynthesisSurface = @"text";
 
+// XCTest's `typingSpeed:` argument is characters per second. At 60 the 11 characters of a `fill`
+// arrived at a fixture field across 131 ms (~13 ms per gap), which is faster than an app that owns
+// its field's value and re-applies it after the edit (a controlled React Native `TextInput`, an
+// async validator) can acknowledge: such a write lands between two characters of the burst and
+// erases what was typed while it was in flight, leaving a value that is stable short of the
+// request. 12 characters/second spaces them ~83 ms apart, so an app whose write-back lands inside
+// one character interval no longer has anything to erase. It is not immunity: a write-back still in
+// flight 150 ms after an edit corrupted an 11-character burst at this pace too. The
+// `--agent-device-text-entry-async-value-write` lane test pins the relationship.
+static const NSUInteger RunnerTextEntryTypingSpeedCharactersPerSecond = 12;
+
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);
 typedef id (*RunnerTextMsgSendInitPath)(id, SEL);
 typedef void (*RunnerTextMsgSendType)(id, SEL, NSString *, NSTimeInterval, NSUInteger, BOOL);
@@ -128,7 +139,14 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       );
     }
     ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.core.setTargetProcessIDSelector, targetProcessID);
-    ((RunnerTextMsgSendType)objc_msgSend)(path, bridge.typeTextSelector, text, 0.0, 60, YES);
+    ((RunnerTextMsgSendType)objc_msgSend)(
+      path,
+      bridge.typeTextSelector,
+      text,
+      0.0,
+      RunnerTextEntryTypingSpeedCharactersPerSecond,
+      YES
+    );
     ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);
 
     NSError *error = nil;

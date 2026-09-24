@@ -91,8 +91,9 @@ extension RunnerTests {
   // A value with a hole in the middle is neither a matching prefix nor an exact match, and must
   // never settle. These are the two corruption strings actually observed in CI on `fill`
   // (id="field-name" "Ada Lovelace" -> "Avelace", id="field-email" "ada@example" -> "aexample";
-  // first character and tail survive, a middle run is missing).
-  func testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters() {
+  // first character and tail survive, a middle run is missing). The wait can refuse a value like
+  // this but not repair it: no later read distinguishes it from a field that has settled.
+  func testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField() {
     let corruptions: [(expected: String, observedAfterDrop: String)] = [
       (expected: "Ada Lovelace", observedAfterDrop: "Avelace"),
       (expected: "ada@example", observedAfterDrop: "aexample"),
@@ -284,8 +285,8 @@ extension RunnerTests {
     // landing as "aexample" CI signature). The fake synthesizer never actually writes into
     // Springboard, so the wait's `observe()` reads nil (no matching field at that point) on every
     // poll and the value never becomes "abc" — under the replacement-mode outcome function that is
-    // correctly a failure (see `testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters` for
-    // why it must NOT be waved through as success), so this call runs the real 3-second deadline
+    // correctly a failure (see `testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField`
+    // for why it must NOT be waved through as success), so this call runs the real 3-second deadline
     // (`TextEntryTiming.synthesizedCommitStallTimeout`; a nil read never advances the expected
     // prefix, so `SynthesizedCommitDeadline` grants it no extra time) before returning. That is
     // deliberate here, not a flake: this test only runs in the nightly XCUITest lane (see
