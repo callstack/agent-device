@@ -453,7 +453,9 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     owns: (file) =>
       file.startsWith('packages/capture-kit/src/ios-snapshot-engine/') ||
       file.startsWith('apple/snapshot-presentation/') ||
-      file === 'contracts/fixtures/ios-snapshot-engine-conformance.json',
+      file === 'packages/kernel/src/rect.ts' ||
+      file === 'contracts/fixtures/ios-snapshot-engine-conformance.json' ||
+      file === 'contracts/fixtures/snapshot-actionability-policy.json',
   },
   // Both platform builds compile the same runner sources, and each is a separate
   // gate in a separate lane, so a Swift change owns both.
