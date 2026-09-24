@@ -64,6 +64,10 @@
       "types": "./src/runner-operations-facade.ts",
       "default": "./src/runner-operations-facade.ts"
     },
+    "./runner/requests-fixtures": {
+      "types": "./src/runner/runner-requests.fixtures.ts",
+      "default": "./src/runner/runner-requests.fixtures.ts"
+    },
     "./runner/test-host": {
       "types": "./src/runner/test-host.ts",
       "default": "./src/runner/test-host.ts"

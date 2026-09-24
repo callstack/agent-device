@@ -11,6 +11,7 @@
     "**/*.md",
     "scripts/maestro-conformance/corpus/**",
     "fallow-baselines/**",
+    // One entry per line, so each pinned runner request changes as one reviewable diff line.
     "contracts/fixtures/runner-requests.json"
   ]
 }

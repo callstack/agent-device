@@ -16,7 +16,7 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
 } from '../runner/__tests__/device-fixtures.ts';
-import { assertProducedRunnerRequests } from '../runner/__tests__/runner-requests-fixture.ts';
+import { assertProducedRunnerRequests } from '../runner/runner-requests.fixtures.ts';
 import {
   recordingRunnerProvider,
   singlePointerPanPlan,

@@ -541,6 +541,8 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/runner',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/operations',
+    // Test-only entry: the runner-requests.json check package and root tests share.
+    '@agent-device/platform-apple/runner/requests-fixtures',
     '@agent-device/platform-apple/runner/test-host',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/simctl',

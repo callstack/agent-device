@@ -86,6 +86,7 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/operations',
+    '@agent-device/platform-apple/runner/requests-fixtures',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simctl',

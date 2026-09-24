@@ -10,17 +10,17 @@ import { disposeRunnerSession } from '../runner-disposal.ts';
 import { buildRunnerLease, writeRunnerLease } from '../runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
-import { runApplePressSeries } from '../runner-sequence.ts';
-import { appleRunnerTestHost } from '../test-host.ts';
-import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
-import { makeRunnerSession } from './runner-session-fixtures.ts';
 import {
   assertProducedRunnerRequests,
   compareRunnerRequestNames,
   readRunnerRequestFixture,
   REPO_ROOT,
-} from './runner-requests-fixture.ts';
+} from '../runner-requests.fixtures.ts';
+import { runApplePressSeries } from '../runner-sequence.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
+import { IOS_SIMULATOR } from './device-fixtures.ts';
+import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
+import { makeRunnerSession } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const runnerState = vi.hoisted(() => ({ ensureRunnerSession: vi.fn(), derivedPath: '' }));
@@ -156,10 +156,10 @@ const DIRECT_SEND = new RegExp(
 );
 
 test('runner request drives send only requests production builds', () => {
+  const producers = readRunnerRequestFixture().map((entry) => path.join(REPO_ROOT, entry.producer));
   const sources = [
-    import.meta.filename,
-    path.join(import.meta.dirname, 'runner-requests-fixture.ts'),
-    path.join(import.meta.dirname, '../../__tests__/runner-requests.test.ts'),
+    ...new Set(producers),
+    path.join(import.meta.dirname, '../runner-requests.fixtures.ts'),
     path.join(import.meta.dirname, '../../__tests__/recording-runner-provider.ts'),
   ];
   const offending = sources.flatMap((file) =>

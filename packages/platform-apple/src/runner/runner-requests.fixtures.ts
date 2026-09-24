@@ -9,7 +9,7 @@ export type RunnerRequestEntry = {
   request: Record<string, unknown>;
 };
 
-export const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
+export const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 const COMMAND_ID_KEYS = ['commandId', 'statusCommandId'];
 
