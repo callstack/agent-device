@@ -109,20 +109,31 @@ extension RunnerTests {
       1.0 / Double(RunnerSynthesizedTextEntry.typingSpeedCharactersPerSecond())
     }
 
-    /// Seconds the plan spends posting, charged per `synthesizedReplacementSteps` step: each
-    /// synthesize call types its characters at the pace and pays its overhead, and a spaced plan
-    /// sleeps `delaySeconds` between two calls.
-    static func projectedSeconds(textLength: Int, delaySeconds: TimeInterval) -> TimeInterval {
-      let calls = synthesizedReplacementIsSpaced(characterCount: textLength, delaySeconds: delaySeconds)
-        ? textLength
-        : 1
+    /// Seconds the plan spends posting: each synthesize call types its characters at the pace and
+    /// pays its overhead, a spaced plan sleeps `delaySeconds` between two calls, and a plan that
+    /// peels one character as a warmup (`typeWarmup`) pays one more call and the wait before the
+    /// rest is posted. That wait is one poll here because the caller that asks has no element to
+    /// read the warmup character back from, so `waitForWarmupValue` has no value to wait for.
+    static func projectedSeconds(
+      textLength: Int,
+      delaySeconds: TimeInterval,
+      typeWarmup: Bool = false
+    ) -> TimeInterval {
+      let spaced = synthesizedReplacementIsSpaced(characterCount: textLength, delaySeconds: delaySeconds)
+      let warmupSplit = typeWarmup && textLength > 1 && !spaced
+      let calls = spaced ? textLength : (warmupSplit ? 2 : 1)
       return Double(textLength) * characterInterval
         + Double(calls) * TextEntryTiming.synthesizeCallOverhead
         + Double(calls - 1) * delaySeconds
+        + (warmupSplit ? TextEntryTiming.pollInterval : 0)
     }
 
-    static func exceeds(textLength: Int, delaySeconds: TimeInterval) -> Bool {
-      projectedSeconds(textLength: textLength, delaySeconds: delaySeconds)
+    static func exceeds(
+      textLength: Int,
+      delaySeconds: TimeInterval,
+      typeWarmup: Bool = false
+    ) -> Bool {
+      projectedSeconds(textLength: textLength, delaySeconds: delaySeconds, typeWarmup: typeWarmup)
         > TextEntryTiming.synthesizedDeliveryCeiling
     }
 

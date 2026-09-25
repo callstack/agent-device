@@ -170,7 +170,11 @@ extension RunnerTests {
         // neither chunk would look long on its own. This branch's target has no element to type into,
         // so nothing can be read back afterwards: the value arrives unverified, as it does for this
         // route's older synthesizer-unavailable fallback.
-        if SynthesizedDeliveryBudget.exceeds(textLength: text.count, delaySeconds: delaySeconds) {
+        if SynthesizedDeliveryBudget.exceeds(
+          textLength: text.count,
+          delaySeconds: delaySeconds,
+          typeWarmup: repairMode != .none
+        ) {
           textEntryRoute = "xctest-application-fallback"
           NSLog(
             "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=xctest-application-fallback "

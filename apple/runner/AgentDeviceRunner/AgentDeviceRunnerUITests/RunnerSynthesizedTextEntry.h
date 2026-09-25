@@ -17,9 +17,10 @@ typedef NS_ENUM(NSInteger, RunnerSynthesizedTextEntryStatus) {
 
 @interface RunnerSynthesizedTextEntry : NSObject
 
-// Characters per second the synthesized text-input records are typed at. The delivery budget and
-// the app-acknowledge window a burst has to fit inside are both derived from it, so it is declared
-// once, here, where the typing happens.
+// Characters per second the synthesized text-input records are typed at. Declared here, where the
+// typing happens, so the delivery budget that bounds a burst is charged the same pace the app sees.
+// The edit-acknowledge window that pace is sized for is a separate assumption about the app
+// (TextEntryTiming.synthesizedAcknowledgeWindowSeconds), not a value derived from this one.
 + (NSUInteger)typingSpeedCharactersPerSecond;
 
 // Synthesizes keyboard input for the current first responder without resolving an

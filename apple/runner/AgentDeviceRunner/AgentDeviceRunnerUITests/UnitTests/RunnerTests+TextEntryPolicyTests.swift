@@ -283,6 +283,38 @@ extension RunnerTests {
     XCTAssertLessThan(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2), fits)
   }
 
+  // A `type` plan peels one character as a warmup and posts the rest afterwards, so the same text
+  // costs one synthesize call and one wait more than the single burst the replacement route posts.
+  // Without this the estimate charged a burst, which is what made the over-budget branch of the
+  // keyboard-visible route unreachable: 215 characters looked like 1 + 214, each inside the budget.
+  func testTypeWarmupSplitCostsOneMoreCallThanASingleBurst() {
+    let length = 20
+    let withWarmup = SynthesizedDeliveryBudget.projectedSeconds(
+      textLength: length,
+      delaySeconds: 0,
+      typeWarmup: true
+    )
+    XCTAssertGreaterThan(
+      withWarmup,
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0)
+    )
+    XCTAssertEqual(
+      withWarmup - SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0),
+      TextEntryTiming.synthesizeCallOverhead + TextEntryTiming.pollInterval,
+      accuracy: 1e-9
+    )
+    // The split mirrors the plan: a spaced `type` already posts per character, and a single
+    // character has no rest to post.
+    XCTAssertEqual(
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0.2, typeWarmup: true),
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0.2)
+    )
+    XCTAssertEqual(
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: 1, delaySeconds: 0, typeWarmup: true),
+      SynthesizedDeliveryBudget.projectedSeconds(textLength: 1, delaySeconds: 0)
+    )
+  }
+
   func testSynthesizedBudgetExceededCarriesItsOwnCodeAndRecovery() {
     XCTAssertEqual(
       TextEntryFailure.synthesisBudgetExceeded.rawValue,

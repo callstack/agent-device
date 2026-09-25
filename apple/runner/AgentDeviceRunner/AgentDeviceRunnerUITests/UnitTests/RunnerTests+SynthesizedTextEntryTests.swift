@@ -58,8 +58,18 @@ extension RunnerTests {
     commandId: String
   ) throws -> Response {
     let frame = textField.frame
-    let command = try runnerCommandFixture(
-      #"{"command":"type","commandId":"\#(commandId)","text":"\#(text)","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    // Assembled with JSONSerialization so a text carrying a quote or a backslash stays one command
+    // rather than invalid JSON.
+    let command = try JSONDecoder().decode(
+      Command.self,
+      from: JSONSerialization.data(withJSONObject: [
+        "command": "type",
+        "commandId": commandId,
+        "text": text,
+        "textEntryMode": "replace",
+        "x": frame.midX,
+        "y": frame.midY,
+      ])
     )
     let failuresBeforeType = currentXCTestFailureCount()
     let response = executeTypeCommand(activeApp: app, command: command)

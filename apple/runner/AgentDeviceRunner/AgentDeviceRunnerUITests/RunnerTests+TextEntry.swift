@@ -36,7 +36,7 @@ extension RunnerTests {
         let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
           delaySeconds: Double(recoveryDelay) / 1000
         )
-        return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time without --delay-ms and append the rest with separate type commands, keeping each command inside that budget. --delay-ms lowers the budget, because every character then pays its own synthesize call and the delay: \(recoveryBudget) characters at --delay-ms \(recoveryDelay). A longer timeout does not help: this route is chosen when the accessibility channel is already degraded, and the pace is what makes the text long."
+        return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time without --delay-ms and append the rest with separate type commands, keeping each command inside that budget. --delay-ms lowers the budget, because each character then gets its own synthesize call and each gap between characters pays the delay: \(recoveryBudget) characters at --delay-ms \(recoveryDelay). A longer timeout does not help: this route is chosen when the accessibility channel is already degraded, and the pace is what makes the text long."
       }
     }
   }

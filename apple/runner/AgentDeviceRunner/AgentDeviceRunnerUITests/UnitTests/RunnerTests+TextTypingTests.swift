@@ -149,11 +149,11 @@ extension RunnerTests {
   }
 
   // Text past the delivery budget cannot be paced into a field the runner cannot resolve, so it goes
-  // through application-wide typing. The budget is charged the whole command, which is what the
-  // length below pins: an append peels its first character for warmup, so a per-dispatch charge
-  // would find both of its pieces inside the budget and pace all 215 characters. The target carries
-  // no element by construction, so nothing on that route can read the value back: the command reports
-  // it unverified and this test reads the field itself to show every character arrived.
+  // through application-wide typing. The budget is charged the whole command, warmup split included:
+  // an append peels its first character for warmup, so a per-dispatch charge would find both of its
+  // pieces inside the budget and pace all these characters. The target carries no element by
+  // construction, so nothing on that route can read the value back: the command reports it
+  // unverified and this test reads the field itself to show every character arrived.
   func testOverBudgetTypeWithoutResolvableElementTypesApplicationWide() throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
@@ -180,6 +180,8 @@ extension RunnerTests {
       count: SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0) + 1
     )
     let failureCountBefore = currentXCTestFailureCount()
+    // The target the `type` command builds when it cannot resolve an input but the keyboard is up:
+    // no element, no refresh point, focused-element preference.
     let result = typeTextReliably(
       app: app,
       target: TextEntryTarget(
@@ -197,8 +199,16 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertNil(result.failure)
     XCTAssertEqual(result.textEntryRoute, "xctest-application-fallback")
-    XCTAssertNil(result.verified)
-    XCTAssertEqual(textField.value as? String, text)
+    // This branch has no element to read, so the value arrives unverified and the command waited for
+    // nothing. The field is polled here, under its own deadline.
+    let valueDeadline = Date().addingTimeInterval(appExistenceTimeout)
+    var observed: String?
+    while Date() < valueDeadline {
+      observed = textField.value as? String
+      if observed == text { break }
+      Thread.sleep(forTimeInterval: 0.25)
+    }
+    XCTAssertEqual(observed, text)
   }
 
   private struct UnavailableTextEntrySynthesizer: TextEntrySynthesizing {
