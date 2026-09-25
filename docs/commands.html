@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.1ef4c202e2.js"></script>
+<script defer src="/agent-device/static/js/index.63ac519908.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -441,6 +441,7 @@ cannot carry custom actions: the pair is rejected as <code>INVALID_ARGS</code> b
 If <code>type</code> reports <code>TEXT_INPUT_NOT_FOCUSED</code>, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
 On iOS, if <code>type &quot;\n&quot;</code> reports <code>TEXT_INPUT_SYNTHESIS_UNAVAILABLE</code> after tapping a field while the software keyboard is hidden, show the software keyboard, then retry. The runner reports this error instead of risking input through an unreliable text-entry path.
 On iOS, if <code>fill</code> reports <code>TEXT_INPUT_COMMIT_NOT_OBSERVED</code>, the runner could not confirm the typed text reached the field — either it did not land before the runner&#x27;s deadline, or the expected final text is identical to the field&#x27;s placeholder. In the latter case, accessibility cannot distinguish committed text from an empty field rendering that placeholder, even if the field held content before dispatch. The field may hold none, part, or all of the text: run <code>snapshot -i</code> and inspect it. If it already matches, continue; otherwise retry with the full text quoted and <code>fill --delay-ms 80</code>, which replaces the whole value. Do not use <code>type</code>, which appends to whatever committed. This covers the coordinate-driven <code>fill</code> route taken when the accessibility channel is under load, which observes the field after synthesizing; it is not a guarantee that every text-entry route verifies its result.
+On iOS, if <code>fill</code> reports <code>TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED</code>, the text is longer than that coordinate-driven route can type inside one runner command at its bounded pace, and nothing was typed. Fill at most the character limit the hint names for your <code>--delay-ms</code>, and append the rest with separate <code>type</code> commands: the hint gives one limit without <code>--delay-ms</code> and a lower one for the delay it recommends. <code>--delay-ms</code> lowers the budget because each character then gets its own synthesize call and each gap between characters pays that delay; a longer timeout does not help.
 Use plain <code>fill</code> or <code>type</code> first for ordinary login and form fields. Use <code>--delay-ms</code> on <code>type</code> or <code>fill</code> only when a debounced search field or search-as-you-type input actually misses characters, or when the app must receive incremental updates.
 Delayed typing intentionally prefers paced character entry over clipboard-style fallbacks so the target field receives each incremental update.
 On Android, <code>fill</code> also verifies text and treats IME-owned capture as a terminal failure instead of retrying against the wrong field.
