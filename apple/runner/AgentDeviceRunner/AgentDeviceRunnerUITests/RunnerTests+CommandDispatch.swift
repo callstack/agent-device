@@ -486,9 +486,11 @@ extension RunnerTests {
       // axis found it on.
       return prepareActivatedTarget(command: command)
 #endif
-    case .existingApp, .mayLaunch:
-      // Asked only where activation is on the table: the bypass decides by querying the cached
-      // target's state, and a command that may bring nothing forward has nothing for it to settle.
+    case .existingApp:
+      // No request-dependent bypass here: it decides by querying the cached target's state, and a
+      // command that may bring nothing forward has nothing for it to settle.
+      return prepareActivatedTarget(command: command)
+    case .mayLaunch:
       if shouldSkipAppActivationPreflight(command) {
         // The one request-dependent bypass: a coordinate-only synthesized tap whose cached target is
         // already foreground needs nothing brought forward.
