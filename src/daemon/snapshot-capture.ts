@@ -17,6 +17,8 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
+import { STALE_REF_HINT } from '@agent-device/selectors';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { clearAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
@@ -186,14 +188,28 @@ export function resolveSnapshotScope(
     session.snapshot,
     ...(session.snapshotScopeSource ? [session.snapshotScopeSource] : []),
   ];
+  let found = false;
   let resolved: string | undefined;
   for (const snapshot of candidates) {
     const node = findNodeByRef(snapshot.nodes, ref);
-    resolved = node ? resolveRefLabel(node, snapshot.nodes) : undefined;
+    if (!node) continue;
+    found = true;
+    resolved = resolveRefLabel(node, snapshot.nodes);
     if (resolved) break;
   }
+  if (!found) {
+    return errorResponse(
+      'COMMAND_FAILED',
+      `Ref ${snapshotScope} not found`,
+      { reason: INTERACTION_ERROR_REASONS.refNotFound, ref },
+      { hint: STALE_REF_HINT },
+    );
+  }
   if (!resolved) {
-    return errorResponse('COMMAND_FAILED', `Ref ${snapshotScope} not found or has no label`);
+    return errorResponse('COMMAND_FAILED', `Ref ${snapshotScope} has no label to scope by`, {
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      ref,
+    });
   }
   return { ok: true, scope: resolved };
 }

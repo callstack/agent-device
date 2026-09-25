@@ -177,6 +177,8 @@ test(scenario('errorTaxonomy'), async () => {
       assert.match(error.message, /Ref @e9 not found or has no bounds/);
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.match(String(details?.hint), /refs expire/i);
+      assert.equal(details?.reason, 'ref_not_found');
+      assert.equal(details?.ref, 'e9');
       return true;
     },
   );

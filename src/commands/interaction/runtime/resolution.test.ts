@@ -7,7 +7,7 @@ import {
   throwIfOffscreenInteractionTarget,
   tryResolveRefNode,
 } from './resolution.ts';
-import { resolveRecordedTarget } from '@agent-device/selectors';
+import { resolveRecordedTarget, STALE_REF_HINT } from '@agent-device/selectors';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
@@ -511,6 +511,11 @@ test('runtime ref interactions fail closed when the authorized ref has no usable
     () => device.interactions.click(ref('@e1'), { session: 'default' }),
     (error: unknown) => {
       assert.match((error as Error).message, /Ref @e1 not found or has no bounds/);
+      assert.deepEqual(
+        (error as { details?: Record<string, unknown> }).details,
+        { reason: 'ref_not_found', ref: 'e1', hint: STALE_REF_HINT },
+        'a consumer dispatches on the reason, not the message',
+      );
       return true;
     },
   );

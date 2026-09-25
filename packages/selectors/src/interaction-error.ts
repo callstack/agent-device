@@ -2,4 +2,14 @@
 export const INTERACTION_ERROR_REASONS = {
   selectorNotFound: 'selector_not_found',
   predicateFailed: 'predicate_failed',
+  /**
+   * An `@ref` names no node of the stored tree: stale, or never issued. `details.ref` carries the
+   * bare ref body (`e12`), as `offscreen_ref` does. A consumer re-observes on this reason instead
+   * of matching the message.
+   */
+  refNotFound: 'ref_not_found',
+  /** An `@ref` resolves to a node with no label to read, wait on, or scope by; the tree is fresh. */
+  refUnlabeled: 'ref_unlabeled',
+  /** The resolved node has no usable centre to touch: a zero, NaN, or negative rect. */
+  targetBoundsInvalid: 'target_bounds_invalid',
 } as const;

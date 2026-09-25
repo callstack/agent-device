@@ -11,6 +11,7 @@ import type {
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
 import { now, toBackendContext } from '../../runtime-common.ts';
@@ -151,6 +152,11 @@ export function resolveRefNode(
   const node =
     findNodeByRef(nodes, ref) ??
     (options.fallbackLabel.length > 0 ? findNodeByLabel(nodes, options.fallbackLabel) : null);
-  if (!node) throw new AppError('COMMAND_FAILED', options.notFoundMessage);
+  if (!node) {
+    throw new AppError('COMMAND_FAILED', options.notFoundMessage, {
+      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      ref,
+    });
+  }
   return { ref, node };
 }

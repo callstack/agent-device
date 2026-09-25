@@ -16,6 +16,7 @@ import {
   selectorReadSnapshot,
 } from './__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { STALE_REF_HINT } from '@agent-device/selectors';
 
 test('runtime get reads text from a selector target', async () => {
   const snapshot = selectorReadSnapshot();
@@ -88,6 +89,62 @@ test('runtime get returns attrs for a ref target without recapturing', async () 
   assert.deepEqual(result.target, { kind: 'ref', ref: '@e1' });
   assert.equal(result.node.label, 'Continue');
   assert.equal(captures, 0);
+});
+
+test('runtime get on a ref the stored tree no longer lists refuses with ref_not_found', async () => {
+  let captures = 0;
+  const device = createSelectorDevice(selectorReadSnapshot(), {
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: selectorReadSnapshot() };
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.get({
+        session: 'default',
+        property: 'attrs',
+        target: { kind: 'ref', ref: '@e9' },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.deepEqual(error.details, { reason: 'ref_not_found', ref: 'e9' });
+      return true;
+    },
+  );
+  assert.equal(captures, 0, 'a stale ref is refused on the stored tree, never re-captured');
+});
+
+test('runtime wait on a ref tells a node the tree lacks from one it lists without a label', async () => {
+  const unlabeled = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Other', rect: { x: 0, y: 0, width: 100, height: 100 } },
+  ]);
+  const device = createSelectorDevice(unlabeled, {
+    captureSnapshot: () => ({ snapshot: unlabeled }),
+  });
+  const refusal = async (ref: string): Promise<AppError> => {
+    try {
+      await device.selectors.wait({
+        session: 'default',
+        target: { kind: 'ref', ref, timeoutMs: 100 },
+      });
+    } catch (error) {
+      assert.ok(error instanceof AppError);
+      return error;
+    }
+    throw new Error(`wait ${ref} resolved`);
+  };
+
+  const missing = await refusal('@e9');
+  assert.equal(missing.code, 'COMMAND_FAILED');
+  assert.deepEqual(missing.details, { reason: 'ref_not_found', ref: 'e9', hint: STALE_REF_HINT });
+
+  const ref = unlabeled.nodes[0]!.ref;
+  const blank = await refusal(`@${ref}`);
+  assert.equal(blank.code, 'COMMAND_FAILED');
+  assert.deepEqual(blank.details, { reason: 'ref_unlabeled', ref });
 });
 
 test('runtime selectors pass runtime signal to backend snapshot capture', async () => {

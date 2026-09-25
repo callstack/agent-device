@@ -3,7 +3,8 @@ import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/ke
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { PublicPlatform } from '@agent-device/kernel/device';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
-import { checkWaitText } from '@agent-device/selectors';
+import { checkWaitText, STALE_REF_HINT } from '@agent-device/selectors';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { resolveRefLabel } from './selector-read-utils.ts';
 import { sleepWithWaitCancellation } from './wait-polling.ts';
 import { waitForAbsent } from './wait-absent.ts';
@@ -217,8 +218,20 @@ async function waitForRef<Runtime extends SelectorWaitRuntime>(
   const ref = normalizeRef(rawRef);
   if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${rawRef}`);
   const node = findNodeByRef(capture.snapshot.nodes, ref);
-  const text = node ? resolveRefLabel(node, capture.snapshot.nodes) : undefined;
-  if (!text) throw new AppError('COMMAND_FAILED', `Ref ${rawRef} not found or has no label`);
+  if (!node) {
+    throw new AppError('COMMAND_FAILED', `Ref ${rawRef} not found`, {
+      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      ref,
+      hint: STALE_REF_HINT,
+    });
+  }
+  const text = resolveRefLabel(node, capture.snapshot.nodes);
+  if (!text) {
+    throw new AppError('COMMAND_FAILED', `Ref ${rawRef} has no label to wait for`, {
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      ref,
+    });
+  }
   return await waitForText(operations, runtime, options, text, timeoutMs);
 }
 

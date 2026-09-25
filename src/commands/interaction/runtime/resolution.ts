@@ -801,6 +801,8 @@ async function resolveSnapshotForRef(
   // element. The caller re-observes (snapshot) or uses a selector.
   if (!authorized) {
     throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found or has no bounds`, {
+      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      ref: normalizeRef(target.ref),
       hint: STALE_REF_HINT,
     });
   }
@@ -893,7 +895,10 @@ function resolveNodeTouchPoint(
   });
   if (resolution.kind === 'resolved') return resolution.point;
   if (resolution.kind === 'invalid') {
-    throw new AppError('COMMAND_FAILED', failure.invalidMessage);
+    throw new AppError('COMMAND_FAILED', failure.invalidMessage, {
+      reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+      ...failure.blockedTargetDetails,
+    });
   }
   throw new AppError(
     'COMMAND_FAILED',

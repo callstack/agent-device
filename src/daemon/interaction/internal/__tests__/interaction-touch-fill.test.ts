@@ -179,6 +179,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
     expect(response.error.message).toMatch(/not found or has no bounds/);
+    expect(response.error.details).toMatchObject({ reason: 'ref_not_found', ref: 'e1' });
   }
   expect(mockFillPoint).not.toHaveBeenCalled();
 });
