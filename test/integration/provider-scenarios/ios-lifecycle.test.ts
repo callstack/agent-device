@@ -281,6 +281,7 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
         'simctl',
         'launch',
         '--console-pty',
+        '--terminate-running-process',
         'sim-1',
         'com.apple.Preferences',
       ]);

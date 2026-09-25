@@ -196,7 +196,8 @@ async function dispatchAppleOpen(
     positionals: launch.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
-    ...(localIosSimulator && input.relaunch && !input.execution.clearAppState
+    ...((localIosSimulator && input.relaunch && !input.execution.clearAppState) ||
+    isDirectAppLaunch(input)
       ? { terminateRunningApp: true }
       : {}),
   });

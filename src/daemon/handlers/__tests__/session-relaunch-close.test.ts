@@ -393,7 +393,9 @@ test('open --relaunch --clear-app-state on iOS simulator keeps close-first order
 
   expect(response.ok).toBe(true);
   expect(calls).toEqual(['close:com.example.app', 'open:com.example.app']);
-  expect(openContext?.terminateRunningApp).toBeUndefined();
+  // clearAppState is a direct-launch shape: the open itself also terminates
+  // any straggler process (belt-and-braces after the close above).
+  expect(openContext?.terminateRunningApp).toBe(true);
 });
 
 test('open --relaunch includes timing and waits for iOS runner prewarm after opening app', async () => {
