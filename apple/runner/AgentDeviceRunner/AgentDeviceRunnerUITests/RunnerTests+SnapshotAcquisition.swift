@@ -423,7 +423,9 @@ extension RunnerTests {
   /// Either focus is focus. `hasFocus` is the focus engine's answer (tvOS, keyboard navigation);
   /// the field a software keyboard is typing into holds `hasKeyboardFocus` instead, which the
   /// text-entry readiness check already consults. Both an element and its snapshot answer the two
-  /// keys through KVC, so one reader serves every producer; a key the object lacks reads as false.
+  /// keys through KVC, so one reader serves the XCTest producers (recursive tree, query sweep,
+  /// collapsed tabs); a key the object lacks reads as false. The private-AX bridge is not among
+  /// them: the AX server declares no keyboard-focus attribute, so it reads `hasFocus` alone.
   func focusBool(_ object: NSObject) -> Bool {
     return kvcBool(object, forKey: "hasKeyboardFocus") || kvcBool(object, forKey: "hasFocus")
   }
