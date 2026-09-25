@@ -250,7 +250,6 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
     }
   }
 }
-#endif
 
 // How fast an app that owns this field's value can acknowledge edits: one render per window, passed
 // by the test as `--agent-device-text-entry-acknowledge-window <seconds>`. An edit that arrives
@@ -302,6 +301,7 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
     [textField removeFromSuperview];
   }
 }
+#endif
 
 - (void)viewDidLoad {
   [super viewDidLoad];
