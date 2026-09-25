@@ -330,8 +330,10 @@ async function baselineEndsInDirection(
 ): Promise<boolean> {
   const edge = verticalEdgeFor(direction);
   if (!edge) return false;
-  // The question is asked of the scroller the swipe ran in: an inner list at its end inside an
-  // outer list that still hides content is the inner list's edge, not the outer list's middle.
+  // The question is asked of the scroller the swipe ran in, through the selection the edge verdict
+  // uses: among the containers holding the point, the one that still hides content in that
+  // direction. An inner list at its end inside an outer list with more below hands the gesture to
+  // the outer list, so the outer list's edge is what gates the claim.
   const state = await readScrollEdgeState(baseline.nodes, edge, { point: swipe.midpoint });
   const ends = state.containerRect !== undefined && !state.canScroll;
   if (ends) {
