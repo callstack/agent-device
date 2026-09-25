@@ -10,6 +10,10 @@ import { readRunnerLogTail } from '../runner-io.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+import {
+  CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+  CAPTURED_SCOPED_SIMULATOR,
+} from './runner-startup-failure-fixtures.ts';
 
 const toolchainProbe = stubAppleToolchainProbes();
 beforeEach(resetAllProcessMemosForTests);
@@ -171,10 +175,7 @@ test('a session that never probed the device publishes no disk-image claim (#268
   assert.equal('developerDiskImage' in (error.details ?? {}), false);
 });
 
-const SCOPED_DESTINATION_NOT_FOUND_LOG = [
-  'xcodebuild: error: Unable to find a destination matching the provided destination specifier:',
-  '\t\t{ platform:iOS Simulator, id:sim-1 }',
-].join('\n');
+const SET_WITHOUT_UDID = CAPTURED_SCOPED_SIMULATOR.setWithoutUdid;
 
 // An external xctestrun: the session carries no build of its own, so the Xcode it names comes from
 // the toolchain the host selects.
@@ -183,14 +184,14 @@ function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): Ru
     ...sessionFailingWith(log),
     device: {
       platform: 'apple',
-      id: 'sim-1',
+      id: CAPTURED_SCOPED_SIMULATOR.udid,
       name: 'iPhone 17 Pro',
       kind: 'simulator',
       appleOs: 'ios',
       booted: true,
       simulatorSetPath,
     },
-    deviceId: 'sim-1',
+    deviceId: CAPTURED_SCOPED_SIMULATOR.udid,
     xctestrunArtifact: {
       xctestrunPath: '/tmp/runner.xctestrun',
       derived: '/tmp/derived',
@@ -204,18 +205,20 @@ function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): Ru
 
 test('a scoped-set simulator whose destination is missing names its set and the Xcode', async () => {
   const error = (await buildRunnerEarlyExitError({
-    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG, '/tmp/tenant-a/sims'),
+    session: simulatorSessionFailingWith(
+      CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+      SET_WITHOUT_UDID,
+    ),
     port: 8100,
   })) as AppError;
 
   assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
   assert.match(String(error.details?.hint), /-DVTSimulatorSetLocation/);
-  assert.equal(error.details?.simulatorSetPath, '/tmp/tenant-a/sims');
+  assert.equal(error.details?.simulatorSetPath, SET_WITHOUT_UDID);
   assert.equal(error.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
-  assert.match(
-    error.message,
-    new RegExp(
-      `simulator set /tmp/tenant-a/sims with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}$`,
+  assert.ok(
+    error.message.endsWith(
+      `simulator set ${SET_WITHOUT_UDID} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
     ),
   );
 });
@@ -224,22 +227,24 @@ test('a scoped-set destination error whose Xcode cannot be read still names the 
   toolchainProbe.mockReturnValue({ exitCode: 1, stdout: '', stderr: 'xcode-select: error' });
 
   const error = (await buildRunnerEarlyExitError({
-    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG, '/tmp/tenant-a/sims'),
+    session: simulatorSessionFailingWith(
+      CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+      SET_WITHOUT_UDID,
+    ),
     port: 8100,
   })) as AppError;
 
   assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
-  assert.equal(error.details?.simulatorSetPath, '/tmp/tenant-a/sims');
+  assert.equal(error.details?.simulatorSetPath, SET_WITHOUT_UDID);
   assert.equal('xcodeVersion' in (error.details ?? {}), false);
-  assert.match(
-    error.message,
-    /simulator set \/tmp\/tenant-a\/sims with Xcode \(version unreadable\)$/,
+  assert.ok(
+    error.message.endsWith(`simulator set ${SET_WITHOUT_UDID} with Xcode (version unreadable)`),
   );
 });
 
 test('a default-set simulator early exit keeps its boot-failure reason', async () => {
   const error = (await buildRunnerEarlyExitError({
-    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG),
+    session: simulatorSessionFailingWith(CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT),
     port: 8100,
   })) as AppError;
 

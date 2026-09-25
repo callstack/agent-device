@@ -25,6 +25,7 @@ import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security
 import { appleToolchainProbeResult, STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import { IOS_DEVICE } from './device-fixtures.ts';
 import {
+  CAPTURED_SCOPED_SIMULATOR,
   RUNNER_STARTUP_FAILURE_FIXTURES,
   buildFixtureById,
   buildForTestingExecFailure,
@@ -238,17 +239,18 @@ test('every reason the classifier can name is produced by a rule row', () => {
 });
 
 test('a scoped-set simulator xcodebuild cannot find names its set and the Xcode', async () => {
+  const { udid, setWithoutUdid } = CAPTURED_SCOPED_SIMULATOR;
   const envelope = await driveBuildFailure(buildFixtureById('scoped-set-destination-not-found'));
 
   assert.equal(envelope.details?.reason, 'simulator_set_destination_not_found');
-  assert.equal(envelope.details?.simulatorSetPath, '/tmp/tenant-a/simulators');
+  assert.equal(envelope.details?.simulatorSetPath, setWithoutUdid);
   assert.equal(envelope.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
   assert.equal(
     envelope.message,
-    `xcodebuild build-for-testing failed: xcodebuild found no simulator sim-1 in simulator set /tmp/tenant-a/simulators with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
+    `xcodebuild build-for-testing failed: xcodebuild found no simulator ${udid} in simulator set ${setWithoutUdid} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
   );
   const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
-  assert.ok(buildArgs.includes('-DVTSimulatorSetLocation=/tmp/tenant-a/simulators'));
+  assert.ok(buildArgs.includes(`-DVTSimulatorSetLocation=${setWithoutUdid}`));
 });
 
 test('a default-set simulator xcodebuild cannot find names no simulator set', async () => {
