@@ -13,6 +13,11 @@ export { centerOfRect } from '@agent-device/kernel/snapshot';
 // `ReturnType<typeof createAgentDeviceClient>` and `Awaited<ReturnType<...>>`, and typed the
 // nodes a snapshot returns by hand.
 export type * from '../client/client-types.ts';
+// Two results `client-types.ts` imports for its signatures without re-exporting them.
+export type {
+  AgentArtifactsResult,
+  CloudProviderSessionResult,
+} from '@agent-device/contracts/observability';
 export type {
   AppErrorCode,
   AppErrorDetails,
