@@ -236,8 +236,11 @@ test('a runner payload with the hittable bit absent presents without declaring i
 
 // The keyboard band the runner measured for a capture (#2660). The strictness budget that decides
 // what cannot be placed belongs to `readSnapshotKeyboardBandFact` in @agent-device/kernel, which owns
-// that table; this seam owns only the forwarding, so a published band must arrive unchanged and a
-// producer that never looked must stay silent.
+// that table; this seam owns forwarding AND the proof that it forwards through that reader. The
+// same-process capture path feeds `result.keyboard` straight into the tap/click occlusion guard in
+// src/commands/interaction/runtime/keyboard-occlusion.ts before any serialization, so a seam that
+// passed the raw wire value through would hand the guard an unvalidated shape with nothing red.
+// The malformed cases below are what prove the routing; kernel/src/record.test.ts owns the table.
 
 test('the reader forwards each published keyboard band shape unchanged', () => {
   // The landscape band #2653 confirmed on iPhone 17 Pro: the runner answers `app.keyboards` in the
@@ -263,4 +266,21 @@ test('a capture from a tier that never reads the keyboard publishes no fact at a
   // The query sweep and private-AX tiers answer with no `keyboard` key, which is how the daemon
   // learns to keep deriving the band from that tree instead of being told the screen is clear.
   assert.equal(readAppleSnapshotResult({ nodes: [] }).keyboard, undefined);
+});
+
+// Routing proof: every reason below is emitted only by the kernel reader, never by a wire producer.
+// One case per reason code — enough that a seam forwarding the raw payload fails on each branch,
+// without re-owning the shape table kernel/src/record.test.ts already pins exhaustively.
+test('a malformed keyboard payload is restated by the kernel reader, never forwarded raw', () => {
+  const cases: ReadonlyArray<readonly [unknown, string]> = [
+    ['visible', 'malformed-fact'],
+    [{ kind: 'measured' }, 'unrecognized-kind'],
+    [{ kind: 'unmeasurable' }, 'unreported-reason'],
+    [{ kind: 'visible', frame: { x: 0, y: 198, width: 0, height: 204 } }, 'invalid-visible-frame'],
+  ];
+
+  for (const [payload, reason] of cases) {
+    const read = readAppleSnapshotResult({ keyboard: payload }).keyboard;
+    assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
+  }
 });

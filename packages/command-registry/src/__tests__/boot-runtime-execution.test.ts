@@ -6,7 +6,7 @@ import {
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '../registry.ts';
 
-test('boot descriptor declares both readiness uses instead of a capability bucket', () => {
+test('boot descriptor declares both readiness uses', () => {
   const boot = commandDescriptors.find(({ name }) => name === 'boot');
 
   expect(boot?.platformExecution).toEqual({

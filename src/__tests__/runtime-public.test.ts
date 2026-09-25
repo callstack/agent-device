@@ -56,10 +56,10 @@ const sessions = {
   set: () => {},
 } satisfies CommandSessionStore;
 
-// A constructed runtime defaults to the restricted policy: nothing may read a local file path
-// unless the caller explicitly opts into `localCommandPolicy()`. No other seam asserts this
-// default, so flipping the factory's fallback must fail here.
-test('a runtime built with no policy restricts local input paths', async () => {
+// A runtime built without a policy lands on `restrictedCommandPolicy()`, not the local one. No
+// other seam asserts that fallback, so flipping it in the factory must fail here. The refusal a
+// restricted policy raises for a local path is owned by contact-sheet.test.ts on the io-policy seam.
+test('a runtime built with no policy defaults to the restricted policy', async () => {
   const device: AgentDevice = createAgentDevice({
     backend,
     artifacts,

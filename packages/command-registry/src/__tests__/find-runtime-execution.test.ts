@@ -2,7 +2,7 @@ import { commandDescriptors, selectFindStepUses } from '../registry.ts';
 import { expect, test } from 'vitest';
 import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 
-test('find descriptor declares its complete runtime uses with no legacy projection', () => {
+test('find descriptor declares its complete runtime uses', () => {
   const find = commandDescriptors.find(({ name }) => name === 'find');
 
   // Plan-time consumers select the alternative from the step input the way the handler does.

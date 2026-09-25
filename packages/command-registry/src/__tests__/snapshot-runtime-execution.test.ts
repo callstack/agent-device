@@ -2,7 +2,7 @@ import { commandDescriptors, selectSnapshotStepUses } from '../registry.ts';
 import { snapshotRuntimePlanUses } from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
 
-test('snapshot descriptor declares its complete planned capture uses with no legacy projection', () => {
+test('snapshot descriptor declares its complete planned capture uses', () => {
   const snapshot = commandDescriptors.find(({ name }) => name === 'snapshot');
 
   // Plan-time consumers select the alternative from the step input the way the handler does.
@@ -19,7 +19,7 @@ test('snapshot descriptor declares its complete planned capture uses with no leg
   ]);
 });
 
-test('diff descriptor reuses the complete snapshot plan uses with no legacy projection', () => {
+test('diff descriptor reuses the complete snapshot plan uses', () => {
   const diff = commandDescriptors.find(({ name }) => name === 'diff');
 
   expect(diff?.platformExecution).toEqual({
