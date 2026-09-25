@@ -109,7 +109,7 @@ let expectedDerived: string;
 function writeStaleLeaseFor(device: DeviceInfo, overrides: Partial<RunnerLease> = {}): RunnerLease {
   const lease: RunnerLease = {
     ...buildRunnerLease({
-      deviceId: device.id,
+      device,
       sessionId: `${device.id}:50700:1`,
       runnerPid: 424242,
       port: 50700,
@@ -165,7 +165,7 @@ test('readStaleRunnerLease returns dead-owner leases and skips owned ones', () =
   // A lease written by this process is owned, not stale.
   writeRunnerLease(
     buildRunnerLease({
-      deviceId: simulator.id,
+      device: simulator,
       sessionId: `${simulator.id}:50700:2`,
       runnerPid: 424242,
       port: 50700,
@@ -324,15 +324,38 @@ test('adoption accepts a legacy lease whose live pid is runner-shaped', async ()
 });
 
 test('a runner for a simulator in a custom simulator set is adopted', async () => {
-  writeStaleLease();
+  const scopedDevice = { ...simulator, simulatorSetPath: '/custom/device-set' };
+  writeStaleLeaseFor(scopedDevice);
   mockIsProcessAlive.mockReturnValue(true);
   mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
 
-  const scopedDevice = { ...simulator, simulatorSetPath: '/custom/device-set' };
   const session = await tryAdoptRunnerSessionFromLease(scopedDevice, {});
 
   expect(session?.state).toBe('ready');
   expect(session?.device.simulatorSetPath).toBe('/custom/device-set');
+  const restamped = JSON.parse(
+    fs.readFileSync(path.join(leaseDir, `${scopedDevice.id}.json`), 'utf8'),
+  ) as RunnerLease;
+  expect(restamped.simulatorSetPath).toBe('/custom/device-set');
+});
+
+test('a runner leased for the same udid in another simulator set is never adopted', async () => {
+  mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+  const tenantA = { ...simulator, simulatorSetPath: '/custom/tenant-a' };
+  const tenantB = { ...simulator, simulatorSetPath: '/custom/tenant-b' };
+
+  for (const [leasedFor, requested] of [
+    [tenantA, tenantB],
+    [tenantA, simulator],
+    [simulator, tenantA],
+  ] as const) {
+    writeStaleLeaseFor(leasedFor);
+
+    expect(await tryAdoptRunnerSessionFromLease(requested, {})).toBeNull();
+    expect(adoptionRefusalReason()).toBe('simulator_set_mismatch');
+  }
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 });
 
 test('adoption is skipped when the runner process is dead', async () => {

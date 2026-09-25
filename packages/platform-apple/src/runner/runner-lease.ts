@@ -18,6 +18,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
+import { runnerSimulatorSetPath } from './runner-device-set.ts';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
 const RUNNER_LEASE_LOCK_TIMEOUT_MS = 30_000;
@@ -57,6 +58,11 @@ export type RunnerLease = {
    * Absent on leases written before the runner's stdio moved onto a file.
    */
   runnerLogPath?: string;
+  /**
+   * The scoped simulator set that holds the leased runner's simulator; absent for the default set,
+   * and on leases written before a scoped-set runner could be handed off.
+   */
+  simulatorSetPath?: string;
   createdAtMs: number;
   /**
    * The owner arbitrates device ownership through host-global device claims
@@ -96,7 +102,7 @@ export type RunnerLeaseCleanupAdapter = {
 };
 
 export function buildRunnerLease(params: {
-  deviceId: string;
+  device: DeviceInfo;
   sessionId: string;
   runnerPid: number | undefined;
   port: number;
@@ -107,7 +113,7 @@ export function buildRunnerLease(params: {
   const runnerLogPath = readOptionalNonEmptyString(params.runnerLogPath);
   return {
     schemaVersion: RUNNER_LEASE_SCHEMA_VERSION,
-    deviceId: params.deviceId,
+    deviceId: params.device.id,
     ownerToken: runnerOwnerToken(),
     ownerPid: RUNNER_OWNER_PID,
     ownerStartTime: runnerOwnerStartTime(),
@@ -119,6 +125,7 @@ export function buildRunnerLease(params: {
     xctestrunPath: params.xctestrunPath,
     jsonPath: params.jsonPath,
     ...(runnerLogPath ? { runnerLogPath } : {}),
+    ...optionalSimulatorSetPath(runnerSimulatorSetPath(params.device)),
     createdAtMs: Date.now(),
     deviceClaimProtocol: 1,
   };
@@ -470,6 +477,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
     runnerLogPath: readOptionalNonEmptyString(raw.runnerLogPath),
+    ...optionalSimulatorSetPath(raw.simulatorSetPath),
     ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };
 }
@@ -496,6 +504,11 @@ function readNonEmptyString(value: unknown): string | null {
 
 function readOptionalNonEmptyString(value: unknown): string | undefined {
   return readNonEmptyString(value) ?? undefined;
+}
+
+function optionalSimulatorSetPath(value: unknown): Pick<RunnerLease, 'simulatorSetPath'> {
+  const simulatorSetPath = readNonEmptyString(value);
+  return simulatorSetPath ? { simulatorSetPath } : {};
 }
 
 function readOptionalString(value: unknown): string | null {

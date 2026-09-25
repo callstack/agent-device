@@ -1,6 +1,5 @@
 import type { AppleRunnerHost } from '../runner/index.ts';
 import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
-import { resolveIosSimulatorDeviceSetPath } from '@agent-device/kernel/device-isolation';
 
 import {
   isCommandTimeoutError,
@@ -42,7 +41,7 @@ import {
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
 } from './runner-owner-state.ts';
-import { buildSimctlArgsForDevice } from './simctl.ts';
+import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
 import { readApplePlistJson, runAppleToolCommand, runXcrun } from './tool-provider.ts';
 
 /**
@@ -86,7 +85,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   createTtlMemo,
   parseBooleanLiteral,
   isRecord,
-  resolveIosSimulatorDeviceSetPath,
   emitRequestProgress,
   getRequestSignal,
   isRequestCanceled,
@@ -96,6 +94,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   runXcrun,
   readApplePlistJson,
   buildSimctlArgsForDevice,
+  simulatorAddressFor,
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,

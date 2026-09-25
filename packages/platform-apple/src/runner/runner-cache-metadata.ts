@@ -38,6 +38,8 @@ const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
  * probe, its warm retry, and the two probes still to run (#2422).
  */
 const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
+/** What naming the Xcode in a failure report may spend when the fingerprint is not memoized yet. */
+const XCODE_VERSION_REPORT_BUDGET_MS = 5_000;
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =
@@ -274,6 +276,22 @@ function requireRunnerToolchainFingerprint(
   if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
   toolchainFingerprintCache().set(sdkName, fingerprint.value);
   return fingerprint.value;
+}
+
+/**
+ * The selected Xcode's version, for a failure report that names it. Reads the fingerprint the cache
+ * decision already memoized; a cold or unreadable toolchain answers undefined within
+ * {@link XCODE_VERSION_REPORT_BUDGET_MS} instead of delaying the failure it describes.
+ */
+export function readRunnerXcodeVersion(device: DeviceInfo): string | undefined {
+  try {
+    return requireRunnerToolchainFingerprint(
+      resolveRunnerSdkName(resolveRunnerPlatformName(device), device.kind),
+      createRunnerPhaseBudget(XCODE_VERSION_REPORT_BUDGET_MS, undefined),
+    ).xcodeVersion;
+  } catch {
+    return undefined;
+  }
 }
 
 function readRunnerToolchainFingerprint(

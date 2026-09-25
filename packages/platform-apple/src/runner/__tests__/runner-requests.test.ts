@@ -101,7 +101,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
   });
   writeRunnerLease({
     ...buildRunnerLease({
-      deviceId: IOS_SIMULATOR.id,
+      device: IOS_SIMULATOR,
       sessionId: `${IOS_SIMULATOR.id}:${server.port}:1`,
       runnerPid: 424242,
       port: server.port,

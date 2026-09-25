@@ -30,7 +30,10 @@ import {
 } from './runner-error-classification.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
-import { runnerSimulatorSetFailureDetails } from './runner-device-set.ts';
+import {
+  runnerSimulatorSetFailureDetails,
+  simulatorSetDestinationNotFoundMessage,
+} from './runner-device-set.ts';
 import {
   canFallBackFromUsbmux,
   fetchWithTimeout,
@@ -529,10 +532,7 @@ export async function buildRunnerEarlyExitError(params: {
     stderr: output,
     context: { platform: 'ios', phase: 'connect' },
   });
-  const simulatorSet = runnerSimulatorSetFailureDetails(
-    session.device,
-    session.xctestrunArtifact?.xcodeVersion,
-  );
+  const simulatorSet = runnerSimulatorSetFailureDetails(session.device);
   const setDestination = classifyRunnerStartupFailure(
     new AppError('COMMAND_FAILED', message, { stderr: output, ...simulatorSet }),
   );
@@ -540,24 +540,30 @@ export async function buildRunnerEarlyExitError(params: {
   // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
   // the trio is nested tool context under `xcodebuild`, classified into
   // `reason`/`hint` above — not a process-exit wrap.
-  const error = new AppError('COMMAND_FAILED', message, {
-    port,
-    // The quote always comes from the runner's own file, so that is the file the error has to name;
-    // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
-    logPath: session.runnerLogPath ?? logPath,
-    xcodebuild: {
-      exitCode: result.exitCode,
-      // One merged file since #2681: the tail is reported under `stderr`, which is where readers
-      // already look, next to the file it came from.
-      stderr: output,
+  const error = new AppError(
+    'COMMAND_FAILED',
+    setDestinationMissing
+      ? simulatorSetDestinationNotFoundMessage(message, session.device, simulatorSet)
+      : message,
+    {
+      port,
+      // The quote always comes from the runner's own file, so that is the file the error has to name;
+      // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
+      logPath: session.runnerLogPath ?? logPath,
+      xcodebuild: {
+        exitCode: result.exitCode,
+        // One merged file since #2681: the tail is reported under `stderr`, which is where readers
+        // already look, next to the file it came from.
+        stderr: output,
+      },
+      reason: setDestinationMissing ? setDestination.reason : reason,
+      hint: setDestinationMissing
+        ? setDestination.hint
+        : resolveRunnerEarlyExitHint(message, output, output, reason),
+      ...simulatorSet,
+      ...runnerConnectFailureDetails('xcodebuild_exited_early'),
     },
-    reason: setDestinationMissing ? setDestination.reason : reason,
-    hint: setDestinationMissing
-      ? setDestination.hint
-      : resolveRunnerEarlyExitHint(message, output, output, reason),
-    ...simulatorSet,
-    ...runnerConnectFailureDetails('xcodebuild_exited_early'),
-  });
+  );
   // The build catch is not the only way a runner stops before serving a command. A locked phone lets
   // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that
   // catch and the disk-image state read before the build would be dropped. Same enrichment, applied

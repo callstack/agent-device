@@ -9,6 +9,7 @@ import {
   type RunnerHandoffRefusal,
 } from './apple-runner-platform.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
+import { runnerSimulatorSetPath } from './runner-device-set.ts';
 import {
   decodeRunnerResponseBody,
   isRunnerResponseOk,
@@ -61,6 +62,8 @@ type RunnerAdoptionRefusal =
   | RunnerHandoffRefusal
   | 'lease_absent'
   | RunnerLeaseAdoptionRefusal
+  /** The leased runner serves a simulator with this udid in another simulator set. */
+  | 'simulator_set_mismatch'
   | 'session_identity_mismatch'
   | 'runner_pid_missing'
   | 'runner_process_dead'
@@ -111,6 +114,9 @@ export async function tryAdoptRunnerSessionFromLease(
   if (leaseVerdict.type === 'absent') return skip('lease_absent');
   if (leaseVerdict.type === 'refused') return skip(leaseVerdict.reason, leaseVerdict.lease);
   const lease = leaseVerdict.lease;
+  if (lease.simulatorSetPath !== runnerSimulatorSetPath(device)) {
+    return skip('simulator_set_mismatch', lease);
+  }
   const leased = verifyLeasedRunnerProcess(lease, options.expectedRunnerSessionId);
   if ('refusal' in leased) return skip(leased.refusal, lease);
   const fingerprint = verifyLeaseArtifactFingerprint(device, lease, options.budget);
@@ -304,7 +310,7 @@ function buildAdoptedRunnerSession(
       requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
     ),
     lease: buildRunnerLease({
-      deviceId: device.id,
+      device,
       sessionId,
       runnerPid,
       port: lease.port,

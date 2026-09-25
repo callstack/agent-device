@@ -372,11 +372,16 @@ test('a scoped simulator-set session hands off like one in the default set', asy
   assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
 });
 
-test('a simulator startup puts back a legacy XCTestDevices redirect before the build', async () => {
+test('a simulator startup puts back a legacy XCTestDevices redirect before adoption and the build', async () => {
   const order: string[] = [];
   mockRestoreLegacyXctestDeviceSetRedirect.mockImplementationOnce((device: DeviceInfo) =>
     order.push(`restore:${device.id}`),
   );
+  appleRunnerTestHost.update({
+    emitDiagnostic: (event) => {
+      if (event.phase === 'ios_runner_lease_adoption_skipped') order.push('adopt');
+    },
+  });
   const ensure = mockEnsureXctestrunArtifact.getMockImplementation();
   mockEnsureXctestrunArtifact.mockImplementationOnce(async (...args: unknown[]) => {
     order.push('ensure');
@@ -385,7 +390,7 @@ test('a simulator startup puts back a legacy XCTestDevices redirect before the b
 
   await ensureRunnerSession({ ...IOS_SIMULATOR, id: 'runner-lifecycle-legacy-redirect' }, {});
 
-  assert.deepEqual(order, ['restore:runner-lifecycle-legacy-redirect', 'ensure']);
+  assert.deepEqual(order, ['restore:runner-lifecycle-legacy-redirect', 'adopt', 'ensure']);
 });
 
 // #2681: the handoff lanes and every gate that keeps a runner on the kill path.
@@ -640,6 +645,26 @@ test('a registered runner whose process died is recycled instead of reused', asy
     sessionId: second.sessionId,
     liveness: 'starting',
   });
+});
+
+test('the same udid in another simulator set starts its own runner instead of reusing this one', async () => {
+  const tenantA = {
+    ...IOS_SIMULATOR,
+    id: 'runner-lifecycle-two-sets',
+    simulatorSetPath: '/tmp/tenant-a/simulators',
+  };
+  const tenantB = { ...tenantA, simulatorSetPath: '/tmp/tenant-b/simulators' };
+  const first = await ensureRunnerSession(tenantA, {});
+  assert.equal(await ensureRunnerSession({ ...tenantA }, {}), first);
+
+  mockGetFreePort.mockResolvedValueOnce(8124);
+  mockRunCmdBackground.mockReturnValueOnce(makeBackgroundRunner(4243));
+  const second = await ensureRunnerSession(tenantB, {});
+
+  assert.notEqual(second.sessionId, first.sessionId);
+  assert.equal(first.state, 'stopped');
+  assert.equal(second.device.simulatorSetPath, '/tmp/tenant-b/simulators');
+  assert.match(leaseRaw(tenantB.id), /"simulatorSetPath": "\/tmp\/tenant-b\/simulators"/);
 });
 
 test('a draining session is never reused while its next command starts a fresh runner', async () => {

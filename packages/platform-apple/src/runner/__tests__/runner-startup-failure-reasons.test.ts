@@ -173,7 +173,7 @@ function assertFailureEnvelope(
   fixture: RunnerStartupFailureFixture,
 ): void {
   assert.equal(envelope.code, 'COMMAND_FAILED');
-  assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
+  assert.ok(envelope.message.startsWith('xcodebuild build-for-testing failed'));
   assert.equal(envelope.details?.reason, fixture.reason);
   assert.ok(
     String(envelope.hint).includes(HINT_FOR_REASON[fixture.reason]),
@@ -243,6 +243,10 @@ test('a scoped-set simulator xcodebuild cannot find names its set and the Xcode'
   assert.equal(envelope.details?.reason, 'simulator_set_destination_not_found');
   assert.equal(envelope.details?.simulatorSetPath, '/tmp/tenant-a/simulators');
   assert.equal(envelope.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+  assert.equal(
+    envelope.message,
+    `xcodebuild build-for-testing failed: xcodebuild found no simulator sim-1 in simulator set /tmp/tenant-a/simulators with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
+  );
   const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
   assert.ok(buildArgs.includes('-DVTSimulatorSetLocation=/tmp/tenant-a/simulators'));
 });
@@ -252,6 +256,7 @@ test('a default-set simulator xcodebuild cannot find names no simulator set', as
 
   assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
   assert.equal(envelope.details?.simulatorSetPath, undefined);
+  assert.equal(envelope.message, 'xcodebuild build-for-testing failed');
   assert.doesNotMatch(String(envelope.hint), /DVTSimulatorSetLocation/);
   const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
   assert.equal(

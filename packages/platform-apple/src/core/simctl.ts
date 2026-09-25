@@ -5,14 +5,19 @@ import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-
 import { runXcrun, simctlCommand, type ScopedSimctlCommand } from './tool-provider.ts';
 
 declare const simulatorAddress: unique symbol;
-/** A simulator udid with the set that holds it; minted only from a DeviceInfo. */
+/**
+ * A simulator udid with the resolved set that holds it (undefined for the default set); minted only
+ * from a DeviceInfo. Two devices name the same simulator only when both fields match.
+ */
 export type SimulatorAddress = Readonly<{ udid: string; simulatorSetPath: string | undefined }> & {
   readonly [simulatorAddress]: true;
 };
 
 export function simulatorAddressFor(device: DeviceInfo): SimulatorAddress {
   const simulatorSetPath =
-    isIosFamily(device) && device.kind === 'simulator' ? device.simulatorSetPath : undefined;
+    isIosFamily(device) && device.kind === 'simulator'
+      ? resolveIosSimulatorDeviceSetPath(device.simulatorSetPath)
+      : undefined;
   return Object.freeze({ udid: device.id, simulatorSetPath }) as SimulatorAddress;
 }
 

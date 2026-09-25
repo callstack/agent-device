@@ -204,7 +204,7 @@ agent-device devices --platform android --android-device-allowlist emulator-5554
 ```
 
 - `--ios-simulator-device-set <path>` constrains simulator discovery and simulator command execution via `xcrun simctl --set <path> ...`.
-- The XCTest runner's `xcodebuild` phases resolve a scoped simulator in the same set through `-DVTSimulatorSetLocation=<path>`; `~/Library/Developer/XCTestDevices` is never redirected. If the selected Xcode no longer resolves the simulator that way, the runner start fails with `details.reason: "simulator_set_destination_not_found"`.
+- The XCTest runner's `xcodebuild` phases resolve a scoped simulator in the same set through `-DVTSimulatorSetLocation=<path>`; `~/Library/Developer/XCTestDevices` is never redirected. If the selected Xcode no longer resolves the simulator that way, the runner start fails with `details.reason: "simulator_set_destination_not_found"`, and the error names the set and the selected Xcode version.
 - `--android-device-allowlist <serials>` constrains Android discovery/selection to comma or space separated serials.
 - Scope is applied before selectors (`--device`, `--udid`, `--serial`), so out-of-scope selectors fail with `DEVICE_NOT_FOUND`.
 - With iOS simulator-set scope enabled, iOS physical devices are not enumerated.

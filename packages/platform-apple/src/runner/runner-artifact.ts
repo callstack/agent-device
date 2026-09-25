@@ -17,6 +17,7 @@ import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
 import {
   runnerSimulatorSetFailureDetails,
+  simulatorSetDestinationNotFoundMessage,
   xcodebuildDestinationArgs,
 } from './runner-device-set.ts';
 import {
@@ -67,8 +68,6 @@ export type RunnerXctestrunArtifact = {
   buildMs: number;
   xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
   reason?: string;
-  /** The Xcode this artifact was built with; unknown for an external xctestrun. */
-  xcodeVersion?: string;
 };
 
 export type ExternalXctestRunnerOptions = {
@@ -232,7 +231,6 @@ async function resolveReusableXctestrunArtifact(params: {
     artifact: 'valid',
     buildMs: 0,
     xctestrunPathSource: existing.source,
-    xcodeVersion: expectedCacheMetadata.xcodeVersion,
   };
 }
 
@@ -259,10 +257,7 @@ async function buildXctestrunArtifact(params: {
     status: 'progress',
     message: 'Building Apple runner...',
   });
-  await buildRunnerXctestrun(device, projectPath, derived, options, {
-    buildTimeoutMs,
-    xcodeVersion: expectedCacheMetadata.xcodeVersion,
-  });
+  await buildRunnerXctestrun(device, projectPath, derived, options, buildTimeoutMs);
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 
   const built = findXctestrun(derived, device);
@@ -292,7 +287,6 @@ async function buildXctestrunArtifact(params: {
     buildMs,
     xctestrunPathSource: 'build',
     reason,
-    xcodeVersion: expectedCacheMetadata.xcodeVersion,
   };
 }
 
@@ -470,11 +464,8 @@ async function buildRunnerXctestrun(
   projectPath: string,
   derived: string,
   options: RunnerXctestrunBuildOptions,
-  build: {
-    /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
-    buildTimeoutMs: number | undefined;
-    xcodeVersion: string;
-  },
+  /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
+  buildTimeoutMs: number | undefined,
 ): Promise<void> {
   const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
@@ -509,7 +500,7 @@ async function buildRunnerXctestrun(
       ],
       {
         detached: true,
-        timeoutMs: build.buildTimeoutMs,
+        timeoutMs: buildTimeoutMs,
         signal: options.budget?.signal,
         onSpawn: (child) => {
           runnerPrepProcesses.add(child);
@@ -529,7 +520,7 @@ async function buildRunnerXctestrun(
     if (isRequestCanceledError(error)) throw error;
     const appErr =
       error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-    const simulatorSet = runnerSimulatorSetFailureDetails(device, build.xcodeVersion);
+    const simulatorSet = runnerSimulatorSetFailureDetails(device);
     // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
     // switches on can never disagree with the advice it is handed.
     const { reason, hint, matched } = classifyRunnerStartupFailure(
@@ -540,15 +531,22 @@ async function buildRunnerXctestrun(
     // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
     // alone (#2690 review). The device's own state is attached further out, by the startup catch that
     // can see this build and the launch after it.
-    throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
-      reason,
-      error: appErr.message,
-      details: appErr.details,
-      logPath: options.logPath,
-      hint,
-      startupRuleMatched: matched,
-      startupHostDeadlineHit: hostDeadlineHit,
-      ...simulatorSet,
-    });
+    const message = 'xcodebuild build-for-testing failed';
+    throw new AppError(
+      'COMMAND_FAILED',
+      reason === 'simulator_set_destination_not_found'
+        ? simulatorSetDestinationNotFoundMessage(message, device, simulatorSet)
+        : message,
+      {
+        reason,
+        error: appErr.message,
+        details: appErr.details,
+        logPath: options.logPath,
+        hint,
+        startupRuleMatched: matched,
+        startupHostDeadlineHit: hostDeadlineHit,
+        ...simulatorSet,
+      },
+    );
   }
 }

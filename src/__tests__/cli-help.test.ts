@@ -162,7 +162,7 @@ test('help physical-device documents the runner/daemon lifecycle detail moved ou
   );
   assert.match(
     result.stdout,
-    /keeps a healthy iOS simulator XCTest runner warm by default so the next open on that device skips the runner build/,
+    /keeps a healthy iOS simulator XCTest runner warm by default so the next open on that simulator \(same udid in the same simulator set\) skips the runner build/,
   );
   assert.match(result.stdout, /the session held a device lease/);
   assert.match(result.stdout, /AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS/);

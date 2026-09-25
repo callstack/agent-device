@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
+import { beforeEach, test } from 'vitest';
 import type { AppError } from '@agent-device/kernel/errors';
+import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerEarlyExitError } from '../runner-startup-transport.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+
+const toolchainProbe = stubAppleToolchainProbes();
+beforeEach(resetAllProcessMemosForTests);
 
 // Verbatim xcodebuild output from an iPhone that was not in the signing account.
 // macOS localizes the installer prose, so the machine-readable anchors are the
@@ -171,6 +176,8 @@ const SCOPED_DESTINATION_NOT_FOUND_LOG = [
   '\t\t{ platform:iOS Simulator, id:sim-1 }',
 ].join('\n');
 
+// An external xctestrun: the session carries no build of its own, so the Xcode it names comes from
+// the toolchain the host selects.
 function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): RunnerSession {
   return {
     ...sessionFailingWith(log),
@@ -183,19 +190,19 @@ function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): Ru
       booted: true,
       simulatorSetPath,
     },
+    deviceId: 'sim-1',
     xctestrunArtifact: {
       xctestrunPath: '/tmp/runner.xctestrun',
       derived: '/tmp/derived',
-      cache: 'exact',
+      cache: 'external',
       artifact: 'valid',
       buildMs: 0,
-      xctestrunPathSource: 'manifest',
-      xcodeVersion: '27.1',
+      xctestrunPathSource: 'external',
     },
   };
 }
 
-test('a scoped-set simulator test-without-building cannot find names its set and the Xcode', async () => {
+test('a scoped-set simulator whose destination is missing names its set and the Xcode', async () => {
   const error = (await buildRunnerEarlyExitError({
     session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG, '/tmp/tenant-a/sims'),
     port: 8100,
@@ -204,7 +211,30 @@ test('a scoped-set simulator test-without-building cannot find names its set and
   assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
   assert.match(String(error.details?.hint), /-DVTSimulatorSetLocation/);
   assert.equal(error.details?.simulatorSetPath, '/tmp/tenant-a/sims');
-  assert.equal(error.details?.xcodeVersion, '27.1');
+  assert.equal(error.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+  assert.match(
+    error.message,
+    new RegExp(
+      `simulator set /tmp/tenant-a/sims with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}$`,
+    ),
+  );
+});
+
+test('a scoped-set destination error whose Xcode cannot be read still names the set', async () => {
+  toolchainProbe.mockReturnValue({ exitCode: 1, stdout: '', stderr: 'xcode-select: error' });
+
+  const error = (await buildRunnerEarlyExitError({
+    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG, '/tmp/tenant-a/sims'),
+    port: 8100,
+  })) as AppError;
+
+  assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
+  assert.equal(error.details?.simulatorSetPath, '/tmp/tenant-a/sims');
+  assert.equal('xcodeVersion' in (error.details ?? {}), false);
+  assert.match(
+    error.message,
+    /simulator set \/tmp\/tenant-a\/sims with Xcode \(version unreadable\)$/,
+  );
 });
 
 test('a default-set simulator early exit keeps its boot-failure reason', async () => {

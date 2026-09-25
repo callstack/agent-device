@@ -5,7 +5,6 @@ import type * as HostProcess from '@agent-device/host-kit/process';
 import type * as HostRequest from '@agent-device/host-kit/request';
 import type * as HostRetry from '@agent-device/host-kit/retry';
 import type * as HostVersion from '@agent-device/host-kit/version';
-import type * as KernelDeviceIsolation from '@agent-device/kernel/device-isolation';
 import type * as KernelDeviceShell from '@agent-device/kernel/device-shell';
 import type * as KernelKeyedLock from '@agent-device/kernel/keyed-lock';
 import type * as KernelRecord from '@agent-device/kernel/record';
@@ -78,11 +77,10 @@ export type AppleRunnerHost = Pick<
   Pick<typeof KernelTtlMemo, 'createTtlMemo'> &
   Pick<typeof KernelRecord, 'isRecord'> &
   Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
-  Pick<typeof KernelDeviceIsolation, 'resolveIosSimulatorDeviceSetPath'> &
   Pick<typeof KernelDeviceShell, 'shellQuote'> &
   Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
   Pick<typeof AppleToolProvider, 'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson'> &
-  Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice'> &
+  Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice' | 'simulatorAddressFor'> &
   Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
     /**
      * The `Deadline` constructor is a class static, so the port carries the factory alone, typed
@@ -178,13 +176,13 @@ export const withKeyedLock = delegate('withKeyedLock');
 export const createTtlMemo = delegate('createTtlMemo');
 export const isRecord = delegate('isRecord');
 export const parseBooleanLiteral = delegate('parseBooleanLiteral');
-export const resolveIosSimulatorDeviceSetPath = delegate('resolveIosSimulatorDeviceSetPath');
 export const classifyBootFailure = delegate('classifyBootFailure');
 export const bootFailureHint = delegate('bootFailureHint');
 export const runAppleToolCommand = delegate('runAppleToolCommand');
 export const runXcrun = delegate('runXcrun');
 export const readApplePlistJson = delegate('readApplePlistJson');
 export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');
+export const simulatorAddressFor = delegate('simulatorAddressFor');
 export const visitXmlPlistEntries = delegate('visitXmlPlistEntries');
 export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDeviceControl');
 export const leaseOwnerStateDir = delegate('leaseOwnerStateDir');

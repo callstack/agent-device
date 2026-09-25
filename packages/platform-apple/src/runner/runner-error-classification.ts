@@ -344,7 +344,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     verdicts: {},
     buildFailure: {
       reason: 'simulator_set_destination_not_found',
-      hint: 'xcodebuild did not find the simulator in the --ios-simulator-device-set named by details.simulatorSetPath. Check that the simulator still exists in that set; if it does, the selected Xcode (details.xcodeVersion) no longer honors -DVTSimulatorSetLocation, so use a simulator in the default set.',
+      hint: 'Check that the simulator still exists in the --ios-simulator-device-set this error names (`xcrun simctl --set <set> list devices`). If it does, the Xcode this error names no longer honors -DVTSimulatorSetLocation, so use a simulator in the default set.',
     },
   },
   {

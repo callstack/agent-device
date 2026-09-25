@@ -126,7 +126,7 @@ afterEach(() => {
 function writeDetachedLease(device: DeviceInfo): void {
   const lease: RunnerLease = {
     ...buildRunnerLease({
-      deviceId: device.id,
+      device,
       sessionId: `${device.id}:${RUNNER_PORT}:1`,
       runnerPid: RUNNER_PID,
       port: RUNNER_PORT,

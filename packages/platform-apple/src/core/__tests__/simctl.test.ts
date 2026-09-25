@@ -106,6 +106,13 @@ test('simulatorAddressFor carries the set of iOS-family simulators only', () => 
   });
 });
 
+test('simulatorAddressFor names a blank set path as the default set', () => {
+  assert.deepEqual(simulatorAddressFor({ ...IOS_SIMULATOR, simulatorSetPath: '   ' }), {
+    udid: 'sim-1',
+    simulatorSetPath: undefined,
+  });
+});
+
 function compileTimeSimulatorScopeProof(): void {
   // @ts-expect-error A simulator address is minted from its DeviceInfo, never written by hand.
   const forged: SimulatorAddress = { udid: 'sim-1', simulatorSetPath: undefined };

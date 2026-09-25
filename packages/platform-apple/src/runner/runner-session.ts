@@ -90,6 +90,7 @@ import {
   type RunnerSessionRegistration,
 } from './runner-session-types.ts';
 import { launchRunnerProcess, type LaunchedRunnerProcess } from './runner-process-launch.ts';
+import { isSameRunnerSimulator } from './runner-device-set.ts';
 
 export type { RunnerSession } from './runner-session-types.ts';
 
@@ -183,6 +184,7 @@ async function startRunnerSessionWithLease(
       logicalLeaseContext,
     },
   });
+  if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect(device);
   const adopted = await measureRunnerStartupStep(
     startupTimings,
     'adopt_detached_runner',
@@ -254,7 +256,6 @@ async function startRunnerSessionWithLease(
   // an external xctestrun that never launches are different steps, and a caller told "developer disk
   // image" should not have to know which one this run happened to take.
   try {
-    if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect(device);
     xctestrunArtifact = await measureRunnerStartupStep(
       startupTimings,
       'ensure_xctestrun',
@@ -313,7 +314,7 @@ async function startRunnerSessionWithLease(
   }
   const sessionId = buildRunnerSessionId(device.id, port);
   const lease = buildRunnerLease({
-    deviceId: device.id,
+    device,
     sessionId,
     runnerPid: runnerProcess.child.pid,
     port,
@@ -406,6 +407,12 @@ async function resolveReusableRunnerSession(
   // A registered session already being taken down or already handed off is not usable, even when
   // its runner process is still there for a moment while disposal works.
   if (liveness !== 'starting' && liveness !== 'ready') return null;
+  if (!isSameRunnerSimulator(existing.device, device)) {
+    await measureRunnerStartupStep({}, 'stop_other_simulator_set_session', async () => {
+      await stopRunnerSessionInternal(device.id, existing);
+    });
+    return null;
+  }
 
   const existingArtifact = existing.xctestrunArtifact;
   if (existingArtifact?.cache === 'external') {
