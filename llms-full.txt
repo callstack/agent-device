@@ -867,6 +867,12 @@ Supported public entry points for Node consumers:
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `centerOfRect(rect)`
+  - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
+  - types: every option and result type of the client's methods, among them `AppOpenOptions`,
+    `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
+    `PressOptions`
+  - types: `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`
+  - types: `NormalizedError`, `AppErrorCode`, `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`
 - `agent-device/io`
   - `createLocalArtifactAdapter(options?)`
   - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
@@ -953,8 +959,11 @@ import {
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from 'agent-device';
+import type { AgentDeviceClient, AgentDeviceDevice } from 'agent-device';
 
-async function resolveSnapshotCapableIosDevice(client: ReturnType<typeof createAgentDeviceClient>) {
+async function resolveSnapshotCapableIosDevice(
+  client: AgentDeviceClient,
+): Promise<AgentDeviceDevice> {
   const devices = await client.devices.list({ platform: 'ios' });
   const device = devices[0];
   if (!device) {

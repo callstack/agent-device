@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.df3e36d4b6.js"></script>
+<script defer src="/agent-device/static/js/index.14897e2070.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -63,6 +63,12 @@
 <li><code>createLocalArtifactAdapter(options?)</code></li>
 <li><code>AppError</code>, <code>isAgentDeviceError(error)</code>, <code>normalizeAgentDeviceError(error)</code></li>
 <li><code>centerOfRect(rect)</code></li>
+<li>types: <code>AgentDeviceClient</code>, <code>AgentDeviceClientConfig</code>, <code>AgentDeviceDevice</code></li>
+<li>types: every option and result type of the client&#x27;s methods, among them <code>AppOpenOptions</code>,
+<code>AppOpenResult</code>, <code>CaptureSnapshotOptions</code>, <code>CaptureSnapshotResult</code>, <code>CaptureScreenshotResult</code>,
+<code>PressOptions</code></li>
+<li>types: <code>SnapshotNode</code>, <code>RawSnapshotNode</code>, <code>SnapshotState</code>, <code>Rect</code>, <code>Point</code></li>
+<li>types: <code>NormalizedError</code>, <code>AppErrorCode</code>, <code>KnownAppErrorCode</code>, <code>AppErrorDetails</code>, <code>ErrorCause</code></li>
 </ul>
 </li>
 <li><code>agent-device/io</code>
@@ -184,8 +190,11 @@
 <span class="line"><span style="color:var(--shiki-foreground)">  isAgentDeviceError</span><span style="color:var(--shiki-token-punctuation)">,</span></span>
 <span class="line"><span style="color:var(--shiki-foreground)">  normalizeAgentDeviceError</span><span style="color:var(--shiki-token-punctuation)">,</span></span>
 <span class="line"><span style="color:var(--shiki-foreground)">} </span><span style="color:var(--shiki-token-keyword)">from</span><span style="color:var(--shiki-token-string-expression)"> &#x27;agent-device&#x27;</span><span style="color:var(--shiki-foreground)">;</span></span>
+<span class="line"><span style="color:var(--shiki-token-keyword)">import</span><span style="color:var(--shiki-token-keyword)"> type</span><span style="color:var(--shiki-foreground)"> { AgentDeviceClient</span><span style="color:var(--shiki-token-punctuation)">,</span><span style="color:var(--shiki-foreground)"> AgentDeviceDevice } </span><span style="color:var(--shiki-token-keyword)">from</span><span style="color:var(--shiki-token-string-expression)"> &#x27;agent-device&#x27;</span><span style="color:var(--shiki-foreground)">;</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:var(--shiki-token-keyword)">async</span><span style="color:var(--shiki-token-keyword)"> function</span><span style="color:var(--shiki-token-function)"> resolveSnapshotCapableIosDevice</span><span style="color:var(--shiki-foreground)">(client</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-function)"> ReturnType</span><span style="color:var(--shiki-foreground)">&lt;</span><span style="color:var(--shiki-token-keyword)">typeof</span><span style="color:var(--shiki-foreground)"> createAgentDeviceClient&gt;) {</span></span>
+<span class="line"><span style="color:var(--shiki-token-keyword)">async</span><span style="color:var(--shiki-token-keyword)"> function</span><span style="color:var(--shiki-token-function)"> resolveSnapshotCapableIosDevice</span><span style="color:var(--shiki-foreground)">(</span></span>
+<span class="line"><span style="color:var(--shiki-foreground)">  client</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-function)"> AgentDeviceClient</span><span style="color:var(--shiki-token-punctuation)">,</span></span>
+<span class="line"><span style="color:var(--shiki-foreground)">)</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-function)"> Promise</span><span style="color:var(--shiki-foreground)">&lt;</span><span style="color:var(--shiki-token-function)">AgentDeviceDevice</span><span style="color:var(--shiki-foreground)">&gt; {</span></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">  const</span><span style="color:var(--shiki-token-constant)"> devices</span><span style="color:var(--shiki-token-keyword)"> =</span><span style="color:var(--shiki-token-keyword)"> await</span><span style="color:var(--shiki-token-constant)"> client</span><span style="color:var(--shiki-token-function)">.</span><span style="color:var(--shiki-token-constant)">devices</span><span style="color:var(--shiki-token-function)">.list</span><span style="color:var(--shiki-foreground)">({ platform</span><span style="color:var(--shiki-token-keyword)">:</span><span style="color:var(--shiki-token-string-expression)"> &#x27;ios&#x27;</span><span style="color:var(--shiki-foreground)"> });</span></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">  const</span><span style="color:var(--shiki-token-constant)"> device</span><span style="color:var(--shiki-token-keyword)"> =</span><span style="color:var(--shiki-foreground)"> devices[</span><span style="color:var(--shiki-token-constant)">0</span><span style="color:var(--shiki-foreground)">];</span></span>
 <span class="line"><span style="color:var(--shiki-token-keyword)">  if</span><span style="color:var(--shiki-foreground)"> (</span><span style="color:var(--shiki-token-keyword)">!</span><span style="color:var(--shiki-foreground)">device) {</span></span>
