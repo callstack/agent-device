@@ -134,20 +134,14 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   }
 
   if (redirectRefusal !== null) {
-    const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
-    if (handBack.restoreFailure !== null) {
-      throw handBack.restoreFailure;
-    }
+    await handBackOrThrowRestoreFailure(paths, lockDirPath, releaseLock);
     throw redirectRefusal;
   }
 
   if (!needsRedirect) {
     // Nothing is displaced and the caller gets no handle: a lock this simulator never needed must not
     // arrive as a redirect problem, and a host device set that could not be put back still must.
-    const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
-    if (handBack.restoreFailure !== null) {
-      throw handBack.restoreFailure;
-    }
+    await handBackOrThrowRestoreFailure(paths, lockDirPath, releaseLock);
     return null;
   }
 
@@ -157,10 +151,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
       return;
     }
     givenBack = true;
-    const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
-    if (handBack.restoreFailure !== null) {
-      throw handBack.restoreFailure;
-    }
+    const handBack = await handBackOrThrowRestoreFailure(paths, lockDirPath, releaseLock);
     if (handBack.releaseFailure !== null && reportUnverifiedRelease) {
       throw handBack.releaseFailure;
     }
@@ -303,6 +294,23 @@ async function handBackDeviceSet(
   }
   recordReleaseFailure(releaseFailure, lockDirPath);
   return { restoreFailure, renamedAsidePath, releaseFailure };
+}
+
+/**
+ * The hand-back every exit that does not already have a more specific error uses: a restore failure
+ * outranks whatever that exit was about to report, because it is a fact about this machine's device set
+ * that outlives the request.
+ */
+async function handBackOrThrowRestoreFailure(
+  paths: DeviceSetPaths,
+  lockDirPath: string,
+  releaseLock: ProcessLockRelease,
+): Promise<DeviceSetHandBack> {
+  const handBack = await handBackDeviceSet(paths, lockDirPath, releaseLock);
+  if (handBack.restoreFailure !== null) {
+    throw handBack.restoreFailure;
+  }
+  return handBack;
 }
 
 /**
