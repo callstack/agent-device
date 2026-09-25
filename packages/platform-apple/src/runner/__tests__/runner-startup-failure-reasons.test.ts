@@ -50,6 +50,11 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const CACHE_RECOVERY_HINT = /clean:xcuitest|apple-runner\/derived/;
 
+/** The fixtures whose failure message names more than the failed build, by fixture id. */
+const MESSAGE_FOR_FIXTURE: Readonly<Record<string, string>> = {
+  'scoped-set-destination-not-found': `xcodebuild build-for-testing failed: xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${CAPTURED_SCOPED_SIMULATOR.setWithoutUdid} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
+};
+
 /**
  * The phrase each reason's advice has to contain. Kept as text rather than as syntax because two of
  * them are quotations from `core/devicectl.ts`, and a fifth escaping helper for a prose remedy with
@@ -174,7 +179,10 @@ function assertFailureEnvelope(
   fixture: RunnerStartupFailureFixture,
 ): void {
   assert.equal(envelope.code, 'COMMAND_FAILED');
-  assert.ok(envelope.message.startsWith('xcodebuild build-for-testing failed'));
+  assert.equal(
+    envelope.message,
+    MESSAGE_FOR_FIXTURE[fixture.id] ?? 'xcodebuild build-for-testing failed',
+  );
   assert.equal(envelope.details?.reason, fixture.reason);
   assert.ok(
     String(envelope.hint).includes(HINT_FOR_REASON[fixture.reason]),
@@ -239,16 +247,13 @@ test('every reason the classifier can name is produced by a rule row', () => {
 });
 
 test('a scoped-set simulator xcodebuild cannot find names its set and the Xcode', async () => {
-  const { udid, setWithoutUdid } = CAPTURED_SCOPED_SIMULATOR;
+  const { setWithoutUdid } = CAPTURED_SCOPED_SIMULATOR;
   const envelope = await driveBuildFailure(buildFixtureById('scoped-set-destination-not-found'));
 
   assert.equal(envelope.details?.reason, 'simulator_set_destination_not_found');
   assert.equal(envelope.details?.simulatorSetPath, setWithoutUdid);
   assert.equal(envelope.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
-  assert.equal(
-    envelope.message,
-    `xcodebuild build-for-testing failed: xcodebuild found no simulator ${udid} in simulator set ${setWithoutUdid} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
-  );
+  assert.equal(envelope.message, MESSAGE_FOR_FIXTURE['scoped-set-destination-not-found']);
   const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
   assert.ok(buildArgs.includes(`-DVTSimulatorSetLocation=${setWithoutUdid}`));
 });

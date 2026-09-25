@@ -19,6 +19,7 @@ export const platformDaemonLifecycleOwners: PlatformOwnerLifecycle = Object.free
   configureForDaemonLock: async (input) => {
     await configureAppleRunnerLeaseOwnerStateDir(input.stateDir);
     await configureAppleRunnerDeviceClaimAuthorityProbe(input.hasDeviceClaimAuthority);
+    await restoreLegacyXctestDeviceSetRedirectRuntime(input.onDiagnostic);
   },
   clearDaemonLockConfiguration: async () => {
     await configureAppleRunnerLeaseOwnerStateDir(undefined);
@@ -31,9 +32,6 @@ export const platformDaemonLifecycleOwners: PlatformOwnerLifecycle = Object.free
   },
   cleanupManagedWebOrphans: async (params) => {
     await cleanupManagedWebRuntimeOrphans(params);
-  },
-  restoreLegacyXctestDeviceSetRedirect: async () => {
-    await restoreLegacyXctestDeviceSetRedirectRuntime();
   },
   resetAndroidSnapshotHelper: async () => {
     await resetAndroidSnapshotHelperRuntime();
