@@ -6,6 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import {
+  buildRunnerSessionXctestrunCleanupPattern,
+  buildRunnerSessionXctestrunSuffix,
+} from '../runner-artifact-env.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
@@ -355,6 +359,42 @@ test('prepareXctestrunWithEnv writes env overlays into configured env dir', asyn
     );
     assert.equal(fs.existsSync(prepared.xctestrunPath), true);
     assert.equal(fs.existsSync(prepared.jsonPath), true);
+  });
+});
+
+test('the session xctestrun the writer builds is found by the cleanup matcher', async () => {
+  // The launch is killed by `pkill -f` on a pattern the writer module itself builds, and the
+  // daemon-client sweep pins its own looser copy of these bytes. Binding writer to pattern and to
+  // those pinned bytes here is what makes a rename that keeps each side self-consistent fail.
+  await withTempDir('runner-xctestrun-identity-', async (root) => {
+    const xctestrunPath = path.join(root, 'AgentDeviceRunner.xctestrun');
+    fs.writeFileSync(
+      xctestrunPath,
+      JSON.stringify({
+        TestConfigurations: [{ TestTargets: [{ TestBundlePath: 'AgentDeviceRunnerUITests' }] }],
+      }),
+    );
+    appleRunnerTestHost.update({ runAppleToolCommand: fakeXctestrunPlutilToolCommand() });
+    const suffix = buildRunnerSessionXctestrunSuffix({
+      deviceId: 'SIM-001',
+      ownerToken: 'owner-4242-ab12cd34',
+      port: 8123,
+    });
+
+    const prepared = await prepareXctestrunWithEnv(xctestrunPath, runnerPortEnv, suffix);
+    const argv = `xcodebuild test-without-building -xctestrun ${prepared.xctestrunPath}`;
+
+    // The bytes the timeout sweep pins literally, so the sweep cannot drift off the writer's name.
+    assert.match(argv, new RegExp(String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`));
+    assert.match(
+      argv,
+      new RegExp(
+        `xcodebuild.*test-without-building.*${buildRunnerSessionXctestrunCleanupPattern({
+          deviceId: 'SIM-001',
+          ownerToken: 'owner-4242-ab12cd34',
+        })}`,
+      ),
+    );
   });
 });
 

@@ -85,6 +85,10 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
       ],
       {
         allowFailure: true,
+        // xcodebuild does not forward its own environment to the test runner: per xcodebuild(1),
+        // only names prefixed `TEST_RUNNER_` cross that boundary, with the prefix stripped. This
+        // entry is visible to xcodebuild alone, and the runner reads its port from the session
+        // xctestrun's EnvironmentVariables instead.
         env: { ...process.env, AGENT_DEVICE_RUNNER_PORT: String(input.port) },
         detached: true,
         signal: input.signal,

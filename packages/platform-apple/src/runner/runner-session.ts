@@ -60,6 +60,7 @@ import {
   writeRunnerLease,
 } from './runner-lease.ts';
 import { isIosRunnerDetachEnabled, tryAdoptRunnerSessionFromLease } from './runner-adoption.ts';
+import { buildRunnerSessionXctestrunSuffix } from './runner-artifact-env.ts';
 import {
   abortRunnerSessionsAndPrepProcesses,
   cleanupOwnedIosRunnerLease,
@@ -276,7 +277,11 @@ async function startRunnerSessionWithLease(
         await prepareXctestrunWithEnv(
           xctestrunArtifact.xctestrunPath,
           { AGENT_DEVICE_RUNNER_PORT: String(port) },
-          `session-${device.id}-${runnerOwnerToken()}-${port}`,
+          buildRunnerSessionXctestrunSuffix({
+            deviceId: device.id,
+            ownerToken: runnerOwnerToken(),
+            port,
+          }),
           { iosXctestEnvDir: options.iosXctestEnvDir },
         ),
     ));

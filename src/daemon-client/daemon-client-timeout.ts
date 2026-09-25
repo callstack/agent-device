@@ -16,6 +16,10 @@ import {
 
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
+  // A client in the field already pkills these exact bytes. This sweep ships separately from the
+  // runner and cannot know which version wrote a timed-out launch, so it never follows a rename:
+  // it must keep matching the names older writers used. The literal stays pinned here rather than
+  // derived from `runner-artifact-env.ts`, which builds only today's session name.
   String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`,
   String.raw`xcodebuild build-for-testing .*apple/runner/AgentDeviceRunner/AgentDeviceRunner\.xcodeproj`,
 ];

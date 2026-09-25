@@ -291,6 +291,10 @@ function buildIosSimulatorLaunchArgs(
   options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
 ): string[] {
   const args = ['launch'];
+  // `--console-pty` is the console mode this path needs: simctl writes the app's bytes to its own
+  // stdout through a PTY, which is what the caller redirects. `--stdout=<path>`/`--stderr=<path>`
+  // cannot substitute, because they resolve the given path inside the device's data container
+  // rather than on the host. Verified on Xcode 27.1.
   if (options?.launchConsole) args.push('--console-pty');
   if (options?.terminateRunningApp) args.push('--terminate-running-process');
   args.push(deviceId, bundleId);

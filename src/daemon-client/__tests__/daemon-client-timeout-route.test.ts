@@ -154,6 +154,27 @@ test('socket timeout: pkill cleanup still runs for a declared non-Apple platform
   // design that skips cleanup based on the declared flag would fail this.
   const pkillCalls = mockRunCmdSync.mock.calls.filter(([cmd]) => cmd === 'pkill');
   assert.equal(pkillCalls.length, 3);
+
+  // The session-xctestrun pattern is pinned by bytes, not derived from the runner's writer module:
+  // a client version in the field already pkills this exact string, and it must keep selecting
+  // launches that older writers named, since it cannot know which version started a timed-out
+  // launch. Deriving it would move this sweep off those names on any rename.
+  const sessionPattern = pkillCalls
+    .map(([, args]) => String(args?.[1]))
+    .find((pattern) => pattern.includes('session'));
+  assert.equal(sessionPattern, String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`);
+  assert.equal(
+    new RegExp(sessionPattern).test(
+      'xcodebuild test-without-building -xctestrun /d/AgentDeviceRunner.env.session-SIM-1-owner-1-ff-8123.xctestrun',
+    ),
+    true,
+  );
+  assert.equal(
+    new RegExp(sessionPattern).test(
+      'xcodebuild test-without-building -xctestrun /d/AgentDeviceRunner.env.session-SIM-1-8123.xctestrun',
+    ),
+    true,
+  );
 });
 
 test('http timeout: pkill cleanup still runs for an undeclared platform (unknown-session case) that terminates nothing, and the hint stays platform-neutral', async () => {

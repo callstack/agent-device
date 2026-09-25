@@ -9,6 +9,7 @@ import {
   runXcrun,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import { buildRunnerSessionXctestrunCleanupPattern } from './runner-artifact-env.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
@@ -331,9 +332,9 @@ async function killRunnerXcodebuildProcesses(
   deviceId: string,
   ownerToken: string | undefined,
 ): Promise<void> {
-  const pattern = ownerToken
-    ? `xcodebuild.*test-without-building.*AgentDeviceRunner\\.env\\.session-${escapeRegex(deviceId)}-${escapeRegex(ownerToken)}-`
-    : `xcodebuild.*test-without-building.*AgentDeviceRunner\\.env\\.session-${escapeRegex(deviceId)}-[0-9]`;
+  const pattern = `xcodebuild.*test-without-building.*${buildRunnerSessionXctestrunCleanupPattern(
+    ownerToken === undefined ? { deviceId } : { deviceId, ownerToken },
+  )}`;
   for (const signal of ['TERM', 'KILL'] as const) {
     try {
       await runAppleToolCommand('pkill', [`-${signal}`, '-f', pattern], {
@@ -352,8 +353,4 @@ async function killRunnerXcodebuildProcesses(
       });
     }
   }
-}
-
-function escapeRegex(value: string): string {
-  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
