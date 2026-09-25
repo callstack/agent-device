@@ -146,8 +146,7 @@ export async function setIosSetting(
       const action = parseBiometricAction(state, biometricSetting);
       await runIosBiometricSimctlCommand(device, action, {
         settingName: biometricSetting,
-        label: biometric.label,
-        modalityAliases: biometric.modalityAliases,
+        notificationModality: biometric.notificationModality,
       });
       return;
     }
@@ -276,12 +275,15 @@ function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | 
 type IosBiometricAction = 'match' | 'nonmatch' | 'enroll' | 'unenroll';
 type IosBiometricSetting = 'faceid' | 'touchid';
 
+/** The BiometricKit_Sim notification family a setting posts to: `pearl` is Face ID, `fingerTouch` is Touch ID. */
+type IosBiometricNotificationModality = 'pearl' | 'fingerTouch';
+
 const IOS_BIOMETRIC_SETTINGS: Record<
   IosBiometricSetting,
-  { label: 'Face ID' | 'Touch ID'; modalityAliases: string[] }
+  { notificationModality: IosBiometricNotificationModality }
 > = {
-  faceid: { label: 'Face ID', modalityAliases: ['face'] },
-  touchid: { label: 'Touch ID', modalityAliases: ['finger', 'touch'] },
+  faceid: { notificationModality: 'pearl' },
+  touchid: { notificationModality: 'fingerTouch' },
 };
 
 function mapIosPermissionAction(action: 'grant' | 'deny' | 'reset'): 'grant' | 'revoke' | 'reset' {
@@ -398,97 +400,73 @@ function parseBiometricAction(state: string, settingName: IosBiometricSetting): 
   );
 }
 
+/**
+ * Simulator biometrics are driven the way the Simulator.app menu drives them: `notifyutil` inside
+ * the simulator posts to `com.apple.BiometricKit_Sim` for a match or non-match and flips the
+ * `enrollmentChanged` state for enrollment. No shipped Xcode has a `simctl biometric` subcommand.
+ */
 async function runIosBiometricSimctlCommand(
   device: DeviceInfo,
   action: IosBiometricAction,
   options: {
     settingName: IosBiometricSetting;
-    label: 'Face ID' | 'Touch ID';
-    modalityAliases: string[];
+    notificationModality: IosBiometricNotificationModality;
   },
 ): Promise<void> {
-  const attempts = biometricCommandAttempts(device.id, action, options.modalityAliases);
-  const failures: CommandAttemptFailure[] = [];
-
-  for (const args of attempts) {
-    const commandArgs = buildSimctlArgsForDevice(device, args);
-    const result = await runXcrun(commandArgs, { allowFailure: true });
-    if (result.exitCode === 0) return;
-    failures.push({
-      args: commandArgs,
-      stderr: result.stderr,
-      stdout: result.stdout,
-      exitCode: result.exitCode,
-    });
-  }
-
-  const attemptsPayload = summarizeCommandAttemptFailures(failures);
-  const capabilityMissing =
-    failures.length > 0 &&
-    failures.every((failure) => isIosBiometricCapabilityMissing(failure.stdout, failure.stderr));
-  if (capabilityMissing) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `${options.label} simulation is not supported on this simulator runtime.`,
-      {
-        deviceId: device.id,
-        action,
-        setting: options.settingName,
-        attempts: attemptsPayload,
-      },
-    );
-  }
+  const args = buildSimctlArgsForDevice(
+    device,
+    biometricNotifyutilArgs(device.id, action, options.notificationModality),
+  );
+  const result = await runXcrun(args, { allowFailure: true });
+  if (result.exitCode === 0) return;
+  const failure: CommandAttemptFailure = {
+    args,
+    stderr: result.stderr,
+    stdout: result.stdout,
+    exitCode: result.exitCode,
+  };
   throw new AppError('COMMAND_FAILED', `Failed to simulate ${options.settingName}.`, {
     deviceId: device.id,
     action,
     setting: options.settingName,
-    attempts: attemptsPayload,
+    attempts: summarizeCommandAttemptFailures([failure]),
   });
 }
 
-function biometricCommandAttempts(
+const BIOMETRIC_ENROLLMENT_NOTIFICATION = 'com.apple.BiometricKit.enrollmentChanged';
+
+/**
+ * The `simctl spawn <udid> notifyutil` argv for one biometric action; enrollment sets the state
+ * before posting so BiometricKit reads the new value when the notification lands.
+ */
+function biometricNotifyutilArgs(
   deviceId: string,
   action: IosBiometricAction,
-  modalityAliases: string[],
-): string[][] {
-  const modalities = modalityAliases.length > 0 ? modalityAliases : ['face'];
+  modality: IosBiometricNotificationModality,
+): string[] {
+  const spawn = ['spawn', deviceId, 'notifyutil'];
   switch (action) {
     case 'match':
-      return modalities.flatMap((modality) => [
-        ['biometric', deviceId, 'match', modality],
-        ['biometric', 'match', deviceId, modality],
-      ]);
+      return [...spawn, '-p', `com.apple.BiometricKit_Sim.${modality}.match`];
     case 'nonmatch':
-      return modalities.flatMap((modality) => [
-        ['biometric', deviceId, 'nonmatch', modality],
-        ['biometric', deviceId, 'nomatch', modality],
-        ['biometric', 'nonmatch', deviceId, modality],
-        ['biometric', 'nomatch', deviceId, modality],
-      ]);
+      return [...spawn, '-p', `com.apple.BiometricKit_Sim.${modality}.nomatch`];
     case 'enroll':
       return [
-        ['biometric', deviceId, 'enroll', 'yes'],
-        ['biometric', deviceId, 'enroll', '1'],
-        ['biometric', 'enroll', deviceId, 'yes'],
-        ['biometric', 'enroll', deviceId, '1'],
+        ...spawn,
+        '-s',
+        BIOMETRIC_ENROLLMENT_NOTIFICATION,
+        '1',
+        '-p',
+        BIOMETRIC_ENROLLMENT_NOTIFICATION,
       ];
     case 'unenroll':
       return [
-        ['biometric', deviceId, 'enroll', 'no'],
-        ['biometric', deviceId, 'enroll', '0'],
-        ['biometric', 'enroll', deviceId, 'no'],
-        ['biometric', 'enroll', deviceId, '0'],
+        ...spawn,
+        '-s',
+        BIOMETRIC_ENROLLMENT_NOTIFICATION,
+        '0',
+        '-p',
+        BIOMETRIC_ENROLLMENT_NOTIFICATION,
       ];
   }
-}
-
-function isIosBiometricCapabilityMissing(stdout: string, stderr: string): boolean {
-  const text = `${stdout}\n${stderr}`.toLowerCase();
-  return (
-    text.includes('unrecognized subcommand') ||
-    text.includes('unknown subcommand') ||
-    text.includes('not supported') ||
-    text.includes('unavailable') ||
-    (text.includes('biometric') && text.includes('invalid'))
-  );
 }

@@ -21,7 +21,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 
 test('managed iOS delegates deployment and system operations without local readiness or runner startup', async () => {
   const app = createDemoIosApp('managed-ios-automation-');
-  let biometricAttempts = 0;
+  let biometricPosts = 0;
   const native = createRecordingAppleToolProvider({
     plist: {
       readJson: async () => ({ CFBundleIdentifier: AUTOMATION_APP_ID, CFBundleName: 'Demo' }),
@@ -37,11 +37,18 @@ test('managed iOS delegates deployment and system operations without local readi
           stderr: '',
           exitCode: 0,
         };
-      expect(['install', 'uninstall', 'pbpaste', 'pbcopy', 'ui', 'biometric', 'push']).toContain(
+      expect(['install', 'uninstall', 'pbpaste', 'pbcopy', 'ui', 'spawn', 'push']).toContain(
         command,
       );
-      if (command === 'biometric' && ++biometricAttempts === 1)
-        return { stdout: '', stderr: 'unknown command', exitCode: 1 };
+      if (command === 'spawn') {
+        biometricPosts += 1;
+        expect(args.slice(3)).toEqual([
+          'managed-ios',
+          'notifyutil',
+          '-p',
+          'com.apple.BiometricKit_Sim.pearl.match',
+        ]);
+      }
       return {
         stdout: command === 'pbpaste' ? 'managed clipboard\n' : '',
         stderr: '',
@@ -74,7 +81,7 @@ test('managed iOS delegates deployment and system operations without local readi
       await ops.writeClipboard!({ text: 'managed' });
       await ops.setSetting!({ setting: 'appearance', state: 'dark' });
       await ops.setSetting!({ setting: 'faceid', state: 'match' });
-      expect(biometricAttempts).toBe(2);
+      expect(biometricPosts).toBe(1);
       expect(native.calls.filter((call) => call[3] === 'install')).toHaveLength(3);
       expect(
         native.calls.some((call) => ['list', 'boot', 'bootstatus', 'shutdown'].includes(call[3]!)),
