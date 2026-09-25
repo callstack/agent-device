@@ -1,4 +1,4 @@
-import { beforeAll, test } from 'vitest';
+import { beforeAll, describe, test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,78 +15,71 @@ const recordingScriptsDir = path.resolve(
 );
 const recordingTestSupportDir = path.resolve(__dirname, '../../../../../test/integration/support');
 const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;
-let swiftCompilerPath = 'swiftc';
-let swiftSdkPath = '';
 
-async function assertSwiftScriptTypechecks(
-  scriptPath: string,
-  extraSourcePaths: string[] = [],
-): Promise<void> {
-  const result = await runCmd(
-    swiftCompilerPath,
-    ['-sdk', swiftSdkPath, '-typecheck', scriptPath, ...extraSourcePaths],
-    {
-      allowFailure: true,
+type TypecheckOutcome = { exitCode: number; stderr: string; source: string };
+
+// The three `swiftc -typecheck` invocations run in beforeAll, not in the test bodies: each is a
+// real compiler launch, and the unit slow-test gate budgets `packages/**` test cases far below one
+// compile (see the budget note in docs/agents/testing.md). The snapshot-bridge and fold-helper
+// gates in platform-apple keep their native compiles out of test-case wall time the same way.
+// One beforeAll covers all three so the SDK probe and the two shared-source compiles are paid once
+// per file rather than once per case.
+describe.skipIf(process.platform !== 'darwin')('recording Swift scripts typecheck', () => {
+  let outcomes: TypecheckOutcome[] = [];
+
+  beforeAll(
+    async () => {
+      const [compiler, sdk] = await Promise.all([
+        runCmd('xcrun', ['--find', 'swiftc']),
+        runCmd('xcrun', ['--show-sdk-path', '--sdk', 'macosx']),
+      ]);
+      const swiftCompilerPath = compiler.stdout.trim() || 'swiftc';
+      const swiftSdkPath = sdk.stdout.trim();
+      const sharedSupport = path.join(recordingScriptsDir, 'RecordingExportSupport.swift');
+      const targets: Array<{ source: string; extraSources: string[] }> = [
+        { source: path.join(recordingTestSupportDir, 'recording-inspect.swift'), extraSources: [] },
+        {
+          source: path.join(recordingScriptsDir, 'recording-overlay.swift'),
+          extraSources: [sharedSupport],
+        },
+        {
+          source: path.join(recordingScriptsDir, 'recording-frames.swift'),
+          extraSources: [sharedSupport],
+        },
+      ];
+
+      outcomes = await Promise.all(
+        targets.map(async ({ source, extraSources }): Promise<TypecheckOutcome> => {
+          const result = await runCmd(
+            swiftCompilerPath,
+            ['-sdk', swiftSdkPath, '-typecheck', source, ...extraSources],
+            { allowFailure: true, timeoutMs: SWIFT_TYPECHECK_TIMEOUT_MS },
+          );
+          return { source, exitCode: result.exitCode, stderr: result.stderr };
+        }),
+      );
     },
+    SWIFT_TYPECHECK_TIMEOUT_MS * 3 + 30_000,
   );
-  assert.equal(
-    result.exitCode,
-    0,
-    `${path.basename(scriptPath)} should typecheck\n${result.stderr}`,
-  );
-}
 
-beforeAll(async () => {
-  if (process.platform !== 'darwin') return;
-  const [compilerResult, sdkResult] = await Promise.all([
-    runCmd('xcrun', ['--find', 'swiftc']),
-    runCmd('xcrun', ['--show-sdk-path', '--sdk', 'macosx']),
-  ]);
-  swiftCompilerPath = compilerResult.stdout.trim();
-  swiftSdkPath = sdkResult.stdout.trim();
+  test('recording inspect Swift script typechecks', () => {
+    assertTypechecked(outcomes, 'recording-inspect.swift');
+  });
+
+  test('recording overlay Swift script typechecks', () => {
+    assertTypechecked(outcomes, 'recording-overlay.swift');
+  });
+
+  test('recording frames Swift script typechecks', () => {
+    assertTypechecked(outcomes, 'recording-frames.swift');
+  });
 });
 
-test(
-  'recording inspect Swift script typechecks',
-  async (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('Swift recording scripts are only validated on macOS');
-    }
-
-    await assertSwiftScriptTypechecks(
-      path.join(recordingTestSupportDir, 'recording-inspect.swift'),
-    );
-  },
-  SWIFT_TYPECHECK_TIMEOUT_MS,
-);
-
-test(
-  'recording overlay Swift script typechecks',
-  async (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('Swift recording scripts are only validated on macOS');
-    }
-
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-overlay.swift'), [
-      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
-    ]);
-  },
-  SWIFT_TYPECHECK_TIMEOUT_MS,
-);
-
-test(
-  'recording frames Swift script typechecks',
-  async (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('Swift recording scripts are only validated on macOS');
-    }
-
-    await assertSwiftScriptTypechecks(path.join(recordingScriptsDir, 'recording-frames.swift'), [
-      path.join(recordingScriptsDir, 'RecordingExportSupport.swift'),
-    ]);
-  },
-  SWIFT_TYPECHECK_TIMEOUT_MS,
-);
+function assertTypechecked(outcomes: readonly TypecheckOutcome[], basename: string): void {
+  const outcome = outcomes.find((entry) => path.basename(entry.source) === basename);
+  assert.ok(outcome, `${basename} was never typechecked`);
+  assert.equal(outcome.exitCode, 0, `${basename} should typecheck\n${outcome.stderr}`);
+}
 
 test('recording overlays are explicitly unsupported on non-macOS hosts', () => {
   assert.equal(

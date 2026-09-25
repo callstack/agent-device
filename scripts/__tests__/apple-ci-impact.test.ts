@@ -19,6 +19,21 @@ function cacheInputs(action: string): string[] {
   );
 }
 
+type WorkflowStep = { run?: string; with?: { gate?: string } };
+
+/**
+ * Index of the first workflow step matching a predicate, counted across every job in file order,
+ * or -1. Steps are located by the command they run or the gate they invoke rather than by their
+ * title, and through the same YAML parser the assertions below already use, so a step renamed for
+ * scope reasons — or a `run:` block reindented — is not mistaken for a sequencing regression.
+ */
+function workflowStepIndex(workflow: string, matches: (step: WorkflowStep) => boolean): number {
+  const doc = parse(workflow) as { jobs?: Record<string, { steps?: WorkflowStep[] }> };
+  return Object.values(doc.jobs ?? {})
+    .flatMap((job) => job.steps ?? [])
+    .findIndex(matches);
+}
+
 test('every runner build-cache input triggers the PR XCTest lane', () => {
   const action = fs.readFileSync(
     path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
@@ -58,10 +73,14 @@ test('the PR workflow applies the impact decision to the XCTest step', () => {
 });
 
 test('macOS clean-install proof follows live UI replay', () => {
+  // Ordered by what each step runs, not by its title: the clean-install proof must not fire
+  // before the replay that can raise local-network permission UI, and a step renamed for scope
+  // reasons is not a sequencing regression.
   const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/macos.yml'), 'utf8');
-  const replay = workflow.indexOf('- name: Run macOS integration test');
-  const proof = workflow.indexOf(
-    '- name: Verify clean-installed Simulator snapshot bridge preparation',
+  const replay = workflowStepIndex(workflow, (step) => step.with?.gate === 'replay-macos');
+  const proof = workflowStepIndex(
+    workflow,
+    (step) => step.run?.includes('--verify-snapshot-bridge-preparation') ?? false,
   );
   expect(replay).toBeGreaterThan(-1);
   expect(proof).toBeGreaterThan(replay);
