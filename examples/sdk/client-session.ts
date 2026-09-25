@@ -13,13 +13,12 @@
  * Run: node --experimental-strip-types examples/sdk/client-session.ts
  */
 import {
-  type AgentDeviceClient,
-  type AgentDeviceDevice,
   AppError,
   createAgentDeviceClient,
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from 'agent-device';
+import type { AgentDeviceClient, AgentDeviceDevice } from 'agent-device';
 
 async function resolveSnapshotCapableIosDevice(
   client: AgentDeviceClient,
