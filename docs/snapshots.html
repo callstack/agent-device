@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.63ac519908.js"></script>
+<script defer src="/agent-device/static/js/index.df3e36d4b6.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -188,7 +188,11 @@ reported. The text of an empty field is its hint on modern Android, so check <co
 before reading <code>value</code> as the entered contents.</li>
 <li><code>placeholder</code> is the field&#x27;s hint text itself, present whether the field is empty or filled: an
 empty field shows it (<code>hintShowing: true</code>, and <code>value</code> repeats it), a filled field no longer does.
-A field without a hint omits it.</li>
+A field without a hint omits it. iOS nodes carry the same fact from the field&#x27;s
+<code>placeholderValue</code>, on every producer (the XCTest tree, the Simulator AX bridge, and the runner&#x27;s
+private-AX reader). XCTest reports an empty field&#x27;s placeholder as its <code>value</code> too, so a <code>value</code>
+equal to <code>placeholder</code> is either an empty field or one holding exactly that text; equality alone
+cannot tell them apart.</li>
 <li><code>selectionStart</code>/<code>selectionEnd</code> are accessibility selection offsets. They are independent of
 <code>editable</code> (read-only selectable text exposes them too), they are not a character count, and
 they do not prove that a masked or secure value equals expected text.</li>

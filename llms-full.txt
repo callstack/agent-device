@@ -4743,7 +4743,11 @@ them. Explicit `false` and `0` are kept; an absent field means the fact was unav
   before reading `value` as the entered contents.
 - `placeholder` is the field's hint text itself, present whether the field is empty or filled: an
   empty field shows it (`hintShowing: true`, and `value` repeats it), a filled field no longer does.
-  A field without a hint omits it.
+  A field without a hint omits it. iOS nodes carry the same fact from the field's
+  `placeholderValue`, on every producer (the XCTest tree, the Simulator AX bridge, and the runner's
+  private-AX reader). XCTest reports an empty field's placeholder as its `value` too, so a `value`
+  equal to `placeholder` is either an empty field or one holding exactly that text; equality alone
+  cannot tell them apart.
 - `selectionStart`/`selectionEnd` are accessibility selection offsets. They are independent of
   `editable` (read-only selectable text exposes them too), they are not a character count, and
   they do not prove that a masked or secure value equals expected text.
