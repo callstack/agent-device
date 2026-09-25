@@ -81,9 +81,10 @@ export async function captureScrollEdgeState(params: {
 export async function readScrollEdgeState(
   nodes: readonly (RawSnapshotNode | SnapshotNode)[],
   edge: ScrollEdge,
+  target: ScrollEdgeTarget = {},
 ): Promise<ScrollEdgeState> {
   const { analyzeScrollEdgeState } = await import('./scroll-edge-state/selection.ts');
-  return analyzeScrollEdgeState(nodes, edge);
+  return analyzeScrollEdgeState(nodes, edge, target);
 }
 
 /**

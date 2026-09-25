@@ -239,7 +239,9 @@ function surfacePairDrift(
 
 /**
  * Polls until an untouched surface proves itself. A surface that differs from the baseline is a
- * verdict on the first capture, so a scroll that worked pays for one read. One that looks untouched
+ * verdict on the first capture, so a scroll that worked pays for one read, unless the baseline
+ * already ended in the scrolled direction, where the change must hold still first
+ * (`baselineEndsInDirection`). One that looks untouched
  * needs a quiet pair, because a gesture still in flight and a gesture that did nothing answer a
  * single read identically. A surface that never holds still expires as `surface-unsettled` rather
  * than being called a no-op — and that answer is worth a warning the others are not, since it spent
@@ -266,7 +268,7 @@ async function pollForSurfaceVerdict(
     attempts += 1;
     if (reading.kind === 'blind') return { kind: 'blind', reason: reading.reason };
     if (reading.kind === 'changed') {
-      changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction);
+      changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction, params.swipe);
     }
     const verdict = settledVerdict(reading, {
       previous,
@@ -324,10 +326,13 @@ function settledVerdict(
 async function baselineEndsInDirection(
   baseline: ScrollSurfaceBaseline,
   direction: ScrollDirection,
+  swipe: ScrollSwipeEvidence,
 ): Promise<boolean> {
   const edge = verticalEdgeFor(direction);
   if (!edge) return false;
-  const state = await readScrollEdgeState(baseline.nodes, edge);
+  // The question is asked of the scroller the swipe ran in: an inner list at its end inside an
+  // outer list that still hides content is the inner list's edge, not the outer list's middle.
+  const state = await readScrollEdgeState(baseline.nodes, edge, { point: swipe.midpoint });
   const ends = state.containerRect !== undefined && !state.canScroll;
   if (ends) {
     emitDiagnostic({

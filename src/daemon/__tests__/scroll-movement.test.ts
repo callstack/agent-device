@@ -192,6 +192,57 @@ test('a bounce past the edge that springs back is at-edge, not moved', async () 
   assert.equal(spy.calls(), 3);
 });
 
+/**
+ * The edge question is asked of the scroller under the swipe, through the same selection the edge
+ * verdict uses: among the containers holding the point, the one that still hides content in that
+ * direction. An inner list at its end inside an outer list with more below hands the swipe to the
+ * outer list (that is what the platform does with the gesture), so the rest requirement does not
+ * engage and the first differing read is the movement it produced.
+ */
+test('an inner list at its end inside an outer list with hidden content hands the swipe on', async () => {
+  const outer = {
+    type: 'ScrollView',
+    identifier: 'outer',
+    rect: { x: 0, y: 100, width: 402, height: 760 },
+    hiddenContentBelow: true,
+  } as SnapshotNode;
+  const inner = (rowOffset: number) => [
+    outer,
+    ...screen(rowOffset, false).map((node) =>
+      node.type === 'ScrollView' ? ({ ...node, identifier: 'inner' } as SnapshotNode) : node,
+    ),
+  ];
+  const { observation, spy } = observe({
+    baseline: baselineOf(inner(0)),
+    screens: [inner(-300)],
+  });
+
+  assert.equal(await observation, 'moved');
+  assert.equal(spy.calls(), 1);
+});
+
+/** With no outer list left to take it, the swipe point resolves the inner list and its edge gates the claim. */
+test('an inner list at its end with no outer list left to scroll is gated on rest', async () => {
+  const outerAtEnd = {
+    type: 'ScrollView',
+    identifier: 'outer',
+    rect: { x: 0, y: 100, width: 402, height: 760 },
+  } as SnapshotNode;
+  const inner = (rowOffset: number) => [
+    outerAtEnd,
+    ...screen(rowOffset, false).map((node) =>
+      node.type === 'ScrollView' ? ({ ...node, identifier: 'inner' } as SnapshotNode) : node,
+    ),
+  ];
+  const { observation, spy } = observe({
+    baseline: baselineOf(inner(0)),
+    screens: [inner(-14), inner(0), inner(0)],
+  });
+
+  assert.equal(await observation, 'at-edge');
+  assert.equal(spy.calls(), 3);
+});
+
 test('content that changes at the edge and holds still is still moved', async () => {
   const { observation, spy } = observe({
     baseline: baselineOf(screen(0, false)),
