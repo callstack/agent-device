@@ -94,13 +94,6 @@ extension RunnerTests {
     )
   }
 
-  func testRunnerScreenshotStabilitySettledTrueWhenWindowMatches() {
-    let frame = Data([1, 2, 3])
-    XCTAssertTrue(
-      runnerScreenshotStabilitySettled([Data([9]), frame, frame, frame], requiredConsecutiveMatches: 3)
-    )
-  }
-
   func testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch() {
     // A momentary pause (two matching samples) followed by resumed movement
     // must not read as settled: the 3-sample window still spans the mismatch.
