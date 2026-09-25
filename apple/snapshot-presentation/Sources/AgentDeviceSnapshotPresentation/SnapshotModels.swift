@@ -34,6 +34,8 @@ public struct RawAXNode: Equatable {
   public let label: String?
   public let identifier: String?
   public let value: String?
+  /// The text a text field shows while empty (`placeholderValue`); `nil` for every other node.
+  public let placeholder: String?
   public var rect: SnapshotRect
   public let enabled: Bool
   public let focused: Bool?
@@ -52,6 +54,7 @@ public struct RawAXNode: Equatable {
     label: String?,
     identifier: String?,
     value: String?,
+    placeholder: String? = nil,
     rect: SnapshotRect,
     enabled: Bool,
     focused: Bool?,
@@ -68,6 +71,7 @@ public struct RawAXNode: Equatable {
     self.label = label
     self.identifier = identifier
     self.value = value
+    self.placeholder = placeholder
     self.rect = rect
     self.enabled = enabled
     self.focused = focused
@@ -272,6 +276,7 @@ public struct PresentedNode: Codable, Equatable {
   public let label: String?
   public let identifier: String?
   public let value: String?
+  public let placeholder: String?
   public let rect: SnapshotRect
   public let enabled: Bool
   public let focused: Bool?
@@ -295,6 +300,7 @@ public struct PresentedNode: Codable, Equatable {
     self.label = raw.label
     self.identifier = raw.identifier
     self.value = raw.value
+    self.placeholder = raw.placeholder
     self.rect = rect ?? raw.rect
     self.enabled = raw.enabled
     self.focused = raw.focused

@@ -140,6 +140,7 @@ extension SnapshotPresentation {
           label: raw.label,
           identifier: raw.identifier,
           value: raw.value,
+          placeholder: raw.placeholder,
           rect: raw.rect,
           enabled: raw.enabled,
           focused: raw.focused,

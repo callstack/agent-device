@@ -16,6 +16,7 @@ const ATTRIBUTE = Object.freeze({
   elementBaseType: 'XC_kAXXCAttributeElementBaseType',
   label: 'XC_kAXXCAttributeLabel',
   value: 'XC_kAXXCAttributeValue',
+  placeholder: 'XC_kAXXCAttributePlaceholderValue',
   identifier: 'XC_kAXXCAttributeIdentifier',
   frame: 'XC_kAXXCAttributeFrame',
   automationType: 'XC_kAXXCAttributeAutomationType',
@@ -260,6 +261,9 @@ function nodeFacts(
       : {}),
     ...(optionalScalar(value[ATTRIBUTE.value])
       ? { value: optionalScalar(value[ATTRIBUTE.value]) }
+      : {}),
+    ...(optionalString(value[ATTRIBUTE.placeholder])
+      ? { placeholder: optionalString(value[ATTRIBUTE.placeholder]) }
       : {}),
     ...(optionalString(value[ATTRIBUTE.identifier])
       ? { identifier: optionalString(value[ATTRIBUTE.identifier]) }

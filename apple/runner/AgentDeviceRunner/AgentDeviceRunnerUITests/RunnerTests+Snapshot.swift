@@ -35,6 +35,7 @@ extension RunnerTests {
     let label: String
     let identifier: String
     let valueText: String?
+    let placeholder: String?
     let focused: Bool
     let selected: Bool
   }
@@ -500,6 +501,7 @@ extension RunnerTests {
           label: candidate.label,
           identifier: candidate.identifier,
           value: candidate.value,
+          placeholder: candidate.placeholder,
           rect: candidate.rect,
           enabled: candidate.enabled,
           focused: candidate.focused,

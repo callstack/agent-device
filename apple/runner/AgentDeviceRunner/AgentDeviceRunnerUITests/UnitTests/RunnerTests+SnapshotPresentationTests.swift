@@ -12,6 +12,7 @@ extension RunnerTests {
       label: "Continue",
       identifier: "continue-button",
       value: "Ready",
+      placeholder: "Type here",
       rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
       enabled: true,
       focused: true,
@@ -54,7 +55,7 @@ extension RunnerTests {
 
     XCTAssertEqual(
       String(decoding: encoded, as: UTF8.self),
-      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
+      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"placeholder":"Type here","rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
     )
     XCTAssertEqual(capture.truncated, true)
     XCTAssertEqual(capture.effectiveDepth, 4)

@@ -117,6 +117,29 @@ extension RunnerTests {
     )
   }
 
+  /// The private-AX reader hands over `placeholderValue` beside `value`; the acquisition publishes
+  /// it on the node and reads an empty one as no placeholder, the way every other producer does.
+  func testPrivateAXAcquisitionCarriesTheFieldPlaceholder() {
+    let frame = Self.privateAXFrame
+    let nodes = privateAXNormalizedAcquisition(
+      rawRoot: [
+        "type": Int(XCUIElement.ElementType.application.rawValue), "frame": frame(0, 0, 402, 874),
+        "children": [
+          ["type": Int(XCUIElement.ElementType.textField.rawValue), "value": "Type your name",
+            "placeholder": "Type your name", "frame": frame(16, 200, 370, 44), "children": []],
+          ["type": Int(XCUIElement.ElementType.button.rawValue), "label": "Save",
+            "placeholder": "", "frame": frame(16, 300, 370, 44), "children": []]
+        ]
+      ],
+      hint: CaptureHint(
+        projection: .raw, depth: nil, regularPresentedDepth: nil,
+        interactiveOnly: false, customActions: false),
+      viewport: CGRect(x: 0, y: 0, width: 402, height: 874),
+      interfaceOrientation: RunnerInterfaceOrientation.portrait)
+
+    XCTAssertEqual(nodes.map(\.placeholder), [nil, "Type your name", nil])
+  }
+
   func testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint() throws {
     let nodes = try privateAXRegularPresentation(
       rawRoot: Self.privateAXScrolledFixture,

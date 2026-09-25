@@ -8,6 +8,7 @@ struct PrivateAXFields {
   let label: String
   let identifier: String
   let value: String
+  let placeholder: String
   let rawType: Int
   let elementType: XCUIElement.ElementType?
   let enabled: Bool
@@ -52,6 +53,7 @@ extension RunnerTests {
       label: privateAXPresentationString(raw["label"]),
       identifier: privateAXPresentationString(raw["identifier"]),
       value: privateAXPresentationString(raw["value"]),
+      placeholder: privateAXPresentationString(raw["placeholder"]),
       rawType: rawType,
       elementType: privateAXElementType(rawElementType: rawType),
       enabled: privateAXPresentationBool(raw["enabled"]) ?? true,
@@ -70,6 +72,7 @@ extension RunnerTests {
       label: fields.label.isEmpty ? nil : fields.label,
       identifier: fields.identifier.isEmpty ? nil : fields.identifier,
       value: fields.value.isEmpty ? nil : fields.value,
+      placeholder: fields.placeholder.isEmpty ? nil : fields.placeholder,
       rect: SnapshotRect(fields.rect), enabled: fields.enabled,
       focused: fields.focused, selected: fields.selected,
       hittable: false,

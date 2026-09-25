@@ -189,6 +189,7 @@ extension RunnerTests {
       label: label,
       identifier: identifier,
       valueText: valueText,
+      placeholder: placeholderText(snapshot.placeholderValue),
       focused: snapshotHasFocus(snapshot),
       selected: snapshotIsSelected(snapshot)
     )
@@ -209,6 +210,7 @@ extension RunnerTests {
       label: evaluation.label.isEmpty ? nil : evaluation.label,
       identifier: evaluation.identifier.isEmpty ? nil : evaluation.identifier,
       value: evaluation.valueText,
+      placeholder: evaluation.placeholder,
       rect: SnapshotRect(snapshot.frame),
       enabled: snapshot.isEnabled,
       focused: evaluation.focused ? true : nil,
@@ -232,6 +234,14 @@ extension RunnerTests {
   private func snapshotValueText(_ snapshot: XCUIElementSnapshot) -> String? {
     guard let value = snapshot.value else { return nil }
     let text = String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+
+  /// The placeholder as the node publishes it: XCTest answers `placeholderValue` for a text field
+  /// whether or not the field is empty, and an empty string for everything else, which reads as
+  /// no placeholder. The private-AX bridge asks the AX server the same attribute.
+  func placeholderText(_ placeholderValue: String?) -> String? {
+    let text = placeholderValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     return text.isEmpty ? nil : text
   }
 
@@ -341,6 +351,7 @@ extension RunnerTests {
         label: node.label,
         identifier: node.identifier,
         value: node.value,
+        placeholder: node.placeholder,
         rect: node.rect,
         enabled: node.enabled,
         focused: node.focused,
@@ -395,6 +406,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
+        placeholder: placeholderText(element.placeholderValue),
         rect: SnapshotRect(frame),
         enabled: element.isEnabled,
         focused: elementHasFocus(element) ? true : nil,
@@ -558,6 +570,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
+        placeholder: placeholderText(element.placeholderValue),
         rect: SnapshotRect(frame),
         enabled: enabled,
         focused: elementHasFocus(element) ? true : nil,

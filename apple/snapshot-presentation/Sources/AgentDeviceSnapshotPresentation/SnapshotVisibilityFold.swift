@@ -199,6 +199,7 @@ public enum SnapshotVisibilityFold {
               label: node.label,
               identifier: node.identifier,
               value: node.value,
+              placeholder: node.placeholder,
               rect: node.rect,
               enabled: node.enabled,
               focused: node.focused,

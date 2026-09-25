@@ -18,7 +18,7 @@
 NSString *const kProtocolVersionKey = @"protocolVersion";
 NSString *const kSourceVersionKey = @"sourceVersion";
 NSString *const kRequestIdKey = @"requestId";
-NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.7.0";
+NSString *const kSourceVersion = @"agent-device-simulator-ax-v1.8.0";
 const NSUInteger kProtocolVersion = 1;
 const uint32_t kMaximumFrameBytes = 16 * 1024 * 1024;
 const NSUInteger kMaximumDepth = 128;
@@ -29,6 +29,7 @@ static NSString *const kAttributeElementType = @"XC_kAXXCAttributeElementType";
 static NSString *const kAttributeElementBaseType = @"XC_kAXXCAttributeElementBaseType";
 static NSString *const kAttributeLabel = @"XC_kAXXCAttributeLabel";
 static NSString *const kAttributeValue = @"XC_kAXXCAttributeValue";
+static NSString *const kAttributePlaceholderValue = @"XC_kAXXCAttributePlaceholderValue";
 static NSString *const kAttributeIdentifier = @"XC_kAXXCAttributeIdentifier";
 static NSString *const kAttributeFrame = @"XC_kAXXCAttributeFrame";
 static NSString *const kAttributeAutomationType = @"XC_kAXXCAttributeAutomationType";
@@ -330,6 +331,7 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
     kAttributeElementBaseType,
     kAttributeLabel,
     kAttributeValue,
+    kAttributePlaceholderValue,
     kAttributeIdentifier,
     kAttributeFrame,
     kAttributeAutomationType,
