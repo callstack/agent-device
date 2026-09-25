@@ -141,13 +141,11 @@ extension RunnerTests {
     }
   }
 
-  /// A `.noApp` command owes both of the merge-base's answers. Nothing about this policy is a promise
-  /// to ignore what is on screen: the merge-base consulted `presentedSystemSurfaceHost()` before the
-  /// lifecycle branch, so `screenshot`, `status`, and `uptime` were served a registered host in place
-  /// (#2438), and with nothing presented they were served the standing cached target rather than a
-  /// target resolved from the request. The policy axis dropped both. The request deliberately names a
-  /// bundle the session never bound, which is the only shape that tells the standing target apart from
-  /// one resolved from the request: both would name the cached app when the request agrees with it.
+  /// `.noApp` owes both of the merge-base's answers: a registered host presented over the session is
+  /// served in place (#2438), and with nothing presented the standing cached target is served rather
+  /// than a target resolved from the request. The policy axis dropped both. The request names a bundle
+  /// the session never bound because that is the only shape separating the two targets — when the
+  /// request agrees with the cache, both answers name the same app.
   func testNoAppCommandStillServesAPresentedSurfaceInPlaceAndOtherwiseTheStandingTarget() throws {
     let cachedBundleId = "com.example.session"
     let requestedBundleId = "com.example.requested-but-never-bound"
