@@ -8,10 +8,11 @@ import { AppError } from '@agent-device/kernel/errors';
  * licenses a fallback, and the command then answers from stale data precisely because the
  * runtime lied about itself (ADR 0019 §2).
  *
- * Deliberately its own module rather than an export of `platform-runtime.ts`: the façade
- * re-exports that module and must stay exhaustive over it, which would make this a public
- * symbol with no external consumer — the unused-export defect. Here it stays internal to
- * `packages/contracts` and both runtime modules share one construction.
+ * Deliberately its own module rather than an export of `platform-runtime.ts`: that façade must stay
+ * exhaustive over its sources and keep its eager closure at budget, so it carries no leaf value
+ * symbol nobody in `contracts` consumes. This module stays a subpath of its own and imports nothing
+ * else from `contracts`, so a platform package whose facts advertised an operation its interactor
+ * cannot perform builds the same failure here instead of restating the code, reason, and hint.
  */
 export function invalidRuntimeContract(message: string): AppError {
   return new AppError('COMMAND_FAILED', message, {

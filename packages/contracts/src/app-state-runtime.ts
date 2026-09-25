@@ -1,6 +1,5 @@
 import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
-
-export type { AppleApplicationState } from '@agent-device/kernel/snapshot';
+import type { LocalInteractorOperationResolver } from './interactor-operation-binding.ts';
 
 /** Which app a session-scoped read is about; the Android foreground read needs nothing. */
 export type AppStateRuntimeInput = Readonly<{ appBundleId?: string }>;
@@ -20,3 +19,6 @@ export type AppStateRuntimeResult = Readonly<{
 export type AppStateRuntimeOperations = Readonly<{
   appState(input?: AppStateRuntimeInput): Promise<AppStateRuntimeResult>;
 }>;
+
+/** Resolves the selected owner's interactor, as every other local interactor-backed read does. */
+export type AppStateInteractorResolver = LocalInteractorOperationResolver;

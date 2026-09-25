@@ -1,4 +1,4 @@
-import type { AppleApplicationState } from './app-state-runtime.ts';
+import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import type { SessionSurface } from './session-surface.ts';
 
 /**

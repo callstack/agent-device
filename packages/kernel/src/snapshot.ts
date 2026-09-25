@@ -471,32 +471,37 @@ export function isIosTargetActivationReason(value: unknown): value is IosTargetA
 }
 
 /**
- * States an activation could have been needed for, in `XCApplicationState` raw order: unknown 0,
- * notRunning 1, suspended 2, plain background 3 — the SDK declares suspended on non-macOS platforms
- * only. `runningForeground` is excluded because the runner skips `activate()` when the app is already
- * foreground and never stamps a fact there. The decoder, which assigns raw values, is what keeps this
- * order honest.
+ * How XCTest reports an app running (`XCUIApplication.State`), in the SDK's raw order: unknown 0,
+ * notRunning 1, suspended 2, plain background 3, foreground 4 — the SDK declares suspended on
+ * non-macOS platforms only. This is the one declaration of those names; the `appState` runner
+ * command answers the session app's state with them, and `RunnerTests+ApplicationStateRawValueTests`
+ * ties them to the SDK enum. The `appState` path names states, so nothing here assigns a raw value;
+ * only the activation decoder's raw table does.
  */
-export const IOS_TARGET_ACTIVATION_PRIOR_STATES = [
+export const APPLE_APPLICATION_STATES = [
   'unknown',
   'notRunning',
   'runningBackgroundSuspended',
   'runningBackground',
-] as const;
-
-export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_STATES)[number];
-
-/**
- * How XCTest reports an app running (`XCUIApplication.State`): the prior states above plus the
- * foreground state the activation disclosure never carries. The `appState` runner command names
- * the session app's state with these words.
- */
-export const APPLE_APPLICATION_STATES = [
-  ...IOS_TARGET_ACTIVATION_PRIOR_STATES,
   'runningForeground',
 ] as const;
 
 export type AppleApplicationState = (typeof APPLE_APPLICATION_STATES)[number];
+
+/**
+ * States an activation could have been needed for: every Apple state except the foreground one,
+ * which the runner skips `activate()` in and therefore stamps no fact about. Derived from the full
+ * list so the two cannot drift, and in the SDK's raw order — a state added to the full list lands
+ * here and must then be pinned natively before the decoder tie accepts it.
+ */
+export const IOS_TARGET_ACTIVATION_PRIOR_STATES = Object.freeze(
+  APPLE_APPLICATION_STATES.filter(
+    (state): state is Exclude<AppleApplicationState, 'runningForeground'> =>
+      state !== 'runningForeground',
+  ),
+);
+
+export type IosTargetActivationPriorState = (typeof IOS_TARGET_ACTIVATION_PRIOR_STATES)[number];
 
 export function isAppleApplicationState(value: unknown): value is AppleApplicationState {
   return (

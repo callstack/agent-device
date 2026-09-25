@@ -16,7 +16,7 @@ import {
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { AppleApplicationState } from '@agent-device/contracts/app-state-runtime';
+import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   hasExplicitSessionFlag,

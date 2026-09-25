@@ -1,18 +1,12 @@
 import type {
+  AppStateInteractorResolver,
   AppStateRuntimeInput,
   AppStateRuntimeOperations,
   AppStateRuntimeResult,
 } from '@agent-device/contracts/app-state-runtime';
-import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
+import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
-
-/** Resolves the selected owner's interactor, exactly as the element text runtime does. */
-export type AppStateInteractorResolver = (
-  device: DeviceInfo,
-  runner: RunnerContext,
-) => Promise<Interactor>;
 
 /**
  * Binds the runner's read of the session app's state for the lifetime of a request binding, on the
@@ -40,13 +34,8 @@ export function bindAppleAppStateRuntime(
       if (typeof interactor.appState !== 'function') {
         // Facts advertised the read but the interactor cannot perform it: a contract bug (ADR 0019
         // §2), not a refusal, so nothing upstream may answer from the session record instead.
-        throw new AppError(
-          'COMMAND_FAILED',
+        throw invalidRuntimeContract(
           'Runtime owner advertised appState without an interactor implementation',
-          {
-            reason: 'runtime-contract-invalid',
-            hint: 'This is an agent-device runtime contract bug; report the selected device and command.',
-          },
         );
       }
       return await interactor.appState();

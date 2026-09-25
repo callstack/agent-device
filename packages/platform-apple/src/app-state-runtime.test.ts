@@ -13,9 +13,10 @@ const device: DeviceInfo = {
   booted: true,
 };
 
-function bind(liveRunner: boolean) {
+function bind(liveRunner: boolean, interactor?: Interactor) {
   const appState = vi.fn(async () => ({ applicationState: 'runningBackground' as const }));
-  const resolveInteractor = vi.fn(async () => ({ appState }) as unknown as Interactor);
+  const resolved: Interactor = interactor ?? ({ appState } as unknown as Interactor);
+  const resolveInteractor = vi.fn(async () => resolved);
   const hasLiveRunnerSession = vi.fn(async () => liveRunner);
   const operations = bindAppleAppStateRuntime(
     { appleApplications: { hasLiveRunnerSession } as never },
@@ -42,4 +43,20 @@ test('without a live runner session the read answers nothing and resolves no int
   await expect(operations.appState({ appBundleId: 'com.example.app' })).resolves.toEqual({});
   expect(hasLiveRunnerSession).toHaveBeenCalledWith(device, {});
   expect(resolveInteractor).not.toHaveBeenCalled();
+});
+
+/**
+ * The facts promised `appState` and the interactor has none. Answering from the session record
+ * instead would invent a state the runner never read, so this fails as the contract bug it is
+ * (ADR 0019 §2) rather than degrading, and the typed reason is what keeps it outside every
+ * closed reason set that licenses a fallback.
+ */
+test('an advertised appState with no interactor implementation fails as a contract bug', async () => {
+  // An interactor with NO appState — the mismatch the facts promised away.
+  const { operations } = bind(true, {} as unknown as Interactor);
+  await expect(operations.appState({ appBundleId: 'com.example.app' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('advertised appState'),
+    details: { reason: 'runtime-contract-invalid' },
+  });
 });
