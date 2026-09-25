@@ -85,8 +85,7 @@ export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
       params.device.kind === 'simulator' &&
       !params.shutdownRequested &&
       !params.hasScreenRecording &&
-      !params.hasLease &&
-      !params.device.simulatorSetPath
+      !params.hasLease
     );
   },
 });
