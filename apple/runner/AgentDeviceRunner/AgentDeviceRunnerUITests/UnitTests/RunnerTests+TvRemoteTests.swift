@@ -39,6 +39,10 @@ extension RunnerTests {
       focusBool(KeyboardFocusOnlyFixture()),
       "an object that exposes no hasFocus key at all still reports its keyboard focus"
     )
+    XCTAssertTrue(
+      focusBool(NativeFocusOnlyFixture()),
+      "an object that exposes no hasKeyboardFocus key at all still reports the focus engine's focus"
+    )
     XCTAssertFalse(focusBool(NSObject()), "an object with neither key reads as unfocused, not as an exception")
   }
 }
@@ -56,5 +60,9 @@ private final class FocusFixture: NSObject {
 
 private final class KeyboardFocusOnlyFixture: NSObject {
   @objc let hasKeyboardFocus: NSNumber = true
+}
+
+private final class NativeFocusOnlyFixture: NSObject {
+  @objc let hasFocus: NSNumber = true
 }
 #endif
