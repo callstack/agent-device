@@ -57,8 +57,10 @@ enum CommandLaunchPolicy: Equatable {
   case presentedSurface
   /// Refuses with `APP_NOT_RUNNING` rather than starting a stopped app, because `activate()` on a
   /// not-running app is a bare launch (#2852). The refusal is about a session app, so it answers an
-  /// explicitly requested bundle id on the platform that can read that app's state; a request naming
-  /// no app has no session app to refuse.
+  /// explicitly requested bundle id; a request naming no app has no session app to refuse. It is
+  /// enforced on iOS only: `notRunningRefusal` is `#if os(iOS)`, the platform that can read an app's
+  /// state without launching it. Off iOS these commands keep the activation route they had before
+  /// this axis existed, and no refusal can occur there.
   case existingApp
   /// Brings the app forward, which bare-launches it when it is not running.
   case mayLaunch
@@ -129,7 +131,8 @@ fileprivate extension CommandTraits {
 
   /// Selector resolution is an observation: it refuses a stopped app instead of bare-launching it,
   /// and the runner still must not replay it after session invalidation. Those are two facts about
-  /// one command, which is why they are two declarations (#2890).
+  /// one command, which is why they are two declarations (#2890). The refusal is the iOS-enforced
+  /// half: off iOS a selector read of a stopped app still activates it, as it did before this axis.
   static let selectorResolution = CommandTraits(
     launchPolicy: .existingApp,
     convertsRecordedFailure: true
