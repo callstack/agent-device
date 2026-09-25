@@ -773,7 +773,7 @@ agent-device apps --platform android --all
 ```
 
 - Android `appstate` reports live foreground package/activity.
-- iOS `appstate` is unavailable: the Apple target answers no sessionless foreground probe, and a session-scoped guess about the foreground is not a fact. The per-command answer arrives as the [`targetActivation` disclosure](#foreground-repairs-on-ios), and the refusal's hint says so.
+- iOS `appstate` needs a session and answers about that session's app: `appName` and `appBundleId` from the session record, and `state` from a live runner, which reads the app's `XCUIApplication` state (`runningForeground`, `runningBackground`, `runningBackgroundSuspended`, `notRunning`, `unknown`) with `source: runner`. After `home` the app reports a background state (`runningBackground` or `runningBackgroundSuspended`); which app took the screen is not read, since no Apple target answers a sessionless foreground probe. The read never starts a runner: when none is live, or the runner cannot answer, the record alone does, with `source: session` and no `state`. A command that had to bring the app back reports that as the [`targetActivation` disclosure](#foreground-repairs-on-ios).
 - `apps` shows user-installed apps by default. Use `--all` when you need the full inventory, including system/OEM apps.
 
 ## Foreground repairs on iOS
