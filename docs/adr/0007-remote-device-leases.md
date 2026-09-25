@@ -67,6 +67,24 @@ one minute, while a cloud WebDriver connection profile asks for ten. A single co
 longer than its own lease is therefore ordinary on the default and only reachable through a profile
 on the longer one.
 
+## Client-side work that precedes admission
+
+Protecting admitted work covers nothing that happens before a request is admitted. Installing an
+artifact uploads it from the caller while the request that will consume it has not been admitted yet,
+so an upload slower than the lease's inactivity window expired the lease paying for the device the
+bytes were going to (#2946). The caller therefore beats the lease over the ordinary transport for as
+long as that phase runs, naming the lease scope exactly as the command named it and no payload of its
+own. An install names no window, so its beats renew for the window the lease already carries; a
+caller that did name one keeps renewing on it. Resolving an absent window to the registry default
+instead — which is what a heartbeat used to do — quietly shortened every lease allocated above that
+default, which is the other half of why the upload could not survive.
+
+A beat is a fresh request each time, never the protected request rewritten: a request identity is
+what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
+that finds the lease gone ends the phase with that lease error rather than finishing the upload
+against a device nobody owns. A beat that fails for any other reason is reported and survived, because
+a later beat covers one lost request.
+
 ## Human control
 
 Human-control holds coexist with an open remote session. They belong to `LeaseRegistry` and use
