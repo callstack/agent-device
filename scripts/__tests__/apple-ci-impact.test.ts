@@ -9,10 +9,10 @@ import { selectChecks } from '../check-affected/model.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-function cacheInputs(action: string): string[] {
+function cacheInputs(action: string, stepId = 'source-hash'): string[] {
   const doc = parse(action) as { runs?: { steps?: Array<{ id?: string; run?: string }> } };
-  const sourceHash = doc.runs?.steps?.find((step) => step.id === 'source-hash')?.run ?? '';
-  const expressions = [...sourceHash.matchAll(/hashFiles\(([\s\S]*?)\)/g)];
+  const hashStep = doc.runs?.steps?.find((step) => step.id === stepId)?.run ?? '';
+  const expressions = [...hashStep.matchAll(/hashFiles\(([\s\S]*?)\)/g)];
   expect(expressions.length).toBeGreaterThan(0);
   return expressions.flatMap((expression) =>
     [...expression[1]!.matchAll(/'([^']+)'/g)].map((match) => match[1]!),
@@ -64,6 +64,7 @@ test('native runner build-cache inputs trigger the PR XCTest lane', () => {
 });
 
 type AppleRunnerBuildStep = {
+  id?: string;
   name?: string;
   env?: Record<string, string>;
   if?: string;
@@ -82,14 +83,19 @@ function appleRunnerBuildAction(): { text: string; steps: AppleRunnerBuildStep[]
   return { text: action, steps: doc.runs.steps };
 }
 
-test('Apple runner build cache restores a compatible native schema', () => {
+test('Apple runner build cache uses only declared source and schema hashes', () => {
   const { text, steps } = appleRunnerBuildAction();
   const restoreIndex = steps.findIndex((step) => step.name === 'Restore Apple runner build cache');
-  const schema = steps.find((step) => step.name === 'Resolve Apple runner cache schema');
-  expect(schema?.run).toContain("hashFiles('.github/actions/setup-apple-runner-build/action.yml'");
-  expect(schema?.run).toContain('scripts/build-xcuitest-apple.sh');
+  expect(steps.filter((step) => step.run?.includes('hashFiles(')).map((step) => step.id)).toEqual([
+    'source-hash',
+    'cache-schema',
+  ]);
+  expect(cacheInputs(text, 'cache-schema')).toEqual([
+    '.github/actions/setup-apple-runner-build/action.yml',
+    'scripts/build-xcuitest-apple.sh',
+  ]);
   expect(steps[restoreIndex]?.with?.key).toContain('steps.cache-schema.outputs.value');
-  expect(steps[restoreIndex]?.with?.['restore-keys']).toContain('steps.cache-schema.outputs.value');
+  expect(steps[restoreIndex]?.with?.['restore-keys']).toBeUndefined();
   expect(cacheInputs(text)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
 });
 

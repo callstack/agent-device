@@ -1,5 +1,5 @@
 name: 'Set Up Apple Runner Build'
-description: 'Restore a compatible Apple runner build and verify it with Xcode'
+description: 'Restore an exact Apple runner build and verify it with Xcode'
 
 inputs:
   derived-path:
@@ -86,8 +86,6 @@ runs:
       with:
         path: ${{ inputs.derived-path }}
         key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.cache-schema.outputs.value }}-${{ steps.source-hash.outputs.value }}
-        restore-keys: |
-          ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.cache-schema.outputs.value }}-
 
     - name: Verify Apple runner artifacts with Xcode
       uses: ./.github/actions/run-gate
@@ -114,14 +112,11 @@ runs:
       env:
         CACHE_HIT: ${{ steps.restore-runner-build.outputs.cache-hit }}
         CACHE_KEY: ${{ steps.restore-runner-build.outputs.cache-primary-key }}
-        CACHE_MATCHED_KEY: ${{ steps.restore-runner-build.outputs.cache-matched-key }}
         BUILD_GATE: ${{ inputs.gate }}
       run: |
         set -euo pipefail
         if [ "$CACHE_HIT" = 'true' ]; then
           RESULT='restored exact native build; verified incrementally with Xcode; icon patch applied'
-        elif [ -n "$CACHE_MATCHED_KEY" ]; then
-          RESULT='restored compatible native build; rebuilt incrementally with Xcode; cached current build; icon patch applied'
         else
           RESULT='cache miss; built and cached native runner; icon patch applied'
         fi
