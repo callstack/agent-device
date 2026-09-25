@@ -8,7 +8,7 @@ export const INTERACTION_ERROR_REASONS = {
    * of matching the message.
    */
   refNotFound: 'ref_not_found',
-  /** An `@ref` resolves to a node with no label to read, wait on, or scope by; the tree is fresh. */
+  /** An `@ref` names a listed node with no label to wait on or scope by; the tree is fresh. */
   refUnlabeled: 'ref_unlabeled',
   /** The target names a node with no usable centre to touch: a missing, non-finite, or negative rect. */
   targetBoundsInvalid: 'target_bounds_invalid',

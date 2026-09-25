@@ -110,7 +110,7 @@ test('runtime get on a ref the stored tree no longer lists refuses with ref_not_
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
-      assert.deepEqual(error.details, { reason: 'ref_not_found', ref: 'e9' });
+      assert.deepEqual(error.details, { reason: 'ref_not_found', ref: 'e9', hint: STALE_REF_HINT });
       return true;
     },
   );

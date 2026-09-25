@@ -165,8 +165,8 @@ this week's bugs, kept permanently:
 - closed drawer (all candidates off-screen) → `offscreen_selector`/`offscreen_ref`;
 - stale or unknown `@ref` (errorTaxonomy) → `ref_not_found` beside the stale-ref hint; a listed
   `@ref` whose node has no usable centre (missing, non-finite, or negative bounds), or a selector
-  target without one → `target_bounds_invalid`; a listed `@ref` with no label to read, wait on, or
-  scope by → `ref_unlabeled`;
+  target without one → `target_bounds_invalid`; a listed `@ref` with no label to wait on or scope
+  by → `ref_unlabeled`;
 - drawer item + visible twin (ambiguous on/off-screen) → visible candidate wins;
 - edge-grazing container (0.07 px viewport overlap, center off-screen) → still refused;
 - covered node → occlusion refusal;

@@ -556,18 +556,48 @@ test('tryResolveRefNode discloses exact for a resolved ref and label-fallback fo
   const nodes = selectorSnapshot().nodes;
 
   const exact = tryResolveRefNode(nodes, '@e1', { fallbackLabel: '' });
-  assert.equal(exact?.node.label, 'Continue');
-  assert.deepEqual(exact?.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
+  assert.equal(exact.kind, 'resolved');
+  if (exact.kind !== 'resolved') throw new Error('unreachable');
+  assert.equal(exact.resolved.node.label, 'Continue');
+  assert.deepEqual(exact.resolved.resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'exact',
+  });
 
   const recovered = tryResolveRefNode(nodes, '@e9', { fallbackLabel: 'Continue' });
-  assert.equal(recovered?.node.label, 'Continue');
-  assert.deepEqual(recovered?.resolution, {
+  assert.equal(recovered.kind, 'resolved');
+  if (recovered.kind !== 'resolved') throw new Error('unreachable');
+  assert.equal(recovered.resolved.node.label, 'Continue');
+  assert.deepEqual(recovered.resolved.resolution, {
     source: 'ref',
     phase: 'pre-action',
     kind: 'label-fallback',
   });
 
-  assert.equal(tryResolveRefNode(nodes, '@e9', { fallbackLabel: '' }), null);
+  assert.deepEqual(tryResolveRefNode(nodes, '@e9', { fallbackLabel: '' }), { kind: 'missing' });
+});
+
+test('tryResolveRefNode tells a listed node without a usable centre from a missing one', () => {
+  const unusable = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Button', label: 'Continue', hittable: true },
+  ]).nodes;
+
+  const byRef = tryResolveRefNode(unusable, '@e1', { fallbackLabel: '' });
+  assert.equal(byRef.kind, 'unusable');
+  if (byRef.kind !== 'unusable') throw new Error('unreachable');
+  assert.equal(byRef.node.label, 'Continue');
+
+  const byLabel = tryResolveRefNode(unusable, '@e9', { fallbackLabel: 'Continue' });
+  assert.equal(
+    byLabel.kind,
+    'unusable',
+    'the trailing-label recovery found the node, so it is not missing',
+  );
+
+  assert.deepEqual(tryResolveRefNode(unusable, '@e9', { fallbackLabel: 'Elsewhere' }), {
+    kind: 'missing',
+  });
 });
 
 test('buildRefResolution is the shared exact and label-fallback disclosure constructor', () => {
