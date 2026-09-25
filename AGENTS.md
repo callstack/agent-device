@@ -12,7 +12,7 @@ Load only the procedures relevant to the task:
 | Domain vocabulary | `CONTEXT.md`, `docs/agents/domain.md` |
 | Architecture decisions | `docs/adr/README.md` |
 | Tests or gate selection | `docs/agents/testing.md` |
-| Writing, auditing, or sweeping tests; dispatching test-audit subagents | `docs/agents/test-audit.md`, `skills/test-audit/SKILL.md` |
+| Writing, auditing, or sweeping tests; dispatching test-audit subagents | `docs/agents/test-audit.md` |
 | Selector capture, polling, or interaction fast paths | `docs/agents/selector-capture.md` |
 | Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
 | Opening or reviewing a PR | `docs/agents/pull-requests.md` |
