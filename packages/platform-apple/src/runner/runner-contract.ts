@@ -157,6 +157,64 @@ export function resolveRunnerRequestSignal(options: {
   return AbortSignal.any([registeredSignal, options.signal]);
 }
 
+type RunnerRequestSignalOptions = {
+  requestId?: string;
+  signal?: AbortSignal;
+};
+
+/**
+ * Whether an abort reason is a caller's own deadline rather than a cancelled request. A `wait`
+ * bounds each poll with an abort signal whose reason is a `TimeoutError` (`runWithinWaitDeadline`);
+ * a cancelled request aborts through the registered request signal or the cancellation registry.
+ * The typed reason decides, never the error text the transport threw on abort.
+ */
+export function isCallerDeadlineAbortReason(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === 'TimeoutError';
+}
+
+/**
+ * Whether the caller's own deadline ended this command, as opposed to the request being cancelled.
+ * A deadline that lands mid-fetch (surfacing as whatever the transport threw on abort) is read the
+ * same way as one that wakes a delay.
+ */
+export function callerDeadlineExpired(options: RunnerRequestSignalOptions): boolean {
+  if (isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted) {
+    return false;
+  }
+  return options.signal?.aborted === true && isCallerDeadlineAbortReason(options.signal.reason);
+}
+
+/**
+ * The signal a runner start reacts to. A cancelled request (client disconnect) must kill the
+ * blocking xctestrun build and the runner launch instead of orphaning them, so the registered request
+ * signal passes through untouched. A caller's own deadline must not: the runner start it interrupts
+ * is the one the retry needs, and a start that pays itself again on every short-timeout poll never
+ * finishes on a slow host (#2894). The start keeps going on its own startup budget, and the caller's
+ * command is still cut off by its unfiltered signal once the runner answers.
+ */
+export function resolveRunnerStartupSignal(
+  options: RunnerRequestSignalOptions,
+): AbortSignal | undefined {
+  const registeredSignal = getRequestSignal(options.requestId);
+  const callerSignal = options.signal;
+  if (!callerSignal || callerSignal === registeredSignal) return registeredSignal;
+  const controller = new AbortController();
+  const forward = (signal: AbortSignal) => {
+    if (controller.signal.aborted) return;
+    if (isCallerDeadlineAbortReason(signal.reason)) return;
+    controller.abort(signal.reason);
+  };
+  for (const signal of [registeredSignal, callerSignal]) {
+    if (!signal) continue;
+    if (signal.aborted) {
+      forward(signal);
+      continue;
+    }
+    signal.addEventListener('abort', () => forward(signal), { once: true });
+  }
+  return controller.signal;
+}
+
 /**
  * The code the XCTest runner answers with when it declines to place a scroll gesture under the
  * on-screen keyboard (#2500). It is the runner's own vocabulary, so it is declared here beside the

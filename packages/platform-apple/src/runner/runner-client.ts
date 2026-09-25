@@ -1,4 +1,4 @@
-import { retryWithPolicy, emitDiagnostic, getRequestSignal, isRequestCanceled } from './host.ts';
+import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
@@ -9,6 +9,7 @@ import {
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
+  callerDeadlineExpired,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -55,21 +56,6 @@ const READ_ONLY_RESEND_POLICY = {
 function readOnlyResendBudget(error: unknown): number {
   if (isRunnerBusyError(error)) return RUNNER_BUSY_RESEND_ATTEMPTS;
   return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
-}
-
-/**
- * Whether the caller's own deadline ended this command, as opposed to the request being cancelled.
- * A `wait` bounds each poll with an abort signal whose reason is a `TimeoutError`
- * (`runWithinWaitDeadline`); a cancelled request aborts through the registered request signal or
- * the cancellation registry. The typed reason decides, so a deadline that lands mid-fetch (surfacing
- * as whatever the transport threw on abort) is read the same way as one that wakes a delay.
- */
-function callerDeadlineExpired(options: AppleRunnerCommandOptions): boolean {
-  if (isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted) {
-    return false;
-  }
-  const reason: unknown = options.signal?.aborted ? options.signal.reason : undefined;
-  return reason instanceof DOMException && reason.name === 'TimeoutError';
 }
 
 export async function runAppleRunnerCommand(

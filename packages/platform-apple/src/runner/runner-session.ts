@@ -35,7 +35,7 @@ import {
   decodeRunnerResponseBody,
   isRunnerResponseOk,
   readRunnerResponseData,
-  resolveRunnerRequestSignal,
+  resolveRunnerStartupSignal,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
@@ -138,14 +138,15 @@ export async function ensureRunnerSession(
   return await withRunnerSessionLock(device.id, async () => {
     // One budget for the whole startup phase, opened here from the request-level
     // `startupTimeoutMs`: the reuse check's toolchain probes, adoption and the startup
-    // itself all spend this one clock. The request's abort signal rides with it, so a
+    // itself all spend this one clock. The request's cancellation rides with it, so a
     // client disconnect kills the blocking xctestrun build and runner launch
-    // (killProcessTree via exec) instead of orphaning them. Request-scoped: only this
-    // request's device startup reacts, and a signal-less internal caller (shutdown)
-    // simply gets undefined.
+    // (killProcessTree via exec) instead of orphaning them; a caller's own deadline does
+    // not, so the start it interrupts is still there for the retry (#2894). Request-scoped:
+    // only this request's device startup reacts, and a signal-less internal caller
+    // (shutdown) simply gets undefined.
     const startupBudget = createRunnerPhaseBudget(
       options.startupTimeoutMs,
-      resolveRunnerRequestSignal(options),
+      resolveRunnerStartupSignal(options),
     );
     const existing = runnerSessions.get(device.id);
     if (existing) {
