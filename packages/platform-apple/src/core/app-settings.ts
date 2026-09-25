@@ -1,4 +1,5 @@
 import {
+  APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
   type MobilePermissionTarget,
   parseAppearanceAction,
@@ -9,7 +10,13 @@ import {
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleSimulator,
+  isIosFamily,
+  isMacOs,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import {
   AppError,
   summarizeCommandAttemptFailures,
@@ -141,6 +148,7 @@ export async function setIosSetting(
     }
     case 'faceid':
     case 'touchid': {
+      requireBiometricLeaf(device);
       const biometricSetting = normalized as IosBiometricSetting;
       const biometric = IOS_BIOMETRIC_SETTINGS[biometricSetting];
       const action = parseBiometricAction(state, biometricSetting);
@@ -418,22 +426,84 @@ async function runIosBiometricSimctlCommand(
     biometricNotifyutilArgs(device.id, action, options.notificationModality),
   );
   const result = await runXcrun(args, { allowFailure: true });
-  if (result.exitCode === 0) return;
-  const failure: CommandAttemptFailure = {
-    args,
-    stderr: result.stderr,
-    stdout: result.stdout,
-    exitCode: result.exitCode,
-  };
+  const failures: CommandAttemptFailure[] = [];
+  if (result.exitCode !== 0) {
+    failures.push({
+      args,
+      stderr: result.stderr,
+      stdout: result.stdout,
+      exitCode: result.exitCode,
+    });
+  } else {
+    const expected = enrollmentStateFor(action);
+    if (expected !== undefined) {
+      const readBack = await readBiometricEnrollmentState(device);
+      if (readBack.state === expected) return;
+      failures.push({
+        args: readBack.args,
+        stderr: readBack.stderr,
+        stdout: readBack.stdout,
+        exitCode: readBack.exitCode,
+      });
+    } else {
+      return;
+    }
+  }
   throw new AppError('COMMAND_FAILED', `Failed to simulate ${options.settingName}.`, {
     deviceId: device.id,
     action,
     setting: options.settingName,
-    attempts: summarizeCommandAttemptFailures([failure]),
+    attempts: summarizeCommandAttemptFailures(failures),
+  });
+}
+
+function requireBiometricLeaf(device: DeviceInfo): void {
+  if (isHandheldAppleSimulator(device)) return;
+  throw new AppError('UNSUPPORTED_OPERATION', APPLE_BIOMETRIC_LEAF_REFUSAL.message, {
+    deviceId: device.id,
+    appleOs: resolveDeviceAppleOs(device),
+    deviceKind: device.kind,
+    reason: APPLE_BIOMETRIC_LEAF_REFUSAL.reason,
+    hint: APPLE_BIOMETRIC_LEAF_REFUSAL.hint,
   });
 }
 
 const BIOMETRIC_ENROLLMENT_NOTIFICATION = 'com.apple.BiometricKit.enrollmentChanged';
+
+function enrollmentStateFor(action: IosBiometricAction): '1' | '0' | undefined {
+  if (action === 'enroll') return '1';
+  if (action === 'unenroll') return '0';
+  return undefined;
+}
+
+/**
+ * Reads the enrollment state BiometricKit holds after an enroll or unenroll post, so a post that
+ * exited 0 without landing is a failure rather than an "Updated setting". `notifyutil -g` answers
+ * `<name> <state>` on one line.
+ */
+async function readBiometricEnrollmentState(
+  device: DeviceInfo,
+): Promise<CommandAttemptFailure & { state: string | undefined }> {
+  const args = buildSimctlArgsForDevice(device, [
+    'spawn',
+    device.id,
+    'notifyutil',
+    '-g',
+    BIOMETRIC_ENROLLMENT_NOTIFICATION,
+  ]);
+  const result = await runXcrun(args, { allowFailure: true });
+  const state = result.stdout
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .find((parts) => parts[0] === BIOMETRIC_ENROLLMENT_NOTIFICATION)?.[1];
+  return {
+    args,
+    stderr: result.stderr,
+    stdout: result.stdout,
+    exitCode: result.exitCode,
+    state: result.exitCode === 0 ? state : undefined,
+  };
+}
 
 /**
  * The `simctl spawn <udid> notifyutil` argv for one biometric action; enrollment sets the state

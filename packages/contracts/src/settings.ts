@@ -235,6 +235,17 @@ export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
   reason: 'setting-unsupported-on-leaf',
 } as const);
 
+/**
+ * Simulator biometrics are driven through BiometricKit_Sim notifications, which only the iPhone and
+ * iPad simulator runtimes observe; a post on an Apple TV or Vision Pro simulator exits 0 and changes
+ * nothing, so the leaf is refused before anything is posted.
+ */
+export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
+  message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
+  hint: 'Run settings faceid|touchid against a booted iPhone or iPad simulator.',
+  reason: 'setting-unsupported-on-leaf',
+} as const);
+
 /** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
 function findVocabularyName<const TNames extends readonly string[]>(
   names: TNames,
