@@ -51,6 +51,8 @@ import type { SessionState } from './session-state.ts';
  * baseline is answered on the first capture, so a scroll that worked pays nothing extra; only a
  * surface that looks untouched keeps polling (a mid-flight or stale read is indistinguishable from a
  * no-op until it either moves or goes quiet), and only an untouched surface at rest is ever reported.
+ * The one exception is a baseline that already ended in the scrolled direction: there a differing
+ * first read is an overscroll bounce until it holds still (`baselineEndsInDirection`).
  *
  * Nothing is classified before the two trees are established to be two views of one screen, and that
  * gate runs on every capture rather than only on the quiet path. The deferred loop can adopt a new
@@ -68,6 +70,8 @@ export type ScrollSurfaceBaseline = Readonly<{
   signature: InteractionSurfaceSignature;
   presentationKey: string | undefined;
   comparisonKey: string | undefined;
+  /** The tree itself: whether the content already ended in the scrolled direction is asked of nodes. */
+  nodes: SnapshotState['nodes'];
 }>;
 
 /** Why there is nothing honest to compare this scroll's effect against. */
@@ -134,6 +138,7 @@ export function readScrollSurfaceBaseline(
     signature,
     presentationKey: snapshot.presentationKey,
     comparisonKey: snapshotSurfaceComparisonKey(snapshot),
+    nodes: snapshot.nodes,
   };
 }
 
@@ -254,26 +259,84 @@ async function pollForSurfaceVerdict(
   const deadline = startedAt + (params.budgetMs ?? MOVEMENT_VERDICT_BUDGET_MS);
   let previous: InteractionSurfaceSignature | undefined;
   let attempts = 0;
+  let changeNeedsRest: boolean | undefined;
 
   while (true) {
     const reading = await readOneCapture(baseline, params.capture);
     attempts += 1;
     if (reading.kind === 'blind') return { kind: 'blind', reason: reading.reason };
-    if (reading.kind === 'changed')
-      return { kind: 'moved', observed: reading.observed, attempts, startedAt };
-    if (surfaceIsAtRest(previous, reading.observed.signature)) {
-      return {
-        kind: 'settled',
-        observed: reading.observed,
-        evidence: reading.evidence,
-        attempts,
-        startedAt,
-      };
+    if (reading.kind === 'changed') {
+      changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction);
     }
+    const verdict = settledVerdict(reading, {
+      previous,
+      changeNeedsRest: changeNeedsRest === true,
+      attempts,
+      startedAt,
+    });
+    if (verdict) return verdict;
     if (Date.now() >= deadline) return budgetExpiredVerdict(params, attempts, startedAt);
     previous = reading.observed.signature;
     await sleep(params.pollMs ?? MOVEMENT_POLL_MS);
   }
+}
+
+/**
+ * The verdict one readable capture supports, or nothing yet. A changed surface is movement on sight
+ * unless the baseline already ended in that direction, where it must hold still first; an unchanged
+ * surface is settled only as the second of a quiet pair.
+ */
+function settledVerdict(
+  reading: Exclude<CaptureReading, { kind: 'blind' }>,
+  poll: {
+    previous: InteractionSurfaceSignature | undefined;
+    changeNeedsRest: boolean;
+    attempts: number;
+    startedAt: number;
+  },
+): SurfaceVerdict | undefined {
+  const atRest = surfaceIsAtRest(poll.previous, reading.observed.signature);
+  const { attempts, startedAt } = poll;
+  if (reading.kind === 'changed') {
+    if (!poll.changeNeedsRest || atRest) {
+      return { kind: 'moved', observed: reading.observed, attempts, startedAt };
+    }
+    return undefined;
+  }
+  if (!atRest) return undefined;
+  return {
+    kind: 'settled',
+    observed: reading.observed,
+    evidence: reading.evidence,
+    attempts,
+    startedAt,
+  };
+}
+
+/**
+ * Whether the pre-gesture tree already showed the end of the content in the scrolled direction. A
+ * scroll past that edge on iOS rubber-bands: the first capture lands mid-bounce with every row shifted
+ * by a few points and reads as `changed`, then the content springs back to exactly the baseline, which
+ * is what the next command's stabilization later observes as a stale-accept (#2884). So a change against
+ * a baseline that had nothing left to reveal is credited only once the surface holds still and still
+ * differs; a scroll whose baseline still hid content keeps paying one read.
+ */
+async function baselineEndsInDirection(
+  baseline: ScrollSurfaceBaseline,
+  direction: ScrollDirection,
+): Promise<boolean> {
+  const edge = verticalEdgeFor(direction);
+  if (!edge) return false;
+  const state = await readScrollEdgeState(baseline.nodes, edge);
+  const ends = state.containerRect !== undefined && !state.canScroll;
+  if (ends) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'scroll_movement_edge_rest_required',
+      data: { direction, containerRect: state.containerRect },
+    });
+  }
+  return ends;
 }
 
 /**

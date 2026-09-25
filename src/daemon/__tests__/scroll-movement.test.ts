@@ -177,6 +177,43 @@ test('a surface that no longer holds the pre-gesture content answers moved on th
   assert.equal(spy.calls(), 1);
 });
 
+/**
+ * At the end of a list iOS rubber-bands past the edge: the first capture lands mid-bounce with every row
+ * shifted, then the content springs back to exactly the pre-gesture tree (#2884). A baseline that already
+ * showed the end of the content turns that first read into a question, not a verdict.
+ */
+test('a bounce past the edge that springs back is at-edge, not moved', async () => {
+  const { observation, spy } = observe({
+    baseline: baselineOf(screen(0, false)),
+    screens: [screen(-14, false), screen(0, false), screen(0, false)],
+  });
+
+  assert.equal(await observation, 'at-edge');
+  assert.equal(spy.calls(), 3);
+});
+
+test('content that changes at the edge and holds still is still moved', async () => {
+  const { observation, spy } = observe({
+    baseline: baselineOf(screen(0, false)),
+    screens: [screen(-300, false), screen(-300, false)],
+  });
+
+  assert.equal(await observation, 'moved');
+  // The rest requirement costs exactly the one extra read, and only at the edge.
+  assert.equal(spy.calls(), 2);
+});
+
+test('a bounce that never settles at the edge spends the budget and answers unobserved', async () => {
+  const { observation } = observe({
+    baseline: baselineOf(screen(0, false)),
+    screens: (attempt) => screen(attempt % 2 === 0 ? -14 : 0, false),
+    budgetMs: 40,
+  });
+
+  assert.equal(await observation, 'unobserved');
+  assertWithheld('surface-unsettled');
+});
+
 test('a surface that never shifted while the container still hides content refuses with a typed reason', async () => {
   const { observation, spy } = observe({
     baseline: baselineOf(screen(0)),
