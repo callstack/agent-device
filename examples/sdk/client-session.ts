@@ -13,13 +13,17 @@
  * Run: node --experimental-strip-types examples/sdk/client-session.ts
  */
 import {
+  type AgentDeviceClient,
+  type AgentDeviceDevice,
   AppError,
   createAgentDeviceClient,
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from 'agent-device';
 
-async function resolveSnapshotCapableIosDevice(client: ReturnType<typeof createAgentDeviceClient>) {
+async function resolveSnapshotCapableIosDevice(
+  client: AgentDeviceClient,
+): Promise<AgentDeviceDevice> {
   const devices = await client.devices.list({ platform: 'ios' });
   const device = devices[0];
   if (!device) {

@@ -34,6 +34,11 @@ Supported public entry points for Node consumers:
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `centerOfRect(rect)`
+  - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, and every option and result type of
+    its methods (`AppOpenOptions`, `AppOpenResult`, `CaptureSnapshotOptions`,
+    `CaptureSnapshotResult`, `CaptureScreenshotResult`, `PressOptions`, `AgentDeviceDevice`, ...);
+    `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`; `AppErrorCode`,
+    `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`, `NormalizedError`
 - `agent-device/io`
   - `createLocalArtifactAdapter(options?)`
   - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
