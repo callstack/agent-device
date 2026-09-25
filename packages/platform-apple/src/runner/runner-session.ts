@@ -21,7 +21,6 @@ import { flushRunnerLogAppends, getFreePort, resolveRunnerLaunchLogPath } from '
 import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
-  acquireXcodebuildSimulatorSetRedirect,
   createRunnerPhaseBudget,
   ensureXctestrunArtifact,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
@@ -29,6 +28,7 @@ import {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
+  restoreLegacyXctestDeviceSetRedirect,
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
 import {
@@ -247,9 +247,6 @@ async function startRunnerSessionWithLease(
   let port: number;
   let xctestrunPath: string;
   let jsonPath: string;
-  let simulatorSetRedirect:
-    | Awaited<ReturnType<typeof acquireXcodebuildSimulatorSetRedirect>>
-    | undefined;
   const runnerLogPath = resolveRunnerLaunchLogPath(options.logPath, device.id);
   let runnerProcess: LaunchedRunnerProcess;
   // One catch for everything between here and a runner that answers, because the device's own answer
@@ -257,6 +254,7 @@ async function startRunnerSessionWithLease(
   // an external xctestrun that never launches are different steps, and a caller told "developer disk
   // image" should not have to know which one this run happened to take.
   try {
+    if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect();
     xctestrunArtifact = await measureRunnerStartupStep(
       startupTimings,
       'ensure_xctestrun',
@@ -283,11 +281,6 @@ async function startRunnerSessionWithLease(
           { iosXctestEnvDir: options.iosXctestEnvDir },
         ),
     ));
-    simulatorSetRedirect = await measureRunnerStartupStep(
-      startupTimings,
-      'simulator_set_redirect',
-      async () => await acquireXcodebuildSimulatorSetRedirect(device),
-    );
     if (xctestrunArtifact.buildMs > 0) {
       emitRequestProgress({
         type: 'command',
@@ -316,7 +309,6 @@ async function startRunnerSessionWithLease(
       },
     );
   } catch (error) {
-    await simulatorSetRedirect?.releaseBestEffort();
     throw enrichRunnerStartupFailureWithDeviceStates(error, deviceStates);
   }
   const sessionId = buildRunnerSessionId(device.id, port);
@@ -350,7 +342,6 @@ async function startRunnerSessionWithLease(
     startupTimings,
     startupDeviceStates: deviceStates,
     logicalLeaseContext,
-    simulatorSetRedirect: simulatorSetRedirect ?? undefined,
     lease,
     speculative: options.speculative === true,
   };
@@ -718,7 +709,6 @@ export async function abortAllIosRunnerSessions(): Promise<void> {
 type RunnerDetachSkippedReason =
   | RunnerHandoffRefusal
   | RunnerDetachRefusal
-  | 'simulator_set_redirect'
   | 'lease_absent'
   | 'runner_process_dead'
   | 'lease_write_failed';
@@ -733,9 +723,8 @@ type RunnerDetachSkippedReason =
 // Every gate that keeps a session on the kill path is named and reported, because a handoff that
 // silently declines is indistinguishable from a rebuild: the handoff lanes
 // (`resolveRunnerHandoffTarget`), a session that never served a command, still owes a response, or
-// last reported main-thread work still draining (`resolveRunnerDetachDecision`), a scoped
-// simulator-set redirect, a missing or unwritable lease, and a runner this process cannot prove
-// alive. What stays in the map is torn down by `stopAllIosRunnerSessions`, which the daemon's
+// last reported main-thread work still draining (`resolveRunnerDetachDecision`), a missing or
+// unwritable lease, and a runner this process cannot prove alive. What stays in the map is torn down by `stopAllIosRunnerSessions`, which the daemon's
 // shutdown runs right after this — so a shutdown during a startup tears that runner down rather than
 // handing off one that never reached its listener (#2681).
 export async function detachIosRunnerSessionsForShutdown(): Promise<number> {
@@ -786,13 +775,6 @@ function detachRunnerSessionForShutdown(
     return { detached: false, lane: undefined, reason: target.reason };
   }
   const lane = target.lane;
-  // CONSERVATIVE: Scoped simulator sets depend on the global XCTestDevices symlink for their
-  // whole runner lifetime; handoff could restore the symlink under a live runner or leak the
-  // redirect lock. Reachable only in the simulator lane — `acquireXcodebuildSimulatorSetRedirect`
-  // returns no handle for any non-simulator — so a physical handoff never waits on it.
-  if (session.simulatorSetRedirect) {
-    return { detached: false, lane, reason: 'simulator_set_redirect' };
-  }
   const decision = resolveRunnerDetachDecision(session);
   if (!decision.detach) {
     return { detached: false, lane, reason: decision.reason };

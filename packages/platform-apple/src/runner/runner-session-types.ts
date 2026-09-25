@@ -3,7 +3,6 @@ import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
-import type { XcodebuildSimulatorSetRedirectHandle } from './runner-device-set.ts';
 import type { IosRunnerDeviceStates } from './runner-error-classification.ts';
 
 /**
@@ -125,7 +124,6 @@ export type RunnerSession = {
    */
   startupDeviceStates?: IosRunnerDeviceStates;
   logicalLeaseContext?: RunnerLogicalLeaseContext;
-  simulatorSetRedirect?: XcodebuildSimulatorSetRedirectHandle;
   lease?: RunnerLease;
 };
 

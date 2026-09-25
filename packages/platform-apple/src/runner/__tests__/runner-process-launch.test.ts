@@ -52,6 +52,33 @@ test("the runner is spawned detached onto its own log file, not onto this proces
   assert.equal(args[args.indexOf('-derivedDataPath') + 1], '/tmp/runner-derived');
 });
 
+test('test-without-building resolves a scoped-set simulator in its own set', () => {
+  mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
+
+  for (const simulatorSetPath of ['/tmp/tenant-a/simulators', undefined]) {
+    launchRunnerProcess({
+      device: { ...IOS_SIMULATOR, simulatorSetPath },
+      port: 8123,
+      xctestrunPath: '/tmp/runner.xctestrun',
+      derivedPath: '/tmp/runner-derived',
+      logPath: runnerLogPath(),
+    });
+  }
+
+  const [scopedArgs, defaultArgs] = mockRunCmdBackground.mock.calls.map(
+    (call) => call[1] as string[],
+  );
+  assert.ok(scopedArgs?.includes('-DVTSimulatorSetLocation=/tmp/tenant-a/simulators'));
+  assert.equal(
+    scopedArgs?.[scopedArgs.indexOf('-destination') + 1],
+    'platform=iOS Simulator,id=sim-1',
+  );
+  assert.equal(
+    defaultArgs?.some((arg) => arg.startsWith('-DVTSimulatorSetLocation')),
+    false,
+  );
+});
+
 test('the listener-ready marker is read back from the runner log file', async () => {
   const logPath = runnerLogPath();
   mockRunCmdBackground.mockReturnValue({

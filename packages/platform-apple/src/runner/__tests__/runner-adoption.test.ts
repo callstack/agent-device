@@ -323,13 +323,16 @@ test('adoption accepts a legacy lease whose live pid is runner-shaped', async ()
   expect(session?.child.pid).toBe(424242);
 });
 
-test('adoption is skipped for devices in a custom simulator set', async () => {
+test('a runner for a simulator in a custom simulator set is adopted', async () => {
   writeStaleLease();
   mockIsProcessAlive.mockReturnValue(true);
+  mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
 
   const scopedDevice = { ...simulator, simulatorSetPath: '/custom/device-set' };
-  expect(await tryAdoptRunnerSessionFromLease(scopedDevice, {})).toBeNull();
-  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+  const session = await tryAdoptRunnerSessionFromLease(scopedDevice, {});
+
+  expect(session?.state).toBe('ready');
+  expect(session?.device.simulatorSetPath).toBe('/custom/device-set');
 });
 
 test('adoption is skipped when the runner process is dead', async () => {

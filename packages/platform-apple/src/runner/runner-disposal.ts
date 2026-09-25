@@ -201,8 +201,7 @@ async function cleanupRunnerSessionResources(
   await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
-  await session.simulatorSetRedirect?.releaseBestEffort();
-  // The session's own resources are gone: no lease, no temp files, no redirect to settle.
+  // The session's own resources are gone: no lease, no temp files.
   advanceRunnerSessionState(session, 'stopped');
 }
 

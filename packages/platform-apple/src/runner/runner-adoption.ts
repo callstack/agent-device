@@ -1,10 +1,5 @@
 import path from 'node:path';
-import {
-  resolveIosSimulatorDeviceSetPath,
-  emitDiagnostic,
-  isProcessAlive,
-  parseBooleanLiteral,
-} from './host.ts';
+import { emitDiagnostic, isProcessAlive, parseBooleanLiteral } from './host.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
@@ -64,7 +59,6 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): 
 
 type RunnerAdoptionRefusal =
   | RunnerHandoffRefusal
-  | 'simulator_set_redirect'
   | 'lease_absent'
   | RunnerLeaseAdoptionRefusal
   | 'session_identity_mismatch'
@@ -112,8 +106,7 @@ export async function tryAdoptRunnerSessionFromLease(
     });
     return null;
   };
-  const eligible = resolveHandoffLane(device, target);
-  if ('refusal' in eligible) return skip(eligible.refusal);
+  if (!target.handoff) return skip(target.reason);
   const leaseVerdict = readRunnerLeaseForAdoption(device.id);
   if (leaseVerdict.type === 'absent') return skip('lease_absent');
   if (leaseVerdict.type === 'refused') return skip(leaseVerdict.reason, leaseVerdict.lease);
@@ -124,7 +117,7 @@ export async function tryAdoptRunnerSessionFromLease(
   if ('refusal' in fingerprint) return skip(fingerprint.refusal, lease);
   const runnerPid = leased.value;
   const expectedDerived = fingerprint.value;
-  const probe = await probeRunnerAnswersUptime(device, lease.port, eligible.value, options.budget);
+  const probe = await probeRunnerAnswersUptime(device, lease.port, target.lane, options.budget);
   if (probe !== 'answered') return skip(probe, lease);
   // The probe awaited network I/O — the xcodebuild can have exited and its pid
   // been recycled while the old port still answers. Re-verify before the
@@ -144,7 +137,7 @@ export async function tryAdoptRunnerSessionFromLease(
     phase: 'ios_runner_lease_adopted',
     data: {
       deviceId: device.id,
-      lane: eligible.value,
+      lane: target.lane,
       sessionId: session.sessionId,
       runnerPid,
       port: lease.port,
@@ -156,24 +149,6 @@ export async function tryAdoptRunnerSessionFromLease(
 
 /** A guard group's verdict: the value adoption needs next, or the typed reason it stopped. */
 type RunnerAdoptionCheck<Value> = { value: Value } | { refusal: RunnerAdoptionRefusal };
-
-/**
- * Which lane this device hands a runner through, if it may hand one across daemons at all. Answers it
- * before any lease is read, so an ineligible device never touches lease state.
- */
-function resolveHandoffLane(
-  device: DeviceInfo,
-  target: ReturnType<typeof resolveRunnerHandoffTarget>,
-): RunnerAdoptionCheck<RunnerHandoffLane> {
-  if (!target.handoff) return { refusal: target.reason };
-  // Custom simulator sets run behind the XCTestDevices redirect, whose
-  // symlink+lock lifetime is bound to the owning session and cannot be
-  // carried across daemons; scoped-set runners always restart fresh.
-  if (target.lane === 'simulator' && resolveIosSimulatorDeviceSetPath(device.simulatorSetPath)) {
-    return { refusal: 'simulator_set_redirect' };
-  }
-  return { value: target.lane };
-}
 
 /**
  * Whether the leased pid is a runner this daemon may take over, and the one adoption will adopt.

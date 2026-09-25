@@ -13,13 +13,11 @@ import {
   assertRunnerCommand,
   makeBackgroundRunner,
   runnerResponse,
-  redirectHandle,
-  redirectRelease,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const {
-  mockAcquireXcodebuildSimulatorSetRedirect,
+  mockRestoreLegacyXctestDeviceSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -39,7 +37,7 @@ const {
   mockWaitForRunner,
   runnerStateTransitions,
 } = vi.hoisted(() => ({
-  mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
+  mockRestoreLegacyXctestDeviceSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -104,7 +102,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
+    restoreLegacyXctestDeviceSetRedirect: mockRestoreLegacyXctestDeviceSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
@@ -192,12 +190,6 @@ beforeEach(async () => {
   });
   mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  // Faithful to `acquireXcodebuildSimulatorSetRedirect`, which never holds a redirect for a
-  // non-simulator. Tests covering the default simulator set, where the real helper also returns
-  // no handle, override with null (#2681).
-  mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(async (device: DeviceInfo) =>
-    device.kind === 'simulator' ? redirectHandle : null,
-  );
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
@@ -350,7 +342,6 @@ test('an abort drains a registered runner before reporting it stopped', async ()
 
 test('shutdown detach moves a handed-off session to stopped without killing its runner', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-detach' };
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(null);
   const session = await ensureRunnerSession(device, {});
   await serveOneCommand(device, session);
   const runnerPid = session.child.pid;
@@ -366,7 +357,7 @@ test('shutdown detach moves a handed-off session to stopped without killing its 
   assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
 });
 
-test('a scoped simulator-set session stays on the kill path that restores the redirect', async () => {
+test('a scoped simulator-set session hands off like one in the default set', async () => {
   const device = {
     ...IOS_SIMULATOR,
     id: 'runner-lifecycle-detach-scoped-sim',
@@ -374,17 +365,25 @@ test('a scoped simulator-set session stays on the kill path that restores the re
   };
   const session = await ensureRunnerSession(device, {});
   await serveOneCommand(device, session);
-  assert.equal(mockAcquireXcodebuildSimulatorSetRedirect.mock.calls.length, 1);
 
-  const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+
+  assert.equal(session.state, 'stopped');
+  assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
+});
+
+test('a simulator startup puts back a legacy XCTestDevices redirect before the build', async () => {
+  const order: string[] = [];
+  mockRestoreLegacyXctestDeviceSetRedirect.mockImplementationOnce(() => order.push('restore'));
+  const ensure = mockEnsureXctestrunArtifact.getMockImplementation();
+  mockEnsureXctestrunArtifact.mockImplementationOnce(async (...args: unknown[]) => {
+    order.push('ensure');
+    return await ensure?.(...args);
   });
 
-  // The redirect-holding session must stay for disposal, which restores the
-  // XCTestDevices symlink; detach never releases the redirect itself.
-  assert.match(diagnostics, /"reason":"simulator_set_redirect"/);
-  assert.ok(readRunnerSessionLiveness(device.id));
-  assert.equal(redirectRelease.mock.calls.length, 0);
+  await ensureRunnerSession({ ...IOS_SIMULATOR, id: 'runner-lifecycle-legacy-redirect' }, {});
+
+  assert.deepEqual(order, ['restore', 'ensure']);
 });
 
 // #2681: the handoff lanes and every gate that keeps a runner on the kill path.

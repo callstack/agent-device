@@ -5,6 +5,7 @@ import { runCmdBackground } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { resolveRunnerDestination } from './apple-runner-platform.ts';
 import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
+import { xcodebuildDestinationArgs } from './runner-device-set.ts';
 import {
   createRunnerLogFile,
   logChunk,
@@ -80,8 +81,7 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
         input.xctestrunPath,
         '-derivedDataPath',
         input.derivedPath,
-        '-destination',
-        resolveRunnerDestination(input.device),
+        ...xcodebuildDestinationArgs(input.device, resolveRunnerDestination(input.device)),
       ],
       {
         allowFailure: true,

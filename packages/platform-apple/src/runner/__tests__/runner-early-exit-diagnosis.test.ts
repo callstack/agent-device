@@ -165,3 +165,54 @@ test('a session that never probed the device publishes no disk-image claim (#268
 
   assert.equal('developerDiskImage' in (error.details ?? {}), false);
 });
+
+const SCOPED_DESTINATION_NOT_FOUND_LOG = [
+  'xcodebuild: error: Unable to find a destination matching the provided destination specifier:',
+  '\t\t{ platform:iOS Simulator, id:sim-1 }',
+].join('\n');
+
+function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): RunnerSession {
+  return {
+    ...sessionFailingWith(log),
+    device: {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      appleOs: 'ios',
+      booted: true,
+      simulatorSetPath,
+    },
+    xctestrunArtifact: {
+      xctestrunPath: '/tmp/runner.xctestrun',
+      derived: '/tmp/derived',
+      cache: 'exact',
+      artifact: 'valid',
+      buildMs: 0,
+      xctestrunPathSource: 'manifest',
+      xcodeVersion: '27.1',
+    },
+  };
+}
+
+test('a scoped-set simulator test-without-building cannot find names its set and the Xcode', async () => {
+  const error = (await buildRunnerEarlyExitError({
+    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG, '/tmp/tenant-a/sims'),
+    port: 8100,
+  })) as AppError;
+
+  assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
+  assert.match(String(error.details?.hint), /-DVTSimulatorSetLocation/);
+  assert.equal(error.details?.simulatorSetPath, '/tmp/tenant-a/sims');
+  assert.equal(error.details?.xcodeVersion, '27.1');
+});
+
+test('a default-set simulator early exit keeps its boot-failure reason', async () => {
+  const error = (await buildRunnerEarlyExitError({
+    session: simulatorSessionFailingWith(SCOPED_DESTINATION_NOT_FOUND_LOG),
+    port: 8100,
+  })) as AppError;
+
+  assert.equal(error.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+  assert.equal(error.details?.simulatorSetPath, undefined);
+});

@@ -20,6 +20,7 @@ import {
   type RunnerCommandRoute,
 } from './runner-command-route.ts';
 import {
+  classifyRunnerStartupFailure,
   enrichRunnerStartupFailureWithDeviceStates,
   isUsbmuxDeviceUnattachedError,
   RUNNER_CACHE_RECOVERY_HINT,
@@ -29,6 +30,7 @@ import {
 } from './runner-error-classification.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
+import { runnerSimulatorSetFailureDetails } from './runner-device-set.ts';
 import {
   canFallBackFromUsbmux,
   fetchWithTimeout,
@@ -527,6 +529,14 @@ export async function buildRunnerEarlyExitError(params: {
     stderr: output,
     context: { platform: 'ios', phase: 'connect' },
   });
+  const simulatorSet = runnerSimulatorSetFailureDetails(
+    session.device,
+    session.xctestrunArtifact?.xcodeVersion,
+  );
+  const setDestination = classifyRunnerStartupFailure(
+    new AppError('COMMAND_FAILED', message, { stderr: output, ...simulatorSet }),
+  );
+  const setDestinationMissing = setDestination.reason === 'simulator_set_destination_not_found';
   // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
   // the trio is nested tool context under `xcodebuild`, classified into
   // `reason`/`hint` above — not a process-exit wrap.
@@ -541,8 +551,11 @@ export async function buildRunnerEarlyExitError(params: {
       // already look, next to the file it came from.
       stderr: output,
     },
-    reason,
-    hint: resolveRunnerEarlyExitHint(message, output, output, reason),
+    reason: setDestinationMissing ? setDestination.reason : reason,
+    hint: setDestinationMissing
+      ? setDestination.hint
+      : resolveRunnerEarlyExitHint(message, output, output, reason),
+    ...simulatorSet,
     ...runnerConnectFailureDetails('xcodebuild_exited_early'),
   });
   // The build catch is not the only way a runner stops before serving a command. A locked phone lets

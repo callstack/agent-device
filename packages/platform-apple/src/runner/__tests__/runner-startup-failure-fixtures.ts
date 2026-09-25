@@ -1,10 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   RunnerDeviceReadinessFailureReason,
   RunnerStartupFailureReason,
 } from '../runner-error-classification.ts';
 import { RUNNER_DEVICE_READINESS_FAILURE_REASONS } from '../runner-error-classification.ts';
 import type { IosPhysicalDeviceRunnerControl } from '../../core/physical-device-routing.ts';
+import { IOS_SIMULATOR } from './device-fixtures.ts';
 
 /**
  * Recorded startup failures for {@link classifyRunnerStartupFailure} (#2680).
@@ -94,6 +96,8 @@ export type RunnerStartupFailureFixture = Readonly<{
   output: string;
   /** The argv the exec reported, which is never evidence of a cause (#2680). */
   args?: readonly string[];
+  /** The device the build targets; a physical iPhone unless the reason is about a simulator. */
+  device?: DeviceInfo;
   /**
    * The device's own states. On the `device-readiness` site this is the evidence the preflight reads;
    * on a `build-for-testing` entry it is what the startup carried onto that build, which is the pairing
@@ -216,6 +220,28 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
       'Provisioning Profile: match-development',
     ],
     note: 'The argv we were asked to run is not xcodebuild evidence: a caller who pinned a profile still gets cache-recovery advice for a compile error (#2680).',
+  },
+  {
+    id: 'scoped-set-destination-not-found',
+    reason: 'simulator_set_destination_not_found',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      'Command line invocation:\n    xcodebuild build-for-testing -scheme AgentDeviceRunner -destination "platform=iOS Simulator,id=sim-1" -DVTSimulatorSetLocation=/tmp/tenant-a/simulators\nxcodebuild: error: Unable to find a device matching the provided destination specifier:\n\t\t{ platform:iOS Simulator, id:sim-1 }\n',
+    device: { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulators' },
+    note: 'The destination error is the one Xcode 26.2 printed for `-showBuildSettings -destination id=<scoped udid>` without `-DVTSimulatorSetLocation` (#2935 spike); the build-for-testing wrapping around it is ours.',
+  },
+  {
+    id: 'default-set-destination-not-found',
+    reason: 'build_failed_unclassified',
+    site: 'build-for-testing',
+    xcodeVersion: UNOBSERVED,
+    provenance: 'invented-shape',
+    output:
+      'Command line invocation:\n    xcodebuild build-for-testing -scheme AgentDeviceRunner -destination "platform=iOS Simulator,id=sim-1"\nxcodebuild: error: Unable to find a device matching the provided destination specifier:\n\t\t{ platform:iOS Simulator, id:sim-1 }\n',
+    device: IOS_SIMULATOR,
+    note: 'A simulator in the default set never passes through `-DVTSimulatorSetLocation`, so its missing destination names no scoped-set cause.',
   },
   // Narrowed profile rows (#2688 review): each of these requires the profile AND the complaint Xcode
   // attaches to it. The bare phrase alone was the shipped sniffer's trigger and is not evidence, so the

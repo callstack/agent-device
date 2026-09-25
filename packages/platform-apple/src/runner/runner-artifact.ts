@@ -15,7 +15,10 @@ import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
-import { withXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
+import {
+  runnerSimulatorSetFailureDetails,
+  xcodebuildDestinationArgs,
+} from './runner-device-set.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   assertSafeDerivedCleanup,
@@ -64,6 +67,8 @@ export type RunnerXctestrunArtifact = {
   buildMs: number;
   xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
   reason?: string;
+  /** The Xcode this artifact was built with; unknown for an external xctestrun. */
+  xcodeVersion?: string;
 };
 
 export type ExternalXctestRunnerOptions = {
@@ -227,6 +232,7 @@ async function resolveReusableXctestrunArtifact(params: {
     artifact: 'valid',
     buildMs: 0,
     xctestrunPathSource: existing.source,
+    xcodeVersion: expectedCacheMetadata.xcodeVersion,
   };
 }
 
@@ -253,7 +259,10 @@ async function buildXctestrunArtifact(params: {
     status: 'progress',
     message: 'Building Apple runner...',
   });
-  await buildRunnerXctestrun(device, projectPath, derived, options, buildTimeoutMs);
+  await buildRunnerXctestrun(device, projectPath, derived, options, {
+    buildTimeoutMs,
+    xcodeVersion: expectedCacheMetadata.xcodeVersion,
+  });
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 
   const built = findXctestrun(derived, device);
@@ -283,6 +292,7 @@ async function buildXctestrunArtifact(params: {
     buildMs,
     xctestrunPathSource: 'build',
     reason,
+    xcodeVersion: expectedCacheMetadata.xcodeVersion,
   };
 }
 
@@ -460,8 +470,11 @@ async function buildRunnerXctestrun(
   projectPath: string,
   derived: string,
   options: RunnerXctestrunBuildOptions,
-  /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
-  buildTimeoutMs: number | undefined,
+  build: {
+    /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
+    buildTimeoutMs: number | undefined;
+    xcodeVersion: string;
+  },
 ): Promise<void> {
   const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
@@ -472,69 +485,70 @@ async function buildRunnerXctestrun(
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
-  await withXcodebuildSimulatorSetRedirect(device, async () => {
-    try {
-      await runCmdStreaming(
-        'xcodebuild',
-        [
-          'build-for-testing',
-          '-project',
-          projectPath,
-          '-scheme',
-          'AgentDeviceRunner',
-          '-parallel-testing-enabled',
-          'NO',
-          resolveRunnerMaxConcurrentDestinationsFlag(device),
-          '1',
-          '-destination',
-          resolveRunnerBuildDestination(device),
-          '-derivedDataPath',
-          derived,
-          ...performanceBuildSettings,
-          ...sandboxBuildArgs,
-          ...runnerBundleBuildSettings,
-          ...provisioningArgs,
-          ...signingBuildSettings,
-        ],
-        {
-          detached: true,
-          timeoutMs: buildTimeoutMs,
-          signal: options.budget?.signal,
-          onSpawn: (child) => {
-            runnerPrepProcesses.add(child);
-            child.on('close', () => {
-              runnerPrepProcesses.delete(child);
-            });
-          },
-          onStdoutChunk: (chunk) => {
-            logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-          },
-          onStderrChunk: (chunk) => {
-            logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
-          },
+  try {
+    await runCmdStreaming(
+      'xcodebuild',
+      [
+        'build-for-testing',
+        '-project',
+        projectPath,
+        '-scheme',
+        'AgentDeviceRunner',
+        '-parallel-testing-enabled',
+        'NO',
+        resolveRunnerMaxConcurrentDestinationsFlag(device),
+        '1',
+        ...xcodebuildDestinationArgs(device, resolveRunnerBuildDestination(device)),
+        '-derivedDataPath',
+        derived,
+        ...performanceBuildSettings,
+        ...sandboxBuildArgs,
+        ...runnerBundleBuildSettings,
+        ...provisioningArgs,
+        ...signingBuildSettings,
+      ],
+      {
+        detached: true,
+        timeoutMs: build.buildTimeoutMs,
+        signal: options.budget?.signal,
+        onSpawn: (child) => {
+          runnerPrepProcesses.add(child);
+          child.on('close', () => {
+            runnerPrepProcesses.delete(child);
+          });
         },
-      );
-    } catch (error) {
-      if (isRequestCanceledError(error)) throw error;
-      const appErr =
-        error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-      // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
-      // switches on can never disagree with the advice it is handed.
-      const { reason, hint, matched } = classifyRunnerStartupFailure(appErr);
-      const hostDeadlineHit = isCommandTimeoutError(appErr);
-      // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
-      // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
-      // alone (#2690 review). The device's own state is attached further out, by the startup catch that
-      // can see this build and the launch after it.
-      throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
-        reason,
-        error: appErr.message,
-        details: appErr.details,
-        logPath: options.logPath,
-        hint,
-        startupRuleMatched: matched,
-        startupHostDeadlineHit: hostDeadlineHit,
-      });
-    }
-  });
+        onStdoutChunk: (chunk) => {
+          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+        },
+        onStderrChunk: (chunk) => {
+          logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
+        },
+      },
+    );
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    const appErr =
+      error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+    const simulatorSet = runnerSimulatorSetFailureDetails(device, build.xcodeVersion);
+    // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
+    // switches on can never disagree with the advice it is handed.
+    const { reason, hint, matched } = classifyRunnerStartupFailure(
+      new AppError(appErr.code, appErr.message, { ...appErr.details, ...simulatorSet }),
+    );
+    const hostDeadlineHit = isCommandTimeoutError(appErr);
+    // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
+    // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
+    // alone (#2690 review). The device's own state is attached further out, by the startup catch that
+    // can see this build and the launch after it.
+    throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
+      reason,
+      error: appErr.message,
+      details: appErr.details,
+      logPath: options.logPath,
+      hint,
+      startupRuleMatched: matched,
+      startupHostDeadlineHit: hostDeadlineHit,
+      ...simulatorSet,
+    });
+  }
 }

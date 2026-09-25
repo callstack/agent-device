@@ -9,6 +9,7 @@ import {
   IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
 } from '../../core/devicectl.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import {
@@ -21,7 +22,7 @@ import {
   type RunnerStartupFailureReason,
 } from '../runner-error-classification.ts';
 import { assertDevToolsSecurityForIosRunner } from '../runner-dev-tools-security.ts';
-import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
+import { appleToolchainProbeResult, STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import { IOS_DEVICE } from './device-fixtures.ts';
 import {
   RUNNER_STARTUP_FAILURE_FIXTURES,
@@ -59,6 +60,7 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, string> = {
   signing_provisioning_profile_missing: 'AGENT_DEVICE_IOS_PROVISIONING_PROFILE',
   signing_unspecified: 'Automatic Signing',
   devtools_security_developer_mode_disabled: 'DevToolsSecurity -enable',
+  simulator_set_destination_not_found: '-DVTSimulatorSetLocation',
   // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
   // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the
   // preflight publishing them is asserted.
@@ -235,6 +237,29 @@ test('every reason the classifier can name is produced by a rule row', () => {
   }
 });
 
+test('a scoped-set simulator xcodebuild cannot find names its set and the Xcode', async () => {
+  const envelope = await driveBuildFailure(buildFixtureById('scoped-set-destination-not-found'));
+
+  assert.equal(envelope.details?.reason, 'simulator_set_destination_not_found');
+  assert.equal(envelope.details?.simulatorSetPath, '/tmp/tenant-a/simulators');
+  assert.equal(envelope.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+  const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
+  assert.ok(buildArgs.includes('-DVTSimulatorSetLocation=/tmp/tenant-a/simulators'));
+});
+
+test('a default-set simulator xcodebuild cannot find names no simulator set', async () => {
+  const envelope = await driveBuildFailure(buildFixtureById('default-set-destination-not-found'));
+
+  assert.equal(envelope.details?.reason, RUNNER_STARTUP_FAILURE_UNCLASSIFIED_REASON);
+  assert.equal(envelope.details?.simulatorSetPath, undefined);
+  assert.doesNotMatch(String(envelope.hint), /DVTSimulatorSetLocation/);
+  const buildArgs = runCmdStreaming.mock.calls[0]?.[1] as string[];
+  assert.equal(
+    buildArgs.some((arg) => arg.startsWith('-DVTSimulatorSetLocation')),
+    false,
+  );
+});
+
 test('an argv that names a provisioning profile is not evidence of a signing failure', async () => {
   // The exec reports the invocation we asked for in `details.args`. Reading the whole details bag
   // would let a caller's own pinned profile name the cause of an unrelated compile error and take
@@ -322,7 +347,7 @@ test('a conflicting-settings failure is not answered with missing-profile advice
  * either.
  */
 async function driveBuildFailure(fixture: RunnerStartupFailureFixture): Promise<NormalizedError> {
-  const thrown = await runBuildCatch(() => buildForTestingExecFailure(fixture));
+  const thrown = await runBuildCatch(() => buildForTestingExecFailure(fixture), fixture.device);
   return normalizeThrown(
     enrichRunnerStartupFailureWithDeviceStates(thrown, deviceStatesOf(fixture)),
   );
@@ -343,7 +368,10 @@ async function driveBuildRejection(rejection: unknown): Promise<NormalizedError>
   return normalizeThrown(await runBuildCatch(() => rejection));
 }
 
-async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
+async function runBuildCatch(
+  buildRejection: () => unknown,
+  device: DeviceInfo = IOS_DEVICE,
+): Promise<unknown> {
   runCmdStreaming.mockReset().mockImplementation(async () => {
     throw buildRejection();
   });
@@ -351,7 +379,7 @@ async function runBuildCatch(buildRejection: () => unknown): Promise<unknown> {
   let caught: unknown;
   await assert.rejects(
     () =>
-      ensureXctestrunArtifact(IOS_DEVICE, {
+      ensureXctestrunArtifact(device, {
         logPath,
         budget: createRunnerPhaseBudget(120_000, undefined),
       }),
