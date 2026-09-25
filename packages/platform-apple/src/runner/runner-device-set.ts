@@ -26,18 +26,34 @@ export function xcodebuildDestinationArgs(device: DeviceInfo, destination: strin
  * Puts the host's own `~/Library/Developer/XCTestDevices` back where an older agent-device left it
  * redirected: a symlink into a scoped set, with the real directory renamed to
  * `XCTestDevices.agent-device-backup`. Xcode's first-launch cleanup deletes every device in
- * `XCTestDevices`, so a symlink left there deletes the scoped set it points at.
+ * `XCTestDevices`, so a symlink left there deletes the scoped set it points at. Only that state is
+ * undone: a symlink is removed when the backup beside it exists, or when it points at this runner's
+ * own scoped set, so a host that links `XCTestDevices` elsewhere keeps its link.
  */
 export function restoreLegacyXctestDeviceSetRedirect(
+  device: DeviceInfo,
   xctestDeviceSetPath: string = path.join(os.homedir(), 'Library', 'Developer', 'XCTestDevices'),
 ): void {
-  if (fs.lstatSync(xctestDeviceSetPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
+  const backupPath = `${xctestDeviceSetPath}.agent-device-backup`;
+  const backupExists = fs.existsSync(backupPath);
+  const isSymlink =
+    fs.lstatSync(xctestDeviceSetPath, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
+  if (
+    isSymlink &&
+    (backupExists || linkPointsAt(xctestDeviceSetPath, resolveRunnerSimulatorSetPath(device)))
+  ) {
     fs.unlinkSync(xctestDeviceSetPath);
   }
-  const backupPath = `${xctestDeviceSetPath}.agent-device-backup`;
-  if (fs.existsSync(backupPath) && !fs.existsSync(xctestDeviceSetPath)) {
+  if (backupExists && !fs.existsSync(xctestDeviceSetPath)) {
     fs.renameSync(backupPath, xctestDeviceSetPath);
   }
+}
+
+function linkPointsAt(linkPath: string, targetPath: string | undefined): boolean {
+  if (targetPath === undefined) return false;
+  return (
+    path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath)) === path.resolve(targetPath)
+  );
 }
 
 /** What a runner xcodebuild failure reports about the scoped set it resolved its destination in. */

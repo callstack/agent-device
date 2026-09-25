@@ -374,7 +374,9 @@ test('a scoped simulator-set session hands off like one in the default set', asy
 
 test('a simulator startup puts back a legacy XCTestDevices redirect before the build', async () => {
   const order: string[] = [];
-  mockRestoreLegacyXctestDeviceSetRedirect.mockImplementationOnce(() => order.push('restore'));
+  mockRestoreLegacyXctestDeviceSetRedirect.mockImplementationOnce((device: DeviceInfo) =>
+    order.push(`restore:${device.id}`),
+  );
   const ensure = mockEnsureXctestrunArtifact.getMockImplementation();
   mockEnsureXctestrunArtifact.mockImplementationOnce(async (...args: unknown[]) => {
     order.push('ensure');
@@ -383,7 +385,7 @@ test('a simulator startup puts back a legacy XCTestDevices redirect before the b
 
   await ensureRunnerSession({ ...IOS_SIMULATOR, id: 'runner-lifecycle-legacy-redirect' }, {});
 
-  assert.deepEqual(order, ['restore', 'ensure']);
+  assert.deepEqual(order, ['restore:runner-lifecycle-legacy-redirect', 'ensure']);
 });
 
 // #2681: the handoff lanes and every gate that keeps a runner on the kill path.

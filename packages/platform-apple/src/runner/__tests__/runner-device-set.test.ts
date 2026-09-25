@@ -76,7 +76,7 @@ test('an older redirect is undone: the symlink goes and the host set comes back'
   fs.mkdirSync(path.join(paths.backupPath, 'HOST-UDID'), { recursive: true });
   fs.symlinkSync(paths.scopedSetPath, paths.xctestDeviceSetPath, 'dir');
 
-  restoreLegacyXctestDeviceSetRedirect(paths.xctestDeviceSetPath);
+  restoreLegacyXctestDeviceSetRedirect(IOS_SIMULATOR, paths.xctestDeviceSetPath);
 
   assert.equal(fs.lstatSync(paths.xctestDeviceSetPath).isSymbolicLink(), false);
   assert.ok(fs.existsSync(path.join(paths.xctestDeviceSetPath, 'HOST-UDID')));
@@ -85,14 +85,40 @@ test('an older redirect is undone: the symlink goes and the host set comes back'
   assert.ok(fs.existsSync(path.join(paths.scopedSetPath, 'SCOPED-UDID')));
 });
 
-test('a symlink an older redirect left without a backup is removed', () => {
+test('a symlink an older redirect left into this scoped set without a backup is removed', () => {
   const paths = makeLegacyPaths();
   fs.symlinkSync(paths.scopedSetPath, paths.xctestDeviceSetPath, 'dir');
 
-  restoreLegacyXctestDeviceSetRedirect(paths.xctestDeviceSetPath);
+  restoreLegacyXctestDeviceSetRedirect(
+    { ...IOS_SIMULATOR, simulatorSetPath: paths.scopedSetPath },
+    paths.xctestDeviceSetPath,
+  );
 
   assert.equal(fs.lstatSync(paths.xctestDeviceSetPath, { throwIfNoEntry: false }), undefined);
   assert.ok(fs.existsSync(path.join(paths.scopedSetPath, 'SCOPED-UDID')));
+});
+
+test('a host-owned XCTestDevices symlink with no backup survives a default-set startup', () => {
+  const paths = makeLegacyPaths();
+  fs.symlinkSync(paths.scopedSetPath, paths.xctestDeviceSetPath, 'dir');
+
+  restoreLegacyXctestDeviceSetRedirect(IOS_SIMULATOR, paths.xctestDeviceSetPath);
+
+  assert.equal(fs.readlinkSync(paths.xctestDeviceSetPath), paths.scopedSetPath);
+});
+
+test('a host-owned XCTestDevices symlink elsewhere survives a scoped-set startup', () => {
+  const paths = makeLegacyPaths();
+  const external = path.join(path.dirname(paths.scopedSetPath), 'external-volume');
+  fs.mkdirSync(external);
+  fs.symlinkSync(external, paths.xctestDeviceSetPath, 'dir');
+
+  restoreLegacyXctestDeviceSetRedirect(
+    { ...IOS_SIMULATOR, simulatorSetPath: paths.scopedSetPath },
+    paths.xctestDeviceSetPath,
+  );
+
+  assert.equal(fs.readlinkSync(paths.xctestDeviceSetPath), external);
 });
 
 test('a backup never replaces a host set that is already in place', () => {
@@ -100,7 +126,7 @@ test('a backup never replaces a host set that is already in place', () => {
   fs.mkdirSync(path.join(paths.xctestDeviceSetPath, 'CURRENT-UDID'), { recursive: true });
   fs.mkdirSync(path.join(paths.backupPath, 'OLD-UDID'), { recursive: true });
 
-  restoreLegacyXctestDeviceSetRedirect(paths.xctestDeviceSetPath);
+  restoreLegacyXctestDeviceSetRedirect(IOS_SIMULATOR, paths.xctestDeviceSetPath);
 
   assert.ok(fs.existsSync(path.join(paths.xctestDeviceSetPath, 'CURRENT-UDID')));
   assert.ok(fs.existsSync(path.join(paths.backupPath, 'OLD-UDID')));
@@ -109,7 +135,7 @@ test('a backup never replaces a host set that is already in place', () => {
 test('a host with no leftovers is left untouched', () => {
   const paths = makeLegacyPaths();
 
-  restoreLegacyXctestDeviceSetRedirect(paths.xctestDeviceSetPath);
+  restoreLegacyXctestDeviceSetRedirect(IOS_SIMULATOR, paths.xctestDeviceSetPath);
 
   assert.equal(fs.existsSync(paths.xctestDeviceSetPath), false);
   assert.equal(fs.existsSync(paths.backupPath), false);

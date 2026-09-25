@@ -254,7 +254,7 @@ async function startRunnerSessionWithLease(
   // an external xctestrun that never launches are different steps, and a caller told "developer disk
   // image" should not have to know which one this run happened to take.
   try {
-    if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect();
+    if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect(device);
     xctestrunArtifact = await measureRunnerStartupStep(
       startupTimings,
       'ensure_xctestrun',
