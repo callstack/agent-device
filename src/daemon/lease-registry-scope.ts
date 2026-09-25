@@ -328,6 +328,18 @@ export function createDeviceLease(
   };
 }
 
+/**
+ * The inactivity window a lease is currently living on: whatever TTL it was last renewed for.
+ *
+ * Every renewal that is not asked to change the window uses this, so a renewal never quietly
+ * re-decides it. Reading the registry default instead would shorten a lease allocated with a longer
+ * one — and a caller that heartbeats without repeating the allocation's TTL is not asking for the
+ * default, it is asking for the same lease to keep going.
+ */
+export function leaseOwnTtlMs(lease: Pick<DeviceLease, 'expiresAt' | 'heartbeatAt'>): number {
+  return lease.expiresAt - lease.heartbeatAt;
+}
+
 export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
   return new AppError('DEVICE_IN_USE', 'Device is already leased', {
     reason: 'DEVICE_LEASE_BUSY',
