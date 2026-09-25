@@ -1,4 +1,5 @@
 import { readHostTextFile } from '@agent-device/host-kit/host-file';
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import {
   readApplePlistJson,
@@ -44,8 +45,7 @@ export type XcrunShimArmedBy =
   | 'version_unreadable'
   | 'shim_unreadable'
   | 'shim_not_located'
-  | 'probe_out_of_budget'
-  | 'probe_canceled';
+  | 'probe_out_of_budget';
 
 type XcrunShimEvidence = {
   tool: XcrunShimToolName;
@@ -64,28 +64,39 @@ export type ArmedXcrunShimFirstLaunchHook = XcrunShimEvidence & {
 /** One entry per {@link XCRUN_SHIM_TOOL_NAMES} tool. */
 export type XctestDeviceSetCleanupArming = readonly XcrunShimFirstLaunchHook[];
 
+/** A probe its request canceled reads no shim: a cancellation is the request's, never an arming. */
+export type XcrunShimProbe =
+  | { canceled: true }
+  | { canceled: false; xcrunShims: XctestDeviceSetCleanupArming };
+
 export type XcrunShimProbeOptions = {
-  /** The owning request's cancellation; an unanswered shim then reads as `probe_canceled`. */
+  /** The owning request's cancellation. */
   signal?: AbortSignal;
+  /** The owning phase's clock; the probe spends no more than it has left. */
+  deadline?: DeadlineClock;
 };
 
-/** Reads every shim's first-launch hook within one shared budget; an unanswered shim reads as armed. */
+/**
+ * Reads every shim's first-launch hook within one shared budget: the cold-toolchain budget, or what
+ * the owning phase has left when that is less. A shim the budget stops reads as armed.
+ */
 export async function probeXcrunShimFirstLaunchHooks(
   options: XcrunShimProbeOptions = {},
-): Promise<XctestDeviceSetCleanupArming> {
-  const budget = AbortSignal.timeout(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([budget, options.signal]) : budget;
-  const stoppedBy = (): XcrunShimArmedBy =>
-    options.signal?.aborted ? 'probe_canceled' : 'probe_out_of_budget';
-  return await Promise.all(
-    XCRUN_SHIM_TOOL_NAMES.map(async (tool) => await probeWithinBudget(tool, signal, stoppedBy)),
+): Promise<XcrunShimProbe> {
+  const phaseRemainingMs = Math.floor(
+    options.deadline?.remainingMs() ?? COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   );
+  const budget = AbortSignal.timeout(Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, phaseRemainingMs));
+  const signal = options.signal ? AbortSignal.any([budget, options.signal]) : budget;
+  const xcrunShims = await Promise.all(
+    XCRUN_SHIM_TOOL_NAMES.map(async (tool) => await probeWithinBudget(tool, signal)),
+  );
+  return options.signal?.aborted ? { canceled: true } : { canceled: false, xcrunShims };
 }
 
 async function probeWithinBudget(
   tool: XcrunShimToolName,
   signal: AbortSignal,
-  stoppedBy: () => XcrunShimArmedBy,
 ): Promise<XcrunShimFirstLaunchHook> {
   const evidence: XcrunShimEvidence = {
     tool,
@@ -94,10 +105,10 @@ async function probeWithinBudget(
     frameworkInfoPlistPath: null,
     installedVersion: null,
   };
-  if (signal.aborted) return armed(evidence, stoppedBy());
+  if (signal.aborted) return armed(evidence, 'probe_out_of_budget');
   let onAbort = (): void => {};
   const stopped = new Promise<XcrunShimFirstLaunchHook>((resolve) => {
-    onAbort = () => resolve(armed(evidence, stoppedBy()));
+    onAbort = () => resolve(armed(evidence, 'probe_out_of_budget'));
   });
   signal.addEventListener('abort', onAbort, { once: true });
   try {

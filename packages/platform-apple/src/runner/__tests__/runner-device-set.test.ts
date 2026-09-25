@@ -17,7 +17,9 @@ import {
 // not hand back, and a build that succeeded does not get to hide one.
 
 beforeEach(() => {
-  appleRunnerTestHost.update({ probeXcrunShimFirstLaunchHooks: async () => [] });
+  appleRunnerTestHost.update({
+    probeXcrunShimFirstLaunchHooks: async () => ({ canceled: false, xcrunShims: [] }),
+  });
 });
 
 const iosSimulator: DeviceInfo = {

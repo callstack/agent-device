@@ -4,9 +4,12 @@ import { afterEach, test, vi } from 'vitest';
 import type { ExecResult, ExecOptions } from '@agent-device/host-kit/command';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../../runner/apple-runner-platform.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import {
   probeXcrunShimFirstLaunchHooks,
   XCRUN_SHIM_TOOL_NAMES,
+  type XcrunShimProbeOptions,
+  type XctestDeviceSetCleanupArming,
 } from '../xcrun-shim-first-launch.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import {
@@ -24,10 +27,20 @@ async function tempRoot(): Promise<string> {
   return await mkdtempForTest('xcrun-shim-first-launch-');
 }
 
+async function probeShims(options?: XcrunShimProbeOptions): Promise<XctestDeviceSetCleanupArming> {
+  const probe = await probeXcrunShimFirstLaunchHooks(options);
+  if (probe.canceled) assert.fail('no request canceled this probe');
+  return probe.xcrunShims;
+}
+
+function phaseClock(remainingMs: number): DeadlineClock {
+  return { remainingMs: () => remainingMs, elapsedMs: () => 0, isExpired: () => remainingMs <= 0 };
+}
+
 test('only the tools Xcode ships as first-launch shims are probed', async () => {
   const host = writeFakeXcrunShims(await tempRoot(), {});
 
-  const shims = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+  const shims = await withFakeXcrunHost(host, () => probeShims());
 
   assert.deepEqual(XCRUN_SHIM_TOOL_NAMES, ['simctl', 'devicectl']);
   assert.deepEqual(host.finds, XCRUN_SHIM_TOOL_NAMES);
@@ -54,7 +67,7 @@ test('a hooked shim found by xcrun --find is read against the plist its own text
   });
   host.installedVersions.set(otherPlist, '1155.4');
 
-  const [simctl, devicectl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+  const [simctl, devicectl] = await withFakeXcrunHost(host, () => probeShims());
 
   assert.deepEqual(host.plistReads, [otherPlist]);
   assert.deepEqual(simctl, {
@@ -79,7 +92,7 @@ test('equal versions disarm a hooked shim', async () => {
     devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
   });
 
-  const shims = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+  const shims = await withFakeXcrunHost(host, () => probeShims());
 
   assert.deepEqual(
     shims.map((shim) => [shim.tool, shim.hook]),
@@ -98,7 +111,7 @@ test('a shim xcrun found but that cannot be read counts as armed', async () => {
   const missing = path.join(root, 'xcrun-shims', 'simctl-removed');
   host.xcrunShimPaths.simctl = missing;
 
-  const [simctl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+  const [simctl] = await withFakeXcrunHost(host, () => probeShims());
 
   assert.deepEqual(simctl, {
     tool: 'simctl',
@@ -127,7 +140,7 @@ for (const [shape, text] of Object.entries(UNREADABLE_VERSION_SHAPES)) {
     const host = writeFakeXcrunShims(root, { devicectl: { text: text(plistPath) } });
     host.installedVersions.set(plistPath, '1');
 
-    const [, devicectl] = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
+    const [, devicectl] = await withFakeXcrunHost(host, () => probeShims());
 
     assert.equal(devicectl?.hook === 'armed' && devicectl.armedBy, 'version_unreadable');
   });
@@ -151,7 +164,7 @@ test('the probe spends the cold-toolchain budget on each xcrun --find and reads 
     if (findTimeoutsMs.length === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
   });
 
-  const shims = await withAppleToolProvider(provider, () => probeXcrunShimFirstLaunchHooks());
+  const shims = await withAppleToolProvider(provider, () => probeShims());
 
   assert.deepEqual(timeout.mock.calls, [[COLD_TOOLCHAIN_PROBE_TIMEOUT_MS]]);
   assert.deepEqual(
@@ -164,7 +177,32 @@ test('the probe spends the cold-toolchain budget on each xcrun --find and reads 
   );
 });
 
-test('a request canceled mid-probe stops every unanswered shim as canceled', async () => {
+for (const [phaseRemainingMs, budgetMs] of [
+  [5_000, 5_000],
+  [120_000, COLD_TOOLCHAIN_PROBE_TIMEOUT_MS],
+] as const) {
+  test(`a phase with ${phaseRemainingMs} ms left gives the probe a ${budgetMs} ms budget`, async () => {
+    const budget = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
+    let started = 0;
+    const provider = hangingXcrun(() => {
+      started += 1;
+      if (started === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
+    });
+
+    const shims = await withAppleToolProvider(provider, () =>
+      probeShims({ deadline: phaseClock(phaseRemainingMs) }),
+    );
+
+    assert.deepEqual(timeout.mock.calls, [[budgetMs]]);
+    assert.deepEqual(
+      shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
+      XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_out_of_budget'),
+    );
+  });
+}
+
+test('a request canceled mid-probe reads as canceled, never as an armed shim', async () => {
   const request = new AbortController();
   let started = 0;
   const provider = hangingXcrun((options) => {
@@ -173,14 +211,12 @@ test('a request canceled mid-probe stops every unanswered shim as canceled', asy
     if (started === XCRUN_SHIM_TOOL_NAMES.length) request.abort();
   });
 
-  const shims = await withAppleToolProvider(provider, () =>
+  const probe = await withAppleToolProvider(provider, () =>
     probeXcrunShimFirstLaunchHooks({ signal: request.signal }),
   );
 
-  assert.deepEqual(
-    shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
-    XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_canceled'),
-  );
+  assert.equal(started, XCRUN_SHIM_TOOL_NAMES.length);
+  assert.deepEqual(probe, { canceled: true });
 });
 
 test('an already-canceled request spawns no xcrun at all', async () => {
@@ -189,13 +225,10 @@ test('an already-canceled request spawns no xcrun at all', async () => {
     devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
   });
 
-  const shims = await withFakeXcrunHost(host, () =>
+  const probe = await withFakeXcrunHost(host, () =>
     probeXcrunShimFirstLaunchHooks({ signal: AbortSignal.abort() }),
   );
 
   assert.deepEqual(host.finds, []);
-  assert.deepEqual(
-    shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
-    XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_canceled'),
-  );
+  assert.deepEqual(probe, { canceled: true });
 });

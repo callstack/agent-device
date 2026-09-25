@@ -58,6 +58,8 @@ export type FakeXcrunHost = {
   finds: string[];
   /** Every Info.plist path the probe asked for, in call order. */
   plistReads: string[];
+  /** Runs as each Info.plist read starts, before it is answered. */
+  onPlistRead?: () => void;
 };
 
 const HOOKLESS_SHIM_TEXT = '#!/bin/bash\nexec "${DEVELOPER_DIR}/usr/bin/tool" "${@}"\n';
@@ -123,6 +125,7 @@ export async function withFakeXcrunHost<T>(
     plist: {
       readJson: async (plistPath) => {
         host.plistReads.push(plistPath);
+        host.onPlistRead?.();
         const version = host.installedVersions.get(plistPath);
         return version === undefined ? null : { CFBundleVersion: version };
       },

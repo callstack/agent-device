@@ -241,7 +241,7 @@ test('a simulator that needs no redirect never probes the shims', async () => {
   assert.equal(probe.mock.calls.length, 0);
 });
 
-test('a request canceled during the probe gives the lock back as a cancellation, not a refusal', async () => {
+test('an already-canceled request gives the lock back as a cancellation without reading a shim', async () => {
   const layout = makeLayout();
   const host = writeFakeXcrunShims(layout.root, {
     simctl: SIMCTL_EQUAL,
@@ -250,7 +250,22 @@ test('a request canceled during the probe gives the lock back as a cancellation,
 
   await assertRefused(layout, host, AbortSignal.abort());
 
+  assert.deepEqual(host.finds, []);
   assert.deepEqual(host.plistReads, []);
+});
+
+test('a request canceled while a shim is read gives the lock back as a cancellation, not a refusal', async () => {
+  const layout = makeLayout();
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: SIMCTL_EQUAL,
+    devicectl: DEVICECTL_EQUAL,
+  });
+  const request = new AbortController();
+  host.onPlistRead = () => request.abort();
+
+  await assertRefused(layout, host, request.signal);
+
+  assert.notDeepEqual(host.plistReads, [], 'the probe was reading a shim when the request ended');
 });
 
 test('the message tells a shim xcrun could not locate from one the probe ran out of budget on', async () => {
@@ -260,8 +275,9 @@ test('the message tells a shim xcrun could not locate from one the probe ran out
     const host = writeFakeXcrunShims(layout.root, {});
     if (armedBy === 'probe_out_of_budget') {
       appleRunnerTestHost.update({
-        probeXcrunShimFirstLaunchHooks: async () =>
-          XCRUN_SHIM_TOOL_NAMES.map((tool): ArmedXcrunShimFirstLaunchHook => ({
+        probeXcrunShimFirstLaunchHooks: async () => ({
+          canceled: false,
+          xcrunShims: XCRUN_SHIM_TOOL_NAMES.map((tool): ArmedXcrunShimFirstLaunchHook => ({
             tool,
             shimPath: null,
             hook: 'armed',
@@ -270,6 +286,7 @@ test('the message tells a shim xcrun could not locate from one the probe ran out
             frameworkInfoPlistPath: null,
             installedVersion: null,
           })),
+        }),
       });
     }
     const refusal = await assertRefused(layout, host);

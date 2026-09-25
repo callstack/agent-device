@@ -7,6 +7,7 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 import { createRunnerPhaseBudget, ensureXctestrunArtifact } from '../runner-xctestrun.ts';
 import { resolveXcodebuildSimulatorDeviceSetPath } from '../runner-device-set.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
@@ -46,6 +47,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   delete process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
   process.env.HOME = originalHome;
 });
@@ -76,19 +78,50 @@ test('a scoped-set simulator on a cache miss is refused before build-for-testing
   assert.equal(fs.lstatSync(xctestDeviceSetPath).isSymbolicLink(), false);
 });
 
+test('a build phase with less left than the cold budget caps the shim probe at what it has left', async () => {
+  const requestedSetPath = path.join(root, 'user-set');
+  fs.mkdirSync(requestedSetPath, { recursive: true });
+  fs.mkdirSync(resolveXcodebuildSimulatorDeviceSetPath(), { recursive: true });
+  const host = writeFakeXcrunShims(root, {
+    simctl: { expectedVersion: '1051.17.7', installedVersion: '1155.4' },
+    devicectl: { hook: 'none' },
+  });
+  const phaseMs = 5_000;
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+
+  await assert.rejects(
+    withFakeXcrunHost(host, () =>
+      ensureXctestrunArtifact(
+        { ...IOS_SIMULATOR, simulatorSetPath: requestedSetPath },
+        { budget: createRunnerPhaseBudget(phaseMs, undefined) },
+      ),
+    ),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'xctest_device_set_cleanup_armed',
+  );
+
+  assert.equal(phaseMs < COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, true);
+  assert.equal(timeout.mock.calls.length, 1);
+  const probeBudgetMs = timeout.mock.calls[0]?.[0] ?? Number.NaN;
+  assert.equal(probeBudgetMs > 0 && probeBudgetMs <= phaseMs, true, `${probeBudgetMs} ms`);
+});
+
 test('a build canceled while the shims are probed releases the device set without building', async () => {
   const requestedSetPath = path.join(root, 'user-set');
   fs.mkdirSync(requestedSetPath, { recursive: true });
   fs.mkdirSync(resolveXcodebuildSimulatorDeviceSetPath(), { recursive: true });
   const request = new AbortController();
+  let finds = 0;
   const xcrun = createLocalAppleToolProvider({
     runCommand: async (_cmd, _args, options): Promise<ExecResult> => {
+      finds += 1;
       request.abort();
-      return await new Promise<ExecResult>((resolve) =>
-        options?.signal?.addEventListener('abort', () =>
-          resolve({ exitCode: 1, stdout: '', stderr: '' }),
-        ),
-      );
+      const stopped: ExecResult = { exitCode: 1, stdout: '', stderr: '' };
+      const signal = options?.signal;
+      if (!signal || signal.aborted) return stopped;
+      return await new Promise<ExecResult>((resolve) => {
+        signal.addEventListener('abort', () => resolve(stopped), { once: true });
+      });
     },
   });
 
@@ -102,6 +135,7 @@ test('a build canceled while the shims are probed releases the device set withou
     (error: unknown) => isRequestCanceledError(error),
   );
 
+  assert.notEqual(finds, 0, 'the probe had started');
   assert.equal(runCmdStreaming.mock.calls.length, 0, 'no xcodebuild build-for-testing ran');
   assert.equal(
     fs.existsSync(path.join(root, 'home', '.agent-device', 'xctest-device-set.lock')),

@@ -171,10 +171,14 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 async function xctestDeviceSetCleanupArmedRefusal(
   options: XcrunShimProbeOptions,
 ): Promise<AppError | null> {
-  const xcrunShims = await probeXcrunShimFirstLaunchHooks({ signal: options.signal });
-  if (options.signal?.aborted) {
+  const probe = await probeXcrunShimFirstLaunchHooks({
+    signal: options.signal,
+    deadline: options.deadline,
+  });
+  if (probe.canceled) {
     return createRequestCanceledError({ phase: 'xctest_device_set_shim_probe' });
   }
+  const { xcrunShims } = probe;
   const armed = xcrunShims.filter(
     (shim): shim is ArmedXcrunShimFirstLaunchHook => shim.hook === 'armed',
   );
@@ -196,7 +200,6 @@ const DESCRIBE_ARMED_SHIM: Record<
   shim_unreadable: (shim) => `Xcode's ${shim.tool} shim at ${shim.shimPath} could not be read`,
   shim_not_located: (shim) => `Xcode's ${shim.tool} could not be located`,
   probe_out_of_budget: (shim) => `Xcode's ${shim.tool} shim was not read within the probe budget`,
-  probe_canceled: (shim) => `Xcode's ${shim.tool} shim probe was canceled`,
 };
 
 function describeShimVersions(shim: ArmedXcrunShimFirstLaunchHook): string {

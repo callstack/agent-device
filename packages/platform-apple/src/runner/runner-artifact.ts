@@ -472,8 +472,7 @@ async function buildRunnerXctestrun(
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
-  const redirectOptions = { signal: options.budget?.signal };
-  await withXcodebuildSimulatorSetRedirect(device, redirectOptions, async () => {
+  await withXcodebuildSimulatorSetRedirect(device, options.budget ?? {}, async () => {
     try {
       await runCmdStreaming(
         'xcodebuild',
