@@ -63,6 +63,44 @@ extension RunnerTests {
     XCTAssertEqual(capture.customActions?.candidates, 2)
   }
 
+  /// A node without a placeholder omits the key: the wire contract is "absent when empty", which
+  /// the synthesized `encodeIfPresent` provides today and a hand-written encoder must keep.
+  func testPresentedNodeOmitsAnAbsentPlaceholder() throws {
+    let raw = RawAXNode(
+      index: 0,
+      type: "Button",
+      label: "Save",
+      identifier: nil,
+      value: nil,
+      rect: SnapshotRect(x: 0, y: 0, width: 100, height: 44),
+      enabled: true,
+      focused: nil,
+      selected: nil,
+      hittable: true,
+      depth: 0,
+      parentIndex: nil,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
+    )
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
+      SnapshotAcquisition(
+        hint: CaptureHint(
+          projection: .raw, depth: nil, regularPresentedDepth: nil,
+          interactiveOnly: false, customActions: false),
+        nodes: [raw],
+        truncated: false,
+        effectiveDepth: nil,
+        customActions: nil,
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
+      ),
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    ))
+    let encoded = String(decoding: try JSONEncoder().encode(capture.nodes), as: UTF8.self)
+
+    XCTAssertNil(capture.nodes.first?.placeholder)
+    XCTAssertFalse(encoded.contains("placeholder"), encoded)
+  }
+
   func testSnapshotPresentationOwnsBackendNeutralEligibility() throws {
     // Non-vacuity: forcing `isEligibleForRegularPresentation` to return true made this test execute
     // once and fail exactly four membership/index/depth/parent assertions before restoration.

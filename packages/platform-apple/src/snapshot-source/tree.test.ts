@@ -468,7 +468,7 @@ test('the bridge tree carries a text field placeholder and omits an empty one', 
   const field = (placeholder?: unknown) => ({
     [application]: 'UITextField',
     [frame]: { X: 16, Y: 200, Width: 370, Height: 44 },
-    XC_kAXXCAttributeValue: 'Type your name',
+    XC_kAXXCAttributeValue: 'Ada Lovelace',
     ...(placeholder === undefined ? {} : { XC_kAXXCAttributePlaceholderValue: placeholder }),
     [children]: [],
   });
@@ -479,7 +479,9 @@ test('the bridge tree carries a text field placeholder and omits an empty one', 
       limits,
     ).nodes[1];
 
-  assert.equal(decode('Type your name')?.placeholder, 'Type your name');
+  const filled = decode('Type your name');
+  assert.equal(filled?.placeholder, 'Type your name');
+  assert.equal(filled?.value, 'Ada Lovelace', 'the value and the placeholder are separate facts');
   assert.equal(decode('')?.placeholder, undefined, 'no placeholder reads as none, not as ""');
   assert.equal(decode()?.placeholder, undefined, 'an unread fact stays unknown');
 });

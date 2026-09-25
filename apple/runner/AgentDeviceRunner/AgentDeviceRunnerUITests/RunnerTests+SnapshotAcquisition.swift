@@ -387,7 +387,8 @@ extension RunnerTests {
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
       let valueText = snapshotValueText(element)
-      let hasContent = !label.isEmpty || !identifier.isEmpty || valueText != nil
+      let placeholder = placeholderText(element.placeholderValue)
+      let hasContent = !label.isEmpty || !identifier.isEmpty || valueText != nil || placeholder != nil
       if !hasContent { return }
       if sameSemanticElement(
         containerSnapshot: containerSnapshot,
@@ -406,7 +407,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
-        placeholder: placeholderText(element.placeholderValue),
+        placeholder: placeholder,
         rect: SnapshotRect(frame),
         enabled: element.isEnabled,
         focused: elementHasFocus(element) ? true : nil,
