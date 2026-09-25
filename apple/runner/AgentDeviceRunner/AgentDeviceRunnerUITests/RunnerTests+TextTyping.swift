@@ -136,6 +136,39 @@ extension RunnerTests {
       }
     }
 
+    // The shape this command posts, decided once: a spaced per-character plan, a peeled warmup plus
+    // the rest, or one burst. The delivery budget below charges this array and the dispatch loops
+    // below post it, so a refusal cannot come from an estimate of a plan the runner never ran
+    // (#2955). The warmup peel is charged here even though only the burst route performs it, and
+    // the spaced route skips it: a spaced plan already posts per character.
+    let synthesizedTypePlan = Self.synthesizedTextPlan(
+      characterCount: text.count,
+      delaySeconds: delaySeconds,
+      selectsExistingText: false,
+      peelsWarmupCharacter: repairMode != .none
+    )
+    // One answer for the whole command, not one per post. The synthesized pace is slowed for fields
+    // whose app owns the value, and a burst that long outlasts the command while the runner is still
+    // posting it, so the ceiling is charged the whole command: charging the chunk instead made 215
+    // characters look like 1 + 214, each inside the budget.
+    let synthesizedTypeCarriesTheCommand = !SynthesizedDeliveryBudget.exceeds(synthesizedTypePlan)
+
+    // Application-wide typing is the only channel left for this post: it is what the command's budget
+    // falls back to, and what private synthesis falls back to. The route cannot read the value back
+    // afterwards, so the text arrives unverified either way. The refusal is charged the whole command
+    // and the post is a chunk of it, so the log names both lengths.
+    func typeApplicationWide(_ value: String, reason: String) -> (element: XCUIElement?, failure: TextEntryFailure?) {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=xctest-application-fallback reason=%@ chars=%d commandChars=%d",
+        reason,
+        value.count,
+        text.count
+      )
+      textEntryRoute = "xctest-application-fallback"
+      app.typeText(value)
+      return (resolveTextEntryElement(app: app, target: activeTarget), nil)
+    }
+
     func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, failure: TextEntryFailure?) {
 #if os(iOS)
       if shouldUseSynthesizedFirstResponderType {
@@ -163,39 +196,18 @@ extension RunnerTests {
         return (currentTarget, nil)
       } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
-        // Text the command budget cannot carry at the synthesized pace goes through application-wide
-        // typing instead. The synthesizer's pace is slowed for fields whose app owns the value, and a
-        // burst that long outlasts the command while the runner is still posting it. The ceiling is
-        // what the command's watchdog leaves, so it is charged the whole command: an append peels its
-        // first character for warmup and a `--delay-ms` plan dispatches one character at a time, and
-        // neither chunk would look long on its own. This branch's target has no element to type into,
-        // so nothing can be read back afterwards: the value arrives unverified, as it does for this
-        // route's older synthesizer-unavailable fallback.
-        if SynthesizedDeliveryBudget.exceeds(
-          textLength: text.count,
-          delaySeconds: delaySeconds,
-          typeWarmup: repairMode != .none
-        ) {
-          textEntryRoute = "xctest-application-fallback"
-          NSLog(
-            "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=xctest-application-fallback "
-              + "reason=delivery-budget chars=%d",
-            value.count
-          )
-          app.typeText(value)
-          return (resolveTextEntryElement(app: app, target: activeTarget), nil)
+        // Two ways this post leaves the synthesized channel, and both hand the text to
+        // application-wide typing: the command's own budget refused it, or XCTest's private synthesis
+        // is unavailable. This branch's target has no element to type into, so nothing can be read
+        // back afterwards: the value arrives unverified either way.
+        guard synthesizedTypeCarriesTheCommand else {
+          return typeApplicationWide(value, reason: "delivery-budget")
         }
         textEntryRoute = "synthesized-first-responder"
         NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder")
-        let action = synthesizer.enterText(
-          app: app,
-          text: value,
-          replacingExistingText: false
-        )
-        switch action {
+        switch synthesizer.enterText(app: app, text: value, replacingExistingText: false) {
         case .fallback:
-          textEntryRoute = "xctest-application-fallback"
-          app.typeText(value)
+          return typeApplicationWide(value, reason: "synthesis-unavailable")
         case .raise(let message):
           NSException(
             name: NSExceptionName.internalInconsistencyException,
@@ -238,17 +250,20 @@ extension RunnerTests {
     }
 
     let characters = Array(text)
-    if delaySeconds > 0 && characters.count > 1 {
+    if synthesizedTypePlan.isSpaced {
       var typedTarget: XCUIElement?
       let delayedTypeStartedAt = Date()
-      for (index, character) in characters.enumerated() {
-        let dispatch = typeIntoCurrentTarget(String(character))
+      var postedCount = 0
+      for step in synthesizedTypePlan.steps {
+        let nextCount = postedCount + step.characterCount
+        let dispatch = typeIntoCurrentTarget(String(characters[postedCount..<nextCount]))
         if let failure = dispatch.failure {
           return dispatchFailureResult(failure)
         }
         typedTarget = dispatch.element ?? typedTarget
-        if index + 1 < characters.count {
-          sleepFor(delaySeconds)
+        postedCount = nextCount
+        if step.pauseAfterSeconds > 0 {
+          sleepFor(step.pauseAfterSeconds)
         }
       }
       logTextEntryPhase(
@@ -288,8 +303,9 @@ extension RunnerTests {
     }
 
     let typedTarget: XCUIElement?
-    if repairMode != .none && characters.count > 1 {
-      let firstCharacter = String(characters[0])
+    if let warmupSplit = synthesizedTypePlan.warmupSplit {
+      let peeledCount = warmupSplit.first.characterCount
+      let firstCharacter = String(characters[0..<peeledCount])
       let firstStartedAt = Date()
       let firstDispatch = typeIntoCurrentTarget(firstCharacter)
       if let failure = firstDispatch.failure {
@@ -310,15 +326,18 @@ extension RunnerTests {
         initialText: initialText
       )
       let warmupStartedAt = Date()
+      // A route with an element reads the peeled character back and waits up to
+      // `warmupValueTimeout` for the app to accept it. The route that had to be budgeted has no
+      // element, so its `warmupExpectedText` is nil and this is the plan's one charged poll.
       waitForWarmupValue(warmupExpectedText, target: activeTarget)
       logTextEntryPhase(
         commandId: commandId,
         phase: "warmup",
         startedAt: warmupStartedAt,
-        chars: 1,
+        chars: peeledCount,
         mode: repairMode
       )
-      let remainingText = String(characters.dropFirst())
+      let remainingText = String(characters[peeledCount...])
       let remainingStartedAt = Date()
       let remainingDispatch = typeIntoCurrentTarget(remainingText)
       if let failure = remainingDispatch.failure {
@@ -329,7 +348,7 @@ extension RunnerTests {
         commandId: commandId,
         phase: "type-remaining",
         startedAt: remainingStartedAt,
-        chars: characters.count - 1,
+        chars: warmupSplit.rest.characterCount,
         mode: repairMode
       )
       typedTarget = firstTypedTarget

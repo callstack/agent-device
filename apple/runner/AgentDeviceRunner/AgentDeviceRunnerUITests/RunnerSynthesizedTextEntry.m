@@ -5,19 +5,10 @@
 
 static NSString *const RunnerTextSynthesisSurface = @"text";
 
-// XCTest's `typingSpeed:` argument is characters per second. At 60 the 11 characters of a `fill`
-// arrived at a fixture field across 131 ms (~13 ms per gap), which is faster than an app that owns
-// its field's value and re-applies it after the edit (a controlled React Native `TextInput`, an
-// async validator) can acknowledge: such a write lands between two characters of the burst and
-// erases what was typed while it was in flight, leaving a value that is stable short of the
-// request. 12 characters/second spaces them ~83 ms apart on average, which reduces that loss but
-// does not remove it: XCTest does not space the characters evenly, and two of them can reach the
-// app a few milliseconds apart. Against a fixture app that acknowledges each edit within 40 ms, 60
-// characters/second left 1 of 11 characters in 20 of 20 bursts, and this pace left 10 or 11. The
-// command refuses a field left short; back-pressure from the field (#2906) is what would prevent
-// it. The app-owned-value lane test pins the average spacing the app sees, and the delivery budget
-// in TextEntryTiming bounds what the pace costs a long text.
-static const NSUInteger RunnerTextEntryTypingSpeedCharactersPerSecond = 12;
+// The pace (`typingSpeed:`) is a caller argument, not a constant here: TextEntryTiming owns it so
+// the synthesized delivery budget charges the pace the app actually sees (#2955). XCTest's
+// `typingSpeed:` is characters per second, and it spaces them unevenly — two characters of a paced
+// burst can reach the app a few milliseconds apart at any pace.
 
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);
 typedef id (*RunnerTextMsgSendInitPath)(id, SEL);
@@ -49,6 +40,7 @@ static RunnerSynthesizedTextEntryResult *RunnerTextEntryFailed(NSString *message
 static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   id application,
   NSString *text,
+  NSUInteger charactersPerSecond,
   BOOL replace
 );
 
@@ -65,18 +57,16 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 
 @implementation RunnerSynthesizedTextEntry
 
-+ (NSUInteger)typingSpeedCharactersPerSecond {
-  return RunnerTextEntryTypingSpeedCharactersPerSecond;
-}
-
 + (RunnerSynthesizedTextEntryResult *)synthesizeTextWithApplication:(id)application
-                                                               text:(NSString *)text {
-  return RunnerSynthesizeTextWithMode(application, text, NO);
+                                                               text:(NSString *)text
+                                                  charactersPerSecond:(NSUInteger)charactersPerSecond {
+  return RunnerSynthesizeTextWithMode(application, text, charactersPerSecond, NO);
 }
 
 + (RunnerSynthesizedTextEntryResult *)replaceTextWithApplication:(id)application
-                                                           text:(NSString *)text {
-  return RunnerSynthesizeTextWithMode(application, text, YES);
+                                                           text:(NSString *)text
+                                              charactersPerSecond:(NSUInteger)charactersPerSecond {
+  return RunnerSynthesizeTextWithMode(application, text, charactersPerSecond, YES);
 }
 
 @end
@@ -84,6 +74,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   id application,
   NSString *text,
+  NSUInteger charactersPerSecond,
   BOOL replace
 ) {
   @try {
@@ -151,7 +142,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       bridge.typeTextSelector,
       text,
       0.0,
-      RunnerTextEntryTypingSpeedCharactersPerSecond,
+      charactersPerSecond,
       YES
     );
     ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);

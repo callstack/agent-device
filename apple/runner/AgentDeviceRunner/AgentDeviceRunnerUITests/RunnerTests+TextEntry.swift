@@ -36,7 +36,12 @@ extension RunnerTests {
         let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
           delaySeconds: Double(recoveryDelay) / 1000
         )
-        return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time without --delay-ms and append the rest with separate type commands, keeping each command inside that budget. --delay-ms lowers the budget, because each character then gets its own synthesize call and each gap between characters pays the delay: \(recoveryBudget) characters at --delay-ms \(recoveryDelay). A longer timeout does not help: this route is chosen when the accessibility channel is already degraded, and the pace is what makes the text long."
+        // Kept inside the 400-character diagnostic bound the host applies to every error string
+        // (`REDACTED_STRING_MAX_LENGTH` in packages/kernel/src/redaction.ts): a hint truncated at
+        // that boundary looks actionable and is not, which is the failure the iOS open-command hint
+        // already refuses to produce. The previous wording cost 460 characters and lost its last
+        // sentence on the wire.
+        return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters per command without --delay-ms and append the rest with separate type commands. --delay-ms lowers the limit: each character then gets its own synthesize call and each gap pays the delay, so \(recoveryDelay) ms fits \(recoveryBudget). This route is chosen when the accessibility channel is already degraded, so a longer timeout does not help."
       }
     }
   }
@@ -71,12 +76,23 @@ extension RunnerTests {
     static let synthesizedDeliveryCeiling: TimeInterval = RunnerTests.mainThreadExecutionTimeout
       - synthesizedReplacementFocusAllowance
       - synthesizedCommitCeiling
-    /// The edit-acknowledge window the synthesized pace is sized for: on average, a burst's
-    /// characters reach the app at least this far apart. XCTest spaces them unevenly, so an app
-    /// with this window can still lose a character that arrives early; the command then refuses the
-    /// short value (#2906 tracks preventing it). The pace policy test and the app-owned-value lane
-    /// test pin the pace against it.
-    static let synthesizedAcknowledgeWindowSeconds: TimeInterval = 0.04
+    /// XCTest's `typingSpeed:` argument: characters per second a synthesized text-input record is
+    /// typed at. At 60 the 11 characters of a `fill` arrived at a fixture field across 131 ms
+    /// (~13 ms per gap), which is faster than an app that owns its field's value and re-applies it
+    /// after the edit (a controlled React Native `TextInput`, an async validator) can acknowledge:
+    /// such a write lands between two characters of the burst and erases what was typed while it was
+    /// in flight, leaving a value that is stable short of the request. 12 characters/second spaces
+    /// them ~83 ms apart on average, which reduces that loss but does not remove it: XCTest does not
+    /// space the characters evenly, and two of them can reach the app a few milliseconds apart.
+    /// Against a fixture app that acknowledges each edit within 40 ms, 60 characters/second left 1
+    /// of 11 characters in 20 of 20 bursts, and this pace left 10 or 11. The command refuses a
+    /// field left short; back-pressure from the field (#2906) is what would prevent it. This is the
+    /// one pace declaration: it is passed to the bridge that types, and the delivery budget below
+    /// charges it, so the pace the app sees and the pace the command is refused at cannot drift. It
+    /// is a `UInt` because that is the bridge's argument type, so no call site converts it.
+    static let synthesizedCharactersPerSecond: UInt = 12
+    /// Seconds two characters of one synthesized burst are typed apart.
+    static let synthesizedCharacterInterval: TimeInterval = 1.0 / Double(synthesizedCharactersPerSecond)
     /// What one private synthesize call costs beyond typing its characters, which a `--delay-ms`
     /// plan pays once per character. One-character calls at the shipped pace took 222 ms on average
     /// on an iPhone 17 Pro simulator (212–617 ms over 235 calls), 83 ms of it the character.

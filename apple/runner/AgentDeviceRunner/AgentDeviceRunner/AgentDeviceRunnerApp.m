@@ -66,7 +66,6 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
-@property(nonatomic, assign) NSUInteger textEntryRenderedEdits;
 @property(nonatomic, assign) NSUInteger textEntryWriteBacks;
 @property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
 @property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
@@ -187,8 +186,7 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 - (void)updateTextEntryWriteBackStatus {
   NSTimeInterval burstSpan = self.textEntryLastEditTime - self.textEntryBurstStartTime;
   self.textEntryWriteBackStatus.text = [NSString
-    stringWithFormat:@"edits=%lu write-backs=%lu burst-edits=%lu burst-ms=%lu min-gap-ms=%lu",
-                     (unsigned long)self.textEntryRenderedEdits,
+    stringWithFormat:@"write-backs=%lu burst-edits=%lu burst-ms=%lu min-gap-ms=%lu",
                      (unsigned long)self.textEntryWriteBacks,
                      (unsigned long)self.textEntryBurstEdits,
                      (unsigned long)llround(burstSpan * 1000),
@@ -292,7 +290,6 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
       }
     } else {
       self.textEntryRenderedValue = [textField.text copy];
-      self.textEntryRenderedEdits += 1;
     }
     [self updateTextEntryWriteBackStatus];
   }

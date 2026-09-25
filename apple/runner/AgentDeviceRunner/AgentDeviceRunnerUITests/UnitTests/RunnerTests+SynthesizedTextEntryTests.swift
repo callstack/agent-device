@@ -3,13 +3,16 @@ import XCTest
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
   /// What the app-owned-value fixture reports about the edits it saw. Counts and timings only: the
-  /// field's contents never cross into the test.
+  /// field's contents never cross into the test. `write-backs` is the only counter this suite acts
+  /// on; the others are parsed so a fixture that stops reporting one fails here instead of silently
+  /// narrowing what the pacing assertion can see.
   struct AppOwnedFieldStatus {
-    let edits: Int
     let writeBacks: Int
     /// Edits in the latest burst, and the milliseconds between its first and last edit.
     let burstEdits: Int
     let burstMilliseconds: Int
+    /// Diagnostic only: XCTest does not space `typingSpeed:` characters evenly, so no pace this
+    /// runner could ship promises a closest pair. It names the tightest gap when the average fails.
     let minimumGapMilliseconds: Int
   }
 
@@ -24,7 +27,6 @@ extension RunnerTests {
       try XCTUnwrap(fields[name], "fixture status lacks \(name): \(label)")
     }
     return AppOwnedFieldStatus(
-      edits: try field("edits"),
       writeBacks: try field("write-backs"),
       burstEdits: try field("burst-edits"),
       burstMilliseconds: try field("burst-ms"),
@@ -102,7 +104,7 @@ extension RunnerTests {
   ///   was the original defect.
   @MainActor
   func testSynthesizedReplacementPacesAnAppOwnedFieldAtItsAcknowledgeWindow() throws {
-    let window = TextEntryTiming.synthesizedAcknowledgeWindowSeconds
+    let window = TextEntryTestAssumptions.synthesizedAcknowledgeWindowSeconds
     let textField = try focusSynthesizedReplacementField(extraLaunchArguments: [
       "--agent-device-text-entry-app-owned-value",
       "--agent-device-text-entry-acknowledge-window", String(window),

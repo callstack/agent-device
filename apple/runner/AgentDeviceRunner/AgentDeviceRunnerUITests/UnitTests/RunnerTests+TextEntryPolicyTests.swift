@@ -2,21 +2,31 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  /// The edit-acknowledge window the shipped pace is sized for: on average, a burst's characters
+  /// reach the app at least this far apart. XCTest spaces them unevenly, so an app with this window
+  /// can still lose a character that arrives early; the command then refuses the short value and
+  /// #2906 tracks preventing that. Nothing in the runner reads this — it is what the two pace tests
+  /// hold the pace against, and what the app-owned-value fixture is launched to model — so it lives
+  /// with the tests instead of in the shipped `TextEntryTiming`.
+  enum TextEntryTestAssumptions {
+    static let synthesizedAcknowledgeWindowSeconds: TimeInterval = 0.04
+  }
+
 #if os(iOS)
   final class RecordingTextEntrySynthesizer: TextEntrySynthesizing {
-    var steps: [SynthesizedReplacementStep] = []
+    struct Post: Equatable {
+      let text: String
+      let replacesExistingText: Bool
+    }
+
+    var posts: [Post] = []
 
     func enterText(
       app _: XCUIApplication,
       text: String,
       replacingExistingText: Bool
     ) -> SynthesizedTextEntryAction {
-      steps.append(
-        SynthesizedReplacementStep(
-          text: text,
-          replacesExistingText: replacingExistingText
-        )
-      )
+      posts.append(Post(text: text, replacesExistingText: replacingExistingText))
       return .continueTyping
     }
   }
@@ -226,29 +236,57 @@ extension RunnerTests {
     }
   }
 
-  func testSynthesizedReplacementPacesCharactersAfterSelectingOnce() {
+  // The plan is the single source for both the cost and the posts: these cases name the array the
+  // replacement route will execute, character counts and all, because the budget below charges this
+  // same array rather than a second estimate of it (#2955).
+  func testSynthesizedReplacementPlanPacesCharactersAfterSelectingOnce() {
     XCTAssertEqual(
-      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0.05),
-      [
-        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
-        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
-        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
-      ]
+      Self.synthesizedTextPlan(characterCount: 3, delaySeconds: 0.05, selectsExistingText: true),
+      SynthesizedTextPlan(
+        steps: [
+          SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true, pauseAfterSeconds: 0.05),
+          SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: 0.05),
+          SynthesizedTextPlan.Step(characterCount: 1),
+        ],
+        isSpaced: true
+      )
     )
     XCTAssertEqual(
-      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0),
-      [SynthesizedReplacementStep(text: "abc", replacesExistingText: true)]
+      Self.synthesizedTextPlan(characterCount: 3, delaySeconds: 0, selectsExistingText: true),
+      SynthesizedTextPlan(
+        steps: [SynthesizedTextPlan.Step(characterCount: 3, replacesExistingText: true)],
+        isSpaced: false
+      )
+    )
+  }
+
+  // A select-and-type post runs two synthesize records — the Command-A selection and the text — so a
+  // burst that replaces costs more than the characters it types. Charging one call per post is the
+  // projection defect this plan exists to remove, one level down.
+  func testSynthesizedPlanChargesAReplacingPostTwoSynthesizeCalls() {
+    let replacing = SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true)
+    XCTAssertEqual(replacing.synthesizeCallCount, 2)
+    XCTAssertEqual(
+      SynthesizedTextPlan.Step(characterCount: 1).synthesizeCallCount,
+      1
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: true).seconds,
+      TextEntryTiming.synthesizedCharacterInterval
+        + 2 * TextEntryTiming.synthesizeCallOverhead
     )
   }
 
   // The pace is what keeps a field the app owns from losing most of a replacement (#2080), so it
   // cannot drift on its own: one character interval has to leave that app at least twice the
-  // acknowledge window the route is sized for. The host lane runs this on every PR; the iOS lane's
-  // app-owned-value test checks the spacing the app actually receives.
+  // acknowledge window the route is sized for. The pace is declared once in TextEntryTiming and
+  // passed to the bridge that types, so the budget cannot charge a speed the app never sees. The
+  // host lane runs this on every PR; the iOS lane's app-owned-value test checks the spacing the app
+  // actually receives.
   func testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit() {
     XCTAssertGreaterThanOrEqual(
-      SynthesizedDeliveryBudget.characterInterval,
-      2 * TextEntryTiming.synthesizedAcknowledgeWindowSeconds
+      TextEntryTiming.synthesizedCharacterInterval,
+      2 * TextEntryTestAssumptions.synthesizedAcknowledgeWindowSeconds
     )
   }
 
@@ -259,59 +297,130 @@ extension RunnerTests {
   func testSynthesizedDeliveryBudgetRefusesTextThatOutrunsTheCommand() {
     let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)
     XCTAssertGreaterThan(fits, 0)
-    XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: 0))
-    XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: 0))
+    XCTAssertFalse(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits, delaySeconds: 0, selectsExistingText: true)
+      )
+    )
+    XCTAssertTrue(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits + 1, delaySeconds: 0, selectsExistingText: true)
+      )
+    )
   }
 
-  // A spaced plan posts each character in its own synthesize call and sleeps between two of them,
-  // so a character costs the pace, the call's overhead and the delay together, not the larger of
-  // pace and delay. The delay checked is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
-  func testSpacedDeliveryBudgetChargesEachCharacterItsCallAndDelay() {
+  // A spaced plan posts each character in its own synthesize call and waits between two of them, so a
+  // character costs the pace, the call's overhead and the delay together, not the larger of pace and
+  // delay. The delay checked is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
+  func testSpacedDeliveryBudgetRefusesSoonerThanABurst() {
     let delay = Double(TextEntryTiming.recoveryDelayMilliseconds) / 1000
     let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
-    XCTAssertFalse(SynthesizedDeliveryBudget.exceeds(textLength: fits, delaySeconds: delay))
-    XCTAssertTrue(SynthesizedDeliveryBudget.exceeds(textLength: fits + 1, delaySeconds: delay))
-    XCTAssertEqual(
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: 10, delaySeconds: delay)
-        - SynthesizedDeliveryBudget.projectedSeconds(textLength: 9, delaySeconds: delay),
-      SynthesizedDeliveryBudget.characterInterval
-        + TextEntryTiming.synthesizeCallOverhead
-        + delay,
-      accuracy: 1e-9
+    XCTAssertFalse(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits, delaySeconds: delay, selectsExistingText: true)
+      )
+    )
+    XCTAssertTrue(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits + 1, delaySeconds: delay, selectsExistingText: true)
+      )
     )
     XCTAssertLessThan(fits, SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0))
     XCTAssertLessThan(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2), fits)
+    // Policy floor, not a formula copy: one more spaced character pays its pace, its own
+    // synthesize call AND the delay, so the gap between two adjacent lengths cannot come cheaper
+    // than all three. A builder that dropped `pauseAfterSeconds` (charge the delay nowhere, or
+    // sleep for nothing) lands under this floor.
+    let cost = Self.synthesizedTextPlan(characterCount: 10, delaySeconds: delay, selectsExistingText: true).seconds
+      - Self.synthesizedTextPlan(characterCount: 9, delaySeconds: delay, selectsExistingText: true).seconds
+    XCTAssertGreaterThanOrEqual(
+      cost,
+      TextEntryTiming.synthesizedCharacterInterval
+        + TextEntryTiming.synthesizeCallOverhead
+        + 0.8 * delay
+    )
   }
 
-  // A `type` plan peels one character as a warmup and posts the rest afterwards, so the same text
-  // costs one synthesize call and one wait more than the single burst the replacement route posts.
-  // Without this the estimate charged a burst, which is what made the over-budget branch of the
-  // keyboard-visible route unreachable: 215 characters looked like 1 + 214, each inside the budget.
-  func testTypeWarmupSplitCostsOneMoreCallThanASingleBurst() {
+  // Both builders must describe the SAME text the executor will slice: every step's characters
+  // accounted for, the spaced plan covering each character exactly once, and the peeled plan's
+  // rest posting what the warmup did not. An off-by-one here posts a character twice or never,
+  // and the charged seconds would describe a different command than the one run.
+  func testSynthesizedPlansCoverTheirTextExactlyOnce() {
+    for length in [2, 3, 11, 240] {
+      for delay in [0.0, 0.08] {
+        let replacement = Self.synthesizedTextPlan(
+          characterCount: length, delaySeconds: delay, selectsExistingText: true
+        )
+        XCTAssertEqual(replacement.steps.reduce(0) { $0 + $1.characterCount }, length)
+        let type = Self.synthesizedTextPlan(
+          characterCount: length, delaySeconds: delay, selectsExistingText: false, peelsWarmupCharacter: true
+        )
+        XCTAssertEqual(type.steps.reduce(0) { $0 + $1.characterCount }, length)
+        if let split = type.warmupSplit {
+          XCTAssertEqual(split.first.characterCount + split.rest.characterCount, length)
+          // A peel only exists on an unspaced burst, and its read-back is the one poll the budget
+          // route can afford: a spaced plan covers the same text with per-character posts instead.
+          XCTAssertEqual(split.first.pauseAfterSeconds, TextEntryTiming.pollInterval)
+        }
+      }
+    }
+  }
+
+  // The recovery tells the caller to fill ≤ N and append the rest with `type`. That only works if
+  // an appending command with the peeled warmup is admitted at exactly the same lengths a fill is;
+  // if the peel ever cost more, the hint would send the caller into a refusal on the second chunk.
+  func testAppendChunksAreAdmittedAtTheFillsOwnBudget() {
+    for delay in [0.0, Double(TextEntryTiming.recoveryDelayMilliseconds) / 1000] {
+      let fillFits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
+      XCTAssertFalse(
+        SynthesizedDeliveryBudget.exceeds(
+          Self.synthesizedTextPlan(
+            characterCount: fillFits,
+            delaySeconds: delay,
+            selectsExistingText: false,
+            peelsWarmupCharacter: true
+          )
+        ),
+        "delay \(delay): the hint's recovery refuses what its own number recommends"
+      )
+    }
+  }
+
+  // A `type` command peels one character as a warmup and posts the rest, so the same text costs one
+  // synthesize call and one read-back more than the single burst the replacement route posts. Without
+  // this the estimate charged a burst, which made the over-budget branch of the keyboard-visible route
+  // unreachable: 215 characters looked like 1 + 214, each inside the budget.
+  func testTypePlanPeelsAWarmupCharacterAndChargesItsReadBack() {
     let length = 20
-    let withWarmup = SynthesizedDeliveryBudget.projectedSeconds(
-      textLength: length,
-      delaySeconds: 0,
-      typeWarmup: true
+    let warmup = TextEntryTiming.pollInterval
+    XCTAssertEqual(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true),
+      SynthesizedTextPlan(
+        steps: [
+          SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: warmup, warmsUpField: true),
+          SynthesizedTextPlan.Step(characterCount: length - 1),
+        ],
+        isSpaced: false
+      )
     )
-    XCTAssertGreaterThan(
-      withWarmup,
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0)
+    // Floor, not arithmetic copy: the peeled plan costs at least one synthesize call AND the
+    // one-poll read-back more than the same burst unpeeled. Dropping either charge falls under it.
+    XCTAssertGreaterThanOrEqual(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true).seconds
+        - Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: false).seconds,
+      TextEntryTiming.synthesizeCallOverhead + TextEntryTiming.pollInterval
+    )
+    // A spaced `type` already posts per character, and a single character has no rest to post, so
+    // neither shape peels.
+    XCTAssertNil(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true).warmupSplit
+    )
+    XCTAssertNil(
+      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true).warmupSplit
     )
     XCTAssertEqual(
-      withWarmup - SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0),
-      TextEntryTiming.synthesizeCallOverhead + TextEntryTiming.pollInterval,
-      accuracy: 1e-9
-    )
-    // The split mirrors the plan: a spaced `type` already posts per character, and a single
-    // character has no rest to post.
-    XCTAssertEqual(
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0.2, typeWarmup: true),
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: length, delaySeconds: 0.2)
-    )
-    XCTAssertEqual(
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: 1, delaySeconds: 0, typeWarmup: true),
-      SynthesizedDeliveryBudget.projectedSeconds(textLength: 1, delaySeconds: 0)
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true),
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: false)
     )
   }
 
@@ -323,14 +432,21 @@ extension RunnerTests {
     // The recovery has to tell the caller to split the text: waiting it out or raising a timeout
     // does nothing, because the pace is what makes the burst long, not the host being slow. A
     // delayed request fits fewer characters, so the hint names both budgets rather than promising
-    // the undelayed one to a caller retrying with --delay-ms.
+    // the undelayed one to a caller retrying with --delay-ms. The numbers come from the same
+    // admission the route applied, so a hint can never promise a length it then refuses.
     let hint = TextEntryFailure.synthesisBudgetExceeded.hint
-    XCTAssertTrue(hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters at a time"))
+    XCTAssertTrue(
+      hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters per command"),
+      hint
+    )
     let recoveryDelay = TextEntryTiming.recoveryDelayMilliseconds
     let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
       delaySeconds: Double(recoveryDelay) / 1000
     )
-    XCTAssertTrue(hint.contains("\(recoveryBudget) characters at --delay-ms \(recoveryDelay)"))
+    XCTAssertTrue(hint.contains("\(recoveryDelay) ms fits \(recoveryBudget)"), hint)
+    // The host redacts any diagnostic string past 400 characters, and a hint cut there reads as
+    // actionable but is not. This one carried 460 and silently lost its last sentence on the wire.
+    XCTAssertLessThanOrEqual(hint.count, 400, "hint outlives the host's diagnostic bound: \(hint.count)")
   }
 
 #if os(iOS)
@@ -363,11 +479,11 @@ extension RunnerTests {
     )
 
     XCTAssertEqual(
-      synthesizer.steps,
+      synthesizer.posts,
       [
-        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
-        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
-        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
+        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: true),
+        RecordingTextEntrySynthesizer.Post(text: "b", replacesExistingText: false),
+        RecordingTextEntrySynthesizer.Post(text: "c", replacesExistingText: false),
       ]
     )
     XCTAssertNil(result.verified)

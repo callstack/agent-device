@@ -42,8 +42,16 @@ extension RunnerTests {
 #if os(iOS)
       let postStartedAt = Date()
       let result = replacingExistingText
-        ? RunnerSynthesizedTextEntry.replaceText(withApplication: app, text: text)
-        : RunnerSynthesizedTextEntry.synthesizeText(withApplication: app, text: text)
+        ? RunnerSynthesizedTextEntry.replaceText(
+          withApplication: app,
+          text: text,
+          charactersPerSecond: TextEntryTiming.synthesizedCharactersPerSecond
+        )
+        : RunnerSynthesizedTextEntry.synthesizeText(
+          withApplication: app,
+          text: text,
+          charactersPerSecond: TextEntryTiming.synthesizedCharactersPerSecond
+        )
       NSLog(
         "[DEBUG-1874] synthesize posted %d chars status=%d tookMs=%.0f",
         text.count, result.status.rawValue, postStartedAt.timeIntervalSinceNow * -1000
@@ -73,74 +81,144 @@ extension RunnerTests {
 #endif
   }
 
-  struct SynthesizedReplacementStep: Equatable {
-    let text: String
-    let replacesExistingText: Bool
+  /// One synthesized text-entry plan: the posts a command makes, in the order it makes them, each
+  /// with the wait that follows it. The delivery budget charges this array and the dispatch loop
+  /// posts this same array, so the ceiling a command is refused against can never be a projection
+  /// of a plan the runner did not run (#2955).
+  struct SynthesizedTextPlan: Equatable {
+    /// One post. `characterCount` characters of the text, taken in order, are what it types.
+    struct Step: Equatable {
+      let characterCount: Int
+      /// True when this post selects the field's existing value away first. That selection is its
+      /// own synthesize record, so the post costs one call more than typing characters.
+      var replacesExistingText = false
+      /// Seconds charged for what follows this post: the `--delay-ms` gap before the next post, or
+      /// the warmup read-back after a peeled first character. The read-back costs one poll, because
+      /// the route that needs a budget has no element to read the character back from and its wait
+      /// cannot be longer than one poll of a value nobody can observe.
+      var pauseAfterSeconds: TimeInterval = 0
+      /// Set on the post whose value the loop waits for before the rest is posted.
+      var warmsUpField = false
+
+      /// How many private synthesize records this post runs.
+      var synthesizeCallCount: Int {
+        replacesExistingText ? 2 : 1
+      }
+    }
+
+    let steps: [Step]
+    /// Recorded by the builder so the dispatch loop never re-decides the shape from `delaySeconds`.
+    let isSpaced: Bool
+
+    /// One post per character, `delaySeconds` charged after every post but the last. A replacement
+    /// selects once, on its first post; an append never selects.
+    static func spacedSteps(
+      characterCount: Int,
+      delaySeconds: Double,
+      replacesExistingTextOnFirstPost: Bool = false
+    ) -> [Step] {
+      (0..<characterCount).map { index in
+        Step(
+          characterCount: 1,
+          replacesExistingText: replacesExistingTextOnFirstPost && index == 0,
+          pauseAfterSeconds: index + 1 < characterCount ? delaySeconds : 0
+        )
+      }
+    }
+
+    /// Wall clock this plan spends posting: each post types its characters at the pace and pays for
+    /// every synthesize record it runs, and each wait in front of the next post is charged once.
+    var seconds: TimeInterval {
+      steps.reduce(0) { total, step in
+        total
+          + Double(step.characterCount) * TextEntryTiming.synthesizedCharacterInterval
+          + Double(step.synthesizeCallCount) * TextEntryTiming.synthesizeCallOverhead
+          + step.pauseAfterSeconds
+      }
+    }
+
+    /// The peeled first character and the rest, when the plan warms the field up before posting it.
+    var warmupSplit: (first: Step, rest: Step)? {
+      guard steps.count == 2, let first = steps.first, first.warmsUpField else {
+        return nil
+      }
+      return (first, steps[1])
+    }
   }
 
-  static func synthesizedReplacementSteps(
-    text: String,
-    delaySeconds: Double
-  ) -> [SynthesizedReplacementStep] {
-    guard synthesizedReplacementIsSpaced(characterCount: text.count, delaySeconds: delaySeconds)
-    else {
-      return [SynthesizedReplacementStep(text: text, replacesExistingText: true)]
-    }
-    return Array(text).enumerated().map { index, character in
-      SynthesizedReplacementStep(
-        text: String(character),
-        replacesExistingText: index == 0
-      )
-    }
-  }
-
-  /// Whether a replacement is posted one character per synthesize call, `delaySeconds` apart,
-  /// rather than as one burst.
-  static func synthesizedReplacementIsSpaced(characterCount: Int, delaySeconds: Double) -> Bool {
+  /// Whether a text is posted one character per synthesize call, `delaySeconds` apart, rather than
+  /// as one burst. The one place this is decided for every synthesized route.
+  static func synthesizedDeliveryIsSpaced(characterCount: Int, delaySeconds: Double) -> Bool {
     delaySeconds > 0 && characterCount > 1
   }
 
-  /// What a synthesized burst costs in wall clock, and the ceiling it has to fit inside before the
-  /// first character is posted. `synthesizedReplacementSteps` decides how a text is posted; this
-  /// decides whether the runner may start posting it at all.
+  /// The posts a synthesized command makes.
+  ///
+  /// - A spaced request posts one character per call with the requested gap between calls; a
+  ///   `fill` selects once, on its first post, and a `type` never selects.
+  /// - A burst is one post, which a `fill` selects away first.
+  /// - A burst from a command that repairs peels one character instead, because a field whose app
+  ///   owns its value can reject the whole burst on the first edit's write-back; the rest follows
+  ///   after the warmup read-back.
+  static func synthesizedTextPlan(
+    characterCount: Int,
+    delaySeconds: Double,
+    selectsExistingText: Bool,
+    peelsWarmupCharacter: Bool = false
+  ) -> SynthesizedTextPlan {
+    if synthesizedDeliveryIsSpaced(characterCount: characterCount, delaySeconds: delaySeconds) {
+      return SynthesizedTextPlan(
+        steps: SynthesizedTextPlan.spacedSteps(
+          characterCount: characterCount,
+          delaySeconds: delaySeconds,
+          replacesExistingTextOnFirstPost: selectsExistingText
+        ),
+        isSpaced: true
+      )
+    }
+    guard peelsWarmupCharacter && characterCount > 1 else {
+      return SynthesizedTextPlan(
+        steps: [
+          SynthesizedTextPlan.Step(
+            characterCount: characterCount,
+            replacesExistingText: selectsExistingText
+          ),
+        ],
+        isSpaced: false
+      )
+    }
+    return SynthesizedTextPlan(
+      steps: [
+        SynthesizedTextPlan.Step(
+          characterCount: 1,
+          pauseAfterSeconds: TextEntryTiming.pollInterval,
+          warmsUpField: true
+        ),
+        SynthesizedTextPlan.Step(characterCount: characterCount - 1),
+      ],
+      isSpaced: false
+    )
+  }
+
+  /// What a plan may not cost: more wall clock than the command has left to post characters. It is
+  /// asked before the first character is dispatched, from the array about to be posted.
   enum SynthesizedDeliveryBudget {
-    /// Seconds between two characters of one synthesized burst.
-    static var characterInterval: TimeInterval {
-      1.0 / Double(RunnerSynthesizedTextEntry.typingSpeedCharactersPerSecond())
+    static func exceeds(_ plan: SynthesizedTextPlan) -> Bool {
+      plan.seconds > TextEntryTiming.synthesizedDeliveryCeiling
     }
 
-    /// Seconds the plan spends posting: each synthesize call types its characters at the pace and
-    /// pays its overhead, a spaced plan sleeps `delaySeconds` between two calls, and a plan that
-    /// peels one character as a warmup (`typeWarmup`) pays one more call and the wait before the
-    /// rest is posted. That wait is one poll here because the caller that asks has no element to
-    /// read the warmup character back from, so `waitForWarmupValue` has no value to wait for.
-    static func projectedSeconds(
-      textLength: Int,
-      delaySeconds: TimeInterval,
-      typeWarmup: Bool = false
-    ) -> TimeInterval {
-      let spaced = synthesizedReplacementIsSpaced(characterCount: textLength, delaySeconds: delaySeconds)
-      let warmupSplit = typeWarmup && textLength > 1 && !spaced
-      let calls = spaced ? textLength : (warmupSplit ? 2 : 1)
-      return Double(textLength) * characterInterval
-        + Double(calls) * TextEntryTiming.synthesizeCallOverhead
-        + Double(calls - 1) * delaySeconds
-        + (warmupSplit ? TextEntryTiming.pollInterval : 0)
-    }
-
-    static func exceeds(
-      textLength: Int,
-      delaySeconds: TimeInterval,
-      typeWarmup: Bool = false
-    ) -> Bool {
-      projectedSeconds(textLength: textLength, delaySeconds: delaySeconds, typeWarmup: typeWarmup)
-        > TextEntryTiming.synthesizedDeliveryCeiling
-    }
-
-    /// Longest text `exceeds` admits at `delaySeconds`, which is what the refusal tells the caller.
+    /// Longest text a replacement at `delaySeconds` still admits, which is the number the refusal
+    /// tells the caller. It asks the same plan admission judges, so the recovery hint can never
+    /// promise a length the route then refuses.
     static func maxTextLength(delaySeconds: TimeInterval) -> Int {
       var length = 1
-      while !exceeds(textLength: length + 1, delaySeconds: delaySeconds) {
+      while !exceeds(
+        synthesizedTextPlan(
+          characterCount: length + 1,
+          delaySeconds: delaySeconds,
+          selectsExistingText: true
+        )
+      ) {
         length += 1
       }
       return length
@@ -153,10 +231,12 @@ extension RunnerTests {
   ) -> SynthesizedReplacementRouteOutcome {
 #if os(iOS)
     NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement")
-    if SynthesizedDeliveryBudget.exceeds(
-      textLength: request.text.count,
-      delaySeconds: request.delaySeconds
-    ) {
+    let plan = Self.synthesizedTextPlan(
+      characterCount: request.text.count,
+      delaySeconds: request.delaySeconds,
+      selectsExistingText: true
+    )
+    if SynthesizedDeliveryBudget.exceeds(plan) {
       NSLog(
         "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=synthesized-first-responder-replacement "
           + "reason=delivery-budget-refused chars=%d budgetChars=%d",
@@ -174,14 +254,13 @@ extension RunnerTests {
         )
       )
     }
-    let steps = Self.synthesizedReplacementSteps(
-      text: request.text,
-      delaySeconds: request.delaySeconds
-    )
-    for (index, step) in steps.enumerated() {
+    var postedCount = 0
+    let characters = Array(request.text)
+    for step in plan.steps {
+      let nextCount = postedCount + step.characterCount
       switch request.synthesizer.enterText(
         app: request.app,
-        text: step.text,
+        text: String(characters[postedCount..<nextCount]),
         replacingExistingText: step.replacesExistingText
       ) {
       case .fallback:
@@ -198,8 +277,9 @@ extension RunnerTests {
       case .continueTyping:
         break
       }
-      if index + 1 < steps.count {
-        sleepFor(request.delaySeconds)
+      postedCount = nextCount
+      if step.pauseAfterSeconds > 0 {
+        sleepFor(step.pauseAfterSeconds)
       }
     }
     // The private synthesize call returns at post time, not commit time, and this route never
