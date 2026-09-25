@@ -143,18 +143,14 @@ extension RunnerTests {
     }
   }
 
-  /// `.noApp` owes both of the merge-base's answers: a registered host presented over the session is
-  /// served in place with its surface disclosed (#2438), and with nothing presented the standing cached
-  /// target is served rather than a target resolved from the request. The policy axis dropped both.
-  /// The request names a bundle the session never bound because that is the only shape separating the
-  /// two targets — when the request agrees with the cache, both answers name the same app. The seam is
-  /// the hosts' foreground state alone and it is authoritative while set, so every registered host's
-  /// answer is pinned here and none is read from live state; the probe's registry walk and foreground
-  /// condition stay the production ones. This pins preparation, which is the whole contract for this
-  /// class: no `.noApp` command body reads the prepared target or the disclosure, on this chain or at
-  /// the merge-base, so the arm that says so in `prepareActiveCommandContext` is the consumer of
-  /// record. Deleting the presented arm fails the first block, and resolving the target from the
-  /// request instead of the cache fails the last.
+  /// Pins the `.noApp` preparation contract in `prepareActiveCommandContext`: a presented host is
+  /// served in place with its surface disclosed, and with nothing presented the standing cached
+  /// target is served rather than one resolved from the request. The request names a bundle the
+  /// session never bound because that is the only shape separating the two targets — when the
+  /// request agrees with the cache, both answers name the same app. The override is authoritative
+  /// for every registered host while set, so no live state is read; the probe's registry walk and
+  /// foreground condition stay the production ones. Deleting the presented arm fails the first
+  /// block, and resolving the target from the request instead of the cache fails the last.
   @MainActor
   func testNoAppCommandStillServesAPresentedSurfaceInPlaceAndOtherwiseTheStandingTarget() throws {
     let cachedBundleId = "com.example.session"

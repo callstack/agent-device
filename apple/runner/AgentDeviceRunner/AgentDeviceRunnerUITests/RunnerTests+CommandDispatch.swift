@@ -468,25 +468,13 @@ extension RunnerTests {
     }
     switch command.traits.launchPolicy {
     case .noApp:
-      // The merge-base's prepared contract, which the policy axis dropped: a genuinely presented
-      // surface is consulted first and served in place as the prepared target with that surface
-      // disclosed, activating nothing and rebinding no session target (#2438). Both facts are
-      // preparation-level and neither has a consumer for this class today — the same as at the
-      // merge-base for every command it had: `status`, `uptime`, `recordStop`, `terminate`,
-      // `targetReset` and `shutdown` answer before reading a target; iOS `screenshot` resolves its
-      // own capture display on purpose (#2728) and macOS `screenshot` resolves the named app or the
-      // full screen, so neither reads the prepared target either; off iOS the probe serves nothing
-      // in place; and `snapshot` — the only provenance consumer — is `.existingApp` and keeps its
-      // presented route in `prepareActivatedTarget`. `appState` is newer than the merge-base and
-      // reads the named bundle's state itself. What the arm owns is the prepared subject and
-      // disclosure, restored to the contract every following command was classified against.
+      // Serves a genuinely presented surface in place with its provenance, else the standing cached
+      // target, activating nothing and binding nothing (#2438); `Command.traits` is the member list.
       if let presented = presentedSystemSurfaceHost() {
         return .context(ActiveCommandContext(app: presented.app, systemSurface: presented.host))
       }
-      // Nothing is presented, so the target is the one that already stands: the cached session app,
-      // or the runner host when nothing is bound. Not the request's bundle id — this route never
-      // resolves a bundle it has not already bound, which is what keeps an observation from deciding
-      // which app it is about.
+      // The standing target, not the request's bundle id: this route never resolves a bundle it has
+      // not already bound, which is what keeps an observation from deciding which app it is about.
       return .context(ActiveCommandContext(app: mainOwned.app ?? app))
     case .presentedSurface:
       // The command is about the surface that already has focus; activating an app under it would
