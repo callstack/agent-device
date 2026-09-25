@@ -468,9 +468,17 @@ extension RunnerTests {
     }
     switch command.traits.launchPolicy {
     case .noApp:
-      // Answers from the runner's own capture and state, so the target is resolved exactly as it
-      // stands.
-      return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+      // A surface that is genuinely on screen is the screen this command would observe, so it is
+      // served in place first, exactly as it is for the reads: bringing nothing forward is what makes
+      // an observation honest, and it is not the same promise as ignoring what is presented (#2438).
+      if let presented = presentedSystemSurfaceHost() {
+        return .context(ActiveCommandContext(app: presented.app, systemSurface: presented.host))
+      }
+      // Nothing is presented, so the target is the one that already stands: the cached session app,
+      // or the runner host when nothing is bound. Not the request's bundle id — this route never
+      // resolves a bundle it has not already bound, which is what keeps an observation from deciding
+      // which app it is about.
+      return .context(ActiveCommandContext(app: mainOwned.app ?? app))
     case .presentedSurface:
       // The command is about the surface that already has focus; activating an app under it would
       // cancel exactly what the command is about.
@@ -581,15 +589,27 @@ extension RunnerTests {
   private func presentedSystemSurfaceHost() -> (host: SystemSurfaceHost, app: XCUIApplication)? {
 #if os(iOS)
     for host in SystemSurfaceHostRegistry.hosts {
-      let candidate = XCUIApplication(bundleIdentifier: host.bundleId)
-      if candidate.state == .runningForeground {
-        return (host, candidate)
+      if systemSurfaceHostState(host) == .runningForeground {
+        return (host, XCUIApplication(bundleIdentifier: host.bundleId))
       }
     }
     return nil
 #else
     return nil
 #endif
+  }
+
+  /// Whether a registered host is on screen. A registered host is an out-of-process service that only
+  /// comes up because some app presented it, and `open` refuses to launch one, so no in-bundle test
+  /// can make the system report one foreground; the named hosts answer that one question here and the
+  /// registry order and the foreground condition above stay the production ones.
+  private func systemSurfaceHostState(_ host: SystemSurfaceHost) -> XCUIApplication.State {
+    #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    if presentedSystemSurfaceForegroundOverrideForTesting?.contains(host.bundleId) == true {
+      return .runningForeground
+    }
+    #endif
+    return XCUIApplication(bundleIdentifier: host.bundleId).state
   }
 
   func currentXCTestFailureCount() -> Int {
