@@ -34,13 +34,12 @@ function workflowStepIndex(workflow: string, matches: (step: WorkflowStep) => bo
     .findIndex(matches);
 }
 
-test('every runner build-cache input triggers the PR XCTest lane', () => {
+test('native runner build-cache inputs trigger the PR XCTest lane', () => {
   const action = fs.readFileSync(
     path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
     'utf8',
   );
-  expect(cacheInputs(action)).toContain('packages/platform-apple/src/runner/**');
-  expect(cacheInputs(action)).toContain('!packages/platform-apple/src/runner/__tests__/**');
+  expect(cacheInputs(action).filter((input) => input.startsWith('packages/'))).toEqual([]);
   const uncovered = (text: string) =>
     cacheInputs(text)
       .filter((input) => !input.startsWith('!'))
