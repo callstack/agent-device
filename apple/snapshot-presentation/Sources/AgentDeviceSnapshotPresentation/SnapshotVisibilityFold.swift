@@ -242,10 +242,10 @@ public enum SnapshotVisibilityFold {
   }
 
   /// The fold's share of the `hittable` policy (#2891). A declared `false` is kept; anything the
-  /// source left undecided is re-decided on the clipped frame, which refuses a disabled or
-  /// degenerate node with no viewport to consult and answers `nil` only while containment is the
-  /// open question. A `visibilityExempt` carrier clipped to nothing by a scroll anchor is that
-  /// `nil` today, and its own frame already answers the question.
+  /// source left undecided is re-decided on the clipped frame: a disabled or degenerate frame —
+  /// including a `visibilityExempt` carrier a scroll anchor clipped to nothing — answers `false`,
+  /// and `nil` stays reserved for the one question the clipped frame cannot answer, containment
+  /// while the capture has no viewport box.
   private static func clippedHittability(
     source: Bool?,
     enabled: Bool,
