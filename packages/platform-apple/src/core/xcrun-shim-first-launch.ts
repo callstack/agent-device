@@ -39,7 +39,10 @@ export type XcrunShimFirstLaunchHook =
     }
   | ArmedXcrunShimFirstLaunchHook;
 
-/** Why a shim reads as armed; every value but `version_mismatch` is a probe that could not decide. */
+/**
+ * Why a shim reads as armed; every value but `version_mismatch` is a probe that could not decide.
+ * `probe_out_of_budget` is a stop by the cold-toolchain budget, never by the owning phase's clock.
+ */
 export type XcrunShimArmedBy =
   | 'version_mismatch'
   | 'version_unreadable'
@@ -64,10 +67,14 @@ export type ArmedXcrunShimFirstLaunchHook = XcrunShimEvidence & {
 /** One entry per {@link XCRUN_SHIM_TOOL_NAMES} tool. */
 export type XctestDeviceSetCleanupArming = readonly XcrunShimFirstLaunchHook[];
 
-/** A probe its request canceled reads no shim: a cancellation is the request's, never an arming. */
+/**
+ * What one probe came back with. A probe its request canceled, or one the owning phase's clock
+ * stopped, reads no shim: the stop belongs to the request or the phase, never to an arming.
+ */
 export type XcrunShimProbe =
-  | { canceled: true }
-  | { canceled: false; xcrunShims: XctestDeviceSetCleanupArming };
+  | { outcome: 'request_canceled' }
+  | { outcome: 'phase_budget_exhausted' }
+  | { outcome: 'read'; xcrunShims: XctestDeviceSetCleanupArming };
 
 export type XcrunShimProbeOptions = {
   /** The owning request's cancellation. */
@@ -78,20 +85,32 @@ export type XcrunShimProbeOptions = {
 
 /**
  * Reads every shim's first-launch hook within one shared budget: the cold-toolchain budget, or what
- * the owning phase has left when that is less. A shim the budget stops reads as armed.
+ * the owning phase has left when that is no more. Only a stop by the cold-toolchain budget reads a
+ * shim as armed; a stop by the phase's clock is the phase running out.
  */
 export async function probeXcrunShimFirstLaunchHooks(
   options: XcrunShimProbeOptions = {},
 ): Promise<XcrunShimProbe> {
-  const phaseRemainingMs = Math.floor(
-    options.deadline?.remainingMs() ?? COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
-  );
+  if (options.signal?.aborted) return { outcome: 'request_canceled' };
+  const phaseRemainingMs = options.deadline
+    ? Math.floor(options.deadline.remainingMs())
+    : Number.POSITIVE_INFINITY;
+  if (phaseRemainingMs <= 0) return { outcome: 'phase_budget_exhausted' };
+  const phaseOwnsBudget = phaseRemainingMs <= COLD_TOOLCHAIN_PROBE_TIMEOUT_MS;
   const budget = AbortSignal.timeout(Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, phaseRemainingMs));
   const signal = options.signal ? AbortSignal.any([budget, options.signal]) : budget;
   const xcrunShims = await Promise.all(
     XCRUN_SHIM_TOOL_NAMES.map(async (tool) => await probeWithinBudget(tool, signal)),
   );
-  return options.signal?.aborted ? { canceled: true } : { canceled: false, xcrunShims };
+  if (options.signal?.aborted) return { outcome: 'request_canceled' };
+  if (phaseOwnsBudget && xcrunShims.some(isStoppedByBudget)) {
+    return { outcome: 'phase_budget_exhausted' };
+  }
+  return { outcome: 'read', xcrunShims };
+}
+
+function isStoppedByBudget(shim: XcrunShimFirstLaunchHook): boolean {
+  return shim.hook === 'armed' && shim.armedBy === 'probe_out_of_budget';
 }
 
 async function probeWithinBudget(

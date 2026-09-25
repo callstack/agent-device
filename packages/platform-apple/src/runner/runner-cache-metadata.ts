@@ -110,7 +110,7 @@ export function requireRunnerPhaseRemainingMs(
 }
 
 /** Says the phase budget ran out, not that the step it would have run is broken. */
-function runnerPhaseBudgetExhaustedError(phase: string): AppError {
+export function runnerPhaseBudgetExhaustedError(phase: string): AppError {
   return new AppError('COMMAND_FAILED', 'The Apple runner budget ran out before this step began', {
     phase,
     reason: 'runner_phase_budget_exhausted',

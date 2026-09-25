@@ -29,7 +29,7 @@ async function tempRoot(): Promise<string> {
 
 async function probeShims(options?: XcrunShimProbeOptions): Promise<XctestDeviceSetCleanupArming> {
   const probe = await probeXcrunShimFirstLaunchHooks(options);
-  if (probe.canceled) assert.fail('no request canceled this probe');
+  if (probe.outcome !== 'read') assert.fail(`the probe read no shim: ${probe.outcome}`);
   return probe.xcrunShims;
 }
 
@@ -177,30 +177,59 @@ test('the probe spends the cold-toolchain budget on each xcrun --find and reads 
   );
 });
 
-for (const [phaseRemainingMs, budgetMs] of [
-  [5_000, 5_000],
-  [120_000, COLD_TOOLCHAIN_PROBE_TIMEOUT_MS],
-] as const) {
-  test(`a phase with ${phaseRemainingMs} ms left gives the probe a ${budgetMs} ms budget`, async () => {
-    const budget = new AbortController();
-    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
-    let started = 0;
-    const provider = hangingXcrun(() => {
-      started += 1;
-      if (started === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
-    });
-
-    const shims = await withAppleToolProvider(provider, () =>
-      probeShims({ deadline: phaseClock(phaseRemainingMs) }),
-    );
-
-    assert.deepEqual(timeout.mock.calls, [[budgetMs]]);
-    assert.deepEqual(
-      shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
-      XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_out_of_budget'),
-    );
+test('a phase with less left than the cold budget caps the probe and owns its stop', async () => {
+  const budget = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
+  let started = 0;
+  const provider = hangingXcrun(() => {
+    started += 1;
+    if (started === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
   });
-}
+
+  const probe = await withAppleToolProvider(provider, () =>
+    probeXcrunShimFirstLaunchHooks({ deadline: phaseClock(5_000) }),
+  );
+
+  assert.deepEqual(timeout.mock.calls, [[5_000]]);
+  assert.equal(started, XCRUN_SHIM_TOOL_NAMES.length);
+  assert.deepEqual(probe, { outcome: 'phase_budget_exhausted' });
+});
+
+test('a phase with more left than the cold budget reads a cold-budget stop as armed', async () => {
+  const budget = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(budget.signal);
+  let started = 0;
+  const provider = hangingXcrun(() => {
+    started += 1;
+    if (started === XCRUN_SHIM_TOOL_NAMES.length) budget.abort();
+  });
+
+  const shims = await withAppleToolProvider(provider, () =>
+    probeShims({ deadline: phaseClock(120_000) }),
+  );
+
+  assert.deepEqual(timeout.mock.calls, [[COLD_TOOLCHAIN_PROBE_TIMEOUT_MS]]);
+  assert.deepEqual(
+    shims.map((shim) => shim.hook === 'armed' && shim.armedBy),
+    XCRUN_SHIM_TOOL_NAMES.map(() => 'probe_out_of_budget'),
+  );
+});
+
+test('a spent phase spawns no xcrun and reads as the phase running out', async () => {
+  const host = writeFakeXcrunShims(await tempRoot(), {
+    simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
+    devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
+  });
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+
+  const probe = await withFakeXcrunHost(host, () =>
+    probeXcrunShimFirstLaunchHooks({ deadline: phaseClock(0) }),
+  );
+
+  assert.deepEqual(probe, { outcome: 'phase_budget_exhausted' });
+  assert.deepEqual(host.finds, []);
+  assert.equal(timeout.mock.calls.length, 0);
+});
 
 test('a request canceled mid-probe reads as canceled, never as an armed shim', async () => {
   const request = new AbortController();
@@ -216,7 +245,7 @@ test('a request canceled mid-probe reads as canceled, never as an armed shim', a
   );
 
   assert.equal(started, XCRUN_SHIM_TOOL_NAMES.length);
-  assert.deepEqual(probe, { canceled: true });
+  assert.deepEqual(probe, { outcome: 'request_canceled' });
 });
 
 test('an already-canceled request spawns no xcrun at all', async () => {
@@ -230,5 +259,5 @@ test('an already-canceled request spawns no xcrun at all', async () => {
   );
 
   assert.deepEqual(host.finds, []);
-  assert.deepEqual(probe, { canceled: true });
+  assert.deepEqual(probe, { outcome: 'request_canceled' });
 });

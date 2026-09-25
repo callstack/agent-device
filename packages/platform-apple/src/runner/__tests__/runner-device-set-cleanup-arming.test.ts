@@ -4,9 +4,11 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DeadlineClock } from '@agent-device/host-kit/retry';
 import {
   XCRUN_SHIM_TOOL_NAMES,
   type ArmedXcrunShimFirstLaunchHook,
+  type XcrunShimProbeOptions,
   type XcrunShimToolName,
 } from '../../core/xcrun-shim-first-launch.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
@@ -65,13 +67,13 @@ function scopedSimulator(setPath: string): DeviceInfo {
   };
 }
 
-async function acquire(layout: Layout, host: FakeXcrunHost, signal?: AbortSignal) {
+async function acquire(layout: Layout, host: FakeXcrunHost, budget: XcrunShimProbeOptions = {}) {
   return await withFakeXcrunHost(host, () =>
     acquireXcodebuildSimulatorSetRedirect(scopedSimulator(layout.requestedSetPath), {
       xctestDeviceSetPath: layout.xctestDeviceSetPath,
       backupPath: layout.backupPath,
       lockDirPath: layout.lockDirPath,
-      signal,
+      ...budget,
     }),
   );
 }
@@ -79,18 +81,22 @@ async function acquire(layout: Layout, host: FakeXcrunHost, signal?: AbortSignal
 async function assertRefused(
   layout: Layout,
   host: FakeXcrunHost,
-  signal?: AbortSignal,
+  budget: XcrunShimProbeOptions = {},
+  expected: 'armed' | 'request_canceled' | 'phase_budget_exhausted' = 'armed',
 ): Promise<AppError> {
   let refusal: AppError | undefined;
-  await assert.rejects(acquire(layout, host, signal), (error: unknown) => {
+  await assert.rejects(acquire(layout, host, budget), (error: unknown) => {
     assert.ok(error instanceof AppError);
     refusal = error;
     return true;
   });
   assert.ok(refusal);
   assert.equal(refusal.code, 'COMMAND_FAILED');
-  if (signal?.aborted) {
+  if (expected === 'request_canceled') {
     assert.equal(isRequestCanceledError(refusal), true);
+  } else if (expected === 'phase_budget_exhausted') {
+    assert.equal(refusal.details?.reason, 'runner_phase_budget_exhausted');
+    assert.equal(refusal.details?.xcrunShims, undefined);
   } else {
     assert.equal(refusal.details?.reason, REASON);
     assert.equal(refusal.details?.hint, ROW_HINT);
@@ -248,7 +254,7 @@ test('an already-canceled request gives the lock back as a cancellation without 
     devicectl: DEVICECTL_EQUAL,
   });
 
-  await assertRefused(layout, host, AbortSignal.abort());
+  await assertRefused(layout, host, { signal: AbortSignal.abort() }, 'request_canceled');
 
   assert.deepEqual(host.finds, []);
   assert.deepEqual(host.plistReads, []);
@@ -263,9 +269,27 @@ test('a request canceled while a shim is read gives the lock back as a cancellat
   const request = new AbortController();
   host.onPlistRead = () => request.abort();
 
-  await assertRefused(layout, host, request.signal);
+  await assertRefused(layout, host, { signal: request.signal }, 'request_canceled');
 
   assert.notDeepEqual(host.plistReads, [], 'the probe was reading a shim when the request ended');
+});
+
+test('a phase that runs out while a stalled xcrun is probed is the phase budget, not an armed shim', async () => {
+  const layout = makeLayout();
+  const host = writeFakeXcrunShims(layout.root, {
+    simctl: SIMCTL_EQUAL,
+    devicectl: DEVICECTL_EQUAL,
+  });
+  host.findStalls = true;
+  const deadline: DeadlineClock = {
+    remainingMs: () => 3,
+    elapsedMs: () => 0,
+    isExpired: () => false,
+  };
+
+  await assertRefused(layout, host, { deadline }, 'phase_budget_exhausted');
+
+  assert.deepEqual(host.finds, XCRUN_SHIM_TOOL_NAMES, 'the probe was waiting on xcrun');
 });
 
 test('the message tells a shim xcrun could not locate from one the probe ran out of budget on', async () => {
@@ -276,7 +300,7 @@ test('the message tells a shim xcrun could not locate from one the probe ran out
     if (armedBy === 'probe_out_of_budget') {
       appleRunnerTestHost.update({
         probeXcrunShimFirstLaunchHooks: async () => ({
-          canceled: false,
+          outcome: 'read',
           xcrunShims: XCRUN_SHIM_TOOL_NAMES.map((tool): ArmedXcrunShimFirstLaunchHook => ({
             tool,
             shimPath: null,

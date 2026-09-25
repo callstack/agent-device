@@ -60,6 +60,8 @@ export type FakeXcrunHost = {
   plistReads: string[];
   /** Runs as each Info.plist read starts, before it is answered. */
   onPlistRead?: () => void;
+  /** When set, `xcrun --find` answers only once its signal aborts, as a cold toolchain stalls. */
+  findStalls?: boolean;
 };
 
 const HOOKLESS_SHIM_TEXT = '#!/bin/bash\nexec "${DEVELOPER_DIR}/usr/bin/tool" "${@}"\n';
@@ -114,9 +116,10 @@ export async function withFakeXcrunHost<T>(
   task: () => Promise<T>,
 ): Promise<T> {
   const provider = createLocalAppleToolProvider({
-    runCommand: async (cmd, args): Promise<ExecResult> => {
+    runCommand: async (cmd, args, options): Promise<ExecResult> => {
       const tool = cmd === 'xcrun' && args[0] === '--find' ? args[1] : undefined;
       if (tool !== undefined) host.finds.push(tool);
+      if (tool !== undefined && host.findStalls) await abortOf(options?.signal);
       const found = tool === undefined ? undefined : host.xcrunShimPaths[tool as XcrunShimToolName];
       return found
         ? { exitCode: 0, stdout: `${found}\n`, stderr: '' }
@@ -132,4 +135,11 @@ export async function withFakeXcrunHost<T>(
     },
   });
   return await withAppleToolProvider(provider, task);
+}
+
+async function abortOf(signal: AbortSignal | undefined): Promise<void> {
+  if (!signal || signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
 }

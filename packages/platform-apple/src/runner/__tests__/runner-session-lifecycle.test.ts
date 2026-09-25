@@ -403,10 +403,10 @@ test('an armed xcrun shim refuses a scoped-set session before the runner launche
     simctl: { expectedVersion: '1155.4', installedVersion: '1155.4' },
     devicectl: { expectedVersion: '506.6', installedVersion: '629.3' },
   });
-  const redirectOptions: Array<Parameters<typeof acquireRealSimulatorSetRedirect>[1]> = [];
+  const redirectRemainingMs: Array<number | undefined> = [];
   mockAcquireXcodebuildSimulatorSetRedirect.mockImplementation(
     async (device: DeviceInfo, options: Parameters<typeof acquireRealSimulatorSetRedirect>[1]) => {
-      redirectOptions.push(options);
+      redirectRemainingMs.push(options?.deadline?.remainingMs());
       return await acquireRealSimulatorSetRedirect(device, {
         ...options,
         xctestDeviceSetPath,
@@ -414,13 +414,18 @@ test('an armed xcrun shim refuses a scoped-set session before the runner launche
       });
     },
   );
-  mockEnsureXctestrunArtifact.mockResolvedValue({
-    xctestrunPath: '/tmp/base-runner.xctestrun',
-    derived: '/tmp/derived',
-    cache: 'exact',
-    artifact: 'valid',
-    buildMs: 0,
-    xctestrunPathSource: 'manifest',
+  const buildMs = 50_000;
+  const realNow = Date.now.bind(Date);
+  mockEnsureXctestrunArtifact.mockImplementation(async () => {
+    vi.spyOn(Date, 'now').mockImplementation(() => realNow() + buildMs);
+    return {
+      xctestrunPath: '/tmp/base-runner.xctestrun',
+      derived: '/tmp/derived',
+      cache: 'exact',
+      artifact: 'rebuilt',
+      buildMs,
+      xctestrunPathSource: 'build',
+    };
   });
   const device = {
     ...IOS_SIMULATOR,
@@ -428,14 +433,22 @@ test('an armed xcrun shim refuses a scoped-set session before the runner launche
     simulatorSetPath: requestedSetPath,
   };
 
-  await assert.rejects(
-    withFakeXcrunHost(host, () => ensureRunnerSession(device, { startupTimeoutMs: 60_000 })),
-    (error: unknown) =>
-      error instanceof AppError && error.details?.reason === 'xctest_device_set_cleanup_armed',
-  );
+  try {
+    await assert.rejects(
+      withFakeXcrunHost(host, () => ensureRunnerSession(device, { startupTimeoutMs: 60_000 })),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'xctest_device_set_cleanup_armed',
+    );
+  } finally {
+    vi.mocked(Date.now).mockRestore();
+  }
 
-  const startupRemainingMs = redirectOptions[0]?.deadline?.remainingMs() ?? Number.NaN;
-  assert.equal(startupRemainingMs > 0 && startupRemainingMs <= 60_000, true, 'the startup clock');
+  const remainingMs = redirectRemainingMs[0] ?? Number.NaN;
+  assert.equal(
+    remainingMs > 60_000 - buildMs && remainingMs <= 60_000,
+    true,
+    `the redirect spends the startup time read before the build, not what the build left: ${remainingMs} ms`,
+  );
   assert.equal(mockRunCmdBackground.mock.calls.length, 0, 'no test-without-building was spawned');
   assert.equal(fs.lstatSync(xctestDeviceSetPath).isSymbolicLink(), false);
   assert.equal(readRunnerSessionLiveness(device.id), null);

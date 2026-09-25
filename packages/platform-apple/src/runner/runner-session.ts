@@ -241,7 +241,8 @@ async function startRunnerSessionWithLease(
       phase: 'ios_runner_startup_cleanup_stale_bundles_skipped',
     });
   }
-  // Read before the build, which is a phase of its own with its own budget (#2422).
+  // Read before the build, which is a phase of its own with its own budget (#2422); every startup step
+  // after the build, the device-set redirect included, spends from this snapshot.
   const startupTimeoutMs = requireRunnerPhaseRemainingMs(startupBudget, 'runner_session_startup');
   let xctestrunArtifact: Awaited<ReturnType<typeof ensureXctestrunArtifact>>;
   let port: number;
@@ -286,7 +287,11 @@ async function startRunnerSessionWithLease(
     simulatorSetRedirect = await measureRunnerStartupStep(
       startupTimings,
       'simulator_set_redirect',
-      async () => await acquireXcodebuildSimulatorSetRedirect(device, startupBudget),
+      async () =>
+        await acquireXcodebuildSimulatorSetRedirect(
+          device,
+          createRunnerPhaseBudget(startupTimeoutMs, signal),
+        ),
     );
     if (xctestrunArtifact.buildMs > 0) {
       emitRequestProgress({

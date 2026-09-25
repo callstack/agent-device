@@ -16,6 +16,7 @@ import {
 } from './host.ts';
 import type { ProcessLockRelease } from '@agent-device/host-kit/file';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
+import { runnerPhaseBudgetExhaustedError } from './runner-cache-metadata.ts';
 
 const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
 const XCTEST_DEVICE_SET_BACKUP_SUFFIX = '.agent-device-backup';
@@ -23,6 +24,7 @@ const XCTEST_DEVICE_SET_LEGACY_BACKUP_PREFIX = '.agent-device-xctestdevices-back
 const XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS = 30_000;
 const XCTEST_DEVICE_SET_LOCK_POLL_MS = 100;
 const XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS = 5_000;
+const XCRUN_SHIM_PROBE_PHASE = 'xctest_device_set_shim_probe';
 
 export type XcodebuildSimulatorSetRedirectHandle = {
   /**
@@ -121,7 +123,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
     reconcileXcodebuildSimulatorSetRedirect(paths);
     needsRedirect = !sameResolvedPath(requestedSetPath, xctestDeviceSetPath);
     if (needsRedirect) {
-      redirectRefusal = await xctestDeviceSetCleanupArmedRefusal(options);
+      redirectRefusal = await xcrunShimProbeRefusal(options);
     }
     if (needsRedirect && redirectRefusal === null) {
       installDeviceSetRedirect(paths, requestedSetPath);
@@ -163,20 +165,23 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 }
 
 /**
- * The refusal for a host where an Xcode shim would run `xcodebuild -runFirstLaunch`, which deletes
- * every device in `XCTestDevices` and so, through the redirect, every device in the requested set.
- * Its reason and hint come from {@link classifyRunnerStartupFailure}, keyed on `xcrunShims`. A request
- * canceled during the probe gets the canceled-request error, never a host refusal.
+ * Why the redirect may not go ahead, or null when every shim is safe. A host where an Xcode shim
+ * would run `xcodebuild -runFirstLaunch` — which deletes every device in `XCTestDevices` and so,
+ * through the redirect, every device in the requested set — is refused with the reason and hint
+ * {@link classifyRunnerStartupFailure} keys on `xcrunShims`. A probe the request canceled gets the
+ * canceled-request error, and one the owning phase's clock stopped gets the phase's budget error;
+ * neither is a host refusal.
  */
-async function xctestDeviceSetCleanupArmedRefusal(
-  options: XcrunShimProbeOptions,
-): Promise<AppError | null> {
+async function xcrunShimProbeRefusal(options: XcrunShimProbeOptions): Promise<AppError | null> {
   const probe = await probeXcrunShimFirstLaunchHooks({
     signal: options.signal,
     deadline: options.deadline,
   });
-  if (probe.canceled) {
-    return createRequestCanceledError({ phase: 'xctest_device_set_shim_probe' });
+  if (probe.outcome === 'request_canceled') {
+    return createRequestCanceledError({ phase: XCRUN_SHIM_PROBE_PHASE });
+  }
+  if (probe.outcome === 'phase_budget_exhausted') {
+    return runnerPhaseBudgetExhaustedError(XCRUN_SHIM_PROBE_PHASE);
   }
   const { xcrunShims } = probe;
   const armed = xcrunShims.filter(

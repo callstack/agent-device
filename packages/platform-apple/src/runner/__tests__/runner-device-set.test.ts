@@ -18,7 +18,7 @@ import {
 
 beforeEach(() => {
   appleRunnerTestHost.update({
-    probeXcrunShimFirstLaunchHooks: async () => ({ canceled: false, xcrunShims: [] }),
+    probeXcrunShimFirstLaunchHooks: async () => ({ outcome: 'read', xcrunShims: [] }),
   });
 });
 
