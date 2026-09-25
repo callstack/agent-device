@@ -154,35 +154,27 @@ private final class AXFixtureSnapshot: NSObject {
   @objc let enabled: NSNumber = true
   @objc let selected: NSNumber = false
   @objc let hasFocus: NSNumber = false
-  @objc let hasKeyboardFocus: NSNumber
   @objc let children: [AXFixtureSnapshot]
   @objc let accessibilityElement: AXFixtureElement?
 
-  init(node: AXFixtureNode, children: [AXFixtureSnapshot], element: AXFixtureElement?, keyboardFocus: Bool = false) {
+  init(node: AXFixtureNode, children: [AXFixtureSnapshot], element: AXFixtureElement?) {
     identifier = node.identity
     label = node.identity
-    hasKeyboardFocus = NSNumber(value: keyboardFocus)
     self.children = children
     accessibilityElement = element
   }
 
   /// `levels` node levels rooted at `node`; the deepest returned level loses its live element
-  /// when the fixture says the frontier vanished. The node named by `keyboardFocusIdentity` holds
-  /// the software keyboard's focus, the way a text field being typed into does.
-  static func fragment(
-    _ node: AXFixtureNode, levels: Int, vanishAtFrontier: Bool, keyboardFocusIdentity: String? = nil
-  ) -> AXFixtureSnapshot {
+  /// when the fixture says the frontier vanished.
+  static func fragment(_ node: AXFixtureNode, levels: Int, vanishAtFrontier: Bool) -> AXFixtureSnapshot {
     let boundary = levels <= 1
     let children = boundary
       ? []
-      : node.children.map {
-        fragment($0, levels: levels - 1, vanishAtFrontier: vanishAtFrontier, keyboardFocusIdentity: keyboardFocusIdentity)
-      }
+      : node.children.map { fragment($0, levels: levels - 1, vanishAtFrontier: vanishAtFrontier) }
     return AXFixtureSnapshot(
       node: node,
       children: children,
-      element: boundary && vanishAtFrontier ? nil : AXFixtureElement(node: node),
-      keyboardFocus: node.identity == keyboardFocusIdentity)
+      element: boundary && vanishAtFrontier ? nil : AXFixtureElement(node: node))
   }
 }
 
@@ -191,16 +183,12 @@ private final class AXFixtureSnapshot: NSObject {
 private final class AXFixtureClient: NSObject {
   private let rejectLevelsAbove: Int?
   private let vanishAtFrontier: Bool
-  private let keyboardFocusIdentity: String?
   private(set) var requests = 0
   private(set) var rejected = 0
-  /// Every attribute the bridge asked for, across requests: the request contract under test.
-  private(set) var requestedAttributes: [String] = []
 
-  init(rejectLevelsAbove: Int?, vanishAtFrontier: Bool, keyboardFocusIdentity: String? = nil) {
+  init(rejectLevelsAbove: Int?, vanishAtFrontier: Bool) {
     self.rejectLevelsAbove = rejectLevelsAbove
     self.vanishAtFrontier = vanishAtFrontier
-    self.keyboardFocusIdentity = keyboardFocusIdentity
   }
 
   @objc(requestSnapshotForElement:attributes:parameters:error:)
@@ -208,7 +196,6 @@ private final class AXFixtureClient: NSObject {
     forElement element: Any, attributes: Any, parameters: [String: Any], error: NSErrorPointer
   ) -> Any? {
     requests += 1
-    requestedAttributes.append(contentsOf: (attributes as? [Any] ?? []).compactMap { $0 as? String })
     let levels = (parameters["maxDepth"] as? NSNumber)?.intValue ?? 0
     if let limit = rejectLevelsAbove, levels > limit {
       rejected += 1
@@ -218,8 +205,7 @@ private final class AXFixtureClient: NSObject {
       return nil
     }
     guard let element = element as? AXFixtureElement else { return nil }
-    return AXFixtureSnapshot.fragment(
-      element.node, levels: levels, vanishAtFrontier: vanishAtFrontier, keyboardFocusIdentity: keyboardFocusIdentity)
+    return AXFixtureSnapshot.fragment(element.node, levels: levels, vanishAtFrontier: vanishAtFrontier)
   }
 }
 
@@ -376,34 +362,6 @@ extension RunnerTests {
       observation.nodes = signature.nodes
     }
     return observation
-  }
-
-  /// The bridge reports keyboard focus as `focused` when the snapshot carries it, beside the focus
-  /// engine's focus it asks the AX server for. The server exposes no keyboard-focus attribute, so
-  /// the request names the native focus only; a snapshot that arrives with keyboard focus set (the
-  /// XCTest producers' case) still reads as focused through the shared OR.
-  func testPrivateAXBridgeReportsKeyboardFocusAsFocused() throws {
-    let rootNode = AXFixtureNode.build(AXRecoveryFixture.Tree(chain: 2, fan: nil))
-    let client = AXFixtureClient(rejectLevelsAbove: nil, vanishAtFrontier: false, keyboardFocusIdentity: "1")
-    let response = RunnerAXSnapshotBridge.snapshotTree(
-      withClient: client,
-      target: AXFixtureElement(node: rootNode),
-      maxDepth: 2,
-      maxNodes: 10,
-      deepExtensionCallLimit: 0,
-      customActionLimit: 0,
-      deadline: .distantFuture)
-    let root = try XCTUnwrap(response["root"] as? [String: Any])
-    let field = try XCTUnwrap((root["children"] as? [[String: Any]])?.first)
-    XCTAssertEqual(root["label"] as? String, "0")
-    XCTAssertEqual(root["focused"] as? Bool, false, "no focus of either kind is not focused")
-    XCTAssertEqual(field["label"] as? String, "1")
-    XCTAssertEqual(field["focused"] as? Bool, true, "keyboard focus alone is focused")
-    // The AX server answers only what it was asked for, so the request must still name the focus
-    // engine's focus: the raw keypath when the mapper is absent, `HasNativeFocus` when it maps.
-    XCTAssertTrue(
-      client.requestedAttributes.contains { $0.range(of: "focus", options: .caseInsensitive) != nil },
-      "requested attributes name the focus engine's focus: \(client.requestedAttributes)")
   }
 
   /// Every recovery case of the shared fixture, replayed through the real ladder, bridge

@@ -369,10 +369,6 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     @"enabled",
     @"selected",
     @"hasFocus",
-    // The AX server has no keyboard-focus attribute (XCTAutomationSupport declares HasNativeFocus
-    // and FocusedApplications only), so the mapper drops this keypath today and this backend reports
-    // the focus engine's focus alone; the keypath stays so a mapper that learns it needs no change.
-    @"hasKeyboardFocus",
     @"children",
   ];
   // The AX server expects real accessibility attribute identifiers, not snapshot keypath
@@ -771,11 +767,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   result[@"frame"] = [self frameValueForSnapshot:snapshot];
   result[@"enabled"] = [self boolNumberForKey:@"enabled" snapshot:snapshot defaultValue:YES];
   result[@"selected"] = [self boolNumberForKey:@"selected" snapshot:snapshot defaultValue:NO];
-  // Either focus is focus: `hasFocus` is the focus engine's, `hasKeyboardFocus` the text field's
-  // under a software keyboard (the XCTest producer reads the same pair).
-  result[@"focused"] = @(
-    [[self boolNumberForKey:@"hasKeyboardFocus" snapshot:snapshot defaultValue:NO] boolValue]
-    || [[self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO] boolValue]);
+  result[@"focused"] = [self boolNumberForKey:@"hasFocus" snapshot:snapshot defaultValue:NO];
 
   NSMutableArray *children = [NSMutableArray array];
   if (depth < maxDepth) {
