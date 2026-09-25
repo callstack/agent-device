@@ -188,6 +188,55 @@ extension RunnerTests {
     )
   }
 
+  /// The commands the merge-base classified read-only, copied from its `CommandType.traits`
+  /// (`git show 6428c54853:…/RunnerTests+Models.swift`) rather than read from anything under test:
+  /// `readOnly: .always`, plus `alert`'s `get` action, which its `.conditional` case resolved to the
+  /// same answer. Both consumers that fact had — replay eligibility and the prepared path's witness
+  /// rule — are pinned against this literal below, so neither can move with the table (#2890 review).
+  private static let mergeBaseReadOnlyCommands: Set<CommandType> = [
+    .findText, .readText, .snapshot, .gestureViewport, .screenshot, .status, .alert,
+  ]
+
+  /// Commands that did not exist at the merge-base, so no classification of its is compared with
+  /// theirs. `appState` arrived with #2929.
+  private static let commandsNewerThanTheMergeBase: Set<CommandType> = [.appState]
+
+  /// The commands `executeOnMain` answers before `executeOnMainPrepared` runs, so the merge-base
+  /// witness predicate was never evaluated for them and neither is the derived one. `snapshot` is
+  /// deliberately absent: it reaches that function's body and is refused there, so its answer is
+  /// observable. If a command starts reaching the prepared path, removing it here is a claim the
+  /// equivalence assertion below then has to keep proving.
+  private static let commandsAnsweredBeforeThePreparedPath: Set<CommandType> = [
+    .status, .uptime, .appState, .activate, .terminate, .targetReset, .shutdown,
+    .recordStart, .recordStop,
+  ]
+
+  private func assertRememberedTextEntryWitnessInvalidation(
+    _ command: Command,
+    type: CommandType,
+    wasReadOnlyAtMergeBase: Bool,
+    _ request: String
+  ) {
+    if !Self.commandsNewerThanTheMergeBase.contains(type) {
+      XCTAssertEqual(
+        command.traits.retryOnSessionLoss,
+        wasReadOnlyAtMergeBase,
+        "\(request) must stay replayable exactly where the merge-base classified it read-only"
+      )
+    }
+    // The merge-base rule (`RunnerTests+CommandExecution.swift:11`):
+    // `command != .tap && command != .type && !isReadOnlyCommand(command)`. `querySelector` is the
+    // row this review round was about: it was never read-only, so the merge-base cleared a
+    // remembered tap for it too and this column says so for every command, not just that one.
+    let mergeBaseClears = type != .tap && type != .type && !wasReadOnlyAtMergeBase
+    guard !Self.commandsAnsweredBeforeThePreparedPath.contains(type) else { return }
+    XCTAssertEqual(
+      command.invalidatesRememberedTextEntryTap,
+      mergeBaseClears,
+      "\(request) must invalidate a remembered text-entry tap exactly as the merge-base did"
+    )
+  }
+
   /// Every decision the runner makes from a classification, asserted for every command from one
   /// table. `retry` is replay eligibility and `launch` is what the runner may do about a stopped
   /// app: `querySelector` is the row that proves one does not set the other (#2890). Each row names
@@ -247,6 +296,12 @@ extension RunnerTests {
       let command = try runnerCommandFixture(request)
       XCTAssertEqual(command.command, type, request)
       assertTraits(command.traits, matches: rowExpectation, request)
+      assertRememberedTextEntryWitnessInvalidation(
+        command,
+        type: type,
+        wasReadOnlyAtMergeBase: Self.mergeBaseReadOnlyCommands.contains(type),
+        request
+      )
     }
     XCTAssertEqual(
       Set(table.map { $0.0 }),
@@ -271,7 +326,16 @@ extension RunnerTests {
     for alertCase in alertCases {
       let request = alertCase.action.map { #"{"command":"alert","action":"\#($0)"}"# }
         ?? #"{"command":"alert"}"#
-      assertTraits(try runnerCommandFixture(request).traits, matches: alertCase.expectation, request)
+      let command = try runnerCommandFixture(request)
+      assertTraits(command.traits, matches: alertCase.expectation, request)
+      // The merge-base resolved `alert` through `readOnly: .conditional`, whose rule was this same
+      // action test, so only `get` — and the missing action it defaults to — was read-only there.
+      assertRememberedTextEntryWitnessInvalidation(
+        command,
+        type: .alert,
+        wasReadOnlyAtMergeBase: (command.action ?? "get").lowercased() == "get",
+        request
+      )
     }
   }
 }
