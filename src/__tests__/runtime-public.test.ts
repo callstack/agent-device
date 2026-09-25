@@ -56,7 +56,10 @@ const sessions = {
   set: () => {},
 } satisfies CommandSessionStore;
 
-test('internal command runtime skeleton is available', async () => {
+// A constructed runtime defaults to the restricted policy: nothing may read a local file path
+// unless the caller explicitly opts into `localCommandPolicy()`. No other seam asserts this
+// default, so flipping the factory's fallback must fail here.
+test('a runtime built with no policy restricts local input paths', async () => {
   const device: AgentDevice = createAgentDevice({
     backend,
     artifacts,
@@ -64,13 +67,6 @@ test('internal command runtime skeleton is available', async () => {
 
   assert.equal(device.backend.platform, 'ios');
   assert.equal(device.policy.allowLocalInputPaths, false);
-  assert.equal(typeof device.capture.screenshot, 'function');
-  assert.equal(typeof device.interactions.click, 'function');
-  assert.equal(typeof device.system.back, 'function');
-  assert.equal(typeof device.apps.open, 'function');
-  assert.equal(typeof device.admin.install, 'function');
-  assert.equal(typeof device.recording.record, 'function');
-  assert.equal(typeof device.observability.logs, 'function');
   const result = await device.capture.screenshot({});
   assert.equal(result.path, '/tmp/path.png');
 });

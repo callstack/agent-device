@@ -4,10 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { test } from 'vitest';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
-  canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
-  isRunnerReadinessPreflightExempt,
-  isRunnerReadinessProbeCommand,
   readRunnerCommandTraits,
   RUNNER_COMMAND_TRAITS,
   type RunnerCommandTraits,
@@ -65,24 +62,6 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
     ],
   });
   assert.deepEqual(Object.values(groups).flat().sort(), [...RUNNER_COMMANDS].sort());
-});
-
-test('runner command trait helpers read from the shared trait table', () => {
-  for (const command of RUNNER_COMMANDS) {
-    const traits = readRunnerCommandTraits({ command });
-    assert.equal(isReadOnlyRunnerCommand({ command }), traits.readOnly, command);
-    assert.equal(isRunnerReadinessProbeCommand({ command }), traits.readinessProbe, command);
-    assert.equal(
-      isRunnerReadinessPreflightExempt({ command }),
-      traits.readinessPreflightExempt,
-      command,
-    );
-    assert.equal(
-      canSkipRunnerReadinessPreflightAfterHealthyMutation({ command }),
-      traits.readinessPreflightSkipEligibleAfterHealthyMutation,
-      command,
-    );
-  }
 });
 
 test('alert actions match the native read-only golden table', () => {

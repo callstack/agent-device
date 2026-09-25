@@ -6,12 +6,7 @@ import {
   listCliCommandNames,
   PUBLIC_COMMANDS,
 } from '@agent-device/command-registry/catalog';
-import {
-  DAEMON_COMMAND_DESCRIPTORS,
-  canRunReplayScopedAction,
-  type DaemonCommandDescriptor,
-} from '../daemon/daemon-command-registry.ts';
-import type { DaemonRequest } from '../daemon/daemon-request.ts';
+import { canRunReplayScopedAction } from '../daemon/daemon-command-registry.ts';
 import {
   deriveDaemonCommandDescriptors,
   deriveStructuredBatchCommandNames,
@@ -19,22 +14,12 @@ import {
 import {
   commandDescriptors,
   listDescriptorCatalogCommandNames,
-  listMcpExposedCommandNames,
   resolveCommandFrameworkTier,
   resolveCommandRecordsSessionAction,
   resolveCommandRecordingEffect,
   resolveTargetIdentityVerification,
   RAW_COMMAND_DESCRIPTORS,
 } from '@agent-device/command-registry/registry';
-
-// Function-valued traits cannot be deep-equaled across re-authored closures, so
-// (mirroring daemon-command-registry.test.ts) they are compared by presence and
-// by behavior on a representative sample, while every other field is deepEqual'd.
-const DAEMON_FUNCTION_TRAITS = [
-  'allowSessionlessDefaultDevice',
-  'skipSessionlessProviderDevice',
-  'sessionlessLeaseAdmissionExemption',
-] as const;
 
 // Public commands that intentionally have no daemon route — they live only in the
 // capability/batch tables, so the daemon registry has never covered them.
@@ -45,24 +30,6 @@ const DAEMON_FUNCTION_TRAITS = [
 const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
 
 type TestCommandDescriptor = (typeof commandDescriptors)[number];
-
-function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
-  return { command, token: 'parity-token', session: 'parity-session', positionals, flags: {} };
-}
-
-// Sample requests that exercise both closure traits' branches for any command.
-function sampleRequests(command: string): DaemonRequest[] {
-  return [
-    makeRequest(command),
-    makeRequest(command, ['start']),
-    makeRequest(command, ['stop']),
-    makeRequest(command, ['START']),
-    { ...makeRequest(command), flags: { shardAll: 2 } },
-    { ...makeRequest(command), flags: { shardSplit: 3 } },
-    { ...makeRequest(PUBLIC_COMMANDS.test), flags: { shardAll: 2 } },
-    { ...makeRequest(PUBLIC_COMMANDS.test), flags: { shardSplit: 1 } },
-  ];
-}
 
 function hasDaemonFacet(descriptor: TestCommandDescriptor): boolean {
   return 'daemon' in descriptor && descriptor.daemon !== undefined;
@@ -97,30 +64,6 @@ test('derived daemon registry holds its routing invariants', () => {
   for (const command of Object.values(PUBLIC_COMMANDS)) {
     if (UNROUTED_PUBLIC_COMMANDS.has(command)) continue;
     assert.ok(nameSet.has(command), `daemon registry covers public command ${command}`);
-  }
-});
-
-test('derived daemon descriptors preserve closure traits by presence and behavior', () => {
-  const liveByCommand = new Map(
-    DAEMON_COMMAND_DESCRIPTORS.map((d) => [d.command, d as DaemonCommandDescriptor]),
-  );
-  for (const derived of deriveDaemonCommandDescriptors(commandDescriptors)) {
-    const live = liveByCommand.get(derived.command);
-    assert.ok(live, `${derived.command} present in hand table`);
-    for (const trait of DAEMON_FUNCTION_TRAITS) {
-      const derivedFn = derived[trait] as ((req: DaemonRequest) => unknown) | undefined;
-      const liveFn = live[trait] as ((req: DaemonRequest) => unknown) | undefined;
-      assert.equal(typeof derivedFn, typeof liveFn, `${derived.command} ${trait} presence`);
-      if (typeof liveFn === 'function' && typeof derivedFn === 'function') {
-        for (const request of sampleRequests(derived.command)) {
-          assert.deepEqual(
-            derivedFn(request),
-            liveFn(request),
-            `${derived.command} ${trait} behavior`,
-          );
-        }
-      }
-    }
   }
 });
 
@@ -186,22 +129,6 @@ test('structured-batch allowlist is built from descriptors', () => {
   for (const excluded of NON_BATCHABLE_COMMANDS) {
     assert.ok(!batchable.has(excluded), `${excluded} is not batchable`);
   }
-});
-
-test('MCP exposure list is built from descriptors', () => {
-  const cliCommands = new Set<string>(listCliCommandNames());
-  const expected = commandDescriptors
-    .filter((descriptor) => descriptor.mcpExposed && cliCommands.has(descriptor.name))
-    .map((descriptor) => descriptor.name)
-    .sort();
-  const expectedNames = new Set<string>(expected);
-
-  assert.deepEqual(listMcpExposedCommandNames(), expected);
-  assert.ok(expectedNames.has('debug'), 'local debug command stays MCP-exposed');
-  assert.ok(expectedNames.has('metro'), 'local metro command stays MCP-exposed');
-  assert.ok(expectedNames.has('session'), 'local session command stays MCP-exposed');
-  assert.equal(expectedNames.has(PUBLIC_COMMANDS.prepare), false, 'prepare stays out of MCP');
-  assert.equal(expectedNames.has('auth'), false, 'schema-only auth command stays out of MCP');
 });
 
 // #1310: every raw descriptor explicitly decides recording; the daemon

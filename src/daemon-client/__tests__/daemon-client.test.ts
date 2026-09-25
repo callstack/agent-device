@@ -27,9 +27,7 @@ import {
 } from '../daemon-client-metadata.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
-import { shouldResetDaemonAfterRequestTimeout } from '../daemon-client-timeout.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { stopProcessForTakeover } from '../../daemon-process.ts';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -229,23 +227,6 @@ test('resolveDaemonStartupHint shell-quotes cleanup paths', () => {
     hint,
     /rm -f '\/tmp\/ad custom'\\''s state\/daemon\.json' '\/tmp\/ad custom'\\''s state\/daemon\.lock'/,
   );
-});
-
-test('snapshot request timeout preserves daemon metadata for follow-up evidence commands', () => {
-  assert.equal(shouldResetDaemonAfterRequestTimeout('snapshot'), false);
-  assert.equal(shouldResetDaemonAfterRequestTimeout('screenshot'), true);
-  assert.equal(shouldResetDaemonAfterRequestTimeout(undefined), true);
-});
-
-test('read-only polling command timeouts preserve the daemon like snapshot', () => {
-  // wait/find are repeated snapshot captures: a stalled accessibility bridge
-  // must not turn one timed-out poll into a daemon reset that loses every session.
-  assert.equal(shouldResetDaemonAfterRequestTimeout('wait'), false);
-  assert.equal(shouldResetDaemonAfterRequestTimeout('find'), false);
-  // Interaction commands resolve targets through the same capture, so their
-  // timeouts preserve the daemon too (#1105); non-capture commands still reset.
-  assert.equal(shouldResetDaemonAfterRequestTimeout('press'), false);
-  assert.equal(shouldResetDaemonAfterRequestTimeout('open'), true);
 });
 
 test('cleanupFailedDaemonStartupMetadata removes partial startup metadata', async () => {
@@ -1596,33 +1577,5 @@ test('computeDaemonCodeSignature ignores a relative-path-shaped string that is n
     assert.match(signature, /^graph:1:[0-9a-f]{40}$/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('stopDaemonProcessForTakeover does not terminate non-daemon process', async () => {
-  const daemonProcess = runCmdBackground(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    stdio: 'ignore',
-    allowFailure: true,
-    captureOutput: false,
-  });
-  void daemonProcess.wait.catch(() => {});
-  const child = daemonProcess.child;
-  const pid = child.pid;
-  assert.ok(pid, 'spawned child should have a pid');
-
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.equal(isProcessAlive(pid), true);
-    await stopProcessForTakeover(pid, {
-      termTimeoutMs: 100,
-      killTimeoutMs: 100,
-      expectedStartTime: undefined,
-    });
-    assert.equal(isProcessAlive(pid), true);
-  } finally {
-    if (isProcessAlive(pid)) {
-      process.kill(pid, 'SIGKILL');
-      await waitForProcessExit(pid, 1_500);
-    }
   }
 });

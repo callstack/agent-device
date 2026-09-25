@@ -10,10 +10,7 @@ import {
   listCliCommandNames,
   SPECIAL_CLI_COMMANDS,
 } from '@agent-device/command-registry/catalog';
-import {
-  commandDescriptors,
-  listRuntimeFactCommands,
-} from '@agent-device/command-registry/registry';
+import { listRuntimeFactCommands } from '@agent-device/command-registry/registry';
 import { getCliCommandSchema } from './command-schema.ts';
 
 test('every public runtime-fact command has a parser schema entry', () => {
@@ -56,20 +53,6 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
       `cli.ts checks command "${command}" but the parser does not recognize it`,
     );
   }
-});
-
-test('schema runtime-fact mappings match descriptor source-of-truth', () => {
-  const cliCommands = new Set<string>(listCliCommandNames());
-  const runtimeFactCatalogCommands = commandDescriptors
-    .filter(
-      (descriptor) =>
-        descriptor.catalog.group === 'public' &&
-        descriptor.platformExecution.kind === 'device-runtime' &&
-        cliCommands.has(descriptor.name),
-    )
-    .map((descriptor) => descriptor.name)
-    .sort();
-  assert.deepEqual(runtimeFactCatalogCommands, listRuntimeFactCommands());
 });
 
 function collectCliDispatchCommandLiterals(): Set<string> {

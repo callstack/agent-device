@@ -110,7 +110,7 @@ export function handleRequestTimeout(
 // capture/polling commands preserve the daemon so sessions survive and evidence
 // commands still work; everything else resets it. Unknown/undefined commands
 // fall back to the default reset-daemon policy.
-export function shouldResetDaemonAfterRequestTimeout(command: string | undefined): boolean {
+function shouldResetDaemonAfterRequestTimeout(command: string | undefined): boolean {
   return resolveCommandTimeoutPolicy(command).onTimeout === 'reset-daemon';
 }
 

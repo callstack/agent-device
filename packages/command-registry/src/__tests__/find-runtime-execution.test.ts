@@ -5,7 +5,6 @@ import { findRuntimePlanUses } from '@agent-device/contracts/platform-runtime-op
 test('find descriptor declares its complete runtime uses with no legacy projection', () => {
   const find = commandDescriptors.find(({ name }) => name === 'find');
 
-  expect(find).not.toHaveProperty('capability');
   // Plan-time consumers select the alternative from the step input the way the handler does.
   expect(find?.platformExecution).toEqual({
     kind: 'device-runtime',

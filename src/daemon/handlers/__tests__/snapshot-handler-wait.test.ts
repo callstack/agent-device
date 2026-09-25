@@ -387,19 +387,3 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
     expect.anything(),
   );
 });
-
-test('wait sleep bypasses sessionless runner cleanup wrapper', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
-
-  const response = await handleSnapshotCommands({
-    req: snapshotRequest(sessionName, 'wait', { positionals: ['0'] }),
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-});

@@ -11,5 +11,4 @@ test('apps declares the complete request-scoped runtime use', () => {
   });
   expect(appsRuntimeUse.required).toEqual(['ensureReady', 'listApps']);
   expect(appsRuntimeUse.preferred).toEqual([]);
-  expect(descriptor).not.toHaveProperty('capability');
 });

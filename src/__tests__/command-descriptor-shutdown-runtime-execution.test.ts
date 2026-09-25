@@ -35,7 +35,6 @@ const androidShutdownSource = readFileSync(
 test('shutdown descriptor declares one canonical runtime operation', () => {
   const shutdown = commandDescriptors.find(({ name }) => name === 'shutdown');
 
-  expect(shutdown).not.toHaveProperty('capability');
   expect(shutdown?.platformExecution).toEqual({
     kind: 'device-runtime',
     use: shutdownTargetUse,

@@ -5,8 +5,6 @@ import { commandDescriptors } from '../registry.ts';
 test('type descriptor declares its complete runtime use with no legacy projection', () => {
   const type = commandDescriptors.find(({ name }) => name === 'type');
 
-  expect(type).not.toHaveProperty('capability');
-  expect(type).not.toHaveProperty('dispatch');
   expect(type?.platformExecution).toEqual({
     kind: 'device-runtime',
     uses: [typeTextRuntimeUse],

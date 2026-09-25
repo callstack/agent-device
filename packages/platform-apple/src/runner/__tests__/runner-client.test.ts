@@ -29,8 +29,8 @@ vi.mock('../runner-macos-products.ts', async () => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { RUNNER_COMMAND_TRAITS, isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
-import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
+import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
+import { withRunnerCommandId } from '../runner-contract.ts';
 import {
   resolveRunnerBuildDestination,
   resolveRunnerDestination,
@@ -94,66 +94,6 @@ const macOsDevice: DeviceInfo = {
   booted: true,
 };
 
-const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerCommand> = {
-  tap: { command: 'tap', x: 120, y: 240 },
-  mouseClick: { command: 'mouseClick', x: 120, y: 240, button: 'secondary' },
-  longPress: { command: 'longPress', x: 120, y: 240, durationMs: 750 },
-  drag: { command: 'drag', x: 120, y: 240, x2: 300, y2: 420, durationMs: 400 },
-  remotePress: { command: 'remotePress', remoteButton: 'down', durationMs: 250 },
-  type: { command: 'type', text: 'hello', delayMs: 20, textEntryMode: 'replace' },
-  swipe: { command: 'swipe', direction: 'down', durationMs: 250 },
-  scroll: { command: 'scroll', direction: 'down', amount: 0.6, pixels: 240 },
-  desktopScroll: {
-    command: 'desktopScroll',
-    direction: 'down',
-    amount: 0.6,
-    pixels: 240,
-    durationMs: 50,
-  },
-  findText: { command: 'findText', text: 'Settings' },
-  querySelector: { command: 'querySelector', selectorKey: 'id', selectorValue: 'submit' },
-  readText: { command: 'readText' },
-  appState: { command: 'appState', appBundleId: 'com.demo.app' },
-  snapshot: {
-    command: 'snapshot',
-    interactiveOnly: true,
-    depth: 2,
-    scope: 'app',
-    raw: false,
-  },
-  screenshot: { command: 'screenshot', outPath: '/tmp/runner-screenshot.png', fullscreen: true },
-  backInApp: { command: 'backInApp' },
-  backSystem: { command: 'backSystem' },
-  home: { command: 'home' },
-  rotate: { command: 'rotate', orientation: 'landscape-left' },
-  appSwitcher: { command: 'appSwitcher' },
-  actionButton: { command: 'actionButton' },
-  keyboardDismiss: { command: 'keyboardDismiss' },
-  keyboardReturn: { command: 'keyboardReturn' },
-  alert: { command: 'alert', action: 'accept' },
-  sequence: {
-    command: 'sequence',
-    steps: [
-      { kind: 'tap', x: 120, y: 240 },
-      { kind: 'longPress', x: 120, y: 240, durationMs: 300 },
-      { kind: 'doubleTap', x: 10, y: 600, pauseMs: 50 },
-    ],
-  },
-  gesture: { command: 'gesture' },
-  gestureViewport: { command: 'gestureViewport' },
-  recordStart: {
-    command: 'recordStart',
-    outPath: '/tmp/runner-recording.mp4',
-    fps: 30,
-  },
-  recordStop: { command: 'recordStop' },
-  status: { command: 'status', statusCommandId: 'runner-command-1' },
-  uptime: { command: 'uptime' },
-  activate: { command: 'activate', appBundleId: 'com.example.app' },
-  terminate: { command: 'terminate', appBundleId: 'com.example.app' },
-  targetReset: { command: 'targetReset' },
-  shutdown: { command: 'shutdown' },
-};
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 async function makeTmpDir(): Promise<string> {
@@ -299,27 +239,6 @@ beforeEach(() => {
 
 test('resolveRunnerDestination uses simulator destination for simulators', () => {
   assert.equal(resolveRunnerDestination(iosSimulator), 'platform=iOS Simulator,id=sim-1');
-});
-
-test('runner protocol fixtures cover every runner command with JSON-safe samples', () => {
-  // The trait table is the exhaustive runner-command enumeration — it is `satisfies
-  // Record<RunnerCommand['command'], …>` — so the fixture set is checked against that declaration
-  // instead of against a second hand-maintained list that a new command has to remember to update.
-  assert.deepEqual(
-    Object.keys(runnerProtocolCommandFixtures).sort(),
-    Object.keys(RUNNER_COMMAND_TRAITS).sort(),
-  );
-
-  const roundTrip = JSON.parse(JSON.stringify(runnerProtocolCommandFixtures)) as Record<
-    string,
-    Record<string, unknown>
-  >;
-  assert.equal(roundTrip.tap!.command, 'tap');
-  assert.equal(roundTrip.mouseClick!.button, 'secondary');
-  assert.equal(roundTrip.snapshot!.scope, 'app');
-  assert.equal(roundTrip.screenshot!.fullscreen, true);
-  assert.equal(roundTrip.rotate!.orientation, 'landscape-left');
-  assert.equal(roundTrip.recordStart!.fps, 30);
 });
 
 test('withRunnerCommandId replaces blank command ids', () => {

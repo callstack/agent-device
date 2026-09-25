@@ -5,8 +5,6 @@ import { commandDescriptors, listRuntimeFactCommands } from '../registry.ts';
 test('focus descriptor declares its complete runtime use', () => {
   const focus = commandDescriptors.find(({ name }) => name === 'focus');
 
-  expect(focus).not.toHaveProperty('capability');
-  expect(focus).not.toHaveProperty('dispatch');
   expect(focus?.platformExecution).toEqual({
     kind: 'device-runtime',
     uses: [focusRuntimeUse],

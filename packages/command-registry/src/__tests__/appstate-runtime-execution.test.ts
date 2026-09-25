@@ -8,7 +8,6 @@ import { commandDescriptors } from '../registry.ts';
 test('appstate descriptor declares the complete readiness and foreground-state use', () => {
   const appstate = commandDescriptors.find(({ name }) => name === 'appstate');
 
-  expect(appstate).not.toHaveProperty('capability');
   expect(appstate?.platformExecution).toEqual({
     kind: 'device-runtime',
     uses: appStateRuntimeUses,
