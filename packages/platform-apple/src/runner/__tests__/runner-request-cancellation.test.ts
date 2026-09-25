@@ -8,7 +8,6 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 
 const {
-  mockRestoreLegacyXctestDeviceSetRedirect,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
   mockIsProcessAlive,
@@ -23,7 +22,6 @@ const {
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
 } = vi.hoisted(() => ({
-  mockRestoreLegacyXctestDeviceSetRedirect: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
   mockIsProcessAlive: vi.fn(),
@@ -63,7 +61,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    restoreLegacyXctestDeviceSetRedirect: mockRestoreLegacyXctestDeviceSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,

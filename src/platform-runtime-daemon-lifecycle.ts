@@ -6,13 +6,14 @@ import {
 import {
   cleanupManagedWebRuntimeOrphans,
   resetAndroidSnapshotHelperRuntime,
+  restoreLegacyXctestDeviceSetRedirectRuntime,
 } from './platform-runtime-resource-cleanup.ts';
 
 /**
  * Root composition of the daemon's typed lifecycle-participation surface (#2333). This is the
  * one place that names the platform resource owners (the Apple runner owner, the Android
- * snapshot-helper and Web orphan cleanups, and legacy app-log marker recovery); the daemon holds
- * only the typed `PlatformOwnerLifecycle` contract.
+ * snapshot-helper and Web orphan cleanups, legacy app-log marker recovery, and the legacy
+ * `XCTestDevices` restore); the daemon holds only the typed `PlatformOwnerLifecycle` contract.
  */
 export const platformDaemonLifecycleOwners: PlatformOwnerLifecycle = Object.freeze({
   configureForDaemonLock: async (input) => {
@@ -30,6 +31,9 @@ export const platformDaemonLifecycleOwners: PlatformOwnerLifecycle = Object.free
   },
   cleanupManagedWebOrphans: async (params) => {
     await cleanupManagedWebRuntimeOrphans(params);
+  },
+  restoreLegacyXctestDeviceSetRedirect: async () => {
+    await restoreLegacyXctestDeviceSetRedirectRuntime();
   },
   resetAndroidSnapshotHelper: async () => {
     await resetAndroidSnapshotHelperRuntime();

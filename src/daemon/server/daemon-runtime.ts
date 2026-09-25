@@ -559,6 +559,7 @@ export async function startDaemonRuntime(
       createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
       baseDir,
     );
+    await restoreLegacyXctestDeviceSetForDaemonStartup(logPath);
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
@@ -703,6 +704,28 @@ async function reconcileDeviceClaimsForDaemonStartup(
         });
         flushDiagnosticsToSessionFile({ force: true });
       }
+    },
+  );
+}
+
+/**
+ * Best effort: the runner never reads `XCTestDevices`, so a restore that fails here is recorded in
+ * daemon.log and fails neither this daemon nor a runner start.
+ */
+export async function restoreLegacyXctestDeviceSetForDaemonStartup(logPath: string): Promise<void> {
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: false },
+    async () => {
+      try {
+        await platformDaemonLifecycleOwners.restoreLegacyXctestDeviceSetRedirect();
+      } catch (error) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'ios_runner_legacy_xctest_device_set_restore_failed',
+          data: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+      flushDiagnosticsToSessionFile({ force: true });
     },
   );
 }

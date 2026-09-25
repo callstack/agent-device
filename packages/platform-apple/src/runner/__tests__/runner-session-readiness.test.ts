@@ -18,7 +18,6 @@ import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/
 import { IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT } from '../../core/devicectl.ts';
 
 const {
-  mockRestoreLegacyXctestDeviceSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -37,7 +36,6 @@ const {
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
 } = vi.hoisted(() => ({
-  mockRestoreLegacyXctestDeviceSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -107,7 +105,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    restoreLegacyXctestDeviceSetRedirect: mockRestoreLegacyXctestDeviceSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,

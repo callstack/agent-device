@@ -40,6 +40,11 @@ export type PlatformOwnerLifecycle = Readonly<{
       ownedProcessRecords?: OwnedProcessRecordStore;
     }>,
   ): Promise<void>;
+  /**
+   * Startup, after daemon.log publication: puts back the host's own `XCTestDevices` directory where
+   * an older agent-device left it redirected into a scoped simulator set.
+   */
+  restoreLegacyXctestDeviceSetRedirect(): Promise<void>;
   /** Shutdown: resets Android snapshot-helper runtime sessions. */
   resetAndroidSnapshotHelper(): Promise<void>;
 }>;

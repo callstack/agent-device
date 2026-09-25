@@ -17,7 +17,6 @@ import {
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const {
-  mockRestoreLegacyXctestDeviceSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -37,7 +36,6 @@ const {
   mockWaitForRunner,
   runnerStateTransitions,
 } = vi.hoisted(() => ({
-  mockRestoreLegacyXctestDeviceSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -102,7 +100,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    restoreLegacyXctestDeviceSetRedirect: mockRestoreLegacyXctestDeviceSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
@@ -370,27 +367,6 @@ test('a scoped simulator-set session hands off like one in the default set', asy
 
   assert.equal(session.state, 'stopped');
   assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
-});
-
-test('a simulator startup puts back a legacy XCTestDevices redirect before adoption and the build', async () => {
-  const order: string[] = [];
-  mockRestoreLegacyXctestDeviceSetRedirect.mockImplementationOnce((device: DeviceInfo) =>
-    order.push(`restore:${device.id}`),
-  );
-  appleRunnerTestHost.update({
-    emitDiagnostic: (event) => {
-      if (event.phase === 'ios_runner_lease_adoption_skipped') order.push('adopt');
-    },
-  });
-  const ensure = mockEnsureXctestrunArtifact.getMockImplementation();
-  mockEnsureXctestrunArtifact.mockImplementationOnce(async (...args: unknown[]) => {
-    order.push('ensure');
-    return await ensure?.(...args);
-  });
-
-  await ensureRunnerSession({ ...IOS_SIMULATOR, id: 'runner-lifecycle-legacy-redirect' }, {});
-
-  assert.deepEqual(order, ['restore:runner-lifecycle-legacy-redirect', 'adopt', 'ensure']);
 });
 
 // #2681: the handoff lanes and every gate that keeps a runner on the kill path.

@@ -28,7 +28,6 @@ import {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  restoreLegacyXctestDeviceSetRedirect,
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
 import {
@@ -184,7 +183,6 @@ async function startRunnerSessionWithLease(
       logicalLeaseContext,
     },
   });
-  if (device.kind === 'simulator') restoreLegacyXctestDeviceSetRedirect(device);
   const adopted = await measureRunnerStartupStep(
     startupTimings,
     'adopt_detached_runner',

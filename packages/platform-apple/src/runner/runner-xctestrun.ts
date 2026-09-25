@@ -20,4 +20,3 @@ export {
   resolveRunnerDerivedPath,
   type RunnerPhaseBudget,
 } from './runner-cache-metadata.ts';
-export { restoreLegacyXctestDeviceSetRedirect } from './runner-device-set.ts';

@@ -19,7 +19,6 @@ import {
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const {
-  mockRestoreLegacyXctestDeviceSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -38,7 +37,6 @@ const {
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
 } = vi.hoisted(() => ({
-  mockRestoreLegacyXctestDeviceSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -108,7 +106,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    restoreLegacyXctestDeviceSetRedirect: mockRestoreLegacyXctestDeviceSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
