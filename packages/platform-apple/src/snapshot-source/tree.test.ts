@@ -483,6 +483,11 @@ test('the bridge tree carries a text field placeholder and omits an empty one', 
   assert.equal(filled?.placeholder, 'Type your name');
   assert.equal(filled?.value, 'Ada Lovelace', 'the value and the placeholder are separate facts');
   assert.equal(decode('')?.placeholder, undefined, 'no placeholder reads as none, not as ""');
+  assert.equal(
+    decode('  ')?.placeholder,
+    undefined,
+    'a whitespace placeholder is none, as on the runner',
+  );
   assert.equal(decode()?.placeholder, undefined, 'an unread fact stays unknown');
 });
 

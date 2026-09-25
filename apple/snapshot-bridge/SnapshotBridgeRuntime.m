@@ -340,6 +340,14 @@ static void finishRequestWatchdog(dispatch_source_t watchdog, SnapshotWatchdogSt
   ];
   NSArray<NSNumber *> *numbers = _attributeNumbersForNames(names);
   if (![numbers isKindOfClass:NSArray.class] || numbers.count != names.count) {
+    // The placeholder attribute is optional: a runtime whose vocabulary lacks it serves the capture
+    // without placeholders rather than failing every capture over a fact no consumer depends on.
+    NSMutableArray<NSString *> *required = [names mutableCopy];
+    [required removeObject:kAttributePlaceholderValue];
+    names = required;
+    numbers = _attributeNumbersForNames(names);
+  }
+  if (![numbers isKindOfClass:NSArray.class] || numbers.count != names.count) {
     if (error) *error = failureResponse(requestId, @"reader_unavailable", @"attribute-vocabulary-mismatch", @"AX attribute vocabulary is incompatible");
     finishRequestWatchdog(watchdog, watchdogState);
     return nil;

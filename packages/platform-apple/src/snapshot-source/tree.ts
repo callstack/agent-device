@@ -248,6 +248,8 @@ function nodeFacts(
   // shape the XCTest tree produces, so a `selected:` selector cannot tell the producers apart.
   const selected = traits === undefined || (traits & SELECTED_TRAIT) === 0n ? undefined : true;
   const userInteractionEnabled = optionalBoolean(value[ATTRIBUTE.userInteractionEnabled]);
+  // Trimmed like the runner's `placeholderText`: a whitespace placeholder is no placeholder.
+  const placeholder = optionalString(value[ATTRIBUTE.placeholder])?.trim();
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
@@ -262,9 +264,7 @@ function nodeFacts(
     ...(optionalScalar(value[ATTRIBUTE.value])
       ? { value: optionalScalar(value[ATTRIBUTE.value]) }
       : {}),
-    ...(optionalString(value[ATTRIBUTE.placeholder])
-      ? { placeholder: optionalString(value[ATTRIBUTE.placeholder]) }
-      : {}),
+    ...(placeholder ? { placeholder } : {}),
     ...(optionalString(value[ATTRIBUTE.identifier])
       ? { identifier: optionalString(value[ATTRIBUTE.identifier]) }
       : {}),

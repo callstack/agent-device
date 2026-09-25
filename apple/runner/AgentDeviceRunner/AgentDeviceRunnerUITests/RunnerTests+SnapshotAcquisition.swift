@@ -245,6 +245,18 @@ extension RunnerTests {
     return text.isEmpty ? nil : text
   }
 
+  /// The element types whose `placeholderValue` the element sweeps read. On a live `XCUIElement`
+  /// every attribute is one more lookup inside the sweep's deadline, so only text entry pays for
+  /// it; a snapshot-based producer reads the attribute off the snapshot it already holds.
+  static let placeholderElementTypes: Set<XCUIElement.ElementType> = [
+    .textField, .secureTextField, .searchField, .textView,
+  ]
+
+  func elementPlaceholderText(_ element: XCUIElement, type: XCUIElement.ElementType) -> String? {
+    guard Self.placeholderElementTypes.contains(type) else { return nil }
+    return placeholderText(element.placeholderValue)
+  }
+
   private func snapshotAppFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
     return onScreenWindowFrame(app: app)
@@ -387,7 +399,7 @@ extension RunnerTests {
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
       let valueText = snapshotValueText(element)
-      let placeholder = placeholderText(element.placeholderValue)
+      let placeholder = elementPlaceholderText(element, type: elementType)
       let hasContent = !label.isEmpty || !identifier.isEmpty || valueText != nil || placeholder != nil
       if !hasContent { return }
       if sameSemanticElement(
@@ -571,7 +583,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: valueText,
-        placeholder: placeholderText(element.placeholderValue),
+        placeholder: elementPlaceholderText(element, type: elementType),
         rect: SnapshotRect(frame),
         enabled: enabled,
         focused: elementHasFocus(element) ? true : nil,
