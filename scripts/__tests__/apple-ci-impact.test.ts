@@ -62,6 +62,31 @@ test('native runner build-cache inputs trigger the PR XCTest lane', () => {
   ).toEqual(['packages/platform-apple/src/foldable/**']);
 });
 
+test('the cache stores native products before applying the current runner icon patch', () => {
+  const action = fs.readFileSync(
+    path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
+    'utf8',
+  );
+  const doc = parse(action) as {
+    runs: {
+      steps: Array<{ name?: string; env?: Record<string, string>; if?: string; run?: string }>;
+    };
+  };
+  const steps = doc.runs.steps;
+  const build = steps.find((step) => step.name === 'Build Apple runner artifacts on cache miss');
+  const saveIndex = steps.findIndex((step) => step.name === 'Save Apple runner build cache');
+  const patchIndex = steps.findIndex((step) => step.name === 'Patch XCTest runner icon');
+  expect(build?.env?.AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH).toBe('1');
+  expect(saveIndex).toBeGreaterThan(-1);
+  expect(patchIndex).toBeGreaterThan(saveIndex);
+  expect(steps[patchIndex]?.if).toBeUndefined();
+  expect(steps[patchIndex]?.run).toContain('scripts/patch-xcuitest-runner-icon.ts');
+  expect(cacheInputs(action)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
+  expect(fs.readFileSync(path.join(repoRoot, 'scripts/build-xcuitest-apple.sh'), 'utf8')).toContain(
+    'if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then',
+  );
+});
+
 test('the PR workflow applies the impact decision to the XCTest step', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ios.yml'), 'utf8');
   expect(workflow).toContain('node --experimental-strip-types scripts/apple-ci-impact.ts xctest');

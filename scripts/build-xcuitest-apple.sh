@@ -165,5 +165,7 @@ node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild bui
   $ARCH_BUILD_SETTINGS \
   $SIGNING_BUILD_SETTINGS
 
-node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"
+if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then
+  node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"
+fi
 node scripts/write-xcuitest-cache-metadata.mjs "$PLATFORM" "$DERIVED_PATH" "$DESTINATION"

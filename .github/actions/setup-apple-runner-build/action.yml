@@ -44,7 +44,7 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/swift-toolchain-tmpdir.ts', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', '.github/actions/setup-apple-runner-build/action.yml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/swift-toolchain-tmpdir.ts', 'scripts/write-xcuitest-cache-metadata.mjs', '.github/actions/setup-apple-runner-build/action.yml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner build variant
@@ -90,6 +90,7 @@ runs:
         AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ inputs.derived-path }}
         AGENT_DEVICE_XCUITEST_PLATFORM: ${{ inputs.xcuitest-platform }}
         AGENT_DEVICE_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}
+        AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH: '1'
 
     - name: Save Apple runner build cache
       if: steps.restore-runner-build.outputs.cache-hit != 'true'
@@ -97,6 +98,10 @@ runs:
       with:
         path: ${{ inputs.derived-path }}
         key: ${{ steps.restore-runner-build.outputs.cache-primary-key }}
+
+    - name: Patch XCTest runner icon
+      shell: bash
+      run: node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "${{ inputs.derived-path }}"
 
     - name: Report Apple runner build cache
       env:
@@ -106,9 +111,9 @@ runs:
       run: |
         set -euo pipefail
         if [ "$CACHE_HIT" = 'true' ]; then
-          RESULT='restored exact prebuilt runner; compilation skipped'
+          RESULT='restored native build; compilation skipped; icon patch applied'
         else
-          RESULT='cache miss; built runner and attempted cache save'
+          RESULT='cache miss; built and cached native runner; icon patch applied'
         fi
         {
           printf '### Apple runner cache (%s)\n\n' "$BUILD_GATE"
