@@ -86,9 +86,10 @@ test('runner command trait helpers read from the shared trait table', () => {
 });
 
 test('alert actions match the native read-only golden table', () => {
-  // The fixture's `query` column names the shared fact — the alert request changes nothing — which
-  // each side consumes under its own name: `readOnly` for this daemon trait, retry eligibility for
-  // the Apple runner, which no longer classifies commands by read-only-ness at all.
+  // The fixture's `query` column records whether the alert request changes anything — `get` is the
+  // one action that is side-effect-free — and each side consumes it under its own name: `readOnly`
+  // for this daemon trait, retry eligibility for the Apple runner, which no longer classifies
+  // commands by read-only-ness at all.
   const cases = JSON.parse(
     fs.readFileSync(
       new URL('../../../../../contracts/fixtures/alert-command-traits.json', import.meta.url),
