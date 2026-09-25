@@ -648,3 +648,36 @@ test('capturePostGestureStabilizedResult still distrusts a same-backend baseline
   assert.equal(rebased, 0);
   assert.equal(staleAccepts, 1);
 });
+
+// A `wait stable` poll bounds its capture with a deadline abort. The record is consumed by entering
+// the loop: left armed, every later capture on the session would pay the whole loop again and the
+// wait would keep timing out with zero captures (#2885).
+test('capturePostGestureStabilizedResult clears the pending record when a capture aborts mid-loop', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = pickupSnapshot(500);
+  markPostGestureStabilization(session, 'scroll');
+  assert.ok(session.postGestureStabilization);
+
+  let captureCount = 0;
+  const capture = vi.fn(async () => {
+    captureCount += 1;
+    if (captureCount === 1) return pickupSnapshot(500);
+    throw new DOMException('Wait deadline exceeded', 'TimeoutError');
+  });
+
+  const resultPromise = capturePostGestureStabilizedResult({
+    session,
+    capture,
+    readSnapshot: (snapshot) => snapshot,
+  }).then(
+    () => 'resolved' as const,
+    (error: unknown) => error,
+  );
+  await vi.advanceTimersByTimeAsync(1_000);
+  const outcome = await resultPromise;
+
+  assert.ok(outcome instanceof DOMException && outcome.name === 'TimeoutError');
+  assert.equal(captureCount, 2);
+  assert.equal(session.postGestureStabilization, undefined);
+});
