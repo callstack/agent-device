@@ -464,9 +464,17 @@ extension RunnerTests {
     }
     switch command.traits.launchPolicy {
     case .noApp:
-      // Answers from the runner's own capture and state, so the target is resolved exactly as it
-      // stands.
-      return .context(ActiveCommandContext(app: resolveAppWithoutActivation(command: command)))
+      // A surface that is genuinely on screen is the screen this command would observe, so it is
+      // served in place first, exactly as it is for the reads: bringing nothing forward is what makes
+      // an observation honest, and it is not the same promise as ignoring what is presented (#2438).
+      if let presented = presentedSystemSurfaceHost() {
+        return .context(ActiveCommandContext(app: presented.app, systemSurface: presented.host))
+      }
+      // Nothing is presented, so the target is the one that already stands: the cached session app,
+      // or the runner host when nothing is bound. Not the request's bundle id — this route never
+      // resolves a bundle it has not already bound, which is what keeps an observation from deciding
+      // which app it is about.
+      return .context(ActiveCommandContext(app: currentApp ?? app))
     case .presentedSurface:
       // The command is about the surface that already has focus; activating an app under it would
       // cancel exactly what the command is about.
@@ -575,8 +583,16 @@ extension RunnerTests {
   /// never activates and is cheap when the host is absent. See docs/adr/0004.
   private func presentedSystemSurfaceHost() -> (host: SystemSurfaceHost, app: XCUIApplication)? {
 #if os(iOS)
+    #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    let forcedForeground = presentedSystemSurfaceForegroundOverrideForTesting
+    #endif
     for host in SystemSurfaceHostRegistry.hosts {
       let candidate = XCUIApplication(bundleIdentifier: host.bundleId)
+      #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      if forcedForeground?.contains(host.bundleId) == true {
+        return (host, candidate)
+      }
+      #endif
       if candidate.state == .runningForeground {
         return (host, candidate)
       }

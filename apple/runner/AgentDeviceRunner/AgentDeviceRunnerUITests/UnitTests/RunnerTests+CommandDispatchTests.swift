@@ -141,6 +141,70 @@ extension RunnerTests {
     }
   }
 
+  /// A `.noApp` command owes both of the merge-base's answers. Nothing about this policy is a promise
+  /// to ignore what is on screen: the merge-base consulted `presentedSystemSurfaceHost()` before the
+  /// lifecycle branch, so `screenshot`, `status`, and `uptime` were served a registered host in place
+  /// (#2438), and with nothing presented they were served the standing cached target rather than a
+  /// target resolved from the request. The policy axis dropped both. The request deliberately names a
+  /// bundle the session never bound, which is the only shape that tells the standing target apart from
+  /// one resolved from the request: both would name the cached app when the request agrees with it.
+  func testNoAppCommandStillServesAPresentedSurfaceInPlaceAndOtherwiseTheStandingTarget() throws {
+    let cachedBundleId = "com.example.session"
+    let requestedBundleId = "com.example.requested-but-never-bound"
+    defer {
+      presentedSystemSurfaceForegroundOverrideForTesting = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+    }
+
+    let host = try XCTUnwrap(SystemSurfaceHostRegistry.hosts.first)
+    let screenshot = try runnerCommandFixture(
+      #"{"command":"screenshot","commandId":"capture-1","appBundleId":"\#(requestedBundleId)"}"#
+    )
+    currentApp = app
+    currentBundleId = cachedBundleId
+
+    presentedSystemSurfaceForegroundOverrideForTesting = [host.bundleId]
+    guard case .context(let presented) = prepareActiveCommandContext(command: screenshot) else {
+      return XCTFail("screenshot must be prepared, not refused")
+    }
+    XCTAssertEqual(
+      presented.systemSurface,
+      host,
+      "a capture taken under a presented surface must carry that surface's provenance (#2438)"
+    )
+    XCTAssertFalse(
+      presented.app === app,
+      "the capture target is the presented host, not the standing session target"
+    )
+    XCTAssertFalse(
+      presented.app === springboard,
+      "a presented surface is served in place, never through SpringBoard"
+    )
+    XCTAssertNil(pendingTargetActivation, "serving a surface in place may not record an activation")
+    XCTAssertEqual(
+      currentBundleId,
+      cachedBundleId,
+      "serving a surface in place may not rebind the session target"
+    )
+
+    // The other half, with nothing presented. Without this the arm could pass by serving a surface
+    // that is not there.
+    presentedSystemSurfaceForegroundOverrideForTesting = nil
+    guard case .context(let standing) = prepareActiveCommandContext(command: screenshot) else {
+      return XCTFail("screenshot must be prepared, not refused")
+    }
+    XCTAssertNil(
+      standing.systemSurface,
+      "no surface is presented, so nothing may be disclosed as one"
+    )
+    XCTAssertTrue(
+      standing.app === app,
+      "naming another bundle is no licence to point the observation away from the standing target"
+    )
+    XCTAssertNil(pendingTargetActivation)
+    XCTAssertEqual(currentBundleId, cachedBundleId, "preparing a capture binds nothing")
+  }
+
   func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {
     app.launch()
     currentApp = app

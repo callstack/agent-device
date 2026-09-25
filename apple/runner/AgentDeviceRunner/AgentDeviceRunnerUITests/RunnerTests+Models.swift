@@ -44,8 +44,11 @@ enum CommandType: String, Codable, CaseIterable {
 /// decides whether a stopped app is started, so it is declared per command rather than inferred
 /// from whether the command may be replayed (#2890).
 enum CommandLaunchPolicy: Equatable {
-  /// Never brings an app forward: the command answers from the runner's own capture and state, or
-  /// drives the runner's own lifecycle.
+  /// Preparation brings no app forward and binds no target: the command answers from the runner's own
+  /// capture and state, or drives the runner's own lifecycle, so it is served the standing cached
+  /// target. A surface that is genuinely presented is served in place instead, because that is the
+  /// screen the command observes (#2438). Scoped to preparation: a command body may still go to the
+  /// app it names, as macOS `screenshot` does.
   case noApp
   /// Answers from the surface that already has focus, where activating an app would cancel exactly
   /// what the command is about: an in-place system surface, or a press that belongs to the system.

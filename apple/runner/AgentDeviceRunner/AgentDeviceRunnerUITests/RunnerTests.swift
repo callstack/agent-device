@@ -208,6 +208,12 @@ final class RunnerTests: XCTestCase {
   var blockingSystemModalPresenceOverrideForTesting: Bool?
   var alertResolutionOverrideForTesting: ((Date) -> RunnerAlert?)?
   var alertButtonHittabilityProbeOverrideForTesting: ((Date) -> Bool)?
+  // Unit-test-only override for the in-place surface probe (`presentedSystemSurfaceHost`): a
+  // registered host is an out-of-process XPC service that only comes up because some app presented
+  // it, and `open` refuses to launch one, so the served-in-place branch is unreachable in-bundle
+  // without it. The named registered hosts are reported foreground; every other one is still asked
+  // the system, which keeps registry order inside the probe. Production never compiles this property.
+  var presentedSystemSurfaceForegroundOverrideForTesting: Set<String>?
   // Runs on the waiting thread after `runMainThreadWork`'s wait timed out and before it takes the
   // lock that decides between finished and abandoned, so a test can finish the work in that window.
   var mainThreadWorkTimedOutForTesting: (() -> Void)?
