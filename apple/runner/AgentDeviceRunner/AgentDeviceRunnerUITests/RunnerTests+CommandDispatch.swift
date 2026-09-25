@@ -468,9 +468,18 @@ extension RunnerTests {
     }
     switch command.traits.launchPolicy {
     case .noApp:
-      // A surface that is genuinely on screen is the screen this command would observe, so it is
-      // served in place first, exactly as it is for the reads: bringing nothing forward is what makes
-      // an observation honest, and it is not the same promise as ignoring what is presented (#2438).
+      // The merge-base's prepared contract, which the policy axis dropped: a genuinely presented
+      // surface is consulted first and served in place as the prepared target with that surface
+      // disclosed, activating nothing and rebinding no session target (#2438). Both facts are
+      // preparation-level and neither has a consumer for this class today — the same as at the
+      // merge-base for every command it had: `status`, `uptime`, `recordStop`, `terminate`,
+      // `targetReset` and `shutdown` answer before reading a target; iOS `screenshot` resolves its
+      // own capture display on purpose (#2728) and macOS `screenshot` resolves the named app or the
+      // full screen, so neither reads the prepared target either; off iOS the probe serves nothing
+      // in place; and `snapshot` — the only provenance consumer — is `.existingApp` and keeps its
+      // presented route in `prepareActivatedTarget`. `appState` is newer than the merge-base and
+      // reads the named bundle's state itself. What the arm owns is the prepared subject and
+      // disclosure, restored to the contract every following command was classified against.
       if let presented = presentedSystemSurfaceHost() {
         return .context(ActiveCommandContext(app: presented.app, systemSurface: presented.host))
       }
@@ -603,12 +612,14 @@ extension RunnerTests {
 
   /// Whether a registered host is on screen. A registered host is an out-of-process service that only
   /// comes up because some app presented it, and `open` refuses to launch one, so no in-bundle test
-  /// can make the system report one foreground; the named hosts answer that one question here and the
-  /// registry order and the foreground condition above stay the production ones.
+  /// can make the system report one foreground; the override answers that one question, and when it
+  /// is set it is authoritative for every registered host — members are foreground, non-members are
+  /// not — so a test pins the whole registry walk rather than the live state of what it left out.
+  /// The registry order and the foreground condition above stay the production ones.
   private func systemSurfaceHostState(_ host: SystemSurfaceHost) -> XCUIApplication.State {
     #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-    if presentedSystemSurfaceForegroundOverrideForTesting?.contains(host.bundleId) == true {
-      return .runningForeground
+    if let override = presentedSystemSurfaceForegroundOverrideForTesting {
+      return override.contains(host.bundleId) ? .runningForeground : .notRunning
     }
     #endif
     return XCUIApplication(bundleIdentifier: host.bundleId).state

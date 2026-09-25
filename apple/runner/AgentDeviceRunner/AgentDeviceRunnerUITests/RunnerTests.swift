@@ -204,8 +204,9 @@ final class RunnerTests: XCTestCase {
   var alertButtonHittabilityProbeOverrideForTesting: (@MainActor (Date) -> Bool)?
   // Unit-test-only seam for the in-place surface probe (`presentedSystemSurfaceHost`): a registered
   // host is an out-of-process XPC service that only comes up because some app presented it, and
-  // `open` refuses to launch one, so the foreground answer for the named registered hosts is
-  // supplied here. The probe's registry order and its `.runningForeground` condition stay the
+  // `open` refuses to launch one, so the foreground answer for every registered host is supplied
+  // here when set — members are foreground, non-members are not — which lets a test pin the whole
+  // registry walk. The probe's registry order and its `.runningForeground` condition stay the
   // production ones. Production never compiles this property.
   var presentedSystemSurfaceForegroundOverrideForTesting: Set<String>?
   // Runs on the waiting thread after `runMainThreadWork`'s wait timed out and before it takes the

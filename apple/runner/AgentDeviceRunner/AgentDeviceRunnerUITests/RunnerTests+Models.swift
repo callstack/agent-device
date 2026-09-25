@@ -46,9 +46,11 @@ enum CommandType: String, Codable, CaseIterable {
 enum CommandLaunchPolicy: Equatable {
   /// Preparation brings no app forward and binds no target: the command answers from the runner's own
   /// capture and state, or drives the runner's own lifecycle, so it is served the standing cached
-  /// target. A surface that is genuinely presented is served in place instead, because that is the
-  /// screen the command observes (#2438). Scoped to preparation: a command body may still go to the
-  /// app it names, as macOS `screenshot` does.
+  /// target. A surface that is genuinely presented is served in place instead, which is the prepared
+  /// contract those commands had before the launch-policy axis (#2438); no command in this class
+  /// consumes the prepared target or the disclosed surface today, and the arm that says so names
+  /// where each command's answer actually comes from. Scoped to preparation either way: a command
+  /// body may still go to the app it names, as macOS `screenshot` does.
   case noApp
   /// Answers from the surface that already has focus, where activating an app would cancel exactly
   /// what the command is about: an in-place system surface, or a press that belongs to the system.

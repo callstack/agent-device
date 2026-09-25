@@ -144,13 +144,17 @@ extension RunnerTests {
   }
 
   /// `.noApp` owes both of the merge-base's answers: a registered host presented over the session is
-  /// served in place (#2438), and with nothing presented the standing cached target is served rather
-  /// than a target resolved from the request. The policy axis dropped both. The request names a bundle
-  /// the session never bound because that is the only shape separating the two targets — when the
-  /// request agrees with the cache, both answers name the same app. The seam is the host's foreground
-  /// state alone: the probe's registry walk and foreground condition stay the production ones, and the
-  /// `snapshot`/`querySelector` route that consumes this preparation is pinned live by the replay
-  /// layers, which need a host something actually presented.
+  /// served in place with its surface disclosed (#2438), and with nothing presented the standing cached
+  /// target is served rather than a target resolved from the request. The policy axis dropped both.
+  /// The request names a bundle the session never bound because that is the only shape separating the
+  /// two targets — when the request agrees with the cache, both answers name the same app. The seam is
+  /// the hosts' foreground state alone and it is authoritative while set, so every registered host's
+  /// answer is pinned here and none is read from live state; the probe's registry walk and foreground
+  /// condition stay the production ones. This pins preparation, which is the whole contract for this
+  /// class: no `.noApp` command body reads the prepared target or the disclosure, on this chain or at
+  /// the merge-base, so the arm that says so in `prepareActiveCommandContext` is the consumer of
+  /// record. Deleting the presented arm fails the first block, and resolving the target from the
+  /// request instead of the cache fails the last.
   @MainActor
   func testNoAppCommandStillServesAPresentedSurfaceInPlaceAndOtherwiseTheStandingTarget() throws {
     let cachedBundleId = "com.example.session"
@@ -174,11 +178,11 @@ extension RunnerTests {
     XCTAssertEqual(
       presented.systemSurface,
       host,
-      "a capture taken under a presented surface must carry that surface's provenance (#2438)"
+      "a capture prepared under a presented surface must name that surface as its prepared subject (#2438)"
     )
     XCTAssertFalse(
       presented.app === app,
-      "the capture target is the presented host, not the standing session target"
+      "the prepared subject is the presented host, not the standing session target"
     )
     XCTAssertFalse(
       presented.app === springboard,
@@ -192,7 +196,8 @@ extension RunnerTests {
     )
 
     // A second host reported instead of the first: an arm that returned the registry's first entry
-    // rather than walking it would pass everything above and fail here.
+    // rather than walking it would pass everything above and fail here. The total override makes the
+    // first host's not-foreground answer pinned too, not merely observed.
     let secondHost = SystemSurfaceHostRegistry.hosts[1]
     presentedSystemSurfaceForegroundOverrideForTesting = [secondHost.bundleId]
     guard case .context(let other) = prepareActiveCommandContext(command: screenshot) else {
@@ -204,9 +209,22 @@ extension RunnerTests {
       "the probe must serve the host that is reported foreground, not the registry's first entry"
     )
 
-    // The other half, with nothing presented. Without this the arm could pass by serving a surface
-    // that is not there.
-    presentedSystemSurfaceForegroundOverrideForTesting = nil
+    // Both reported: the registry's own order decides, because live state cannot be told to present
+    // two hosts at once. Totality is what keeps the block's answer free of what the sim happens to
+    // report for any host a future registry entry adds.
+    presentedSystemSurfaceForegroundOverrideForTesting = [host.bundleId, secondHost.bundleId]
+    guard case .context(let both) = prepareActiveCommandContext(command: screenshot) else {
+      return XCTFail("screenshot must be prepared, not refused")
+    }
+    XCTAssertEqual(
+      both.systemSurface,
+      host,
+      "with every host foreground the probe must serve them in registry order"
+    )
+
+    // The other half, with nothing presented — an empty total override, so this half pins the
+    // hosts' answers too. Without this the arm could pass by serving a surface that is not there.
+    presentedSystemSurfaceForegroundOverrideForTesting = []
     guard case .context(let standing) = prepareActiveCommandContext(command: screenshot) else {
       return XCTFail("screenshot must be prepared, not refused")
     }
