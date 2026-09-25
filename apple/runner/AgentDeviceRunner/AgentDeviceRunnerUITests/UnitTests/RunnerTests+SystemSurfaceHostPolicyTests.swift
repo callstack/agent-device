@@ -31,20 +31,5 @@ extension RunnerTests {
     let golden = fixture.hosts.map { [$0.bundleId, $0.kind] }
     XCTAssertEqual(registry, golden, "SystemSurfaceHostRegistry drifted from the golden fixture")
   }
-
-  func testSystemSurfaceHostRegistryRecognizesRegisteredHosts() {
-    XCTAssertTrue(SystemSurfaceHostRegistry.isSystemSurfaceHost("com.apple.SafariViewService"))
-    XCTAssertTrue(SystemSurfaceHostRegistry.isSystemSurfaceHost("com.apple.PassbookUIService"))
-    XCTAssertFalse(SystemSurfaceHostRegistry.isSystemSurfaceHost("com.example.app"))
-    XCTAssertFalse(SystemSurfaceHostRegistry.isSystemSurfaceHost(nil))
-    XCTAssertEqual(
-      SystemSurfaceHostRegistry.host(forBundleId: "com.apple.SafariViewService")?.kind,
-      .webAuth
-    )
-    XCTAssertEqual(
-      SystemSurfaceHostRegistry.host(forBundleId: "com.apple.PassbookUIService")?.kind,
-      .payment
-    )
-  }
 }
 #endif

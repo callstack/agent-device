@@ -20,13 +20,4 @@ enum SystemSurfaceHostRegistry {
     SystemSurfaceHost(bundleId: "com.apple.SafariViewService", kind: .webAuth),
     SystemSurfaceHost(bundleId: "com.apple.PassbookUIService", kind: .payment),
   ]
-
-  static func host(forBundleId bundleId: String?) -> SystemSurfaceHost? {
-    guard let bundleId else { return nil }
-    return hosts.first { $0.bundleId == bundleId }
-  }
-
-  static func isSystemSurfaceHost(_ bundleId: String?) -> Bool {
-    host(forBundleId: bundleId) != nil
-  }
 }
