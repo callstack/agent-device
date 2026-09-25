@@ -161,8 +161,9 @@ test('direct command cancellation reaches runner launch without a registered req
   const controller = new AbortController();
   const device = { ...IOS_SIMULATOR, id: 'runner-direct-signal-sim' };
   mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
-    assert.equal(options?.signal, controller.signal);
-    controller.abort(new Error('wait deadline exceeded'));
+    assert.equal(options?.signal?.aborted, false);
+    controller.abort(new Error('client disconnected'));
+    assert.equal(options?.signal?.aborted, true);
     return makeBackgroundRunner(4141);
   });
 
@@ -176,6 +177,51 @@ test('direct command cancellation reaches runner launch without a registered req
   );
 
   assert.equal(readRunnerSessionLiveness(device.id), null);
+});
+
+/**
+ * A `wait` poll bounds each attempt with a `TimeoutError` deadline. When that deadline lands while the
+ * runner is still starting, the start it interrupts is the one the retry needs: the launch must not be
+ * killed and the session must stay registered as starting, so the next request joins it (#2894).
+ */
+test('a caller deadline during runner start leaves the starting runner for the next request', async () => {
+  const controller = new AbortController();
+  const device = { ...IOS_SIMULATOR, id: 'runner-caller-deadline-sim' };
+  mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
+    controller.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+    assert.equal(options?.signal?.aborted, false, 'the launch outlives the caller deadline');
+    return makeBackgroundRunner(4545);
+  });
+  mockWaitForRunner.mockImplementationOnce(async () => {
+    throw createRequestCanceledError();
+  });
+
+  await assert.rejects(
+    executeRunnerCommand(
+      device,
+      { command: 'snapshot', appBundleId: 'com.example.demo' },
+      { signal: controller.signal, logPath: '/tmp/runner.log' },
+    ),
+    (error: unknown) =>
+      isRequestCanceledError(error) &&
+      (error as { details?: { readinessPhase?: string } }).details?.readinessPhase ===
+        'runner-start',
+  );
+  assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'starting');
+  assert.deepEqual(readRetainedLeaseDeviceIds(), [device.id]);
+
+  await executeRunnerCommand(
+    device,
+    { command: 'snapshot', appBundleId: 'com.example.demo' },
+    { logPath: '/tmp/runner.log' },
+  );
+
+  assert.equal(
+    mockRunCmdBackground.mock.calls.length,
+    1,
+    'the retry did not launch a second runner',
+  );
+  assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'ready');
 });
 
 test('prepare cancellation stops only its runner and preserves unrelated prep', async () => {

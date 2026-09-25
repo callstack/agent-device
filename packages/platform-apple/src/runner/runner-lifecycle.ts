@@ -21,6 +21,7 @@ import {
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
+  callerDeadlineExpired,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -311,7 +312,10 @@ export async function executeRunnerCommand(
       ? session.state === 'starting'
       : livenessAtEntry !== 'ready';
     if (runnerNeverAnswered && isRequestCanceledError(appErr)) {
-      if (session) {
+      // A cancelled request leaves no half-started runner behind. A caller whose own deadline ran
+      // out mid-start leaves it running: the start is on its own budget, and the next request
+      // joins it instead of paying it again (#2894).
+      if (session && !callerDeadlineExpired(options)) {
         await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
       }
       throw createRequestCanceledError(
