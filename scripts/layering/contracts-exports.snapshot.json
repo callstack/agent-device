@@ -95,6 +95,7 @@
   "@agent-device/contracts/remote",
   "@agent-device/contracts/replay",
   "@agent-device/contracts/runner-lease-context",
+  "@agent-device/contracts/runtime-contract-error",
   "@agent-device/contracts/runtime-operation-names",
   "@agent-device/contracts/screen-capture-contract",
   "@agent-device/contracts/screen-recording-runtime",
