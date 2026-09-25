@@ -40,6 +40,7 @@ test('native runner build-cache inputs trigger the PR XCTest lane', () => {
     'utf8',
   );
   expect(cacheInputs(action).filter((input) => input.startsWith('packages/'))).toEqual([]);
+  expect(cacheInputs(action).filter((input) => input.endsWith('.ts'))).toEqual([]);
   const uncovered = (text: string) =>
     cacheInputs(text)
       .filter((input) => !input.startsWith('!'))
@@ -62,26 +63,52 @@ test('native runner build-cache inputs trigger the PR XCTest lane', () => {
   ).toEqual(['packages/platform-apple/src/foldable/**']);
 });
 
-test('the cache stores native products before applying the current runner icon patch', () => {
+type AppleRunnerBuildStep = {
+  name?: string;
+  env?: Record<string, string>;
+  if?: string;
+  run?: string;
+  with?: Record<string, string>;
+};
+
+function appleRunnerBuildAction(): { text: string; steps: AppleRunnerBuildStep[] } {
   const action = fs.readFileSync(
     path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
     'utf8',
   );
   const doc = parse(action) as {
-    runs: {
-      steps: Array<{ name?: string; env?: Record<string, string>; if?: string; run?: string }>;
-    };
+    runs: { steps: AppleRunnerBuildStep[] };
   };
-  const steps = doc.runs.steps;
-  const build = steps.find((step) => step.name === 'Build Apple runner artifacts on cache miss');
+  return { text: action, steps: doc.runs.steps };
+}
+
+test('Apple runner build cache restores a compatible native schema', () => {
+  const { text, steps } = appleRunnerBuildAction();
+  const restoreIndex = steps.findIndex((step) => step.name === 'Restore Apple runner build cache');
+  const schema = steps.find((step) => step.name === 'Resolve Apple runner cache schema');
+  expect(schema?.run).toContain("hashFiles('.github/actions/setup-apple-runner-build/action.yml'");
+  expect(schema?.run).toContain('scripts/build-xcuitest-apple.sh');
+  expect(steps[restoreIndex]?.with?.key).toContain('steps.cache-schema.outputs.value');
+  expect(steps[restoreIndex]?.with?.['restore-keys']).toContain('steps.cache-schema.outputs.value');
+  expect(cacheInputs(text)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
+});
+
+test('restored native products are rebuilt before caching and icon patching', () => {
+  const { steps } = appleRunnerBuildAction();
+  const restoreIndex = steps.findIndex((step) => step.name === 'Restore Apple runner build cache');
+  const buildIndex = steps.findIndex(
+    (step) => step.name === 'Verify Apple runner artifacts with Xcode',
+  );
   const saveIndex = steps.findIndex((step) => step.name === 'Save Apple runner build cache');
   const patchIndex = steps.findIndex((step) => step.name === 'Patch XCTest runner icon');
-  expect(build?.env?.AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH).toBe('1');
-  expect(saveIndex).toBeGreaterThan(-1);
+  expect(buildIndex).toBeGreaterThan(restoreIndex);
+  expect(steps[buildIndex]?.if).toBeUndefined();
+  expect(steps[buildIndex]?.env?.AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH).toBe('1');
+  expect(saveIndex).toBeGreaterThan(buildIndex);
+  expect(steps[saveIndex]?.if).toContain("cache-hit != 'true'");
   expect(patchIndex).toBeGreaterThan(saveIndex);
   expect(steps[patchIndex]?.if).toBeUndefined();
   expect(steps[patchIndex]?.run).toContain('scripts/patch-xcuitest-runner-icon.ts');
-  expect(cacheInputs(action)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
   expect(fs.readFileSync(path.join(repoRoot, 'scripts/build-xcuitest-apple.sh'), 'utf8')).toContain(
     'if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then',
   );

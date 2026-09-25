@@ -1,5 +1,5 @@
 name: 'Set Up Apple Runner Build'
-description: 'Restore an exact Apple runner build or build and cache it on a miss'
+description: 'Restore a compatible Apple runner build and verify it with Xcode'
 
 inputs:
   derived-path:
@@ -44,7 +44,13 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**', 'scripts/build-xcuitest-apple.sh', 'scripts/runner-isolation-diagnostics.ts', 'scripts/swift-toolchain-tmpdir.ts', 'scripts/write-xcuitest-cache-metadata.mjs', '.github/actions/setup-apple-runner-build/action.yml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**') }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Resolve Apple runner cache schema
+      id: cache-schema
+      run: |
+        echo "value=${{ hashFiles('.github/actions/setup-apple-runner-build/action.yml', 'scripts/build-xcuitest-apple.sh') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner build variant
@@ -79,10 +85,11 @@ runs:
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
       with:
         path: ${{ inputs.derived-path }}
-        key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.source-hash.outputs.value }}
+        key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.cache-schema.outputs.value }}-${{ steps.source-hash.outputs.value }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.cache-schema.outputs.value }}-
 
-    - name: Build Apple runner artifacts on cache miss
-      if: steps.restore-runner-build.outputs.cache-hit != 'true'
+    - name: Verify Apple runner artifacts with Xcode
       uses: ./.github/actions/run-gate
       with:
         gate: ${{ inputs.gate }}
@@ -107,11 +114,14 @@ runs:
       env:
         CACHE_HIT: ${{ steps.restore-runner-build.outputs.cache-hit }}
         CACHE_KEY: ${{ steps.restore-runner-build.outputs.cache-primary-key }}
+        CACHE_MATCHED_KEY: ${{ steps.restore-runner-build.outputs.cache-matched-key }}
         BUILD_GATE: ${{ inputs.gate }}
       run: |
         set -euo pipefail
         if [ "$CACHE_HIT" = 'true' ]; then
-          RESULT='restored native build; compilation skipped; icon patch applied'
+          RESULT='restored exact native build; verified incrementally with Xcode; icon patch applied'
+        elif [ -n "$CACHE_MATCHED_KEY" ]; then
+          RESULT='restored compatible native build; rebuilt incrementally with Xcode; cached current build; icon patch applied'
         else
           RESULT='cache miss; built and cached native runner; icon patch applied'
         fi
