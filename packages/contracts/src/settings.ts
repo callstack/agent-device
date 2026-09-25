@@ -242,7 +242,7 @@ export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
  */
 export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
   message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
-  hint: 'Run settings faceid|touchid against a booted iPhone or iPad simulator.',
+  hint: 'Select a booted iPhone or iPad simulator, then run `settings faceid <state>` or `settings touchid <state>`.',
   reason: 'setting-unsupported-on-leaf',
 } as const);
 
