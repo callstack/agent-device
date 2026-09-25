@@ -83,9 +83,10 @@ Notes:
 - `open <url>` in iOS sessions opens deep links.
 - `open <app> <url>` in iOS sessions opens deep links.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
-- On iOS, `appstate` is unavailable: the Apple target answers no sessionless foreground probe. Whether
-  the session app actually held the foreground is answered per command instead, by the
-  [`targetActivation` disclosure](/agent-device/pr-preview/pr-2947/docs/commands.md#foreground-repairs-on-ios).
+- On iOS, `appstate` answers about the session app: its name from the session record and, when a
+  runner is live, its `XCUIApplication` state (`state`, `source: runner`). No Apple target answers a
+  sessionless foreground probe, so which app is in front is not read; whether the session app held
+  the foreground during a command is the [`targetActivation` disclosure](/agent-device/pr-preview/pr-2947/docs/commands.md#foreground-repairs-on-ios).
 - For remote `connect --remote-config` sessions, see [Commands](/agent-device/pr-preview/pr-2947/docs/commands.md#remote-metro-workflow).
 - Use `--session <name>` for intentional named-session sharing. Do not parallelize mutating commands against the same session; serialize stateful actions such as open, press, fill, type, scroll, back, alert, replay, batch, and close.
 
