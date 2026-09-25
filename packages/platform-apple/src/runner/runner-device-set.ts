@@ -48,18 +48,26 @@ export function restoreLegacyXctestDeviceSetRedirect(
     isSymlinkAt(xctestDeviceSetPath) &&
     (backupExists || linkPointsAt(xctestDeviceSetPath, runnerSimulatorSetPath(device)))
   ) {
-    try {
-      fs.unlinkSync(xctestDeviceSetPath);
-    } catch (error) {
-      if (isSymlinkAt(xctestDeviceSetPath)) throw error;
-    }
+    removeSymlinkUnlessGone(xctestDeviceSetPath);
   }
   if (backupExists && !fs.existsSync(xctestDeviceSetPath)) {
-    try {
-      fs.renameSync(backupPath, xctestDeviceSetPath);
-    } catch (error) {
-      if (fs.existsSync(backupPath) && !fs.existsSync(xctestDeviceSetPath)) throw error;
-    }
+    restoreBackupUnlessRestored(backupPath, xctestDeviceSetPath);
+  }
+}
+
+function removeSymlinkUnlessGone(linkPath: string): void {
+  try {
+    fs.unlinkSync(linkPath);
+  } catch (error) {
+    if (isSymlinkAt(linkPath)) throw error;
+  }
+}
+
+function restoreBackupUnlessRestored(backupPath: string, restoredPath: string): void {
+  try {
+    fs.renameSync(backupPath, restoredPath);
+  } catch (error) {
+    if (fs.existsSync(backupPath) && !fs.existsSync(restoredPath)) throw error;
   }
 }
 

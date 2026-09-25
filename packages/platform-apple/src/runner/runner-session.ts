@@ -389,11 +389,11 @@ function runnerSessionOwnershipChanged(): AppError {
   );
 }
 
-async function resolveReusableRunnerSession(
+/** Whether a registered session can serve this device; one that cannot is stopped when it must be. */
+async function isRunnerSessionServing(
   device: DeviceInfo,
   existing: RunnerSession,
-  startupBudget: RunnerPhaseBudget,
-): Promise<RunnerSession | null> {
+): Promise<boolean> {
   const liveness = readRunnerSessionLivenessFor(existing);
   if (liveness === 'gone') {
     await measureRunnerStartupStep({}, 'stop_stale_session', async () => {
@@ -402,17 +402,24 @@ async function resolveReusableRunnerSession(
         waitTimeoutMs: RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
       });
     });
-    return null;
+    return false;
   }
   // A registered session already being taken down or already handed off is not usable, even when
   // its runner process is still there for a moment while disposal works.
-  if (liveness !== 'starting' && liveness !== 'ready') return null;
-  if (!isSameRunnerSimulator(existing.device, device)) {
-    await measureRunnerStartupStep({}, 'stop_other_simulator_set_session', async () => {
-      await stopRunnerSessionInternal(device.id, existing);
-    });
-    return null;
-  }
+  if (liveness !== 'starting' && liveness !== 'ready') return false;
+  if (isSameRunnerSimulator(existing.device, device)) return true;
+  await measureRunnerStartupStep({}, 'stop_other_simulator_set_session', async () => {
+    await stopRunnerSessionInternal(device.id, existing);
+  });
+  return false;
+}
+
+async function resolveReusableRunnerSession(
+  device: DeviceInfo,
+  existing: RunnerSession,
+  startupBudget: RunnerPhaseBudget,
+): Promise<RunnerSession | null> {
+  if (!(await isRunnerSessionServing(device, existing))) return null;
 
   const existingArtifact = existing.xctestrunArtifact;
   if (existingArtifact?.cache === 'external') {
