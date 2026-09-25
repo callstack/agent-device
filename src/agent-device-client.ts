@@ -1,4 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -18,7 +18,6 @@ import type {
   CaptureSnapshotResult,
   DragOptions,
   FlingOptions,
-  InternalRequestOptions,
   MaterializationReleaseOptions,
   PanOptions,
   PinchOptions,

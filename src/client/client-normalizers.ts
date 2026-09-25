@@ -4,11 +4,11 @@ import type {
   AgentDeviceSessionDevice,
   AppDeployResult,
   AppInstallFromSourceResult,
-  InternalRequestOptions,
   MaterializationReleaseResult,
   StartupPerfSample,
   DeviceSelectionMetadata,
 } from '@agent-device/contracts/client';
+import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isAppleOs,

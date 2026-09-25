@@ -1,4 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
 import { screenshotFlagsFromOptions } from '@agent-device/contracts/capture';
 import {
   leaseScopeFromOptions,
@@ -10,7 +10,6 @@ import {
   snapshotFlagsFromOptions,
 } from '@agent-device/kernel/snapshot';
 import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
-import type { InternalRequestOptions } from '@agent-device/contracts/client';
 import type { CommandMetadata } from './command-contract.ts';
 
 const CLI_FLAG_KEYS: ReadonlySet<string> = new Set(

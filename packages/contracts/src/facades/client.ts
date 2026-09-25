@@ -89,11 +89,7 @@ export type {
   ReplayRunOptions,
   ReplayTestOptions,
 } from '../client-replay.ts';
-export type {
-  CommandExecutionOptions,
-  CommandRequestResult,
-  InternalRequestOptions,
-} from '../client-request.ts';
+export type { CommandRequestResult } from '../client-request.ts';
 export type {
   FindBaseOptions,
   FindOptions,

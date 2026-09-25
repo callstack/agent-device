@@ -1,8 +1,5 @@
-import type {
-  HumanControlHold,
-  InternalRequestOptions,
-  Lease,
-} from '@agent-device/contracts/client';
+import type { HumanControlHold, Lease } from '@agent-device/contracts/client';
+import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isRecord } from '@agent-device/kernel/record';

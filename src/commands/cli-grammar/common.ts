@@ -1,9 +1,5 @@
-import type {
-  ElementTarget,
-  InteractionTarget,
-  InternalRequestOptions,
-} from '@agent-device/contracts/client';
-import type { CliFlags } from '@agent-device/contracts/command';
+import type { ElementTarget, InteractionTarget } from '@agent-device/contracts/client';
+import type { CliFlags, InternalRequestOptions } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   checkElementTargetArgs,

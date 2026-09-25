@@ -73,7 +73,7 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
   // If a flag ever becomes a typed field on DaemonRequest, that changes
   // DaemonRequest's own digest, and the right fix is to list the type here
   // rather than widen this waiver.
-  'packages/contracts/src/client-request.ts#InternalRequestOptions':
+  'packages/contracts/src/request-envelope.ts#InternalRequestOptions':
     'CLI-side option projection; reaches the peer inside DaemonRequest.input/flags (Record<string, unknown>, both listed), and ADR 0006 calls new flags additive.',
   'packages/contracts/src/command-flags.ts#CommandFlags':
     'CLI-side flag vocabulary; reaches the peer inside DaemonRequest.flags (Record<string, unknown>, listed), and ADR 0006 calls new flags additive.',
