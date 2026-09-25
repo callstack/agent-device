@@ -9,11 +9,7 @@ extension RunnerTests {
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
-    // Every command that reaches here with a mutation to prove makes a remembered text-entry tap
-    // stale; the two commands that own that witness decide for themselves in their own cases below.
-    if command.traits.convertsRecordedFailure,
-      !CommandTraits.textEntryWitnessOwners.contains(command.command)
-    {
+    if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
     switch command.command {

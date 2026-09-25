@@ -160,11 +160,19 @@ fileprivate extension CommandTraits {
 extension CommandTraits {
   /// The commands that own the remembered text-entry witness instead of invalidating it: `tap`
   /// records it (and clears it where a tap demonstrably did not land), and `type` reads the one this
-  /// command relies on. Everywhere else on the prepared command path it is having a mutation to
-  /// prove that makes a remembered tap stale, so clearing is derived from `convertsRecordedFailure`
-  /// together with this set at that one consumer — not declared as a fifth fact, which the commands
-  /// answered before that path would have carried without ever being read (#2890 review).
+  /// command relies on.
   static let textEntryWitnessOwners: Set<CommandType> = [.tap, .type]
+}
+
+extension Command {
+  /// Whether arriving at the prepared command path invalidates a remembered text-entry tap. Not a
+  /// fifth trait: everywhere but the two owner commands, it is having a mutation to prove that makes
+  /// the witness stale, so this reads `convertsRecordedFailure` and that set rather than declaring a
+  /// fact no command would answer for itself (#2890 review). `executeOnMainPrepared` is its only
+  /// consumer, and the exhaustive table test pins the answer for every command.
+  var invalidatesRememberedTextEntryTap: Bool {
+    traits.convertsRecordedFailure && !CommandTraits.textEntryWitnessOwners.contains(command)
+  }
 }
 
 struct Command: Codable {
