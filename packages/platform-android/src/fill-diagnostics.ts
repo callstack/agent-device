@@ -10,6 +10,13 @@ export type AndroidFillVerificationNode = {
   password: boolean;
   inputMethodOwned: boolean;
   area: number;
+  /**
+   * Helper-only fact: the node's dump `text` is its HINT, so the field itself is empty. Reported on
+   * a mismatch so a placeholder read as the value is visible in the failure, not only in the log.
+   */
+  hintShowing: boolean;
+  /** The field's hint text when the helper supplied it, whether or not it is showing. */
+  placeholder: string | null;
 };
 
 export type FillFailureReason = 'ime_capture' | 'masked_unverified' | 'text_mismatch';

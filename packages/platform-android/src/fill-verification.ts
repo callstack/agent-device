@@ -24,8 +24,6 @@ export type { AndroidFillVerification } from './fill-diagnostics.ts';
 
 type AndroidFillVerificationCandidate = AndroidFillVerificationNode & {
   editText: boolean;
-  // Helper-only fact: the node's dump text is its HINT, so the field itself is empty.
-  hintShowing: boolean;
 };
 
 type AndroidTextAtPointInspection = {
@@ -410,6 +408,7 @@ function androidFillCandidateFromNode(
     area,
     editText: isEditTextClass(node.className ?? ''),
     hintShowing: node.hintShowing === true,
+    placeholder: node.hint ?? null,
   };
 }
 

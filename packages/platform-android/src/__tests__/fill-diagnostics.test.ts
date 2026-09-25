@@ -13,6 +13,8 @@ function node(overrides: Partial<AndroidFillVerificationNode>): AndroidFillVerif
     password: false,
     inputMethodOwned: false,
     area: 0,
+    hintShowing: false,
+    placeholder: null,
     ...overrides,
   };
 }
@@ -84,4 +86,26 @@ test('buildFillFailureDetails redacts common masked field glyphs', () => {
     assert.equal(details.actualInput?.textRedacted, true);
     assert.doesNotMatch(JSON.stringify(details), /Secret123|\*|•|●/);
   }
+});
+
+// A field whose value the app rewrites, or an empty field dumping its hint as `text`, fails with the
+// raw dump text as `actual`. The node facts say whether that text was the field's placeholder.
+test('buildFillFailureDetails carries the hint-showing fact and the placeholder on the observed node', () => {
+  const details = buildFillFailureDetails('Acme Ltd', {
+    ok: false,
+    actual: 'e.g. Merchant',
+    reason: 'text_mismatch',
+    targetInput: node({ text: 'e.g. Merchant', hintShowing: true, placeholder: 'e.g. Merchant' }),
+    actualInput: node({
+      text: 'e.g. Merchant',
+      focused: true,
+      hintShowing: true,
+      placeholder: 'e.g. Merchant',
+    }),
+  });
+
+  assert.equal(details.expected, 'Acme Ltd');
+  assert.equal(details.actual, 'e.g. Merchant');
+  assert.equal(details.actualInput?.hintShowing, true);
+  assert.equal(details.actualInput?.placeholder, 'e.g. Merchant');
 });
