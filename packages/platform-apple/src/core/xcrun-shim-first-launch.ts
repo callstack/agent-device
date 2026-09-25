@@ -65,8 +65,6 @@ export type ArmedXcrunShimFirstLaunchHook = XcrunShimEvidence & {
 export type XctestDeviceSetCleanupArming = readonly XcrunShimFirstLaunchHook[];
 
 export type XcrunShimProbeOptions = {
-  /** Replaces `xcrun --find`: a tool absent from the map reads as not found. */
-  xcrunShimPaths?: Readonly<Partial<Record<XcrunShimToolName, string>>>;
   /** The owning request's cancellation; an unanswered shim then reads as `probe_canceled`. */
   signal?: AbortSignal;
 };
@@ -80,15 +78,12 @@ export async function probeXcrunShimFirstLaunchHooks(
   const stoppedBy = (): XcrunShimArmedBy =>
     options.signal?.aborted ? 'probe_canceled' : 'probe_out_of_budget';
   return await Promise.all(
-    XCRUN_SHIM_TOOL_NAMES.map(
-      async (tool) => await probeWithinBudget(tool, options, signal, stoppedBy),
-    ),
+    XCRUN_SHIM_TOOL_NAMES.map(async (tool) => await probeWithinBudget(tool, signal, stoppedBy)),
   );
 }
 
 async function probeWithinBudget(
   tool: XcrunShimToolName,
-  options: XcrunShimProbeOptions,
   signal: AbortSignal,
   stoppedBy: () => XcrunShimArmedBy,
 ): Promise<XcrunShimFirstLaunchHook> {
@@ -106,7 +101,7 @@ async function probeWithinBudget(
   });
   signal.addEventListener('abort', onAbort, { once: true });
   try {
-    return await Promise.race([readShimHook(evidence, options, signal), stopped]);
+    return await Promise.race([readShimHook(evidence, signal), stopped]);
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
@@ -121,11 +116,10 @@ function armed(
 
 async function readShimHook(
   evidence: XcrunShimEvidence,
-  options: XcrunShimProbeOptions,
   signal: AbortSignal,
 ): Promise<XcrunShimFirstLaunchHook> {
   const { tool } = evidence;
-  const shimPath = await locateShim(tool, options, signal);
+  const shimPath = await locateShim(tool, signal);
   if (shimPath === null) return armed(evidence, 'shim_not_located');
   evidence.shimPath = shimPath;
   const text = await readShimText(shimPath, signal);
@@ -165,12 +159,7 @@ function settleShimHook(evidence: XcrunShimEvidence, shimPath: string): XcrunShi
   };
 }
 
-async function locateShim(
-  tool: XcrunShimToolName,
-  options: XcrunShimProbeOptions,
-  signal: AbortSignal,
-): Promise<string | null> {
-  if (options.xcrunShimPaths) return options.xcrunShimPaths[tool] ?? null;
+async function locateShim(tool: XcrunShimToolName, signal: AbortSignal): Promise<string | null> {
   try {
     const result = await runAppleToolCommand('xcrun', ['--find', tool], {
       allowFailure: true,

@@ -171,10 +171,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
 async function xctestDeviceSetCleanupArmedRefusal(
   options: XcrunShimProbeOptions,
 ): Promise<AppError | null> {
-  const xcrunShims = await probeXcrunShimFirstLaunchHooks({
-    xcrunShimPaths: options.xcrunShimPaths,
-    signal: options.signal,
-  });
+  const xcrunShims = await probeXcrunShimFirstLaunchHooks({ signal: options.signal });
   if (options.signal?.aborted) {
     return createRequestCanceledError({ phase: 'xctest_device_set_shim_probe' });
   }

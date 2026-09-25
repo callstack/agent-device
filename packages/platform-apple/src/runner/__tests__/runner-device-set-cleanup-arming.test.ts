@@ -71,7 +71,6 @@ async function acquire(layout: Layout, host: FakeXcrunHost, signal?: AbortSignal
       xctestDeviceSetPath: layout.xctestDeviceSetPath,
       backupPath: layout.backupPath,
       lockDirPath: layout.lockDirPath,
-      xcrunShimPaths: host.xcrunShimPaths,
       signal,
     }),
   );

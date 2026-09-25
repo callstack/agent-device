@@ -79,9 +79,7 @@ test('equal versions disarm a hooked shim', async () => {
     devicectl: { expectedVersion: '629.3', installedVersion: '629.3' },
   });
 
-  const shims = await withFakeXcrunHost(host, () =>
-    probeXcrunShimFirstLaunchHooks({ xcrunShimPaths: host.xcrunShimPaths }),
-  );
+  const shims = await withFakeXcrunHost(host, () => probeXcrunShimFirstLaunchHooks());
 
   assert.deepEqual(
     shims.map((shim) => [shim.tool, shim.hook]),

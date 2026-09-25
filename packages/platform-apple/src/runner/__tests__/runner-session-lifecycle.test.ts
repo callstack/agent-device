@@ -408,7 +408,6 @@ test('an armed xcrun shim refuses a scoped-set session before the runner launche
       await acquireRealSimulatorSetRedirect(device, {
         xctestDeviceSetPath,
         lockDirPath: path.join(root, 'xctest-device-set.lock'),
-        xcrunShimPaths: host.xcrunShimPaths,
       }),
   );
   mockEnsureXctestrunArtifact.mockResolvedValue({
