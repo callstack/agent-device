@@ -9,18 +9,19 @@ import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
 import {
   deviceFieldsFromPublicPlatform,
-  isIosFamily,
-  publicPlatformString,
+  platformSelectorsConflict,
   resolveDevice,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import {
+  buildConnectionDeviceKey,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
   mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
+  resolveConnectionDeviceScope,
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -30,6 +31,7 @@ import type { BatchStep } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isSessionRuntimePlatform,
+  leaseBackendForPlatform,
   type LeaseBackend,
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
@@ -690,11 +692,7 @@ async function releaseAcquiredLeaseOnWriteFailure(
 }
 
 export function resolveRequestedLeaseBackend(flags: CliFlags): LeaseBackend | undefined {
-  if (flags.leaseBackend) return flags.leaseBackend;
-  if (flags.platform === 'android') return 'android-instance';
-  if (flags.platform === 'ios') return 'ios-instance';
-  if (flags.platform === 'harmonyos') return 'harmonyos-instance';
-  return undefined;
+  return flags.leaseBackend ?? leaseBackendForPlatform(flags.platform);
 }
 
 function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBackend {
@@ -870,15 +868,14 @@ async function resolveProxyLeaseState(options: {
     );
   }
   const device = await resolveSelectedDevice(options.client, options.flags);
-  const deviceKey = buildProxyDeviceKey(device);
+  const scope = resolveConnectionDeviceScope(device);
   return {
     state: {
       ...options.state,
-      deviceKey,
-      leaseBackend:
-        options.state.leaseBackend ?? options.leaseBackend ?? leaseBackendForDevice(device),
-      platform: options.state.platform ?? device.platform,
-      target: options.state.target ?? device.target,
+      deviceKey: buildConnectionDeviceKey(scope),
+      leaseBackend: options.state.leaseBackend ?? options.leaseBackend ?? scope.leaseBackend,
+      platform: options.state.platform ?? scope.platform,
+      target: options.state.target ?? scope.target,
       updatedAt: new Date().toISOString(),
     },
     device,
@@ -886,15 +883,11 @@ async function resolveProxyLeaseState(options: {
 }
 
 function applyResolvedDeviceSelector(flags: CliFlags, device: DeviceInfo): void {
-  flags.platform = device.platform;
-  flags.target = device.target ?? flags.target;
-  if (isIosFamily(device)) {
-    flags.udid = device.id;
-    return;
-  }
-  if (device.platform === 'android' || device.platform === 'harmonyos') {
-    flags.serial = device.id;
-  }
+  const scope = resolveConnectionDeviceScope(device);
+  flags.platform = scope.platform;
+  flags.target = scope.target ?? flags.target;
+  if (scope.identityFlag === 'udid') flags.udid = scope.id;
+  if (scope.identityFlag === 'serial') flags.serial = scope.id;
 }
 
 async function resolveSelectedDevice(
@@ -929,17 +922,6 @@ async function resolveSelectedDevice(
   );
 }
 
-function buildProxyDeviceKey(device: DeviceInfo): string {
-  return `${publicPlatformString(device)}:${device.target ?? 'mobile'}:${device.id}`;
-}
-
-function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {
-  if (isIosFamily(device)) return 'ios-instance';
-  if (device.platform === 'android') return 'android-instance';
-  if (device.platform === 'harmonyos') return 'harmonyos-instance';
-  return undefined;
-}
-
 function assertRequestedConnectionScope(
   state: RemoteConnectionState,
   flags: CliFlags,
@@ -952,7 +934,7 @@ function assertRequestedConnectionScope(
       { session: state.session, leaseBackend: state.leaseBackend },
     );
   }
-  if (state.platform && flags.platform && state.platform !== flags.platform) {
+  if (platformSelectorsConflict(flags.platform, state.platform)) {
     throw new AppError(
       'INVALID_ARGS',
       'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',

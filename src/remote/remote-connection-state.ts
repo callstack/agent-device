@@ -3,10 +3,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  deviceIdentityFlag,
+  publicPlatformString,
+  type DeviceIdentityFlag,
+  type DeviceInfo,
+  type DeviceTarget,
+  type PublicPlatform,
+} from '@agent-device/kernel/device';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { LeaseBackend, SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import {
+  leaseBackendForPlatform,
+  type LeaseBackend,
+  type SessionRuntimeHints,
+} from '@agent-device/kernel/contracts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
@@ -46,6 +58,55 @@ export type RemoteConnectionRequestMetadata = Pick<
   RemoteConnectionState,
   'leaseProvider' | 'deviceKey' | 'clientId'
 >;
+
+/**
+ * A resolved device projected onto the axes a remote connection records it on.
+ *
+ * A `DeviceInfo` carries the INTERNAL platform axis (`apple`, with `appleOs` as the OS
+ * discriminant), while every field above — `platform`, `target`, `deviceKey`, `leaseBackend` —
+ * speaks the PUBLIC leaf axis (`ios`/`macos`, ADR 0009). This is where the two axes meet, so those
+ * fields can never disagree about which axis a device was named on. Reading `device.platform`
+ * directly instead was #2962: an iOS device recorded `apple` while the connection held `ios`, and
+ * the scope check compared the two and refused every iOS install and open on a proxy lease.
+ *
+ * Each rule it composes stays with its owning module; this answers only "which device, named how,
+ * rented by whom".
+ */
+export type ConnectionDeviceScope = Readonly<{
+  platform: PublicPlatform;
+  /** The target as the device records it; `undefined` leaves an existing selection untouched. */
+  target: DeviceTarget | undefined;
+  /** The lease backend that rents this device, or `undefined` when no backend leases it. */
+  leaseBackend: LeaseBackend | undefined;
+  /**
+   * The flag that names this device to a request, or `undefined` when it names none.
+   *
+   * Only a device a backend can rent gets one. A platform with no lease backend cannot be bound by
+   * a remote connection at all, so its identity is never sent — and for the macOS desktop host it
+   * must not be: the daemon's own selector rule reads `--udid` as an iOS-family selector and would
+   * report a conflict against the session this very command is opening. Such a device fails on the
+   * missing backend, which names the real problem, instead of on a selector it could never use.
+   */
+  identityFlag: DeviceIdentityFlag | undefined;
+  id: string;
+}>;
+
+export function resolveConnectionDeviceScope(device: DeviceInfo): ConnectionDeviceScope {
+  const platform = publicPlatformString(device);
+  const leaseBackend = leaseBackendForPlatform(platform);
+  return {
+    platform,
+    target: device.target,
+    leaseBackend,
+    identityFlag: leaseBackend ? deviceIdentityFlag(platform) : undefined,
+    id: device.id,
+  };
+}
+
+/** The `deviceKey` for a resolved device: its identity on the public platform and target axes. */
+export function buildConnectionDeviceKey(scope: ConnectionDeviceScope): string {
+  return `${scope.platform}:${scope.target ?? 'mobile'}:${scope.id}`;
+}
 
 type RemoteConnectionDefaults = {
   flags: Partial<CliFlags>;

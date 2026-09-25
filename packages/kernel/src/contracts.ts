@@ -58,6 +58,31 @@ const LEASE_BACKENDS = [
   'harmonyos-instance',
 ] as const;
 export type LeaseBackend = (typeof LEASE_BACKENDS)[number];
+
+// Which lease backend rents a device on each platform the remote lease layer can hold. `ios-simulator`
+// is a backend-specific runner guard rather than something a platform selector names, and the
+// platforms with no remote lease backend (`vega`, `linux`, `web`) — and the macOS desktop host — map
+// to no backend at all, so a request for one fails on the missing backend instead of renting a
+// device no provider owns. Keyed on the `--platform` selector axis: callers holding a `DeviceInfo`
+// project it with `publicPlatformString` first, which is the axis #2962 mixed up.
+const LEASE_BACKEND_BY_PLATFORM: Partial<Record<PlatformSelector, LeaseBackend>> = {
+  ios: 'ios-instance',
+  android: 'android-instance',
+  harmonyos: 'harmonyos-instance',
+};
+
+/**
+ * Maps a platform to the lease backend that rents it. The CLI reads it for `--platform`/
+ * `--lease-backend` resolution and the remote connection reads it for the device it just resolved.
+ * Both previously keyed their own copy off a platform axis, which is where #2962 started; a further
+ * copy in `connect limrun` validation is tracked for follow-up.
+ */
+export function leaseBackendForPlatform(
+  platform: PlatformSelector | undefined,
+): LeaseBackend | undefined {
+  return platform === undefined ? undefined : LEASE_BACKEND_BY_PLATFORM[platform];
+}
+
 const DAEMON_SERVER_MODES = ['socket', 'http', 'dual'] as const;
 export type DaemonServerMode = (typeof DAEMON_SERVER_MODES)[number];
 const DAEMON_TRANSPORT_PREFERENCES = ['auto', 'socket', 'http'] as const;

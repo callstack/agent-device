@@ -16,6 +16,7 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { platformSelectorsConflict } from '@agent-device/kernel/device';
 import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
@@ -424,12 +425,29 @@ function optionalConnectionFieldsMatch(
   state: RemoteConnectionState,
   options: Parameters<typeof isCompatibleConnection>[1],
 ): boolean {
+  if (!platformSelectionMatches(state.platform, options.flags.platform)) return false;
   const fieldsMatch = [
     [state.leaseBackend, options.desiredLeaseBackend],
-    [state.platform, options.flags.platform],
     [state.target, options.flags.target],
   ].every(([left, right]) => right === undefined || left === right);
   return fieldsMatch && remoteConnectionLeaseIdentityMatches(state, options.connection);
+}
+
+/**
+ * Whether a `connect --platform` names the platform the active connection is already bound to.
+ *
+ * The comparison goes through the selector rule rather than string equality: `--platform apple`
+ * names the same devices as the `ios` a profile recorded, and treating those as two connections
+ * forced a needless `--force` (#2962). A connection that recorded no platform stays bound to
+ * nothing, so a request that names one still counts as a different connection.
+ */
+function platformSelectionMatches(
+  bound: RemoteConnectionState['platform'],
+  requested: CliFlags['platform'],
+): boolean {
+  if (requested === undefined) return true;
+  if (bound === undefined) return false;
+  return !platformSelectorsConflict(requested, bound);
 }
 
 function isSameDaemonState(
