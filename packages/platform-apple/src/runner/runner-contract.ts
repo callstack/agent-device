@@ -198,21 +198,17 @@ export function resolveRunnerStartupSignal(
   const registeredSignal = getRequestSignal(options.requestId);
   const callerSignal = options.signal;
   if (!callerSignal || callerSignal === registeredSignal) return registeredSignal;
-  const controller = new AbortController();
-  const forward = (signal: AbortSignal) => {
-    if (controller.signal.aborted) return;
-    if (isCallerDeadlineAbortReason(signal.reason)) return;
-    controller.abort(signal.reason);
+  // The caller signal is filtered through its own controller, so a deadline never reaches the
+  // start; the registered signal is composed with `AbortSignal.any`, which detaches its own
+  // listener once the composed signal settles, so a request that polls many times does not
+  // accumulate listeners on its long-lived cancellation signal.
+  const filtered = new AbortController();
+  const forward = () => {
+    if (!isCallerDeadlineAbortReason(callerSignal.reason)) filtered.abort(callerSignal.reason);
   };
-  for (const signal of [registeredSignal, callerSignal]) {
-    if (!signal) continue;
-    if (signal.aborted) {
-      forward(signal);
-      continue;
-    }
-    signal.addEventListener('abort', () => forward(signal), { once: true });
-  }
-  return controller.signal;
+  if (callerSignal.aborted) forward();
+  else callerSignal.addEventListener('abort', forward, { once: true });
+  return registeredSignal ? AbortSignal.any([registeredSignal, filtered.signal]) : filtered.signal;
 }
 
 /**
