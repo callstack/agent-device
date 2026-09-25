@@ -174,7 +174,7 @@ test(scenario('errorTaxonomy'), async () => {
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-      assert.match(error.message, /Ref @e9 not found or has no bounds/);
+      assert.match(error.message, /Ref @e9 not found/);
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.match(String(details?.hint), /refs expire/i);
       assert.equal(details?.reason, 'ref_not_found');

@@ -152,8 +152,8 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toMatch(/not found or has no bounds/);
-    expect(response.error.details).toMatchObject({ reason: 'ref_not_found', ref: 'e1' });
+    expect(response.error.message).toMatch(/Ref @e1 has no usable bounds/);
+    expect(response.error.details).toMatchObject({ reason: 'target_bounds_invalid', ref: 'e1' });
   }
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
@@ -208,8 +208,8 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toMatch(/not found or has no bounds/);
-    expect(response.error.details).toMatchObject({ reason: 'ref_not_found', ref: 'e1' });
+    expect(response.error.message).toMatch(/Ref @e1 has no usable bounds/);
+    expect(response.error.details).toMatchObject({ reason: 'target_bounds_invalid', ref: 'e1' });
   }
   expect(mockTapPoint).not.toHaveBeenCalled();
 });

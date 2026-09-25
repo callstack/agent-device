@@ -510,12 +510,41 @@ test('runtime ref interactions fail closed when the authorized ref has no usable
   await assert.rejects(
     () => device.interactions.click(ref('@e1'), { session: 'default' }),
     (error: unknown) => {
-      assert.match((error as Error).message, /Ref @e1 not found or has no bounds/);
+      assert.match((error as Error).message, /Ref @e1 has no usable bounds/);
       assert.deepEqual(
         (error as { details?: Record<string, unknown> }).details,
-        { reason: 'ref_not_found', ref: 'e1', hint: STALE_REF_HINT },
-        'a consumer dispatches on the reason, not the message',
+        { reason: 'target_bounds_invalid', ref: 'e1', hint: STALE_REF_HINT },
+        'the frame lists @e1, so the refusal names the bounds, not a missing ref',
       );
+      return true;
+    },
+  );
+  assert.equal(captures, 0);
+  assert.deepEqual(calls, []);
+});
+
+test('runtime ref interactions refuse a ref the authorized frame does not list with ref_not_found', async () => {
+  const calls: Point[] = [];
+  let captures = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => {
+      captures += 1;
+      return { snapshot: selectorSnapshot() };
+    },
+    tap: async (_context, point) => {
+      calls.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e9'), { session: 'default' }),
+    (error: unknown) => {
+      assert.match((error as Error).message, /Ref @e9 not found/);
+      assert.deepEqual((error as { details?: Record<string, unknown> }).details, {
+        reason: 'ref_not_found',
+        ref: 'e9',
+        hint: STALE_REF_HINT,
+      });
       return true;
     },
   );

@@ -360,7 +360,7 @@ async function resolveRefInteractionTarget(
     },
     resolveTapPoint: (node) =>
       resolveNodeTouchPoint(node, nodes, {
-        invalidMessage: `Ref ${target.ref} not found or has invalid bounds`,
+        invalidMessage: `Ref ${target.ref} has no usable bounds`,
         blockedTargetLabel: `Ref ${target.ref}`,
         blockedTargetDetails: { ref: `@${normalizeRef(target.ref) ?? node.ref}` },
       }),
@@ -799,13 +799,7 @@ async function resolveSnapshotForRef(
   // exactly the positional-coincidence retarget the frame model forbids. A stale
   // read is observable and recoverable; a stale mutation can act on the wrong
   // element. The caller re-observes (snapshot) or uses a selector.
-  if (!authorized) {
-    throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found or has no bounds`, {
-      reason: INTERACTION_ERROR_REASONS.refNotFound,
-      ref: normalizeRef(target.ref),
-      hint: STALE_REF_HINT,
-    });
-  }
+  if (!authorized) throw refMissRefusal(frameTree.nodes, target.ref);
   return reconcileFreshObservation({
     session,
     frameTree,
@@ -878,6 +872,29 @@ type ResolvedRefNode = {
   resolution: ResolutionDisclosure;
 };
 
+/**
+ * The refusal for a ref the frame could not authorize, told apart by what the frame still lists:
+ * a ref no node carries is stale or was never issued (`ref_not_found`); a ref whose node is
+ * listed but has no usable centre is present and unactionable (`target_bounds_invalid`). Both
+ * recover the same way, a fresh observation, so both carry the stale-ref hint; `details.ref` is
+ * the bare ref body either way.
+ */
+function refMissRefusal(nodes: SnapshotState['nodes'], refInput: string): AppError {
+  const ref = normalizeRef(refInput) ?? refInput;
+  const listed = findNodeByRef(nodes, ref) !== null;
+  return listed
+    ? new AppError('COMMAND_FAILED', `Ref ${refInput} has no usable bounds`, {
+        reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+        ref,
+        hint: STALE_REF_HINT,
+      })
+    : new AppError('COMMAND_FAILED', `Ref ${refInput} not found`, {
+        reason: INTERACTION_ERROR_REASONS.refNotFound,
+        ref,
+        hint: STALE_REF_HINT,
+      });
+}
+
 function resolveNodeTouchPoint(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
@@ -897,7 +914,7 @@ function resolveNodeTouchPoint(
   if (resolution.kind === 'invalid') {
     throw new AppError('COMMAND_FAILED', failure.invalidMessage, {
       reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
-      ...failure.blockedTargetDetails,
+      ...bareTargetDetails(failure.blockedTargetDetails),
     });
   }
   throw new AppError(
@@ -911,6 +928,13 @@ function resolveNodeTouchPoint(
       hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
     },
   );
+}
+
+/** `details.ref` is the bare ref body on every reason; the blocked-target label keeps its `@`. */
+function bareTargetDetails(
+  details: { ref: string } | { selector: string },
+): { ref: string } | { selector: string } {
+  return 'ref' in details ? { ref: normalizeRef(details.ref) ?? details.ref } : details;
 }
 
 function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is SnapshotNode {
