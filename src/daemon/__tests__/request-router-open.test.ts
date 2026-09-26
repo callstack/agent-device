@@ -368,7 +368,7 @@ test('open stores admitted lease metadata on the session', async () => {
     leaseProvider: 'proxy',
     clientId: 'client-a',
     deviceKey: 'ios:SIM-LEASED',
-    expiresAt: 301_000,
+    expiresAt: 61_000,
   });
 });
 

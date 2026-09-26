@@ -8,9 +8,7 @@ import {
 } from './daemon-command-registry.ts';
 import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
-  DEFAULT_PROXY_LEASE_TTL_MS,
   findMissingProxyLeaseFields,
-  isProxyLeaseScope,
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from './lease-context.ts';
@@ -94,14 +92,11 @@ export function assertRequestLeaseAdmission(
   }
   assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
-  const heartbeatLeaseScope = {
-    ...leaseScope,
-    leaseTtlMs:
-      leaseScope.leaseTtlMs ??
-      (isProxyLeaseScope(leaseScope) ? DEFAULT_PROXY_LEASE_TTL_MS : undefined),
-  };
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
-  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
+  // Admission renews for the window the lease already carries, or the window this request named.
+  // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
+  // that rented a device for longer than the default lost it on the next admitted command (#2946).
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;
 }
