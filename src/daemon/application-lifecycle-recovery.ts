@@ -65,9 +65,15 @@ export async function finalizeBoundSessionApplicationLifecycle(params: {
 }
 
 /**
- * Finish a persisted session's lifecycle-owned resources during daemon shutdown. The selected
- * owner is admitted from eager facts, then bound through the provider-first gateway exactly once.
- * A platform finalization failure remains primary over binding disposal failure.
+ * Finish a persisted session's lifecycle-owned resources when the daemon, not a request, owns the
+ * teardown. The selected owner is admitted from eager facts, then bound through the provider-first
+ * gateway exactly once. A platform finalization failure remains primary over binding disposal failure.
+ *
+ * `daemonLeaving` is the one axis that decides what happens to a healthy execution host, and it
+ * defaults to `true` because every existing caller is the daemon on its way out, which hands a
+ * healthy host to the gateway's final shutdown phase. A daemon that stays alive — the #2833
+ * idle-session expiry — has no successor and passes `false`, taking the ordinary-close path that
+ * stops the host and releases its lease instead of parking it until process exit.
  */
 export async function finalizeDaemonSessionApplicationLifecycle(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
@@ -75,6 +81,7 @@ export async function finalizeDaemonSessionApplicationLifecycle(params: {
   session: SessionState;
   stateDir: string;
   runtimeHints: RuntimeHintValues;
+  daemonLeaving?: boolean;
 }): Promise<void> {
   const { gateway, scope, session, stateDir, runtimeHints } = params;
   // Bound lazily so an unsupported cell still fails on facts alone, without allocating an owner.
@@ -89,7 +96,7 @@ export async function finalizeDaemonSessionApplicationLifecycle(params: {
       session,
       stateDir,
       runtimeHints,
-      daemonShutdown: true,
+      ...(params.daemonLeaving === false ? {} : { daemonShutdown: true }),
     });
   } catch (operationError) {
     try {

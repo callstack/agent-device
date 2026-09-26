@@ -109,6 +109,24 @@ test('reports the exact outcome of clearing an owned, missing, and unowned claim
   assert.equal(await clearDeviceClaim(undefined), 'absent');
 });
 
+test('reports an undecodable claim at its own device key as unattributable, not released', async () => {
+  const root = useClaimsRoot();
+  const ownership = {
+    deviceKey: canonicalLocalDeviceKey(device),
+    ownerToken: 'this-daemons-token',
+    ownerPid: process.pid,
+    ownerStartTime: null,
+  } as const;
+  // A record sitting exactly where this ownership's claim belongs, that decodes into nothing. The
+  // clear cannot remove it and cannot attribute it, which is NOT the same information as a successor
+  // having taken the device — a caller that forgets its session here would strand this record under a
+  // process that no longer knows it holds the device.
+  fs.writeFileSync(claimPath(root), '{bad json');
+
+  assert.equal(await clearDeviceClaim(ownership), 'unattributable');
+  assert.equal(fs.readFileSync(claimPath(root), 'utf8'), '{bad json');
+});
+
 test('keeps corrupt records visible and classifies dead owners without reclaiming either', () => {
   const root = useClaimsRoot();
   fs.writeFileSync(path.join(root, 'corrupt.json'), '{bad json');
@@ -752,7 +770,10 @@ test('an allocator-held claim conflicts with an ordinary acquire, is never recon
   assert.equal(fs.readFileSync(claimPath(root), 'utf8'), before);
   // Apple runner arbitration reads process ownership; an installation principal grants none.
   assert.equal(processOwnsActiveDeviceClaim(device), false);
-  // Nothing this daemon holds can clear it either: there is no ownership to match.
+  // Nothing this daemon holds can clear it either: there is no ownership to match. And the record
+  // left behind yields no session claim to attribute the device to, so a caller that is about to
+  // forget its own claim cannot read this as "a successor has it now" — `ownership-changed` would
+  // say the device moved, while this record says nothing about who holds the device.
   assert.equal(
     await clearDeviceClaim({
       deviceKey: canonicalLocalDeviceKey(device),
@@ -760,7 +781,7 @@ test('an allocator-held claim conflicts with an ordinary acquire, is never recon
       ownerPid: process.pid,
       ownerStartTime: null,
     }),
-    'ownership-changed',
+    'unattributable',
   );
   assert.equal(fs.readFileSync(claimPath(root), 'utf8'), before);
 });

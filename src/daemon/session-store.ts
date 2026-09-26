@@ -14,6 +14,11 @@ import {
   resolveRepairTombstonePath,
   type RepairSessionTombstone,
 } from '../session-repair-tombstone.ts';
+import {
+  readIdleSessionTombstoneFile,
+  resolveIdleSessionTombstonePath,
+  type IdleSessionTombstone,
+} from './session-idle-tombstone.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
 import { effectiveWriteForce } from './session-script-publication-capability.ts';
 import {
@@ -66,7 +71,14 @@ export class SessionStore {
    * documents intent rather than committing anything; a genuinely new record needs it.
    */
   set(name: string, session: SessionState): void {
+    // A key with no record is a NEW occupant, and the previous occupant's idle-expiry marker must
+    // stop explaining this key's absences from now on. Clearing it here rather than at `open` covers
+    // every way a record arrives — `open`'s provisional record, a record-only `record` session — and
+    // cannot be forgotten by a future insertion path. A replacing `open` on a live session takes the
+    // other branch and keeps whatever marker that session will earn for itself.
+    const occupying = this.sessions.has(name);
     this.sessions.set(name, session);
+    if (!occupying) this.clearIdleExpiryTombstone(name);
   }
 
   delete(name: string): boolean {
@@ -274,6 +286,88 @@ export class SessionStore {
     try {
       fs.rmSync(this.repairTombstonePath(sessionName), { force: true });
     } catch {}
+  }
+
+  /**
+   * #2833: records the instant a command that attaches to this session finished, which is the moving
+   * signal the opt-in inactivity deadline for a claim-holding session is measured from. The store
+   * owns the field, so the request path reports the event without becoming a `SessionState` writer.
+   * Callers hold the session's execution lock, which is what makes one plain assignment enough.
+   *
+   * An unknown address is ignored rather than fatal: the common one is an `open` whose session was
+   * never built, and its own `createdAt` already starts that session's deadline clock.
+   */
+  noteSessionActivity(address: string, atMs: number = Date.now()): void {
+    const session = this.sessions.get(address);
+    if (!session) return;
+    session.lastActivityAtMs = atMs;
+  }
+
+  /**
+   * #2833: drops the bounded marker an idle-expired session leaves, so the next command on that key
+   * learns why its session is gone instead of being told to run `open`. Best effort — the expiry
+   * already happened, and a marker that cannot be written must not undo it.
+   */
+  writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
+    try {
+      fs.mkdirSync(this.resolveSessionDir(sessionName), { recursive: true });
+      fs.writeFileSync(
+        resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
+        `${JSON.stringify(tombstone)}\n`,
+      );
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'idle_expiry_tombstone_write_failed',
+        data: {
+          session: sessionName,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  /**
+   * #2833: the non-expired idle-expiry marker this exact session key left when it was expired, or
+   * `undefined`. Total by design: a name that cannot address a session directory has no marker rather
+   * than the `INVALID_ARGS` `resolveSessionDir` would raise, because this read runs on an error path
+   * where a throw would replace the caller's own failure with an internal one.
+   *
+   * The recorded owner has to be the key being asked about, not merely a session that shares its
+   * directory. A session name becomes a directory through `safeSessionName`, which is a many-to-one
+   * encoding — the same one every other session artifact shares, and one no marker may quietly fork
+   * from — so two distinct keys can land in one directory. Answering for either of them with the
+   * other's expiry would report the wrong window and, worse, the wrong device as the one this caller
+   * just lost. Absent rather than borrowed is the safe answer.
+   */
+  readIdleExpiryTombstone(sessionName: string): IdleSessionTombstone | undefined {
+    if (!isSafeSessionSegment(sessionName)) return undefined;
+    const tombstone = readIdleSessionTombstoneFile(
+      resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
+    );
+    return tombstone?.owner === sessionName ? tombstone : undefined;
+  }
+
+  /**
+   * #2833: a fresh `open` on this key clears the idle-expiry marker, so a later `SESSION_NOT_FOUND`
+   * for a DIFFERENT removal of this session (an explicit `close`, a lease expiry) can't borrow the
+   * old expiry's explanation. Best effort, like the write.
+   */
+  clearIdleExpiryTombstone(sessionName: string): void {
+    try {
+      fs.rmSync(resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)), {
+        force: true,
+      });
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'idle_expiry_tombstone_clear_failed',
+        data: {
+          session: sessionName,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
 
   private repairTombstonePath(sessionName: string): string {

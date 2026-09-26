@@ -57,6 +57,10 @@ import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
+import { scopeRequestSession } from './request-admission.ts';
+import { resolveEffectiveSessionName } from './session-routing.ts';
+import { sessionIdleExpiredError } from './session-idle-expiry.ts';
+import type { IdleSessionTombstone } from './session-idle-tombstone.ts';
 import {
   createAppLogAdmissionLedger,
   type AppLogAdmissionLedger,
@@ -184,8 +188,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         if (!response.ok) {
           // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
           // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
-          // re-run guidance, never a bare SESSION_NOT_FOUND.
-          const error = repairExpiredIfTombstoned(req, response.error, sessionStore);
+          // re-run guidance, never a bare SESSION_NOT_FOUND. #2833 adds the
+          // sibling case: an idle-expired session explains itself the same way.
+          const error = idleExpiredIfTombstoned(
+            req,
+            repairExpiredIfTombstoned(req, response.error, sessionStore),
+            sessionStore,
+          );
           return { ok: false, error: enrichDaemonError(error) };
         }
         // Phase 4 (agent-cost) grafts on the success path. Runs inside the
@@ -594,6 +603,49 @@ function repairExpiredIfTombstoned(
       `The --save-script repair session "${req.session}" was reaped before it was finalized (idle-reap); ${reRun}.`,
     ),
   );
+}
+
+/**
+ * #2833: when a command finds no session because this daemon already expired it for idleness, the
+ * answer stays `SESSION_NOT_FOUND` — the session genuinely is gone — but carries the typed reason,
+ * the window it missed, and the device it released. A bare "Run open first" tells an agent on a
+ * shared machine to retry an `open` that will collide with its own expired session's claim if the
+ * release is still in flight, and gives it nothing to reason about either way.
+ *
+ * Consulted after the repair tombstone so an abandoned repair transaction keeps its own, more
+ * specific recovery guidance. The address is resolved through the same routing the request took; a
+ * name that cannot be resolved has no marker rather than an error that would replace the caller's.
+ */
+function idleExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const tombstone = readIdleExpiryTombstoneSafely(req, sessionStore);
+  if (!tombstone) return error;
+  return normalizeError(sessionIdleExpiredError(tombstone.owner, tombstone));
+}
+
+function readIdleExpiryTombstoneSafely(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): IdleSessionTombstone | undefined {
+  try {
+    // The address is resolved exactly as the request itself resolved it, tenant scope included: a
+    // tenant-isolated request keeps its sessions under `<tenant>:<name>`, so reading the raw name
+    // would miss this request's own marker and could instead surface another tenant's, reporting an
+    // unrelated device as the one this caller just lost.
+    const scopedReq = scopeRequestSession(req);
+    // `attachesToSession: false` is the inventory reading: it never refuses an ambiguous workspace,
+    // which is right here because this read is a question about an absent session, not a request to
+    // act through one.
+    return sessionStore.readIdleExpiryTombstone(
+      resolveEffectiveSessionName(scopedReq, sessionStore, { attachesToSession: false }),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 // Phase 2 typed-error graft: add machine-readable signals to an error response.

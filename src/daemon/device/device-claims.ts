@@ -333,10 +333,16 @@ function staleReleaseRefusalReason(classification: DeviceClaimClassification): s
  *
  *  - `deleted`          — the claim this ownership acquired was removed.
  *  - `absent`           — no claim remains for the device; nothing to remove.
- *  - `ownership-changed`— a claim remains, but it is not the one we acquired
- *                         (a successor owner, or a record we cannot attribute).
+ *  - `ownership-changed`— a decodable claim remains and it is not the one we
+ *                         acquired, so a successor owns the device now.
+ *  - `unattributable`   — a record remains that yields no attributable claim:
+ *                         unreadable, undecodable, or held by an allocator
+ *                         principal. This says nothing about who owns the
+ *                         device and is NOT evidence we released anything, so a
+ *                         caller that is about to forget this claim must hold it
+ *                         back and try again rather than read it as superseded.
  */
-export type DeviceClaimClearOutcome = 'deleted' | 'absent' | 'ownership-changed';
+export type DeviceClaimClearOutcome = 'deleted' | 'absent' | 'ownership-changed' | 'unattributable';
 
 export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
@@ -353,7 +359,13 @@ export async function clearDeviceClaim(
       }
       return 'deleted';
     },
-    (conflict) => (conflict ? 'ownership-changed' : 'absent'),
+    (conflict) => {
+      if (!conflict) return 'absent';
+      // `claim` is optional by type precisely to keep a reader from matching against a record that
+      // never decoded into a process-owned claim. Present means a successor's record; absent means
+      // the file told us nothing we can attribute to either side.
+      return conflict.claim ? 'ownership-changed' : 'unattributable';
+    },
   );
 }
 

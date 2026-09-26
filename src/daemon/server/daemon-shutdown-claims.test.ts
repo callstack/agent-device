@@ -97,6 +97,24 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['successor']);
 });
 
+test('a claim whose record yields no owner is reported orphaned, not superseded', async () => {
+  const session = await claimedSession('unreadable');
+  const deviceKey = session.deviceClaim?.deviceKey ?? '';
+  // The record this daemon's claim points at can no longer be decoded into a process-owned claim.
+  // That is not evidence a successor took the device — which would make it `superseded` and tell the
+  // operator to look elsewhere — and a daemon on its way out does leave its own owner identity dead,
+  // so this is the cleanup-pending state `device release --stale` resolves from.
+  fs.writeFileSync(resolveDeviceClaimPath(deviceKey), '{bad json');
+
+  const ledger = createDaemonShutdownClaimLedger();
+  await ledger.releaseClaim(session);
+  ledger.finalize(session);
+
+  expect(ledger.claims.released).toEqual([]);
+  expect(ledger.claims.superseded).toEqual([]);
+  expect(ledger.claims.orphaned).toEqual([claimRecord(session, 'unreadable')]);
+});
+
 test('a session that never held a claim contributes nothing', async () => {
   const ledger = createDaemonShutdownClaimLedger();
   const session: SessionState = {
