@@ -168,6 +168,12 @@ async function streamFileToHttpRequestAttempt(options: {
     req.on('error', (err) => {
       if (responseReceived) return;
       clearTimeout(timeout);
+      // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
+      // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
+      if (options.signal?.aborted) {
+        reject(options.signal.reason);
+        return;
+      }
       reject(
         new AppError(
           'COMMAND_FAILED',

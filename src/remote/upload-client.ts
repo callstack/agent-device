@@ -365,6 +365,9 @@ async function finalizeDirectUpload(options: {
     signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),
   }).catch((error) => {
+    // As with preflight: a canceled finalize is not a transport failure to report, it is the caller
+    // saying this upload is no longer worth finishing.
+    if (options.signal?.aborted) throw error;
     throw new AppError('COMMAND_FAILED', 'Failed to finalize direct artifact upload', {}, error);
   });
 

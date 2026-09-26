@@ -199,6 +199,9 @@ test('admitting a command does not shorten a proxy lease allocated above the old
   );
 
   assert.equal(result?.leaseId, lease.leaseId);
+  // Without this, a lease handed back untouched would pass: allocation already leaves a 600_000
+  // difference between these two stamps, so the delta alone cannot prove admission renewed anything.
+  assert.equal(result!.heartbeatAt, 2_000, 'admission renewed at admission time');
   assert.equal(
     result!.expiresAt - result!.heartbeatAt,
     600_000,

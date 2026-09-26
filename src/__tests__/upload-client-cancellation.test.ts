@@ -67,6 +67,7 @@ test('an aborted signal ends a legacy upload mid-stream instead of finishing the
           token: TEST_TOKEN,
           signal: control.signal,
         }),
+      isAbortError,
     );
     assert.ok(sawBytes > 0, 'the upload had started streaming before the abort');
     assert.ok(sawBytes < content.length, `the stream stopped early, at ${sawBytes} bytes`);
@@ -96,6 +97,7 @@ test('an aborted signal before preflight refuses to ask the daemon for a ticket'
           token: TEST_TOKEN,
           signal: control.signal,
         }),
+      isAbortError,
     );
     assert.deepEqual(requests, [], 'an upload nobody waits for never reaches the daemon');
   } finally {
@@ -136,6 +138,13 @@ test('an upload with no signal behaves exactly as before', async () => {
     await server.close();
   }
 });
+
+function isAbortError(error: unknown): boolean {
+  // The contract on `signal` is that an aborted upload rejects with the signal's own reason. Any
+  // other rejection — a transport failure, the server-error fallback — means the upload stopped for
+  // a reason this test is not about and would let the abort path regress while staying green.
+  return error instanceof DOMException && error.name === 'AbortError';
+}
 
 function createTempFile(filename: string, content: string | Buffer): string {
   const dir = mkdtempForTestSync('agent-device-upload-cancel-');
