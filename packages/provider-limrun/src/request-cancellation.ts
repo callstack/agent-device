@@ -2,7 +2,7 @@
  * The Limrun WebSocket client does not expose an AbortSignal parameter. Keep the request-bound
  * caller cancellable while retaining a handled continuation for the provider operation it started.
  */
-export async function awaitLimrunOperation<Value>(
+async function awaitLimrunOperation<Value>(
   source: Promise<Value>,
   signal?: AbortSignal,
   abortMessage = 'Limrun provider operation aborted',

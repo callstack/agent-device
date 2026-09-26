@@ -18,6 +18,10 @@
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
     },
+    "./app-log-polling": {
+      "types": "./src/app-log-polling.ts",
+      "default": "./src/app-log-polling.ts"
+    },
     "./audio-probe-admission-ledger": {
       "types": "./src/capture-admission/audio-probe-admission-ledger.ts",
       "default": "./src/capture-admission/audio-probe-admission-ledger.ts"
