@@ -4,7 +4,6 @@ import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
-export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
 
 const REQUIRED_PROXY_LEASE_FIELDS = [
   'leaseId',
