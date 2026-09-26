@@ -121,7 +121,7 @@
     "src/daemon/server/http-server.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
     "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
-    "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:ca661f6dd2de6e517c520dbd1e20b59b24b58d925157ed06123149ed2bc0fa3b",
+    "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
     "src/daemon/session-tenant-scope.ts#TenantSessionNamespace": "sha256:a6613d22933caa053e479f05b7f016664f6be8d0afdbbf81e578ff497fc1b13d",
     "src/daemon/session-tenant-scope.ts#isTenantAddressableSessionName": "sha256:cc8ae18094b7f57d4bb694678f84ba767637b1087fd28058ffd6a3c92c79f05d",
@@ -300,6 +300,11 @@
       "declaration": "packages/kernel/src/contracts.ts#daemonRuntimeSchema",
       "digest": "sha256:3b99926ce9deb5d66186a55b1168011dc1ae4d010ada5ac5d79c4c7225a1f80f",
       "rationale": "#2266 broadens runtime-hint validation to accept the additive HarmonyOS platform value; existing protocol-2 runtime hints remain valid and unchanged."
+    },
+    {
+      "declaration": "src/daemon/server/http-server.ts#writeProgressEnvelope",
+      "digest": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
+      "rationale": "#2894 lets an iOS runner start outlive the caller whose deadline gave up on it, so a progress event can arrive after the response ended. The sink now also skips a response whose writable side has ended, next to the destroyed check it already had. No byte written to a live response changes: the envelope framing and payload are untouched, and a released client never sees an event it could not have received before."
     }
   ]
 }
