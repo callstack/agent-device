@@ -39,8 +39,7 @@ extension RunnerTests {
         // Kept inside the 400-character diagnostic bound the host applies to every error string
         // (`REDACTED_STRING_MAX_LENGTH` in packages/kernel/src/redaction.ts): a hint truncated at
         // that boundary looks actionable and is not, which is the failure the iOS open-command hint
-        // already refuses to produce. The previous wording cost 460 characters and lost its last
-        // sentence on the wire.
+        // already refuses to produce.
         return "Fill at most \(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters per command without --delay-ms and append the rest with separate type commands. --delay-ms lowers the limit: each character then gets its own synthesize call and each gap pays the delay, so \(recoveryDelay) ms fits \(recoveryBudget). This route is chosen when the accessibility channel is already degraded, so a longer timeout does not help."
       }
     }

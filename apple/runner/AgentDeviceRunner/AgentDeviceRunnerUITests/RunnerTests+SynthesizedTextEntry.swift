@@ -107,8 +107,6 @@ extension RunnerTests {
     }
 
     let steps: [Step]
-    /// Recorded by the builder so the dispatch loop never re-decides the shape from `delaySeconds`.
-    let isSpaced: Bool
 
     /// One post per character, `delaySeconds` charged after every post but the last. A replacement
     /// selects once, on its first post; an append never selects.
@@ -137,12 +135,11 @@ extension RunnerTests {
       }
     }
 
-    /// The peeled first character and the rest, when the plan warms the field up before posting it.
-    var warmupSplit: (first: Step, rest: Step)? {
-      guard steps.count == 2, let first = steps.first, first.warmsUpField else {
-        return nil
-      }
-      return (first, steps[1])
+    /// Whether the plan hands the text over one character at a time, which is what a `--delay-ms`
+    /// request builds. A burst is a single post and a repair peels a warmup character, so both keep
+    /// a phase log per post; a paced plan logs one phase for the whole delivery instead.
+    var pacesEveryCharacter: Bool {
+      steps.count > 1 && !steps.contains(where: \.warmsUpField)
     }
   }
 
@@ -172,8 +169,7 @@ extension RunnerTests {
           characterCount: characterCount,
           delaySeconds: delaySeconds,
           replacesExistingTextOnFirstPost: selectsExistingText
-        ),
-        isSpaced: true
+        )
       )
     }
     guard peelsWarmupCharacter && characterCount > 1 else {
@@ -183,8 +179,7 @@ extension RunnerTests {
             characterCount: characterCount,
             replacesExistingText: selectsExistingText
           ),
-        ],
-        isSpaced: false
+        ]
       )
     }
     return SynthesizedTextPlan(
@@ -195,8 +190,7 @@ extension RunnerTests {
           warmsUpField: true
         ),
         SynthesizedTextPlan.Step(characterCount: characterCount - 1),
-      ],
-      isSpaced: false
+      ]
     )
   }
 
@@ -223,6 +217,56 @@ extension RunnerTests {
       }
       return length
     }
+  }
+
+  /// Where one post leaves the plan: move on to the next step, or stop the command with a reason the
+  /// route has already reported.
+  enum SynthesizedStepDispatch {
+    case posted
+    case stop
+  }
+
+  struct SynthesizedPlanRun {
+    let postedCharacterCount: Int
+    /// True when a post stopped the plan before its last step.
+    let stoppedEarly: Bool
+  }
+
+  /// Posts a plan the delivery budget just charged: each step slices the next characters off the
+  /// text, and every wait the plan carries is taken. Both synthesized routes post through here so the
+  /// array a command is refused against cannot drift from the posts the command makes (#2955).
+  ///
+  /// `waitAfterWarmupCharacter` replaces the charged pause on a warmup step with what the route wants
+  /// to wait on, handed the characters that post made. The route that has an
+  /// element reads the peeled character back and waits up to `warmupValueTimeout` for the app to
+  /// accept it; the route that needed a budget has no element, so its wait is the plan's one poll of
+  /// a value nobody can observe. Both are waits against the same charge, which is why the read-back
+  /// belongs to the route and the plan only carries the character it waits for.
+  @MainActor
+  func runSynthesizedTextPlan(
+    _ plan: SynthesizedTextPlan,
+    text: String,
+    post: (_ characters: String, _ step: SynthesizedTextPlan.Step) -> SynthesizedStepDispatch,
+    waitAfterWarmupCharacter: (_ characters: String) -> Void,
+    didPostStep: (_ step: SynthesizedTextPlan.Step) -> Void = { _ in }
+  ) -> SynthesizedPlanRun {
+    let characters = Array(text)
+    var postedCount = 0
+    for step in plan.steps {
+      let nextCount = postedCount + step.characterCount
+      if post(String(characters[postedCount..<nextCount]), step) == .stop {
+        // The stopped post never delivered its slice, so the run reports what did arrive.
+        return SynthesizedPlanRun(postedCharacterCount: postedCount, stoppedEarly: true)
+      }
+      postedCount = nextCount
+      didPostStep(step)
+      if step.warmsUpField {
+        waitAfterWarmupCharacter(String(characters[postedCount - step.characterCount..<postedCount]))
+      } else if step.pauseAfterSeconds > 0 {
+        sleepFor(step.pauseAfterSeconds)
+      }
+    }
+    return SynthesizedPlanRun(postedCharacterCount: postedCount, stoppedEarly: false)
   }
 
   @MainActor
@@ -254,33 +298,38 @@ extension RunnerTests {
         )
       )
     }
-    var postedCount = 0
-    let characters = Array(request.text)
-    for step in plan.steps {
-      let nextCount = postedCount + step.characterCount
-      switch request.synthesizer.enterText(
-        app: request.app,
-        text: String(characters[postedCount..<nextCount]),
-        replacingExistingText: step.replacesExistingText
-      ) {
-      case .fallback:
-        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
-        guard let point = request.target.refreshPoint else { return .notApplicable }
-        return .fallback(
-          focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
-        )
-      case .raise(let message):
-        NSException(
-          name: NSExceptionName.internalInconsistencyException,
-          reason: message ?? "private XCTest text synthesis failed"
-        ).raise()
-      case .continueTyping:
-        break
-      }
-      postedCount = nextCount
-      if step.pauseAfterSeconds > 0 {
-        sleepFor(step.pauseAfterSeconds)
-      }
+    // A private synthesis channel that is gone mid-plan leaves the command the same
+    // point-and-focus fallback it had before the plan existed.
+    let synthesisAvailable = runSynthesizedTextPlan(
+      plan,
+      text: request.text,
+      post: { slice, step in
+        switch request.synthesizer.enterText(
+          app: request.app,
+          text: slice,
+          replacingExistingText: step.replacesExistingText
+        ) {
+        case .continueTyping:
+          return .posted
+        case .fallback:
+          return .stop
+        case .raise(let message):
+          NSException(
+            name: NSExceptionName.internalInconsistencyException,
+            reason: message ?? "private XCTest text synthesis failed"
+          ).raise()
+          return .stop
+        }
+      },
+      // A replacement never peels a warmup character, so no step asks for a read-back.
+      waitAfterWarmupCharacter: { _ in }
+    )
+    if synthesisAvailable.stoppedEarly {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
+      guard let point = request.target.refreshPoint else { return .notApplicable }
+      return .fallback(
+        focusTextInputForTextEntry(app: request.app, x: point.x, y: point.y)
+      )
     }
     // The private synthesize call returns at post time, not commit time, and this route never
     // resolves an XCUIElement, so without this wait it had no way to notice a dropped or

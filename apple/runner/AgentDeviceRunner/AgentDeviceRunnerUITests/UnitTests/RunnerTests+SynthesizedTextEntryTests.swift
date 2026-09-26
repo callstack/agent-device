@@ -3,9 +3,10 @@ import XCTest
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
   /// What the app-owned-value fixture reports about the edits it saw. Counts and timings only: the
-  /// field's contents never cross into the test. `write-backs` is the only counter this suite acts
-  /// on; the others are parsed so a fixture that stops reporting one fails here instead of silently
-  /// narrowing what the pacing assertion can see.
+  /// field's contents never cross into the test. `write-backs` is the only counter that gates an
+  /// outcome; the burst counters feed the pacing assertion and `min-gap-ms` appears only in its
+  /// failure message. All are parsed so a fixture that stops reporting one fails here instead of
+  /// silently narrowing what the pacing assertion can see.
   struct AppOwnedFieldStatus {
     let writeBacks: Int
     /// Edits in the latest burst, and the milliseconds between its first and last edit.

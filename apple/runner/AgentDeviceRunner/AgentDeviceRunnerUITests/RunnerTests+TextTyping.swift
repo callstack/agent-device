@@ -235,138 +235,100 @@ extension RunnerTests {
       )
     }
 
-    func waitForWarmupValue(_ expectedValue: String?, target: TextEntryTarget) {
-      guard let expectedValue else {
+    func readBackWarmupCharacter(_ peeledCharacter: String) {
+      // A route with an element reads the peeled character back and waits up to `warmupValueTimeout`
+      // for the app to accept it. The route that had to be budgeted has no element, so its expected
+      // value is nil and this is the plan's one charged poll.
+      let warmupExpectedText = expectedTextEntryValue(
+        typedText: peeledCharacter,
+        mode: repairMode,
+        initialText: initialText
+      )
+      guard let warmupExpectedText else {
         sleepFor(TextEntryTiming.pollInterval)
         return
       }
       let deadline = Date().addingTimeInterval(TextEntryTiming.warmupValueTimeout)
       while Date() < deadline {
-        if editableTextValue(for: resolveTextEntryElement(app: app, target: target)) == expectedValue {
+        if editableTextValue(for: resolveTextEntryElement(app: app, target: activeTarget)) == warmupExpectedText {
           return
         }
         sleepFor(TextEntryTiming.pollInterval)
       }
     }
 
-    let characters = Array(text)
-    if synthesizedTypePlan.isSpaced {
-      var typedTarget: XCUIElement?
-      let delayedTypeStartedAt = Date()
-      var postedCount = 0
-      for step in synthesizedTypePlan.steps {
-        let nextCount = postedCount + step.characterCount
-        let dispatch = typeIntoCurrentTarget(String(characters[postedCount..<nextCount]))
+    // One pass over the plan the budget charged: each step posts its slice and takes the wait the
+    // plan carries, so the shape a refusal was measured against is the shape dispatched (#2955).
+    var typedTarget: XCUIElement?
+    var sawWarmupPost = false
+    var planFailure: TextEntryResult?
+    var stepStartedAt = Date()
+    let pacedStartedAt = Date()
+    runSynthesizedTextPlan(
+      synthesizedTypePlan,
+      text: text,
+      post: { slice, step in
+        stepStartedAt = Date()
+        let dispatch = typeIntoCurrentTarget(slice)
         if let failure = dispatch.failure {
-          return dispatchFailureResult(failure)
+          planFailure = dispatchFailureResult(failure)
+          return .stop
         }
         typedTarget = dispatch.element ?? typedTarget
-        postedCount = nextCount
-        if step.pauseAfterSeconds > 0 {
-          sleepFor(step.pauseAfterSeconds)
+        if step.warmsUpField {
+          // The read-back wants the element this post just typed into, not a re-resolve from scratch.
+          activeTarget = activeTarget.withElement(typedTarget)
         }
+        return .posted
+      },
+      waitAfterWarmupCharacter: { peeledCharacter in
+        let warmupStartedAt = Date()
+        readBackWarmupCharacter(peeledCharacter)
+        logTextEntryPhase(
+          commandId: commandId,
+          phase: "warmup",
+          startedAt: warmupStartedAt,
+          chars: 1,
+          mode: repairMode
+        )
+      },
+      didPostStep: { step in
+        guard !synthesizedTypePlan.pacesEveryCharacter else {
+          return
+        }
+        let phase: String
+        if step.warmsUpField {
+          phase = "type-first"
+          sawWarmupPost = true
+        } else {
+          phase = sawWarmupPost ? "type-remaining" : "type-all"
+        }
+        logTextEntryPhase(
+          commandId: commandId,
+          phase: phase,
+          startedAt: stepStartedAt,
+          chars: step.characterCount,
+          mode: repairMode
+        )
       }
+    )
+    if synthesizedTypePlan.pacesEveryCharacter {
+      // Paced delivery is one paced burst: the phase covers every post and names the whole text
+      // rather than its last character.
       logTextEntryPhase(
         commandId: commandId,
         phase: "type-delayed",
-        startedAt: delayedTypeStartedAt,
-        chars: characters.count,
-        mode: repairMode
-      )
-      if repairMode == .none {
-        logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
-        return TextEntryResult(
-          verified: nil,
-          repaired: false,
-          expectedText: nil,
-          observedText: nil,
-          textEntryRoute: textEntryRoute
-        )
-      }
-      let verifyStartedAt = Date()
-      var result = verifyTextEntryWithRepairIfNeeded(
-        app: app,
-        target: activeTarget.withElement(typedTarget),
-        expectedText: expectedText,
-        repairMode: repairMode
-      )
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "verify",
-        startedAt: verifyStartedAt,
-        chars: characters.count,
-        mode: repairMode
-      )
-      logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
-      result.textEntryRoute = textEntryRoute
-      return result
-    }
-
-    let typedTarget: XCUIElement?
-    if let warmupSplit = synthesizedTypePlan.warmupSplit {
-      let peeledCount = warmupSplit.first.characterCount
-      let firstCharacter = String(characters[0..<peeledCount])
-      let firstStartedAt = Date()
-      let firstDispatch = typeIntoCurrentTarget(firstCharacter)
-      if let failure = firstDispatch.failure {
-        return dispatchFailureResult(failure)
-      }
-      var firstTypedTarget = firstDispatch.element
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "type-first",
-        startedAt: firstStartedAt,
-        chars: 1,
-        mode: repairMode
-      )
-      activeTarget = activeTarget.withElement(firstTypedTarget)
-      let warmupExpectedText = expectedTextEntryValue(
-        typedText: firstCharacter,
-        mode: repairMode,
-        initialText: initialText
-      )
-      let warmupStartedAt = Date()
-      // A route with an element reads the peeled character back and waits up to
-      // `warmupValueTimeout` for the app to accept it. The route that had to be budgeted has no
-      // element, so its `warmupExpectedText` is nil and this is the plan's one charged poll.
-      waitForWarmupValue(warmupExpectedText, target: activeTarget)
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "warmup",
-        startedAt: warmupStartedAt,
-        chars: peeledCount,
-        mode: repairMode
-      )
-      let remainingText = String(characters[peeledCount...])
-      let remainingStartedAt = Date()
-      let remainingDispatch = typeIntoCurrentTarget(remainingText)
-      if let failure = remainingDispatch.failure {
-        return dispatchFailureResult(failure)
-      }
-      firstTypedTarget = remainingDispatch.element ?? firstTypedTarget
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "type-remaining",
-        startedAt: remainingStartedAt,
-        chars: warmupSplit.rest.characterCount,
-        mode: repairMode
-      )
-      typedTarget = firstTypedTarget
-    } else {
-      let typeStartedAt = Date()
-      let dispatch = typeIntoCurrentTarget(text)
-      if let failure = dispatch.failure {
-        return dispatchFailureResult(failure)
-      }
-      typedTarget = dispatch.element
-      logTextEntryPhase(
-        commandId: commandId,
-        phase: "type-all",
-        startedAt: typeStartedAt,
-        chars: characters.count,
+        startedAt: pacedStartedAt,
+        chars: text.count,
         mode: repairMode
       )
     }
+    // A stopped plan must answer before touching the target: the input can be gone by now, and the
+    // element the last post returned is then unreadable. That failure is already typed.
+    if let failure = planFailure {
+      return failure
+    }
+    activeTarget = activeTarget.withElement(typedTarget)
     if repairMode == .none {
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
       return TextEntryResult(
@@ -380,7 +342,7 @@ extension RunnerTests {
     let verifyStartedAt = Date()
     var result = verifyTextEntryWithRepairIfNeeded(
       app: app,
-      target: activeTarget.withElement(typedTarget),
+      target: activeTarget,
       expectedText: expectedText,
       repairMode: repairMode
     )
@@ -388,7 +350,7 @@ extension RunnerTests {
       commandId: commandId,
       phase: "verify",
       startedAt: verifyStartedAt,
-      chars: characters.count,
+      chars: text.count,
       mode: repairMode
     )
     logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)

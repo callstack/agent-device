@@ -247,15 +247,13 @@ extension RunnerTests {
           SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true, pauseAfterSeconds: 0.05),
           SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: 0.05),
           SynthesizedTextPlan.Step(characterCount: 1),
-        ],
-        isSpaced: true
+        ]
       )
     )
     XCTAssertEqual(
       Self.synthesizedTextPlan(characterCount: 3, delaySeconds: 0, selectsExistingText: true),
       SynthesizedTextPlan(
-        steps: [SynthesizedTextPlan.Step(characterCount: 3, replacesExistingText: true)],
-        isSpaced: false
+        steps: [SynthesizedTextPlan.Step(characterCount: 3, replacesExistingText: true)]
       )
     )
   }
@@ -327,17 +325,16 @@ extension RunnerTests {
     )
     XCTAssertLessThan(fits, SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0))
     XCTAssertLessThan(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2), fits)
-    // Policy floor, not a formula copy: one more spaced character pays its pace, its own
-    // synthesize call AND the delay, so the gap between two adjacent lengths cannot come cheaper
-    // than all three. A builder that dropped `pauseAfterSeconds` (charge the delay nowhere, or
-    // sleep for nothing) lands under this floor.
+    // Policy floor, not a formula copy: one more spaced character pays its pace, its own synthesize
+    // call AND the delay, so the gap between two adjacent lengths cannot come cheaper than all
+    // three. A builder that dropped `pauseAfterSeconds` (charge the delay nowhere, or sleep for
+    // nothing) lands under this floor. The epsilon only absorbs the float accumulation of the two
+    // sums being subtracted; a dropped charge is two orders of magnitude larger.
     let cost = Self.synthesizedTextPlan(characterCount: 10, delaySeconds: delay, selectsExistingText: true).seconds
       - Self.synthesizedTextPlan(characterCount: 9, delaySeconds: delay, selectsExistingText: true).seconds
     XCTAssertGreaterThanOrEqual(
       cost,
-      TextEntryTiming.synthesizedCharacterInterval
-        + TextEntryTiming.synthesizeCallOverhead
-        + 0.8 * delay
+      TextEntryTiming.synthesizedCharacterInterval + TextEntryTiming.synthesizeCallOverhead + delay - 1e-9
     )
   }
 
@@ -356,11 +353,12 @@ extension RunnerTests {
           characterCount: length, delaySeconds: delay, selectsExistingText: false, peelsWarmupCharacter: true
         )
         XCTAssertEqual(type.steps.reduce(0) { $0 + $1.characterCount }, length)
-        if let split = type.warmupSplit {
-          XCTAssertEqual(split.first.characterCount + split.rest.characterCount, length)
-          // A peel only exists on an unspaced burst, and its read-back is the one poll the budget
-          // route can afford: a spaced plan covers the same text with per-character posts instead.
-          XCTAssertEqual(split.first.pauseAfterSeconds, TextEntryTiming.pollInterval)
+        // A peel only exists on an unspaced burst, and its read-back is the one poll the budget
+        // route can afford: a spaced plan covers the same text with per-character posts instead.
+        XCTAssertEqual(type.pacesEveryCharacter, delay > 0)
+        if let warmup = type.steps.first, warmup.warmsUpField {
+          XCTAssertEqual(warmup.characterCount, 1)
+          XCTAssertEqual(warmup.pauseAfterSeconds, TextEntryTiming.pollInterval)
         }
       }
     }
@@ -399,8 +397,7 @@ extension RunnerTests {
         steps: [
           SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: warmup, warmsUpField: true),
           SynthesizedTextPlan.Step(characterCount: length - 1),
-        ],
-        isSpaced: false
+        ]
       )
     )
     // Floor, not arithmetic copy: the peeled plan costs at least one synthesize call AND the
@@ -412,16 +409,78 @@ extension RunnerTests {
     )
     // A spaced `type` already posts per character, and a single character has no rest to post, so
     // neither shape peels.
-    XCTAssertNil(
-      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true).warmupSplit
+    XCTAssertFalse(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true)
+        .steps.contains(where: \.warmsUpField)
     )
-    XCTAssertNil(
-      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true).warmupSplit
+    XCTAssertFalse(
+      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true)
+        .steps.contains(where: \.warmsUpField)
     )
     XCTAssertEqual(
       Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true),
       Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: false)
     )
+  }
+
+  // The executor is where the charged plan and the posted text meet, so it owns the slicing contract:
+  // every step hands over the next slice in order, a warmup step gets the read-back with exactly its
+  // own characters instead of the charged pause, and a post that stops the plan reports only what
+  // arrived. A wrong slice here types a character twice or never, which is the same failure the
+  // charged-seconds tests above can only see as a number.
+  @MainActor
+  func testSynthesizedPlanExecutorSlicesTheTextItsChargedPlanPosts() {
+    let text = "abcdefgh"
+    let cases: [(Int, Double, Bool)] = [
+      (1, 0, false),
+      (8, 0, false),
+      (8, 0.001, false),
+      (8, 0, true),
+      (8, 0.001, true),
+    ]
+    for (length, delay, peels) in cases {
+      let plan = Self.synthesizedTextPlan(
+        characterCount: length,
+        delaySeconds: delay,
+        selectsExistingText: false,
+        peelsWarmupCharacter: peels
+      )
+      var slices: [String] = []
+      var reads: [String] = []
+      let run = runSynthesizedTextPlan(
+        plan,
+        text: String(text.prefix(length)),
+        post: { slice, _ in
+          slices.append(slice)
+          return .posted
+        },
+        waitAfterWarmupCharacter: { reads.append($0) }
+      )
+      XCTAssertEqual(slices.joined(), String(text.prefix(length)), "plan \(length)/\(delay)/peel=\(peels)")
+      XCTAssertEqual(slices.count, plan.steps.count)
+      XCTAssertEqual(run.postedCharacterCount, length)
+      XCTAssertFalse(run.stoppedEarly)
+      XCTAssertEqual(reads, plan.steps.contains(where: { $0.warmsUpField }) ? ["a"] : [])
+    }
+  }
+
+  @MainActor
+  func testSynthesizedPlanExecutorStopsAtThePostThatRefusesTheText() {
+    let plan = Self.synthesizedTextPlan(characterCount: 6, delaySeconds: 0.001, selectsExistingText: false)
+    var slices: [String] = []
+    let run = runSynthesizedTextPlan(
+      plan,
+      text: "abcdef",
+      post: { slice, _ in
+        slices.append(slice)
+        return slice == "c" ? .stop : .posted
+      },
+      waitAfterWarmupCharacter: { _ in }
+    )
+    XCTAssertEqual(slices, ["a", "b", "c"])
+    XCTAssertTrue(run.stoppedEarly)
+    // The refused post never delivered its character, so the caller learns two arrived.
+    XCTAssertEqual(run.postedCharacterCount, 2)
   }
 
   func testSynthesizedBudgetExceededCarriesItsOwnCodeAndRecovery() {
