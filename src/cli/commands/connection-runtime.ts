@@ -874,7 +874,13 @@ async function resolveProxyLeaseState(options: {
       ...options.state,
       deviceKey: buildConnectionDeviceKey(scope),
       leaseBackend: options.state.leaseBackend ?? options.leaseBackend ?? scope.leaseBackend,
-      platform: options.state.platform ?? scope.platform,
+      // A recorded `apple` was a family selection made before any device was bound. Once this
+      // command binds one, the record must name the leaf its own `deviceKey` speaks; keeping the
+      // alias would let a later leaf on the same family pass the scope guard against this device.
+      platform:
+        options.state.platform === 'apple'
+          ? scope.platform
+          : (options.state.platform ?? scope.platform),
       target: options.state.target ?? scope.target,
       updatedAt: new Date().toISOString(),
     },

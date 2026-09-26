@@ -321,3 +321,91 @@ test('proxy install records the public platform and the next command reuses that
   assert.equal(reused.flags.leaseId, 'ios-lease-1');
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+// A connection opened with the `apple` family selector records that alias before any device is
+// bound. Once a command resolves one specific device, the record must collapse to that device's
+// leaf: keeping the alias would let a later command name the OTHER leaf of the same family —
+// macOS against an iOS-bound lease — pass the scope guard, because family and leaf never
+// conflict, and take the device's lease under a selector that names a different machine.
+test('a connection opened on the apple family collapses to the bound device leaf', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-proxy-apple-family-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-proxy',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'proxy',
+      runId: 'proxy-client-1',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      platform: 'apple',
+      leaseBackend: 'ios-instance',
+    },
+  });
+  const allocate = recordedLeaseAllocate({ leaseId: 'ios-lease-1', backend: 'ios-instance' });
+  const client = createTestClient({
+    listDevices: async () => [
+      {
+        platform: 'ios',
+        target: 'mobile',
+        kind: 'simulator',
+        id: 'SIM-001',
+        name: 'iPhone 16',
+        booted: true,
+        identifiers: { udid: 'SIM-001' },
+        ios: { udid: 'SIM-001' },
+      },
+      {
+        platform: 'macos',
+        target: 'desktop',
+        kind: 'device',
+        id: 'MAC-1',
+        name: 'Mac',
+        booted: true,
+        identifiers: {},
+      },
+    ],
+    allocate: allocate.stub,
+  });
+  const install = (platform: 'apple' | 'ios' | 'macos') =>
+    materializeRemoteConnectionForCommand({
+      command: 'install',
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'proxy',
+        runId: 'proxy-client-1',
+        session: 'adc-proxy',
+        platform,
+      },
+      client,
+    });
+
+  const materialized = await install('ios');
+  assert.equal(materialized.flags.leaseId, 'ios-lease-1');
+  assert.equal(materialized.flags.udid, 'SIM-001');
+
+  const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
+  assert.equal(state?.platform, 'ios');
+  assert.equal(state?.deviceKey, 'ios:mobile:SIM-001');
+
+  // macOS shares the `apple` family with the bound iOS simulator, so only the collapsed leaf
+  // above — not the family alias — refuses this request before it touches the lease.
+  await assert.rejects(
+    async () => await install('macos'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.session === 'adc-proxy' &&
+      error.details?.platform === 'ios',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
