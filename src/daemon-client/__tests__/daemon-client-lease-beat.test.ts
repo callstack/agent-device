@@ -10,7 +10,7 @@ import {
   createLeaseRenewalBeat,
   leaseScopeForHeartbeat,
   runProtectedLeaseWork,
-} from '../daemon-client.ts';
+} from '../daemon-client-lease-beat.ts';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 
 function lostLeaseError(reason: string): AppError {
