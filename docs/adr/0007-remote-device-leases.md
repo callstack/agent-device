@@ -77,13 +77,24 @@ long as that phase runs, naming the lease scope exactly as the command named it 
 own. An install names no window, so its beats renew for the window the lease already carries; a
 caller that did name one keeps renewing on it. Resolving an absent window to the registry default
 instead — which is what a heartbeat used to do — quietly shortened every lease allocated above that
-default, which is the other half of why the upload could not survive.
+default, which is the other half of why the upload could not survive. Request admission had its own
+copy of that mistake: it named a proxy-specific default for every admitted request, so a lease
+allocated longer than the default lost its window on the next command. Admission renews on the lease's
+window too; the window a lease carries is the one its client named when it allocated.
+
+The first beat is fired when the phase starts, not one cadence in, because a beat is what proves the
+lease the upload is spending time on is still alive — a lease shorter than any fixed cadence would
+otherwise lapse before anything renewed it, and a lease already gone is worth learning that before any
+bytes move. Each beat answers with the window it just renewed, and the next one is armed a third of
+that window after the beat lands: beats never overlap, and one slower than the cadence delays its
+successor instead of replacing the schedule or suppressing every beat behind it.
 
 A beat is a fresh request each time, never the protected request rewritten: a request identity is
 what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
-that finds the lease gone ends the phase with that lease error rather than finishing the upload
-against a device nobody owns. A beat that fails for any other reason is reported and survived, because
-a later beat covers one lost request.
+that finds the lease gone, or finds that this request can never renew it because its scope is missing
+or belongs to another lease, ends the phase with that error and cancels the upload rather than
+finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails for
+any other reason is reported and survived, because a later beat covers one lost request.
 
 ## Human control
 

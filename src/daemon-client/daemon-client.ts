@@ -69,7 +69,7 @@ export async function sendToDaemon(
   const info = daemon.info;
   const preparedRemoteRequest = await runProtectedLeaseWork({
     heartbeat: buildUploadLeaseHeartbeat(info, settings, requestWithoutAuthFlag),
-    task: () => prepareRemoteRequestArtifacts(requestWithoutAuthFlag, info),
+    task: (signal) => prepareRemoteRequestArtifacts(requestWithoutAuthFlag, info, signal),
   });
   writeInstallInProgressNotice(requestWithoutAuthFlag.command);
 
@@ -277,19 +277,42 @@ function withActiveSessionAddressHint(
 }
 
 /**
- * How often a long client-side phase renews the lease it is waiting under.
+ * The cadence a long client-side phase beats on before it has learned the lease's own window.
  *
- * A third of the daemon's one-minute default inactivity TTL: a beat always lands while two thirds of
- * the window it is protecting is still open, so one slow or lost beat cannot cost the lease.
+ * The first beat answers with the window the daemon just renewed, and from then on the phase beats a
+ * third of that window. This constant only covers the gap until that answer lands, and the phase
+ * when the caller overrides it.
  */
-export const LEASE_HEARTBEAT_INTERVAL_MS = 20_000;
+const LEASE_HEARTBEAT_INTERVAL_MS = 20_000;
+
+/**
+ * The floor for a window-derived cadence.
+ *
+ * A lease admitted with the registry's minimum five-second window beats every 1.6s at one third of
+ * its window; the floor keeps a misreported or pathologically short window from turning the beat
+ * into a request loop against the daemon it is trying to stay admitted to.
+ */
+const MIN_LEASE_BEAT_INTERVAL_MS = 1_000;
 
 /** Why a beat stopped protecting the lease: the lease is gone, so nothing else is worth waiting for. */
-const FATAL_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
+const LOST_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
   'LEASE_NOT_FOUND',
   'LEASE_EXPIRED',
   'LEASE_REVOKED',
   'LEASE_SESSION_MISMATCH',
+]);
+
+/**
+ * Why a beat stopped protecting the lease even though the lease may live on: this client's request
+ * will never be the one that renews it.
+ *
+ * A beat refused for a missing or mismatched owner scope is a fact about the request, not the
+ * lease, so every successor is refused identically. Surviving it would only spend the upload against
+ * a lease that stops renewing — the #2946 failure with extra steps.
+ */
+const UNRENEWABLE_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
+  'LEASE_SCOPE_REQUIRED',
+  'LEASE_SCOPE_MISMATCH',
 ]);
 
 /**
@@ -302,70 +325,112 @@ const FATAL_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
  * being uploaded to (#2946).
  *
  * `heartbeat` is the caller's transport decision; `undefined` means there is no lease to protect and
- * the phase runs untouched. A beat that fails for a reason other than the lease being gone is
- * reported and ignored — one lost request must not fail an upload that a later beat will cover. A
- * beat that finds the lease gone ends the phase immediately with that error: the device is no
- * longer ours, and the only honest outcome is to say so before the bytes finish.
+ * the phase runs untouched. The first beat is fired immediately rather than one interval in, so a
+ * lease shorter than that interval is renewed before it can lapse — and a lease already gone is
+ * found before any bytes move. Each beat answers with the window it just renewed, and the next one
+ * is armed for a third of that window from the beat that landed: beats never overlap, and a slow
+ * one delays its successor instead of suppressing every beat after it.
  *
- * Beats never overlap, and an in-flight beat is awaited on the way out so a renewal cannot land
- * after the phase it was protecting.
+ * A beat that fails for a reason that says nothing about this lease is reported and survived — one
+ * lost request must not fail an upload that a later beat will cover. A beat that finds the lease
+ * gone, or finds this client can never renew it, ends the phase with that error and aborts the
+ * signal the phase runs under: the device is no longer ours (or was never reachable through this
+ * request), and the only honest outcome is to say so before the bytes finish.
  */
 export async function runProtectedLeaseWork<T>(
   options: Readonly<{
     heartbeat: (() => Promise<unknown>) | undefined;
     intervalMs?: number;
-    task: () => Promise<T>;
+    task: (signal: AbortSignal) => Promise<T>;
   }>,
 ): Promise<T> {
   const { heartbeat } = options;
-  if (!heartbeat) return await options.task();
-  const intervalMs = options.intervalMs ?? LEASE_HEARTBEAT_INTERVAL_MS;
+  if (!heartbeat) return await options.task(new AbortController().signal);
+  const fallbackIntervalMs = options.intervalMs ?? LEASE_HEARTBEAT_INTERVAL_MS;
 
+  const control = new AbortController();
+  let intervalMs = fallbackIntervalMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
   let inFlight: Promise<void> | undefined;
-  let lostLease: unknown;
-  let reportLoss: ((error: unknown) => void) | undefined;
-  const lost = new Promise<never>((_, reject) => {
-    reportLoss = reject;
+  let terminalError: unknown;
+  let reportTerminal: ((error: unknown) => void) | undefined;
+  const terminal = new Promise<never>((_, reject) => {
+    reportTerminal = reject;
   });
 
-  const beat = () => {
-    if (inFlight) return;
+  const runBeat = (): void => {
     inFlight = (async () => {
       try {
-        await heartbeat();
+        const renewed = leaseWindowFromHeartbeatResponse(await heartbeat());
+        if (renewed !== undefined) {
+          intervalMs = Math.max(MIN_LEASE_BEAT_INTERVAL_MS, Math.floor(renewed / 3));
+        }
       } catch (error) {
-        if (!isLostLeaseError(error)) {
-          emitDiagnostic({
-            level: 'warn',
-            phase: 'lease_heartbeat_failed',
-            data: { message: error instanceof Error ? error.message : String(error) },
-          });
+        if (isTerminalLeaseBeatError(error)) {
+          terminalError = error;
+          // The upload is the only thing still consuming this phase's time, and it is pointed at a
+          // device this client can no longer renew. Stop it rather than finish bytes nobody owns.
+          control.abort();
+          reportTerminal?.(error);
           return;
         }
-        lostLease = error;
-        reportLoss?.(error);
-      } finally {
-        inFlight = undefined;
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'lease_heartbeat_failed',
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
       }
+      // A beat that lands after the phase settled must not arm a successor: nothing is left to
+      // protect, and a beat without a phase to stop it would renew the lease forever.
+      if (!stopped) timer = setTimeout(runBeat, intervalMs);
     })();
   };
 
-  const timer = setInterval(beat, intervalMs);
+  // Armed before the phase starts, not one interval in: a beat is what proves the lease the upload
+  // is spending its time on is still alive.
+  timer = setTimeout(runBeat, 0);
   // A beat already in flight when the phase settles can still report a lost lease; the caller reads
-  // it from `lostLease`, so nothing may be left racing on this rejection by then.
-  void lost.catch(() => undefined);
+  // it from `terminalError`, so nothing may be left racing on this rejection by then.
+  void terminal.catch(() => undefined);
   const phase = await captureOutcome(
     // The async boundary also turns a synchronous throw from the phase into a rejection, so the
     // timer below is always cleared.
-    (async () => await Promise.race([options.task(), lost]))(),
+    (async () => await Promise.race([options.task(control.signal), terminal]))(),
   );
-  clearInterval(timer);
+  stopped = true;
+  if (timer) clearTimeout(timer);
   await inFlight;
-  // A beat that found the lease gone outranks a phase that settled meanwhile, from either side: the
+  // A beat that ended the protection outranks a phase that settled meanwhile, from either side: the
   // device is no longer ours, and the lease error is the reason the phase was not worth finishing.
-  if (lostLease !== undefined) throw lostLease;
+  if (terminalError !== undefined) throw terminalError;
   if (!phase.ok) throw phase.error;
   return phase.value;
+}
+
+/**
+ * The inactivity window a beat just renewed, read from the lease its response carries.
+ *
+ * `heartbeatLease` answers with the lease, whose `expiresAt - heartbeatAt` is exactly the window it
+ * extended — the same pair `leaseOwnTtlMs` renews on. Anything unrecognizable leaves the caller on
+ * the fallback cadence rather than guessing one.
+ */
+function leaseWindowFromHeartbeatResponse(response: unknown): number | undefined {
+  const lease = (
+    response as Readonly<{ data?: Readonly<{ lease?: Readonly<Record<string, unknown>> }> }>
+  )?.data?.lease;
+  const expiresAt = lease?.expiresAt;
+  const heartbeatAt = lease?.heartbeatAt;
+  if (typeof expiresAt !== 'number' || typeof heartbeatAt !== 'number') return undefined;
+  return expiresAt > heartbeatAt ? expiresAt - heartbeatAt : undefined;
+}
+
+function isTerminalLeaseBeatError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (LOST_LEASE_BEAT_REASONS.has(error.details?.reason) ||
+      UNRENEWABLE_LEASE_BEAT_REASONS.has(error.details?.reason))
+  );
 }
 
 type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
@@ -376,10 +441,6 @@ async function captureOutcome<T>(promise: Promise<T>): Promise<Outcome<T>> {
   } catch (error) {
     return { ok: false, error };
   }
-}
-
-function isLostLeaseError(error: unknown): boolean {
-  return error instanceof AppError && FATAL_LEASE_BEAT_REASONS.has(error.details?.reason);
 }
 
 /**

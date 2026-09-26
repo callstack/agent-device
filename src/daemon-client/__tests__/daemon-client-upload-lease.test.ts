@@ -8,7 +8,6 @@ import {
   buildLeaseHeartbeatRequest,
   buildUploadLeaseHeartbeat,
   createLeaseRenewalBeat,
-  LEASE_HEARTBEAT_INTERVAL_MS,
   leaseScopeForHeartbeat,
   runProtectedLeaseWork,
 } from '../daemon-client.ts';
@@ -36,39 +35,118 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function renewedLeaseResponse(windowMs: number): {
+  ok: true;
+  data: { lease: { heartbeatAt: number; expiresAt: number } };
+} {
+  return { ok: true, data: { lease: { heartbeatAt: 1_000_000, expiresAt: 1_000_000 + windowMs } } };
+}
+
 describe('runProtectedLeaseWork', () => {
   test('runs the task untouched when there is no lease to protect', async () => {
     const heartbeat = vi.fn();
-    assert.equal(
-      await runProtectedLeaseWork({ heartbeat: undefined, task: async () => 'ok' }),
-      'ok',
-    );
+    const phase = await runProtectedLeaseWork({ heartbeat: undefined, task: async () => 'ok' });
+    assert.equal(phase, 'ok');
     assert.equal(heartbeat.mock.calls.length, 0);
   });
 
-  test('beats on the interval while a slow task runs, and stops when it ends', async () => {
+  test('a fast upload that lands before the first beat reports success', async () => {
     vi.useFakeTimers();
-    const heartbeat = vi.fn(async () => ({}));
-    const upload = deferred<string>();
-
+    const heartbeat = vi.fn(async () => renewedLeaseResponse(30_000));
     const running = runProtectedLeaseWork({
+      intervalMs: 10,
+      task: async (signal) => {
+        assert.ok(!signal.aborted, 'a lease still held does not cancel the upload');
+        return 'installed';
+      },
       heartbeat,
-      task: () => upload.promise,
     });
 
-    await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_INTERVAL_MS * 3);
-    // #2946: a 1m47s upload beat zero times and the lease died. Three intervals, three beats.
+    assert.equal(await running, 'installed', 'the beat is armed but the upload is faster');
+  });
+
+  test('the first beat fires immediately, not one interval into the upload', async () => {
+    vi.useFakeTimers();
+    const heartbeat = vi.fn(async () => renewedLeaseResponse(30_000));
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      intervalMs: 20_000,
+      task: () => upload.promise,
+      heartbeat,
+    });
+
+    // A lease admitted with a short window used to be able to lapse before the first beat: the
+    // upload paid for the device with a lease nobody renewed yet.
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(heartbeat.mock.calls.length, 1, 'a beat is out before the interval elapses');
+
+    upload.resolve('installed');
+    assert.equal(await running, 'installed');
+  });
+
+  test('beats follow the window the lease reports, not the fallback interval', async () => {
+    vi.useFakeTimers();
+    // The daemon says it just extended the lease by 15s; the next beat must land at a third of
+    // that, whatever the caller's fallback cadence was.
+    const heartbeat = vi.fn(async () => renewedLeaseResponse(15_000));
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      intervalMs: 60_000,
+      task: () => upload.promise,
+      heartbeat,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    assert.equal(heartbeat.mock.calls.length, 2, 'first beat at once, second one third of 15s in');
+    await vi.advanceTimersByTimeAsync(5_000);
     assert.equal(heartbeat.mock.calls.length, 3);
 
     upload.resolve('installed');
     assert.equal(await running, 'installed');
-
     const before = heartbeat.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(LEASE_HEARTBEAT_INTERVAL_MS * 3);
+    await vi.advanceTimersByTimeAsync(60_000);
     assert.equal(heartbeat.mock.calls.length, before, 'no beat outlives the phase');
   });
 
-  test('never overlaps beats', async () => {
+  test('a beat shorter than the floor still beats no faster than the floor', async () => {
+    vi.useFakeTimers();
+    const heartbeat = vi.fn(async () => renewedLeaseResponse(1_500));
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      intervalMs: 60_000,
+      task: () => upload.promise,
+      heartbeat,
+    });
+
+    await vi.advanceTimersByTimeAsync(999);
+    assert.equal(heartbeat.mock.calls.length, 1, 'the floor holds a pathological window off');
+    await vi.advanceTimersByTimeAsync(1);
+    assert.equal(heartbeat.mock.calls.length, 2);
+
+    upload.resolve('installed');
+    assert.equal(await running, 'installed');
+  });
+
+  test('a response that names no window keeps the fallback cadence', async () => {
+    vi.useFakeTimers();
+    const heartbeat = vi.fn(async () => ({ ok: true, data: {} }));
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      intervalMs: 10,
+      task: () => upload.promise,
+      heartbeat,
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    assert.equal(heartbeat.mock.calls.length, 2, 'immediate first, then the fallback interval');
+    await vi.advanceTimersByTimeAsync(10);
+    assert.equal(heartbeat.mock.calls.length, 3);
+
+    upload.resolve('installed');
+    assert.equal(await running, 'installed');
+  });
+
+  test('never overlaps beats, and a slow beat delays its successor instead of replacing the schedule', async () => {
     vi.useFakeTimers();
     let inFlight = 0;
     let maxConcurrent = 0;
@@ -87,14 +165,16 @@ describe('runProtectedLeaseWork', () => {
       },
     });
 
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     assert.equal(gates.length, 1);
 
-    // Three more intervals pass with the first beat still outstanding: none of them may start a
-    // second one, or a slow beat would pile up behind a stalled transport.
+    // The fallback intervals pass with the first beat still outstanding: none of them may start a
+    // second one, or a stalled transport would pile beats up behind it.
     await vi.advanceTimersByTimeAsync(30);
     assert.equal(gates.length, 1, 'an outstanding beat holds the next one off');
 
+    // The successor is armed when the slow beat lands — the cadence comes from completions, so a
+    // beat slower than the interval shifts the schedule instead of silently killing every later one.
     gates[0]!.resolve();
     await vi.advanceTimersByTimeAsync(10);
     assert.equal(gates.length, 2, 'the next beat starts once the previous one lands');
@@ -106,16 +186,15 @@ describe('runProtectedLeaseWork', () => {
     assert.equal(maxConcurrent, 1);
   });
 
-  test('a beat that fails for a reason other than the lease still running is survived', async () => {
+  test('a beat that fails for a transient reason is survived and re-armed', async () => {
     vi.useFakeTimers();
-    const failing: () => Promise<unknown> = async () => {
-      // A reason from the same registry that is not a lost lease: contention says nothing about
-      // whether this lease is still ours, so the upload keeps going and the next beat asks again.
+    // A reason from the same registry that is not a lost lease: contention says nothing about
+    // whether this lease is still ours, so the upload keeps going and the next beat asks again.
+    const heartbeat = vi.fn<() => Promise<unknown>>(async () => {
       throw new AppError('DEVICE_IN_USE', 'Device is already leased', {
         reason: 'DEVICE_LEASE_BUSY',
       });
-    };
-    const heartbeat = vi.fn(failing);
+    });
     const upload = deferred<string>();
     const running = runProtectedLeaseWork({
       intervalMs: 10,
@@ -123,10 +202,10 @@ describe('runProtectedLeaseWork', () => {
       heartbeat,
     });
 
-    await vi.advanceTimersByTimeAsync(35);
-    assert.equal(heartbeat.mock.calls.length, 3, 'one lost beat does not stop the others');
+    await vi.advanceTimersByTimeAsync(25);
+    assert.equal(heartbeat.mock.calls.length, 3, 'one failed beat does not stop the others');
 
-    heartbeat.mockImplementation(async () => ({}));
+    heartbeat.mockImplementation(async () => ({ ok: true }));
     await vi.advanceTimersByTimeAsync(10);
     upload.resolve('installed');
     assert.equal(await running, 'installed');
@@ -160,31 +239,73 @@ describe('runProtectedLeaseWork', () => {
           error.code === 'UNAUTHORIZED' &&
           error.details?.reason === reason,
       );
-      await vi.advanceTimersByTimeAsync(15);
+      await vi.advanceTimersByTimeAsync(0);
       await rejected;
       upload.resolve('too late');
     });
   }
 
-  test('an upload that lands before the first beat reports success', async () => {
+  for (const reason of ['LEASE_SCOPE_REQUIRED', 'LEASE_SCOPE_MISMATCH']) {
+    test(`a beat refused ${reason} ends the phase instead of beating to the lease's death`, async () => {
+      vi.useFakeTimers();
+      // Both say this request can never renew the lease — the scope it names is missing or belongs
+      // to someone else. Surviving would spend the whole upload on a lease that stops renewing:
+      // the #2946 symptom recreated on the client's own side.
+      const heartbeat = vi.fn(async () => {
+        throw new AppError('UNAUTHORIZED', "Lease scope is not this request's", { reason });
+      });
+      const upload = deferred<string>();
+      const running = runProtectedLeaseWork({
+        intervalMs: 10,
+        task: () => upload.promise,
+        heartbeat,
+      });
+
+      const rejected = assert.rejects(
+        running,
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'UNAUTHORIZED' &&
+          error.details?.reason === reason,
+      );
+      await vi.advanceTimersByTimeAsync(50);
+      assert.equal(
+        heartbeat.mock.calls.length,
+        1,
+        'a doomed renewal is not retried for the window',
+      );
+      await rejected;
+      upload.resolve('too late');
+    });
+  }
+
+  test('a beat that ends the protection cancels the upload the phase is running', async () => {
     vi.useFakeTimers();
-    const upload = deferred<string>();
+    const heartbeat = vi.fn(async () => {
+      throw lostLeaseError('LEASE_NOT_FOUND');
+    });
+    let sawAbort = false;
     const running = runProtectedLeaseWork({
       intervalMs: 10,
-      task: () => upload.promise,
-      heartbeat: async () => {
-        throw lostLeaseError('LEASE_NOT_FOUND');
-      },
+      task: (signal) =>
+        new Promise<string>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            sawAbort = true;
+            reject(signal.reason);
+          });
+        }),
+      heartbeat,
     });
 
-    upload.resolve('installed');
+    const rejected = assert.rejects(running);
     await vi.advanceTimersByTimeAsync(0);
-    assert.equal(await running, 'installed');
+    await rejected;
+    assert.equal(sawAbort, true, 'the upload is told to stop before the bytes finish');
   });
 
   test('a phase that throws synchronously still stops the beats', async () => {
     vi.useFakeTimers();
-    const heartbeat = vi.fn(async () => ({}));
+    const heartbeat = vi.fn(async () => ({ ok: true }));
     await assert.rejects(
       (async () =>
         await runProtectedLeaseWork({
@@ -219,7 +340,7 @@ describe('runProtectedLeaseWork', () => {
       running,
       (error: unknown) => error instanceof AppError && error.details?.reason === 'LEASE_NOT_FOUND',
     );
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     assert.ok(beat, 'a beat started');
     first.resolve('installed');
     beat?.();
@@ -229,7 +350,7 @@ describe('runProtectedLeaseWork', () => {
 
   test('a task rejection propagates and still stops the beats', async () => {
     vi.useFakeTimers();
-    const heartbeat = vi.fn(async () => ({}));
+    const heartbeat = vi.fn(async () => ({ ok: true }));
     const running = runProtectedLeaseWork({
       intervalMs: 10,
       task: async () => {
@@ -244,22 +365,22 @@ describe('runProtectedLeaseWork', () => {
     assert.equal(heartbeat.mock.calls.length, before);
   });
 
-  test('an in-flight beat is awaited on the way out', async () => {
+  test('an in-flight beat is awaited on the way out and arms nothing after it', async () => {
     vi.useFakeTimers();
     const beat = deferred<void>();
     const upload = deferred<string>();
-    let started = false;
+    const heartbeat = vi.fn(async () => {
+      await beat.promise;
+      return renewedLeaseResponse(30_000);
+    });
     const running = runProtectedLeaseWork({
       intervalMs: 10,
       task: () => upload.promise,
-      heartbeat: async () => {
-        started = true;
-        await beat.promise;
-      },
+      heartbeat,
     });
 
-    await vi.advanceTimersByTimeAsync(10);
-    assert.equal(started, true, 'a beat is in flight while the upload finishes');
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(heartbeat.mock.calls.length, 1, 'a beat is in flight while the upload finishes');
 
     upload.resolve('installed');
     await vi.advanceTimersByTimeAsync(0);
@@ -272,6 +393,8 @@ describe('runProtectedLeaseWork', () => {
 
     beat.resolve();
     assert.equal(await running, 'installed');
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(heartbeat.mock.calls.length, 1, 'the renewal that landed last arms no successor');
   });
 });
 
@@ -444,6 +567,19 @@ describe('buildUploadLeaseHeartbeat', () => {
     transportPreference: 'socket' as const,
     serverMode: 'socket' as const,
   };
+
+  test('no beat for a remote request that names no lease, which has nothing to renew', () => {
+    // The lease-less path is the one an unleased install takes; a timer there would beat a lease
+    // that does not exist and keep a request alive that owns no device.
+    assert.equal(
+      buildUploadLeaseHeartbeat(
+        { baseUrl: 'http://remote.example.test/agent-device', token: 't', pid: 1 },
+        settings,
+        { ...installRequest, flags: {}, meta: undefined },
+      ),
+      undefined,
+    );
+  });
 
   test('no beat for a local daemon, which never uploads and holds no billed device', () => {
     assert.equal(
