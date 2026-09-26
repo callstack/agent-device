@@ -155,8 +155,8 @@ function resolveWalkedRoots(
   cacheRoot: string,
   canonicalCacheRoot: string,
 ): RunnerCacheWalkedRoots {
-  const roots: string[] = [];
-  for (const productPath of dedupeNestedPaths(productPaths)) {
+  const resolved: string[] = [];
+  for (const productPath of productPaths) {
     const resolvedRoot = resolveRealPath(productPath);
     if (resolvedRoot === null) {
       return { ok: false, refusal: unusableRootRefusal(cacheRoot, productPath) };
@@ -171,31 +171,28 @@ function resolveWalkedRoots(
         },
       };
     }
-    // `isPathInsideDirectory` is strict, so an alias resolving onto a root already walked -- a
-    // direct path beside an in-cache symlink to the same bundle -- needs its own equality test.
-    // Without it the leaves would be collected twice and the reader's walk would delete them
-    // under the first root and call the second root's copies undeclared.
-    if (
-      !roots.some(
-        (keptRoot) => resolvedRoot === keptRoot || isPathInsideDirectory(resolvedRoot, keptRoot),
-      )
-    ) {
-      roots.push(resolvedRoot);
-    }
+    resolved.push(resolvedRoot);
   }
+  const roots = dropNestedRoots(resolved);
   if (roots.length > 0) {
     return { ok: true, roots };
   }
   return { ok: false, refusal: { reason: 'root_unusable', path: productPaths.join(', ') } };
 }
 
-/** Drop paths whose ancestor is already walked, so no subtree is collected twice. */
-function dedupeNestedPaths(productPaths: readonly string[]): string[] {
-  const sorted = [...new Set(productPaths.map((target) => path.resolve(target)))].sort();
+/**
+ * The kept set of resolved roots, identical whatever order the caller spelled them in: sorted
+ * so every ancestor precedes its descendants, then an equal or nested candidate is dropped.
+ * Deduplicating in input order instead would keep a descendant whose ancestor arrives later,
+ * walking that subtree twice, and an alias resolving onto a kept root would ride along as a
+ * second root whose leaves the reader calls undeclared.
+ */
+function dropNestedRoots(resolvedRoots: readonly string[]): string[] {
   const kept: string[] = [];
-  for (const candidate of sorted) {
-    if (kept.some((keptPath) => isPathInsideDirectory(candidate, keptPath))) continue;
-    kept.push(candidate);
+  for (const candidate of new Set([...resolvedRoots].sort())) {
+    if (!kept.some((keptRoot) => isPathInsideDirectory(candidate, keptRoot))) {
+      kept.push(candidate);
+    }
   }
   return kept;
 }

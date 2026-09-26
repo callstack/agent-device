@@ -56,8 +56,6 @@ export function publishedXctestrun(derived: string): string {
   return path.join(derived, 'Build', 'Products', 'Runner_iphonesimulator26.2-arm64.xctestrun');
 }
 
-export { digestFile as digest } from './digest-file.ts';
-
 export function mismatchOf(
   state: ExistingXctestrunState,
 ): Extract<ExistingXctestrunState, { reason: 'artifact_content_mismatch' }> {

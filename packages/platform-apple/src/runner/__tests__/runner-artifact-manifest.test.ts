@@ -13,11 +13,11 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   EXECUTABLE_BYTES,
-  digest,
   makeCachedRunnerBuild,
   mismatchOf,
   publishedXctestrun,
 } from './runner-cache.fixtures.ts';
+import { digestFile } from './digest-file.ts';
 
 test('a manifest-certified build is reused', async () => {
   const { derived, xctestrunPath, executablePath, expected } = await makeCachedRunnerBuild();
@@ -240,6 +240,28 @@ test('a direct product path beside a symlink alias of it certifies one walk', as
   assert.equal(state.reason, 'reuse_ready');
 });
 
+test('roots keep one walk whatever order their paths are spelled in', async () => {
+  // Descendant-first spelling must not survive as two roots: sorted-then-filtered is what makes
+  // the kept set identical to the alias-first spelling above, not the caller's ordering.
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
+  const executablePath = path.join(runnerAppPath, 'Runner');
+  const productsPath = path.join(derived, 'Build', 'Products');
+
+  assert.equal(
+    await writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
+      executablePath,
+      runnerAppPath,
+      path.join(productsPath, 'Debug-iphonesimulator'),
+      runnerAppPath,
+    ]),
+    null,
+  );
+
+  const state = await evaluateExistingXctestrun({ derived, expectedCacheMetadata: expected });
+
+  assert.equal(state.reason, 'reuse_ready');
+});
+
 test('a manifest that certifies an escaping symlink refuses reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
@@ -251,7 +273,7 @@ test('a manifest that certifies an escaping symlink refuses reuse', async () => 
     artifacts: {
       xctestrunPath: publishedXctestrun(derived),
       xctestrunSize: fs.statSync(publishedXctestrun(derived)).size,
-      xctestrunDigest: digest(publishedXctestrun(derived)),
+      xctestrunDigest: digestFile(publishedXctestrun(derived)),
       productPaths: [runnerAppPath],
       entries: [
         {
@@ -266,7 +288,7 @@ test('a manifest that certifies an escaping symlink refuses reuse', async () => 
             .replaceAll(path.sep, '/'),
           size: EXECUTABLE_BYTES.length,
           mode: 0o755,
-          digest: digest(path.join(runnerAppPath, 'Runner')),
+          digest: digestFile(path.join(runnerAppPath, 'Runner')),
         },
       ],
     },
@@ -330,7 +352,7 @@ test('a manifest whose .xctestrun was replaced by a symlink refuses reuse', asyn
     artifacts: {
       xctestrunPath: linkedXctestrun,
       xctestrunSize: fs.statSync(realXctestrun).size,
-      xctestrunDigest: digest(realXctestrun),
+      xctestrunDigest: digestFile(realXctestrun),
       productPaths: [runnerAppPath],
       entries: [
         {
@@ -339,7 +361,7 @@ test('a manifest whose .xctestrun was replaced by a symlink refuses reuse', asyn
             .replaceAll(path.sep, '/'),
           size: EXECUTABLE_BYTES.length,
           mode: 0o755,
-          digest: digest(path.join(runnerAppPath, 'Runner')),
+          digest: digestFile(path.join(runnerAppPath, 'Runner')),
         },
       ],
     },
