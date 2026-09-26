@@ -91,10 +91,11 @@ successor instead of replacing the schedule or suppressing every beat behind it.
 
 A beat is a fresh request each time, never the protected request rewritten: a request identity is
 what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
-that finds the lease gone, or finds that this request can never renew it because its scope is missing
-or belongs to another lease, ends the phase with that error and cancels the upload rather than
-finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails for
-any other reason is reported and survived, because a later beat covers one lost request.
+that finds the lease gone, or finds that this request can never renew it — its scope is missing or
+belongs to another lease, or the daemon rejects the scope and window the beat itself was built with,
+which no successor will ask differently — ends the phase with that error and cancels the upload rather
+than finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails
+for any other reason is reported and survived, because a later beat covers one lost request.
 
 ## Human control
 
