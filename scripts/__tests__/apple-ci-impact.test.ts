@@ -72,16 +72,37 @@ type AppleRunnerBuildStep = {
   with?: Record<string, string>;
 };
 
-function appleRunnerBuildAction(): { text: string; steps: AppleRunnerBuildStep[] } {
+function appleRunnerBuildAction(): {
+  text: string;
+  steps: AppleRunnerBuildStep[];
+  inputs: Record<string, { required?: boolean; default?: string }>;
+} {
   const action = fs.readFileSync(
     path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
     'utf8',
   );
   const doc = parse(action) as {
+    inputs?: Record<string, { required?: boolean; default?: string }>;
     runs: { steps: AppleRunnerBuildStep[] };
   };
-  return { text: action, steps: doc.runs.steps };
+  return { text: action, steps: doc.runs.steps, inputs: doc.inputs ?? {} };
 }
+
+/**
+ * The metadata writer resolves the build identity from these two values, so a job that omitted
+ * them must be refused when it starts rather than at re-publish time, after a full build.
+ */
+test('the Apple runner build action requires the identity its metadata writer reads', () => {
+  const { inputs } = appleRunnerBuildAction();
+  expect(inputs['xcuitest-platform']).toEqual({
+    required: true,
+    description: expect.stringContaining('AGENT_DEVICE_XCUITEST_PLATFORM'),
+  });
+  expect(inputs['xcuitest-destination']).toEqual({
+    required: true,
+    description: expect.stringContaining('AGENT_DEVICE_XCUITEST_DESTINATION'),
+  });
+});
 
 test('Apple runner build cache uses only declared source and schema hashes', () => {
   const { text, steps } = appleRunnerBuildAction();
@@ -95,6 +116,9 @@ test('Apple runner build cache uses only declared source and schema hashes', () 
     'scripts/build-xcuitest-apple.sh',
   ]);
   expect(steps[restoreIndex]?.with?.key).toContain('steps.cache-schema.outputs.value');
+  // Restoring under a prefix would hand a job products whose content manifest belongs to
+  // another identity, so the cache is exact-match only and the source hash must be in the key.
+  expect(steps[restoreIndex]?.with?.key).toContain('steps.source-hash.outputs.value');
   expect(steps[restoreIndex]?.with?.['restore-keys']).toBeUndefined();
   expect(cacheInputs(text)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
 });
@@ -107,6 +131,9 @@ test('restored native products are rebuilt before caching and icon patching', ()
   );
   const saveIndex = steps.findIndex((step) => step.name === 'Save Apple runner build cache');
   const patchIndex = steps.findIndex((step) => step.name === 'Patch XCTest runner icon');
+  const republishIndex = steps.findIndex(
+    (step) => step.name === 'Re-publish Apple runner cache metadata',
+  );
   expect(buildIndex).toBeGreaterThan(restoreIndex);
   expect(steps[buildIndex]?.if).toBeUndefined();
   expect(steps[buildIndex]?.env?.AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH).toBe('1');
@@ -115,6 +142,11 @@ test('restored native products are rebuilt before caching and icon patching', ()
   expect(patchIndex).toBeGreaterThan(saveIndex);
   expect(steps[patchIndex]?.if).toBeUndefined();
   expect(steps[patchIndex]?.run).toContain('scripts/patch-xcuitest-runner-icon.ts');
+  // The cache is saved unpatched, so the manifest that ships inside it certifies unpatched
+  // bytes. The tree that actually runs is republished after the patch rewrote those bytes.
+  expect(republishIndex).toBeGreaterThan(patchIndex);
+  expect(steps[republishIndex]?.run).toContain('scripts/write-xcuitest-cache-metadata.ts');
+  expect(steps[republishIndex]?.run).toContain('agent-device-build-for-testing.log');
   expect(fs.readFileSync(path.join(repoRoot, 'scripts/build-xcuitest-apple.sh'), 'utf8')).toContain(
     'if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then',
   );

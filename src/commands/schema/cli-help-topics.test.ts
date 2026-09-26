@@ -577,7 +577,7 @@ test('usageForCommand resolves validate help topic', async () => {
   assert.match(help, /Use the settled diff as evidence/);
   assert.match(help, /Close sessions and release leases/);
   assert.match(help, /exact key that includes the agent-device package and Xcode version/);
-  assert.match(help, /Avoid broad restore-key fallbacks/);
+  assert.match(help, /Runner reuse is authorized only by the cache metadata's content manifest/);
 });
 
 test('usageForCommand resolves macos help topic', async () => {

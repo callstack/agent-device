@@ -1,7 +1,7 @@
 import type { DeviceKind, PublicPlatform } from '@agent-device/kernel/device';
 import type { JsonObject } from './json.ts';
 
-export type PrepareIosRunnerCacheKind = 'exact' | 'restore-key' | 'miss' | 'external';
+export type PrepareIosRunnerCacheKind = 'exact' | 'miss' | 'external';
 export type PrepareIosRunnerArtifactState = 'valid' | 'rebuilt';
 
 export type PrepareIosRunnerTiming = {

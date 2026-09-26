@@ -5,8 +5,11 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions } from '@agent-device/host-kit/command';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   createRunnerPhaseBudget,
+  requireRunnerBuildSettingsMatchBuildLog,
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -17,6 +20,8 @@ import {
 } from '../runner-cache-metadata.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
+import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();
 
@@ -121,7 +126,7 @@ test('resolveRunnerSandboxBuildArgs disables nested Xcode and Swift sandboxing',
     '-IDEPackageSupportDisableManifestSandbox=1',
     '-IDEPackageSupportDisablePluginExecutionSandbox=1',
     'ENABLE_USER_SCRIPT_SANDBOXING=NO',
-    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY',
   ]);
 });
 
@@ -133,7 +138,7 @@ test('resolveRunnerSandboxBuildArgs includes Swift runner unit tests only when r
       '-IDEPackageSupportDisableManifestSandbox=1',
       '-IDEPackageSupportDisablePluginExecutionSandbox=1',
       'ENABLE_USER_SCRIPT_SANDBOXING=NO',
-      'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
     ]);
   } finally {
     if (previous === undefined) {
@@ -172,9 +177,10 @@ test('metadata diff names only the comparable keys that differ, with expected an
     runnerPerformanceBuildSettings: ['ENABLE_CODE_COVERAGE=YES'],
     artifacts: {
       xctestrunPath: '/tmp/derived/Runner.xctestrun',
-      xctestrunMtimeMs: 1,
       xctestrunSize: 2,
-      productPaths: [{ path: '/tmp/derived/Runner.app', mtimeMs: 1, size: 2 }],
+      xctestrunDigest: 'a'.repeat(64),
+      productPaths: ['/tmp/derived/Runner.app'],
+      entries: [{ path: 'Runner.app/Runner', size: 2, mode: 0o755, digest: 'b'.repeat(64) }],
     },
   };
 
@@ -680,5 +686,68 @@ test('only a complete, parsed toolchain fingerprint is memoized', () => {
   assert.deepEqual(
     [second.xcodeVersion, second.xcodeBuildVersion, second.sdkVersion, second.sdkBuildVersion],
     [first.xcodeVersion, first.xcodeBuildVersion, first.sdkVersion, first.sdkBuildVersion],
+  );
+});
+
+function recordedRunnerBuildArguments(): string[] {
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  return [
+    ...metadata.runnerBundleBuildSettings,
+    ...metadata.runnerSigningBuildSettings,
+    ...metadata.runnerPerformanceBuildSettings,
+    ...metadata.runnerArchBuildSettings,
+    ...metadata.runnerSandboxBuildArgs,
+  ];
+}
+
+function writeRunnerBuildLog(root: string, args: readonly string[]): string {
+  const logPath = path.join(root, 'agent-device-build-for-testing.log');
+  fs.writeFileSync(logPath, xcodebuildLogWithBuildArguments(args));
+  return logPath;
+}
+
+test('a build log holding the recorded recipe certifies the build', () => {
+  const root = mkdtempForTestSync('runner-build-log-');
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  const logPath = writeRunnerBuildLog(root, recordedRunnerBuildArguments());
+
+  assert.doesNotThrow(() => requireRunnerBuildSettingsMatchBuildLog(metadata, logPath));
+});
+
+test('a build log missing a recorded package-sandbox flag fails the check', () => {
+  const root = mkdtempForTestSync('runner-build-log-');
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  // `-I` flags are not build settings, so the settings block would stay complete without them.
+  const logPath = writeRunnerBuildLog(
+    root,
+    recordedRunnerBuildArguments().filter((arg) => !arg.startsWith('-IDEPackageSupport')),
+  );
+
+  assert.throws(
+    () => requireRunnerBuildSettingsMatchBuildLog(metadata, logPath),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.deepEqual(
+        (error.details as { differences: Array<{ key: string; expected: string }> }).differences
+          .map((difference) => difference.expected)
+          .sort(),
+        [
+          '-IDEPackageSupportDisableManifestSandbox=1',
+          '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+        ],
+      );
+      return true;
+    },
+  );
+});
+
+test('an unreadable or setting-less build log fails the check', () => {
+  const root = mkdtempForTestSync('runner-build-log-');
+  const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+
+  assert.throws(
+    () =>
+      requireRunnerBuildSettingsMatchBuildLog(metadata, path.join(root, 'never-written-build.log')),
+    /did not use the settings its cache identity records/,
   );
 });

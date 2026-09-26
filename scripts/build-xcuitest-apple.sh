@@ -4,7 +4,6 @@ set -eu
 PLATFORM="${AGENT_DEVICE_XCUITEST_PLATFORM:-}"
 PROJECT_PATH="apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
 SCHEME="AgentDeviceRunner"
-DEFAULT_IOS_RUNNER_APP_BUNDLE_ID="com.callstack.agentdevice.runner"
 
 if [ -z "$PLATFORM" ]; then
   echo "AGENT_DEVICE_XCUITEST_PLATFORM is required (ios, macos, tvos, visionos)" >&2
@@ -121,50 +120,31 @@ resolve_clean_path() {
 DESTINATION="${AGENT_DEVICE_XCUITEST_DESTINATION:-$(resolve_default_destination)}"
 DERIVED_PATH="${AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH:-$(resolve_default_derived_path)}"
 CLEAN_PATH="$(resolve_clean_path)"
-RUNNER_APP_BUNDLE_ID="${AGENT_DEVICE_IOS_BUNDLE_ID:-${AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID:-$DEFAULT_IOS_RUNNER_APP_BUNDLE_ID}}"
-RUNNER_TEST_BUNDLE_ID="${AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID:-$RUNNER_APP_BUNDLE_ID.uitests}"
-SIGNING_BUILD_SETTINGS=""
-
-if [ "$PLATFORM" = "macos" ]; then
-  SIGNING_BUILD_SETTINGS="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM="
-fi
 
 if is_truthy "${AGENT_DEVICE_IOS_CLEAN_DERIVED:-}"; then
   rm -rf "$CLEAN_PATH"
 fi
 
-SWIFT_FLAGS='$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY'
-if is_truthy "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-}"; then
-  SWIFT_FLAGS="$SWIFT_FLAGS -D AGENT_DEVICE_RUNNER_UNIT_TESTS"
-fi
-
-# Optional arch override. A generic simulator destination leaves the active arch
-# undefined; Xcode versions differ on the default (26.6 picks x86_64, which runs
-# under Rosetta on arm64 hosts). Set AGENT_DEVICE_XCUITEST_ARCHS=arm64 to pin it.
-ARCH_BUILD_SETTINGS=""
-if [ -n "${AGENT_DEVICE_XCUITEST_ARCHS:-}" ]; then
-  ARCH_BUILD_SETTINGS="ARCHS=$AGENT_DEVICE_XCUITEST_ARCHS"
-fi
+# The compiler recipe and the cache identity come from one owner: this build passes exactly the
+# build settings scripts/write-xcuitest-cache-metadata.ts records, so a manifest can never
+# certify products compiled under settings the cache key does not name.
+BUILD_SETTINGS_FILE="$DERIVED_PATH/Logs/agent-device-build-settings.txt"
+mkdir -p "$DERIVED_PATH/Logs"
+node --experimental-strip-types scripts/xcuitest-build-settings.ts "$PLATFORM" "$DESTINATION" \
+  > "$BUILD_SETTINGS_FILE"
 
 build_for_testing() {
+  set --
+  while IFS= read -r build_setting; do
+    [ -n "$build_setting" ] || continue
+    set -- "$@" "$build_setting"
+  done < "$BUILD_SETTINGS_FILE"
   node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts xcodebuild build-for-testing \
     -project "$PROJECT_PATH" \
     -scheme "$SCHEME" \
     -destination "$DESTINATION" \
     -derivedDataPath "$DERIVED_PATH" \
-    AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID="$RUNNER_APP_BUNDLE_ID" \
-    AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID="$RUNNER_TEST_BUNDLE_ID" \
-    COMPILER_INDEX_STORE_ENABLE=NO \
-    ENABLE_CODE_COVERAGE=NO \
-    ONLY_ACTIVE_ARCH=YES \
-    ENABLE_PREVIEWS=NO \
-    ENABLE_DEBUG_DYLIB=NO \
-    -IDEPackageSupportDisableManifestSandbox=1 \
-    -IDEPackageSupportDisablePluginExecutionSandbox=1 \
-    ENABLE_USER_SCRIPT_SANDBOXING=NO \
-    OTHER_SWIFT_FLAGS="$SWIFT_FLAGS" \
-    $ARCH_BUILD_SETTINGS \
-    $SIGNING_BUILD_SETTINGS
+    "$@"
 }
 
 # The isolation scan reads the compiler diagnostics in the build log, and an incremental build
@@ -199,4 +179,4 @@ fi
 if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then
   node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"
 fi
-node scripts/write-xcuitest-cache-metadata.mjs "$PLATFORM" "$DERIVED_PATH" "$DESTINATION"
+node --experimental-strip-types scripts/write-xcuitest-cache-metadata.ts "$PLATFORM" "$DERIVED_PATH" "$DESTINATION" "$BUILD_LOG"

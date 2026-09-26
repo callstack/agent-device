@@ -15,13 +15,16 @@ import {
   diffComparableRunnerCacheMetadata,
   stableJsonStringify,
   type RunnerCacheMetadataDifference,
-  type RunnerXctestrunCacheArtifacts,
   type RunnerXctestrunCacheMetadata,
-  type RunnerXctestrunCacheProductArtifact,
 } from './runner-cache-metadata.ts';
+import type {
+  RunnerCacheArtifactMismatch,
+  RunnerCacheRefusal,
+} from './runner-artifact-manifest.ts';
 export {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
+  resolveRunnerArchBuildSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -38,30 +41,30 @@ const RUNNER_XCTESTRUN_CACHE_LOCK_OWNER_GRACE_MS = 5_000;
 
 const badRunnerArtifactsForRun = new Set<string>();
 
-export type RunnerXctestrunCacheKind = 'exact' | 'restore-key' | 'miss' | 'external';
+export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'external';
 
 export type ExistingXctestrunState =
-  | {
-      reason: 'missing_xctestrun';
-      xctestrunPath: null;
-    }
   | {
       reason: 'reuse_ready';
       xctestrunPath: string;
       productPaths: string[];
-      source: 'manifest' | 'scan';
     }
   | {
-      reason: 'project_root_mismatch' | 'missing_products' | 'cache_metadata_missing';
-      xctestrunPath: string;
+      reason: 'cache_metadata_missing' | 'artifact_manifest_missing';
+      xctestrunPath: string | null;
       productPaths: string[];
-      source: 'manifest' | 'scan';
+    }
+  | {
+      reason: 'artifact_content_mismatch';
+      xctestrunPath: string | null;
+      productPaths: string[];
+      /** The first entry whose bytes, kind, or mode disagree with the manifest. */
+      mismatch: RunnerCacheArtifactMismatch;
     }
   | {
       reason: 'cache_metadata_mismatch';
-      xctestrunPath: string;
+      xctestrunPath: string | null;
       productPaths: string[];
-      source: 'manifest' | 'scan';
       /** Which comparable keys differ, so a rebuild names its cause. */
       metadataDifferences: RunnerCacheMetadataDifference[];
     };
@@ -148,15 +151,61 @@ export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild
   badRunnerArtifactsForRun.delete(derived);
 }
 
-export function writeRunnerCacheMetadataForArtifacts(
+/**
+ * Publishes cache metadata whose `artifacts` manifest digests the exact bytes of the `.xctestrun`
+ * and every file and symlink under the referenced product paths, keyed relative to the cache root.
+ * Reuse is authorized from this manifest alone.
+ *
+ * A tree the walk cannot describe is published without a manifest, which makes it a permanent
+ * miss, and the refusal is returned so the caller can name it. Silently uncertifiable products
+ * would otherwise cost a full rebuild on every launch with nothing to trace.
+ */
+export async function writeRunnerCacheMetadataForArtifacts(
   derived: string,
   metadata: RunnerXctestrunCacheMetadata,
   xctestrunPath: string,
-  productPaths: string[],
-): void {
+  productPaths: readonly string[],
+): Promise<RunnerCacheRefusal | null> {
+  const { buildRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
+  const built = buildRunnerCacheArtifactManifest(derived, xctestrunPath, productPaths);
   writeRunnerCacheMetadata(
     derived,
-    withRunnerCacheArtifacts(metadata, xctestrunPath, productPaths),
+    built.ok ? { ...metadata, artifacts: built.artifacts } : metadata,
+  );
+  if (built.ok) {
+    return null;
+  }
+  emitRunnerXctestrunDecision('preserve', 'uncertifiable_products', {
+    derived,
+    xctestrunPath,
+    ...(built.refusal ? { refusal: built.refusal } : {}),
+  });
+  return built.refusal;
+}
+
+/**
+ * A cache tree a content manifest cannot certify is not safe to launch: nothing can prove those
+ * bytes came from this build. Fails with the refusing entry rather than reporting a plain miss,
+ * which would rebuild the same uncertifiable tree on every launch.
+ */
+export function requireCertifiedRunnerCacheArtifacts(
+  refusal: RunnerCacheRefusal | null,
+  derived: string,
+): void {
+  if (!refusal) {
+    return;
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The Apple runner products cannot be certified for cache reuse',
+    {
+      reason: 'runner_cache_uncertifiable',
+      refusalReason: refusal.reason,
+      refusingPath: refusal.path ?? derived,
+      ...(refusal.reason === 'root_unusable' ? {} : { resolvesTo: refusal.target }),
+      derived,
+      hint: `Inspect ${refusal.path ?? derived} under ${derived}. A symlinked or unreadable product tree must be replaced; run pnpm build:xcuitest with a clean AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH.`,
+    },
   );
 }
 
@@ -235,122 +284,6 @@ function evaluateRunnerCacheMetadata(
   return { ok: true, metadata: actual };
 }
 
-function withRunnerCacheArtifacts(
-  metadata: RunnerXctestrunCacheMetadata,
-  xctestrunPath: string,
-  productPaths: readonly string[],
-): RunnerXctestrunCacheMetadata {
-  const artifacts = buildRunnerCacheArtifacts(xctestrunPath, productPaths);
-  return artifacts ? { ...metadata, artifacts } : metadata;
-}
-
-function buildRunnerCacheArtifacts(
-  xctestrunPath: string,
-  productPaths: readonly string[],
-): RunnerXctestrunCacheArtifacts | null {
-  const xctestrunStats = readPathSignature(xctestrunPath);
-  if (xctestrunStats === null || productPaths.length === 0) {
-    return null;
-  }
-  const productArtifacts: RunnerXctestrunCacheProductArtifact[] = [];
-  for (const productPath of productPaths) {
-    const stats = readPathSignature(productPath);
-    if (stats === null) {
-      return null;
-    }
-    productArtifacts.push({ path: productPath, ...stats });
-  }
-  return {
-    xctestrunPath,
-    xctestrunMtimeMs: xctestrunStats.mtimeMs,
-    xctestrunSize: xctestrunStats.size,
-    productPaths: productArtifacts,
-  };
-}
-
-function readValidatedRunnerCacheArtifacts(
-  derived: string,
-  metadata: RunnerXctestrunCacheMetadata | null,
-): { xctestrunPath: string; productPaths: string[] } | null {
-  const artifacts = metadata?.artifacts;
-  if (!isRunnerCacheArtifacts(artifacts)) {
-    return null;
-  }
-  if (!isPathInsideDirectory(artifacts.xctestrunPath, derived)) {
-    return null;
-  }
-  if (
-    !pathSignatureMatches(artifacts.xctestrunPath, {
-      mtimeMs: artifacts.xctestrunMtimeMs,
-      size: artifacts.xctestrunSize,
-    })
-  ) {
-    return null;
-  }
-  const productPaths: string[] = [];
-  for (const product of artifacts.productPaths) {
-    if (!isPathInsideDirectory(product.path, derived)) {
-      return null;
-    }
-    if (!pathSignatureMatches(product.path, product)) {
-      return null;
-    }
-    productPaths.push(product.path);
-  }
-  return { xctestrunPath: artifacts.xctestrunPath, productPaths };
-}
-
-function isRunnerCacheArtifacts(value: unknown): value is RunnerXctestrunCacheArtifacts {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  const artifacts = value as Partial<RunnerXctestrunCacheArtifacts>;
-  return (
-    typeof artifacts.xctestrunPath === 'string' &&
-    Number.isInteger(artifacts.xctestrunMtimeMs) &&
-    Number.isInteger(artifacts.xctestrunSize) &&
-    Array.isArray(artifacts.productPaths) &&
-    artifacts.productPaths.length > 0 &&
-    artifacts.productPaths.every(isRunnerCacheProductArtifact)
-  );
-}
-
-function isRunnerCacheProductArtifact(
-  value: unknown,
-): value is RunnerXctestrunCacheProductArtifact {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-  const product = value as Partial<RunnerXctestrunCacheProductArtifact>;
-  return (
-    typeof product.path === 'string' &&
-    Number.isInteger(product.mtimeMs) &&
-    Number.isInteger(product.size)
-  );
-}
-
-function readPathSignature(filePath: string): { mtimeMs: number; size: number } | null {
-  try {
-    const stat = fs.statSync(filePath);
-    return { mtimeMs: Math.trunc(stat.mtimeMs), size: stat.size };
-  } catch {
-    return null;
-  }
-}
-
-function pathSignatureMatches(
-  filePath: string,
-  expected: { mtimeMs: number; size: number },
-): boolean {
-  const actual = readPathSignature(filePath);
-  return actual?.mtimeMs === expected.mtimeMs && actual.size === expected.size;
-}
-
-function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
-  const relativePath = path.relative(path.resolve(directoryPath), path.resolve(targetPath));
-  return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
-}
-
 function shouldCleanDerived(): boolean {
   return isEnvTruthy(process.env.AGENT_DEVICE_IOS_CLEAN_DERIVED);
 }
@@ -382,54 +315,43 @@ function isPathInsideProjectTmp(targetPath: string): boolean {
   return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
 }
 
-// fallow-ignore-next-line complexity
 export async function evaluateExistingXctestrun(options: {
   derived: string;
-  projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
-  findXctestrun: (root: string) => string | null;
-  xctestrunReferencesProjectRoot: (xctestrunPath: string, projectRoot: string) => boolean;
-  resolveExistingXctestrunProductPaths: (xctestrunPath: string) => Promise<string[] | null>;
 }): Promise<ExistingXctestrunState> {
   const cacheMetadata = evaluateRunnerCacheMetadata(options.derived, options.expectedCacheMetadata);
-  const manifest = cacheMetadata.ok
-    ? readValidatedRunnerCacheArtifacts(options.derived, cacheMetadata.metadata)
-    : null;
-  const xctestrunPath = manifest?.xctestrunPath ?? options.findXctestrun(options.derived);
-  if (!xctestrunPath) {
-    return { reason: 'missing_xctestrun', xctestrunPath: null };
-  }
-  const hasValidatedManifest = manifest?.xctestrunPath === xctestrunPath;
-  const source = hasValidatedManifest ? 'manifest' : 'scan';
-  const productPaths = hasValidatedManifest
-    ? manifest.productPaths
-    : await options.resolveExistingXctestrunProductPaths(xctestrunPath);
-  if (!productPaths) {
-    return { reason: 'missing_products', xctestrunPath, productPaths: [], source };
-  }
-  if (
-    !options.xctestrunReferencesProjectRoot(xctestrunPath, options.projectRoot) &&
-    !hasValidatedManifest
-  ) {
-    return { reason: 'project_root_mismatch', xctestrunPath, productPaths, source };
-  }
   if (!cacheMetadata.ok) {
     return cacheMetadata.reason === 'cache_metadata_mismatch'
       ? {
           reason: cacheMetadata.reason,
-          xctestrunPath,
-          productPaths,
-          source,
+          xctestrunPath: null,
+          productPaths: [],
           metadataDifferences: cacheMetadata.differences,
         }
-      : { reason: cacheMetadata.reason, xctestrunPath, productPaths, source };
+      : { reason: cacheMetadata.reason, xctestrunPath: null, productPaths: [] };
   }
-  return { reason: 'reuse_ready', xctestrunPath, productPaths, source };
+  const { validateRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
+  const artifacts = validateRunnerCacheArtifactManifest(options.derived, cacheMetadata.metadata);
+  if (!artifacts.ok) {
+    return artifacts.mismatch
+      ? {
+          reason: 'artifact_content_mismatch',
+          xctestrunPath: null,
+          productPaths: [],
+          mismatch: artifacts.mismatch,
+        }
+      : { reason: 'artifact_manifest_missing', xctestrunPath: null, productPaths: [] };
+  }
+  return {
+    reason: 'reuse_ready',
+    xctestrunPath: artifacts.xctestrunPath,
+    productPaths: artifacts.productPaths,
+  };
 }
 
 /**
  * Reports why a cache state cannot be reused, naming the differing keys when the
- * cause is a metadata mismatch.
+ * cause is a metadata mismatch and the failing entry when the cause is content.
  */
 export function emitRunnerXctestrunRebuildDecision(
   existing: Exclude<ExistingXctestrunState, { reason: 'reuse_ready' }>,
@@ -437,10 +359,10 @@ export function emitRunnerXctestrunRebuildDecision(
 ): void {
   emitRunnerXctestrunDecision('rebuild', existing.reason, {
     derived,
-    xctestrunPath: existing.xctestrunPath,
     ...(existing.reason === 'cache_metadata_mismatch'
       ? { metadataDifferences: existing.metadataDifferences }
       : {}),
+    ...(existing.reason === 'artifact_content_mismatch' ? { mismatch: existing.mismatch } : {}),
   });
 }
 
@@ -448,9 +370,8 @@ export function emitRunnerXctestrunDecision(
   action: 'clean' | 'reuse' | 'rebuild' | 'build' | 'preserve',
   reason:
     | 'forced_clean'
-    | 'missing_xctestrun'
-    | 'project_root_mismatch'
-    | 'missing_products'
+    | 'artifact_manifest_missing'
+    | 'artifact_content_mismatch'
     | 'cache_metadata_missing'
     | 'cache_metadata_mismatch'
     | 'repair_failed'
@@ -459,11 +380,12 @@ export function emitRunnerXctestrunDecision(
     | 'bad_artifact'
     | 'built_new'
     | 'external_xctestrun'
-    | 'external_bad_artifact',
+    | 'external_bad_artifact'
+    | 'uncertifiable_products',
   data: Record<string, unknown>,
 ): void {
   emitDiagnostic({
-    level: action === 'rebuild' ? 'warn' : 'info',
+    level: action === 'rebuild' || action === 'preserve' ? 'warn' : 'info',
     phase: 'runner_xctestrun_cache',
     data: {
       action,

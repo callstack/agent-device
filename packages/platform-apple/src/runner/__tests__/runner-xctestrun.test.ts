@@ -1,21 +1,23 @@
 import { test, vi, beforeEach } from 'vitest';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 // oxlint-disable-next-line no-restricted-imports -- mirrors production's os.tmpdir xctestrun path
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   buildRunnerSessionXctestrunPathCleanupPattern,
   buildRunnerSessionXctestrunSuffix,
 } from '../runner-artifact-env.ts';
+import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
+import { writeXctestrunFixture } from './runner-xctestrun.fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
-// This script runs outside the package's host abstraction (it is invoked directly via
-// dynamic import in the "setup metadata script" test below) and calls node:child_process
-// execFileSync itself, so it cannot be faked through a host override; the module mock stays.
+// The toolchain probes reach the exec layer through `execFileSync`, which the package's host
+// seam does not wrap; the module mock keeps a test from shelling out to a real Xcode.
 const { mockExecFileSync } = vi.hoisted(() => ({
   mockExecFileSync: vi.fn(),
 }));
@@ -29,6 +31,9 @@ const mockRunCmdSync = vi.fn();
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { findXctestrun, scoreXctestrunCandidate } from '../runner-artifact.ts';
+import { evaluateExistingXctestrun } from '../runner-cache.ts';
+import { resolveExistingXctestrunProductPaths } from '../runner-xctestrun-products.ts';
+import type { RunnerXctestrunCacheArtifacts } from '../runner-cache-metadata.ts';
 import {
   ensureXctestrunArtifact,
   markRunnerXctestrunArtifactBadForRun,
@@ -36,6 +41,8 @@ import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
+
+const repoRoot = process.cwd();
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',
@@ -205,73 +212,286 @@ test('scoreXctestrunCandidate penalizes macos and env xctestrun files for simula
   assert.ok(simulatorScore > macosEnvScore);
 });
 
-test('setup metadata script matches expected iOS simulator cache metadata', async () => {
+/**
+ * The build script and the metadata writer are separate processes with one contract: the recipe
+ * `xcuitest-build-settings.ts` hands `xcodebuild` is the recipe the published identity records,
+ * and the manifest certifies the bytes that build left on disk. Both scripts are driven the way
+ * `build-xcuitest-apple.sh` drives them — real processes, a stand-in toolchain on PATH, and a
+ * build log echoing the settings it was handed — because the scripts import the composition
+ * root, which cannot share a process with this suite's test host.
+ */
+test('the build script and the metadata writer publish one iOS simulator identity', async () => {
   await withTempDir('runner-cache-metadata-', async (root) => {
-    const repoRoot = process.cwd();
-    const scriptPath = path.join(repoRoot, 'scripts', 'write-xcuitest-cache-metadata.mjs');
-    const projectRoot = path.join(root, 'project');
-    const derivedRoot = path.join(root, 'derived');
-    fs.mkdirSync(derivedRoot, { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner'), {
-      recursive: true,
+    const project = seedRunnerBuildFixture(root);
+    const buildSettings = runBuildSettings(project);
+    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildArguments(buildSettings));
+
+    const written = runScript(project.root, 'write-xcuitest-cache-metadata.ts', [
+      'ios',
+      project.derivedPath,
+      project.destination,
+      project.buildLogPath,
+      project.bin,
+    ]);
+    assert.equal(written.status, 0, written.stderr);
+
+    const published = readRunnerCacheManifest(project.derivedPath);
+    const { artifacts: _artifacts, ...publishedIdentity } = published;
+    assert.deepEqual(
+      stripVolatile(publishedIdentity),
+      stripVolatile(resolveExpectedRunnerCacheMetadata(iosSimulator, project.root)),
+    );
+
+    assert.ok(artifactsOf(published).xctestrunDigest);
+    const entries = new Map(
+      artifactsOf(published).entries.map((entry: any) => [entry.path, entry]),
+    );
+    const executableEntry = entries.get(
+      path.relative(project.derivedPath, project.executablePath).replaceAll(path.sep, '/'),
+    );
+    assert.ok(executableEntry, 'the manifest must list the runner executable');
+    assert.equal(executableEntry!.mode, 0o755);
+    assert.equal(
+      executableEntry!.digest,
+      crypto.createHash('sha256').update(fs.readFileSync(project.executablePath)).digest('hex'),
+    );
+
+    // What the daemon will do with a restored tree: the manifest it just read must certify it.
+    const state = await evaluateExistingXctestrun({
+      derived: project.derivedPath,
+      expectedCacheMetadata: resolveExpectedRunnerCacheMetadata(iosSimulator, project.root),
     });
-    fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"version":"0.19.0"}\n');
-    fs.writeFileSync(
-      path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
-      'final class Runner {}\n',
-    );
-    const runnerUnitTest = path.join(
-      projectRoot,
-      'apple',
-      'runner',
-      'AgentDeviceRunner',
-      'AgentDeviceRunnerUITests',
-      'UnitTests',
-      'Invariant.swift',
-    );
-    fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
-    fs.writeFileSync(runnerUnitTest, 'unit-one\n');
-    const ignoredSharedSource = path.join(
-      projectRoot,
-      'apple',
-      'snapshot-presentation',
-      'Tests',
-      'Ignored.swift',
-    );
-    fs.mkdirSync(path.dirname(ignoredSharedSource), { recursive: true });
-    fs.writeFileSync(ignoredSharedSource, 'ignored-one\n');
-    const { writeXcuitestCacheMetadata } = await import(
-      `${pathToFileURL(scriptPath).href}?case=${Date.now()}`
-    );
-    const firstMetadata = writeXcuitestCacheMetadata(
-      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
-      projectRoot,
-    );
+    assert.equal(state.reason, 'reuse_ready');
 
-    const actual = JSON.parse(
-      fs.readFileSync(path.join(derivedRoot, '.agent-device-runner-cache.json'), 'utf8'),
+    // The same files must keep reporting one fingerprint while only ignored sources change.
+    fs.writeFileSync(project.ignoredSharedSource, 'ignored-two\n');
+    assert.equal(
+      resolveExpectedRunnerCacheMetadata(iosSimulator, project.root).runnerSourceFingerprint,
+      published.runnerSourceFingerprint,
     );
-    const { artifacts: _actualArtifacts, ...actualComparable } = actual;
-    const { artifacts: _expectedArtifacts, ...expectedComparable } =
-      resolveExpectedRunnerCacheMetadata(iosSimulator, projectRoot);
-
-    assert.deepEqual(actualComparable, expectedComparable);
-
-    fs.writeFileSync(ignoredSharedSource, 'ignored-two\n');
-    const secondMetadata = writeXcuitestCacheMetadata(
-      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
-      projectRoot,
+    fs.writeFileSync(project.runnerUnitTest, 'unit-two\n');
+    assert.notEqual(
+      resolveExpectedRunnerCacheMetadata(iosSimulator, project.root).runnerSourceFingerprint,
+      published.runnerSourceFingerprint,
     );
-    assert.equal(secondMetadata.runnerSourceFingerprint, firstMetadata.runnerSourceFingerprint);
-
-    fs.writeFileSync(runnerUnitTest, 'unit-two\n');
-    const thirdMetadata = writeXcuitestCacheMetadata(
-      ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
-      projectRoot,
-    );
-    assert.notEqual(thirdMetadata.runnerSourceFingerprint, secondMetadata.runnerSourceFingerprint);
   });
-}, 15_000);
+}, 120_000);
+
+test('an .xctestrun fixture holding paths that need XML escaping names those products', async () => {
+  // CI checkouts and fork names can carry `&` or `'`. Written into the plist unescaped they make
+  // it malformed, and the reuse cases built on this fixture would silently exercise a rebuild
+  // instead of the path they name.
+  const root = mkdtempForTestSync('agent-device-xctestrun-escaping-');
+  const projectRoot = path.join(root, "a & b's <worktree>");
+  const derivedPath = path.join(projectRoot, '.tmp', 'derived');
+  const bundlePath = path.join(
+    derivedPath,
+    'Build',
+    'Products',
+    'Debug-iphonesimulator',
+    "Runner & Co's.app",
+  );
+  await fs.promises.mkdir(bundlePath, { recursive: true });
+  await fs.promises.writeFile(path.join(bundlePath, 'Runner'), 'runner', { mode: 0o755 });
+  const xctestrunPath = path.join(derivedPath, 'Build', 'Products', 'Runner.xctestrun');
+  writeXctestrunFixture(xctestrunPath, {
+    projectRoot,
+    productRelativePaths: ["Debug-iphonesimulator/Runner & Co's.app"],
+  });
+
+  assert.deepEqual(await resolveExistingXctestrunProductPaths(xctestrunPath), [bundlePath]);
+});
+
+test('the metadata writer refuses a build log whose recipe it did not record', async () => {
+  await withTempDir('runner-cache-metadata-', async (root) => {
+    const project = seedRunnerBuildFixture(root);
+    const drifted = runBuildSettings(project).filter(
+      (setting) => !setting.startsWith('ONLY_ACTIVE_ARCH='),
+    );
+    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildArguments(drifted));
+
+    const written = runScript(project.root, 'write-xcuitest-cache-metadata.ts', [
+      'ios',
+      project.derivedPath,
+      project.destination,
+      project.buildLogPath,
+      project.bin,
+    ]);
+    assert.notEqual(written.status, 0);
+    assert.match(written.stderr, /did not use the settings its cache identity records/);
+    assert.equal(
+      fs.existsSync(path.join(project.derivedPath, '.agent-device-runner-cache.json')),
+      false,
+    );
+  });
+}, 120_000);
+
+type RunnerBuildFixture = {
+  root: string;
+  bin: string;
+  derivedPath: string;
+  buildLogPath: string;
+  destination: string;
+  executablePath: string;
+  runnerUnitTest: string;
+  ignoredSharedSource: string;
+};
+
+/**
+ * A project root plus the DerivedData a successful `build-for-testing` would leave behind:
+ * an `.xctestrun` naming a product bundle whose executable is on disk.
+ */
+function seedRunnerBuildFixture(root: string): RunnerBuildFixture {
+  const projectRoot = path.join(root, 'project');
+  const derivedPath = path.join(root, 'derived');
+  const productsRoot = path.join(derivedPath, 'Build', 'Products');
+  const runnerAppPath = path.join(productsRoot, 'Debug-iphonesimulator', 'Runner-Runner.app');
+  const executablePath = path.join(runnerAppPath, 'Runner');
+  const xctestrunPath = path.join(
+    productsRoot,
+    'AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator26.2-arm64.xctestrun',
+  );
+  fs.mkdirSync(runnerAppPath, { recursive: true });
+  fs.writeFileSync(executablePath, Buffer.from('runner-executable\n'), { mode: 0o755 });
+  fs.mkdirSync(path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"version":"0.19.0"}\n');
+  fs.writeFileSync(
+    path.join(projectRoot, 'apple', 'runner', 'AgentDeviceRunner', 'Runner.swift'),
+    'final class Runner {}\n',
+  );
+  const runnerUnitTest = path.join(
+    projectRoot,
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunnerUITests',
+    'UnitTests',
+    'Invariant.swift',
+  );
+  fs.mkdirSync(path.dirname(runnerUnitTest), { recursive: true });
+  fs.writeFileSync(runnerUnitTest, 'unit-one\n');
+  const ignoredSharedSource = path.join(
+    projectRoot,
+    'apple',
+    'snapshot-presentation',
+    'Tests',
+    'Ignored.swift',
+  );
+  fs.mkdirSync(path.dirname(ignoredSharedSource), { recursive: true });
+  fs.writeFileSync(ignoredSharedSource, 'ignored-one\n');
+  fs.writeFileSync(
+    xctestrunPath,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>ProjectRootHint</key>
+  <string>${projectRoot}</string>
+  <key>ProductPaths</key>
+  <array>
+    <string>__TESTROOT__/Debug-iphonesimulator/Runner-Runner.app</string>
+  </array>
+</dict>
+</plist>`,
+  );
+  const buildLogPath = path.join(derivedPath, 'Logs', 'agent-device-build-for-testing.log');
+  fs.mkdirSync(path.dirname(buildLogPath), { recursive: true });
+  return {
+    root: projectRoot,
+    bin: fakeAppleToolchainBin(root),
+    derivedPath,
+    buildLogPath,
+    destination: 'generic/platform=iOS Simulator',
+    executablePath,
+    runnerUnitTest,
+    ignoredSharedSource,
+  };
+}
+
+/**
+ * The three tools the scripts exec: `xcodebuild -version` and two `xcrun --sdk` probes, answering
+ * exactly what this suite's fingerprint stub reports so the child and parent identities agree.
+ */
+function fakeAppleToolchainBin(root: string): string {
+  const bin = path.join(root, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  writeFakeTool(
+    bin,
+    'xcodebuild',
+    String.raw`{ printf 'Xcode 26.2
+'; printf 'Build version 17C52
+'; }`,
+  );
+  writeFakeTool(
+    bin,
+    'xcrun',
+    String.raw`{ for arg in "$@"; do
+  if [ "$arg" = "--show-sdk-build-version" ]; then printf "23C53
+"; exit 0; fi
+done
+printf "26.2
+"; }`,
+  );
+  return bin;
+}
+
+function writeFakeTool(bin: string, name: string, body: string): void {
+  fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`);
+  fs.chmodSync(path.join(bin, name), 0o755);
+}
+
+/** The recipe the emitter hands `xcodebuild`, read the way the build script reads it. */
+function runBuildSettings(project: RunnerBuildFixture): string[] {
+  const emitted = runScript(project.root, 'xcuitest-build-settings.ts', [
+    'ios',
+    project.destination,
+    project.bin,
+  ]);
+  assert.equal(emitted.status, 0, emitted.stderr);
+  return emitted.stdout.split('\n').filter((line: string) => line !== '');
+}
+
+/** Runs one repository script in a real process, the way the build script does. */
+function runScript(
+  cwd: string,
+  script: string,
+  args: readonly string[],
+): {
+  status: number;
+  stdout: string;
+  stderr: string;
+} {
+  const fakeBin = args.at(-1)!;
+  const rest = args.slice(0, -1);
+  const result = spawnSync(
+    process.execPath,
+    ['--experimental-strip-types', path.join(repoRoot, 'scripts', script), ...rest],
+    {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}` },
+    },
+  );
+  return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+}
+
+function readRunnerCacheManifest(derivedPath: string): any {
+  return JSON.parse(
+    fs.readFileSync(path.join(derivedPath, '.agent-device-runner-cache.json'), 'utf8'),
+  );
+}
+
+function artifactsOf(manifest: any): RunnerXctestrunCacheArtifacts {
+  if (!manifest.artifacts) {
+    throw new Error('The writer must publish an artifact manifest alongside the identity.');
+  }
+  return manifest.artifacts as RunnerXctestrunCacheArtifacts;
+}
+
+function stripVolatile(metadata: Record<string, unknown>): Record<string, unknown> {
+  const { packageVersion: _packageVersion, ...rest } = metadata;
+  return rest;
+}
 
 test('runner cache key ignores package version but honors toolchain and SDK changes', () => {
   const metadata = resolveExpectedRunnerCacheMetadata(iosSimulator);

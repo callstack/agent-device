@@ -32,6 +32,13 @@ export function resolveAppleSnapshotPresentationSourceRoot(projectRoot: string):
 }
 
 const RUNNER_SOURCE_IGNORED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
+/**
+ * Finder and editor droppings that land inside an Xcode package without being build input. They
+ * would otherwise flip the fingerprint and cost a full runner rebuild whenever a checkout is
+ * browsed. Xcode keeps user state under `xcuserdata`, already ignored as a directory.
+ */
+const XCODE_PACKAGE_NON_BUILD_FILE_NAMES = new Set(['.DS_Store']);
+const XCODE_PACKAGE_NON_BUILD_FILE_EXTENSIONS = new Set(['.xcuserstate']);
 const SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES = new Set([
   '.build',
   '.swiftpm',
@@ -116,44 +123,74 @@ function collectRunnerSourceFilesUnderRoot(
   ignoredDirectoryNames: ReadonlySet<string>,
 ): string[] {
   return fs.existsSync(root)
-    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames)
+    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames, false)
     : [];
 }
 
 function collectRunnerSourceFilesInDirectory(
   directory: string,
   ignoredDirectoryNames: ReadonlySet<string>,
+  includeEveryFile: boolean,
 ): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (!ignoredDirectoryNames.has(entry.name)) {
-        files.push(...collectRunnerSourceFilesInDirectory(fullPath, ignoredDirectoryNames));
+      if (ignoredDirectoryNames.has(entry.name)) continue;
+      const nestedIncludeEveryFile = includeEveryFile || isXcodePackageDirectory(entry.name);
+      files.push(
+        ...collectRunnerSourceFilesInDirectory(
+          fullPath,
+          ignoredDirectoryNames,
+          nestedIncludeEveryFile,
+        ),
+      );
+    } else if (entry.isFile()) {
+      if (
+        includeEveryFile ? isXcodePackageNonBuildFile(entry.name) : !isRunnerSourceFile(entry.name)
+      ) {
+        continue;
       }
-    } else if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
       files.push(fullPath);
     }
   }
   return files;
 }
 
-function isRunnerSourceFile(fileName: string, filePath: string): boolean {
-  if (fileName === 'project.pbxproj') {
-    return filePath.includes(`${path.sep}.xcodeproj${path.sep}`);
-  }
-  return [
-    '.jpg',
-    '.json',
-    '.png',
-    '.swift',
-    '.m',
-    '.h',
-    '.plist',
-    '.entitlements',
-    '.xctestplan',
-    '.xcconfig',
-    '.storyboard',
-    '.xib',
-  ].includes(path.extname(fileName));
+/** Whether a file inside an Xcode package is Finder or editor droppings rather than build input. */
+function isXcodePackageNonBuildFile(fileName: string): boolean {
+  return (
+    XCODE_PACKAGE_NON_BUILD_FILE_NAMES.has(fileName) ||
+    XCODE_PACKAGE_NON_BUILD_FILE_EXTENSIONS.has(path.extname(fileName))
+  );
+}
+
+/**
+ * Xcode owns the contents of a project or workspace package — `project.pbxproj`, shared
+ * schemes, and workspace data all change what a build produces — so every file inside one
+ * is build input, not just the ones with a recognizable extension.
+ */
+function isXcodePackageDirectory(directoryName: string): boolean {
+  return directoryName.endsWith('.xcodeproj') || directoryName.endsWith('.xcworkspace');
+}
+
+const RUNNER_SOURCE_FILE_EXTENSIONS = new Set([
+  '.jpg',
+  '.json',
+  '.png',
+  '.swift',
+  '.m',
+  '.h',
+  '.plist',
+  '.entitlements',
+  '.xctestplan',
+  '.xcconfig',
+  '.storyboard',
+  '.xib',
+  '.xcscheme',
+  '.xcworkspacedata',
+]);
+
+function isRunnerSourceFile(fileName: string): boolean {
+  return RUNNER_SOURCE_FILE_EXTENSIONS.has(path.extname(fileName));
 }

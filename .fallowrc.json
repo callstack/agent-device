@@ -19,6 +19,8 @@
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
+    "scripts/write-xcuitest-cache-metadata.ts",
+    "scripts/xcuitest-build-settings.ts",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
@@ -41,7 +43,6 @@
     "scripts/di-seams/**",
     "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
-    "scripts/write-xcuitest-cache-metadata.mjs",
     "scripts/help-conformance-sample-outputs.d.mts",
     "scripts/help-conformance-runner-output.d.mts"
   ],

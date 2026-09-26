@@ -16,13 +16,11 @@ inputs:
     description: 'Registered check id built through `pnpm gate`'
     required: true
   xcuitest-platform:
-    description: 'Optional AGENT_DEVICE_XCUITEST_PLATFORM value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_PLATFORM value the runner build and its cache metadata are keyed by'
+    required: true
   xcuitest-destination:
-    description: 'Optional AGENT_DEVICE_XCUITEST_DESTINATION value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_DESTINATION value, which must carry a platform= token'
+    required: true
 outputs:
   cache-hit:
     description: 'Whether an exact Apple runner build cache was restored'
@@ -107,6 +105,17 @@ runs:
     - name: Patch XCTest runner icon
       shell: bash
       run: node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "${{ inputs.derived-path }}"
+
+    # The icon patch rewrites product bytes after the cache was saved unpatched, so the
+    # content manifest on this machine must certify the tree that will actually run.
+    - name: Re-publish Apple runner cache metadata
+      shell: bash
+      run: |
+        node --experimental-strip-types scripts/write-xcuitest-cache-metadata.ts \
+          "${{ inputs.xcuitest-platform }}" \
+          "${{ inputs.derived-path }}" \
+          "${{ inputs.xcuitest-destination }}" \
+          "${{ inputs.derived-path }}/Logs/agent-device-build-for-testing.log"
 
     - name: Report Apple runner build cache
       env:
