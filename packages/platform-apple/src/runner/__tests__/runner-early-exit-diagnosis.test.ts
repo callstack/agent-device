@@ -7,7 +7,7 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerEarlyExitError } from '../runner-startup-transport.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 import {
@@ -52,8 +52,7 @@ function sessionFailingWith(
     child: { pid: 4242, exitCode: 1 } as ExecBackgroundResult['child'],
     state: 'starting',
     startupDeviceStates,
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
   };
 }
 

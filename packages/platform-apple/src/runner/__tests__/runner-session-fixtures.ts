@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import {
   runnerConnectFailureDetails,
   type RunnerConnectFailureReason,
@@ -28,8 +28,7 @@ export function makeRunnerSession(overrides: Partial<RunnerSession> = {}): Runne
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null },
     state: 'ready',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
     ...overrides,
   } as RunnerSession;
 }
