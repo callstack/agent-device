@@ -161,7 +161,7 @@
     "src/remote/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "src/remote/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "src/remote/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "src/remote/upload-client.ts#finalizeDirectUpload": "sha256:04e18bdf91b9930a04d43f1661fe3f31ac2e6018154f8a8cb14656b9bc2b6140",
+    "src/remote/upload-client.ts#finalizeDirectUpload": "sha256:5d283353df5f089a6ab26b7be96c44997e6b9905b329cb993d300c615479d715",
     "src/remote/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "src/remote/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
     "src/remote/upload-client.ts#requestUploadPreflight": "sha256:4c9863bce8757f1dc0f01ec7374019e752efc8e786cd070200f516a1d72d09e1",
@@ -178,7 +178,7 @@
     "src/remote/upload-stream.ts#parseNonNegativeIntegerHeader": "sha256:5cbe9c6994459d673d988a51407e65556e28175b187ce0a9d27cbb6331962834",
     "src/remote/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
     "src/remote/upload-stream.ts#streamFileToHttpRequest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
-    "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:bc636083b00c2eef73a65a3446491e831510cdf934ff2545dd12e6b6ba13160d"
+    "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:aa73fb51890ca5e43d4aa80c1d2124b574568380a73b19eae7da0ee3e3e7acf8"
   },
   "compatibleChanges": [
     {
@@ -318,8 +318,8 @@
     },
     {
       "declaration": "src/remote/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:04e18bdf91b9930a04d43f1661fe3f31ac2e6018154f8a8cb14656b9bc2b6140",
-      "rationale": "#2946 adds the caller's abort signal to finalize's existing timeout. Route and body keys are unchanged, so a protocol-2 daemon parses an uncancelled finalize exactly as before."
+      "digest": "sha256:5d283353df5f089a6ab26b7be96c44997e6b9905b329cb993d300c615479d715",
+      "rationale": "#2946 adds the caller's abort signal to finalize's existing timeout and lets a canceled one reject with the signal's own reason instead of a wrapped transport error. Route and body keys are unchanged, so a protocol-2 daemon parses an uncancelled finalize exactly as before."
     },
     {
       "declaration": "src/remote/upload-client.ts#uploadLegacyArtifact",
@@ -333,8 +333,8 @@
     },
     {
       "declaration": "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt",
-      "digest": "sha256:bc636083b00c2eef73a65a3446491e831510cdf934ff2545dd12e6b6ba13160d",
-      "rationale": "#2946 passes the optional abort signal to the request. The released 308 resume contract is untouched: offset headers, resume start offsets, redirects, and payload bytes are computed exactly as before."
+      "digest": "sha256:aa73fb51890ca5e43d4aa80c1d2124b574568380a73b19eae7da0ee3e3e7acf8",
+      "rationale": "#2946 passes the optional abort signal to the request and rejects with that signal's reason when it is what ended the stream. The released 308 resume contract is untouched: offset headers, resume start offsets, redirects, and payload bytes are computed exactly as before."
     }
   ]
 }
