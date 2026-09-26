@@ -77,9 +77,10 @@ function isTerminalLeaseBeatError(error: unknown): boolean {
  *
  * `heartbeat` is the caller's transport decision; `undefined` means there is no lease to protect and
  * the phase runs untouched. The first beat is fired immediately rather than one interval in, so a
- * lease shorter than that interval is renewed before it can lapse — and a lease already gone is
- * found while the upload is still hashing. Each beat answers with the window it just renewed, and
- * the cadence becomes a third of that window.
+ * lease shorter than that interval is renewed before it can lapse. A lease already gone is caught
+ * early rather than at the end of the phase, though not before the phase begins: hashing, preflight,
+ * and the first bytes can all happen while the opening beat is still outstanding. Each beat answers
+ * with the window it just renewed, and the cadence becomes a third of that window.
  *
  * A beat's budget is the cadence it started on, and its successor is armed when the beat starts
  * rather than when it settles. A beat that never returns — a half-open connection, a daemon wedged
