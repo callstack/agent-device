@@ -49,5 +49,11 @@ export {
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
 } from '../runner/runner-cache-metadata.ts';
-export { resolveRunnerScriptDevice } from '../runner/apple-runner-platform.ts';
-export { writeRunnerCacheMetadataForArtifacts } from '../runner/runner-cache.ts';
+export {
+  isRunnerXcuitestScriptPlatform,
+  resolveRunnerScriptDevice,
+} from '../runner/apple-runner-platform.ts';
+export {
+  requireCertifiedRunnerCacheArtifacts,
+  writeRunnerCacheMetadataForArtifacts,
+} from '../runner/runner-cache.ts';

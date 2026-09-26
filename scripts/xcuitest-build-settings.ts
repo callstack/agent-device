@@ -4,6 +4,7 @@
 // compiler invocation and the cache identity cannot drift apart.
 import { pathToFileURL } from 'node:url';
 import {
+  isRunnerXcuitestScriptPlatform,
   resolveRunnerArchBuildSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerPerformanceBuildSettings,
@@ -20,6 +21,9 @@ function resolveXcuitestBuildSettings(
   destination: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
+  if (!isRunnerXcuitestScriptPlatform(platform)) {
+    throw new Error(`Unsupported platform: ${platform}`);
+  }
   const device = resolveRunnerScriptDevice(platform, destination);
   return [
     ...resolveRunnerPerformanceBuildSettings(),

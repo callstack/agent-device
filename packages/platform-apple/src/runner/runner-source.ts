@@ -32,6 +32,13 @@ export function resolveAppleSnapshotPresentationSourceRoot(projectRoot: string):
 }
 
 const RUNNER_SOURCE_IGNORED_DIR_NAMES = new Set(['.build', '.swiftpm', 'xcuserdata']);
+/**
+ * Finder and editor droppings that land inside an Xcode package without being build input. They
+ * would otherwise flip the fingerprint and cost a full runner rebuild whenever a checkout is
+ * browsed. Xcode keeps user state under `xcuserdata`, already ignored as a directory.
+ */
+const XCODE_PACKAGE_NON_BUILD_FILE_NAMES = new Set(['.DS_Store']);
+const XCODE_PACKAGE_NON_BUILD_FILE_EXTENSIONS = new Set(['.xcuserstate']);
 const SNAPSHOT_PRESENTATION_SOURCE_IGNORED_DIR_NAMES = new Set([
   '.build',
   '.swiftpm',
@@ -138,7 +145,12 @@ function collectRunnerSourceFilesInDirectory(
           nestedIncludeEveryFile,
         ),
       );
-    } else if (entry.isFile() && (includeEveryFile || isRunnerSourceFile(entry.name))) {
+    } else if (entry.isFile()) {
+      if (
+        includeEveryFile ? isXcodePackageNonBuildFile(entry.name) : !isRunnerSourceFile(entry.name)
+      ) {
+        continue;
+      }
       files.push(fullPath);
     }
   }
@@ -150,6 +162,14 @@ function collectRunnerSourceFilesInDirectory(
  * schemes, and workspace data all change what a build produces — so every file inside one
  * is build input, not just the ones with a recognizable extension.
  */
+/** Whether a file inside an Xcode package is Finder or editor droppings rather than build input. */
+function isXcodePackageNonBuildFile(fileName: string): boolean {
+  return (
+    XCODE_PACKAGE_NON_BUILD_FILE_NAMES.has(fileName) ||
+    XCODE_PACKAGE_NON_BUILD_FILE_EXTENSIONS.has(path.extname(fileName))
+  );
+}
+
 function isXcodePackageDirectory(directoryName: string): boolean {
   return directoryName.endsWith('.xcodeproj') || directoryName.endsWith('.xcworkspace');
 }

@@ -72,16 +72,37 @@ type AppleRunnerBuildStep = {
   with?: Record<string, string>;
 };
 
-function appleRunnerBuildAction(): { text: string; steps: AppleRunnerBuildStep[] } {
+function appleRunnerBuildAction(): {
+  text: string;
+  steps: AppleRunnerBuildStep[];
+  inputs: Record<string, { required?: boolean; default?: string }>;
+} {
   const action = fs.readFileSync(
     path.join(repoRoot, '.github/actions/setup-apple-runner-build/action.yml'),
     'utf8',
   );
   const doc = parse(action) as {
+    inputs?: Record<string, { required?: boolean; default?: string }>;
     runs: { steps: AppleRunnerBuildStep[] };
   };
-  return { text: action, steps: doc.runs.steps };
+  return { text: action, steps: doc.runs.steps, inputs: doc.inputs ?? {} };
 }
+
+/**
+ * The metadata writer resolves the build identity from these two values, so a job that omitted
+ * them must be refused when it starts rather than at re-publish time, after a full build.
+ */
+test('the Apple runner build action requires the identity its metadata writer reads', () => {
+  const { inputs } = appleRunnerBuildAction();
+  expect(inputs['xcuitest-platform']).toEqual({
+    required: true,
+    description: expect.stringContaining('AGENT_DEVICE_XCUITEST_PLATFORM'),
+  });
+  expect(inputs['xcuitest-destination']).toEqual({
+    required: true,
+    description: expect.stringContaining('AGENT_DEVICE_XCUITEST_DESTINATION'),
+  });
+});
 
 test('Apple runner build cache uses only declared source and schema hashes', () => {
   const { text, steps } = appleRunnerBuildAction();

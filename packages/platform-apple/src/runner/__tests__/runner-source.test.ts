@@ -170,6 +170,8 @@ test('computeRunnerSourceFingerprint ignores per-user Xcode state', () => {
 
   const before = computeRunnerSourceFingerprint(root);
   fs.writeFileSync(userScheme, `<Scheme state="dirty"/>\n`);
+  fs.writeFileSync(path.join(projectPackage, '.DS_Store'), 'finder\n');
+  fs.writeFileSync(path.join(projectPackage, 'Workspace.xcuserstate'), 'xcode-user-state\n');
 
   assert.equal(computeRunnerSourceFingerprint(root), before);
 });

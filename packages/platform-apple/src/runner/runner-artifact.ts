@@ -37,6 +37,7 @@ import {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
+  requireCertifiedRunnerCacheArtifacts,
   writeRunnerCacheMetadataForArtifacts,
   type ExistingXctestrunState,
   type RunnerPhaseBudget,
@@ -276,7 +277,10 @@ async function buildXctestrunArtifact(params: {
   // This covers direct local xcodebuilds triggered by ensureXctestrunArtifact on cache miss.
   // The manifest is written last so it certifies the bytes that actually run.
   await applyXctestRunnerAppIcon(builtProductPaths);
-  writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths);
+  requireCertifiedRunnerCacheArtifacts(
+    writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths),
+    derived,
+  );
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -304,11 +308,14 @@ async function tryReuseExistingXctestrun(
       derived,
       xctestrunPath: existing.xctestrunPath,
     });
-    writeRunnerCacheMetadataForArtifacts(
+    requireCertifiedRunnerCacheArtifacts(
+      writeRunnerCacheMetadataForArtifacts(
+        derived,
+        expectedCacheMetadata,
+        existing.xctestrunPath,
+        existing.productPaths,
+      ),
       derived,
-      expectedCacheMetadata,
-      existing.xctestrunPath,
-      existing.productPaths,
     );
     return existing.xctestrunPath;
   } catch (error) {

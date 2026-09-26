@@ -23,6 +23,7 @@ import {
   makeCachedRunnerXctestrun,
   makeProjectScratchDir,
   makeScratchDir,
+  RUNNER_FIXTURE_EXECUTABLE_BYTES,
   seedRunnerProductBundle,
   stripRunnerCacheArtifacts,
   withRunnerDerivedPathEnv,
@@ -30,6 +31,16 @@ import {
   writeRunnerCacheMetadataWithArtifacts,
   writeXctestrunFixture,
 } from './runner-xctestrun.fixtures.ts';
+
+/** Certifies a fixture tree the way the production writer would, and proves it worked. */
+function writeCertifiedRunnerMetadata(params: {
+  derivedPath: string;
+  device: DeviceInfo;
+  xctestrunPath: string;
+  productPaths: string[];
+}): void {
+  assert.equal(writeRunnerCacheMetadataWithArtifacts(params), null);
+}
 
 const mockRunCmdStreaming = vi.fn();
 const { mockRepairMacOsRunnerProductsIfNeeded } = vi.hoisted(() => ({
@@ -93,7 +104,7 @@ test('ensureXctestrunArtifact reuses matching manifest artifacts from another pr
     projectRoot: '/tmp/other-agent-device-worktree',
     productRelativePaths: ['Runner.app'],
   });
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath,
@@ -115,12 +126,12 @@ test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not 
   const productPath = path.join(derivedPath, 'Runner.app');
   const foreignXctestrunPath = path.join(derivedPath, 'foreign.xctestrun');
   const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
-  await fs.promises.mkdir(productPath, { recursive: true });
+  await seedRunnerProductBundle(productPath);
   writeXctestrunFixture(foreignXctestrunPath, {
     projectRoot: '/tmp/other-agent-device-worktree',
     productRelativePaths: ['Runner.app'],
   });
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: foreignXctestrunPath,
@@ -159,18 +170,27 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
   const externalProductPath = path.join(externalDir, 'Runner.app');
   const externalXctestrunPath = path.join(externalDir, 'external.xctestrun');
   const rebuiltXctestrunPath = path.join(derivedPath, 'rebuilt', 'rebuilt.xctestrun');
-  await fs.promises.mkdir(externalProductPath, { recursive: true });
+  await seedRunnerProductBundle(externalProductPath);
   writeXctestrunFixture(externalXctestrunPath, {
     projectRoot,
     productRelativePaths: ['Runner.app'],
   });
   await fs.promises.mkdir(derivedPath, { recursive: true });
-  writeRunnerCacheMetadataWithArtifacts({
-    derivedPath,
-    device: macOsDevice,
-    xctestrunPath: externalXctestrunPath,
-    productPaths: [externalProductPath],
-  });
+  // A manifest naming paths outside its own cache root cannot have been written for this tree,
+  // so the reader declines it. The production writer refuses to publish one, hence the hand-off.
+  fs.writeFileSync(
+    resolveRunnerCacheMetadataPath(derivedPath),
+    JSON.stringify({
+      ...resolveExpectedRunnerCacheMetadata(macOsDevice, projectRoot),
+      artifacts: {
+        xctestrunPath: externalXctestrunPath,
+        xctestrunSize: fs.statSync(externalXctestrunPath).size,
+        xctestrunDigest: '0'.repeat(64),
+        productPaths: [externalProductPath],
+        entries: [{ path: 'Runner', size: 1, mode: 0o755, digest: '1'.repeat(64) }],
+      },
+    }),
+  );
   withRunnerDerivedPathEnv(derivedPath);
 
   mockRunCmdStreaming.mockImplementation(async () => {
@@ -348,7 +368,7 @@ test('ensureXctestrunArtifact prefers validated cache manifest over recursive sc
     new Date(now.getTime() + 5_000),
     new Date(now.getTime() + 5_000),
   );
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: manifestXctestrunPath,
@@ -389,7 +409,7 @@ test('ensureXctestrunArtifact ignores a newer foreign xctestrun beside a certifi
     new Date(now.getTime() + 5_000),
     new Date(now.getTime() + 5_000),
   );
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: manifestXctestrunPath,
@@ -415,18 +435,21 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
     projectRoot: repoRoot,
     productRelativePaths: ['Runner.app'],
   });
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: cachedXctestrunPath,
     productPaths: [productPath],
   });
-  // The failure the old stat signature could not see: same size, same stats, new bytes.
-  const stat = fs.statSync(path.join(productPath, 'Runner'));
-  fs.writeFileSync(path.join(productPath, 'Runner'), Buffer.from('runner-executab\n'), {
-    mode: 0o755,
-  });
-  fs.utimesSync(path.join(productPath, 'Runner'), stat.atime, stat.mtime);
+  // The failure the old stat signature could not see: same length, same mtime, new bytes, so
+  // only a digest can tell. A shorter replacement would trip `size_changed` first.
+  const executablePath = path.join(productPath, 'Runner');
+  const tampered = Buffer.from(RUNNER_FIXTURE_EXECUTABLE_BYTES);
+  tampered[tampered.length - 2] = 'x'.charCodeAt(0);
+  assert.equal(tampered.length, RUNNER_FIXTURE_EXECUTABLE_BYTES.length);
+  const stat = fs.statSync(executablePath);
+  fs.writeFileSync(executablePath, tampered, { mode: 0o755 });
+  fs.utimesSync(executablePath, stat.atime, stat.mtime);
   withRunnerDerivedPathEnv(derivedPath);
 
   mockRunCmdStreaming.mockImplementation(async () => {
@@ -563,7 +586,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
     projectRoot,
     productRelativePaths: ['Runner.app'],
   });
-  writeRunnerCacheMetadataWithArtifacts({
+  writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: cachedXctestrunPath,

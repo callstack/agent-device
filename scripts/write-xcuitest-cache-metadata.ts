@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 import type { RunnerXctestrunCacheMetadata } from '@agent-device/platform-apple/runner/operations';
 import {
   findRunnerXctestrun,
+  isRunnerXcuitestScriptPlatform,
+  requireCertifiedRunnerCacheArtifacts,
   requireRunnerBuildSettingsMatchBuildLog,
   resolveExistingRunnerProductPaths,
   resolveExpectedRunnerCacheMetadata,
@@ -11,14 +13,8 @@ import {
   writeRunnerCacheMetadataForArtifacts,
 } from '@agent-device/platform-apple/runner/operations';
 
-type XcuitestCachePlatform = 'ios' | 'macos' | 'tvos' | 'visionos';
-
 const USAGE =
   'Usage: write-xcuitest-cache-metadata.ts <ios|macos|tvos|visionos> <derived> <destination> <build-log>';
-
-function isScriptPlatform(value: string): value is XcuitestCachePlatform {
-  return value === 'ios' || value === 'macos' || value === 'tvos' || value === 'visionos';
-}
 
 /**
  * Publishes the cache metadata for a `scripts/build-xcuitest-apple.sh` build. The identity half
@@ -39,7 +35,7 @@ function parseWriterInvocation(args: readonly string[]): WriterInvocation {
   if (!platform || !derivedPath || !destination || !buildLogPath) {
     throw new Error(USAGE);
   }
-  if (!isScriptPlatform(platform)) {
+  if (!isRunnerXcuitestScriptPlatform(platform)) {
     throw new Error(`Unsupported platform: ${platform}`);
   }
   return {
@@ -65,7 +61,10 @@ async function writeXcuitestCacheMetadata(
   if (!productPaths || productPaths.length === 0) {
     throw new Error(`Runner products referenced by ${xctestrunPath} are missing`);
   }
-  writeRunnerCacheMetadataForArtifacts(derivedPath, metadata, xctestrunPath, productPaths);
+  requireCertifiedRunnerCacheArtifacts(
+    writeRunnerCacheMetadataForArtifacts(derivedPath, metadata, xctestrunPath, productPaths),
+    derivedPath,
+  );
   return metadata;
 }
 

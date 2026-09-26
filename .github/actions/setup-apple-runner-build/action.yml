@@ -16,13 +16,11 @@ inputs:
     description: 'Registered check id built through `pnpm gate`'
     required: true
   xcuitest-platform:
-    description: 'Optional AGENT_DEVICE_XCUITEST_PLATFORM value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_PLATFORM value the runner build and its cache metadata are keyed by'
+    required: true
   xcuitest-destination:
-    description: 'Optional AGENT_DEVICE_XCUITEST_DESTINATION value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_DESTINATION value, which must carry a platform= token'
+    required: true
 outputs:
   cache-hit:
     description: 'Whether an exact Apple runner build cache was restored'

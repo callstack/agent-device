@@ -4,7 +4,7 @@ import { onTestFinished } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { mkdtempForTest } from './tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { writeRunnerCacheMetadataForArtifacts } from '../runner-cache.ts';
+import { writeRunnerCacheMetadataForArtifacts, type RunnerCacheRefusal } from '../runner-cache.ts';
 import { resolveExpectedRunnerCacheMetadata } from '../runner-xctestrun.ts';
 
 // Scratch trees and certified runner products shared by the tests that exercise
@@ -43,8 +43,13 @@ export function writeXctestrunFixture(
   xctestrunPath: string,
   options: { projectRoot: string; productRelativePaths: string[] },
 ): void {
+  // Paths reach this plist as text, and a checkout directory can carry an `&` or a `'` in its
+  // name. Unescaped, the plist would be malformed and the product-path reader would find nothing,
+  // so the case under test would silently exercise a different path.
   const entries = options.productRelativePaths
-    .map((relativePath) => `        <string>__TESTROOT__/${relativePath}</string>`)
+    .map(
+      (relativePath) => `        <string>${escapeXmlText(`__TESTROOT__/${relativePath}`)}</string>`,
+    )
     .join('\n');
   fs.mkdirSync(path.dirname(xctestrunPath), { recursive: true });
   fs.writeFileSync(
@@ -54,7 +59,7 @@ export function writeXctestrunFixture(
 <plist version="1.0">
 <dict>
   <key>ProjectRootHint</key>
-  <string>${options.projectRoot}</string>
+  <string>${escapeXmlText(options.projectRoot)}</string>
   <key>ProductPaths</key>
   <array>
 ${entries}
@@ -63,6 +68,15 @@ ${entries}
 </plist>`,
     'utf8',
   );
+}
+
+function escapeXmlText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 export function withRunnerDerivedPathEnv(derivedPath: string): void {
@@ -100,23 +114,29 @@ export function stripRunnerCacheArtifacts(
  * A content manifest certifies bytes, so a fixture product needs some. Mirrors what a build
  * leaves behind: a bundle directory holding an executable.
  */
+/** The bytes a fixture product bundle holds, exported so a tamper can keep the same length. */
+export const RUNNER_FIXTURE_EXECUTABLE_BYTES = Buffer.from('runner-executable\n');
+
 export async function seedRunnerProductBundle(bundlePath: string): Promise<void> {
   await fs.promises.mkdir(bundlePath, { recursive: true });
   await fs.promises.writeFile(
     path.join(bundlePath, path.basename(bundlePath, '.app')),
-    Buffer.from('runner-executable\n'),
+    RUNNER_FIXTURE_EXECUTABLE_BYTES,
     { mode: 0o755 },
   );
 }
 
-/** Publishes the metadata the production writer would, so a fixture tree is really certified. */
+/**
+ * Publishes the metadata the production writer would, so a fixture tree is really certified.
+ * Returns the refusal when the tree cannot be certified, which callers assert rather than ignore.
+ */
 export function writeRunnerCacheMetadataWithArtifacts(params: {
   derivedPath: string;
   device: DeviceInfo;
   xctestrunPath: string;
   productPaths: string[];
-}): void {
-  writeRunnerCacheMetadataForArtifacts(
+}): RunnerCacheRefusal | null {
+  return writeRunnerCacheMetadataForArtifacts(
     params.derivedPath,
     resolveExpectedRunnerCacheMetadata(params.device, REPO_ROOT_FOR_TEST),
     params.xctestrunPath,

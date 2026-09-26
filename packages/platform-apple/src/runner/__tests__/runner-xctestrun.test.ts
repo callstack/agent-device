@@ -11,6 +11,8 @@ import {
   buildRunnerSessionXctestrunPathCleanupPattern,
   buildRunnerSessionXctestrunSuffix,
 } from '../runner-artifact-env.ts';
+import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
+import { writeXctestrunFixture } from './runner-xctestrun.fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
@@ -30,6 +32,7 @@ const mockRunCmdSync = vi.fn();
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { findXctestrun, scoreXctestrunCandidate } from '../runner-artifact.ts';
 import { evaluateExistingXctestrun } from '../runner-cache.ts';
+import { resolveExistingXctestrunProductPaths } from '../runner-xctestrun-products.ts';
 import type { RunnerXctestrunCacheArtifacts } from '../runner-cache-metadata.ts';
 import {
   ensureXctestrunArtifact,
@@ -221,7 +224,7 @@ test('the build script and the metadata writer publish one iOS simulator identit
   await withTempDir('runner-cache-metadata-', async (root) => {
     const project = seedRunnerBuildFixture(root);
     const buildSettings = runBuildSettings(project);
-    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildSettings(buildSettings));
+    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildArguments(buildSettings));
 
     const written = runScript(project.root, 'write-xcuitest-cache-metadata.ts', [
       'ios',
@@ -274,13 +277,38 @@ test('the build script and the metadata writer publish one iOS simulator identit
   });
 }, 120_000);
 
+test('an .xctestrun fixture holding paths that need XML escaping names those products', async () => {
+  // CI checkouts and fork names can carry `&` or `'`. Written into the plist unescaped they make
+  // it malformed, and the reuse cases built on this fixture would silently exercise a rebuild
+  // instead of the path they name.
+  const root = mkdtempForTestSync('agent-device-xctestrun-escaping-');
+  const projectRoot = path.join(root, "a & b's <worktree>");
+  const derivedPath = path.join(projectRoot, '.tmp', 'derived');
+  const bundlePath = path.join(
+    derivedPath,
+    'Build',
+    'Products',
+    'Debug-iphonesimulator',
+    "Runner & Co's.app",
+  );
+  await fs.promises.mkdir(bundlePath, { recursive: true });
+  await fs.promises.writeFile(path.join(bundlePath, 'Runner'), 'runner', { mode: 0o755 });
+  const xctestrunPath = path.join(derivedPath, 'Build', 'Products', 'Runner.xctestrun');
+  writeXctestrunFixture(xctestrunPath, {
+    projectRoot,
+    productRelativePaths: ["Debug-iphonesimulator/Runner & Co's.app"],
+  });
+
+  assert.deepEqual(await resolveExistingXctestrunProductPaths(xctestrunPath), [bundlePath]);
+});
+
 test('the metadata writer refuses a build log whose recipe it did not record', async () => {
   await withTempDir('runner-cache-metadata-', async (root) => {
     const project = seedRunnerBuildFixture(root);
     const drifted = runBuildSettings(project).filter(
       (setting) => !setting.startsWith('ONLY_ACTIVE_ARCH='),
     );
-    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildSettings(drifted));
+    fs.writeFileSync(project.buildLogPath, xcodebuildLogWithBuildArguments(drifted));
 
     const written = runScript(project.root, 'write-xcuitest-cache-metadata.ts', [
       'ios',
@@ -445,29 +473,6 @@ function runScript(
     },
   );
   return { status: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
-}
-
-/**
- * `xcodebuild`'s own echo of the recipe it was handed: build settings under their own header,
- * and the `-I` flags it does not treat as settings on the invocation line.
- */
-function xcodebuildLogWithBuildSettings(settings: readonly string[]): string {
-  const isSetting = (setting: string) => /^[A-Z][A-Z0-9_]*=/.test(setting);
-  const buildSettings = settings.filter(isSetting).map((setting) => {
-    const index = setting.indexOf('=');
-    return `    ${setting.slice(0, index)} = ${setting.slice(index + 1)}`;
-  });
-  const flags = settings.filter((setting) => !isSetting(setting));
-  return [
-    'Command line invocation:',
-    `    /usr/bin/xcodebuild build-for-testing ${flags.join(' ')}`.trimEnd(),
-    '',
-    'Build settings from command line:',
-    ...buildSettings,
-    '',
-    'Resolve Package Graph',
-    '',
-  ].join('\n');
 }
 
 function readRunnerCacheManifest(derivedPath: string): any {

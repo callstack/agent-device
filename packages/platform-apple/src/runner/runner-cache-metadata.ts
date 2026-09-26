@@ -639,6 +639,7 @@ function resolveRunnerSwiftFlags(env: NodeJS.ProcessEnv): string {
 const BUILD_SETTINGS_HEADER = /^\s*Build settings from command line:\s*$/;
 const BUILD_SETTING_LINE = /^\s+([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/;
 const RECORDED_BUILD_SETTING = /^([A-Z][A-Z0-9_]*)=(.*)$/;
+const COMMAND_LINE_INVOCATION_HEADER = /^\s*Command line invocation:\s*$/;
 
 export type RunnerBuildSettingEvidence = {
   key: string;
@@ -647,19 +648,31 @@ export type RunnerBuildSettingEvidence = {
 };
 
 /**
- * The build settings `xcodebuild` echoed back, or null when the log holds no such block. That
- * echo is the build's own record of the recipe it was handed.
+ * What one build log says it was handed: the settings block `xcodebuild` echoed, and the
+ * invocation line that carries every argument, including the ones that are not build settings.
+ * Null when the log holds no settings block at all.
  */
-function readRunnerBuildSettingsFromBuildLog(logPath: string): Map<string, string> | null {
+type RunnerBuildLogRecipe = {
+  settings: Map<string, string>;
+  invocationLine: string;
+};
+
+function readRunnerBuildLogRecipe(logPath: string): RunnerBuildLogRecipe | null {
   let contents: string;
   try {
     contents = fs.readFileSync(logPath, 'utf8');
   } catch {
     return null;
   }
+  const lines = contents.split('\n');
   const settings = new Map<string, string>();
   let inBlock = false;
-  for (const line of contents.split('\n')) {
+  let invocationLine = '';
+  for (const [index, line] of lines.entries()) {
+    if (COMMAND_LINE_INVOCATION_HEADER.test(line)) {
+      invocationLine = lines[index + 1] ?? '';
+      continue;
+    }
     if (BUILD_SETTINGS_HEADER.test(line)) {
       inBlock = true;
       continue;
@@ -669,26 +682,50 @@ function readRunnerBuildSettingsFromBuildLog(logPath: string): Map<string, strin
     if (!setting) break;
     settings.set(setting[1]!, setting[2]!.trimEnd());
   }
-  return inBlock ? settings : null;
+  return inBlock ? { settings, invocationLine } : null;
+}
+
+/** Every argument the cache identity records as a recipe, in the `xcodebuild` spelling. */
+function recordedRunnerBuildArguments(metadata: RunnerXctestrunCacheMetadata): string[] {
+  return [
+    ...metadata.runnerBundleBuildSettings,
+    ...metadata.runnerSigningBuildSettings,
+    ...metadata.runnerPerformanceBuildSettings,
+    ...metadata.runnerArchBuildSettings,
+    ...metadata.runnerSandboxBuildArgs,
+  ];
 }
 
 function recordedRunnerBuildSettings(
   metadata: RunnerXctestrunCacheMetadata,
 ): Record<string, string> {
   const recorded: Record<string, string> = {};
-  for (const arg of [
-    ...metadata.runnerBundleBuildSettings,
-    ...metadata.runnerSigningBuildSettings,
-    ...metadata.runnerPerformanceBuildSettings,
-    ...metadata.runnerArchBuildSettings,
-    ...metadata.runnerSandboxBuildArgs,
-  ]) {
+  for (const arg of recordedRunnerBuildArguments(metadata)) {
     const setting = RECORDED_BUILD_SETTING.exec(arg);
     if (setting) {
       recorded[setting[1]!] = setting[2]!;
     }
   }
   return recorded;
+}
+
+/**
+ * Recorded arguments `xcodebuild` echoes on the invocation line rather than in its settings block,
+ * which is where its whole recipe shows: `-I` user-default flags such as the package-sandbox
+ * disables. Without this the settings diff would call a recipe complete while ignoring them.
+ */
+function diffRunnerInvocationFlagsAgainstBuildLog(
+  metadata: RunnerXctestrunCacheMetadata,
+  invocationLine: string,
+): RunnerBuildSettingEvidence[] {
+  return recordedRunnerBuildArguments(metadata)
+    .filter((arg) => !RECORDED_BUILD_SETTING.test(arg))
+    .filter((arg) => !invocationLine.includes(arg))
+    .map((arg) => ({
+      key: '(invocation flag)',
+      expected: arg,
+      actual: 'absent from the "Command line invocation:" line',
+    }));
 }
 
 /**
@@ -699,7 +736,7 @@ function diffRunnerBuildSettingsAgainstBuildLog(
   metadata: RunnerXctestrunCacheMetadata,
   logPath: string,
 ): RunnerBuildSettingEvidence[] {
-  const reported = readRunnerBuildSettingsFromBuildLog(logPath);
+  const reported = readRunnerBuildLogRecipe(logPath);
   if (!reported) {
     return [
       {
@@ -709,20 +746,25 @@ function diffRunnerBuildSettingsAgainstBuildLog(
       },
     ];
   }
-  return Object.entries(recordedRunnerBuildSettings(metadata))
+  const settingDifferences = Object.entries(recordedRunnerBuildSettings(metadata))
     .filter(([key, expected]) => {
-      const actual = reported.get(key);
+      const actual = reported.settings.get(key);
       return actual === undefined ? expected !== '' : actual !== expected;
     })
     .map(([key, expected]) => ({
       key,
       expected,
-      actual: reported.get(key) ?? '(absent)',
+      actual: reported.settings.get(key) ?? '(absent)',
     }));
+  return [
+    ...settingDifferences,
+    ...diffRunnerInvocationFlagsAgainstBuildLog(metadata, reported.invocationLine),
+  ];
 }
 
 /**
- * Fails when a build log shows a recipe other than the one `metadata` records, so a caller that
+ * Fails when a build log shows a recipe other than the one `metadata` records — a setting whose
+ * value differs or went missing, or a recorded flag absent from the invocation — so a caller that
  * drifted from this identity cannot have its products certified under it.
  */
 export function requireRunnerBuildSettingsMatchBuildLog(
