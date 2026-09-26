@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-2991/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2991/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-2991/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-2991/static/js/index.966ba4696f.js"></script>
+<script defer src="/agent-device/pr-preview/pr-2991/static/js/index.59e3f256d0.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -244,6 +244,7 @@ See <a href="/agent-device/pr-preview/pr-2991/docs/remote-proxy#human-takeover" 
 <li>If a fresh runner launch gets stuck before accepting connections, Agent Device invalidates that runner session and launches it once more without forcing a rebuild.</li>
 <li>CI may cache <code>~/.agent-device/apple-runner/derived</code> when the cache key includes the exact Agent Device package contents and selected Xcode version.</li>
 <li>Runner reuse is authorized only by the cache metadata&#x27;s content manifest: a restored tree whose files no longer match the recorded digests, modes, or symlink targets is discarded and rebuilt. A cache key must stay exact — the runtime never falls back to a broader cache.</li>
+<li>Certification is fail-closed: when a product tree cannot be certified at all — a product escaping the derived-data root, an unreadable subtree, a file over 128 MB, or a non-regular entry such as a socket — the build fails with <code>runner_cache_uncertifiable</code> naming the path instead of launching uncertified bytes. Point <code>AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH</code> at a plain directory the current user owns; replacing the tree (the error&#x27;s hint says how) clears a refusal.</li>
 <li>Runner build/start output is written to the session&#x27;s <code>runner.log</code>. The top-level <code>daemon.log</code> is reserved for daemon lifecycle/startup issues.</li>
 </ul>
 <h2 class="rp-toc-include" id="tv-targets"><a href="#tv-targets" class="rp-header-anchor rp-link" aria-hidden="true">#</a>TV targets</h2>
