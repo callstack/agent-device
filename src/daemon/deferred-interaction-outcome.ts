@@ -311,7 +311,7 @@ async function capturePostActionSnapshotAttempt(
  * (`post-gesture-stability.ts`): reads the pending record, supplies the
  * interaction-surface comparators from interaction-outcome-policy as hooks,
  * and — as the R7 owner — clears `postGestureStabilization` once the loop
- * returns, on settle and timeout alike.
+ * has run, on settle, timeout and an aborted capture alike.
  */
 export async function capturePostGestureStabilizedResult<T>(params: {
   session: SessionState | undefined;
@@ -325,32 +325,37 @@ export async function capturePostGestureStabilizedResult<T>(params: {
     return { value: params.initial ?? (await capture()) };
   }
 
-  const outcome = await runPostGestureStabilityLoop({
-    pending: {
-      action: pending.action,
-      positionals: pending.positionals ?? [],
-      baselineSignature: pending.baselineSignature,
-      baselineBackend: pending.baselineBackend,
-    },
-    needsBaselineDistrust: requiresPostGestureBaselineDistrust(session.device),
-    initial: params.initial,
-    hooks: {
-      capture,
-      readSurface: (value) => {
-        const snapshot = readSnapshot(value);
-        return {
-          signature: buildInteractionSurfaceSignature(snapshot.nodes),
-          backend: snapshotSurfaceComparisonKey(snapshot),
-        };
+  // Entering the loop consumes the record. It is cleared on every exit: a settled surface, the
+  // stabilization timeout, or a capture that threw. A later capture on the session never pays this
+  // gesture's loop again.
+  try {
+    return await runPostGestureStabilityLoop({
+      pending: {
+        action: pending.action,
+        positionals: pending.positionals ?? [],
+        baselineSignature: pending.baselineSignature,
+        baselineBackend: pending.baselineBackend,
       },
-      signaturesStable: areInteractionSurfaceSignaturesStable,
-      classifyBaselineEvidence: classifyBaselineSurfaceEvidence,
-      surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
-      summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
-    },
-  });
-  clearPostGestureStabilization(session);
-  return outcome;
+      needsBaselineDistrust: requiresPostGestureBaselineDistrust(session.device),
+      initial: params.initial,
+      hooks: {
+        capture,
+        readSurface: (value) => {
+          const snapshot = readSnapshot(value);
+          return {
+            signature: buildInteractionSurfaceSignature(snapshot.nodes),
+            backend: snapshotSurfaceComparisonKey(snapshot),
+          };
+        },
+        signaturesStable: areInteractionSurfaceSignaturesStable,
+        classifyBaselineEvidence: classifyBaselineSurfaceEvidence,
+        surfacesIdentical: haveIdenticalDiscriminatingSurfaces,
+        summarizeDivergence: summarizeDiscriminatingSurfaceDivergence,
+      },
+    });
+  } finally {
+    clearPostGestureStabilization(session);
+  }
 }
 
 /** The stabilized attempt as a capture result: the tree carries the gesture's outcome as its own fact. */
