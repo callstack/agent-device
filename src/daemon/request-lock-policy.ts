@@ -9,7 +9,7 @@ import {
   type SessionSelectorConflictKey,
 } from './session-selector.ts';
 import {
-  isApplePlatform,
+  platformSelectorsConflict,
   publicPlatformString,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
@@ -214,17 +214,6 @@ function listFreshSessionConflicts(
   appendFreshSessionTargetConflict(conflicts, flags, normalizedLockPlatform);
   appendFreshSessionDeviceSelectorConflicts(conflicts, flags, normalizedLockPlatform);
   return conflicts;
-}
-
-function platformSelectorsConflict(
-  requested: PlatformSelector | undefined,
-  locked: PlatformSelector | undefined,
-): boolean {
-  if (!requested || !locked) return false;
-  if (requested === locked) return false;
-  if (requested === 'apple') return !isApplePlatform(locked);
-  if (locked === 'apple') return !isApplePlatform(requested);
-  return true;
 }
 
 function appendFreshSessionTargetConflict(

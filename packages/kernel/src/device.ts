@@ -249,6 +249,31 @@ export function matchesPlatformSelector(
   return device.platform === selector;
 }
 
+/**
+ * Whether two `--platform` selections can name the SAME device.
+ *
+ * Selectors name a platform on one of two axes: the collapsed `apple` family, or an Apple leaf
+ * (`ios`/`macos`) — plus the non-Apple platforms, which have one axis each. Equality of the two
+ * strings is therefore not the question: `apple` and `ios` name overlapping devices while `ios` and
+ * `macos` do not. The `apple` selector is only equivalent to a leaf, never to a non-Apple platform.
+ *
+ * Comparing selectors by string instead was the shape behind #2962, where a remote connection bound
+ * to the public `ios` was compared with an `apple`-axis value and every iOS install was refused.
+ * Any caller that decides "this request targets a different platform than the one already bound"
+ * has to answer it on both axes, which is why this lives beside the selectors rather than in one
+ * caller.
+ */
+export function platformSelectorsConflict(
+  requested: PlatformSelector | undefined,
+  bound: PlatformSelector | undefined,
+): boolean {
+  if (!requested || !bound) return false;
+  if (requested === bound) return false;
+  if (requested === 'apple') return !isApplePlatform(bound);
+  if (bound === 'apple') return !isApplePlatform(requested);
+  return true;
+}
+
 export function resolveApplePlatformName(
   platformOrTarget: ApplePlatform | DeviceTarget | undefined,
   appleOs?: AppleOS,
@@ -415,14 +440,27 @@ function deviceIdentityMistakenForNameHint(
   if (!flag) return undefined;
   return (
     `${deviceName} is the id of ${JSON.stringify(identityMatch.name)}, not its name. ` +
-    `Did you mean ${flag} ${deviceName}?`
+    `Did you mean --${flag} ${deviceName}?`
   );
 }
 
-/** The identity flag that can actually resolve a device on this platform, if one exists. */
-function deviceIdentityFlag(platform: Platform): '--udid' | '--serial' | undefined {
-  if (isApplePlatform(platform)) return '--udid';
-  if (isSerialAddressablePlatform(platform)) return '--serial';
+export type DeviceIdentityFlag = 'udid' | 'serial';
+
+/**
+ * Which flag carries a device identity on a platform: `udid` addresses Apple devices, `serial`
+ * addresses the serial-addressable ones. Resolution rejects the wrong pairing
+ * (`assertSelectorFlagMatchesPlatform`), and a caller that resolved a device and has to re-issue it
+ * as flags — a remote lease request that must bind the device it just picked — has to name the same
+ * flag, or the two drift and the request binds a selector that resolves a DIFFERENT device.
+ *
+ * Two sites still spell the pairing out inline; each differs from this rule in a way that is its own
+ * decision, so they are tracked as follow-ups rather than folded in here.
+ */
+export function deviceIdentityFlag(
+  platform: Platform | PublicPlatform,
+): DeviceIdentityFlag | undefined {
+  if (isApplePlatform(platform)) return 'udid';
+  if (isSerialAddressablePlatform(platform)) return 'serial';
   return undefined;
 }
 
@@ -472,10 +510,9 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
 
 function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
   const first = candidates[0];
-  const identitySelector =
-    first && isSerialAddressablePlatform(first.platform)
-      ? `--serial ${first.id}`
-      : `--udid ${first?.id ?? '<id>'}`;
+  const identitySelector = first
+    ? `--${deviceIdentityFlag(first.platform) ?? 'udid'} ${first.id}`
+    : `--udid <id>`;
   return (
     `Select the intended device explicitly, for example ${identitySelector} ` +
     `or --device ${JSON.stringify(first?.name ?? '<name>')}. ` +

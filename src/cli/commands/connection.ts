@@ -11,6 +11,7 @@ import {
   readRemoteConnectionState,
   remoteConnectionLeaseIdentityMatches,
   removeRemoteConnectionState,
+  connectionPlatformMatchesSelection,
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -424,9 +425,9 @@ function optionalConnectionFieldsMatch(
   state: RemoteConnectionState,
   options: Parameters<typeof isCompatibleConnection>[1],
 ): boolean {
+  if (!connectionPlatformMatchesSelection(state, options.flags.platform)) return false;
   const fieldsMatch = [
     [state.leaseBackend, options.desiredLeaseBackend],
-    [state.platform, options.flags.platform],
     [state.target, options.flags.target],
   ].every(([left, right]) => right === undefined || left === right);
   return fieldsMatch && remoteConnectionLeaseIdentityMatches(state, options.connection);
