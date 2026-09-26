@@ -316,6 +316,21 @@ const UNRENEWABLE_LEASE_BEAT_REASONS: ReadonlySet<unknown> = new Set([
 ]);
 
 /**
+ * Whether a beat failed for a reason every successor will repeat: the lease is gone, or the daemon
+ * refused a fact baked into the beat itself. A beat's scope and ttl never change across the phase,
+ * so an `INVALID_ARGS` refusal — an out-of-range ttl, an unusable lease id — is terminal without
+ * waiting out the window it can no longer renew.
+ */
+function isTerminalLeaseBeatError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (LOST_LEASE_BEAT_REASONS.has(error.details?.reason) ||
+      UNRENEWABLE_LEASE_BEAT_REASONS.has(error.details?.reason) ||
+      error.code === 'INVALID_ARGS')
+  );
+}
+
+/**
  * Runs one client-side phase under a lease it does not own the clock of.
  *
  * A lease renews when a request is admitted, and the daemon protects a lease while ADMITTED work
@@ -423,14 +438,6 @@ function leaseWindowFromHeartbeatResponse(response: unknown): number | undefined
   const heartbeatAt = lease?.heartbeatAt;
   if (typeof expiresAt !== 'number' || typeof heartbeatAt !== 'number') return undefined;
   return expiresAt > heartbeatAt ? expiresAt - heartbeatAt : undefined;
-}
-
-function isTerminalLeaseBeatError(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    (LOST_LEASE_BEAT_REASONS.has(error.details?.reason) ||
-      UNRENEWABLE_LEASE_BEAT_REASONS.has(error.details?.reason))
-  );
 }
 
 type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };

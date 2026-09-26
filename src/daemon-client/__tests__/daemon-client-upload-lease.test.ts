@@ -279,6 +279,31 @@ describe('runProtectedLeaseWork', () => {
     });
   }
 
+  test('a beat refused INVALID_ARGS ends the phase, because the beat asks the same thing forever', async () => {
+    vi.useFakeTimers();
+    // The beat's scope and ttl are fixed when it is built, so a daemon that rejects them — a ttl
+    // outside [minLeaseTtlMs, maxLeaseTtlMs] — rejects every successor identically. It carries no
+    // reason to key on, so the code is the signal; waiting it out only spends the upload.
+    const heartbeat = vi.fn(async () => {
+      throw new AppError('INVALID_ARGS', 'Lease ttlMs must be between 5000 and 3600000.');
+    });
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      intervalMs: 10,
+      task: () => upload.promise,
+      heartbeat,
+    });
+
+    const rejected = assert.rejects(
+      running,
+      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    assert.equal(heartbeat.mock.calls.length, 1, 'a refusal the beat cannot fix is not retried');
+    await rejected;
+    upload.resolve('too late');
+  });
+
   test('a beat that ends the protection cancels the upload the phase is running', async () => {
     vi.useFakeTimers();
     const heartbeat = vi.fn(async () => {
