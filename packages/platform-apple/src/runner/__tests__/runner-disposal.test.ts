@@ -15,8 +15,13 @@ vi.mock('../runner-io.ts', async (importOriginal) => {
   return { ...actual, cleanupTempFile: mockCleanupTempFile };
 });
 
-import { abortRunnerSessionsAndPrepProcesses, disposeRunnerSession } from '../runner-disposal.ts';
 import {
+  abortRunnerSessionsAndPrepProcesses,
+  disposeRunnerSession,
+  runnerLeaseCleanupAdapter,
+} from '../runner-disposal.ts';
+import {
+  buildDetachedRunnerLease,
   currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
   withRunnerLeaseLock,
@@ -181,6 +186,57 @@ test('disposal serializes behind a successor reclaim window and never terminates
   expect(simulatorTerminateCalls()).toEqual([]);
   expect(currentRunnerLeaseOwnerToken(IOS_SIMULATOR.id)).toBe('owner-toctou-successor');
 });
+
+test('a leased cleanup selects the launch named by the artifact the lease recorded', async () => {
+  // The launch is found by matching its argv, and a lease knows the artifact that launch was
+  // started with. Detaching is why following the path rather than the token matters: it rewrites
+  // `ownerToken` to `detached-<token>` while the handed-over xcodebuild keeps the name the writer
+  // gave it, so a pattern rebuilt from the token names a file that never existed.
+  const detached = buildDetachedRunnerLease(
+    makeRunnerLease({ deviceId: IOS_SIMULATOR.id, ownerToken: 'owner-4242-ab12cd34' }),
+  );
+  expect(detached.ownerToken).toBe('detached-owner-4242-ab12cd34');
+
+  await runnerLeaseCleanupAdapter.cleanupRunnerXcodebuildProcesses({
+    deviceId: detached.deviceId,
+    xctestrunPath: detached.xctestrunPath,
+  });
+
+  const pattern = runnerXcodebuildPkillPatterns()[0];
+  expect(pattern).toBeDefined();
+  const selects = (xctestrunPath: string): boolean =>
+    new RegExp(pattern ?? '').test(runnerLaunchArgv(xctestrunPath));
+  expect(selects(detached.xctestrunPath)).toBe(true);
+  // A launch this lease does not name is somebody else's, and must stay untouched.
+  expect(selects('/tmp/other/AgentDeviceRunner.xctestrun')).toBe(false);
+});
+
+test('a cleanup with no recorded artifact sweeps that device launches only', async () => {
+  // A reclaim with no lease to read knows the device and nothing else, so it keeps the released
+  // pre-owner-token bytes and stays scoped to that device instead of every xcodebuild on the host.
+  await runnerLeaseCleanupAdapter.cleanupRunnerXcodebuildProcesses({ deviceId: 'SIM-OTHER' });
+
+  const pattern = runnerXcodebuildPkillPatterns()[0];
+  expect(pattern).toBeDefined();
+  const selects = (fileName: string): boolean =>
+    new RegExp(pattern ?? '').test(runnerLaunchArgv(`/tmp/${fileName}`));
+  expect(selects('AgentDeviceRunner.env.session-SIM-OTHER-8123.xctestrun')).toBe(true);
+  expect(selects('AgentDeviceRunner.env.session-SIM-VICTIM-8123.xctestrun')).toBe(false);
+  // A launch a lease still names is not this sweep's to take: it is reached by its own lease.
+  expect(
+    selects('AgentDeviceRunner.env.session-SIM-OTHER-owner-4242-ab12cd34-8123.xctestrun'),
+  ).toBe(false);
+});
+
+function runnerXcodebuildPkillPatterns(): string[] {
+  return mockRunAppleToolCommand.mock.calls
+    .filter(([tool, args]) => tool === 'pkill' && (args as string[]).includes('-f'))
+    .map(([, args]) => String((args as string[])[2]));
+}
+
+function runnerLaunchArgv(xctestrunPath: string): string {
+  return `xcodebuild test-without-building -xctestrun ${xctestrunPath}`;
+}
 
 function simulatorTerminateCalls(): unknown[] {
   return mockRunXcrun.mock.calls.filter(([args]) => (args as string[]).includes('terminate'));
