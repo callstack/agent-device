@@ -67,6 +67,42 @@ one minute, while a cloud WebDriver connection profile asks for ten. A single co
 longer than its own lease is therefore ordinary on the default and only reachable through a profile
 on the longer one.
 
+## Client-side work that precedes admission
+
+Protecting admitted work covers nothing that happens before a request is admitted. Installing an
+artifact uploads it from the caller while the request that will consume it has not been admitted yet,
+so an upload slower than the lease's inactivity window expired the lease paying for the device the
+bytes were going to (#2946). The caller therefore beats the lease over the ordinary transport for as
+long as that phase runs, naming the lease scope exactly as the command named it and no payload of its
+own. An install names no window, so its beats renew for the window the lease already carries; a
+caller that did name one keeps renewing on it. Resolving an absent window to the registry default
+instead — which is what a heartbeat used to do — quietly shortened every lease allocated above that
+default, which is the other half of why the upload could not survive. Request admission had its own
+copy of that mistake: it named a proxy-specific default for every admitted request, so a lease
+allocated longer than the default lost its window on the next command. Admission renews on the lease's
+window too; the window a lease carries is the one its client named when it allocated.
+
+The first beat is fired when the phase starts, not one cadence in, because a beat is what proves the
+lease the upload is spending time on is still alive — a lease shorter than any fixed cadence would
+otherwise lapse before anything renewed it. A lease already gone is caught early, but not before the
+phase begins: hashing, the preflight, and the start of the stream can all run while the first beat is
+still outstanding, so what the first beat buys is that the loss is learned during the upload rather
+than after it. Each beat answers with the window it just renewed, and the loop arms its successor when
+the beat starts rather than when it settles, so a beat that never answers is abandoned on schedule
+instead of taking the schedule with it; the beat's own budget is capped at the cadence it started on,
+which is what keeps one stalled round trip from outliving the window it exists to protect. A phase
+that settles does not wait on a beat still in flight.
+
+A beat is a fresh request each time, never the protected request rewritten: a request identity is
+what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
+that finds the lease gone, or finds that this request can never renew it — its scope is missing or
+belongs to another lease, or the daemon rejects the scope and window the beat itself was built with,
+which no successor will ask differently — ends the phase with that error and cancels the upload rather
+than finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails
+for any other reason is reported and survived, because a later beat covers one lost request — including
+one that was abandoned at its budget rather than answered, which is what makes that promise hold for a
+stalled round trip and not only for one that fails fast.
+
 ## Human control
 
 Human-control holds coexist with an open remote session. They belong to `LeaseRegistry` and use

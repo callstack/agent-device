@@ -26,6 +26,7 @@ import {
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
+import { buildUploadLeaseHeartbeat, runProtectedLeaseWork } from './daemon-client-lease-beat.ts';
 
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
@@ -61,7 +62,10 @@ export async function sendToDaemon(
     { requestId, session: req.session },
   );
   const info = daemon.info;
-  const preparedRemoteRequest = await prepareRemoteRequestArtifacts(requestWithoutAuthFlag, info);
+  const preparedRemoteRequest = await runProtectedLeaseWork({
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, requestWithoutAuthFlag),
+    task: (signal) => prepareRemoteRequestArtifacts(requestWithoutAuthFlag, info, signal),
+  });
   writeInstallInProgressNotice(requestWithoutAuthFlag.command);
 
   const request = buildTransportRequest(

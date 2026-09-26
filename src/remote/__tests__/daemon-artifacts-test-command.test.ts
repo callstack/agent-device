@@ -12,6 +12,7 @@ import { prepareRemoteRequestArtifacts } from '../daemon-artifacts.ts';
 
 const REMOTE = { baseUrl: 'http://remote-mac.example.test:7777/agent-device', token: 'secret' };
 const LOCAL = { token: 'secret' };
+const NO_CANCELLATION = new AbortController().signal;
 
 function testRequest(artifactsDir: string | undefined, cwd = '/repo') {
   return {
@@ -27,6 +28,7 @@ test('a remote daemon redirects an explicit --artifacts-dir to a temp path it ow
   const prepared = await prepareRemoteRequestArtifacts(
     testRequest('remote-device-artifacts/ad-test'),
     REMOTE,
+    NO_CANCELLATION,
   );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
@@ -39,7 +41,11 @@ test('a remote daemon redirects an explicit --artifacts-dir to a temp path it ow
 });
 
 test('a remote daemon redirects the default artifacts directory too', async () => {
-  const prepared = await prepareRemoteRequestArtifacts(testRequest(undefined), REMOTE);
+  const prepared = await prepareRemoteRequestArtifacts(
+    testRequest(undefined),
+    REMOTE,
+    NO_CANCELLATION,
+  );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
   assert.equal(typeof redirected, 'string');
@@ -54,6 +60,7 @@ test('a remote daemon leaves an already-absolute --artifacts-dir as the download
   const prepared = await prepareRemoteRequestArtifacts(
     testRequest('/ci/artifacts/ad-test'),
     REMOTE,
+    NO_CANCELLATION,
   );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
@@ -65,6 +72,7 @@ test('a local daemon leaves --artifacts-dir untouched', async () => {
   const prepared = await prepareRemoteRequestArtifacts(
     testRequest('remote-device-artifacts/ad-test'),
     LOCAL,
+    NO_CANCELLATION,
   );
 
   assert.equal(

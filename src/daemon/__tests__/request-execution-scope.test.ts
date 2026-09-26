@@ -224,8 +224,8 @@ test('leased session admission uses stored lease metadata and heartbeats', async
   expect(scope.sessionName).toBe('default');
   const activeLease = leaseRegistry.listActiveLeases()[0];
   expect(activeLease?.heartbeatAt).toBe(2_000);
-  expect(activeLease?.expiresAt).toBe(302_000);
-  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(302_000);
+  expect(activeLease?.expiresAt).toBe(62_000);
+  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
 });
 
 test('leased session heartbeat is serialized with the request execution lock', async () => {

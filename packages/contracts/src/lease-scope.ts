@@ -4,7 +4,6 @@ import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
-export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
 
 const REQUIRED_PROXY_LEASE_FIELDS = [
   'leaseId',
@@ -294,6 +293,32 @@ export function isProxyLeaseScope(scope: LeaseScope): boolean {
 export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
   if (!isProxyLeaseScope(scope)) return [];
   return REQUIRED_PROXY_LEASE_FIELDS.filter((field) => !scope[field]);
+}
+
+/**
+ * Why a lease stopped being ours: it is gone, spent, or taken back.
+ *
+ * This is the whole taxonomy of "the lease is no longer usable" as the daemon reports it, and both
+ * readers ask the same question — a client deciding whether a connection still owns a device, and a
+ * lease beat deciding whether an upload is still worth finishing. A reason naming a mismatch between
+ * a request and a lease is not in here: that says something about the request, not the lease.
+ */
+const INACTIVE_LEASE_REASONS: ReadonlySet<unknown> = new Set([
+  'LEASE_NOT_FOUND',
+  'LEASE_EXPIRED',
+  'LEASE_REVOKED',
+]);
+
+/** Whether `error` says the lease is gone rather than merely unavailable to this request. */
+export function isInactiveLeaseError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Readonly<{ code?: unknown }>).code === 'UNAUTHORIZED' &&
+    INACTIVE_LEASE_REASONS.has(
+      (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
+    )
+  );
 }
 
 function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {

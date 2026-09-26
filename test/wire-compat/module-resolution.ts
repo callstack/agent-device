@@ -35,6 +35,7 @@ export type ResolvedOrigin =
  * `DaemonRequest`), so treating the constructor as a leaf loses nothing.
  */
 const TS_GLOBALS = new Set([
+  'AbortSignal',
   'Array',
   'Awaited',
   'Date',

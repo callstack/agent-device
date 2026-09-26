@@ -23,6 +23,7 @@ import {
   assertLeaseOwnerScope,
   assertLeaseScopeMatch,
   leaseDeviceBindingKey,
+  leaseOwnTtlMs,
   leaseRunBindingKey,
 } from './lease-registry-scope.ts';
 import { DeviceMutationDrain } from './device/device-mutation-drain.ts';
@@ -107,13 +108,21 @@ export class LeaseRegistry {
     return this.refreshLease(existingLease, leaseTtlMs);
   }
 
+  /**
+   * Extends a lease's life. A request naming a `ttlMs` asks for that inactivity window; one naming
+   * none renews for the window the lease already carries, the way protected work renews for its
+   * existing one (ADR 0007). Resolving an absent `ttlMs` to the registry default instead would
+   * shorten a lease every time a caller heartbeats without repeating its allocation TTL — which is
+   * what an admitted request does, and what expired the lease paying for a device mid-upload (#2946).
+   */
   heartbeatLease(request: HeartbeatLeaseRequest): DeviceLease {
     const leaseId = normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.getActiveLease(leaseId);
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
-    const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
+    const leaseTtlMs =
+      request.ttlMs === undefined ? leaseOwnTtlMs(lease) : this.resolveLeaseTtlMs(request.ttlMs);
     return this.refreshLease(lease, leaseTtlMs);
   }
 
@@ -427,11 +436,7 @@ export class LeaseRegistry {
   private refreshProtectedLease(leaseId: string | undefined, at: number): void {
     const lease = leaseId ? this.leases.get(leaseId) : undefined;
     if (lease) {
-      this.refreshLease(
-        lease,
-        lease.expiresAt - lease.heartbeatAt,
-        Math.max(at, lease.heartbeatAt),
-      );
+      this.refreshLease(lease, leaseOwnTtlMs(lease), Math.max(at, lease.heartbeatAt));
     }
   }
 
