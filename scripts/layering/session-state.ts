@@ -125,6 +125,9 @@ export const STORE_OWNED_SESSION_STATE_FIELDS: ReadonlySet<string> = new Set([
   'audioProbe',
   'createdAt',
   'device',
+  // #2833: the request path reports session activity through `SessionStore.noteSessionActivity`, so
+  // the only writer of this field is the store that owns the record.
+  'lastActivityAtMs',
   'lastPerfProfile',
   'name',
   'recordOnlySession',
