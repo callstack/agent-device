@@ -15,6 +15,7 @@ import {
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import {
+  boundConnectionPlatform,
   buildConnectionDeviceKey,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
@@ -321,6 +322,17 @@ async function materializeLeaseForCommand(options: {
     preliminaryLeaseBackend ??
     requireRequestedLeaseBackend(nextFlags, command);
   assertRequestedConnectionScope(state, nextFlags, leaseBackend);
+  // Binding a lease is the moment the platform family is decided, so every field this command
+  // records or sends from here on — the allocate payload, the flags the request carries, the state
+  // written below — names the leaf the backend rents, never the `apple` alias asked for.
+  nextState = {
+    ...nextState,
+    platform: boundConnectionPlatform({
+      platform: nextState.platform ?? nextFlags.platform,
+      leaseBackend,
+    }),
+  };
+  nextFlags.platform = nextState.platform ?? nextFlags.platform;
   const materializedLease = await allocateOrReuseLease(
     client,
     nextState,
@@ -874,13 +886,7 @@ async function resolveProxyLeaseState(options: {
       ...options.state,
       deviceKey: buildConnectionDeviceKey(scope),
       leaseBackend: options.state.leaseBackend ?? options.leaseBackend ?? scope.leaseBackend,
-      // A recorded `apple` was a family selection made before any device was bound. Once this
-      // command binds one, the record must name the leaf its own `deviceKey` speaks; keeping the
-      // alias would let a later leaf on the same family pass the scope guard against this device.
-      platform:
-        options.state.platform === 'apple'
-          ? scope.platform
-          : (options.state.platform ?? scope.platform),
+      platform: scope.platform,
       target: options.state.target ?? scope.target,
       updatedAt: new Date().toISOString(),
     },
@@ -940,11 +946,19 @@ function assertRequestedConnectionScope(
       { session: state.session, leaseBackend: state.leaseBackend },
     );
   }
-  if (platformSelectorsConflict(flags.platform, state.platform)) {
+  // A record saved before the collapse existed, or one whose lease already matched so nothing
+  // rewrote it, still names the `apple` family beside the backend that decided it. The guard reads
+  // the leaf that record owes; a connection that recorded no platform is bound to none, so a
+  // selector cannot conflict with it.
+  const boundPlatform = boundConnectionPlatform({
+    platform: state.platform,
+    leaseBackend: state.leaseBackend,
+  });
+  if (platformSelectorsConflict(flags.platform, boundPlatform)) {
     throw new AppError(
       'INVALID_ARGS',
       'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',
-      { session: state.session, platform: state.platform },
+      { session: state.session, platform: boundPlatform },
     );
   }
   if (state.target && flags.target && state.target !== flags.target) {

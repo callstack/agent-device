@@ -19,6 +19,7 @@ import {
   recordedLeaseAllocate,
   seedConnectionState,
 } from './remote-connection.fixtures.ts';
+import { connectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
@@ -406,6 +407,186 @@ test('a connection opened on the apple family collapses to the bound device leaf
       error.code === 'INVALID_ARGS' &&
       error.details?.session === 'adc-proxy' &&
       error.details?.platform === 'ios',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+// The same rule on the policies that never resolve a device themselves. A `connect --platform apple
+// --lease-backend ios-instance` records the alias next to a backend that already rents only iOS
+// devices, and this is the one command that turns it into a leaf: without the collapse the next
+// `--platform macos` passed the guard, and its request went to the daemon as `apple` against the
+// `ios-instance` lease instead of being refused here.
+test('a default-policy connection collapses its recorded apple alias when the lease is bound', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-default-apple-binding-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-default',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseBackend: 'ios-instance',
+      platform: 'apple',
+    },
+  });
+  const allocate = recordedLeaseAllocate({ leaseId: 'default-lease-1', backend: 'ios-instance' });
+  const command = (platform: 'apple' | 'ios' | 'macos') =>
+    materializeRemoteConnectionForCommand({
+      command: 'snapshot',
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-9',
+        session: 'adc-default',
+        platform,
+      },
+      client: createTestClient({ allocate: allocate.stub }),
+    });
+
+  const materialized = await command('apple');
+  assert.equal(materialized.flags.leaseId, 'default-lease-1');
+  assert.equal(materialized.flags.platform, 'ios', 'the request names the leaf it leased on');
+  assert.equal(allocate.request?.platform, 'ios', 'so does the allocate payload');
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-default' })?.platform,
+    'ios',
+    'and so does the record the next command is guarded against',
+  );
+
+  await assert.rejects(
+    async () => await command('macos'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.platform === 'ios',
+    'a second leaf of the same family has to be refused, not retargeted',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+// A state file written before the collapse existed records `apple` next to the backend that settled
+// it, and a record that already matches its lease is never rewritten — so this connection stays as
+// it was saved. The guard has to read the leaf that record owes, or the second leaf of the family
+// still walks past it and the command goes out as `apple` on an `ios-instance` lease.
+test('a stored apple record refuses the other leaf even though nothing rewrote it', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-apple-legacy-record-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-legacy',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseId: 'legacy-lease-1',
+      leaseBackend: 'ios-instance',
+      deviceKey: 'ios:mobile:SIM-001',
+      platform: 'apple',
+    },
+  });
+  const heartbeats: string[] = [];
+  const command = (platform: 'macos') =>
+    materializeRemoteConnectionForCommand({
+      command: 'snapshot',
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-9',
+        session: 'adc-legacy',
+        platform,
+      },
+      client: createTestClient({
+        heartbeat: async (request) => {
+          heartbeats.push(request.leaseId);
+          return {
+            leaseId: request.leaseId,
+            tenantId: 'acme',
+            runId: 'run-9',
+            backend: 'ios-instance',
+          };
+        },
+      }),
+    });
+
+  await assert.rejects(
+    async () => await command('macos'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.platform === 'ios',
+  );
+  assert.deepEqual(heartbeats, [], 'the lease was never touched by the refused request');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+// `connect` asks the same question a command does — is this the connection already bound? — and it
+// answers it before writing anything. A record saved as `apple` next to the `ios-instance` backend
+// that decided it counted as compatible with `--platform macos`, because a family and a leaf never
+// conflict, so the new selector was accepted onto the iOS device's connection with no `--force`.
+test('connect refuses to reuse an apple-bound connection for the other leaf', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-apple-reuse-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-apple-reuse',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseId: 'apple-lease-1',
+      leaseBackend: 'ios-instance',
+      platform: 'apple',
+    },
+  });
+  const connect = (platform: 'apple' | 'ios' | 'macos') =>
+    connectCommand({
+      positionals: [],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-9',
+        session: 'adc-apple-reuse',
+        platform,
+        leaseBackend: 'ios-instance',
+      },
+      client: createTestClient(),
+    });
+
+  await assert.rejects(
+    async () => await connect('macos'),
+    /A different remote connection is already active/,
+    "the other leaf of the family can't ride along on this lease",
+  );
+  await connect('ios');
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-apple-reuse' })?.platform,
+    'ios',
+    'the leaf the backend rents is what the reconnected record carries',
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

@@ -5,6 +5,7 @@ import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-co
 import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceIdentityFlag,
+  platformSelectorsConflict,
   publicPlatformString,
   type DeviceIdentityFlag,
   type DeviceInfo,
@@ -16,6 +17,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   leaseBackendForPlatform,
+  platformForLeaseBackend,
   type LeaseBackend,
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
@@ -106,6 +108,54 @@ export function resolveConnectionDeviceScope(device: DeviceInfo): ConnectionDevi
 /** The `deviceKey` for a resolved device: its identity on the public platform and target axes. */
 export function buildConnectionDeviceKey(scope: ConnectionDeviceScope): string {
   return `${scope.platform}:${scope.target ?? 'mobile'}:${scope.id}`;
+}
+
+/**
+ * The platform a command records once a lease is bound: the leaf of the device the lease holds.
+ *
+ * `apple` is a family selection a caller makes before any device exists, and a family never
+ * conflicts with a leaf — so a connection left recording `apple` accepts a later `--platform macos`
+ * against the iOS device its own lease is paying for, and forwards that request to the daemon as
+ * `apple` on an `ios-instance` lease (#2962's shape, one axis wider). Binding a lease decides the
+ * family, so the alias collapses here and every later comparison is leaf-to-leaf.
+ *
+ * A backend that names no platform — `ios-simulator`, a runner guard below device leases — and a
+ * connection with no backend at all keep the selector as named: nothing has decided the family yet,
+ * and inventing a leaf would be the same axis mistake in the other direction.
+ */
+export function boundConnectionPlatform(
+  evidence: Readonly<{
+    platform?: CliFlags['platform'];
+    leaseBackend?: LeaseBackend;
+  }>,
+): CliFlags['platform'] {
+  if (evidence.platform !== 'apple' || !evidence.leaseBackend) return evidence.platform;
+  return platformForLeaseBackend(evidence.leaseBackend) ?? evidence.platform;
+}
+
+/**
+ * Whether a `--platform` selector names the platform a connection is bound to.
+ *
+ * Both halves are needed and neither is enough alone. The selector rule answers family-vs-leaf as a
+ * match, which is right for a fresh selection — `--platform apple` and a recorded `ios` name the same
+ * devices — and wrong for a record whose backend already decided the family. A record saved before
+ * the collapse existed, or one whose lease already matched so nothing rewrote it, still says `apple`
+ * next to an `ios-instance` backend; comparing that alias against `--platform macos` calls the
+ * connection reusable and sends a macOS request against an iOS device's lease.
+ */
+export function connectionPlatformMatchesSelection(
+  state: Readonly<{
+    platform?: CliFlags['platform'];
+    leaseBackend?: LeaseBackend;
+  }>,
+  requested: CliFlags['platform'],
+): boolean {
+  if (requested === undefined) return true;
+  if (state.platform === undefined) return false;
+  return !platformSelectorsConflict(
+    requested,
+    boundConnectionPlatform({ platform: state.platform, leaseBackend: state.leaseBackend }),
+  );
 }
 
 type RemoteConnectionDefaults = {

@@ -5,7 +5,9 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
+  boundConnectionPlatform,
   buildConnectionDeviceKey,
+  connectionPlatformMatchesSelection,
   buildRemoteConnectionDaemonState,
   hashRemoteConfigFile,
   resolveConnectionDeviceScope,
@@ -183,4 +185,60 @@ test('resolveRemoteConnectionDefaults falls back to the environment token', asyn
   });
 
   assert.equal(defaults?.flags.daemonAuthToken, FAKE_DAEMON_TOKEN);
+});
+
+// The rule that decides whether a recorded platform is still a family selection: the backend is what
+// settles it. With none, the alias is kept rather than guessed — a connection that named no backend
+// can legitimately serve either Apple leaf.
+test('boundConnectionPlatform collapses apple only when a backend names the leaf', () => {
+  const bound = boundConnectionPlatform({ platform: 'apple', leaseBackend: undefined });
+  assert.equal(bound, 'apple');
+  // A backend is what decides it, including one whose platform the backend does not name.
+  assert.equal(
+    boundConnectionPlatform({ platform: 'apple', leaseBackend: 'ios-simulator' }),
+    'apple',
+    'a runner-guard backend names no platform to collapse to',
+  );
+  assert.equal(
+    boundConnectionPlatform({ platform: 'apple', leaseBackend: 'android-instance' }),
+    'android',
+  );
+  // A leaf is already decided, whichever backend it leased on.
+  assert.equal(
+    boundConnectionPlatform({ platform: 'ios', leaseBackend: 'ios-instance' }),
+    'ios',
+    'a leaf passes through untouched',
+  );
+});
+
+// The reuse question `connect` asks: is this the same connection? A record that still names the
+// `apple` family beside an `ios-instance` backend must not answer yes to `--platform macos`, which
+// is how a stored alias let a macOS request reuse an iOS device's connection. The selector rule
+// alone says family-vs-leaf is no conflict, so the collapse has to be part of this answer too.
+test('connectionPlatformMatchesSelection refuses the other leaf of a bound apple record', () => {
+  const boundIos = { platform: 'apple', leaseBackend: 'ios-instance' } as const;
+  assert.equal(connectionPlatformMatchesSelection(boundIos, 'macos'), false);
+  assert.equal(
+    connectionPlatformMatchesSelection(boundIos, 'apple'),
+    true,
+    'naming the family still matches the connection it named',
+  );
+  assert.equal(
+    connectionPlatformMatchesSelection(boundIos, 'ios'),
+    true,
+    'and so does the leaf the backend rents',
+  );
+  assert.equal(
+    connectionPlatformMatchesSelection(boundIos, undefined),
+    true,
+    'a request that names no platform asks for no platform',
+  );
+  // The other direction of #2962: an unbound record is bound to nothing, so a request naming a
+  // platform is a different connection rather than a match.
+  assert.equal(connectionPlatformMatchesSelection({ platform: undefined }, 'ios'), false);
+  assert.equal(
+    connectionPlatformMatchesSelection({ platform: 'apple' }, 'macos'),
+    true,
+    'with no backend, nothing has decided the family and the alias stands',
+  );
 });

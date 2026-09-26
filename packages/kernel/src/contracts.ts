@@ -2,7 +2,7 @@ import type { DaemonError } from './errors.ts';
 
 export type { AppErrorCode } from './errors.ts';
 export { defaultHintForCode, normalizeError } from './errors.ts';
-import type { PlatformSelector } from './device.ts';
+import type { PlatformSelector, PublicPlatform } from './device.ts';
 
 const SESSION_RUNTIME_PLATFORMS = ['ios', 'android', 'harmonyos'] as const;
 export type SessionRuntimePlatform = (typeof SESSION_RUNTIME_PLATFORMS)[number];
@@ -81,6 +81,24 @@ export function leaseBackendForPlatform(
   platform: PlatformSelector | undefined,
 ): LeaseBackend | undefined {
   return platform === undefined ? undefined : LEASE_BACKEND_BY_PLATFORM[platform];
+}
+
+/**
+ * The public leaf platform a lease backend rents devices on — the inverse of
+ * {@link leaseBackendForPlatform} for the backends that name a platform rather than a runner guard.
+ *
+ * A connection binds a platform at the same moment it binds a lease, and the lease is the stronger
+ * evidence: it names the backend that is actually holding the device. `ios-simulator` maps to no
+ * leaf because it is a runner/process guard below device leases, not a platform a selector names.
+ */
+const PLATFORM_BY_LEASE_BACKEND: Partial<Record<LeaseBackend, PublicPlatform>> = {
+  'ios-instance': 'ios',
+  'android-instance': 'android',
+  'harmonyos-instance': 'harmonyos',
+};
+
+export function platformForLeaseBackend(backend: LeaseBackend): PublicPlatform | undefined {
+  return PLATFORM_BY_LEASE_BACKEND[backend];
 }
 
 const DAEMON_SERVER_MODES = ['socket', 'http', 'dual'] as const;
