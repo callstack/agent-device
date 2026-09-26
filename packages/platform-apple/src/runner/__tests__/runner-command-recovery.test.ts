@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { RunnerCommandAccounting } from '../runner-session-types.ts';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
@@ -35,8 +36,7 @@ function makeRunnerSession(port: number): RunnerSession {
     testPromise: new Promise<ExecResult>(() => {}),
     child: { pid: process.pid, exitCode: null },
     state: 'ready',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
   };
 }
 

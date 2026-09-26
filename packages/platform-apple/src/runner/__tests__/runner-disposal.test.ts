@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { IOS_SIMULATOR, MACOS_DEVICE, TVOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import type { RunnerSession } from '../runner-session-types.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { makeRunnerLease } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
@@ -257,8 +257,7 @@ function makeRunnerSession(
     testPromise,
     child: { pid: 42, exitCode: null },
     state: 'ready',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
     ...overrides,
   };
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RunnerSession } from '../runner-session-types.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import {
   iosDevice,
   iosSimulator,
@@ -251,8 +251,7 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     testPromise: Promise.resolve({ exitCode: 65, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'starting',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
   };
   mockUsbmuxPostCommand.mockImplementation(async () => {
     (session.child as { exitCode: number | null }).exitCode = 65;
@@ -294,8 +293,7 @@ test('waitForRunner carries the disk-image state when the runner is still alive 
     testPromise: new Promise(() => {}),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'starting',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
     startupDeviceStates: {
       developerMode: 'enabled',
       developerDiskImage: 'unavailable',
@@ -379,8 +377,7 @@ function makeReadyRunnerSession(): RunnerSession {
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
     state: 'ready',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
   };
 }
 

@@ -480,16 +480,20 @@ test('a session that still owes a response is not handed off', async () => {
   // The charge lands behind the preflight and deadline awaits, so wait for it instead of betting on a
   // single macrotask: a loaded runner can sit anywhere on that path, and a session that had not been
   // charged yet would look identical to one whose charge was wrongly dropped (#2681).
-  for (let tick = 0; tick < 500 && session.inFlightCommands === 0; tick += 1) {
+  for (let tick = 0; tick < 500 && session.commandCharges.outstandingChargeCount === 0; tick += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
-  assert.equal(session.inFlightCommands, 1);
+  assert.equal(session.commandCharges.outstandingChargeCount, 1);
 
   const diagnostics = await captureDiagnostics(async () => {
     assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
   });
 
   assert.match(diagnostics, /"reason":"command_in_flight"/);
+  // The awaited exchange is charged but not abandoned: what waits here is its own answer, not terminal
+  // evidence for a residue (#2965).
+  assert.match(diagnostics, /"outstandingCharges":1/);
+  assert.match(diagnostics, /"hasAbandonedCharges":false/);
   assert.ok(readRunnerSessionLiveness(device.id));
 });
 
@@ -516,18 +520,23 @@ test('a command abandoned by a cancelled transport keeps the runner occupied', a
       controller.signal,
     ),
   );
-  assert.equal(session.hasAbandonedCommands, true);
+  assert.equal(session.commandCharges.hasAbandonedCharges, true);
 
   const refused = await captureDiagnostics(async () => {
     assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
   });
   assert.match(refused, /"reason":"command_in_flight"/);
+  // The refusal this issue is about: nothing is awaited any more, and only terminal evidence for that
+  // command's `commandId` — never a later reply — may discharge it (#2965).
+  assert.match(refused, /"outstandingCharges":1/);
+  assert.match(refused, /"hasAbandonedCharges":true/);
 
-  // Any answered exchange forgives the abandoned charge: the runner is serving again, and stamps
-  // whatever is still draining onto that very reply.
+  // An answered queued exchange forgives the abandoned charge: the serial queue makes it evidence that
+  // the abandoned handling ahead of it finished, and whatever is still draining is stamped onto that
+  // very reply. An answer the runner serves inline forgives nothing (#2965); that case is pinned in
+  // `runner-recovery-wiring.test.ts`, where the probe reaches a real session.
   await serveOneCommand(device, session);
-  assert.equal(session.inFlightCommands, 0);
-  assert.equal(session.hasAbandonedCommands, false);
+  assert.equal(session.commandCharges.hasOutstandingCharges, false);
   assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
 });
 
