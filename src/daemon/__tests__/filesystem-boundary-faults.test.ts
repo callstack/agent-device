@@ -138,7 +138,7 @@ function createShutdownReportFixture(root: string): FilesystemBoundaryFixture {
     run: async () =>
       writeDaemonShutdownReport(root, {
         providerReleases: { released: [], pending: [] },
-        claims: { released: [], orphaned: [], superseded: [] },
+        claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
       }),
     expected: 'return',
   };

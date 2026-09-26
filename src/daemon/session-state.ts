@@ -137,6 +137,15 @@ export type SessionState = {
     clientId?: string;
     expiresAt?: number;
   };
+  /**
+   * #2833: the instant a command that attaches to this session last finished, which is what the
+   * opt-in inactivity deadline for a claim-holding session is measured from. Absent until then, in
+   * which case the session's own `createdAt` is the base — so the abandonment this exists for
+   * (`open`, then silence) still expires on its own. Written only through `SessionStore
+   * .noteSessionActivity`, under the session's execution lock. A session with a remote lease is
+   * governed by that lease's own `expiresAt` instead and is never measured from this field.
+   */
+  lastActivityAtMs?: number;
   /** Enforced host-global local-device claim owned by this session, if acquired. */
   deviceClaim?: {
     deviceKey: string;

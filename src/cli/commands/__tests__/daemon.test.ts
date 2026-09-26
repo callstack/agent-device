@@ -33,6 +33,7 @@ const GRACEFUL_RESULT: DaemonStopResult = {
   claimsReleased: [],
   claimsOrphaned: [],
   claimsSuperseded: [],
+  claimsUnattributable: [],
   providerReleases: { status: 'completed', released: [], pending: [] },
   warnings: [],
 };
@@ -77,7 +78,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
       released: [{ leaseId: 'lease-1', provider: 'limrun' }],
       pending: [],
     },
-    claims: { released: [claim], orphaned: [], superseded: [] },
+    claims: { released: [claim], orphaned: [], superseded: [], unattributable: [] },
   });
 
   try {
@@ -104,6 +105,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
         claimsReleased: [claim],
         claimsOrphaned: [],
         claimsSuperseded: [],
+        claimsUnattributable: [],
       }),
       expect.any(Function),
     );
@@ -152,7 +154,7 @@ test('warns in text output when a graceful stop leaves an orphaned claim', async
   };
   mocks.readDaemonShutdownReport.mockReturnValue({
     providerReleases: { released: [], pending: [] },
-    claims: { released: [], orphaned: [claim], superseded: [] },
+    claims: { released: [], orphaned: [claim], superseded: [], unattributable: [] },
   });
 
   try {
@@ -172,6 +174,48 @@ test('warns in text output when a graceful stop leaves an orphaned claim', async
     const rendered = (renderHuman as () => string)();
     expect(rendered).toContain('Ownership of emulator-5554 was not released cleanly');
     expect(rendered).toContain('agent-device device release --stale');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('routes an unattributable claim to the default status view, never to --stale', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
+  mocks.readDaemonStopIdentity.mockReturnValue({ pid: 123, processStartTime: 'start-time' });
+  mocks.stopDaemon.mockResolvedValue(GRACEFUL_RESULT);
+  const claim = {
+    deviceKey: 'local:android:none:emulator-5554',
+    session: 'default',
+    platform: 'android',
+    deviceId: 'emulator-5554',
+  };
+  mocks.readDaemonShutdownReport.mockReturnValue({
+    providerReleases: { released: [], pending: [] },
+    claims: { released: [], orphaned: [], superseded: [], unattributable: [claim] },
+  });
+
+  try {
+    await daemonCommand({
+      positionals: ['stop'],
+      flags: { clean: false, help: false, json: false, stateDir, version: false },
+      client: {} as never,
+    });
+
+    const [, data, renderHuman] = mocks.writeCommandOutput.mock.calls.at(-1) ?? [];
+    expect(data).toEqual(
+      expect.objectContaining({
+        claimsUnattributable: [claim],
+        claimsOrphaned: [],
+        warnings: [expect.stringContaining('whose owner could not be read')],
+      }),
+    );
+    const rendered = (renderHuman as () => string)();
+    expect(rendered).toContain('Inspect with: agent-device device status.');
+    // The whole reason this is its own bucket: both stale routes refuse a record with no recorded
+    // owner, so the warning may name them only to forbid them and must not end in a release.
+    expect(rendered).toContain('No device release route settles it');
+    expect(rendered).not.toContain('then release with');
+    expect(rendered).not.toContain('Inspect with: agent-device device status --stale');
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

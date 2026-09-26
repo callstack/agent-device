@@ -10,6 +10,22 @@ import type { SessionRef } from './session-state.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
 
+/**
+ * The lock pair an already-bound session's commands take, in acquisition order. The #2833
+ * session-idle expiry settles a session through these same keys in this same order: settling a
+ * session while a device-lock-holding command still runs on its device would release a device
+ * under work, and any other order would deadlock against a request's pair.
+ */
+export function existingSessionExecutionLockKeys(
+  sessionName: string,
+  deviceId: string,
+): RequestExecutionLockKey[] {
+  return orderRequestExecutionLockKeys([
+    sessionExecutionLockKey(sessionName),
+    deviceExecutionLockKey(deviceId),
+  ]);
+}
+
 export type RequestExecutionLockPlan = {
   keys: RequestExecutionLockKey[];
   /**
@@ -35,10 +51,7 @@ export async function resolveRequestExecutionLockPlan(params: {
   const existingSession = sessionStore.get(sessionName);
   if (existingSession) {
     return {
-      keys: orderRequestExecutionLockKeys([
-        sessionExecutionLockKey(sessionName),
-        deviceExecutionLockKey(existingSession.device.id),
-      ]),
+      keys: existingSessionExecutionLockKeys(sessionName, existingSession.device.id),
       deviceId: existingSession.device.id,
     };
   }

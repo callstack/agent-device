@@ -30,6 +30,12 @@ export type DaemonStopResult = {
   claimsOrphaned: DeviceClaimRecord[];
   /** Claims another owner had already taken over; this daemon released nothing. */
   claimsSuperseded: DeviceClaimRecord[];
+  /**
+   * Claims whose on-disk record named no owner, so this daemon cannot say whether the device is
+   * still held. `device release --stale` cannot settle these — it proves staleness from a recorded
+   * owner — so they are reported apart from {@link DaemonStopResult.claimsOrphaned}.
+   */
+  claimsUnattributable: DeviceClaimRecord[];
   providerReleases: {
     status: 'completed' | 'unknown';
     released: ProviderReleaseRecord[];
@@ -76,6 +82,7 @@ export async function stopDaemon(params: {
       claimsReleased: [],
       claimsOrphaned: [],
       claimsSuperseded: [],
+      claimsUnattributable: [],
       providerReleases: { status: 'completed', released: [], pending: [] },
       warnings: [],
     };
@@ -99,6 +106,7 @@ export async function stopDaemon(params: {
     claimsReleased: [],
     claimsOrphaned: [],
     claimsSuperseded: [],
+    claimsUnattributable: [],
     providerReleases: { status: 'unknown', released: [], pending: null },
     warnings: [
       'The daemon was force-killed before provider lease state could be finalized. Provider allocations may remain active.',
@@ -139,6 +147,7 @@ function notRunningResult(): DaemonStopResult {
     claimsReleased: [],
     claimsOrphaned: [],
     claimsSuperseded: [],
+    claimsUnattributable: [],
     providerReleases: { status: 'completed', released: [], pending: [] },
     warnings: [],
   };

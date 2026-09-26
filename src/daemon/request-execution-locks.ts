@@ -40,7 +40,7 @@ export function createRequestExecutionLocks(params: {
       }
       running = true;
       try {
-        return await withRequestExecutionLocks(locks, initialKeys, task);
+        return await withRequestExecutionLockKeys(locks, initialKeys, task);
       } finally {
         try {
           await releaseRetainedLocks();
@@ -66,9 +66,9 @@ export function createRequestExecutionLocks(params: {
   };
 }
 
-async function withRequestExecutionLocks<T>(
+export async function withRequestExecutionLockKeys<T>(
   locks: Map<string, Promise<unknown>>,
-  keys: RequestExecutionLockKey[],
+  keys: readonly RequestExecutionLockKey[],
   task: () => Promise<T>,
 ): Promise<T> {
   const [key, ...remainingKeys] = keys;
@@ -76,7 +76,7 @@ async function withRequestExecutionLocks<T>(
   return await withKeyedLock(
     locks,
     key,
-    async () => await withRequestExecutionLocks(locks, remainingKeys, task),
+    async () => await withRequestExecutionLockKeys(locks, remainingKeys, task),
   );
 }
 

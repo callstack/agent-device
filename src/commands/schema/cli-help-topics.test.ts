@@ -517,6 +517,7 @@ test('usageForCommand resolves physical-device help topic', async () => {
   );
   assert.match(help, /AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS/);
   assert.match(help, /AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS/);
+  assert.match(help, /AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS/);
   assert.match(
     help,
     /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,

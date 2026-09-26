@@ -27,6 +27,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
@@ -35,6 +36,8 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
+import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
+import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
 import {
   processOwnsActiveDeviceClaim,
@@ -398,6 +401,73 @@ export async function startDaemonRuntime(
     await Promise.all(sessionsToStop.map(teardownDaemonSession));
   };
 
+  // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
+  // `teardownDaemonSession`: that one exists for a daemon that is leaving, so it hands a healthy
+  // execution host to its successor, finalizes a remote lease, and deletes the session whether the
+  // bounded teardown finished or not. An idle expiry is the opposite situation — the daemon is
+  // staying alive, there is no successor, and a session whose resources would not release has to
+  // survive so the next pass can retry rather than leave a claim owned by a process that no longer
+  // knows what it holds. So: resources, then the platform finalization that stops the execution host
+  // and releases its lease, then the claim, cleared last, by the reaper.
+  const settleIdleExpiredSession = async (
+    session: SessionState,
+    sessionName: string,
+  ): Promise<void> => {
+    await teardownSessionResources({
+      appLog: 'run',
+      session,
+      sessionName,
+      sessionStore,
+      stateDir: baseDir,
+      platformCleanup: platformResourceCleanup,
+    });
+    await finalizeDaemonSessionApplicationLifecycle({
+      gateway: deviceRuntimeGateway,
+      scope: createDaemonRecoveryPlatformScope(),
+      session,
+      stateDir: baseDir,
+      runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionName)),
+      // The one caller that must say so: this daemon is staying alive, so there is no shutdown
+      // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
+      // runner and releases its lease instead of parking it until process exit.
+      daemonLeaving: false,
+    });
+    // ADR 0012 R7 binds this teardown too — the healed `.ad` is committed by
+    // `SessionStore.finalizeRepairTeardown` — but NOT from in here. That call publishes the script
+    // and stamps COMMITTED onto the record it is handed, which makes it part of ENDING the session
+    // rather than part of releasing its resources, and a settle that cannot confirm its claim gone
+    // holds the session back to retry. The reaper runs it once the expiry is committed to.
+  };
+
+  const sessionIdleExpiry = createSessionIdleExpiry({
+    sessionStore,
+    idleExpiryMs: resolveSessionIdleExpiryMs(env),
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    settleSession: settleIdleExpiredSession,
+    // The same bounded teardown budget every other session teardown gets. It bounds only how long a
+    // sweep waits, never the settle itself, so a stuck recorder cannot make a sweep hang but also
+    // cannot make an expiry give up on a device that does come free.
+    settleBudgetMs: (session) => resolveDaemonSessionTeardownTimeoutMs(session),
+    // A sweep is out-of-request work, so it has no request scope and `emitDiagnostic` would drop
+    // everything it reports — including the record of what was reclaimed and why a reclaim failed.
+    withinDiagnosticsScope: async (run) =>
+      await withDiagnosticsScope(
+        { command: 'daemon', session: 'daemon', logPath, debug: true },
+        async () => {
+          try {
+            return await run();
+          } finally {
+            flushDiagnosticsToSessionFile({ force: true });
+          }
+        },
+      ),
+    // An expiry can be the event that makes this daemon fully idle, and no request follows it to
+    // arm the process-level reap.
+    onSessionExpired: () => {
+      idleReap.noteActivity();
+    },
+  });
+
   // Reaps this daemon process when it sits fully idle (no open sessions, no
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
   // `shutdown` is defined below but only invoked asynchronously by the timer,
@@ -420,6 +490,11 @@ export async function startDaemonRuntime(
     } finally {
       inFlightRequestCount--;
       idleReap.noteActivity();
+      // One hook covers every way a deadline changes: an `open` has added one, a `close` has removed
+      // one, and any other command has just re-stamped the session it ran on. Reading the session set
+      // here — after the request's own session stamp landed inside its execution lock — is what keeps
+      // the reaper's view of a session's deadline identical to the lock-guarded one.
+      sessionIdleExpiry.noteSessionsChanged();
     }
   };
 
@@ -563,6 +638,8 @@ export async function startDaemonRuntime(
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
+    // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
+    // in it, and that request's own completion re-arms the reaper.
   } catch (error) {
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
@@ -582,6 +659,7 @@ export async function startDaemonRuntime(
   let shuttingDown = false;
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
+    sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
     if (shutdownOptions.cause) {

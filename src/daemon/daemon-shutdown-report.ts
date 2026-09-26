@@ -16,7 +16,9 @@ export type ProviderReleaseRecord = {
  * terminal state; `orphaned` means teardown left it in place, so the exiting
  * daemon's dead owner identity is what later proves it reclaimable; `superseded`
  * means another owner had already replaced it, so this daemon released nothing
- * and left nothing to reconcile.
+ * and left nothing to reconcile; `unattributable` means a record is still there
+ * that names no owner at all, which neither of the other two describes — see
+ * `DaemonShutdownClaims.unattributable`.
  */
 export type DeviceClaimRecord = {
   deviceKey: string;
@@ -34,6 +36,7 @@ export type DaemonShutdownReport = {
     released: DeviceClaimRecord[];
     orphaned: DeviceClaimRecord[];
     superseded: DeviceClaimRecord[];
+    unattributable: DeviceClaimRecord[];
   };
 };
 
@@ -45,6 +48,7 @@ export function writeDaemonShutdownReport(
       released: readonly DeviceClaimRecord[];
       orphaned: readonly DeviceClaimRecord[];
       superseded: readonly DeviceClaimRecord[];
+      unattributable: readonly DeviceClaimRecord[];
     };
   },
 ): void {
@@ -57,6 +61,7 @@ export function writeDaemonShutdownReport(
       released: [...outcome.claims.released],
       orphaned: [...outcome.claims.orphaned],
       superseded: [...outcome.claims.superseded],
+      unattributable: [...outcome.claims.unattributable],
     },
   };
   const filePath = shutdownReportPath(stateDir);
@@ -119,12 +124,20 @@ function isProviderReleaseReport(
 
 function readClaimSection(value: { claims?: unknown }): DaemonShutdownReport['claims'] {
   const claims = value.claims;
-  if (!claims || typeof claims !== 'object') return { released: [], orphaned: [], superseded: [] };
-  const records = claims as { released?: unknown; orphaned?: unknown; superseded?: unknown };
+  if (!claims || typeof claims !== 'object') {
+    return { released: [], orphaned: [], superseded: [], unattributable: [] };
+  }
+  const records = claims as {
+    released?: unknown;
+    orphaned?: unknown;
+    superseded?: unknown;
+    unattributable?: unknown;
+  };
   return {
     released: readClaimRecords(records.released),
     orphaned: readClaimRecords(records.orphaned),
     superseded: readClaimRecords(records.superseded),
+    unattributable: readClaimRecords(records.unattributable),
   };
 }
 
