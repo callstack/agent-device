@@ -7,6 +7,7 @@ import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { buildRunnerEarlyExitError } from '../runner-startup-transport.ts';
 import { readRunnerLogTail } from '../runner-io.ts';
+import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { STUBBED_APPLE_TOOLCHAIN, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
@@ -177,8 +178,8 @@ test('a session that never probed the device publishes no disk-image claim (#268
 
 const SET_WITHOUT_UDID = CAPTURED_SCOPED_SIMULATOR.setWithoutUdid;
 
-// An external xctestrun: the session carries no build of its own, so the Xcode it names comes from
-// the toolchain the host selects.
+// An external xctestrun: the session carries no build of its own, so the Xcode it names is the one a
+// runner cache decision in this process already read, if any.
 function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): RunnerSession {
   return {
     ...sessionFailingWith(log),
@@ -204,28 +205,26 @@ function simulatorSessionFailingWith(log: string, simulatorSetPath?: string): Ru
 }
 
 test('a scoped-set simulator whose destination is missing names its set and the Xcode', async () => {
-  const error = (await buildRunnerEarlyExitError({
-    session: simulatorSessionFailingWith(
-      CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
-      SET_WITHOUT_UDID,
-    ),
-    port: 8100,
-  })) as AppError;
+  const session = simulatorSessionFailingWith(
+    CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+    SET_WITHOUT_UDID,
+  );
+  resolveExpectedRunnerCacheMetadata(session.device);
+
+  const error = (await buildRunnerEarlyExitError({ session, port: 8100 })) as AppError;
 
   assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
   assert.match(String(error.details?.hint), /-DVTSimulatorSetLocation/);
   assert.equal(error.details?.simulatorSetPath, SET_WITHOUT_UDID);
   assert.equal(error.details?.xcodeVersion, STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
-  assert.ok(
-    error.message.endsWith(
-      `simulator set ${SET_WITHOUT_UDID} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
-    ),
+  assert.equal(
+    error.message,
+    `Runner did not accept connection (xcodebuild exited early): xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${SET_WITHOUT_UDID} with Xcode ${STUBBED_APPLE_TOOLCHAIN.xcodeVersion}`,
   );
 });
 
-test('a scoped-set destination error whose Xcode cannot be read still names the set', async () => {
-  toolchainProbe.mockReturnValue({ exitCode: 1, stdout: '', stderr: 'xcode-select: error' });
-
+test('a scoped-set destination error before any cache decision read the Xcode still names the set', async () => {
+  toolchainProbe.mockClear();
   const error = (await buildRunnerEarlyExitError({
     session: simulatorSessionFailingWith(
       CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
@@ -237,9 +236,11 @@ test('a scoped-set destination error whose Xcode cannot be read still names the 
   assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
   assert.equal(error.details?.simulatorSetPath, SET_WITHOUT_UDID);
   assert.equal('xcodeVersion' in (error.details ?? {}), false);
-  assert.ok(
-    error.message.endsWith(`simulator set ${SET_WITHOUT_UDID} with Xcode (version unreadable)`),
+  assert.equal(
+    error.message,
+    `Runner did not accept connection (xcodebuild exited early): xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${SET_WITHOUT_UDID} with Xcode (version unreadable)`,
   );
+  assert.equal(toolchainProbe.mock.calls.length, 0);
 });
 
 test('a default-set simulator early exit keeps its boot-failure reason', async () => {

@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from './daemon/platform-resource-cleanup.ts';
+import type { DaemonStartupDiagnostic } from './daemon/platform-owner-lifecycle.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
@@ -17,11 +18,13 @@ async function stopAndroidSnapshotHelperRuntimeForDevice(device: DeviceInfo): Pr
 }
 
 /** Only a macOS host has an `XCTestDevices` an older agent-device could have redirected. */
-export async function restoreLegacyXctestDeviceSetRedirectRuntime(): Promise<void> {
+export async function restoreLegacyXctestDeviceSetRedirectRuntime(
+  onDiagnostic: (diagnostic: DaemonStartupDiagnostic) => void,
+): Promise<void> {
   if (process.platform !== 'darwin') return;
   const { restoreLegacyXctestDeviceSetRedirect } =
     await import('@agent-device/platform-apple/runner/operations');
-  restoreLegacyXctestDeviceSetRedirect();
+  restoreLegacyXctestDeviceSetRedirect(onDiagnostic);
 }
 
 export async function cleanupManagedWebRuntimeOrphans(params: {

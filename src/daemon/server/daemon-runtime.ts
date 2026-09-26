@@ -80,10 +80,8 @@ import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { platformDaemonLifecycleOwners } from '../../platform-runtime-daemon-lifecycle.ts';
 import { openWebSessionNames } from '../web-session-names.ts';
-import {
-  recoverAppLogResourcesAfterDaemonLock,
-  type AppLogRecoveryDiagnostic,
-} from '../app-log-resource-recovery.ts';
+import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
+import type { DaemonStartupDiagnostic } from '../platform-owner-lifecycle.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
@@ -217,7 +215,7 @@ export type DaemonRuntimeController = {
 
 export async function flushDaemonStartupDiagnostics(
   logPath: string,
-  diagnostics: readonly AppLogRecoveryDiagnostic[],
+  diagnostics: readonly DaemonStartupDiagnostic[],
 ): Promise<void> {
   if (diagnostics.length === 0) return;
   await withDiagnosticsScope(
@@ -495,24 +493,25 @@ export async function startDaemonRuntime(
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
-  const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
+  const startupDiagnostics: DaemonStartupDiagnostic[] = [];
   try {
     await platformDaemonLifecycleOwners.configureForDaemonLock({
       stateDir: baseDir,
       hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
+      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
     });
     const legacyMarkerRecovery =
       await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(sessionsDir);
     appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
     for (const markerPath of legacyMarkerRecovery.recovered) {
-      startupAppLogDiagnostics.push({
+      startupDiagnostics.push({
         phase: 'app_log_legacy_marker_recovered',
         resourcePath: markerPath,
         data: {},
       });
     }
     for (const retained of legacyMarkerRecovery.retained) {
-      startupAppLogDiagnostics.push({
+      startupDiagnostics.push({
         phase: 'app_log_legacy_marker_retained',
         resourcePath: retained.markerPath,
         data: {
@@ -525,7 +524,7 @@ export async function startDaemonRuntime(
       sessionsDir,
       gateway: deviceRuntimeGateway,
       scope: createDaemonRecoveryPlatformScope(),
-      onDiagnostic: (diagnostic) => startupAppLogDiagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
     });
     await reapOwnedProcessRecordsAtStartup(ownedProcessRecords, {
       openWebSessionNames: openWebSessionNames(sessionStore),
@@ -551,7 +550,7 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
-    await flushDaemonStartupDiagnostics(logPath, startupAppLogDiagnostics);
+    await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
@@ -559,7 +558,6 @@ export async function startDaemonRuntime(
       createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
       baseDir,
     );
-    await restoreLegacyXctestDeviceSetForDaemonStartup(logPath);
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
@@ -704,28 +702,6 @@ async function reconcileDeviceClaimsForDaemonStartup(
         });
         flushDiagnosticsToSessionFile({ force: true });
       }
-    },
-  );
-}
-
-/**
- * Best effort: the runner never reads `XCTestDevices`, so a restore that fails here is recorded in
- * daemon.log and fails neither this daemon nor a runner start.
- */
-export async function restoreLegacyXctestDeviceSetForDaemonStartup(logPath: string): Promise<void> {
-  await withDiagnosticsScope(
-    { command: 'daemon', session: 'daemon', logPath, debug: false },
-    async () => {
-      try {
-        await platformDaemonLifecycleOwners.restoreLegacyXctestDeviceSetRedirect();
-      } catch (error) {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'ios_runner_legacy_xctest_device_set_restore_failed',
-          data: { error: error instanceof Error ? error.message : String(error) },
-        });
-      }
-      flushDiagnosticsToSessionFile({ force: true });
     },
   );
 }
