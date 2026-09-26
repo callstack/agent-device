@@ -15,6 +15,7 @@ import {
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
+import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
@@ -990,13 +991,4 @@ async function heartbeatOrAllocateLease(
     if (isInactiveLeaseError(error)) return undefined;
     throw error;
   }
-}
-
-function isInactiveLeaseError(error: unknown): boolean {
-  if (!(error instanceof AppError) || error.code !== 'UNAUTHORIZED') return false;
-  return (
-    error.details?.reason === 'LEASE_NOT_FOUND' ||
-    error.details?.reason === 'LEASE_EXPIRED' ||
-    error.details?.reason === 'LEASE_REVOKED'
-  );
 }

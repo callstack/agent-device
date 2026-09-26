@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   findMissingProxyLeaseFields,
+  isInactiveLeaseError,
   leaseScopeFromOptions,
   leaseScopeFromRequest,
   leaseScopeToCommandFlags,
@@ -214,4 +215,30 @@ test('readLeaseAllocateProviderFlags carries the provider-allocation flags and d
     { providerApp: 'bs://abc' },
   );
   assert.deepEqual(readLeaseAllocateProviderFlags(undefined), {});
+});
+
+test('isInactiveLeaseError recognizes the lease being gone, and refuses a request mismatch', () => {
+  for (const reason of ['LEASE_NOT_FOUND', 'LEASE_EXPIRED', 'LEASE_REVOKED']) {
+    assert.equal(
+      isInactiveLeaseError({ code: 'UNAUTHORIZED', details: { reason } }),
+      true,
+      `${reason} says the lease is no longer usable`,
+    );
+  }
+  // A mismatch is about the request that asked, not the lease: the lease may be perfectly alive and
+  // held by this same client under another request, so a beat must keep renewing on this answer.
+  assert.equal(
+    isInactiveLeaseError({ code: 'UNAUTHORIZED', details: { reason: 'LEASE_SCOPE_MISMATCH' } }),
+    false,
+    'a scope mismatch is not the lease being gone',
+  );
+  // Both halves are required: the code alone is any unauthorized call, and the reason alone could
+  // ride on an error the client has no business acting on.
+  assert.equal(isInactiveLeaseError({ code: 'UNAUTHORIZED', details: {} }), false);
+  assert.equal(
+    isInactiveLeaseError({ code: 'COMMAND_FAILED', details: { reason: 'LEASE_NOT_FOUND' } }),
+    false,
+  );
+  assert.equal(isInactiveLeaseError(new Error('LEASE_NOT_FOUND')), false);
+  assert.equal(isInactiveLeaseError(undefined), false);
 });
