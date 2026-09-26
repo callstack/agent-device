@@ -9,7 +9,10 @@ import {
   runXcrun,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
-import { buildRunnerSessionXctestrunCleanupPattern } from './runner-artifact-env.ts';
+import {
+  buildRunnerSessionXctestrunDeviceCleanupPattern,
+  buildRunnerSessionXctestrunPathCleanupPattern,
+} from './runner-artifact-env.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
@@ -20,6 +23,7 @@ import {
   releaseRunnerLease,
   withRunnerLeaseLock,
   type RunnerLeaseCleanupAdapter,
+  type RunnerXcodebuildCleanupTarget,
 } from './runner-lease.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS, runnerPrepProcesses } from './runner-xctestrun.ts';
 import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
@@ -328,13 +332,12 @@ async function killRunnerProcessTree(
   } catch {}
 }
 
-async function killRunnerXcodebuildProcesses(
-  deviceId: string,
-  ownerToken: string | undefined,
-): Promise<void> {
-  const pattern = `xcodebuild.*test-without-building.*${buildRunnerSessionXctestrunCleanupPattern(
-    ownerToken === undefined ? { deviceId } : { deviceId, ownerToken },
-  )}`;
+async function killRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void> {
+  const { deviceId } = target;
+  const pattern = `xcodebuild.*test-without-building.*${
+    buildRunnerSessionXctestrunPathCleanupPattern(target.xctestrunPath) ??
+    buildRunnerSessionXctestrunDeviceCleanupPattern(deviceId)
+  }`;
   for (const signal of ['TERM', 'KILL'] as const) {
     try {
       await runAppleToolCommand('pkill', [`-${signal}`, '-f', pattern], {

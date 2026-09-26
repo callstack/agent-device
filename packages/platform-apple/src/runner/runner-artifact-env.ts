@@ -46,20 +46,31 @@ export function buildRunnerSessionXctestrunSuffix(
 }
 
 /**
- * The `pkill -f` pattern selecting one device's runner launches, for a caller that knows the owner
- * token or does not. Without a token the device is followed by the port — the pre-owner-token
+ * The `pkill -f` pattern selecting one device's runner launches, for a caller that has no lease to
+ * read and therefore knows only the device. The device is followed by the port — the pre-owner-token
  * spelling, kept matchable because a released version may still hold such a launch.
  */
-export function buildRunnerSessionXctestrunCleanupPattern(
-  params: Readonly<{ deviceId: string; ownerToken?: string | undefined }>,
-): string {
-  const deviceId = escapeForExtendedRegex(sanitizeRunnerSessionNameField(params.deviceId));
-  const { ownerToken } = params;
-  return ownerToken === undefined
-    ? `${RUNNER_SESSION_XCTESTRUN_NAME_PATTERN}${deviceId}-[0-9]`
-    : `${RUNNER_SESSION_XCTESTRUN_NAME_PATTERN}${deviceId}-${escapeForExtendedRegex(
-        sanitizeRunnerSessionNameField(ownerToken),
-      )}-`;
+export function buildRunnerSessionXctestrunDeviceCleanupPattern(deviceId: string): string {
+  return `${RUNNER_SESSION_XCTESTRUN_NAME_PATTERN}${escapeForExtendedRegex(
+    sanitizeRunnerSessionNameField(deviceId),
+  )}-[0-9]`;
+}
+
+/**
+ * The `pkill -f` pattern selecting the launch a lease describes, from the xctestrun path that lease
+ * recorded. The basename is what the launch carries in argv, so a lease that no longer spells its
+ * own name — a detached lease rewrites `ownerToken` — still selects exactly the launch it started.
+ *
+ * Returns `undefined` when the recorded path does not name a runner session artifact: such a
+ * basename could be any short string, and a pattern that loose would signal unrelated xcodebuilds.
+ * Callers fall back to {@link buildRunnerSessionXctestrunDeviceCleanupPattern} for those leases.
+ */
+export function buildRunnerSessionXctestrunPathCleanupPattern(
+  xctestrunPath: string | undefined,
+): string | undefined {
+  const basename = xctestrunPath ? path.basename(xctestrunPath) : '';
+  if (!basename.startsWith(`${RUNNER_SESSION_XCTESTRUN_STEM}.`)) return undefined;
+  return escapeForExtendedRegex(basename);
 }
 
 /** Characters a session name may carry; anything else is flattened, as the filesystem does. */

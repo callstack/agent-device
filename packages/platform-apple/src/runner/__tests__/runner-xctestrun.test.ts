@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
-  buildRunnerSessionXctestrunCleanupPattern,
+  buildRunnerSessionXctestrunPathCleanupPattern,
   buildRunnerSessionXctestrunSuffix,
 } from '../runner-artifact-env.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
@@ -386,13 +386,17 @@ test('the session xctestrun the writer builds is found by the cleanup matcher', 
 
     // The bytes the timeout sweep pins literally, so the sweep cannot drift off the writer's name.
     assert.match(argv, new RegExp(String.raw`xcodebuild .*AgentDeviceRunner\.env\.session-`));
+    // The lease-backed pattern is spelled from the path the writer returned, so pin those bytes
+    // literally rather than comparing the pattern to the path it was built from: a rename that keeps
+    // both sides self-consistent must still fail here.
+    assert.equal(
+      buildRunnerSessionXctestrunPathCleanupPattern(prepared.xctestrunPath),
+      String.raw`AgentDeviceRunner\.env\.session-SIM-001-owner-4242-ab12cd34-8123\.xctestrun`,
+    );
     assert.match(
       argv,
       new RegExp(
-        `xcodebuild.*test-without-building.*${buildRunnerSessionXctestrunCleanupPattern({
-          deviceId: 'SIM-001',
-          ownerToken: 'owner-4242-ab12cd34',
-        })}`,
+        String.raw`xcodebuild.*test-without-building.*AgentDeviceRunner\.env\.session-SIM-001-owner-4242-ab12cd34-8123\.xctestrun`,
       ),
     );
   });

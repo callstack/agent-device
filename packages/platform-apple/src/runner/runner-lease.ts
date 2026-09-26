@@ -95,9 +95,20 @@ type RunnerLeaseRequiredFields = Pick<
   'createdAtMs' | 'jsonPath' | 'ownerPid' | 'ownerToken' | 'port' | 'sessionId' | 'xctestrunPath'
 >;
 
+/**
+ * Which runner xcodebuild launches a cleanup may signal.
+ *
+ * With `xctestrunPath` — the path a lease recorded — the sweep is scoped to the one launch that
+ * artifact names. Without it the caller only knows the device, so the sweep covers that device's
+ * launches and must be a reclaim, never a stop of a session this daemon still considers live.
+ */
+export type RunnerXcodebuildCleanupTarget = Readonly<
+  { deviceId: string } & ({ xctestrunPath: string } | { xctestrunPath?: undefined })
+>;
+
 export type RunnerLeaseCleanupAdapter = {
   cleanupRunnerProcessTree(pid: number | undefined, signal: 'SIGTERM' | 'SIGKILL'): Promise<void>;
-  cleanupRunnerXcodebuildProcesses(deviceId: string, ownerToken: string | undefined): Promise<void>;
+  cleanupRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void>;
   cleanupTempFile(filePath: string): void;
 };
 
@@ -180,7 +191,7 @@ export async function prepareRunnerLeaseForStartup(
   const deviceId = device.id;
   const state = classifyRunnerLease(readRunnerLease(deviceId));
   if (state.type === 'empty') {
-    await cleanup.cleanupRunnerXcodebuildProcesses(deviceId, undefined);
+    await cleanup.cleanupRunnerXcodebuildProcesses({ deviceId });
     return;
   }
   if (state.type === 'busy') {
@@ -551,7 +562,10 @@ async function cleanupLeasedRunnerProcesses(
     },
   });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
-  await cleanup.cleanupRunnerXcodebuildProcesses(lease.deviceId, lease.ownerToken);
+  await cleanup.cleanupRunnerXcodebuildProcesses({
+    deviceId: lease.deviceId,
+    xctestrunPath: lease.xctestrunPath,
+  });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGKILL');
   cleanup.cleanupTempFile(lease.xctestrunPath);
   cleanup.cleanupTempFile(lease.jsonPath);

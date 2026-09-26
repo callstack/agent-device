@@ -125,6 +125,7 @@ import {
   validateRunnerDevice,
 } from '../runner-session.ts';
 import {
+  buildDetachedRunnerLease,
   cleanupRunnerLeasesForOwner,
   prepareRunnerLeaseForStartup,
   runnerOwnerStartTime,
@@ -132,6 +133,7 @@ import {
   writeRunnerLease,
   type RunnerLease,
   type RunnerLeaseCleanupAdapter,
+  type RunnerXcodebuildCleanupTarget,
 } from '../runner-lease.ts';
 
 // Test-only stand-in for the daemon's own runtime lease-owner-state-dir
@@ -734,6 +736,41 @@ test('runner session startup reclaims dead foreign runner lease before launching
   );
 });
 
+test('runner session startup reclaims a detached lease by the artifact that lease recorded', async () => {
+  // A detached lease keeps the runner's launch name but rewrites its own token to
+  // `detached-<token>`, so the reclaim has to follow the recorded xctestrun path: a pattern rebuilt
+  // from the lease's token names a file the launch never carried, and the xcodebuild survives.
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-detached-lease-sim' };
+  const detached = buildDetachedRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-4242-ab12cd34',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'Fri Jun 19 12:01:00 2026',
+      runnerPid: 999_999_998,
+    }),
+  );
+  assert.match(detached.ownerToken, /^detached-owner-4242-ab12cd34$/);
+  mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999 && pid !== 999_999_998);
+  writeRunnerLease(detached);
+  mockPrepareXctestrunWithEnv.mockResolvedValue({
+    xctestrunPath: detached.xctestrunPath,
+    jsonPath: detached.jsonPath,
+  });
+  const launchArgv = `xcodebuild test-without-building -xctestrun ${detached.xctestrunPath}`;
+
+  const session = await ensureRunnerSession(device, {});
+
+  assert.equal(session.deviceId, device.id);
+  const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
+  assert.ok(pkillCalls.length >= 2);
+  const pattern = String(pkillCalls[0]?.[1]?.[2] ?? '');
+  assert.ok(
+    new RegExp(pattern).test(launchArgv),
+    `the reclaim pattern ${pattern} must select the launch ${launchArgv}`,
+  );
+});
+
 // #1596: lease files outlive their runner (SIGKILLed daemon) and pids get
 // recycled — the stale-lease cleanup must never signal a pid it cannot prove
 // is still the leased runner. The recording adapter observes exactly which
@@ -741,13 +778,13 @@ test('runner session startup reclaims dead foreign runner lease before launching
 // separate adapter call and must keep running either way.
 function makeRecordingCleanupAdapter() {
   const treeKills: Array<{ pid: number | undefined; signal: string }> = [];
-  const xcodebuildCleanups: Array<{ deviceId: string; ownerToken: string | undefined }> = [];
+  const xcodebuildCleanups: RunnerXcodebuildCleanupTarget[] = [];
   const adapter: RunnerLeaseCleanupAdapter = {
     async cleanupRunnerProcessTree(pid, signal) {
       treeKills.push({ pid, signal });
     },
-    async cleanupRunnerXcodebuildProcesses(deviceId, ownerToken) {
-      xcodebuildCleanups.push({ deviceId, ownerToken });
+    async cleanupRunnerXcodebuildProcesses(target) {
+      xcodebuildCleanups.push(target);
     },
     cleanupTempFile() {},
   };
@@ -783,9 +820,12 @@ test('stale-lease cleanup does not signal a recycled runner pid (start time mism
     { pid: undefined, signal: 'SIGTERM' },
     { pid: undefined, signal: 'SIGKILL' },
   ]);
-  assert.deepEqual(xcodebuildCleanups, [
-    { deviceId: device.id, ownerToken: 'owner-dead-recycled' },
-  ]);
+  assert.equal(xcodebuildCleanups.length, 1);
+  assert.equal(xcodebuildCleanups[0]?.deviceId, device.id);
+  assert.equal(
+    path.basename(String(xcodebuildCleanups[0]?.xctestrunPath)),
+    'AgentDeviceRunner.env.session-runner-lease-recycled-pid-sim-owner-dead-recycled-8123.xctestrun',
+  );
 });
 
 test('stale-lease cleanup signals the runner pid when its start time still matches', async () => {

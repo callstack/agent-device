@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { appleRunnerTestHost } from '../test-host.ts';
@@ -55,8 +56,11 @@ function recordingCleanupAdapter(): RunnerLeaseCleanupAdapter & { calls: string[
     cleanupRunnerProcessTree: async (_pid, signal) => {
       calls.push(`process-tree:${signal}`);
     },
-    cleanupRunnerXcodebuildProcesses: async (_deviceId, ownerToken) => {
-      calls.push(`xcodebuild:${ownerToken ?? 'any'}`);
+    cleanupRunnerXcodebuildProcesses: async (target) => {
+      const basename = target.xctestrunPath
+        ? `:${path.basename(target.xctestrunPath)}`
+        : ':device-sweep';
+      calls.push(`xcodebuild:${target.deviceId}${basename}`);
     },
     cleanupTempFile: (filePath) => {
       calls.push(`temp:${filePath}`);
@@ -78,7 +82,13 @@ test('device-claim authority reclaims a live foreign claim-aware lease', async (
 
   await prepareRunnerLeaseForStartup(device, cleanup);
 
-  assert.ok(cleanup.calls.includes('xcodebuild:owner-foreign-live'));
+  // The takeover kills the launch the lease named, so it must carry the recorded artifact path
+  // rather than anything derived from the owner token it is preempting.
+  assert.ok(
+    cleanup.calls.includes(
+      'xcodebuild:claim-takeover-sim:AgentDeviceRunner.env.session-claim-takeover-sim-owner-foreign-live-8123.xctestrun',
+    ),
+  );
   // The probe must receive the full device identity, never a bare id: claim
   // ownership is canonical family/OS/id, and a same-id claim from another
   // platform family grants nothing.
@@ -89,7 +99,7 @@ test('device-claim authority reclaims a live foreign claim-aware lease', async (
   // sees an empty store instead of the foreign owner.
   const emptyCleanup = recordingCleanupAdapter();
   await prepareRunnerLeaseForStartup(device, emptyCleanup);
-  assert.ok(emptyCleanup.calls.includes('xcodebuild:any'));
+  assert.ok(emptyCleanup.calls.includes(`xcodebuild:${device.id}:device-sweep`));
 });
 
 test('a claim-aware lease still refuses without device-claim authority', async () => {
