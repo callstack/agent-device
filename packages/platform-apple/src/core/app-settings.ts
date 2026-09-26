@@ -10,13 +10,7 @@ import {
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
-import {
-  isHandheldAppleSimulator,
-  isIosFamily,
-  isMacOs,
-  resolveDeviceAppleOs,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   AppError,
   summarizeCommandAttemptFailures,
@@ -30,6 +24,7 @@ import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
+import { requireHandheldAppleSimulatorLeaf } from './settings-leaf.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
 import {
@@ -148,7 +143,7 @@ export async function setIosSetting(
     }
     case 'faceid':
     case 'touchid': {
-      requireBiometricLeaf(device);
+      requireHandheldAppleSimulatorLeaf(device, APPLE_BIOMETRIC_LEAF_REFUSAL);
       const biometricSetting = normalized as IosBiometricSetting;
       const biometric = IOS_BIOMETRIC_SETTINGS[biometricSetting];
       const action = parseBiometricAction(state, biometricSetting);
@@ -454,17 +449,6 @@ async function runIosBiometricSimctlCommand(
     action,
     setting: options.settingName,
     attempts: summarizeCommandAttemptFailures(failures),
-  });
-}
-
-function requireBiometricLeaf(device: DeviceInfo): void {
-  if (isHandheldAppleSimulator(device)) return;
-  throw new AppError('UNSUPPORTED_OPERATION', APPLE_BIOMETRIC_LEAF_REFUSAL.message, {
-    deviceId: device.id,
-    appleOs: resolveDeviceAppleOs(device),
-    deviceKind: device.kind,
-    reason: APPLE_BIOMETRIC_LEAF_REFUSAL.reason,
-    hint: APPLE_BIOMETRIC_LEAF_REFUSAL.hint,
   });
 }
 
