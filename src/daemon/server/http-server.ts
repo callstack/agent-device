@@ -174,7 +174,7 @@ function writeProgressEnvelope(
   res: http.ServerResponse<http.IncomingMessage>,
   event: RequestProgressEvent,
 ): void {
-  if (res.destroyed) return;
+  if (res.destroyed || res.writableEnded) return;
   res.write(serializeDaemonProgressEnvelope(event));
 }
 
