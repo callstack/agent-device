@@ -120,7 +120,10 @@ function digestXctestrun(
   if (!isPathInsideDirectory(resolved, canonicalCacheRoot)) {
     return { reason: 'root_escapes_cache', path: relativePath, target: resolved };
   }
-  if (!isRegularFile(resolved)) {
+  // The manifest names a regular file at this exact path; the reader lstats it and calls a
+  // symlink a kind change. Certifying an in-cache link here would publish a manifest the reader
+  // refuses at first sight, i.e. a rebuild on every launch.
+  if (!isRegularFile(xctestrunPath)) {
     return { reason: 'root_unusable', path: relativePath };
   }
   const digested = digestFile(xctestrunPath);
@@ -168,7 +171,15 @@ function resolveWalkedRoots(
         },
       };
     }
-    if (!roots.some((keptRoot) => isPathInsideDirectory(resolvedRoot, keptRoot))) {
+    // `isPathInsideDirectory` is strict, so an alias resolving onto a root already walked -- a
+    // direct path beside an in-cache symlink to the same bundle -- needs its own equality test.
+    // Without it the leaves would be collected twice and the reader's walk would delete them
+    // under the first root and call the second root's copies undeclared.
+    if (
+      !roots.some(
+        (keptRoot) => resolvedRoot === keptRoot || isPathInsideDirectory(resolvedRoot, keptRoot),
+      )
+    ) {
       roots.push(resolvedRoot);
     }
   }

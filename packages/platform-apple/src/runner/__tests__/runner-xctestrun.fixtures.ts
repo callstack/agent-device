@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { onTestFinished } from 'vitest';
@@ -163,11 +164,16 @@ export async function makeCachedRunnerXctestrun(device: DeviceInfo): Promise<{
     projectRoot: REPO_ROOT_FOR_TEST,
     productRelativePaths: ['Runner.app'],
   });
-  await writeRunnerCacheMetadataWithArtifacts({
-    derivedPath,
-    device,
-    xctestrunPath: existingXctestrunPath,
-    productPaths: [path.join(derivedPath, 'Runner.app')],
-  });
+  // The reuse tests that take this tree are asserting behaviour on a CERTIFIED cache; an
+  // uncertifiable one would silently exercise a different scenario than they set up.
+  assert.equal(
+    await writeRunnerCacheMetadataWithArtifacts({
+      derivedPath,
+      device,
+      xctestrunPath: existingXctestrunPath,
+      productPaths: [path.join(derivedPath, 'Runner.app')],
+    }),
+    null,
+  );
   return { derivedPath, existingXctestrunPath };
 }

@@ -309,10 +309,6 @@ async function tryReuseExistingXctestrun(
 ): Promise<string | null> {
   try {
     await repairMacOsRunnerProductsIfNeeded(device, existing.productPaths, existing.xctestrunPath);
-    emitRunnerXctestrunDecision('reuse', 'reuse_ready', {
-      derived,
-      xctestrunPath: existing.xctestrunPath,
-    });
     requireCertifiedRunnerCacheArtifacts(
       await writeRunnerCacheMetadataForArtifacts(
         derived,
@@ -322,6 +318,10 @@ async function tryReuseExistingXctestrun(
       ),
       derived,
     );
+    emitRunnerXctestrunDecision('reuse', 'reuse_ready', {
+      derived,
+      xctestrunPath: existing.xctestrunPath,
+    });
     return existing.xctestrunPath;
   } catch (error) {
     if (!isExpectedRunnerRepairFailure(error)) {

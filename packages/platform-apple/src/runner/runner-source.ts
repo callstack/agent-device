@@ -157,11 +157,6 @@ function collectRunnerSourceFilesInDirectory(
   return files;
 }
 
-/**
- * Xcode owns the contents of a project or workspace package — `project.pbxproj`, shared
- * schemes, and workspace data all change what a build produces — so every file inside one
- * is build input, not just the ones with a recognizable extension.
- */
 /** Whether a file inside an Xcode package is Finder or editor droppings rather than build input. */
 function isXcodePackageNonBuildFile(fileName: string): boolean {
   return (
@@ -170,6 +165,11 @@ function isXcodePackageNonBuildFile(fileName: string): boolean {
   );
 }
 
+/**
+ * Xcode owns the contents of a project or workspace package — `project.pbxproj`, shared
+ * schemes, and workspace data all change what a build produces — so every file inside one
+ * is build input, not just the ones with a recognizable extension.
+ */
 function isXcodePackageDirectory(directoryName: string): boolean {
   return directoryName.endsWith('.xcodeproj') || directoryName.endsWith('.xcworkspace');
 }

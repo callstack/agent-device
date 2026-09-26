@@ -10,7 +10,6 @@ import {
 } from '../runner-cache.ts';
 import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   EXECUTABLE_BYTES,
@@ -19,8 +18,6 @@ import {
   mismatchOf,
   publishedXctestrun,
 } from './runner-cache.fixtures.ts';
-
-stubAppleToolchainProbes();
 
 test('a manifest-certified build is reused', async () => {
   const { derived, xctestrunPath, executablePath, expected } = await makeCachedRunnerBuild();
@@ -222,6 +219,27 @@ test('a symlinked product root that stays inside the cache is certified', async 
   assert.equal(state.mismatch.reason, 'undeclared_entry');
 });
 
+test('a direct product path beside a symlink alias of it certifies one walk', async () => {
+  // Xcode hands the .xctestrun a product per relative path; two spellings of one bundle (a
+  // direct path plus an in-cache alias) must collapse to one walked root, or the leaves get
+  // collected twice and the reader's walk calls the second root's copies undeclared.
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
+  const aliasPath = path.join(path.dirname(runnerAppPath), 'Runner.alias.app');
+  fs.symlinkSync(path.basename(runnerAppPath), aliasPath);
+
+  assert.equal(
+    await writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
+      runnerAppPath,
+      aliasPath,
+    ]),
+    null,
+  );
+
+  const state = await evaluateExistingXctestrun({ derived, expectedCacheMetadata: expected });
+
+  assert.equal(state.reason, 'reuse_ready');
+});
+
 test('a manifest that certifies an escaping symlink refuses reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
@@ -358,6 +376,28 @@ test('a build whose .xctestrun is a symlink out of the cache publishes no manife
   assert.equal(published.artifacts, undefined);
 });
 
+test('a build whose .xctestrun is an in-cache symlink publishes no manifest', async () => {
+  // The reader lstats the named path and calls a symlink a kind change, so a manifest written
+  // for a link would be refused on sight: a rebuild on every launch. The writer must decline to
+  // publish that pairing rather than hand every cache entry to the miss path.
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
+  const productsPath = path.join(derived, 'Build', 'Products');
+  const realXctestrun = path.join(productsPath, 'staged.xctestrun');
+  fs.writeFileSync(realXctestrun, '<plist>xctestrun</plist>');
+  const linkedXctestrun = path.join(productsPath, 'linked.xctestrun');
+  fs.symlinkSync('staged.xctestrun', linkedXctestrun);
+
+  const refusal = await writeRunnerCacheMetadataForArtifacts(derived, expected, linkedXctestrun, [
+    runnerAppPath,
+  ]);
+
+  assert.equal(refusal?.reason, 'root_unusable');
+
+  const state = await evaluateExistingXctestrun({ derived, expectedCacheMetadata: expected });
+
+  assert.equal(state.reason, 'artifact_manifest_missing');
+});
+
 test('products without a content manifest are a miss, never a reuse', async () => {
   const { derived, expected } = await makeCachedRunnerBuild();
 
@@ -390,14 +430,19 @@ test('a manifest naming paths outside the cache root is a miss', async () => {
   assert.equal(state.reason, 'artifact_manifest_missing');
 });
 
-test('a manifest written for a foreign cache root certifies nothing', async () => {
+test('a writer handed an .xctestrun path that does not exist certifies nothing', async () => {
+  // The reader-side crossing-root defense is 'a manifest naming paths outside the cache root is
+  // a miss'; this is the writer half: a named path with no bytes behind it cannot be digested,
+  // so the identity half is published and the tree stays a miss.
   const { derived, expected } = await makeCachedRunnerBuild();
-  await writeRunnerCacheMetadataForArtifacts(
+  const refusal = await writeRunnerCacheMetadataForArtifacts(
     derived,
     expected,
     path.join(derived, 'Build', 'Products', 'other.xctestrun'),
     [path.join(derived, 'Build', 'Products', 'Debug-iphonesimulator', 'Runner-Runner.app')],
   );
+
+  assert.equal(refusal?.reason, 'root_unusable');
 
   const state = await evaluateExistingXctestrun({ derived, expectedCacheMetadata: expected });
 

@@ -18,6 +18,7 @@ import {
   resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
+import { digestFile } from './digest-file.ts';
 import {
   REPO_ROOT_FOR_TEST as repoRoot,
   makeCachedRunnerXctestrun,
@@ -178,6 +179,10 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
   await fs.promises.mkdir(derivedPath, { recursive: true });
   // A manifest naming paths outside its own cache root cannot have been written for this tree,
   // so the reader declines it. The production writer refuses to publish one, hence the hand-off.
+  // Every byte the manifest describes is hashed from where it really sits, so nothing but the
+  // crossing paths can make this manifest fail: a regression that dropped the containment check
+  // would certify or content-mismatch, not the pinned manifest miss below.
+  const externalExecutablePath = path.join(externalProductPath, 'Runner');
   fs.writeFileSync(
     resolveRunnerCacheMetadataPath(derivedPath),
     JSON.stringify({
@@ -185,9 +190,16 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
       artifacts: {
         xctestrunPath: externalXctestrunPath,
         xctestrunSize: fs.statSync(externalXctestrunPath).size,
-        xctestrunDigest: '0'.repeat(64),
+        xctestrunDigest: digestFile(externalXctestrunPath),
         productPaths: [externalProductPath],
-        entries: [{ path: 'Runner', size: 1, mode: 0o755, digest: '1'.repeat(64) }],
+        entries: [
+          {
+            path: 'Runner',
+            size: fs.statSync(externalExecutablePath).size,
+            mode: 0o755,
+            digest: digestFile(externalExecutablePath),
+          },
+        ],
       },
     }),
   );
@@ -201,9 +213,10 @@ test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root'
     });
   });
 
-  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
+  const result = await ensureXctestrunArtifact(macOsDevice, {});
 
-  assert.equal(result, rebuiltXctestrunPath);
+  assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
+  assert.equal(result.reason, 'artifact_manifest_missing');
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
 });
 
@@ -293,6 +306,42 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   );
   assert.ok(canceledCall, 'canceled build received its request signal');
   assert.ok(survivorCall, 'survivor build received its request signal');
+});
+
+test('ensureXctestrunArtifact never reports reuse of a tree that fails certification', async () => {
+  // A repair step that leaves an escaping symlink behind poisons the tree AFTER evaluation
+  // called it reusable. Certification catches it and throws, but only the ORDER of the
+  // `reuse_ready` decision proves the gate is real: emitted before it, diagnostics would record
+  // a reuse that never happened.
+  const { derivedPath } = await makeCachedRunnerXctestrun(macOsDevice);
+  const outside = await makeProjectScratchDir();
+  withRunnerDerivedPathEnv(derivedPath);
+  const decisions: Array<Record<string, unknown>> = [];
+  appleRunnerTestHost.update({
+    emitDiagnostic: (event) => {
+      if (event.phase === 'runner_xctestrun_cache') {
+        decisions.push(event.data ?? {});
+      }
+    },
+  });
+  mockRepairMacOsRunnerProductsIfNeeded.mockImplementation(async () => {
+    fs.symlinkSync(path.join(outside, 'evil'), path.join(derivedPath, 'Runner.app', 'Leaked'));
+  });
+
+  await assert.rejects(() => ensureXctestrunArtifact(macOsDevice, {}), {
+    code: 'COMMAND_FAILED',
+    message: 'The Apple runner products cannot be certified for cache reuse',
+  });
+
+  assert.equal(
+    decisions.some((data) => data.reason === 'reuse_ready'),
+    false,
+  );
+  assert.ok(
+    decisions.some((data) => data.reason === 'uncertifiable_products'),
+    'the refusal is what the diagnostics record instead',
+  );
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
 });
 
 test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure', async () => {

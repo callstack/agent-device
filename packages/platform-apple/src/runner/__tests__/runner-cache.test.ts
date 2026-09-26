@@ -4,12 +4,10 @@ import { onTestFinished, test } from 'vitest';
 import { evaluateExistingXctestrun, writeRunnerCacheMetadata } from '../runner-cache.ts';
 import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { restoreEnvVar } from './runner-xctestrun.fixtures.ts';
 import { makeCachedRunnerBuild } from './runner-cache.fixtures.ts';
 
-stubAppleToolchainProbes();
 test('reuse ignores the non-comparable package version', async () => {
   const { derived, expected } = await makeCachedRunnerBuild();
 
