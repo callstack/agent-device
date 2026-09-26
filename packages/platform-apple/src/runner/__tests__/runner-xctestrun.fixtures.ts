@@ -4,7 +4,8 @@ import { onTestFinished } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { mkdtempForTest } from './tmp-dir.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { writeRunnerCacheMetadataForArtifacts, type RunnerCacheRefusal } from '../runner-cache.ts';
+import { writeRunnerCacheMetadataForArtifacts } from '../runner-cache.ts';
+import type { RunnerCacheRefusal } from '../runner-artifact-manifest.ts';
 import { resolveExpectedRunnerCacheMetadata } from '../runner-xctestrun.ts';
 
 // Scratch trees and certified runner products shared by the tests that exercise

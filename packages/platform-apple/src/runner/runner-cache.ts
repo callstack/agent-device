@@ -23,10 +23,6 @@ import {
   type RunnerCacheArtifactMismatch,
   type RunnerCacheRefusal,
 } from './runner-artifact-manifest.ts';
-export type {
-  RunnerCacheArtifactMismatch,
-  RunnerCacheRefusal,
-} from './runner-artifact-manifest.ts';
 export {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
