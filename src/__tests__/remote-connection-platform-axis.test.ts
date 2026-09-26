@@ -243,7 +243,8 @@ test('proxy install against a differently-bound platform is still refused', asyn
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      /different platform/.test(error.message),
+      error.details?.session === 'adc-proxy' &&
+      error.details?.platform === 'ios',
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
