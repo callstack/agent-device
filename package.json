@@ -161,7 +161,7 @@
     "check:xctest-selection": "node --experimental-strip-types scripts/check-xctest-selection.ts",
     "check:packaged-runner-swift": "node --experimental-strip-types scripts/check-packaged-runner-swift.ts",
     "check:tmpdir-leaks": "node --experimental-strip-types scripts/check-tmpdir-leaks.ts",
-    "check:tmpdir-leaks:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/check-tmpdir-leaks-model.test.ts scripts/vitest-tmpdir-global-setup.test.ts scripts/node-test-tmpdir.test.ts scripts/swift-toolchain-tmpdir.test.ts",
+    "check:tmpdir-leaks:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test --test-concurrency=1 scripts/check-tmpdir-leaks-model.test.ts scripts/vitest-tmpdir-global-setup.test.ts scripts/node-test-tmpdir.test.ts scripts/swift-toolchain-tmpdir.test.ts",
     "check:freerange": "fr",
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",

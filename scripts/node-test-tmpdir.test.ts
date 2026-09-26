@@ -256,6 +256,53 @@ test('every node --test package.json script routes through scripts/node-test-tmp
   );
 });
 
+// These two files each sweep the real shared root: this file asserts
+// `pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT)` both keeps and removes a
+// planted directory, and the Vitest lifecycle file drives a real `vitest` whose
+// global setup sweeps the same root. `node --test` runs files in parallel by
+// default, so one file's sweep can remove the directory the other is mid-flight
+// on: the orphan test's "the next run prunes it" assertion then observes `[]`
+// and fails. Whether it does depends on process interleaving, not the code —
+// it passed 5/5 locally and failed on a CI runner with `actual: []`.
+// Serialization is the fix; this keeps it an invariant rather than a flag
+// someone can drop while "cleaning up" the lane.
+const GLOBAL_SWEEP_TEST_FILES = [
+  'scripts/node-test-tmpdir.test.ts',
+  'scripts/vitest-tmpdir-global-setup.test.ts',
+];
+
+// The flag must sit among the args the wrapper FORWARDS to its child: the
+// wrapper spawns `node <forwarded...> --test`, so a flag written before the
+// wrapper path is parsed by the wrapper's own node process and never reaches
+// the runner — the lane would silently go parallel while still containing the
+// string. Everything after the wrapper path is what the child receives.
+function forwardedNodeArgs(command: string): string {
+  const wrapperIndex = command.indexOf('scripts/node-test-tmpdir.ts');
+  return wrapperIndex === -1
+    ? ''
+    : command.slice(wrapperIndex + 'scripts/node-test-tmpdir.ts'.length);
+}
+
+test('lanes that sweep the shared run-directory root serialize their files', () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
+  ) as { scripts?: Record<string, string> };
+
+  const unsynchronized = Object.entries(manifest.scripts ?? {})
+    .filter(([, command]) => GLOBAL_SWEEP_TEST_FILES.every((file) => command.includes(file)))
+    .filter(([, command]) => !forwardedNodeArgs(command).includes('--test-concurrency=1'))
+    .map(([name]) => name);
+
+  assert.deepEqual(
+    unsynchronized,
+    [],
+    `these scripts run the global run-directory sweep from several test files in parallel, so a ` +
+      `sweep from one file can remove the directory another file is asserting on: ` +
+      `${unsynchronized.join(', ')}. Add --test-concurrency=1 after scripts/node-test-tmpdir.ts ` +
+      `so the child runner receives it.`,
+  );
+});
+
 // INT32_MAX exceeds every platform's pid range (Linux pid_max caps at 2^22,
 // macOS at 99999), so kill(pid, 0) is ESRCH by construction — an owner that
 // is dead and can never be reused mid-test, unlike a freshly exited child's pid.
